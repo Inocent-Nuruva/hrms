@@ -35,6 +35,10 @@ const data = {
       icon: <UsersIcon />,
       items: [
         {
+          title: "All Employees",
+          url: "/dashboard/employees/all",
+        },
+        {
           title: "Register",
           url: "/dashboard/employees/register",
         },
@@ -108,6 +112,7 @@ const data = {
 
 const searchIndex = [
   { title: "Dashboard", url: "/dashboard", section: "General", keywords: ["home", "overview"] },
+  { title: "Employees / All Employees", url: "/dashboard/employees/all", section: "Employees", keywords: ["employee", "directory", "staff"] },
   { title: "Employees / Register", url: "/dashboard/employees/register", section: "Employees", keywords: ["employee", "onboard"] },
   { title: "Employees / Offboarding", url: "/dashboard/employees/offboarding", section: "Employees", keywords: ["employee", "exit"] },
   { title: "Employees / Leave Management", url: "/dashboard/employees/leave-management", section: "Employees", keywords: ["leave", "vacation"] },

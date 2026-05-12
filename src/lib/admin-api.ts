@@ -33,6 +33,13 @@ export interface UsersQueryParams {
   search?: string
 }
 
+export interface EmployeesQueryParams extends UsersQueryParams {
+  employment_status?: "onboarding" | "active" | "suspended" | "terminated" | "exited"
+  branch_id?: number
+  department_id?: number
+  position_id?: number
+}
+
 export interface PaginatedUsersResult {
   rows: AdminRecord[]
   page: number
@@ -211,6 +218,39 @@ function buildUsersQuery(params: UsersQueryParams) {
   return query ? `?${query}` : ""
 }
 
+function buildEmployeesQuery(params: EmployeesQueryParams) {
+  const searchParams = new URLSearchParams()
+  if (typeof params.page === "number" && params.page > 0) {
+    searchParams.set("page", String(params.page))
+  }
+  if (typeof params.limit === "number" && params.limit > 0) {
+    searchParams.set("limit", String(params.limit))
+  }
+  if (params.sortBy && params.sortBy.trim()) {
+    searchParams.set("sortBy", params.sortBy.trim())
+  }
+  if (params.sortOrder === "ASC" || params.sortOrder === "DESC") {
+    searchParams.set("sortOrder", params.sortOrder)
+  }
+  if (params.search && params.search.trim()) {
+    searchParams.set("search", params.search.trim())
+  }
+  if (params.employment_status) {
+    searchParams.set("employment_status", params.employment_status)
+  }
+  if (typeof params.branch_id === "number" && params.branch_id > 0) {
+    searchParams.set("branch_id", String(params.branch_id))
+  }
+  if (typeof params.department_id === "number" && params.department_id > 0) {
+    searchParams.set("department_id", String(params.department_id))
+  }
+  if (typeof params.position_id === "number" && params.position_id > 0) {
+    searchParams.set("position_id", String(params.position_id))
+  }
+  const query = searchParams.toString()
+  return query ? `?${query}` : ""
+}
+
 function extractUsersPagination(payload: unknown, fallbackPage: number, fallbackLimit: number) {
   const root = asRecord(payload)
   const rootData = asRecord(root?.data)
@@ -368,6 +408,19 @@ export async function listUsers(
   const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20
   const query = buildUsersQuery(params)
   const payload = await adminRequest<unknown>(`/api/users${query}`, { token })
+  const rows = normalizeList(payload)
+  const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit)
+  return { rows, ...pagination }
+}
+
+export async function listEmployees(
+  token: string,
+  params: EmployeesQueryParams = {}
+): Promise<PaginatedUsersResult> {
+  const fallbackPage = params.page && params.page > 0 ? params.page : 1
+  const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20
+  const query = buildEmployeesQuery(params)
+  const payload = await adminRequest<unknown>(`/api/employees${query}`, { token })
   const rows = normalizeList(payload)
   const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit)
   return { rows, ...pagination }

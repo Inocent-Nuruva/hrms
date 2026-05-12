@@ -1,9 +1,11 @@
 import { redirect } from "next/navigation"
 
 import AdminDashboardView from "@/components/dashboard/admin-dashboard-view"
+import { EmployeesListView } from "@/components/dashboard/employees-list-view"
 import { EmployeeRegisterForm } from "@/components/dashboard/employee-register-form"
 
 const ALLOWED_VIEWS = new Set([
+  "all",
   "register",
   "offboarding",
   "leave-management",
@@ -30,6 +32,14 @@ export default async function EmployeesViewPage({
     return (
       <AdminDashboardView>
         <EmployeeRegisterForm />
+      </AdminDashboardView>
+    )
+  }
+
+  if (normalized === "all") {
+    return (
+      <AdminDashboardView>
+        <EmployeesListView />
       </AdminDashboardView>
     )
   }
