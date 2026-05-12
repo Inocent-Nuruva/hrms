@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:api.anthropic.com)",
+      "Bash(cd /tmp)",
+      "Bash(tar -xf /c/Users/ITAdmin/AppData/Local/Temp/ess_design.tar)",
+      "Bash(tar -tf /c/Users/ITAdmin/AppData/Local/Temp/ess_design.tar)",
+      "Bash(tar -xf /c/Users/ITAdmin/AppData/Local/Temp/ess_design.tar \"hrms-phase-1/project/ESS Login.html\" \"hrms-phase-1/README.md\" \"hrms-phase-1/chats/chat1.md\")",
+      "Read(//tmp/hrms-phase-1/project/**)"
+    ]
+  }
+}
