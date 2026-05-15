@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
-import { Toaster } from "sonner";
 import { LoginFlow } from "@/components/auth/LoginFlow";
+import { ErrorAlertOverlay } from "@/components/error-alert-overlay";
+import { SuccessAlertOverlay } from "@/components/success-alert-overlay";
+import { Toaster } from "@/components/ui/sonner";
 
 const HEADING_WORDS = ["Welcome", "to", "your", "onboarding", "journey"];
 const HEXAGON_TILE_SIZE = 72;
@@ -138,12 +140,18 @@ export default function LoginPage() {
     typeof router.query.email === "string" ? router.query.email : "";
 
   const handleSuccess = (redirectUrl: string) => {
+    if (typeof window !== "undefined") {
+      window.location.assign(redirectUrl);
+      return;
+    }
     void router.push(redirectUrl);
   };
 
   return (
     <>
-      <Toaster position="top-right" richColors />
+      <Toaster position="top-right" />
+      <SuccessAlertOverlay />
+      <ErrorAlertOverlay />
 
       {/* Animated background blobs */}
       <div

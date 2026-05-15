@@ -3,6 +3,8 @@ import { Poppins } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { SuccessAlertOverlay } from "@/components/success-alert-overlay";
+import { ErrorAlertOverlay } from "@/components/error-alert-overlay";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 
@@ -32,6 +34,8 @@ export default function RootLayout({
         <ThemeProvider>
           <TooltipProvider>
             {children}
+            <SuccessAlertOverlay />
+            <ErrorAlertOverlay />
             <Toaster />
           </TooltipProvider>
         </ThemeProvider>

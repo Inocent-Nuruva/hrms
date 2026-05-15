@@ -1,0 +1,535 @@
+"use client"
+
+import * as React from "react"
+
+import {
+  createDesignation,
+  deleteDesignation,
+  listDepartments,
+  listDesignations,
+  patchDesignation,
+  type AdminRecord,
+  type DesignationsQueryParams,
+} from "@/lib/admin-api"
+import { AUTH_STORAGE_KEYS } from "@/utils/constants"
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+
+const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
+
+const DEFAULT_QUERY: Required<Omit<DesignationsQueryParams, "status" | "department_id">> & {
+  status: string
+  department_id: number
+} = {
+  page: 1,
+  limit: 20,
+  sortBy: "created_at",
+  sortOrder: "DESC",
+  search: "",
+  status: "",
+  department_id: 0,
+}
+
+type DesignationForm = {
+  name: string
+  code: string
+  description: string
+  status: string
+  department_id: string
+  hierarchy_level: string
+  grade_level: string
+  is_managerial: string
+}
+
+function readStoredToken() {
+  if (typeof window === "undefined") {
+    return ""
+  }
+
+  const direct = window.localStorage.getItem(TOKEN_STORAGE_KEY)?.trim() ?? ""
+  if (direct) {
+    return direct
+  }
+
+  const authTokensRaw = window.localStorage.getItem(AUTH_STORAGE_KEYS.tokens)
+  if (!authTokensRaw) {
+    return ""
+  }
+
+  try {
+    const parsed = JSON.parse(authTokensRaw) as { accessToken?: string; access_token?: string }
+    return (parsed.accessToken ?? parsed.access_token ?? "").trim()
+  } catch {
+    return ""
+  }
+}
+
+function readString(row: AdminRecord, keys: string[]) {
+  for (const key of keys) {
+    const value = row[key]
+    if (typeof value === "string" && value.trim()) {
+      return value
+    }
+  }
+  return "-"
+}
+
+function readNumber(row: AdminRecord, keys: string[]) {
+  for (const key of keys) {
+    const value = row[key]
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value
+    }
+    if (typeof value === "string" && value.trim()) {
+      const parsed = Number(value)
+      if (Number.isFinite(parsed)) {
+        return parsed
+      }
+    }
+  }
+  return null
+}
+
+function readBoolean(row: AdminRecord, keys: string[]) {
+  for (const key of keys) {
+    const value = row[key]
+    if (typeof value === "boolean") {
+      return value
+    }
+    if (typeof value === "string") {
+      if (value.toLowerCase() === "true") {
+        return true
+      }
+      if (value.toLowerCase() === "false") {
+        return false
+      }
+    }
+  }
+  return false
+}
+
+function emptyForm(): DesignationForm {
+  return {
+    name: "",
+    code: "",
+    description: "",
+    status: "active",
+    department_id: "",
+    hierarchy_level: "0",
+    grade_level: "0",
+    is_managerial: "false",
+  }
+}
+
+export function DesignationsView() {
+  const [query, setQuery] = React.useState(DEFAULT_QUERY)
+  const [rows, setRows] = React.useState<AdminRecord[]>([])
+  const [departments, setDepartments] = React.useState<AdminRecord[]>([])
+  const [loading, setLoading] = React.useState(false)
+  const [saving, setSaving] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
+  const [page, setPage] = React.useState(1)
+  const [totalPages, setTotalPages] = React.useState<number | null>(null)
+  const [total, setTotal] = React.useState<number | null>(null)
+
+  const [openForm, setOpenForm] = React.useState(false)
+  const [form, setForm] = React.useState<DesignationForm>(emptyForm())
+  const [editingId, setEditingId] = React.useState<number | null>(null)
+  const [pendingDelete, setPendingDelete] = React.useState<AdminRecord | null>(null)
+
+  const fetchDesignations = React.useCallback(async () => {
+    const token = readStoredToken()
+    if (!token) {
+      setError("Authentication required. Please log in again.")
+      setRows([])
+      return
+    }
+
+    setLoading(true)
+    setError(null)
+    try {
+      const result = await listDesignations(token, {
+        ...query,
+        page,
+        status: query.status || undefined,
+        department_id: query.department_id > 0 ? query.department_id : undefined,
+      })
+      setRows(result.rows)
+      setTotalPages(result.totalPages)
+      setTotal(result.total)
+    } catch (errorObject) {
+      setRows([])
+      setTotalPages(null)
+      setTotal(null)
+      setError(errorObject instanceof Error ? errorObject.message : "Failed to load designations.")
+    } finally {
+      setLoading(false)
+    }
+  }, [page, query])
+
+  React.useEffect(() => {
+    void fetchDesignations()
+  }, [fetchDesignations])
+
+  React.useEffect(() => {
+    const token = readStoredToken()
+    if (!token) {
+      return
+    }
+    void listDepartments(token, {
+      page: 1,
+      limit: 100,
+      sortBy: "created_at",
+      sortOrder: "DESC",
+    })
+      .then((result) => setDepartments(result.rows))
+      .catch(() => setDepartments([]))
+  }, [])
+
+  const canGoPrevious = page > 1 && !loading
+  const canGoNext = !loading && (totalPages === null || page < totalPages)
+
+  function fillFormFromRow(row: AdminRecord) {
+    setForm({
+      name: readString(row, ["name"]),
+      code: readString(row, ["code"]),
+      description: readString(row, ["description"]),
+      status: readString(row, ["status"]) === "-" ? "active" : readString(row, ["status"]),
+      department_id: String(readNumber(row, ["department_id"]) ?? ""),
+      hierarchy_level: String(readNumber(row, ["hierarchy_level"]) ?? 0),
+      grade_level: String(readNumber(row, ["grade_level"]) ?? 0),
+      is_managerial: String(readBoolean(row, ["is_managerial"])),
+    })
+  }
+
+  function departmentName(departmentId: number | null) {
+    if (departmentId === null) {
+      return "-"
+    }
+    const match = departments.find((department) => readNumber(department, ["id"]) === departmentId)
+    if (!match) {
+      return String(departmentId)
+    }
+    return readString(match, ["name", "code"])
+  }
+
+  async function submitForm() {
+    const token = readStoredToken()
+    if (!token) {
+      setError("Authentication required. Please log in again.")
+      return
+    }
+
+    const payload: AdminRecord = {
+      name: form.name.trim(),
+      code: form.code.trim(),
+      description: form.description.trim(),
+      status: form.status || "active",
+      department_id: form.department_id.trim() ? Number(form.department_id) : 0,
+      hierarchy_level: Number(form.hierarchy_level || "0"),
+      grade_level: Number(form.grade_level || "0"),
+      is_managerial: form.is_managerial === "true",
+    }
+
+    setSaving(true)
+    setError(null)
+    try {
+      if (editingId === null) {
+        await createDesignation(token, payload)
+      } else {
+        await patchDesignation(token, editingId, payload)
+      }
+      setOpenForm(false)
+      setEditingId(null)
+      setForm(emptyForm())
+      await fetchDesignations()
+    } catch (errorObject) {
+      setError(errorObject instanceof Error ? errorObject.message : "Failed to save designation.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleDelete(row: AdminRecord) {
+    const token = readStoredToken()
+    const id = readNumber(row, ["id"])
+    if (!token || id === null) {
+      return
+    }
+
+    setSaving(true)
+    setError(null)
+    try {
+      await deleteDesignation(token, id)
+      await fetchDesignations()
+    } catch (errorObject) {
+      setError(errorObject instanceof Error ? errorObject.message : "Failed to delete designation.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white/80 px-4 py-5 shadow-sm lg:px-6">
+      <div className="mb-4 flex flex-wrap items-end gap-3">
+        <div className="min-w-[220px] flex-1">
+          <label className="mb-1 block text-sm font-medium text-slate-700">Search</label>
+          <input
+            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+            placeholder="Search designation"
+            value={query.search}
+            onChange={(event) => {
+              setPage(1)
+              setQuery((previous) => ({ ...previous, search: event.target.value }))
+            }}
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium text-slate-700">Status</label>
+          <select
+            className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+            value={query.status}
+            onChange={(event) => {
+              setPage(1)
+              setQuery((previous) => ({ ...previous, status: event.target.value }))
+            }}
+          >
+            <option value="">All</option>
+            <option value="active">active</option>
+            <option value="inactive">inactive</option>
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium text-slate-700">Department</label>
+          <select
+            className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+            value={query.department_id === 0 ? "" : String(query.department_id)}
+            onChange={(event) => {
+              setPage(1)
+              setQuery((previous) => ({
+                ...previous,
+                department_id: event.target.value ? Number(event.target.value) : 0,
+              }))
+            }}
+          >
+            <option value="">All</option>
+            {departments.map((department) => {
+              const id = readNumber(department, ["id"])
+              if (id === null) {
+                return null
+              }
+              return (
+                <option key={id} value={String(id)}>
+                  {readString(department, ["name"])}
+                </option>
+              )
+            })}
+          </select>
+        </div>
+        <button
+          type="button"
+          className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white"
+          onClick={() => {
+            setEditingId(null)
+            setForm(emptyForm())
+            setOpenForm(true)
+          }}
+        >
+          Add Designation
+        </button>
+      </div>
+
+      {error ? <p className="mb-3 text-sm text-rose-600">{error}</p> : null}
+
+      <div className="overflow-x-auto rounded-md border border-slate-200">
+        <table className="min-w-full divide-y divide-slate-200 text-sm">
+          <thead className="bg-slate-50">
+            <tr>
+              <th className="px-3 py-2 text-left font-semibold text-slate-700">Name</th>
+              <th className="px-3 py-2 text-left font-semibold text-slate-700">Code</th>
+              <th className="px-3 py-2 text-left font-semibold text-slate-700">Department</th>
+              <th className="px-3 py-2 text-left font-semibold text-slate-700">Hierarchy</th>
+              <th className="px-3 py-2 text-left font-semibold text-slate-700">Grade</th>
+              <th className="px-3 py-2 text-left font-semibold text-slate-700">Managerial</th>
+              <th className="px-3 py-2 text-left font-semibold text-slate-700">Status</th>
+              <th className="px-3 py-2 text-right font-semibold text-slate-700">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 bg-white">
+            {rows.map((row, index) => {
+              const id = readNumber(row, ["id"])
+              return (
+                <tr key={String(id ?? index)}>
+                  <td className="px-3 py-2">{readString(row, ["name"])}</td>
+                  <td className="px-3 py-2">{readString(row, ["code"])}</td>
+                  <td className="px-3 py-2">{departmentName(readNumber(row, ["department_id"]))}</td>
+                  <td className="px-3 py-2">{String(readNumber(row, ["hierarchy_level"]) ?? "-")}</td>
+                  <td className="px-3 py-2">{String(readNumber(row, ["grade_level"]) ?? "-")}</td>
+                  <td className="px-3 py-2">{readBoolean(row, ["is_managerial"]) ? "Yes" : "No"}</td>
+                  <td className="px-3 py-2">{readString(row, ["status"])}</td>
+                  <td className="px-3 py-2 text-right">
+                    <div className="inline-flex gap-2">
+                      <button
+                        type="button"
+                        className="rounded-md border border-slate-300 px-2 py-1 text-xs"
+                        onClick={() => {
+                          fillFormFromRow(row)
+                          setEditingId(id)
+                          setOpenForm(true)
+                        }}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-md border border-rose-300 px-2 py-1 text-xs text-rose-700"
+                        disabled={saving}
+                        onClick={() => setPendingDelete(row)}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
+            {!loading && rows.length === 0 ? (
+              <tr>
+                <td className="px-3 py-6 text-center text-slate-500" colSpan={8}>
+                  No designations found.
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="mt-4 flex items-center justify-between gap-3">
+        <p className="text-sm text-slate-600">
+          {loading ? "Loading designations..." : `Page ${page}${totalPages ? ` of ${totalPages}` : ""}`}
+          {typeof total === "number" ? ` • Total ${total}` : ""}
+        </p>
+        <div className="flex gap-2">
+          <button type="button" className="rounded-md border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-50" disabled={!canGoPrevious} onClick={() => setPage((value) => Math.max(1, value - 1))}>
+            Previous
+          </button>
+          <button type="button" className="rounded-md border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-50" disabled={!canGoNext} onClick={() => setPage((value) => value + 1)}>
+            Next
+          </button>
+        </div>
+      </div>
+
+      {openForm ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+          <div className="w-full max-w-2xl rounded-lg border border-slate-200 bg-white p-4 shadow-lg">
+            <h3 className="text-lg font-semibold text-slate-900">{editingId === null ? "Add" : "Edit"} Designation</h3>
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <label className="grid gap-1">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Name</span>
+                <input className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={form.name} onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} />
+              </label>
+              <label className="grid gap-1">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Code</span>
+                <input className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={form.code} onChange={(event) => setForm((prev) => ({ ...prev, code: event.target.value }))} />
+              </label>
+              <label className="grid gap-1">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Department</span>
+                <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={form.department_id} onChange={(event) => setForm((prev) => ({ ...prev, department_id: event.target.value }))}>
+                  <option value="">Select department</option>
+                  {departments.map((department) => {
+                    const id = readNumber(department, ["id"])
+                    if (id === null) {
+                      return null
+                    }
+                    return (
+                      <option key={id} value={String(id)}>
+                        {readString(department, ["name"])}
+                      </option>
+                    )
+                  })}
+                </select>
+              </label>
+              <label className="grid gap-1">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Hierarchy Level</span>
+                <input type="number" min={0} className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={form.hierarchy_level} onChange={(event) => setForm((prev) => ({ ...prev, hierarchy_level: event.target.value }))} />
+              </label>
+              <label className="grid gap-1">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Grade Level</span>
+                <input type="number" min={0} className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={form.grade_level} onChange={(event) => setForm((prev) => ({ ...prev, grade_level: event.target.value }))} />
+              </label>
+              <label className="grid gap-1">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Managerial</span>
+                <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={form.is_managerial} onChange={(event) => setForm((prev) => ({ ...prev, is_managerial: event.target.value }))}>
+                  <option value="false">No</option>
+                  <option value="true">Yes</option>
+                </select>
+              </label>
+              <label className="grid gap-1">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Status</span>
+                <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={form.status} onChange={(event) => setForm((prev) => ({ ...prev, status: event.target.value }))}>
+                  <option value="active">active</option>
+                  <option value="inactive">inactive</option>
+                </select>
+              </label>
+              <label className="grid gap-1 md:col-span-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Description</span>
+                <textarea className="min-h-20 rounded-md border border-slate-300 px-3 py-2 text-sm" value={form.description} onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))} />
+              </label>
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <button type="button" className="rounded-md border border-slate-300 px-3 py-2 text-sm" onClick={() => setOpenForm(false)}>
+                Cancel
+              </button>
+              <button type="button" className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white" disabled={saving} onClick={() => void submitForm()}>
+                {saving ? "Saving..." : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      <AlertDialog
+        open={Boolean(pendingDelete)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPendingDelete(null)
+          }
+        }}
+      >
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Delete</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this designation? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <button
+              type="button"
+              disabled={saving || !pendingDelete}
+              className="rounded-md bg-[hsl(358,82%,59%)] px-3 py-2 text-sm font-medium text-white hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={async () => {
+                if (!pendingDelete) {
+                  return
+                }
+                const row = pendingDelete
+                setPendingDelete(null)
+                await handleDelete(row)
+              }}
+            >
+              {saving ? "Deleting..." : "Delete"}
+            </button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  )
+}

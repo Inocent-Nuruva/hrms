@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { toast } from "sonner"
+import { showSuccessAlert } from "@/lib/success-alert"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -160,9 +161,30 @@ function stringifyValue(value: unknown): string {
     return String(value)
   }
   if (Array.isArray(value)) {
+    if (value.length === 0) {
+      return "-"
+    }
+    const first = value[0]
+    if (typeof first === "string" || typeof first === "number") {
+      return value.slice(0, 2).map((item) => String(item)).join(", ") + (value.length > 2 ? "..." : "")
+    }
     return `${value.length} item(s)`
   }
-  return JSON.stringify(value)
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>
+    const preferredKeys = ["name", "display_name", "title", "slug", "email", "code", "id"]
+    for (const key of preferredKeys) {
+      const candidate = record[key]
+      if (typeof candidate === "string" && candidate.trim()) {
+        return candidate
+      }
+      if (typeof candidate === "number" || typeof candidate === "boolean") {
+        return String(candidate)
+      }
+    }
+    return "Object"
+  }
+  return String(value)
 }
 
 function getVisibleColumns(rows: AdminRecord[]) {
@@ -359,7 +381,15 @@ export function DataTable({
   const [editingEntityForm, setEditingEntityForm] = React.useState<BasicEntityForm>(EMPTY_ENTITY_FORM)
   const [editingRolePermissionNames, setEditingRolePermissionNames] = React.useState<string[]>([])
 
-  const columns = React.useMemo(() => getVisibleColumns(rows), [rows])
+  const columns = React.useMemo(() => {
+    const baseColumns = getVisibleColumns(rows)
+    if (activeResource === "roles") {
+      return baseColumns.filter(
+        (column) => column !== "company_id" && column !== "companyId"
+      )
+    }
+    return baseColumns
+  }, [activeResource, rows])
   const roleOptions = React.useMemo(() => {
     return roles
       .map((role) => {
@@ -480,7 +510,7 @@ export function DataTable({
         setCompanyForm(EMPTY_COMPANY_FORM)
       }
 
-      toast.success(`${RESOURCE_LABELS[activeResource]} created.`)
+      showSuccessAlert(`${RESOURCE_LABELS[activeResource]} created.`)
     } catch (errorObject) {
       const message = errorObject instanceof Error ? errorObject.message : "Create failed."
       toast.error(message)
@@ -513,7 +543,7 @@ export function DataTable({
       }
 
       setEditingUser(null)
-      toast.success("User updated.")
+      showSuccessAlert("User updated.")
     } catch (errorObject) {
       const message = errorObject instanceof Error ? errorObject.message : "Update failed."
       toast.error(message)
@@ -536,7 +566,7 @@ export function DataTable({
       })
       setEditingEntity(null)
       setEditingRolePermissionNames([])
-      toast.success(`${RESOURCE_LABELS[editingEntity.resource]} updated.`)
+      showSuccessAlert(`${RESOURCE_LABELS[editingEntity.resource]} updated.`)
     } catch (errorObject) {
       const message = errorObject instanceof Error ? errorObject.message : "Update failed."
       toast.error(message)
@@ -554,7 +584,7 @@ export function DataTable({
 
     try {
       await onDelete(activeResource, rowId)
-      toast.success(`${RESOURCE_LABELS[activeResource]} deleted.`)
+      showSuccessAlert(`${RESOURCE_LABELS[activeResource]} deleted.`)
     } catch (errorObject) {
       const message = errorObject instanceof Error ? errorObject.message : "Delete failed."
       toast.error(message)
@@ -574,7 +604,7 @@ export function DataTable({
       await onSetUserPassword(targetPasswordUser.id, targetPassword)
       setTargetPassword("")
       setTargetPasswordUser(null)
-      toast.success("Password updated.")
+      showSuccessAlert("Password updated.")
     } catch (errorObject) {
       const message = errorObject instanceof Error ? errorObject.message : "Password update failed."
       toast.error(message)
@@ -933,12 +963,19 @@ export function DataTable({
       <div className="relative flex flex-col gap-4 overflow-auto px-4 lg:px-6">
           <div className="rounded-lg border">
             <Table>
-              <TableHeader className="sticky top-0 z-10 bg-muted">
+              <TableHeader
+                className="sticky top-0 z-10"
+                style={{ backgroundColor: "var(--table-header-accent-bg)" }}
+              >
                 <TableRow>
                   {columns.map((column) => (
-                    <TableHead key={column}>{prettifyKey(column)}</TableHead>
+                    <TableHead key={column} style={{ color: "var(--table-header-accent)" }}>
+                      {prettifyKey(column)}
+                    </TableHead>
                   ))}
-                  <TableHead className="w-16 text-right">Actions</TableHead>
+                  <TableHead className="w-16 text-right" style={{ color: "var(--table-header-accent)" }}>
+                    Actions
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -975,7 +1012,7 @@ export function DataTable({
                       <TableRow key={`${rowId}`}>
                         {columns.map((column) => (
                           <TableCell key={`${rowId}-${column}`}>
-                            <span className="line-clamp-1">{stringifyValue(row[column])}</span>
+                            <span className="block max-w-[24rem] truncate">{stringifyValue(row[column])}</span>
                           </TableCell>
                         ))}
                         <TableCell className="text-right">
@@ -989,7 +1026,7 @@ export function DataTable({
                               <DropdownMenuItem
                                 onClick={() => {
                                   void navigator.clipboard.writeText(JSON.stringify(row, null, 2))
-                                  toast.success("Record details copied.")
+                                  showSuccessAlert("Record details copied.")
                                 }}
                               >
                                 <CopyIcon />

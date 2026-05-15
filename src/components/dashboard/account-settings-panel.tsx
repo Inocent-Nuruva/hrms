@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { toast } from "sonner"
+import { showSuccessAlert } from "@/lib/success-alert"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -39,7 +40,7 @@ export function AccountSettingsPanel({
     try {
       await onUpdateMyProfile({ password: profilePassword })
       setProfilePassword("")
-      toast.success("Profile updated.")
+      showSuccessAlert("Profile updated.")
     } catch (errorObject) {
       const message = errorObject instanceof Error ? errorObject.message : "Profile update failed."
       toast.error(message)
@@ -60,7 +61,7 @@ export function AccountSettingsPanel({
       await onChangeMyPassword(currentPassword, newPassword)
       setCurrentPassword("")
       setNewPassword("")
-      toast.success("Password changed.")
+      showSuccessAlert("Password changed.")
     } catch (errorObject) {
       const message = errorObject instanceof Error ? errorObject.message : "Password change failed."
       toast.error(message)

@@ -11,16 +11,16 @@ export const liquidButtonVariants = cva(
     variants: {
       variant: {
         default:
-          "border-[#f4c6c7] bg-white text-[#303194] shadow-[0_10px_22px_rgba(237,67,72,0.18)] hover:text-white before:bg-[linear-gradient(180deg,#f06d72,#ed4348)] dark:border-[#7b3c4a] dark:bg-[#f3f6ff] dark:text-[#1f2752] dark:hover:text-white dark:before:bg-[linear-gradient(180deg,#f07f84,#d93a3f)]",
+          "border-[color:rgb(var(--primary-rgb)/0.28)] bg-white text-[var(--primary)] shadow-[0_10px_22px_rgb(var(--primary-rgb)/0.22)] hover:text-white before:bg-[var(--primary)] dark:border-[color:rgb(var(--primary-rgb)/0.45)] dark:bg-[#f3f6ff] dark:text-[var(--primary)] dark:hover:text-white dark:before:bg-[var(--primary)]",
         outline:
-          "border-[#d5def6] bg-[#f7f9ff] text-[#26305f] hover:bg-[#e9efff] before:bg-[linear-gradient(180deg,rgba(48,49,148,0.10),rgba(48,49,148,0.02))] dark:border-[#3c4685] dark:bg-[#1d2454] dark:text-[#eef2ff] dark:hover:bg-[#2a336d]",
+          "border-[color:rgb(var(--primary-rgb)/0.25)] bg-[#f7f9ff] text-[var(--primary)] hover:bg-[color:rgb(var(--primary-rgb)/0.08)] before:bg-[color:rgb(var(--primary-rgb)/0.15)] dark:border-[color:rgb(var(--primary-rgb)/0.35)] dark:bg-[#1d2454] dark:text-[#eef2ff] dark:hover:bg-[#2a336d]",
         secondary:
-          "bg-[#e8eeff] text-[#273162] hover:bg-[#dbe5ff] before:bg-[linear-gradient(180deg,rgba(48,49,148,0.12),rgba(48,49,148,0.03))] dark:bg-[#242d63] dark:text-[#eef2ff] dark:hover:bg-[#2f3975]",
+          "bg-[color:rgb(var(--primary-rgb)/0.12)] text-[var(--primary)] hover:bg-[color:rgb(var(--primary-rgb)/0.18)] before:bg-[color:rgb(var(--primary-rgb)/0.18)] dark:bg-[#242d63] dark:text-[#eef2ff] dark:hover:bg-[#2f3975]",
         ghost:
-          "bg-transparent text-[#26305f] hover:bg-[#edf2ff] before:bg-[linear-gradient(180deg,rgba(48,49,148,0.08),rgba(48,49,148,0.02))] dark:text-[#eef2ff] dark:hover:bg-[#2a336d]",
+          "bg-transparent text-[var(--primary)] hover:bg-[color:rgb(var(--primary-rgb)/0.08)] before:bg-[color:rgb(var(--primary-rgb)/0.12)] dark:text-[#eef2ff] dark:hover:bg-[#2a336d]",
         destructive:
-          "bg-[#ed4348] text-white shadow-[0_10px_22px_rgba(237,67,72,0.24)] hover:bg-[#d93a3f] before:bg-[linear-gradient(180deg,rgba(255,255,255,0.2),rgba(255,255,255,0.02))] dark:bg-[#f06d72] dark:text-[#210c0d] dark:hover:bg-[#ef5358]",
-        link: "bg-transparent p-0 text-[#303194] underline-offset-4 before:hidden after:hidden hover:underline dark:text-[#aab5ff]",
+          "bg-[var(--primary)] text-white shadow-[0_10px_22px_rgb(var(--primary-rgb)/0.24)] hover:brightness-95 before:bg-[linear-gradient(180deg,rgba(255,255,255,0.2),rgba(255,255,255,0.02))] dark:bg-[var(--primary)] dark:text-[#210c0d] dark:hover:brightness-95",
+        link: "bg-transparent p-0 text-[var(--primary)] underline-offset-4 before:hidden after:hidden hover:underline dark:text-[#aab5ff]",
       },
       size: {
         default:

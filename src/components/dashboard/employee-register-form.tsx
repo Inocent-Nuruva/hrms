@@ -2,9 +2,9 @@
 
 import * as React from "react"
 import { toast } from "sonner"
+import { showSuccessAlert } from "@/lib/success-alert"
 import ReactFlagsSelect from "react-flags-select"
 import {
-  ArrowRightIcon,
   BadgeCheckIcon,
   CalendarDaysIcon,
   ChevronLeftIcon,
@@ -49,6 +49,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Calendar } from "@/components/ui/calendar"
+import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 import {
   Card,
   CardContent,
@@ -470,6 +471,7 @@ function Field({
 
 export function EmployeeRegisterForm() {
   const [currentStep, setCurrentStep] = React.useState<RegisterStep>("details")
+  const [tabDirection, setTabDirection] = React.useState<"forward" | "backward">("forward")
   const [form, setForm] = React.useState<RegisterFormState>(EMPTY_FORM)
   const [dob, setDob] = React.useState<Date | undefined>(undefined)
   const [contacts, setContacts] = React.useState<ContactFormState[]>([])
@@ -519,6 +521,17 @@ export function EmployeeRegisterForm() {
       ? REGISTER_STEP_ORDER[currentStepIndex + 1]
       : null
   const isDraftBankMobileMoney = draftBankAccount.paymentMode === "mobile_money"
+  const getStepTransitionClass = React.useCallback(
+    (step: RegisterStep) => {
+      if (currentStep !== step) {
+        return ""
+      }
+      return tabDirection === "forward"
+        ? "animate-in fade-in-0 slide-in-from-right-3 duration-300"
+        : "animate-in fade-in-0 slide-in-from-left-3 duration-300"
+    },
+    [currentStep, tabDirection]
+  )
 
   const updateField = <K extends keyof RegisterFormState>(
     field: K,
@@ -1059,7 +1072,7 @@ export function EmployeeRegisterForm() {
           role_id: form.roleId || undefined,
         },
       })
-      toast.success("Employee saved successfully.")
+      showSuccessAlert("Employee saved successfully.")
       clearForm()
     } catch (errorObject) {
       toast.error(errorObject instanceof Error ? errorObject.message : "Failed to save employee.")
@@ -1111,40 +1124,47 @@ export function EmployeeRegisterForm() {
           </CardTitle>
         </CardHeader>
 
-        <CardContent className="space-y-6 pt-5">
+        <CardContent className="space-y-7 px-4 pb-7 pt-6 sm:px-5 lg:px-6">
           <Tabs
             value={currentStep}
             onValueChange={(value) => {
               if (REGISTER_STEP_ORDER.includes(value as RegisterStep)) {
-                setCurrentStep(value as RegisterStep)
+                const nextStep = value as RegisterStep
+                const nextIndex = REGISTER_STEP_ORDER.indexOf(nextStep)
+                if (nextIndex !== -1 && nextIndex !== currentStepIndex) {
+                  setTabDirection(nextIndex > currentStepIndex ? "forward" : "backward")
+                }
+                setCurrentStep(nextStep)
               }
             }}
           >
-            <TabsList className="w-full flex-nowrap items-stretch justify-start gap-0 overflow-hidden rounded-lg border border-border/70 bg-muted/20 p-0">
-              {REGISTER_STEP_ORDER.map((step, index) => (
+            <TabsList className="relative !h-auto min-h-9 w-full flex-nowrap items-stretch justify-start gap-0 overflow-x-auto rounded-lg border border-border/70 bg-muted/20 p-0.5 sm:overflow-hidden">
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute top-0.5 bottom-0.5 left-0 z-0 rounded-md bg-primary shadow-sm transition-transform duration-500 ease-in-out"
+                style={{
+                  width: `${100 / REGISTER_STEP_ORDER.length}%`,
+                  transform: `translateX(${currentStepIndex * 100}%)`,
+                }}
+              />
+              {REGISTER_STEP_ORDER.map((step) => (
                 <TabsTrigger
                   key={step}
                   value={step}
-                  className="group h-auto min-w-0 flex-1 rounded-none border-r border-border/50 px-2 py-2 text-left text-xs data-active:bg-primary data-active:text-primary-foreground sm:text-sm [&:last-child]:border-r-0"
+                  className="group relative z-10 h-auto min-w-[9rem] flex-none rounded-md border-r border-border/50 px-4 py-2 text-left text-sm data-active:bg-transparent data-active:text-primary-foreground sm:min-w-0 sm:flex-1 [&:last-child]:border-r-0"
                 >
                   <span className="flex items-center justify-between gap-2">
                     <span className="flex min-w-0 items-center gap-2">
-                      <span className="inline-flex size-5 shrink-0 items-center justify-center rounded-full border border-current/25 text-[11px] font-semibold leading-none">
-                      {index + 1}
-                      </span>
                       <span className="truncate">{REGISTER_STEP_LABELS[step]}</span>
                     </span>
-                    {index < REGISTER_STEP_ORDER.length - 1 ? (
-                      <ArrowRightIcon className="size-3.5 shrink-0 opacity-60 transition-opacity group-data-active:opacity-100" />
-                    ) : null}
                   </span>
                 </TabsTrigger>
               ))}
             </TabsList>
 
-            <TabsContents className="pt-4">
-              <TabsContent value="details">
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <TabsContents className="px-3 pt-6 sm:px-4 lg:px-5 [&_[data-slot=input]]:h-11 [&_[data-slot=input]]:px-4 [&_[data-slot=select-trigger]]:h-11 [&_[data-slot=select-trigger]]:px-4 [&_[data-slot=select-content]]:p-1 [&_[data-slot=select-item]]:px-3 [&_[data-slot=select-item]]:py-2">
+              <TabsContent value="details" className={getStepTransitionClass("details")}>
+                <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
                   <Field label="Employee Number" htmlFor="employeeNo" delayMs={30}>
                     <Input
                       id="employeeNo"
@@ -1344,7 +1364,7 @@ export function EmployeeRegisterForm() {
                 </div>
               </TabsContent>
 
-              <TabsContent value="contacts">
+              <TabsContent value="contacts" className={getStepTransitionClass("contacts")}>
                 <div className="grid gap-3">
                   <div className="flex items-center justify-between gap-2">
                     <Label>Contacts</Label>
@@ -1424,7 +1444,7 @@ export function EmployeeRegisterForm() {
                 </div>
               </TabsContent>
 
-              <TabsContent value="addresses">
+              <TabsContent value="addresses" className={getStepTransitionClass("addresses")}>
                 <div className="grid gap-3">
                   <div className="flex items-center justify-between gap-2">
                     <Label>Addresses</Label>
@@ -1496,7 +1516,7 @@ export function EmployeeRegisterForm() {
                 </div>
               </TabsContent>
 
-              <TabsContent value="relatives">
+              <TabsContent value="relatives" className={getStepTransitionClass("relatives")}>
                 <div className="grid gap-3">
                   <div className="flex items-center justify-between gap-2">
                     <Label>Relatives</Label>
@@ -1570,7 +1590,7 @@ export function EmployeeRegisterForm() {
                 </div>
               </TabsContent>
 
-              <TabsContent value="identifications">
+              <TabsContent value="identifications" className={getStepTransitionClass("identifications")}>
                 <div className="grid gap-3">
                   <div className="flex items-center justify-between gap-2">
                     <Label>Identifications</Label>
@@ -1647,7 +1667,7 @@ export function EmployeeRegisterForm() {
                 </div>
               </TabsContent>
 
-              <TabsContent value="bankAccounts">
+              <TabsContent value="bankAccounts" className={getStepTransitionClass("bankAccounts")}>
                 <div className="grid gap-3">
                   <div className="flex items-center justify-between gap-2">
                     <Label>Bank Accounts</Label>
@@ -1730,14 +1750,25 @@ export function EmployeeRegisterForm() {
           </Button>
           <div className="flex items-center gap-2">
             {previousStep ? (
-              <Button variant="outline" onClick={() => setCurrentStep(previousStep)}>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setTabDirection("backward")
+                  setCurrentStep(previousStep)
+                }}
+              >
                 <ChevronLeftIcon />
                 Previous
               </Button>
             ) : null}
 
             {nextStep ? (
-              <Button onClick={() => setCurrentStep(nextStep)}>
+              <Button
+                onClick={() => {
+                  setTabDirection("forward")
+                  setCurrentStep(nextStep)
+                }}
+              >
                 Next
                 <ChevronRightIcon />
               </Button>
@@ -2026,11 +2057,11 @@ export function EmployeeRegisterForm() {
             </div>
             <div className="grid gap-2">
               <Label htmlFor="draft-identification-expiry">Expiry Date</Label>
-              <Input
+              <DatePickerPresets
                 id="draft-identification-expiry"
-                type="date"
                 value={draftIdentification.expiryDate}
-                onChange={(event) => updateDraftIdentification("expiryDate", event.target.value)}
+                onChange={(value) => updateDraftIdentification("expiryDate", value)}
+                placeholder="Expiry date"
               />
             </div>
             <label className="inline-flex items-center gap-2 text-sm font-medium md:col-span-2">

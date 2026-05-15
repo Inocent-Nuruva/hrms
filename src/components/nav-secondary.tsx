@@ -45,7 +45,17 @@ export function NavSecondary({
   const router = useRouter()
   const [query, setQuery] = React.useState("")
   const [isSearchOpen, setIsSearchOpen] = React.useState(false)
+  const [hoveredLink, setHoveredLink] = React.useState<string | null>(null)
   const normalizedQuery = query.trim().toLowerCase()
+  const renderAnimatedIcon = React.useCallback((icon: React.ReactNode, key: string) => {
+    if (!React.isValidElement(icon)) {
+      return icon
+    }
+    return React.cloneElement(icon as React.ReactElement<Record<string, unknown>>, {
+      animate: hoveredLink === key ? "path-loop" : false,
+      size: 48,
+    })
+  }, [hoveredLink])
 
   const searchableItems = React.useMemo(
     () => searchItems.filter((item) => item.url && item.url !== "#"),
@@ -94,10 +104,12 @@ export function NavSecondary({
                           isActive={false}
                           className="cursor-pointer"
                           aria-label="Open global search"
+                          onMouseEnter={() => setHoveredLink(item.title)}
+                          onMouseLeave={() => setHoveredLink((value) => (value === item.title ? null : value))}
                         />
                       }
                     >
-                      {item.icon}
+                      {renderAnimatedIcon(item.icon, item.title)}
                       <span>{item.title}</span>
                     </DialogTrigger>
                     <DialogPopup from="top" showCloseButton className="sm:max-w-[560px]">
@@ -147,8 +159,10 @@ export function NavSecondary({
                 <SidebarMenuButton
                   render={<Link href={item.url} />}
                   isActive={pathname === item.url}
+                  onMouseEnter={() => setHoveredLink(item.title)}
+                  onMouseLeave={() => setHoveredLink((value) => (value === item.title ? null : value))}
                 >
-                  {item.icon}
+                  {renderAnimatedIcon(item.icon, item.title)}
                   <span>{item.title}</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>

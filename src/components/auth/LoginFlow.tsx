@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { toast } from "sonner";
+import { showSuccessAlert } from "@/lib/success-alert";
+import { showErrorAlert } from "@/lib/error-alert";
 import { EyeIcon, EyeOffIcon } from "lucide-react";
 
 import { Checkbox } from "@/components/ui/checkbox";
@@ -15,20 +16,27 @@ interface LoginFlowProps {
 export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
   const [email, setEmail] = useState(defaultEmail);
   const [password, setPassword] = useState("");
+  const [loginError, setLoginError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [isDone, setIsDone] = useState(false);
+  const [isHoveringSubmit, setIsHoveringSubmit] = useState(false);
   const { login, isLoading } = useAuth();
 
   const handleLogin = async () => {
     const normalizedEmail = email.trim().toLowerCase();
+    setLoginError(null);
 
     if (!normalizedEmail) {
-      toast.error("Email is required.");
+      const message = "Email is required.";
+      setLoginError(message);
+      showErrorAlert(message, "Invalid credentials");
       return;
     }
     if (!password) {
-      toast.error("Password is required.");
+      const message = "Password is required.";
+      setLoginError(message);
+      showErrorAlert(message, "Invalid credentials");
       return;
     }
 
@@ -39,24 +47,30 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
       });
 
       if (response.requiresOtp) {
-        toast.error("This admin login accepts only email and password.");
+        const message = "This admin login accepts only email and password.";
+        setLoginError(message);
+        showErrorAlert(message, "Invalid credentials");
         return;
       }
 
       if (!response.tokens) {
-        toast.error("Login response did not include tokens.");
+        const message = "Login response did not include tokens.";
+        setLoginError(message);
+        showErrorAlert(message, "Invalid credentials");
         return;
       }
 
       setIsDone(true);
-      toast.success("Login successful! Redirecting…");
+      showSuccessAlert("Login successful! Redirecting…", "Success");
       const redirect = "/dashboard";
       setTimeout(() => {
         if (onSuccess) onSuccess(redirect);
         else window.location.href = redirect;
-      }, 900);
+      }, 1800);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Login failed. Please try again.");
+      const message = err instanceof Error ? err.message : "Login failed. Please try again.";
+      setLoginError(message);
+      showErrorAlert(message, "Invalid credentials");
     }
   };
 
@@ -99,7 +113,10 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
                 type="email"
                 value={email}
                 autoComplete="username"
-                onChange={(event) => setEmail(event.target.value)}
+                onChange={(event) => {
+                  setEmail(event.target.value);
+                  if (loginError) setLoginError(null);
+                }}
                 placeholder="admin@company.com"
                 style={{
                   width: "100%",
@@ -121,7 +138,10 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
                   type={showPassword ? "text" : "password"}
                   value={password}
                   autoComplete="current-password"
-                  onChange={(event) => setPassword(event.target.value)}
+                  onChange={(event) => {
+                    setPassword(event.target.value);
+                    if (loginError) setLoginError(null);
+                  }}
                   placeholder="Enter password"
                   style={{
                     width: "100%",
@@ -160,6 +180,23 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
               </div>
             </div>
 
+            {loginError ? (
+              <p
+                style={{
+                  margin: 0,
+                  padding: "10px 12px",
+                  borderRadius: 10,
+                  border: "1px solid #fecaca",
+                  background: "#fef2f2",
+                  color: "#b91c1c",
+                  fontSize: 13,
+                  fontWeight: 600,
+                }}
+              >
+                {loginError}
+              </p>
+            ) : null}
+
             <label
               style={{
                 display: "inline-flex",
@@ -184,99 +221,84 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
               type="button"
               disabled={isLoading}
               onClick={() => void handleLogin()}
+              onMouseEnter={() => setIsHoveringSubmit(true)}
+              onMouseLeave={() => setIsHoveringSubmit(false)}
               style={{
+                position: "relative",
+                overflow: "hidden",
                 width: "100%",
                 padding: 14,
-                background: isLoading ? "rgba(237,67,72,0.6)" : "#ed4348",
-                color: "white",
-                border: "none",
+                background: isLoading
+                  ? "rgba(48,49,148,0.65)"
+                  : isHoveringSubmit
+                    ? "white"
+                    : "#303194",
+                color: isHoveringSubmit ? "#303194" : "white",
+                border: "1px solid #303194",
                 borderRadius: 12,
                 fontSize: 15,
                 fontWeight: 700,
                 fontFamily: "var(--font)",
                 cursor: isLoading ? "not-allowed" : "pointer",
-                boxShadow: isLoading ? "none" : "0 4px 14px rgba(237,67,72,0.40)",
-                transition: "all 0.2s",
+                boxShadow: isLoading ? "none" : "0 4px 14px rgba(48,49,148,0.4)",
+                transition: "all 0.28s cubic-bezier(0.22, 1, 0.36, 1)",
               }}
             >
+              {!isLoading ? (
+                <span
+                  aria-hidden="true"
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: isHoveringSubmit ? "115%" : "-40%",
+                    zIndex: 1,
+                    height: "100%",
+                    width: "35%",
+                    transform: "skewX(-12deg)",
+                    background: "rgba(255,255,255,0.25)",
+                    opacity: isHoveringSubmit ? 1 : 0,
+                    pointerEvents: "none",
+                    transition: "all 0.5s",
+                  }}
+                />
+              ) : null}
+              <span style={{ position: "relative", zIndex: 2 }}>
               {isLoading ? "Signing in..." : "Sign In"}
+              </span>
             </button>
           </div>
-        ) : (
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: 16,
-              marginTop: 24,
-              textAlign: "center",
-            }}
-          >
-            <div
-              style={{
-                width: 64,
-                height: 64,
-                background: "#d1fae5",
-                borderRadius: "50%",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                animation: "pop 0.4s cubic-bezier(0.34,1.56,0.64,1)",
-              }}
-            >
-              <svg
-                width="28"
-                height="28"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="#10b981"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
-            </div>
-            <div>
-              <p style={{ fontSize: 18, fontWeight: 800, color: "#1a1f36", marginBottom: 4 }}>
-                You&apos;re signed in!
-              </p>
-              <p style={{ fontSize: 14, color: "#6b7280" }}>
-                Redirecting to your admin dashboard…
-              </p>
-            </div>
-          </div>
-        )}
+        ) : null}
       </div>
 
-      <div
-        style={{
-          borderTop: "1px solid #f3f4f6",
-          padding: "14px 40px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 8,
-        }}
-      >
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="#9ca3af"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
+      {!isDone ? (
+        <div
+          style={{
+            borderTop: "1px solid #f3f4f6",
+            padding: "14px 40px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 8,
+          }}
         >
-          <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
-          <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-        </svg>
-        <span style={{ fontSize: 12, color: "#9ca3af", fontWeight: 500 }}>
-          Email + password authentication
-        </span>
-      </div>
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="#9ca3af"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+          </svg>
+          <span style={{ fontSize: 12, color: "#9ca3af", fontWeight: 500 }}>
+            Email + password authentication
+          </span>
+        </div>
+      ) : null}
     </div>
   );
 }

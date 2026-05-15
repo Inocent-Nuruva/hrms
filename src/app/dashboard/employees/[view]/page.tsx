@@ -3,12 +3,12 @@ import { redirect } from "next/navigation"
 import AdminDashboardView from "@/components/dashboard/admin-dashboard-view"
 import { EmployeesListView } from "@/components/dashboard/employees-list-view"
 import { EmployeeRegisterForm } from "@/components/dashboard/employee-register-form"
-
+import { OnboardingView } from "@/components/dashboard/onboarding-view"
 const ALLOWED_VIEWS = new Set([
   "all",
   "register",
   "offboarding",
-  "leave-management",
+  "onboarding",
   "attendance",
 ])
 
@@ -23,6 +23,10 @@ export default async function EmployeesViewPage({
 }: EmployeesViewPageProps) {
   const { view } = await params
   const normalized = view?.toLowerCase()
+
+  if (normalized === "departments") {
+    redirect("/dashboard/departments")
+  }
 
   if (!ALLOWED_VIEWS.has(normalized)) {
     redirect("/dashboard/employees/register")
@@ -40,6 +44,14 @@ export default async function EmployeesViewPage({
     return (
       <AdminDashboardView>
         <EmployeesListView />
+      </AdminDashboardView>
+    )
+  }
+
+  if (normalized === "onboarding") {
+    return (
+      <AdminDashboardView>
+        <OnboardingView />
       </AdminDashboardView>
     )
   }

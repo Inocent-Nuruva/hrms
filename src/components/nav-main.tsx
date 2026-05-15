@@ -23,7 +23,9 @@ import {
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar"
 import type { AdminResourceKey } from "@/lib/admin-api"
-import { BellIcon, ChevronDownIcon, LayoutDashboardIcon } from "lucide-react"
+import { ChevronDownIcon } from "lucide-react"
+import { Bell } from "@/components/animate-ui/icons/bell"
+import { LayoutDashboard } from "@/components/animate-ui/icons/layout-dashboard"
 
 type NavMainSubItem = {
   title: string
@@ -67,6 +69,17 @@ export function NavMain({
         ])
     )
   )
+  const [hoveredLink, setHoveredLink] = React.useState<string | null>(null)
+
+  const renderAnimatedIcon = React.useCallback((icon: React.ReactNode, key: string) => {
+    if (!React.isValidElement(icon)) {
+      return icon
+    }
+    return React.cloneElement(icon as React.ReactElement<Record<string, unknown>>, {
+      animate: hoveredLink === key ? "path-loop" : false,
+      size: 42,
+    })
+  }, [hoveredLink])
 
   React.useEffect(() => {
     setOpenGroups((previous) => {
@@ -93,12 +106,15 @@ export function NavMain({
           <SidebarMenuItem className="flex items-center gap-2">
             <SidebarMenuButton
               tooltip="Dashboard"
-              className="min-w-8 bg-[#303194] text-white duration-200 ease-linear hover:bg-[#252882] hover:text-white active:bg-[#252882] active:text-white dark:bg-[#7f8ce3] dark:text-[#101433] dark:hover:bg-[#a3afff] dark:active:bg-[#a3afff]"
+              className="min-w-8 rounded-xl bg-transparent text-foreground duration-200 ease-linear hover:bg-muted hover:text-foreground data-active:!bg-transparent data-active:!text-[var(--sidebar-active-link-color)] [&_svg]:!text-[var(--sidebar-icon-color)]"
+              isActive={currentPath === "/dashboard"}
               onClick={() => {
                 router.push("/dashboard")
               }}
+              onMouseEnter={() => setHoveredLink("__dashboard")}
+              onMouseLeave={() => setHoveredLink((value) => (value === "__dashboard" ? null : value))}
             >
-              <LayoutDashboardIcon />
+              <LayoutDashboard size={48} animation="path-loop" animate={hoveredLink === "__dashboard" ? "path-loop" : false} />
               <span>Dashboard</span>
             </SidebarMenuButton>
             <Dialog>
@@ -113,7 +129,7 @@ export function NavMain({
                   />
                 }
               >
-                <BellIcon />
+                <Bell size={40} animation="path-loop" animateOnHover="path-loop" />
                 <span className="sr-only">Notifications</span>
               </DialogTrigger>
               <DialogPopup from="right" showCloseButton className="sm:max-w-[425px]">
@@ -123,7 +139,7 @@ export function NavMain({
 
                 <div className="flex min-h-44 flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border bg-muted/25 p-6 text-center">
                   <div className="rounded-full bg-muted p-3">
-                    <BellIcon className="size-5 text-muted-foreground" />
+                    <Bell size={24} className="text-muted-foreground" />
                   </div>
                   <p className="text-sm font-normal text-muted-foreground">No notifications yet</p>
                 </div>
@@ -140,7 +156,7 @@ export function NavMain({
             <SidebarMenuItem key={item.title}>
               <SidebarMenuButton
                 tooltip={item.title}
-                className="cursor-pointer"
+                className="cursor-pointer rounded-xl py-5 text-[1rem] font-medium text-foreground !no-underline hover:!no-underline hover:bg-muted data-active:!bg-transparent data-active:!text-[var(--sidebar-active-link-color)] [&_svg]:!text-[var(--sidebar-icon-color)]"
                 isActive={
                   item.items
                     ? item.items.some((subItem) => currentPath.startsWith(subItem.url))
@@ -156,8 +172,10 @@ export function NavMain({
                     [item.title]: !previous[item.title],
                   }))
                 }}
+                onMouseEnter={() => setHoveredLink(item.title)}
+                onMouseLeave={() => setHoveredLink((value) => (value === item.title ? null : value))}
               >
-                {item.icon}
+                {renderAnimatedIcon(item.icon, item.title)}
                 <span>{item.title}</span>
                 {item.items ? (
                   <ChevronDownIcon
@@ -183,7 +201,7 @@ export function NavMain({
                       {item.items.map((subItem) => (
                         <SidebarMenuSubItem key={subItem.url}>
                           <SidebarMenuSubButton
-                            className="cursor-pointer"
+                            className="cursor-pointer rounded-lg py-4 text-[0.9rem] text-foreground !no-underline hover:!no-underline hover:bg-muted data-active:!bg-transparent data-active:!text-[var(--sidebar-active-link-color)] [&_svg]:!text-[var(--sidebar-icon-color)]"
                             isActive={currentPath === subItem.url}
                             onClick={() => {
                               router.push(subItem.url)

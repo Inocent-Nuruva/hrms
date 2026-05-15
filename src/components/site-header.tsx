@@ -1,6 +1,7 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
+import { AccentColorPicker } from "@/components/accent-color-picker"
 import { ThemeTogglerButton } from "@/components/animate-ui/components/buttons/theme-toggler"
 import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
@@ -45,8 +46,9 @@ export function SiteHeader({
             variant="outline"
             size="icon-sm"
             direction="right"
-            modes={["light", "dark", "system"]}
+            modes={["light", "dark"]}
           />
+          <AccentColorPicker />
           <Button variant="outline" size="sm" onClick={onRefresh} disabled={loading}>
             <RefreshCwIcon className={loading ? "animate-spin" : ""} />
             Refresh

@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { MonitorCogIcon, MoonIcon, SunIcon } from "lucide-react"
-import { useTheme } from "next-themes"
+import { useTheme } from "@/components/theme-provider"
 
 import { Button } from "@/components/ui/button"
 
@@ -39,7 +39,7 @@ export function ThemeTogglerButton({
   modes = ["light", "dark"],
   className,
 }: ThemeTogglerButtonProps) {
-  const { theme, setTheme } = useTheme()
+  const { theme, resolvedTheme, setTheme } = useTheme()
   const [mounted, setMounted] = React.useState(false)
 
   React.useEffect(() => {
@@ -50,7 +50,9 @@ export function ThemeTogglerButton({
   const current = (mounted ? theme : safeModes[0]) as ThemeMode | undefined
   const currentMode = safeModes.includes(current as ThemeMode)
     ? (current as ThemeMode)
-    : safeModes[0]
+    : safeModes.includes(resolvedTheme as ThemeMode)
+      ? (resolvedTheme as ThemeMode)
+      : safeModes[0]
   const iconMode = currentMode ?? "light"
   const icon =
     iconMode === "dark" ? (

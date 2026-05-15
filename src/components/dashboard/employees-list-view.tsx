@@ -1,7 +1,17 @@
 "use client"
 
 import * as React from "react"
+import { useRouter } from "next/navigation"
 
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { listEmployees, type AdminRecord, type EmployeesQueryParams } from "@/lib/admin-api"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 
@@ -53,7 +63,60 @@ function readString(row: AdminRecord, keys: string[]) {
   return "-"
 }
 
+function asRecordArray(value: unknown): AdminRecord[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+  return value.filter((entry) => typeof entry === "object" && entry !== null) as AdminRecord[]
+}
+
+function getPrimaryContact(row: AdminRecord) {
+  const contacts = asRecordArray(row.contacts)
+  if (contacts.length === 0) {
+    return { email: "-", phone: "-" }
+  }
+
+  const primary = contacts.find((contact) => contact.is_primary === true) ?? contacts[0]
+  if (!primary) {
+    return { email: "-", phone: "-" }
+  }
+
+  return {
+    email: readString(primary, ["email"]),
+    phone: readString(primary, ["phone_number", "phone"]),
+  }
+}
+
+function employeeDisplayName(row: AdminRecord) {
+  const named = readString(row, ["full_name", "fullName", "name"])
+  if (named !== "-") {
+    return named
+  }
+  const first = readString(row, ["first_name", "firstName"])
+  const middle = readString(row, ["middle_name", "middleName"])
+  const last = readString(row, ["last_name", "lastName"])
+  return [first, middle, last].filter((part) => part !== "-").join(" ").trim() || "-"
+}
+
+const REQUIRED_PROFILE_ITEMS: Array<{ key: string; label: string }> = [
+  { key: "contacts", label: "Contacts" },
+  { key: "addresses", label: "Addresses" },
+  { key: "relatives", label: "Relatives" },
+  { key: "identifications", label: "Identifications" },
+  { key: "bank_accounts", label: "Bank Accounts" },
+  { key: "departments", label: "Departments" },
+  { key: "academic_qualifications", label: "Academic Qualifications" },
+  { key: "professional_qualifications", label: "Professional Qualifications" },
+  { key: "experience_details", label: "Experience Details" },
+  { key: "documents", label: "Documents" },
+]
+
+function missingProfileItems(row: AdminRecord) {
+  return REQUIRED_PROFILE_ITEMS.filter((item) => asRecordArray(row[item.key]).length === 0)
+}
+
 export function EmployeesListView() {
+  const router = useRouter()
   const [query, setQuery] = React.useState(DEFAULT_QUERY)
   const [rows, setRows] = React.useState<AdminRecord[]>([])
   const [loading, setLoading] = React.useState(false)
@@ -61,6 +124,7 @@ export function EmployeesListView() {
   const [page, setPage] = React.useState(1)
   const [totalPages, setTotalPages] = React.useState<number | null>(null)
   const [total, setTotal] = React.useState<number | null>(null)
+  const [missingDialog, setMissingDialog] = React.useState<{ employeeNo: string; missing: Array<{ key: string; label: string }> } | null>(null)
 
   const fetchEmployees = React.useCallback(async () => {
     const token = readStoredToken()
@@ -100,6 +164,14 @@ export function EmployeesListView() {
 
   const canGoPrevious = page > 1 && !loading
   const canGoNext = !loading && (totalPages === null || page < totalPages)
+
+  const openEmployeeDetails = (row: AdminRecord) => {
+    const employeeNo = readString(row, ["employee_no", "user_no", "employeeNo"])
+    if (employeeNo === "-") {
+      return
+    }
+    router.push(`/dashboard/employees/profile/${encodeURIComponent(employeeNo)}`)
+  }
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white/80 px-4 py-5 shadow-sm lg:px-6">
@@ -151,19 +223,48 @@ export function EmployeesListView() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 bg-white">
-            {rows.map((row, index) => (
-              <tr key={String(row.id ?? row.user_id ?? row.employee_id ?? index)}>
-                <td className="px-3 py-2">{readString(row, ["employee_no", "user_no", "employeeNo"])}</td>
-                <td className="px-3 py-2">
-                  {readString(row, ["full_name", "fullName", "name"]) !== "-"
-                    ? readString(row, ["full_name", "fullName", "name"])
-                    : `${readString(row, ["first_name", "firstName"])} ${readString(row, ["last_name", "lastName"])}`.trim()}
-                </td>
-                <td className="px-3 py-2">{readString(row, ["email"])}</td>
-                <td className="px-3 py-2">{readString(row, ["phone", "phone_number"])}</td>
-                <td className="px-3 py-2">{readString(row, ["employment_status", "status"])}</td>
-              </tr>
-            ))}
+            {rows.map((row, index) => {
+              const primaryContact = getPrimaryContact(row)
+              const employeeNo = readString(row, ["employee_no", "user_no", "employeeNo"])
+              const missingItems = missingProfileItems(row)
+              return (
+                <tr
+                  key={String(row.id ?? row.user_id ?? row.employee_id ?? index)}
+                  className="cursor-pointer hover:bg-slate-50"
+                  onClick={() => openEmployeeDetails(row)}
+                >
+                  <td className="px-3 py-2">
+                    <button
+                      type="button"
+                      className="font-medium text-slate-800 hover:text-slate-950"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        openEmployeeDetails(row)
+                      }}
+                    >
+                      {employeeNo}
+                    </button>
+                    <button
+                      type="button"
+                      className="mt-1 block text-left text-xs font-semibold text-rose-600 hover:text-rose-700"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        setMissingDialog({
+                          employeeNo,
+                          missing: missingItems,
+                        })
+                      }}
+                    >
+                      {missingItems.length} out of {REQUIRED_PROFILE_ITEMS.length} incomplete
+                    </button>
+                  </td>
+                  <td className="px-3 py-2">{employeeDisplayName(row)}</td>
+                  <td className="px-3 py-2">{primaryContact.email}</td>
+                  <td className="px-3 py-2">{primaryContact.phone}</td>
+                  <td className="px-3 py-2">{readString(row, ["employment_status", "status"])}</td>
+                </tr>
+              )
+            })}
             {!loading && rows.length === 0 ? (
               <tr>
                 <td className="px-3 py-6 text-center text-slate-500" colSpan={5}>
@@ -201,6 +302,49 @@ export function EmployeesListView() {
       </div>
 
       {error ? <p className="mt-3 text-sm text-rose-600">{error}</p> : null}
+
+      <AlertDialog
+        open={Boolean(missingDialog)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setMissingDialog(null)
+          }
+        }}
+      >
+        <AlertDialogContent className="max-w-lg">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Incomplete Profile Items</AlertDialogTitle>
+            <AlertDialogDescription>
+              {missingDialog
+                ? `${missingDialog.employeeNo} has ${missingDialog.missing.length} incomplete item(s).`
+                : "Incomplete profile details."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {missingDialog && missingDialog.missing.length > 0 ? (
+            <div className="space-y-2">
+              {missingDialog.missing.map((item) => (
+                <div key={item.key} className="flex items-center justify-between rounded-md border border-slate-200 p-2">
+                  <span className="text-sm text-slate-800">{item.label}</span>
+                  <button
+                    type="button"
+                    className="text-xs font-medium text-indigo-600 hover:text-indigo-700"
+                    onClick={() => {
+                      router.push(`/dashboard/employees/profile/${encodeURIComponent(missingDialog.employeeNo)}`)
+                    }}
+                  >
+                    Open profile
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-emerald-700">All required items are completed.</p>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel>Close</AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
