@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { FormEvent, useState } from "react";
 import { showSuccessAlert } from "@/lib/success-alert";
 import { showErrorAlert } from "@/lib/error-alert";
 import { EyeIcon, EyeOffIcon } from "lucide-react";
@@ -74,18 +74,17 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
     }
   };
 
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    void handleLogin();
+  };
+
   return (
     <div
       style={{
-        background: "white",
-        borderRadius: 24,
-        boxShadow: "0 8px 40px rgba(48,49,148,0.10), 0 2px 8px rgba(0,0,0,0.05)",
         width: "100%",
-        overflow: "hidden",
       }}
     >
-      <div style={{ height: 4, background: "linear-gradient(90deg, #303194, #ed4348)" }} />
-
       <div style={{ padding: "40px 40px 36px" }}>
         <div style={{ textAlign: "center", marginBottom: 24 }}>
           <h1
@@ -106,10 +105,14 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
         </div>
 
         {!isDone ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <form
+            onSubmit={handleSubmit}
+            style={{ display: "flex", flexDirection: "column", gap: 14 }}
+          >
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               <label style={{ fontSize: 13, fontWeight: 600, color: "#1a1f36" }}>Email</label>
               <input
+                className="transition-[box-shadow,border-color] focus:outline-none focus:ring-4 focus:ring-[#303194]/20 focus:border-[#303194]"
                 type="email"
                 value={email}
                 autoComplete="username"
@@ -135,6 +138,7 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
               <label style={{ fontSize: 13, fontWeight: 600, color: "#1a1f36" }}>Password</label>
               <div style={{ position: "relative" }}>
                 <input
+                  className="transition-[box-shadow,border-color] focus:outline-none focus:ring-4 focus:ring-[#303194]/20 focus:border-[#303194]"
                   type={showPassword ? "text" : "password"}
                   value={password}
                   autoComplete="current-password"
@@ -218,9 +222,8 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
             </label>
 
             <button
-              type="button"
+              type="submit"
               disabled={isLoading}
-              onClick={() => void handleLogin()}
               onMouseEnter={() => setIsHoveringSubmit(true)}
               onMouseLeave={() => setIsHoveringSubmit(false)}
               style={{
@@ -266,14 +269,14 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
               {isLoading ? "Signing in..." : "Sign In"}
               </span>
             </button>
-          </div>
+          </form>
         ) : null}
       </div>
 
       {!isDone ? (
         <div
           style={{
-            borderTop: "1px solid #f3f4f6",
+            borderTop: "1px solid rgba(148, 163, 184, 0.25)",
             padding: "14px 40px",
             display: "flex",
             alignItems: "center",

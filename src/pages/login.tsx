@@ -202,7 +202,7 @@ export default function LoginPage() {
         <div
           className="hidden md:flex w-full animate-card-entrance"
           style={{
-            maxWidth: 960,
+            maxWidth: 1040,
             minHeight: 600,
             borderRadius: 24,
             overflow: "hidden",
@@ -217,7 +217,7 @@ export default function LoginPage() {
               alignItems: "center",
               justifyContent: "center",
               padding: "40px 32px",
-              flex: "0 0 440px",
+              flex: "0 0 500px",
             }}
           >
             <div style={{ width: "100%" }}>
