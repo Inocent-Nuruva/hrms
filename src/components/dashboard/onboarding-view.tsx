@@ -11,6 +11,9 @@ import {
   createOnboardingWorkflow,
   deleteOnboardingRequest,
   deleteOnboardingWorkflow,
+  getOnboardingAuditLogs,
+  getOnboardingProgress,
+  getOnboardingRequest,
   getOnboardingWorkflow,
   listBranches,
   listDepartments,
@@ -146,6 +149,32 @@ function toTitleCaseWords(value: string) {
     .replace(/\b\w/g, (match) => match.toUpperCase())
 }
 
+function toRecord(value: unknown): AdminRecord | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null
+  }
+  return value as AdminRecord
+}
+
+function toRecordList(value: unknown): AdminRecord[] {
+  if (Array.isArray(value)) {
+    return value.map((entry) => toRecord(entry)).filter((entry): entry is AdminRecord => Boolean(entry))
+  }
+  const record = toRecord(value)
+  return record ? [record] : []
+}
+
+function toTimestamp(value: unknown) {
+  if (typeof value !== "string" || !value.trim()) {
+    return "-"
+  }
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) {
+    return value
+  }
+  return parsed.toLocaleString()
+}
+
 type RequestAction =
   | "approve"
   | "reject"
@@ -222,6 +251,13 @@ export function OnboardingView() {
   const [requestSearch, setRequestSearch] = React.useState("")
   const [requestStatusFilter, setRequestStatusFilter] = React.useState("all")
   const [workflows, setWorkflows] = React.useState<AdminRecord[]>([])
+  const [requestDetailsOpen, setRequestDetailsOpen] = React.useState(false)
+  const [requestDetailsLoading, setRequestDetailsLoading] = React.useState(false)
+  const [selectedRequestRow, setSelectedRequestRow] = React.useState<AdminRecord | null>(null)
+  const [selectedRequestDetails, setSelectedRequestDetails] = React.useState<AdminRecord | null>(null)
+  const [selectedRequestProgress, setSelectedRequestProgress] = React.useState<AdminRecord | null>(null)
+  const [selectedRequestAuditLogs, setSelectedRequestAuditLogs] = React.useState<AdminRecord[]>([])
+  const [selectedWorkflowSteps, setSelectedWorkflowSteps] = React.useState<AdminRecord[]>([])
 
   const [requestForm, setRequestForm] = React.useState({
     employee_id: "",
@@ -473,6 +509,75 @@ export function OnboardingView() {
   function resolveYesNoLabel(value: unknown) {
     return String(value) === "true" || value === true ? "Yes" : "No"
   }
+
+  const resolveResponsibleParty = React.useCallback((step: AdminRecord) => {
+    const explicitPerson = readString(step, ["assignee_name", "assigned_to_name", "owner_name", "company_user_name"])
+    if (explicitPerson !== "-") {
+      return explicitPerson
+    }
+
+    const approverType = String(step.approver_type ?? "").toLowerCase().trim()
+
+    const companyUserId = readNumber(step, ["company_user_id", "user_id", "assigned_user_id"])
+    if (companyUserId !== null) {
+      const personLabel = resolveOptionLabel(users, companyUserId, ["id", "user_id", "company_user_id"], [
+        "full_name",
+        "name",
+        "email",
+      ])
+      if (personLabel !== "-") {
+        return personLabel
+      }
+    }
+
+    const roleId = readNumber(step, ["role_id", "assigned_role_id"])
+    if (roleId !== null) {
+      const roleLabel = resolveOptionLabel(roles, roleId, ["id", "role_id"], ["display_name", "name", "title"])
+      if (roleLabel !== "-") {
+        return `Role: ${roleLabel}`
+      }
+    }
+
+    const positionId = readNumber(step, ["position_id", "assigned_position_id"])
+    if (positionId !== null) {
+      const positionLabel = resolveOptionLabel(
+        positions,
+        positionId,
+        ["id", "position_id"],
+        ["name", "title"]
+      )
+      if (positionLabel !== "-") {
+        return `Position: ${positionLabel}`
+      }
+    }
+
+    const branchId = readNumber(step, ["assigned_branch_id", "branch_id"])
+    const departmentId = readNumber(step, ["assigned_department_id", "department_id"])
+    const branchLabel =
+      branchId !== null
+        ? resolveOptionLabel(branches, branchId, ["id", "branch_id"], ["name", "title"])
+        : "-"
+    const departmentLabel =
+      departmentId !== null
+        ? resolveOptionLabel(
+            departments,
+            departmentId,
+            ["id", "department_id"],
+            ["name", "title"]
+          )
+        : "-"
+
+    if (departmentLabel !== "-") {
+      return `Department: ${departmentLabel}`
+    }
+    if (branchLabel !== "-") {
+      return `Branch: ${branchLabel}`
+    }
+    if (approverType) {
+      return toTitleCaseWords(approverType)
+    }
+    return "-"
+  }, [branches, departments, positions, roles, users])
 
   function resetWorkflowStepForm() {
     setWorkflowForm((prev) => ({
@@ -821,6 +926,163 @@ export function OnboardingView() {
     }
   }
 
+  const requestTimelineNodes = React.useMemo(() => {
+    if (!selectedRequestRow) {
+      return []
+    }
+
+    const progressRecord = selectedRequestProgress ?? {}
+    const detailRecord = selectedRequestDetails ?? {}
+    const workflowRecord = toRecord(detailRecord.workflow ?? detailRecord.assigned_workflow ?? null)
+
+    const progressSteps = toRecordList(
+      progressRecord.steps ??
+        progressRecord.workflow_steps ??
+        progressRecord.progress_steps ??
+        progressRecord.activities ??
+        progressRecord.tasks
+    )
+    const workflowSteps =
+      selectedWorkflowSteps.length > 0
+        ? selectedWorkflowSteps
+        : toRecordList(workflowRecord?.steps ?? workflowRecord?.workflow_steps ?? null)
+    const requestSteps = toRecordList(
+      detailRecord.steps ??
+        detailRecord.workflow_steps ??
+        detailRecord.tasks ??
+        detailRecord.activities
+    )
+
+    const seed = workflowSteps.length ? workflowSteps : progressSteps.length ? progressSteps : requestSteps
+    const progressByKey = new Map<string, AdminRecord>()
+    const addProgressEntry = (entry: AdminRecord) => {
+      const keys = [
+        readString(entry, ["id", "step_id", "task_id", "approval_level"]),
+        readString(entry, ["step_name", "name", "title", "task_title"]),
+      ]
+      keys
+        .filter((key) => key && key !== "-")
+        .forEach((key) => {
+          progressByKey.set(String(key).toLowerCase(), entry)
+        })
+    }
+    progressSteps.forEach(addProgressEntry)
+    requestSteps.forEach(addProgressEntry)
+
+    const nodes = seed.map((step, index) => {
+      const stepIdKey = readString(step, ["id", "step_id", "task_id", "approval_level"]).toLowerCase()
+      const stepNameKey = readString(step, ["step_name", "name", "title", "task_title"]).toLowerCase()
+      const matchedProgress =
+        progressByKey.get(stepIdKey) ?? progressByKey.get(stepNameKey) ?? null
+      const source = matchedProgress ?? step
+      const stepStatus = String(
+        source.status ??
+          source.step_status ??
+          source.approval_status ??
+          source.state ??
+          (index === 0 ? "pending" : "queued")
+      )
+        .trim()
+        .toLowerCase()
+      const owner = resolveResponsibleParty(source) !== "-" ? resolveResponsibleParty(source) : resolveResponsibleParty(step)
+      const actionLabel = readString(step, ["action_type", "task_type", "name", "title", "step_name"])
+      return {
+        key: `${readString(step, ["id", "step_id", "task_id"])}-${index}`,
+        index: index + 1,
+        actionLabel: actionLabel === "-" ? `Step ${index + 1}` : actionLabel,
+        status: stepStatus,
+        owner,
+        completedAt: toTimestamp(
+          source.completed_at ?? source.done_at ?? source.approved_at ?? source.updated_at ?? source.executed_at
+        ),
+        required: String(step.is_required ?? source.is_required) === "true" || step.is_required === true,
+      }
+    })
+
+    if (nodes.length === 0) {
+      const fallbackStatus = String(
+        readString(selectedRequestRow, ["status", "request_status", "onboarding_status", "workflow_status"])
+      )
+        .trim()
+        .toLowerCase()
+      return [
+        {
+          key: "fallback-step",
+          index: 1,
+          actionLabel: "Request Created",
+          status: fallbackStatus || "pending",
+          owner: readString(selectedRequestRow, ["employee_name", "full_name", "name"]),
+          completedAt: toTimestamp(readString(selectedRequestRow, ["updated_at", "created_at"])),
+          required: true,
+        },
+      ]
+    }
+
+    return nodes
+  }, [
+    resolveResponsibleParty,
+    selectedRequestDetails,
+    selectedRequestProgress,
+    selectedRequestRow,
+    selectedWorkflowSteps,
+  ])
+
+  async function openRequestDetails(row: AdminRecord) {
+    const requestId = readNumber(row, ["id", "request_id"])
+    if (requestId === null) {
+      showErrorAlert("Unable to open request details because request ID is missing.")
+      return
+    }
+
+    const token = readStoredToken()
+    if (!token) {
+      showErrorAlert("Authentication required. Please log in again.")
+      return
+    }
+
+    setSelectedRequestRow(row)
+    setRequestDetailsOpen(true)
+    setRequestDetailsLoading(true)
+    setSelectedRequestDetails(null)
+    setSelectedRequestProgress(null)
+    setSelectedRequestAuditLogs([])
+    setSelectedWorkflowSteps([])
+
+    try {
+      const [detail, progress, auditLogs] = await Promise.all([
+        getOnboardingRequest(token, requestId),
+        getOnboardingProgress(token, requestId),
+        getOnboardingAuditLogs(token, requestId),
+      ])
+      setSelectedRequestDetails(detail)
+      setSelectedRequestProgress(progress)
+      setSelectedRequestAuditLogs(auditLogs)
+
+      const assignedWorkflow = detail
+        ? toRecord(detail.workflow ?? detail.assigned_workflow)
+        : null
+      const workflowId =
+        (detail ? readNumber(detail, ["workflow_id", "onboarding_workflow_id"]) : null) ??
+        readNumber(row, ["workflow_id", "onboarding_workflow_id"]) ??
+        (assignedWorkflow ? readNumber(assignedWorkflow, ["id", "workflow_id"]) : null)
+      if (workflowId !== null) {
+        const workflow = await getOnboardingWorkflow(token, workflowId)
+        if (workflow) {
+          const workflowSteps = toRecordList(
+            workflow.steps ?? workflow.workflow_steps ?? workflow.tasks ?? workflow.activities
+          )
+          setSelectedWorkflowSteps(workflowSteps)
+        }
+      }
+    } catch (errorObject) {
+      const message = errorObject instanceof Error ? errorObject.message : "Failed to load request details."
+      setError(message)
+      showErrorAlert(message)
+    } finally {
+      setRequestDetailsLoading(false)
+    }
+  }
+
   return (
     <div className="space-y-5 px-4 pb-6 pt-4 lg:px-6">
       <div className="flex flex-wrap items-center gap-2">
@@ -1018,7 +1280,11 @@ export function OnboardingView() {
                           ? "bg-amber-100 text-amber-700"
                           : "bg-slate-100 text-slate-700"
                 return (
-                  <TableRow key={requestId ?? `request-${index}`}>
+                  <TableRow
+                    key={requestId ?? `request-${index}`}
+                    className="cursor-pointer"
+                    onClick={() => void openRequestDetails(row)}
+                  >
                     <TableCell>{requestId ?? "-"}</TableCell>
                     <TableCell>{resolveEmployeeLabel(employeeId)}</TableCell>
                     <TableCell>{readString(row, ["title", "name"])}</TableCell>
@@ -1028,7 +1294,10 @@ export function OnboardingView() {
                       </span>
                     </TableCell>
                     <TableCell>
-                      <div className="flex min-h-9 flex-wrap items-center justify-end gap-2">
+                      <div
+                        className="flex min-h-9 flex-wrap items-center justify-end gap-2"
+                        onClick={(event) => event.stopPropagation()}
+                      >
                         {canApprove ? (
                           <Button
                             type="button"
@@ -1097,6 +1366,157 @@ export function OnboardingView() {
               ) : null}
             </TableBody>
           </Table>
+
+          <Dialog open={requestDetailsOpen} onOpenChange={setRequestDetailsOpen}>
+            <DialogPopup from="bottom" className="max-h-[85vh] overflow-y-auto sm:max-w-4xl">
+              <DialogHeader>
+                <DialogTitle>Onboarding Request Activity</DialogTitle>
+                <DialogDescription>
+                  View workflow ownership, pending step, and completed activity history for this request.
+                </DialogDescription>
+              </DialogHeader>
+
+              {requestDetailsLoading ? (
+                <div className="rounded-lg border border-border p-4 text-sm text-muted-foreground">
+                  Loading request activity...
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="grid gap-3 rounded-lg border border-border p-4 md:grid-cols-4">
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Request ID</p>
+                      <p className="text-sm font-semibold text-slate-900">
+                        {readNumber(selectedRequestRow ?? {}, ["id", "request_id"]) ?? "-"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Employee</p>
+                      <p className="text-sm font-semibold text-slate-900">
+                        {resolveEmployeeLabel(readNumber(selectedRequestRow ?? {}, ["employee_id"]))}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Status</p>
+                      <p className="text-sm font-semibold text-slate-900">
+                        {readString(selectedRequestRow ?? {}, ["status", "request_status"])}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Updated</p>
+                      <p className="text-sm font-semibold text-slate-900">
+                        {toTimestamp(
+                          readString(selectedRequestRow ?? {}, ["updated_at", "modified_at", "created_at"])
+                        )}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 rounded-lg border border-border p-4">
+                    <p className="text-sm font-semibold text-slate-900">Workflow Map</p>
+                    <div className="space-y-3">
+                      {requestTimelineNodes.map((node, idx) => {
+                        const isDone =
+                          node.status.includes("complete") ||
+                          node.status.includes("approved") ||
+                          node.status.includes("done") ||
+                          node.status.includes("verified")
+                        const isPending =
+                          node.status.includes("pending") ||
+                          node.status.includes("review") ||
+                          node.status.includes("in_progress") ||
+                          node.status.includes("active")
+                        const badgeClass = isDone
+                          ? "bg-emerald-100 text-emerald-700"
+                          : isPending
+                            ? "bg-amber-100 text-amber-700"
+                            : "bg-slate-100 text-slate-700"
+                        return (
+                          <div key={node.key} className="relative pl-8">
+                            {idx < requestTimelineNodes.length - 1 ? (
+                              <span className="absolute left-[11px] top-6 h-[calc(100%-0.25rem)] w-px bg-slate-200" />
+                            ) : null}
+                            <span
+                              className={`absolute left-0 top-1.5 inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${
+                                isDone
+                                  ? "bg-emerald-500 text-white"
+                                  : isPending
+                                    ? "bg-amber-500 text-white"
+                                    : "bg-slate-300 text-slate-700"
+                              }`}
+                            >
+                              {node.index}
+                            </span>
+                            <div className="rounded-md border border-slate-200 bg-white p-3">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <p className="text-sm font-semibold text-slate-900">
+                                  {toTitleCaseWords(String(node.actionLabel))}
+                                </p>
+                                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${badgeClass}`}>
+                                  {toTitleCaseWords(String(node.status))}
+                                </span>
+                              </div>
+                              <p className="mt-1 text-xs text-slate-600">
+                                Owner: <span className="font-medium text-slate-800">{node.owner || "-"}</span>
+                              </p>
+                              <p className="mt-1 text-xs text-slate-600">
+                                Required:{" "}
+                                <span className="font-medium text-slate-800">{node.required ? "Yes" : "No"}</span>
+                              </p>
+                              <p className="mt-1 text-xs text-slate-500">Completed: {node.completedAt}</p>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 rounded-lg border border-border p-4">
+                    <p className="text-sm font-semibold text-slate-900">Activity Record</p>
+                    {selectedRequestAuditLogs.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No activity record available for this request.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {selectedRequestAuditLogs.map((entry, index) => (
+                          <div
+                            key={`audit-${readString(entry, ["id", "log_id"])}-${index}`}
+                            className="rounded-md border border-slate-200 bg-white p-3"
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <p className="text-sm font-medium text-slate-900">
+                                {toTitleCaseWords(
+                                  readString(entry, ["action", "event", "type", "activity"]) || "Updated"
+                                )}
+                              </p>
+                              <p className="text-xs text-slate-500">
+                                {toTimestamp(
+                                  entry.created_at ?? entry.timestamp ?? entry.occurred_at ?? entry.updated_at
+                                )}
+                              </p>
+                            </div>
+                            <p className="mt-1 text-xs text-slate-600">
+                              By:{" "}
+                              <span className="font-medium text-slate-800">
+                                {readString(entry, ["actor_name", "performed_by_name", "user_name", "created_by"])}
+                              </span>
+                            </p>
+                            <p className="mt-1 text-xs text-slate-600">
+                              {readString(entry, ["description", "message", "remarks", "comment"])}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setRequestDetailsOpen(false)}>
+                  Close
+                </Button>
+              </DialogFooter>
+            </DialogPopup>
+          </Dialog>
         </div>
       ) : (
         <div className="space-y-5">

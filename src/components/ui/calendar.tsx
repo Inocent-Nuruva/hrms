@@ -20,10 +20,8 @@ function Calendar({
     new Date(new Date().getFullYear(), new Date().getMonth(), 1)
   )
 
-  const selectedDate =
-    props.selected instanceof Date ? props.selected : undefined
   const controlledMonth =
-    props.month instanceof Date ? props.month : undefined
+    "month" in props && props.month instanceof Date ? props.month : undefined
   const currentMonth = controlledMonth ?? internalMonth
 
   const setCalendarMonth = React.useCallback(
@@ -34,11 +32,15 @@ function Calendar({
     [props]
   )
 
+  const isSingleMode = "mode" in props && props.mode === "single"
+  const onSelectSingle =
+    "onSelect" in props
+      ? (props.onSelect as ((date: Date | undefined) => void) | undefined)
+      : undefined
+
   const applyPreset = (offset: number) => {
     const nextDate = addDays(new Date(), offset)
-    ;(props.onSelect as ((date: Date | undefined) => void) | undefined)?.(
-      nextDate
-    )
+    onSelectSingle?.(nextDate)
     setCalendarMonth(new Date(nextDate.getFullYear(), nextDate.getMonth(), 1))
   }
 
@@ -112,7 +114,7 @@ function Calendar({
             className="flex-1"
             type="button"
             onClick={() => applyPreset(preset.value)}
-            disabled={!props.onSelect || props.mode !== "single"}
+            disabled={!onSelectSingle || !isSingleMode}
           >
             {preset.label}
           </Button>
