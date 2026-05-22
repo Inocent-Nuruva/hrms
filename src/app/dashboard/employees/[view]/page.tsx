@@ -4,6 +4,7 @@ import AdminDashboardView from "@/components/dashboard/admin-dashboard-view"
 import { EmployeesListView } from "@/components/dashboard/employees-list-view"
 import { EmployeeRegisterForm } from "@/components/dashboard/employee-register-form"
 import { OnboardingView } from "@/components/dashboard/onboarding-view"
+import { OffboardingView } from "@/components/dashboard/offboarding-view"
 const ALLOWED_VIEWS = new Set([
   "all",
   "register",
@@ -52,6 +53,14 @@ export default async function EmployeesViewPage({
     return (
       <AdminDashboardView>
         <OnboardingView />
+      </AdminDashboardView>
+    )
+  }
+
+  if (normalized === "offboarding") {
+    return (
+      <AdminDashboardView>
+        <OffboardingView />
       </AdminDashboardView>
     )
   }

@@ -17,7 +17,9 @@ import {
 
 import {
   createEmployeeProfile,
-  listResource,
+  listBranches,
+  listDepartments,
+  listPositions,
   type AdminRecord,
 } from "@/lib/admin-api"
 import {
@@ -83,7 +85,6 @@ type RegisterFormState = {
   branch: string
   department: string
   position: string
-  email: string
   gender: string
   maritalStatus: string
   nationality: string
@@ -148,7 +149,6 @@ const EMPTY_FORM: RegisterFormState = {
   branch: "",
   department: "",
   position: "",
-  email: "",
   gender: "",
   maritalStatus: "",
   nationality: "",
@@ -156,30 +156,7 @@ const EMPTY_FORM: RegisterFormState = {
 }
 
 const GENDER_OPTIONS = ["Male", "Female", "Non-binary", "Prefer not to say"]
-const BRANCH_OPTIONS = ["Head Office", "Arusha", "Mwanza", "Dodoma", "Mbeya"]
-const DEPARTMENT_OPTIONS = [
-  "Human Resources",
-  "Operations",
-  "Finance",
-  "Underwriting",
-  "Claims",
-]
-const POSITION_OPTIONS = [
-  "Officer",
-  "Senior Officer",
-  "Supervisor",
-  "Manager",
-  "Director",
-]
 const MARITAL_STATUS_OPTIONS = ["Single", "Married", "Divorced", "Widowed"]
-const NATIONALITY_OPTIONS = [
-  "Tanzanian",
-  "Kenyan",
-  "Ugandan",
-  "Rwandan",
-  "Burundian",
-  "Other",
-]
 const CONTACT_TYPE_OPTIONS = ["personal", "work"]
 const ADDRESS_TYPE_OPTIONS = ["home", "work", "other"]
 const RELATIONSHIP_OPTIONS = [
@@ -375,6 +352,45 @@ function toRoleOption(record: AdminRecord): RoleOption | null {
   return { id, label, name }
 }
 
+function normalizeRolesPayload(payload: unknown): AdminRecord[] {
+  if (Array.isArray(payload)) {
+    return payload.filter((entry): entry is AdminRecord => typeof entry === "object" && entry !== null)
+  }
+  if (typeof payload !== "object" || payload === null) {
+    return []
+  }
+  const record = payload as AdminRecord
+  const nestedCandidates = [record.data, record.items, record.results, record.rows]
+  for (const candidate of nestedCandidates) {
+    if (Array.isArray(candidate)) {
+      return candidate.filter((entry): entry is AdminRecord => typeof entry === "object" && entry !== null)
+    }
+  }
+  return []
+}
+
+async function fetchRolesDirect(accessToken: string) {
+  const baseUrl = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://192.168.1.30:8888").replace(/\/$/, "")
+  const endpoint = `${baseUrl}/api/roles`
+
+  // Roles endpoint is auth-protected in this environment.
+  const authedResponse = await fetch(endpoint, {
+    method: "GET",
+    cache: "no-store",
+    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+  })
+  if (authedResponse.ok) {
+    return normalizeRolesPayload((await authedResponse.json()) as unknown)
+  }
+
+  // Graceful fallback for environments where roles may be exposed without auth.
+  const directResponse = await fetch(endpoint, { method: "GET", cache: "no-store" })
+  if (!directResponse.ok) {
+    throw new Error(`Request failed with status ${authedResponse.status}`)
+  }
+  return normalizeRolesPayload((await directResponse.json()) as unknown)
+}
+
 function resolveAccessTokenFromStorage() {
   if (typeof window === "undefined") {
     return ""
@@ -429,6 +445,17 @@ function resolveAccessTokenFromStorage() {
       ? legacySessionToken
       : "")
   )
+}
+
+const REGISTER_DRAFT_STORAGE_KEY = "hrms.employee.register.draft.v1"
+
+function countryNameFromIso(isoCode: string) {
+  try {
+    const regionNames = new Intl.DisplayNames(["en"], { type: "region" })
+    return regionNames.of(isoCode.toUpperCase()) ?? isoCode.toUpperCase()
+  } catch {
+    return isoCode.toUpperCase()
+  }
 }
 
 function AnimatedField({
@@ -506,6 +533,9 @@ export function EmployeeRegisterForm() {
     label: string
   } | null>(null)
   const [roles, setRoles] = React.useState<RoleOption[]>([])
+  const [branchRecords, setBranchRecords] = React.useState<AdminRecord[]>([])
+  const [departmentRecords, setDepartmentRecords] = React.useState<AdminRecord[]>([])
+  const [positionRecords, setPositionRecords] = React.useState<AdminRecord[]>([])
   const [rolesLoading, setRolesLoading] = React.useState(false)
   const [rolesError, setRolesError] = React.useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = React.useState(false)
@@ -513,6 +543,27 @@ export function EmployeeRegisterForm() {
   const selectedRoleLabel = React.useMemo(
     () => roles.find((role) => role.id === form.roleId)?.label ?? "",
     [roles, form.roleId]
+  )
+  const branchOptions = React.useMemo(
+    () =>
+      branchRecords
+        .map((row) => readString(row, ["name", "title"]))
+        .filter((name) => name !== "-"),
+    [branchRecords]
+  )
+  const departmentOptions = React.useMemo(
+    () =>
+      departmentRecords
+        .map((row) => readString(row, ["name", "title"]))
+        .filter((name) => name !== "-"),
+    [departmentRecords]
+  )
+  const positionOptions = React.useMemo(
+    () =>
+      positionRecords
+        .map((row) => readString(row, ["name", "title"]))
+        .filter((name) => name !== "-"),
+    [positionRecords]
   )
   const currentStepIndex = REGISTER_STEP_ORDER.indexOf(currentStep)
   const previousStep = currentStepIndex > 0 ? REGISTER_STEP_ORDER[currentStepIndex - 1] : null
@@ -593,8 +644,16 @@ export function EmployeeRegisterForm() {
   const saveDraftContact = () => {
     const normalizedPhone = draftContact.phoneNumber.trim()
     const normalizedEmail = draftContact.email.trim().toLowerCase()
+    const hasExistingPrimaryWithEmailAndPhone = contacts.some(
+      (contact, index) =>
+        index !== editingContactIndex &&
+        contact.isPrimary &&
+        Boolean(contact.phoneNumber.trim()) &&
+        Boolean(contact.email.trim())
+    )
+    const emailRequired = !hasExistingPrimaryWithEmailAndPhone
 
-    if (!normalizedEmail) {
+    if (emailRequired && !normalizedEmail) {
       setDraftContactEmailError("Email is required.")
       return
     }
@@ -889,11 +948,28 @@ export function EmployeeRegisterForm() {
     setRolesLoading(true)
     setRolesError(null)
     try {
-      const roleRecords = await listResource("roles", accessToken)
+      const [roleRecordsResult, branchResult, departmentResult, positionResult] = await Promise.allSettled([
+        fetchRolesDirect(accessToken),
+        listBranches(accessToken, { page: 1, limit: 100 }),
+        listDepartments(accessToken, { page: 1, limit: 100 }),
+        listPositions(accessToken, { page: 1, limit: 100 }),
+      ])
+      const roleRecords =
+        roleRecordsResult.status === "fulfilled" ? roleRecordsResult.value : ([] as AdminRecord[])
+      const resolvedBranches = branchResult.status === "fulfilled" ? branchResult.value.rows : []
+      const resolvedDepartments =
+        departmentResult.status === "fulfilled" ? departmentResult.value.rows : []
+      const resolvedPositions = positionResult.status === "fulfilled" ? positionResult.value.rows : []
       const roleOptions = roleRecords
         .map((record) => toRoleOption(record))
         .filter((entry): entry is RoleOption => Boolean(entry))
       setRoles(roleOptions)
+      setBranchRecords(resolvedBranches)
+      setDepartmentRecords(resolvedDepartments)
+      setPositionRecords(resolvedPositions)
+      if (roleOptions.length === 0) {
+        setRolesError("Roles are unavailable for this account. You can still continue.")
+      }
       const defaultRoleId = resolveDefaultRoleId(roleOptions)
       setForm((previous) => {
         const hasCurrent = roleOptions.some((role) => role.id === previous.roleId)
@@ -907,7 +983,9 @@ export function EmployeeRegisterForm() {
       })
     } catch (errorObject) {
       setRoles([])
-      setRolesError(errorObject instanceof Error ? errorObject.message : "Failed to fetch roles.")
+      setRolesError(
+        errorObject instanceof Error ? errorObject.message : "Failed to load registration data."
+      )
     } finally {
       setRolesLoading(false)
     }
@@ -916,6 +994,58 @@ export function EmployeeRegisterForm() {
   React.useEffect(() => {
     void loadRoles()
   }, [loadRoles])
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") return
+    try {
+      const raw = window.localStorage.getItem(REGISTER_DRAFT_STORAGE_KEY)
+      if (!raw) return
+      const parsed = JSON.parse(raw) as {
+        currentStep?: RegisterStep
+        form?: RegisterFormState
+        dob?: string | null
+        contacts?: ContactFormState[]
+        addresses?: AddressFormState[]
+        relatives?: RelativeFormState[]
+        identifications?: IdentificationFormState[]
+        bankAccounts?: BankAccountFormState[]
+      }
+      if (parsed.currentStep && REGISTER_STEP_ORDER.includes(parsed.currentStep)) {
+        setCurrentStep(parsed.currentStep)
+      }
+      if (parsed.form) {
+        setForm((previous) => ({ ...previous, ...parsed.form }))
+      }
+      if (parsed.dob) {
+        const nextDob = new Date(parsed.dob)
+        if (!Number.isNaN(nextDob.getTime())) {
+          setDob(nextDob)
+        }
+      }
+      if (Array.isArray(parsed.contacts)) setContacts(parsed.contacts)
+      if (Array.isArray(parsed.addresses)) setAddresses(parsed.addresses)
+      if (Array.isArray(parsed.relatives)) setRelatives(parsed.relatives)
+      if (Array.isArray(parsed.identifications)) setIdentifications(parsed.identifications)
+      if (Array.isArray(parsed.bankAccounts)) setBankAccounts(parsed.bankAccounts)
+    } catch {
+      // ignore corrupted draft
+    }
+  }, [])
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") return
+    const payload = {
+      currentStep,
+      form,
+      dob: dob ? dob.toISOString() : null,
+      contacts,
+      addresses,
+      relatives,
+      identifications,
+      bankAccounts,
+    }
+    window.localStorage.setItem(REGISTER_DRAFT_STORAGE_KEY, JSON.stringify(payload))
+  }, [currentStep, form, dob, contacts, addresses, relatives, identifications, bankAccounts])
 
   const submitRegistration = async () => {
     if (isSubmitting) {
@@ -1110,7 +1240,10 @@ export function EmployeeRegisterForm() {
     setDraftBankAccount({ ...EMPTY_BANK_ACCOUNT })
     setIsBankDialogOpen(false)
     setEditingBankIndex(null)
-    setPendingDelete(null)
+      setPendingDelete(null)
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem(REGISTER_DRAFT_STORAGE_KEY)
+      }
     toast.message("Form reset.")
   }
 
@@ -1207,7 +1340,7 @@ export function EmployeeRegisterForm() {
                         <SelectValue placeholder="Select branch" />
                       </SelectTrigger>
                       <SelectContent>
-                        {BRANCH_OPTIONS.map((option) => (
+                        {branchOptions.map((option) => (
                           <SelectItem key={option} value={option}>
                             {option}
                           </SelectItem>
@@ -1225,7 +1358,7 @@ export function EmployeeRegisterForm() {
                         <SelectValue placeholder="Select department" />
                       </SelectTrigger>
                       <SelectContent>
-                        {DEPARTMENT_OPTIONS.map((option) => (
+                        {departmentOptions.map((option) => (
                           <SelectItem key={option} value={option}>
                             {option}
                           </SelectItem>
@@ -1240,7 +1373,7 @@ export function EmployeeRegisterForm() {
                         <SelectValue placeholder="Select position" />
                       </SelectTrigger>
                       <SelectContent>
-                        {POSITION_OPTIONS.map((option) => (
+                        {positionOptions.map((option) => (
                           <SelectItem key={option} value={option}>
                             {option}
                           </SelectItem>
@@ -1249,17 +1382,7 @@ export function EmployeeRegisterForm() {
                     </Select>
                   </Field>
 
-                  <Field label="Email" htmlFor="email" delayMs={280}>
-                    <Input
-                      id="email"
-                      type="email"
-                      value={form.email}
-                      onChange={(event) => updateField("email", event.target.value)}
-                      placeholder="name@company.com"
-                    />
-                  </Field>
-
-                  <Field label="Gender" htmlFor="gender" delayMs={320}>
+                  <Field label="Gender" htmlFor="gender" delayMs={280}>
                     <Select value={form.gender} onValueChange={(value) => updateField("gender", value ?? "")}>
                       <SelectTrigger id="gender" className="w-full">
                         <SelectValue placeholder="Select gender" />
@@ -1274,7 +1397,7 @@ export function EmployeeRegisterForm() {
                     </Select>
                   </Field>
 
-                  <Field label="Marital Status" htmlFor="maritalStatus" delayMs={360}>
+                  <Field label="Marital Status" htmlFor="maritalStatus" delayMs={320}>
                     <Select
                       value={form.maritalStatus}
                       onValueChange={(value) => updateField("maritalStatus", value ?? "")}
@@ -1292,25 +1415,28 @@ export function EmployeeRegisterForm() {
                     </Select>
                   </Field>
 
-                  <Field label="Nationality" htmlFor="nationality" delayMs={400}>
-                    <Select
-                      value={form.nationality}
-                      onValueChange={(value) => updateField("nationality", value ?? "")}
-                    >
-                      <SelectTrigger id="nationality" className="w-full">
-                        <SelectValue placeholder="Select nationality" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {NATIONALITY_OPTIONS.map((option) => (
-                          <SelectItem key={option} value={option}>
-                            {option}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  <Field label="Nationality" htmlFor="nationality" delayMs={360}>
+                    <div className="register-nationality relative z-[70] rounded-md border border-slate-300 px-2 py-2">
+                      <ReactFlagsSelect
+                        selected={form.nationality || ""}
+                        onSelect={(value) => updateField("nationality", value ?? "")}
+                        searchable
+                        searchPlaceholder="Search country"
+                        placeholder="Select nationality"
+                        alignOptionsToRight={false}
+                        className="w-full"
+                        selectButtonClassName="w-full"
+                        customLabels={{}}
+                      />
+                    </div>
+                    {form.nationality ? (
+                      <p className="text-xs text-muted-foreground">
+                        {countryNameFromIso(form.nationality)}
+                      </p>
+                    ) : null}
                   </Field>
 
-                  <AnimatedField delayMs={420}>
+                  <AnimatedField delayMs={400}>
                     <div className="grid gap-2">
                       <Label htmlFor="roleId">Roles</Label>
                       <Select value={form.roleId} onValueChange={(value) => updateField("roleId", value ?? "")}>
@@ -1330,11 +1456,20 @@ export function EmployeeRegisterForm() {
                           ) : null}
                         </SelectContent>
                       </Select>
-                      {rolesError ? <p className="text-xs text-destructive">{rolesError}</p> : null}
+                      {rolesError ? (
+                        <p
+                          className={cn(
+                            "text-xs",
+                            rolesError.includes("unavailable") ? "text-muted-foreground" : "text-destructive"
+                          )}
+                        >
+                          {rolesError}
+                        </p>
+                      ) : null}
                     </div>
                   </AnimatedField>
 
-                  <AnimatedField delayMs={460}>
+                  <AnimatedField delayMs={440}>
                     <div className="grid gap-2 md:col-span-2 xl:col-span-3">
                       <Label htmlFor="dob-trigger">Date of Birth</Label>
                       <Popover>
@@ -1945,12 +2080,49 @@ export function EmployeeRegisterForm() {
             </div>
             <div className="grid gap-2">
               <Label htmlFor="draft-relative-phone">Phone</Label>
-              <Input
-                id="draft-relative-phone"
-                value={draftRelative.phone}
-                onChange={(event) => updateDraftRelative("phone", event.target.value)}
-                placeholder="Phone number"
-              />
+              <div className="grid gap-2 sm:grid-cols-[220px_minmax(0,1fr)]">
+                <Select
+                  value={draftRelative.phone.startsWith("+")
+                    ? (Object.keys(COUNTRY_DIAL_BY_ISO).find((iso) =>
+                        draftRelative.phone.startsWith(
+                          COUNTRY_DIAL_BY_ISO[iso as keyof typeof COUNTRY_DIAL_BY_ISO]
+                        )
+                      ) ?? "TZ")
+                    : "TZ"}
+                  onValueChange={(isoCode) => {
+                    const safeIsoCode = isoCode ?? "TZ"
+                    const dial = getDialCodeForCountry(safeIsoCode)
+                    const stripped = draftRelative.phone.replace(/^\+\d+/, "").replace(/\D/g, "")
+                    updateDraftRelative("phone", `${dial}${stripped}`)
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Country code" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(Object.keys(COUNTRY_DIAL_BY_ISO) as CountryIso[]).map((iso) => (
+                      <SelectItem key={iso} value={iso}>
+                        {COUNTRY_LABELS[iso].primary} ({COUNTRY_LABELS[iso].secondary})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Input
+                  id="draft-relative-phone"
+                  value={draftRelative.phone.replace(/^\+\d+/, "")}
+                  onChange={(event) => {
+                    const digits = event.target.value.replace(/\D/g, "")
+                    const iso =
+                      (Object.keys(COUNTRY_DIAL_BY_ISO).find((code) =>
+                        draftRelative.phone.startsWith(
+                          COUNTRY_DIAL_BY_ISO[code as keyof typeof COUNTRY_DIAL_BY_ISO]
+                        )
+                      ) as CountryIso | undefined) ?? "TZ"
+                    updateDraftRelative("phone", `${getDialCodeForCountry(iso)}${digits}`)
+                  }}
+                  placeholder="Phone number"
+                />
+              </div>
             </div>
             <div className="grid gap-2 md:col-span-2 xl:col-span-3">
               <Label htmlFor="draft-relative-email">Email</Label>

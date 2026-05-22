@@ -24,6 +24,8 @@ import {
   createEmployeeSectionItem,
   deleteEmployeeDocument,
   deleteEmployeeSectionItem,
+  EMPLOYEE_STATUS_VALUES,
+  isEmployeeStatusValue,
   listEmployees,
   patchEmployeeStatus,
   patchEmployeeSectionItem,
@@ -35,6 +37,71 @@ import {
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
+const EMPLOYEE_STATUS_REFRESH_KEY = "hrms.employees.status.updatedAt"
+const EMPLOYEE_STATUS_REFRESH_EVENT = "hrms:employee-status-updated"
+
+type EmployeeStatusFormState = {
+  employment_status: EmployeeStatusPayload["employment_status"]
+  exit_date: string
+  exit_reason: string
+  notes: string
+}
+
+function normalizeEmployeeStatus(value: unknown): EmployeeStatusPayload["employment_status"] {
+  const normalized = typeof value === "string" ? value.trim().toLowerCase() : ""
+  return isEmployeeStatusValue(normalized) ? normalized : "active"
+}
+
+function readEmployeeStatusForm(employee: AdminRecord): EmployeeStatusFormState {
+  const status = normalizeEmployeeStatus(employee.employment_status ?? employee.status)
+  const exitDate = readString(employee, ["exit_date"]) === "-" ? "" : readString(employee, ["exit_date"])
+  const exitReason = readString(employee, ["exit_reason"]) === "-" ? "" : readString(employee, ["exit_reason"])
+  const notes = readString(employee, ["notes"]) === "-" ? "" : readString(employee, ["notes"])
+
+  return {
+    employment_status: status,
+    exit_date: status === "exited" ? exitDate : "",
+    exit_reason: status === "exited" ? exitReason : "",
+    notes,
+  }
+}
+
+function validateStatusForm(form: EmployeeStatusFormState) {
+  if (!isEmployeeStatusValue(form.employment_status)) {
+    return "Please select a valid employment status."
+  }
+
+  const notes = form.notes.trim()
+  if ((form.employment_status === "suspended" || form.employment_status === "terminated") && notes.length < 3) {
+    return "Please provide at least 3 characters of notes for suspended or terminated status."
+  }
+
+  if (form.employment_status === "exited") {
+    const exitReason = form.exit_reason.trim()
+    if (exitReason.length < 3) {
+      return "Exit reason must be at least 3 characters."
+    }
+
+    const exitDate = form.exit_date.trim()
+    if (!exitDate) {
+      return "Exit date is required for exited status."
+    }
+
+    const parsed = new Date(exitDate)
+    if (Number.isNaN(parsed.getTime())) {
+      return "Exit date is invalid."
+    }
+
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    parsed.setHours(0, 0, 0, 0)
+    if (parsed.getTime() > today.getTime()) {
+      return "Exit date cannot be in the future."
+    }
+  }
+
+  return null
+}
 
 function readStoredToken() {
   if (typeof window === "undefined") {
@@ -1280,7 +1347,7 @@ export function EmployeeProfilePage({ employeeNo }: { employeeNo: string }) {
   const [statusDialogOpen, setStatusDialogOpen] = React.useState(false)
   const [statusSubmitting, setStatusSubmitting] = React.useState(false)
   const [statusError, setStatusError] = React.useState<string | null>(null)
-  const [statusForm, setStatusForm] = React.useState({
+  const [statusForm, setStatusForm] = React.useState<EmployeeStatusFormState>({
     employment_status: "active",
     exit_date: "",
     exit_reason: "",
@@ -1374,12 +1441,7 @@ export function EmployeeProfilePage({ employeeNo }: { employeeNo: string }) {
               type="button"
               className="rounded-md px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 dark:hover:text-white"
               onClick={() => {
-                setStatusForm({
-                  employment_status: (readString(employee, ["employment_status"]) || "active") as "active",
-                  exit_date: readString(employee, ["exit_date"]) === "-" ? "" : readString(employee, ["exit_date"]),
-                  exit_reason: readString(employee, ["exit_reason"]) === "-" ? "" : readString(employee, ["exit_reason"]),
-                  notes: readString(employee, ["notes"]) === "-" ? "" : readString(employee, ["notes"]),
-                })
+                setStatusForm(readEmployeeStatusForm(employee))
                 setStatusError(null)
                 setStatusDialogOpen(true)
               }}
@@ -1443,7 +1505,7 @@ export function EmployeeProfilePage({ employeeNo }: { employeeNo: string }) {
                 value={statusForm.employment_status}
                 onChange={(event) =>
                   setStatusForm((prev) => {
-                    const nextStatus = event.target.value
+                    const nextStatus = normalizeEmployeeStatus(event.target.value)
                     if (nextStatus === "exited") {
                       return { ...prev, employment_status: nextStatus }
                     }
@@ -1457,11 +1519,11 @@ export function EmployeeProfilePage({ employeeNo }: { employeeNo: string }) {
                 }
                 className="h-10 rounded-md border border-slate-300 px-3 text-sm"
               >
-                <option value="onboarding">onboarding</option>
-                <option value="active">active</option>
-                <option value="suspended">suspended</option>
-                <option value="terminated">terminated</option>
-                <option value="exited">exited</option>
+                {EMPLOYEE_STATUS_VALUES.map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
               </select>
             </label>
             <label className={`grid min-w-0 gap-1 ${isExitedStatus ? "" : "opacity-60"}`}>
@@ -1513,16 +1575,26 @@ export function EmployeeProfilePage({ employeeNo }: { employeeNo: string }) {
                 if (employeeId === null || !token) {
                   return
                 }
+                const validationError = validateStatusForm(statusForm)
+                if (validationError) {
+                  setStatusError(validationError)
+                  return
+                }
+
                 const payload: EmployeeStatusPayload = {
-                  employment_status: statusForm.employment_status as EmployeeStatusPayload["employment_status"],
-                  exit_date: isExitedStatus ? statusForm.exit_date || undefined : undefined,
-                  exit_reason: isExitedStatus ? statusForm.exit_reason || undefined : undefined,
-                  notes: statusForm.notes || undefined,
+                  employment_status: statusForm.employment_status,
+                  exit_date: isExitedStatus ? statusForm.exit_date.trim() || undefined : undefined,
+                  exit_reason: isExitedStatus ? statusForm.exit_reason.trim() || undefined : undefined,
+                  notes: statusForm.notes.trim() || undefined,
                 }
                 setStatusSubmitting(true)
                 setStatusError(null)
                 try {
                   await patchEmployeeStatus(token, employeeId, payload)
+                  if (typeof window !== "undefined") {
+                    window.localStorage.setItem(EMPLOYEE_STATUS_REFRESH_KEY, String(Date.now()))
+                    window.dispatchEvent(new CustomEvent(EMPLOYEE_STATUS_REFRESH_EVENT))
+                  }
                   setStatusDialogOpen(false)
                   await fetchEmployee()
                 } catch (errorObject) {

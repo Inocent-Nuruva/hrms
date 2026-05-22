@@ -16,6 +16,8 @@ import { listEmployees, type AdminRecord, type EmployeesQueryParams } from "@/li
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
+const EMPLOYEE_STATUS_REFRESH_KEY = "hrms.employees.status.updatedAt"
+const EMPLOYEE_STATUS_REFRESH_EVENT = "hrms:employee-status-updated"
 const DEFAULT_QUERY: Required<Omit<EmployeesQueryParams, "employment_status">> & {
   employment_status: "" | NonNullable<EmployeesQueryParams["employment_status"]>
 } = {
@@ -162,6 +164,31 @@ export function EmployeesListView() {
     void fetchEmployees()
   }, [fetchEmployees])
 
+  React.useEffect(() => {
+    if (typeof window === "undefined") {
+      return
+    }
+
+    const onFocus = () => {
+      void fetchEmployees()
+    }
+
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === EMPLOYEE_STATUS_REFRESH_KEY) {
+        void fetchEmployees()
+      }
+    }
+
+    window.addEventListener("focus", onFocus)
+    window.addEventListener("storage", onStorage)
+    window.addEventListener(EMPLOYEE_STATUS_REFRESH_EVENT, onFocus)
+    return () => {
+      window.removeEventListener("focus", onFocus)
+      window.removeEventListener("storage", onStorage)
+      window.removeEventListener(EMPLOYEE_STATUS_REFRESH_EVENT, onFocus)
+    }
+  }, [fetchEmployees])
+
   const canGoPrevious = page > 1 && !loading
   const canGoNext = !loading && (totalPages === null || page < totalPages)
 
@@ -246,7 +273,7 @@ export function EmployeesListView() {
                     </button>
                     <button
                       type="button"
-                      className="mt-1 block text-left text-xs font-semibold text-rose-600 hover:text-rose-700"
+                      className="mt-1 block text-left text-xs font-semibold text-red-200 hover:text-red-300"
                       onClick={(event) => {
                         event.stopPropagation()
                         setMissingDialog({

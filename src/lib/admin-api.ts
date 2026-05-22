@@ -83,12 +83,33 @@ export interface LeaveHolidaysQueryParams extends UsersQueryParams {
   to_date?: string
 }
 
+export interface LeavePoliciesQueryParams extends UsersQueryParams {
+  status?: string
+  applicable_department_id?: number
+  applicable_position_id?: number
+}
+
+export interface LeaveWorkflowsQueryParams extends UsersQueryParams {
+  status?: string
+  leave_type_id?: number
+}
+
 export interface OnboardingWorkflowsQueryParams extends UsersQueryParams {
   status?: string
 }
 
 export interface OnboardingRequestsQueryParams extends UsersQueryParams {
   employee_id?: number
+  status?: string
+}
+
+export interface OffboardingRequestsQueryParams extends UsersQueryParams {
+  employee_id?: number
+  status?: string
+  offboarding_type?: string
+}
+
+export interface OffboardingWorkflowsQueryParams extends UsersQueryParams {
   status?: string
 }
 
@@ -107,6 +128,23 @@ export interface EmployeeStatusPayload {
   exit_date?: string
   exit_reason?: string
   notes?: string
+}
+
+export const EMPLOYEE_STATUS_VALUES = [
+  "onboarding",
+  "active",
+  "suspended",
+  "terminated",
+  "exited",
+] as const
+
+export type EmployeeStatusValue = (typeof EMPLOYEE_STATUS_VALUES)[number]
+
+export function isEmployeeStatusValue(value: unknown): value is EmployeeStatusValue {
+  return (
+    typeof value === "string" &&
+    (EMPLOYEE_STATUS_VALUES as readonly string[]).includes(value.trim().toLowerCase())
+  )
 }
 
 export interface PaginatedUsersResult {
@@ -545,6 +583,63 @@ function buildLeaveHolidaysQuery(params: LeaveHolidaysQueryParams) {
   return query ? `?${query}` : ""
 }
 
+function buildLeavePoliciesQuery(params: LeavePoliciesQueryParams) {
+  const searchParams = new URLSearchParams()
+  if (typeof params.page === "number" && params.page > 0) {
+    searchParams.set("page", String(params.page))
+  }
+  if (typeof params.limit === "number" && params.limit > 0) {
+    searchParams.set("limit", String(params.limit))
+  }
+  if (params.sortBy && params.sortBy.trim()) {
+    searchParams.set("sortBy", params.sortBy.trim())
+  }
+  if (params.sortOrder === "ASC" || params.sortOrder === "DESC") {
+    searchParams.set("sortOrder", params.sortOrder)
+  }
+  if (params.search && params.search.trim()) {
+    searchParams.set("search", params.search.trim())
+  }
+  if (params.status && params.status.trim()) {
+    searchParams.set("status", params.status.trim())
+  }
+  if (typeof params.applicable_department_id === "number" && params.applicable_department_id > 0) {
+    searchParams.set("applicable_department_id", String(params.applicable_department_id))
+  }
+  if (typeof params.applicable_position_id === "number" && params.applicable_position_id > 0) {
+    searchParams.set("applicable_position_id", String(params.applicable_position_id))
+  }
+  const query = searchParams.toString()
+  return query ? `?${query}` : ""
+}
+
+function buildLeaveWorkflowsQuery(params: LeaveWorkflowsQueryParams) {
+  const searchParams = new URLSearchParams()
+  if (typeof params.page === "number" && params.page > 0) {
+    searchParams.set("page", String(params.page))
+  }
+  if (typeof params.limit === "number" && params.limit > 0) {
+    searchParams.set("limit", String(params.limit))
+  }
+  if (params.sortBy && params.sortBy.trim()) {
+    searchParams.set("sortBy", params.sortBy.trim())
+  }
+  if (params.sortOrder === "ASC" || params.sortOrder === "DESC") {
+    searchParams.set("sortOrder", params.sortOrder)
+  }
+  if (params.search && params.search.trim()) {
+    searchParams.set("search", params.search.trim())
+  }
+  if (params.status && params.status.trim()) {
+    searchParams.set("status", params.status.trim())
+  }
+  if (typeof params.leave_type_id === "number" && params.leave_type_id > 0) {
+    searchParams.set("leave_type_id", String(params.leave_type_id))
+  }
+  const query = searchParams.toString()
+  return query ? `?${query}` : ""
+}
+
 function buildOnboardingWorkflowsQuery(params: OnboardingWorkflowsQueryParams) {
   const searchParams = new URLSearchParams()
   if (typeof params.page === "number" && params.page > 0) {
@@ -588,6 +683,60 @@ function buildOnboardingRequestsQuery(params: OnboardingRequestsQueryParams) {
   }
   if (typeof params.employee_id === "number" && params.employee_id > 0) {
     searchParams.set("employee_id", String(params.employee_id))
+  }
+  if (params.status && params.status.trim()) {
+    searchParams.set("status", params.status.trim())
+  }
+  const query = searchParams.toString()
+  return query ? `?${query}` : ""
+}
+
+function buildOffboardingRequestsQuery(params: OffboardingRequestsQueryParams) {
+  const searchParams = new URLSearchParams()
+  if (typeof params.page === "number" && params.page > 0) {
+    searchParams.set("page", String(params.page))
+  }
+  if (typeof params.limit === "number" && params.limit > 0) {
+    searchParams.set("limit", String(params.limit))
+  }
+  if (params.sortBy && params.sortBy.trim()) {
+    searchParams.set("sortBy", params.sortBy.trim())
+  }
+  if (params.sortOrder === "ASC" || params.sortOrder === "DESC") {
+    searchParams.set("sortOrder", params.sortOrder)
+  }
+  if (params.search && params.search.trim()) {
+    searchParams.set("search", params.search.trim())
+  }
+  if (typeof params.employee_id === "number" && params.employee_id > 0) {
+    searchParams.set("employee_id", String(params.employee_id))
+  }
+  if (params.status && params.status.trim()) {
+    searchParams.set("status", params.status.trim())
+  }
+  if (params.offboarding_type && params.offboarding_type.trim()) {
+    searchParams.set("offboarding_type", params.offboarding_type.trim())
+  }
+  const query = searchParams.toString()
+  return query ? `?${query}` : ""
+}
+
+function buildOffboardingWorkflowsQuery(params: OffboardingWorkflowsQueryParams) {
+  const searchParams = new URLSearchParams()
+  if (typeof params.page === "number" && params.page > 0) {
+    searchParams.set("page", String(params.page))
+  }
+  if (typeof params.limit === "number" && params.limit > 0) {
+    searchParams.set("limit", String(params.limit))
+  }
+  if (params.sortBy && params.sortBy.trim()) {
+    searchParams.set("sortBy", params.sortBy.trim())
+  }
+  if (params.sortOrder === "ASC" || params.sortOrder === "DESC") {
+    searchParams.set("sortOrder", params.sortOrder)
+  }
+  if (params.search && params.search.trim()) {
+    searchParams.set("search", params.search.trim())
   }
   if (params.status && params.status.trim()) {
     searchParams.set("status", params.status.trim())
@@ -683,6 +832,25 @@ function normalizeSingle(payload: unknown): AdminRecord | null {
   return list[0] ?? null
 }
 
+function looksLikeEmployeeRecord(value: AdminRecord | null) {
+  if (!value) {
+    return false
+  }
+  return (
+    "employee_no" in value ||
+    "employee_number" in value ||
+    "employee_code" in value ||
+    "branch_id" in value ||
+    "department_id" in value ||
+    "position_id" in value ||
+    "company_user_id" in value ||
+    "employment_status" in value ||
+    "branch" in value ||
+    "department" in value ||
+    "position" in value
+  )
+}
+
 function extractMessage(payload: unknown, status: number) {
   const record = asRecord(payload)
   if (!record) {
@@ -721,8 +889,10 @@ async function adminRequest<T>(path: string, options: AdminRequestOptions = {}):
   if (!response.ok) {
     const error = new Error(extractMessage(payload, response.status)) as Error & {
       status?: number
+      payload?: unknown
     }
     error.status = response.status
+    error.payload = payload
     throw error
   }
 
@@ -875,6 +1045,32 @@ export async function listLeaveHolidays(
   return { rows, ...pagination }
 }
 
+export async function listLeavePolicies(
+  token: string,
+  params: LeavePoliciesQueryParams = {}
+): Promise<PaginatedUsersResult> {
+  const fallbackPage = params.page && params.page > 0 ? params.page : 1
+  const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20
+  const query = buildLeavePoliciesQuery(params)
+  const payload = await adminRequest<unknown>(`/api/leave/policies${query}`, { token })
+  const rows = normalizeList(payload)
+  const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit)
+  return { rows, ...pagination }
+}
+
+export async function listLeaveWorkflows(
+  token: string,
+  params: LeaveWorkflowsQueryParams = {}
+): Promise<PaginatedUsersResult> {
+  const fallbackPage = params.page && params.page > 0 ? params.page : 1
+  const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20
+  const query = buildLeaveWorkflowsQuery(params)
+  const payload = await adminRequest<unknown>(`/api/leave/workflows${query}`, { token })
+  const rows = normalizeList(payload)
+  const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit)
+  return { rows, ...pagination }
+}
+
 export async function listOnboardingWorkflows(
   token: string,
   params: OnboardingWorkflowsQueryParams = {}
@@ -896,6 +1092,32 @@ export async function listOnboardingRequests(
   const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20
   const query = buildOnboardingRequestsQuery(params)
   const payload = await adminRequest<unknown>(`/api/onboarding/requests${query}`, { token })
+  const rows = normalizeList(payload)
+  const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit)
+  return { rows, ...pagination }
+}
+
+export async function listOffboardingRequests(
+  token: string,
+  params: OffboardingRequestsQueryParams = {}
+): Promise<PaginatedUsersResult> {
+  const fallbackPage = params.page && params.page > 0 ? params.page : 1
+  const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20
+  const query = buildOffboardingRequestsQuery(params)
+  const payload = await adminRequest<unknown>(`/api/offboarding/requests${query}`, { token })
+  const rows = normalizeList(payload)
+  const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit)
+  return { rows, ...pagination }
+}
+
+export async function listOffboardingWorkflows(
+  token: string,
+  params: OffboardingWorkflowsQueryParams = {}
+): Promise<PaginatedUsersResult> {
+  const fallbackPage = params.page && params.page > 0 ? params.page : 1
+  const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20
+  const query = buildOffboardingWorkflowsQuery(params)
+  const payload = await adminRequest<unknown>(`/api/offboarding/workflows${query}`, { token })
   const rows = normalizeList(payload)
   const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit)
   return { rows, ...pagination }
@@ -1118,6 +1340,110 @@ export async function deleteLeaveHoliday(token: string, id: string | number) {
   })
 }
 
+export async function createLeavePolicy(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/leave/policies", {
+    method: "POST",
+    token,
+    body: data,
+  })
+}
+
+export async function patchLeavePolicy(token: string, id: string | number, data: AdminRecord) {
+  return adminRequest<unknown>(`/api/leave/policies/${id}`, {
+    method: "PATCH",
+    token,
+    body: data,
+  })
+}
+
+export async function deleteLeavePolicy(token: string, id: string | number) {
+  return adminRequest<unknown>(`/api/leave/policies/${id}`, {
+    method: "DELETE",
+    token,
+  })
+}
+
+export async function createLeaveWorkflow(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/leave/workflows", {
+    method: "POST",
+    token,
+    body: data,
+  })
+}
+
+export async function getLeaveWorkflow(token: string, id: string | number) {
+  const payload = await adminRequest<unknown>(`/api/leave/workflows/${id}`, { token })
+  return normalizeSingle(payload)
+}
+
+export async function patchLeaveWorkflow(token: string, id: string | number, data: AdminRecord) {
+  return adminRequest<unknown>(`/api/leave/workflows/${id}`, {
+    method: "PATCH",
+    token,
+    body: data,
+  })
+}
+
+export async function deleteLeaveWorkflow(token: string, id: string | number) {
+  return adminRequest<unknown>(`/api/leave/workflows/${id}`, {
+    method: "DELETE",
+    token,
+  })
+}
+
+export async function listLeaveWorkflowSteps(token: string, workflowId: string | number) {
+  const payload = await adminRequest<unknown>(`/api/leave/workflows/${workflowId}/steps`, { token })
+  return normalizeList(payload)
+}
+
+export async function createLeaveWorkflowStep(
+  token: string,
+  workflowId: string | number,
+  data: AdminRecord
+) {
+  return adminRequest<unknown>(`/api/leave/workflows/${workflowId}/steps`, {
+    method: "POST",
+    token,
+    body: data,
+  })
+}
+
+export async function patchLeaveWorkflowStep(
+  token: string,
+  workflowId: string | number,
+  stepId: string | number,
+  data: AdminRecord
+) {
+  return adminRequest<unknown>(`/api/leave/workflows/${workflowId}/steps/${stepId}`, {
+    method: "PATCH",
+    token,
+    body: data,
+  })
+}
+
+export async function deleteLeaveWorkflowStep(
+  token: string,
+  workflowId: string | number,
+  stepId: string | number
+) {
+  return adminRequest<unknown>(`/api/leave/workflows/${workflowId}/steps/${stepId}`, {
+    method: "DELETE",
+    token,
+  })
+}
+
+export async function addLeaveRequestDocument(
+  token: string,
+  leaveRequestId: string | number,
+  data: AdminRecord
+) {
+  return adminRequest<unknown>(`/api/leave/requests/${leaveRequestId}/documents`, {
+    method: "POST",
+    token,
+    body: data,
+  })
+}
+
 export async function createOnboardingWorkflow(token: string, data: AdminRecord) {
   return adminRequest<unknown>("/api/onboarding/workflows", {
     method: "POST",
@@ -1334,6 +1660,225 @@ export async function getOnboardingAuditLogs(token: string, requestId: string | 
   return normalizeList(payload)
 }
 
+export async function createOffboardingWorkflow(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/offboarding/workflows", {
+    method: "POST",
+    token,
+    body: data,
+  })
+}
+
+export async function getOffboardingWorkflow(token: string, id: string | number) {
+  const payload = await adminRequest<unknown>(`/api/offboarding/workflows/${id}`, { token })
+  return normalizeSingle(payload)
+}
+
+export async function patchOffboardingWorkflow(token: string, id: string | number, data: AdminRecord) {
+  return adminRequest<unknown>(`/api/offboarding/workflows/${id}`, {
+    method: "PATCH",
+    token,
+    body: data,
+  })
+}
+
+export async function deleteOffboardingWorkflow(token: string, id: string | number) {
+  return adminRequest<unknown>(`/api/offboarding/workflows/${id}`, {
+    method: "DELETE",
+    token,
+  })
+}
+
+export async function createOffboardingWorkflowStep(
+  token: string,
+  workflowId: string | number,
+  data: AdminRecord
+) {
+  return adminRequest<unknown>(`/api/offboarding/workflows/${workflowId}/steps`, {
+    method: "POST",
+    token,
+    body: data,
+  })
+}
+
+export async function patchOffboardingWorkflowStep(
+  token: string,
+  workflowId: string | number,
+  stepId: string | number,
+  data: AdminRecord
+) {
+  return adminRequest<unknown>(`/api/offboarding/workflows/${workflowId}/steps/${stepId}`, {
+    method: "PATCH",
+    token,
+    body: data,
+  })
+}
+
+export async function deleteOffboardingWorkflowStep(
+  token: string,
+  workflowId: string | number,
+  stepId: string | number
+) {
+  return adminRequest<unknown>(`/api/offboarding/workflows/${workflowId}/steps/${stepId}`, {
+    method: "DELETE",
+    token,
+  })
+}
+
+export async function createOffboardingRequest(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/offboarding/requests", {
+    method: "POST",
+    token,
+    body: data,
+  })
+}
+
+export async function getOffboardingRequest(token: string, id: string | number) {
+  const payload = await adminRequest<unknown>(`/api/offboarding/requests/${id}`, { token })
+  return normalizeSingle(payload)
+}
+
+export async function patchOffboardingRequest(token: string, id: string | number, data: AdminRecord) {
+  return adminRequest<unknown>(`/api/offboarding/requests/${id}`, {
+    method: "PATCH",
+    token,
+    body: data,
+  })
+}
+
+export async function submitOffboardingRequest(token: string, id: string | number, data: AdminRecord) {
+  return adminRequest<unknown>(`/api/offboarding/requests/${id}/submit`, {
+    method: "POST",
+    token,
+    body: data,
+  })
+}
+
+export async function approveOffboardingRequest(token: string, id: string | number, data: AdminRecord) {
+  return adminRequest<unknown>(`/api/offboarding/requests/${id}/approve`, {
+    method: "POST",
+    token,
+    body: data,
+  })
+}
+
+export async function rejectOffboardingRequest(token: string, id: string | number, data: AdminRecord) {
+  return adminRequest<unknown>(`/api/offboarding/requests/${id}/reject`, {
+    method: "POST",
+    token,
+    body: data,
+  })
+}
+
+export async function cancelOffboardingRequest(token: string, id: string | number, data: AdminRecord) {
+  return adminRequest<unknown>(`/api/offboarding/requests/${id}/cancel`, {
+    method: "POST",
+    token,
+    body: data,
+  })
+}
+
+export async function completeOffboardingRequest(token: string, id: string | number) {
+  return adminRequest<unknown>(`/api/offboarding/requests/${id}/complete`, {
+    method: "POST",
+    token,
+  })
+}
+
+export async function addOffboardingDocument(
+  token: string,
+  requestId: string | number,
+  data: AdminRecord
+) {
+  return adminRequest<unknown>(`/api/offboarding/requests/${requestId}/documents`, {
+    method: "POST",
+    token,
+    body: data,
+  })
+}
+
+export async function listOffboardingDocuments(token: string, requestId: string | number) {
+  const payload = await adminRequest<unknown>(`/api/offboarding/requests/${requestId}/documents`, { token })
+  return normalizeList(payload)
+}
+
+export async function createOffboardingTask(
+  token: string,
+  requestId: string | number,
+  data: AdminRecord
+) {
+  return adminRequest<unknown>(`/api/offboarding/requests/${requestId}/tasks`, {
+    method: "POST",
+    token,
+    body: data,
+  })
+}
+
+export async function completeOffboardingTask(
+  token: string,
+  requestId: string | number,
+  taskId: string | number,
+  data: AdminRecord
+) {
+  return adminRequest<unknown>(`/api/offboarding/requests/${requestId}/tasks/${taskId}/complete`, {
+    method: "POST",
+    token,
+    body: data,
+  })
+}
+
+export async function rejectOffboardingTask(
+  token: string,
+  requestId: string | number,
+  taskId: string | number,
+  data: AdminRecord
+) {
+  return adminRequest<unknown>(`/api/offboarding/requests/${requestId}/tasks/${taskId}/reject`, {
+    method: "POST",
+    token,
+    body: data,
+  })
+}
+
+export async function createOffboardingClearance(
+  token: string,
+  requestId: string | number,
+  data: AdminRecord
+) {
+  return adminRequest<unknown>(`/api/offboarding/requests/${requestId}/clearances`, {
+    method: "POST",
+    token,
+    body: data,
+  })
+}
+
+export async function completeOffboardingClearance(
+  token: string,
+  requestId: string | number,
+  clearanceId: string | number,
+  data: AdminRecord
+) {
+  return adminRequest<unknown>(`/api/offboarding/requests/${requestId}/clearances/${clearanceId}/complete`, {
+    method: "POST",
+    token,
+    body: data,
+  })
+}
+
+export async function getOffboardingProgress(token: string, requestId: string | number) {
+  const payload = await adminRequest<unknown>(`/api/offboarding/requests/${requestId}/progress`, { token })
+  return asRecord(payload) ?? {}
+}
+
+export async function getOffboardingApprovals(token: string, requestId: string | number) {
+  const payload = await adminRequest<unknown>(`/api/offboarding/requests/${requestId}/approvals`, { token })
+  return normalizeList(payload)
+}
+
+export async function getOffboardingAuditLogs(token: string, requestId: string | number) {
+  const payload = await adminRequest<unknown>(`/api/offboarding/requests/${requestId}/audit-logs`, { token })
+  return normalizeList(payload)
+}
+
 export async function getCurrentAdmin(token: string) {
   const payload = await adminRequest<unknown>("/api/users/me", { token })
   return normalizeSingle(payload)
@@ -1358,6 +1903,40 @@ export async function createEmployeeProfile(token: string, data: AdminRecord) {
     token,
     body: data,
   })
+}
+
+export async function getEmployeeById(id: string | number, token: string) {
+  const payload = await adminRequest<unknown>(`/api/employees/${id}`, { token })
+  return normalizeSingle(payload)
+}
+
+export async function getCurrentEmployee(token: string) {
+  const payload = await adminRequest<unknown>("/api/employees/me", { token })
+  const root = asRecord(payload)
+  const rootData = asRecord(root?.data)
+  const rootResult = asRecord(root?.result)
+  const rootItem = asRecord(root?.item)
+  const candidates = [rootData, rootResult, rootItem, root]
+  const nestedCandidates = [
+    asRecord(rootData?.employee),
+    asRecord(rootResult?.employee),
+    asRecord(rootItem?.employee),
+    asRecord(root?.employee),
+  ]
+
+  for (const candidate of candidates) {
+    if (looksLikeEmployeeRecord(candidate)) {
+      return candidate
+    }
+  }
+
+  for (const candidate of nestedCandidates) {
+    if (looksLikeEmployeeRecord(candidate)) {
+      return candidate
+    }
+  }
+
+  return normalizeSingle(payload)
 }
 
 export async function getUserById(id: string | number, token: string) {
@@ -1515,10 +2094,28 @@ export async function patchEmployeeStatus(
   employeeId: string | number,
   data: EmployeeStatusPayload
 ) {
+  const normalizedStatus = String(data.employment_status ?? "").trim().toLowerCase()
+  if (!isEmployeeStatusValue(normalizedStatus)) {
+    throw new Error("Invalid employee status.")
+  }
+
+  const trimmedNotes = typeof data.notes === "string" ? data.notes.trim() : ""
+  const normalizedPayload: EmployeeStatusPayload = {
+    employment_status: normalizedStatus,
+    notes: trimmedNotes || undefined,
+  }
+
+  if (normalizedStatus === "exited") {
+    const trimmedExitDate = typeof data.exit_date === "string" ? data.exit_date.trim() : ""
+    const trimmedExitReason = typeof data.exit_reason === "string" ? data.exit_reason.trim() : ""
+    normalizedPayload.exit_date = trimmedExitDate || undefined
+    normalizedPayload.exit_reason = trimmedExitReason || undefined
+  }
+
   return adminRequest<unknown>(`/api/employees/${employeeId}/status`, {
     method: "PATCH",
     token,
-    body: data,
+    body: normalizedPayload,
   })
 }
 

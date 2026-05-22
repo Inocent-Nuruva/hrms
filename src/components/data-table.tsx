@@ -404,17 +404,34 @@ export function DataTable({
   const permissionOptions = React.useMemo(() => {
     return permissions
       .map((permission) => {
+        const id = asRoleId(permission.id)
         const name =
           asPermissionName(permission.name) ??
           asPermissionName(permission.display_name) ??
           asPermissionName(permission.id)
-        if (!name) {
+        if (!name || !id) {
           return null
         }
-        return { name, label: permissionLabel(permission) }
+        return { id, name, label: permissionLabel(permission) }
       })
-      .filter((item): item is { name: string; label: string } => Boolean(item))
+      .filter((item): item is { id: string; name: string; label: string } => Boolean(item))
   }, [permissions])
+
+  const permissionIdsFromSelection = React.useCallback(
+    (selection: string[]) => {
+      const resolved = selection
+        .map((value) => {
+          const byName = permissionOptions.find((permission) => permission.name === value)
+          if (byName) {
+            return rolePayloadId(byName.id)
+          }
+          return rolePayloadId(value)
+        })
+        .filter((value) => value !== "")
+      return Array.from(new Set(resolved))
+    },
+    [permissionOptions]
+  )
 
   React.useEffect(() => {
     setSearchInput(usersQuery.search)
@@ -487,10 +504,23 @@ export function DataTable({
           name: roleForm.name.trim(),
           display_name: roleForm.display_name.trim(),
           description: roleForm.description.trim(),
-          permissions: rolePermissionNames,
+          permission_ids: permissionIdsFromSelection(rolePermissionNames),
         })
         setRoleForm(EMPTY_ENTITY_FORM)
         setRolePermissionNames([])
+      }
+
+      if (activeResource === "permissions") {
+        if (!roleForm.name.trim() || !roleForm.display_name.trim()) {
+          toast.error("Permission name and display name are required.")
+          return
+        }
+        await onCreate("permissions", {
+          name: roleForm.name.trim(),
+          display_name: roleForm.display_name.trim(),
+          description: roleForm.description.trim(),
+        })
+        setRoleForm(EMPTY_ENTITY_FORM)
       }
 
       if (activeResource === "companies") {
@@ -561,7 +591,7 @@ export function DataTable({
         display_name: editingEntityForm.display_name.trim(),
         description: editingEntityForm.description.trim(),
         ...(editingEntity.resource === "roles"
-          ? { permissions: editingRolePermissionNames }
+          ? { permission_ids: permissionIdsFromSelection(editingRolePermissionNames) }
           : {}),
       })
       setEditingEntity(null)
@@ -616,7 +646,7 @@ export function DataTable({
   const canNextPage = usersTotalPages
     ? usersQuery.page < usersTotalPages
     : rows.length >= usersQuery.limit
-  const canCreateResource = activeResource !== "permissions"
+  const canCreateResource = true
 
   return (
     <div className="w-full flex-col justify-start gap-6">

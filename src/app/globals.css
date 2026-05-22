@@ -175,6 +175,15 @@ table.min-w-full > tbody.bg-white > tr:hover > td {
   to   { opacity: 1; transform: translateX(0); }
 }
 
+@keyframes profileWaveShift {
+  0% {
+    background-position-x: 0%;
+  }
+  100% {
+    background-position-x: 220%;
+  }
+}
+
 
 /* ── Animation utility classes ───────────────────────────────────────────── */
 
@@ -188,6 +197,236 @@ table.min-w-full > tbody.bg-white > tr:hover > td {
 
 .animate-fade-up {
   animation: fadeUp 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.profile-wave-separator {
+  position: relative;
+  height: 10px;
+  overflow: hidden;
+  opacity: 0.9;
+}
+
+.profile-wave-separator::before {
+  content: "";
+  position: absolute;
+  inset: 3px 0;
+  border-radius: 999px;
+  background-image:
+    radial-gradient(80% 140% at 0% 50%, rgba(var(--primary-rgb), 0.02) 40%, transparent 41%),
+    repeating-radial-gradient(
+      circle at 0 50%,
+      rgba(var(--primary-rgb), 0.08) 0 9px,
+      rgba(var(--primary-rgb), 0.18) 10px 16px,
+      rgba(var(--primary-rgb), 0.08) 17px 24px
+    );
+  background-size: 100% 100%, 240px 100%;
+  background-position: 0 0, 0 0;
+  animation: profileWaveShift 9s linear infinite;
+}
+
+.profile-section-wave {
+  position: relative;
+  height: 26px;
+  overflow: hidden;
+  border-radius: 999px;
+  opacity: 0.95;
+}
+
+.profile-section-wave__layer {
+  position: absolute;
+  left: -10%;
+  right: -10%;
+  height: 20px;
+  border-radius: 999px;
+  background-repeat: repeat-x;
+  background-size: 260px 100%;
+  animation: profileWaveShift 12s linear infinite;
+}
+
+.profile-section-wave__layer--one {
+  top: 3px;
+  opacity: 0.34;
+  background-image:
+    radial-gradient(120% 145% at 50% 100%, rgba(var(--primary-rgb), 0.2) 0%, rgba(var(--primary-rgb), 0.05) 60%, transparent 72%),
+    repeating-radial-gradient(circle at 0 100%, rgba(var(--primary-rgb), 0.2) 0 10px, rgba(var(--primary-rgb), 0.02) 11px 22px);
+}
+
+.profile-section-wave__layer--two {
+  top: 9px;
+  opacity: 0.25;
+  background-image:
+    radial-gradient(120% 145% at 50% 0%, rgba(var(--primary-rgb), 0.16) 0%, rgba(var(--primary-rgb), 0.03) 60%, transparent 72%),
+    repeating-radial-gradient(circle at 24px 0, rgba(var(--primary-rgb), 0.16) 0 9px, rgba(var(--primary-rgb), 0.02) 10px 20px);
+  animation-direction: reverse;
+  animation-duration: 14s;
+}
+
+.profile-section-wave__glow {
+  position: absolute;
+  inset: 9px 10% 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, rgba(var(--primary-rgb), 0.11), transparent);
+  filter: blur(5px);
+}
+
+.profile-section-wave[data-variant="subtle"] {
+  height: 20px;
+}
+
+.profile-section-wave[data-variant="subtle"] .profile-section-wave__layer--one {
+  opacity: 0.24;
+}
+
+.profile-section-wave[data-variant="subtle"] .profile-section-wave__layer--two {
+  opacity: 0.16;
+}
+
+.profile-section-wave[data-variant="subtle"] .profile-section-wave__glow {
+  opacity: 0.58;
+}
+
+.profile-section-wave[data-inverted="true"] .profile-section-wave__layer--one,
+.profile-section-wave[data-inverted="true"] .profile-section-wave__layer--two {
+  transform: rotate(180deg);
+}
+
+.profile-wave-bridge {
+  align-self: stretch;
+  display: flex;
+  justify-content: center;
+}
+
+.profile-wave-bridge .profile-section-wave {
+  width: 100%;
+  height: 100%;
+  min-height: 260px;
+  overflow: visible;
+}
+
+.profile-wave-bridge .profile-section-wave__layer--one,
+.profile-wave-bridge .profile-section-wave__layer--two {
+  transform: rotate(90deg) scale(1.05);
+  transform-origin: center;
+}
+
+.profile-wave-bridge .profile-section-wave__glow {
+  inset: 12% 0;
+}
+
+.summary-wave-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: color-mix(in srgb, white 93%, transparent);
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.05),
+    0 6px 14px rgba(15, 23, 42, 0.04);
+}
+
+.summary-wave-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    rgba(var(--primary-rgb), 0.07),
+    rgba(var(--primary-rgb), 0.015) 45%,
+    transparent
+  );
+  opacity: 1;
+}
+
+.dark .summary-wave-card {
+  background: color-mix(in srgb, rgb(15 23 42) 62%, transparent);
+  border-color: rgba(100, 116, 139, 0.45);
+}
+
+.assignment-detail-card {
+  border-radius: 0.625rem;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: rgba(255, 255, 255, 0.55);
+  padding: 0.75rem;
+}
+
+.dark .assignment-detail-card {
+  border-color: rgba(100, 116, 139, 0.45);
+  background: rgba(15, 23, 42, 0.35);
+}
+
+.profile-tabs-list {
+  position: relative;
+  overflow: hidden;
+}
+
+.profile-tabs-list::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(var(--primary-rgb), 0.1), rgba(var(--primary-rgb), 0.04)),
+    radial-gradient(120% 180% at 50% -140%, rgba(var(--primary-rgb), 0.36) 0 40%, transparent 41%) top / 100% 9px no-repeat,
+    radial-gradient(120% 180% at 50% 240%, rgba(var(--primary-rgb), 0.36) 0 40%, transparent 41%) bottom / 100% 9px no-repeat;
+}
+
+.profile-tabs-trigger {
+  position: relative;
+  transition: color 260ms ease, transform 260ms ease, background-color 260ms ease;
+}
+
+.profile-tabs-trigger::before,
+.profile-tabs-trigger::after {
+  content: "";
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(var(--primary-rgb), 0.35), rgba(var(--primary-rgb), 0.85), rgba(var(--primary-rgb), 0.35));
+  transform: scaleX(0);
+  transform-origin: center;
+  transition: transform 260ms ease, opacity 260ms ease;
+  opacity: 0;
+}
+
+.profile-tabs-trigger::before {
+  top: 2px;
+}
+
+.profile-tabs-trigger::after {
+  bottom: 2px;
+}
+
+.profile-tabs-trigger[data-state="active"]::before,
+.profile-tabs-trigger[data-state="active"]::after {
+  transform: scaleX(1);
+  opacity: 1;
+}
+
+.profile-tabs-trigger[data-state="active"] {
+  transform: translateY(-0.5px);
+}
+
+@media (max-width: 767px) {
+  .profile-section-wave {
+    height: 20px;
+  }
+
+  .profile-section-wave__layer {
+    background-size: 200px 100%;
+  }
+
+  .profile-section-wave__layer--one {
+    top: 2px;
+  }
+
+  .profile-section-wave__layer--two {
+    top: 7px;
+  }
 }
 
 /* Blob base — composited with per-blob delays via style prop */
@@ -423,6 +662,32 @@ table.min-w-full > tbody.bg-white > tr:hover > td {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* employee register nationality selector alignment + stacking */
+.register-nationality [class*="ReactFlagsSelect-module_flagsSelect"] {
+  position: relative;
+  width: 100%;
+}
+
+.register-nationality button[class*="ReactFlagsSelect-module_selectBtn"] {
+  width: 100%;
+}
+
+.register-nationality ul[class*="ReactFlagsSelect-module_selectOptions"] {
+  z-index: 80;
+  left: 0;
+  right: 0;
+  width: 100%;
+  max-height: min(18rem, 46vh);
+  overflow-y: auto;
+}
+
+.register-nationality ul[class*="ReactFlagsSelect-module_selectOptions"] > div[class*="ReactFlagsSelect-module_filterBox"] {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: inherit;
 }
 
 @media (prefers-reduced-motion: no-preference) {

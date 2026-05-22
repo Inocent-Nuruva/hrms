@@ -42,9 +42,9 @@ function applyAccent(accent: string) {
   if (typeof document === "undefined") {
     return
   }
+  const root = document.documentElement
   const rgb = hexToRgb(accent)
   const headerBg = rgb ? `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.14)` : "rgba(17, 17, 17, 0.14)"
-  const root = document.documentElement
   root.style.setProperty("--sidebar-icon-color", accent)
   root.style.setProperty("--sidebar-active-link-color", accent)
   root.style.setProperty("--table-header-accent", accent)
@@ -90,16 +90,23 @@ export function AccentColorPicker() {
         <PaletteIcon />
       </Button>
       {open ? (
-        <div className="absolute right-0 z-50 mt-2 w-56 rounded-lg border border-border bg-card p-3 shadow-xl">
+        <div
+          className="absolute right-0 z-[200] mt-2 w-56 rounded-lg border border-border bg-card p-3 shadow-xl pointer-events-auto"
+          onMouseDown={(event) => event.stopPropagation()}
+        >
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Accent color</p>
           <div className="mb-3 flex flex-wrap gap-2">
             {PRESET_COLORS.map((preset) => (
               <button
                 key={preset}
                 type="button"
-                className="h-7 w-7 rounded-full border border-slate-300"
+                className="h-7 w-7 cursor-pointer rounded-full border border-slate-300 transition-transform hover:scale-105 active:scale-95"
                 style={{ backgroundColor: preset }}
-                onClick={() => setAndPersist(preset)}
+                onMouseDown={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  setAndPersist(preset)
+                }}
                 title={preset}
               />
             ))}

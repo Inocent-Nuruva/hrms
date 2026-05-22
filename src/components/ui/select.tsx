@@ -70,6 +70,22 @@ function SelectContent({
     SelectPrimitive.Positioner.Props,
     "align" | "alignOffset" | "side" | "sideOffset" | "alignItemWithTrigger"
   >) {
+  const [query, setQuery] = React.useState("")
+  const popupRef = React.useRef<HTMLDivElement | null>(null)
+
+  React.useEffect(() => {
+    const popup = popupRef.current
+    if (!popup) {
+      return
+    }
+    const items = popup.querySelectorAll<HTMLElement>('[data-slot="select-item"]')
+    const loweredQuery = query.trim().toLowerCase()
+    items.forEach((item) => {
+      const matches = !loweredQuery || item.textContent?.toLowerCase().includes(loweredQuery)
+      item.style.display = matches ? "" : "none"
+    })
+  }, [query, children])
+
   return (
     <SelectPrimitive.Portal>
       <SelectPrimitive.Positioner
@@ -81,11 +97,20 @@ function SelectContent({
         className="isolate z-50"
       >
         <SelectPrimitive.Popup
+          ref={popupRef}
           data-slot="select-content"
           data-align-trigger={alignItemWithTrigger}
           className={cn("relative isolate z-50 max-h-(--available-height) w-(--anchor-width) min-w-36 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-lg bg-popover text-popover-foreground shadow-md ring-1 ring-foreground/10 duration-200 ease-out data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95", className )}
           {...props}
         >
+          <div className="sticky top-0 z-20 border-b border-border bg-popover p-2">
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search..."
+              className="h-8 w-full rounded-md border border-input bg-transparent px-2 text-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
+            />
+          </div>
           <SelectScrollUpButton />
           <SelectPrimitive.List>{children}</SelectPrimitive.List>
           <SelectScrollDownButton />

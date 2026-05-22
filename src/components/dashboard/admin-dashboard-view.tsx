@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 
 import { AppSidebar } from "@/components/app-sidebar"
 import {
@@ -23,7 +23,6 @@ import {
   listUsers,
   patchResource,
   revokeRoleFromUser,
-  updateCurrentUserProfile,
   updateUserById,
   type AdminRecord,
   type AdminResourceCollections,
@@ -57,6 +56,60 @@ const RESOURCE_ROUTE_MAP: Record<AdminResourceKey, string> = {
   permissions: "/dashboard/permissions",
   companies: "/dashboard/companies",
 }
+
+const SELF_SERVICE_HOME_ROUTE = "/dashboard/employees/register"
+const ADMIN_ROLE_KEYS = new Set([
+  "admin",
+  "administrator",
+  "super_admin",
+  "super-admin",
+  "company_admin",
+  "company-admin",
+  "hr_admin",
+  "hr-admin",
+  "owner",
+  "root",
+])
+
+const ADMIN_PORTAL_PERMISSION_KEYS = new Set([
+  "view_company_dashboard",
+  "view_company_data",
+  "update_company_data",
+  "users:read",
+  "roles:read",
+  "permissions:read",
+  "employees:read",
+  "departments:read",
+  "branches:read",
+  "positions:read",
+  "designations:read",
+  "leave_types:read",
+  "leave_requests:read",
+  "leave_balances:read",
+  "leave_policies:read",
+  "leave_workflows:read",
+  "onboarding_requests:read",
+  "offboarding_requests:read",
+  "attendance_settings:read",
+  "attendance_devices:read",
+  "attendance_policies:read",
+])
+
+const EMPLOYEE_RESTRICTED_ROUTE_PREFIXES = [
+  "/dashboard/users",
+  "/dashboard/roles",
+  "/dashboard/permissions",
+  "/dashboard/companies",
+  "/dashboard/departments",
+  "/dashboard/branches",
+  "/dashboard/positions",
+  "/dashboard/designations",
+  "/dashboard/operations/recruitment",
+  "/dashboard/operations/reports",
+  "/dashboard/employees/onboarding",
+  "/dashboard/leave-management/types",
+  "/dashboard/leave-management/workflows",
+]
 
 function decodeBase64Url(input: string) {
   try {
@@ -97,6 +150,191 @@ function getStringValue(record: AdminRecord | null, keys: string[]) {
     }
   }
   return null
+}
+
+function readRoleCandidate(value: unknown): string | null {
+  if (typeof value === "string" && value.trim()) {
+    return value.trim()
+  }
+  const record = asRecord(value)
+  if (!record) {
+    return null
+  }
+  return (
+    readString(record, ["name", "role", "key", "code", "slug", "type", "user_type"]) ?? null
+  )
+}
+
+function resolveClientRoleLabel(root: AdminRecord | null) {
+  if (!root) {
+    return null
+  }
+
+  const direct = readString(root, ["role", "user_type", "type"])
+  if (direct) {
+    return direct
+  }
+
+  const candidates = [
+    root.role,
+    root.roles,
+    root.userRole,
+    root.user_role,
+    root.role_name,
+    root.roleName,
+    root.authorities,
+    root.permissions,
+  ]
+
+  for (const candidate of candidates) {
+    const scalar = readRoleCandidate(candidate)
+    if (scalar) {
+      return scalar
+    }
+
+    if (Array.isArray(candidate)) {
+      for (const item of candidate) {
+        const nested = readRoleCandidate(item)
+        if (nested) {
+          return nested
+        }
+      }
+    }
+  }
+
+  return null
+}
+
+function collectRoleLabels(root: AdminRecord | null) {
+  const labels = new Set<string>()
+  if (!root) {
+    return labels
+  }
+
+  const push = (value: unknown) => {
+    const role = readRoleCandidate(value)
+    if (role) {
+      labels.add(role.toLowerCase().trim())
+    }
+  }
+
+  push(root.role)
+  push(root.user_type)
+  push(root.type)
+
+  const candidates = [root.roles, root.authorities, root.userRole, root.user_role]
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) {
+      candidate.forEach((entry) => push(entry))
+      continue
+    }
+    push(candidate)
+  }
+
+  return labels
+}
+
+function resolveAdminFlag(root: AdminRecord | null) {
+  if (!root) {
+    return false
+  }
+  const candidates = [
+    root.is_admin,
+    root.isAdmin,
+    root.admin,
+    root.is_super_admin,
+    root.isSuperAdmin,
+    root.super_admin,
+    root.superAdmin,
+  ]
+  return candidates.some((value) => value === true || value === 1 || value === "1" || value === "true")
+}
+
+function hasAdminPortalPermissions(permissionLabels: string[]) {
+  return permissionLabels.some((permission) => ADMIN_PORTAL_PERMISSION_KEYS.has(permission))
+}
+
+function collectPermissionLabelsFromUnknown(value: unknown, sink: Set<string>) {
+  if (typeof value === "string" && value.trim()) {
+    const normalized = value.trim().toLowerCase()
+    const looksLikePermission =
+      normalized.includes(":") ||
+      normalized.startsWith("view_") ||
+      normalized.startsWith("create_") ||
+      normalized.startsWith("update_") ||
+      normalized.startsWith("delete_") ||
+      normalized.startsWith("manage_")
+    if (looksLikePermission) {
+      sink.add(normalized)
+    }
+    return
+  }
+
+  if (Array.isArray(value)) {
+    value.forEach((entry) => collectPermissionLabelsFromUnknown(entry, sink))
+    return
+  }
+
+  const record = asRecord(value)
+  if (!record) {
+    return
+  }
+
+  const direct = readString(record, ["name", "key", "code", "slug", "permission", "action"])
+  if (direct) {
+    collectPermissionLabelsFromUnknown(direct, sink)
+  }
+
+  for (const key of [
+    "permissions",
+    "permission",
+    "authorities",
+    "scopes",
+    "actions",
+    "role_permissions",
+    "rolePermissions",
+    "granted_permissions",
+    "grantedPermissions",
+    "data",
+    "items",
+    "records",
+    "results",
+    "user",
+    "profile",
+    "meta",
+  ]) {
+    collectPermissionLabelsFromUnknown(record[key], sink)
+  }
+
+  for (const nestedValue of Object.values(record)) {
+    if (typeof nestedValue === "object" && nestedValue !== null) {
+      collectPermissionLabelsFromUnknown(nestedValue, sink)
+    }
+  }
+}
+
+function resolvePermissionLabels(root: AdminRecord | null) {
+  const labels = new Set<string>()
+  if (!root) {
+    return labels
+  }
+
+  for (const key of [
+    "permissions",
+    "permission",
+    "authorities",
+    "scopes",
+    "actions",
+    "role_permissions",
+    "rolePermissions",
+  ]) {
+    collectPermissionLabelsFromUnknown(root[key], labels)
+  }
+
+  collectPermissionLabelsFromUnknown(root.role, labels)
+  collectPermissionLabelsFromUnknown(root.roles, labels)
+
+  return labels
 }
 
 function buildChartData(collections: AdminResourceCollections): AdminChartPoint[] {
@@ -163,6 +401,7 @@ export default function AdminDashboardView({
   children,
 }: AdminDashboardViewProps) {
   const router = useRouter()
+  const pathname = usePathname()
   const [token, setToken] = React.useState("")
   const [collections, setCollections] = React.useState<AdminResourceCollections>({
     users: [],
@@ -497,18 +736,6 @@ export default function AdminDashboardView({
     await loadData(accessToken)
   }
 
-  const handleUpdateMyProfile = async (payload: AdminRecord) => {
-    const accessToken = resolveStoredTokens().accessToken
-    if (!accessToken) {
-      throw new Error("Authentication required. Please log in again.")
-    }
-    if (accessToken !== token) {
-      setToken(accessToken)
-    }
-    await updateCurrentUserProfile(accessToken, payload)
-    await loadData(accessToken)
-  }
-
   const handleChangeMyPassword = async (oldPassword: string, newPassword: string) => {
     const accessToken = resolveStoredTokens().accessToken
     if (!accessToken) {
@@ -559,11 +786,17 @@ export default function AdminDashboardView({
     adminEmail: string | null
     companyName: string | null
     tokenCompanyName: string | null
+    role: string | null
+    isAdmin: boolean
+    permissionLabels: string[]
   }>({
     adminName: null,
     adminEmail: null,
     companyName: null,
     tokenCompanyName: null,
+    role: null,
+    isAdmin: false,
+    permissionLabels: [],
   })
 
   React.useEffect(() => {
@@ -574,6 +807,9 @@ export default function AdminDashboardView({
     let adminName: string | null = null
     let adminEmail: string | null = null
     let companyName: string | null = null
+    let userRole: string | null = null
+    let userIsAdmin = false
+    const permissionLabels = new Set<string>()
 
     const rawUser = window.localStorage.getItem(AUTH_STORAGE_KEYS.user)
     if (rawUser) {
@@ -610,10 +846,15 @@ export default function AdminDashboardView({
             .trim() || null
         adminName = readString(root, ["fullName", "full_name", "name"]) ?? composedAdminName
         adminEmail = readString(root, ["email"]) ?? null
+        userRole = resolveClientRoleLabel(root)
+        userIsAdmin = resolveAdminFlag(root)
+        resolvePermissionLabels(root).forEach((entry) => permissionLabels.add(entry))
       } catch {
         adminName = null
         adminEmail = null
         companyName = null
+        userRole = null
+        userIsAdmin = false
       }
     }
 
@@ -626,12 +867,18 @@ export default function AdminDashboardView({
         "company",
         "organization_name",
       ]) ?? null
+    const tokenRole = resolveClientRoleLabel(payload)
+    const tokenIsAdmin = resolveAdminFlag(payload)
+    resolvePermissionLabels(payload).forEach((entry) => permissionLabels.add(entry))
 
     setClientIdentity({
       adminName,
       adminEmail,
       companyName,
       tokenCompanyName,
+      role: userRole ?? tokenRole,
+      isAdmin: userIsAdmin || tokenIsAdmin,
+      permissionLabels: Array.from(permissionLabels),
     })
   }, [resolveStoredTokens])
   const adminName =
@@ -652,6 +899,40 @@ export default function AdminDashboardView({
     clientIdentity.companyName ??
     clientIdentity.tokenCompanyName ??
     null
+  const permissionLabels = React.useMemo(() => {
+    const merged = new Set<string>(clientIdentity.permissionLabels)
+    resolvePermissionLabels(currentAdmin).forEach((entry) => merged.add(entry))
+    return Array.from(merged)
+  }, [clientIdentity.permissionLabels, currentAdmin])
+  const roleLabels = React.useMemo(() => {
+    const merged = new Set<string>()
+    collectRoleLabels(currentAdmin).forEach((entry) => merged.add(entry))
+    collectRoleLabels(decodeJwtPayload(resolveStoredTokens().accessToken)).forEach((entry) => merged.add(entry))
+    const identityRole = (clientIdentity.role ?? "").toLowerCase().trim()
+    if (identityRole) {
+      merged.add(identityRole)
+    }
+    return Array.from(merged)
+  }, [clientIdentity.role, currentAdmin, resolveStoredTokens])
+
+  const identityIsAdmin = roleLabels.some((role) => ADMIN_ROLE_KEYS.has(role))
+  const accessMode = identityIsAdmin ? "admin" : "employee"
+
+  React.useEffect(() => {
+    if (accessMode !== "employee") {
+      return
+    }
+
+    const currentPath = pathname ?? ""
+    if (currentPath === "/dashboard") {
+      router.replace(SELF_SERVICE_HOME_ROUTE)
+      return
+    }
+
+    if (EMPLOYEE_RESTRICTED_ROUTE_PREFIXES.some((prefix) => currentPath.startsWith(prefix))) {
+      router.replace(SELF_SERVICE_HOME_ROUTE)
+    }
+  }, [accessMode, pathname, router])
 
   return (
     <SidebarProvider
@@ -667,6 +948,8 @@ export default function AdminDashboardView({
         userName={adminName}
         userEmail={adminEmail}
         companyName={companyName}
+        accessMode={accessMode}
+        permissionLabels={permissionLabels}
         activeResource={activeResource}
         onSelectResource={navigateToResource}
       />
@@ -708,11 +991,10 @@ export default function AdminDashboardView({
                   onSyncUserRoles={handleSyncUserRoles}
                 />
               ) : null}
-              {showSettings && useApis ? (
+              {showSettings ? (
                 <AccountSettingsPanel
                   token={token}
                   loading={loading}
-                  onUpdateMyProfile={handleUpdateMyProfile}
                   onChangeMyPassword={handleChangeMyPassword}
                 />
               ) : null}

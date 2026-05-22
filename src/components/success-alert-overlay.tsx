@@ -44,15 +44,15 @@ export function SuccessAlertOverlay() {
   return (
     <div className="fixed inset-0 z-[120] bg-black/20 backdrop-blur-md">
       <div className="flex h-full w-full items-center justify-center px-6">
-        <div className="flex flex-col items-center gap-3 text-center text-foreground">
+        <div className="flex flex-col items-center gap-3 text-center">
           <BadgeCheck
             size={72}
             animation="path-loop"
             animate
-            className="text-[var(--sidebar-active-link-color)] drop-shadow-[0_8px_18px_rgba(0,0,0,0.25)]"
+            className="text-white drop-shadow-[0_8px_18px_rgba(0,0,0,0.25)]"
           />
-          <p className="text-xl font-semibold">{title}</p>
-          <p className="max-w-lg text-sm text-foreground/85">{message}</p>
+          <p className="text-xl text-white">{title}</p>
+          <p className="max-w-lg text-sm text-white/90">{message}</p>
         </div>
       </div>
     </div>

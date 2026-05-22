@@ -44,15 +44,15 @@ export function ErrorAlertOverlay() {
   return (
     <div className="fixed inset-0 z-[130] bg-black/60 backdrop-blur-md">
       <div className="flex h-full w-full items-center justify-center px-6">
-        <div className="flex flex-col items-center gap-3 text-center text-white">
+        <div className="flex flex-col items-center gap-3 text-center">
           <CircleX
             size={72}
             animation="path-loop"
             animate
-            className="text-white drop-shadow-[0_8px_18px_rgba(0,0,0,0.35)]"
+            className="text-red-200 drop-shadow-[0_8px_18px_rgba(0,0,0,0.35)]"
           />
-          <p className="text-xl font-semibold">{title}</p>
-          <p className="max-w-lg text-sm text-white/90">{message}</p>
+          <p className="text-xl text-red-200">{title}</p>
+          <p className="max-w-lg text-sm text-red-200">{message}</p>
         </div>
       </div>
     </div>

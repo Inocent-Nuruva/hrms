@@ -56,19 +56,25 @@ export function NavMain({
   activeResource?: AdminResourceKey
   onSelectResource?: (resource: AdminResourceKey) => void
 }) {
+  const OPEN_GROUPS_STORAGE_KEY = "hrms.sidebar.open-groups.v1"
   const router = useRouter()
   const pathname = usePathname()
   const currentPath = pathname ?? ""
-  const [openGroups, setOpenGroups] = React.useState<Record<string, boolean>>(() =>
-    Object.fromEntries(
-      items
-        .filter((item): item is Extract<NavMainItem, { items: NavMainSubItem[] }> => Boolean(item.items))
-        .map((item) => [
-          item.title,
-          item.items.some((subItem) => currentPath.startsWith(subItem.url)),
-        ])
-    )
+  const defaultOpenGroups = React.useMemo(
+    () =>
+      Object.fromEntries(
+        items
+          .filter((item): item is Extract<NavMainItem, { items: NavMainSubItem[] }> => Boolean(item.items))
+          .map((item) => [
+            item.title,
+            item.items.some((subItem) => currentPath.startsWith(subItem.url)),
+          ])
+      ),
+    [items, currentPath]
   )
+  const [openGroups, setOpenGroups] = React.useState<Record<string, boolean>>(() => {
+    return defaultOpenGroups
+  })
   const [hoveredLink, setHoveredLink] = React.useState<string | null>(null)
 
   const renderAnimatedIcon = React.useCallback((icon: React.ReactNode, key: string) => {
@@ -80,6 +86,22 @@ export function NavMain({
       size: 42,
     })
   }, [hoveredLink])
+
+  React.useEffect(() => {
+    setOpenGroups((previous) => ({ ...defaultOpenGroups, ...previous }))
+  }, [defaultOpenGroups])
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") return
+    try {
+      const raw = window.localStorage.getItem(OPEN_GROUPS_STORAGE_KEY)
+      if (!raw) return
+      const stored = JSON.parse(raw) as Record<string, boolean>
+      setOpenGroups((previous) => ({ ...previous, ...stored }))
+    } catch {
+      // ignore invalid cache
+    }
+  }, [])
 
   React.useEffect(() => {
     setOpenGroups((previous) => {
@@ -98,6 +120,11 @@ export function NavMain({
       return next
     })
   }, [currentPath, items])
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") return
+    window.localStorage.setItem(OPEN_GROUPS_STORAGE_KEY, JSON.stringify(openGroups))
+  }, [openGroups])
 
   return (
     <SidebarGroup>

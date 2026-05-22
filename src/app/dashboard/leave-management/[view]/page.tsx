@@ -3,9 +3,9 @@ import { redirect } from "next/navigation"
 import AdminDashboardView from "@/components/dashboard/admin-dashboard-view"
 import { LeaveManagementView } from "@/components/dashboard/leave-management-view"
 
-const ALLOWED_VIEWS = new Set(["types", "requests", "balances", "holidays"])
+const ALLOWED_VIEWS = new Set(["types", "requests", "balances", "holidays", "policies", "workflows"])
 
-type LeaveView = "types" | "requests" | "balances" | "holidays"
+type LeaveView = "types" | "requests" | "balances" | "holidays" | "policies" | "workflows"
 
 interface LeaveManagementViewPageProps {
   params: Promise<{

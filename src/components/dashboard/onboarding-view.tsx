@@ -1593,7 +1593,7 @@ export function OnboardingView() {
           </Table>
 
           <Sheet open={workflowSheetOpen} onOpenChange={setWorkflowSheetOpen}>
-            <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-4xl">
+            <SheetContent side="right" className="w-full overflow-y-auto data-[side=right]:w-1/2 sm:max-w-none">
               <SheetHeader>
                 <SheetTitle>{editingWorkflowId === null ? "Create Workflow" : "Edit Workflow"}</SheetTitle>
                 <SheetDescription>

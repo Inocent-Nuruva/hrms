@@ -16,35 +16,35 @@ import {
 } from "@/components/ui/sidebar"
 import { CommandIcon } from "lucide-react"
 import { UsersRound } from "@/components/animate-ui/icons/users-round"
-import { Kanban } from "@/components/animate-ui/icons/kanban"
-import { MapPin } from "@/components/animate-ui/icons/map-pin"
-import { ChartColumn } from "@/components/animate-ui/icons/chart-column"
 import { Route } from "@/components/animate-ui/icons/route"
 import { Sparkles } from "@/components/animate-ui/icons/sparkles"
-import { Key } from "@/components/animate-ui/icons/key"
 import { ChartBar } from "@/components/animate-ui/icons/chart-bar"
-import { ChartLine } from "@/components/animate-ui/icons/chart-line"
-import { LockKeyhole } from "@/components/animate-ui/icons/lock-keyhole"
+import { Key } from "@/components/animate-ui/icons/key"
+import { CircleX } from "@/components/animate-ui/icons/circle-x"
+import { ChartColumn } from "@/components/animate-ui/icons/chart-column"
+import { Bell } from "@/components/animate-ui/icons/bell"
 import { Settings } from "@/components/animate-ui/icons/settings"
 import { Search } from "@/components/animate-ui/icons/search"
 import { MessageCircleQuestion } from "@/components/animate-ui/icons/message-circle-question"
 import type { AdminResourceKey } from "@/lib/admin-api"
 
 const IUsers = <UsersRound size={48} animation="path-loop" />
-const IDepartments = <Kanban size={48} animation="path-loop" />
-const IBranches = <MapPin size={48} animation="path-loop" />
-const IPositions = <ChartColumn size={48} animation="path-loop" />
 const ILeave = <Route size={48} animation="path-loop" />
 const IPromotion = <Sparkles size={48} animation="path-loop" />
-const IRecruitment = <Key size={48} animation="path-loop" />
 const IPayroll = <ChartBar size={48} animation="path-loop" />
-const IReports = <ChartLine size={48} animation="path-loop" />
-const IAccess = <LockKeyhole size={48} animation="path-loop" />
+const IRegistration = <Key size={48} animation="path-loop" />
+const IOffboarding = <CircleX size={48} animation="path-loop" />
+const IAttendance = <ChartColumn size={48} animation="path-loop" />
+const IHolidays = <Bell size={48} animation="path-loop" />
 const ISettings = <Settings size={48} animation="path-loop" />
 const IHelp = <MessageCircleQuestion size={48} animation="path-loop" />
 const ISearch = <Search size={48} animation="path-loop" />
 
-const data = {
+type AppSidebarAccessMode = "admin" | "employee"
+
+type SearchItem = { title: string; url: string; section: string; keywords: string[] }
+
+const adminData = {
   navMain: [
     {
       title: "Employees",
@@ -75,16 +75,16 @@ const data = {
     {
       title: "Departments",
       url: "/dashboard/departments",
-      icon: IDepartments,
+      icon: IUsers,
     },
     {
       title: "Branches",
       url: "/dashboard/branches",
-      icon: IBranches,
+      icon: IUsers,
     },
     {
       title: "Positions",
-      icon: IPositions,
+      icon: IUsers,
       items: [
         {
           title: "Positions",
@@ -116,6 +116,14 @@ const data = {
           title: "Holidays",
           url: "/dashboard/leave-management/holidays",
         },
+        {
+          title: "Policies",
+          url: "/dashboard/leave-management/policies",
+        },
+        {
+          title: "Workflows",
+          url: "/dashboard/leave-management/workflows",
+        },
       ],
     },
     {
@@ -126,7 +134,7 @@ const data = {
     {
       title: "Recruitment",
       url: "/dashboard/operations/recruitment",
-      icon: IRecruitment,
+      icon: IUsers,
     },
     {
       title: "Payroll",
@@ -136,11 +144,11 @@ const data = {
     {
       title: "Reports",
       url: "/dashboard/operations/reports",
-      icon: IReports,
+      icon: IUsers,
     },
     {
       title: "Access Control",
-      icon: IAccess,
+      icon: IUsers,
       items: [
         {
           title: "Roles",
@@ -172,7 +180,7 @@ const data = {
   ],
 }
 
-const searchIndex = [
+const adminSearchIndex = [
   { title: "Dashboard", url: "/dashboard", section: "General", keywords: ["home", "overview"] },
   { title: "Employees / All Employees", url: "/dashboard/employees/all", section: "Employees", keywords: ["employee", "directory", "staff"] },
   { title: "Employees / Register", url: "/dashboard/employees/register", section: "Employees", keywords: ["employee", "onboard"] },
@@ -183,6 +191,8 @@ const searchIndex = [
   { title: "Leave Management / Leave Requests", url: "/dashboard/leave-management/requests", section: "Leave", keywords: ["leave", "request", "approval"] },
   { title: "Leave Management / Leave Balances", url: "/dashboard/leave-management/balances", section: "Leave", keywords: ["leave", "balance", "quota"] },
   { title: "Leave Management / Holidays", url: "/dashboard/leave-management/holidays", section: "Leave", keywords: ["leave", "holiday", "calendar"] },
+  { title: "Leave Management / Policies", url: "/dashboard/leave-management/policies", section: "Leave", keywords: ["leave", "policy", "quota"] },
+  { title: "Leave Management / Workflows", url: "/dashboard/leave-management/workflows", section: "Leave", keywords: ["leave", "workflow", "approval"] },
   { title: "Departments", url: "/dashboard/departments", section: "Organization", keywords: ["department", "org"] },
   { title: "Branches", url: "/dashboard/branches", section: "Organization", keywords: ["branch", "location"] },
   { title: "Positions", url: "/dashboard/positions", section: "Organization", keywords: ["position", "job title"] },
@@ -196,22 +206,198 @@ const searchIndex = [
   { title: "Settings", url: "/dashboard/settings", section: "General", keywords: ["preferences", "account"] },
 ]
 
+const employeeData = {
+  navMain: [
+    {
+      title: "Registration",
+      icon: IRegistration,
+      url: "/dashboard/employees/register",
+    },
+    {
+      title: "My Info",
+      icon: IUsers,
+      url: "/dashboard/me/profile",
+    },
+    {
+      title: "My Attendance",
+      icon: IAttendance,
+      url: "/dashboard/employees/attendance",
+    },
+    {
+      title: "My Leave",
+      icon: ILeave,
+      url: "/dashboard/leave-management/balances",
+    },
+    {
+      title: "My Payroll",
+      url: "/dashboard/operations/payroll",
+      icon: IPayroll,
+    },
+    {
+      title: "Office Holidays",
+      icon: IHolidays,
+      url: "/dashboard/leave-management/holidays",
+    },
+    {
+      title: "My Promotion",
+      icon: IPromotion,
+      url: "/dashboard/operations/promotion",
+    },
+    {
+      title: "Offboarding",
+      icon: IOffboarding,
+      url: "/dashboard/employees/offboarding",
+    },
+  ],
+  navSecondary: [
+    {
+      title: "Settings",
+      url: "/dashboard/settings",
+      icon: ISettings,
+    },
+    {
+      title: "Get Help",
+      url: "#",
+      icon: IHelp,
+    },
+    {
+      title: "Search",
+      url: "#",
+      icon: ISearch,
+    },
+  ],
+}
+
+const employeeSearchIndex = [
+  { title: "Dashboard", url: "/dashboard", section: "General", keywords: ["home", "overview"] },
+  { title: "Registration", url: "/dashboard/employees/register", section: "Employees", keywords: ["employee", "register", "onboard"] },
+  { title: "My Info", url: "/dashboard/me/profile", section: "Employees", keywords: ["profile", "my info", "account"] },
+  { title: "My Attendance", url: "/dashboard/employees/attendance", section: "Employees", keywords: ["attendance", "timesheet"] },
+  { title: "My Leave", url: "/dashboard/leave-management/balances", section: "Leave", keywords: ["leave", "balance", "quota"] },
+  { title: "My Payroll", url: "/dashboard/operations/payroll", section: "Operations", keywords: ["salary", "payments", "payroll"] },
+  { title: "Office Holidays", url: "/dashboard/leave-management/holidays", section: "Leave", keywords: ["leave", "holiday", "calendar", "office"] },
+  { title: "My Promotion", url: "/dashboard/operations/promotion", section: "Operations", keywords: ["career", "upgrade"] },
+  { title: "Offboarding", url: "/dashboard/employees/offboarding", section: "Employees", keywords: ["employee", "exit"] },
+  { title: "Settings", url: "/dashboard/settings", section: "General", keywords: ["preferences", "account"] },
+]
+
 interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
   userName?: string | null
   userEmail?: string | null
   companyName?: string | null
+  accessMode?: AppSidebarAccessMode
+  permissionLabels?: string[]
   activeResource?: AdminResourceKey
   onSelectResource?: (resource: AdminResourceKey) => void
+}
+
+const ADMIN_ROUTE_PERMISSIONS: Record<string, string[]> = {
+  "/dashboard/employees/all": ["employees:read"],
+  "/dashboard/employees/register": ["employees:create"],
+  "/dashboard/employees/offboarding": ["offboarding_requests:read", "offboarding_workflows:read"],
+  "/dashboard/employees/onboarding": ["onboarding_requests:read", "onboarding_workflows:read"],
+  "/dashboard/employees/attendance": [
+    "attendance_devices:read",
+    "attendance_settings:read",
+    "attendance_policies:read",
+    "attendance_checkpoints:read",
+  ],
+  "/dashboard/departments": ["departments:read"],
+  "/dashboard/branches": ["branches:read"],
+  "/dashboard/positions": ["positions:read"],
+  "/dashboard/designations": ["designations:read"],
+  "/dashboard/leave-management/types": ["leave_types:read"],
+  "/dashboard/leave-management/requests": ["leave_requests:read"],
+  "/dashboard/leave-management/balances": ["leave_balances:read"],
+  "/dashboard/leave-management/holidays": ["holidays:read", "attendance_holidays:read"],
+  "/dashboard/leave-management/policies": ["leave_policies:read"],
+  "/dashboard/leave-management/workflows": ["leave_workflows:read"],
+  "/dashboard/operations/promotion": ["view_company_data"],
+  "/dashboard/operations/recruitment": ["view_company_data"],
+  "/dashboard/operations/payroll": ["view_company_data"],
+  "/dashboard/operations/reports": ["view_company_data"],
+  "/dashboard/roles": ["roles:read"],
+  "/dashboard/permissions": ["permissions:read"],
+}
+
+function normalizePermissionLabels(permissionLabels: string[]) {
+  return permissionLabels
+    .map((label) => label.trim().toLowerCase())
+    .filter((label) => label.length > 0)
+}
+
+function canAccessAdminRoute(url: string, normalizedPermissions: string[]) {
+  const requiredPermissions = ADMIN_ROUTE_PERMISSIONS[url]
+  if (!requiredPermissions || requiredPermissions.length === 0) {
+    return true
+  }
+  if (normalizedPermissions.length === 0) {
+    return false
+  }
+  if (
+    normalizedPermissions.some(
+      (entry) => entry === "*" || entry === "all" || entry.includes("admin") || entry.includes("super")
+    )
+  ) {
+    return true
+  }
+  return requiredPermissions.some((required) => normalizedPermissions.includes(required))
+}
+
+function filterAdminNavByPermissions(navMain: typeof adminData.navMain, normalizedPermissions: string[]) {
+  return navMain
+    .map((item) => {
+      if ("url" in item) {
+        return canAccessAdminRoute(item.url ?? "", normalizedPermissions) ? item : null
+      }
+      const filteredItems = item.items.filter((subItem) => canAccessAdminRoute(subItem.url, normalizedPermissions))
+      if (filteredItems.length === 0) {
+        return null
+      }
+      return {
+        ...item,
+        items: filteredItems,
+      }
+    })
+    .filter((item): item is NonNullable<typeof item> => item !== null)
+}
+
+function filterAdminSearchByPermissions(searchItems: SearchItem[], normalizedPermissions: string[]) {
+  return searchItems.filter((item) => canAccessAdminRoute(item.url, normalizedPermissions))
 }
 
 export function AppSidebar({
   userName,
   userEmail,
   companyName,
+  accessMode = "admin",
+  permissionLabels = [],
   activeResource,
   onSelectResource,
   ...props
 }: AppSidebarProps) {
+  const normalizedPermissions = React.useMemo(
+    () => normalizePermissionLabels(permissionLabels),
+    [permissionLabels]
+  )
+
+  const navData = React.useMemo(() => {
+    if (accessMode === "employee") {
+      return employeeData
+    }
+    return {
+      ...adminData,
+      navMain: filterAdminNavByPermissions(adminData.navMain, normalizedPermissions),
+    }
+  }, [accessMode, normalizedPermissions])
+
+  const searchIndex = React.useMemo(() => {
+    if (accessMode === "employee") {
+      return employeeSearchIndex
+    }
+    return filterAdminSearchByPermissions(adminSearchIndex, normalizedPermissions)
+  }, [accessMode, normalizedPermissions])
+
   return (
     <Sidebar collapsible="offcanvas" {...props}>
       <SidebarHeader>
@@ -223,18 +409,20 @@ export function AppSidebar({
               aria-disabled="true"
             >
               <CommandIcon className="size-5!" />
-              <span className="text-base font-semibold">{companyName ?? "HRMS Admin"}</span>
+              <span className="text-base font-semibold">
+                {companyName ?? (accessMode === "employee" ? "HRMS Portal" : "HRMS Admin")}
+              </span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent className="px-2">
         <NavMain
-          items={data.navMain}
+          items={navData.navMain}
           activeResource={activeResource}
           onSelectResource={onSelectResource}
         />
-        <NavSecondary items={data.navSecondary} searchItems={searchIndex} className="mt-auto" />
+        <NavSecondary items={navData.navSecondary} searchItems={searchIndex} className="mt-auto" />
       </SidebarContent>
       <SidebarFooter>
         <NavUser
