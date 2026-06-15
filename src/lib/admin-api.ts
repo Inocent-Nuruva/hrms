@@ -113,6 +113,93 @@ export interface OffboardingWorkflowsQueryParams extends UsersQueryParams {
   status?: string
 }
 
+export interface AttendanceQueryParams extends UsersQueryParams {
+  status?: string
+}
+
+export interface MyAttendanceHistoryQueryParams extends UsersQueryParams {
+  employee_id?: number
+  from_date?: string
+  to_date?: string
+  attendance_status?: string
+}
+
+export interface MyAttendancePunchesQueryParams extends UsersQueryParams {
+  employeeId?: number
+  branchId?: number
+  punchType?: "CHECK_IN" | "CHECK_OUT"
+  validationStatus?:
+    | "APPROVED"
+    | "REJECTED"
+    | "PENDING_OVERRIDE"
+    | "OVERRIDE_APPROVED"
+    | "OVERRIDE_REJECTED"
+  dateFrom?: string
+  dateTo?: string
+}
+
+export interface MyAttendanceScheduleQueryParams {
+  from_date?: string
+  to_date?: string
+  days?: number
+}
+
+export interface EmployeePositionsQueryParams extends UsersQueryParams {
+  employee_id?: number
+  position_id?: number
+  designation_id?: number
+  status?: string
+  assignment_type?: string
+}
+
+export interface EmployeeDesignationsQueryParams extends UsersQueryParams {
+  employee_id?: number
+  designation_id?: number
+  is_current?: boolean
+}
+
+export type AttendanceResourceKey =
+  | "settings"
+  | "policies"
+  | "devices"
+  | "checkpoints"
+  | "geofences"
+  | "wifi-networks"
+  | "mobile-punches"
+  | "holiday-groups"
+  | "holidays"
+  | "device-sync-logs"
+
+export type ShiftResourceKey =
+  | "shift-assignments"
+  | "shift-attendance-rules"
+  | "shift-breaks"
+  | "shift-change-requests"
+  | "shift-overtime-rules"
+  | "shift-rotation-groups"
+  | "shift-rotation-rules"
+  | "shift-schedules"
+  | "shift-templates"
+  | "shifts"
+
+export type TimetableResourceKey =
+  | "employee-timetables"
+  | "timetable-attendance-rules"
+  | "timetable-days"
+  | "timetable-generated-schedules"
+  | "timetable-holiday-rules"
+  | "timetable-rotation-rules"
+  | "timetable-rotations"
+  | "timetable-shift-rules"
+  | "timetables"
+
+export type AccessControlResourceKey =
+  | "doors"
+  | "schedule-templates"
+  | "organizations"
+  | "groups"
+  | "week-plans"
+
 export type EmployeeProfileSection =
   | "contacts"
   | "addresses"
@@ -124,7 +211,15 @@ export type EmployeeProfileSection =
   | "experience-details"
 
 export interface EmployeeStatusPayload {
-  employment_status: "onboarding" | "active" | "suspended" | "terminated" | "exited"
+  employment_status:
+    | "onboarding"
+    | "active"
+    | "suspended"
+    | "inactive"
+    | "resigned"
+    | "terminated"
+    | "retired"
+    | "exited"
   exit_date?: string
   exit_reason?: string
   notes?: string
@@ -134,7 +229,10 @@ export const EMPLOYEE_STATUS_VALUES = [
   "onboarding",
   "active",
   "suspended",
+  "inactive",
+  "resigned",
   "terminated",
+  "retired",
   "exited",
 ] as const
 
@@ -222,6 +320,26 @@ function asArray(value: unknown): AdminRecord[] | null {
   return value.filter((entry) => typeof entry === "object" && entry !== null) as AdminRecord[]
 }
 
+function getRecordArrays(record: AdminRecord | null) {
+  if (!record) {
+    return []
+  }
+
+  return Object.values(record)
+    .map((value) => asArray(value))
+    .filter((value): value is AdminRecord[] => value !== null)
+}
+
+function getNestedRecords(record: AdminRecord | null) {
+  if (!record) {
+    return []
+  }
+
+  return Object.values(record)
+    .map((value) => asRecord(value))
+    .filter((value): value is AdminRecord => value !== null)
+}
+
 function extractListFromRecord(record: AdminRecord | null): AdminRecord[] | null {
   if (!record) {
     return null
@@ -244,11 +362,16 @@ function extractListFromRecord(record: AdminRecord | null): AdminRecord[] | null
     }
   }
 
+  for (const list of getRecordArrays(record)) {
+    return list
+  }
+
   const nestedCandidates = [
     asRecord(record.data),
     asRecord(record.result),
     asRecord(record.pagination),
     asRecord(record.meta),
+    ...getNestedRecords(record),
   ]
 
   for (const nested of nestedCandidates) {
@@ -640,6 +763,72 @@ function buildLeaveWorkflowsQuery(params: LeaveWorkflowsQueryParams) {
   return query ? `?${query}` : ""
 }
 
+function buildEmployeePositionsQuery(params: EmployeePositionsQueryParams) {
+  const searchParams = new URLSearchParams()
+  if (typeof params.page === "number" && params.page > 0) {
+    searchParams.set("page", String(params.page))
+  }
+  if (typeof params.limit === "number" && params.limit > 0) {
+    searchParams.set("limit", String(params.limit))
+  }
+  if (params.sortBy && params.sortBy.trim()) {
+    searchParams.set("sortBy", params.sortBy.trim())
+  }
+  if (params.sortOrder === "ASC" || params.sortOrder === "DESC") {
+    searchParams.set("sortOrder", params.sortOrder)
+  }
+  if (params.search && params.search.trim()) {
+    searchParams.set("search", params.search.trim())
+  }
+  if (typeof params.employee_id === "number" && params.employee_id > 0) {
+    searchParams.set("employee_id", String(params.employee_id))
+  }
+  if (typeof params.position_id === "number" && params.position_id > 0) {
+    searchParams.set("position_id", String(params.position_id))
+  }
+  if (typeof params.designation_id === "number" && params.designation_id > 0) {
+    searchParams.set("designation_id", String(params.designation_id))
+  }
+  if (params.status && params.status.trim()) {
+    searchParams.set("status", params.status.trim())
+  }
+  if (params.assignment_type && params.assignment_type.trim()) {
+    searchParams.set("assignment_type", params.assignment_type.trim())
+  }
+  const query = searchParams.toString()
+  return query ? `?${query}` : ""
+}
+
+function buildEmployeeDesignationsQuery(params: EmployeeDesignationsQueryParams) {
+  const searchParams = new URLSearchParams()
+  if (typeof params.page === "number" && params.page > 0) {
+    searchParams.set("page", String(params.page))
+  }
+  if (typeof params.limit === "number" && params.limit > 0) {
+    searchParams.set("limit", String(params.limit))
+  }
+  if (params.sortBy && params.sortBy.trim()) {
+    searchParams.set("sortBy", params.sortBy.trim())
+  }
+  if (params.sortOrder === "ASC" || params.sortOrder === "DESC") {
+    searchParams.set("sortOrder", params.sortOrder)
+  }
+  if (params.search && params.search.trim()) {
+    searchParams.set("search", params.search.trim())
+  }
+  if (typeof params.employee_id === "number" && params.employee_id > 0) {
+    searchParams.set("employee_id", String(params.employee_id))
+  }
+  if (typeof params.designation_id === "number" && params.designation_id > 0) {
+    searchParams.set("designation_id", String(params.designation_id))
+  }
+  if (typeof params.is_current === "boolean") {
+    searchParams.set("is_current", String(params.is_current))
+  }
+  const query = searchParams.toString()
+  return query ? `?${query}` : ""
+}
+
 function buildOnboardingWorkflowsQuery(params: OnboardingWorkflowsQueryParams) {
   const searchParams = new URLSearchParams()
   if (typeof params.page === "number" && params.page > 0) {
@@ -745,6 +934,93 @@ function buildOffboardingWorkflowsQuery(params: OffboardingWorkflowsQueryParams)
   return query ? `?${query}` : ""
 }
 
+function buildMyAttendancePunchesQuery(params: MyAttendancePunchesQueryParams) {
+  const searchParams = new URLSearchParams()
+  if (typeof params.page === "number" && params.page > 0) {
+    searchParams.set("page", String(params.page))
+  }
+  if (typeof params.limit === "number" && params.limit > 0) {
+    searchParams.set("limit", String(params.limit))
+  }
+  if (params.sortBy && params.sortBy.trim()) {
+    searchParams.set("sortBy", params.sortBy.trim())
+  }
+  if (params.sortOrder === "ASC" || params.sortOrder === "DESC") {
+    searchParams.set("sortOrder", params.sortOrder)
+  }
+  if (params.search && params.search.trim()) {
+    searchParams.set("search", params.search.trim())
+  }
+  if (typeof params.employeeId === "number" && params.employeeId > 0) {
+    searchParams.set("employeeId", String(params.employeeId))
+  }
+  if (typeof params.branchId === "number" && params.branchId > 0) {
+    searchParams.set("branchId", String(params.branchId))
+  }
+  if (params.punchType) {
+    searchParams.set("punchType", params.punchType)
+  }
+  if (params.validationStatus) {
+    searchParams.set("validationStatus", params.validationStatus)
+  }
+  if (params.dateFrom && params.dateFrom.trim()) {
+    searchParams.set("dateFrom", params.dateFrom.trim())
+  }
+  if (params.dateTo && params.dateTo.trim()) {
+    searchParams.set("dateTo", params.dateTo.trim())
+  }
+  const query = searchParams.toString()
+  return query ? `?${query}` : ""
+}
+
+function buildMyAttendanceHistoryQuery(params: MyAttendanceHistoryQueryParams) {
+  const searchParams = new URLSearchParams()
+  if (typeof params.page === "number" && params.page > 0) {
+    searchParams.set("page", String(params.page))
+  }
+  if (typeof params.limit === "number" && params.limit > 0) {
+    searchParams.set("limit", String(params.limit))
+  }
+  if (params.sortBy && params.sortBy.trim()) {
+    searchParams.set("sortBy", params.sortBy.trim())
+  }
+  if (params.sortOrder === "ASC" || params.sortOrder === "DESC") {
+    searchParams.set("sortOrder", params.sortOrder)
+  }
+  if (params.search && params.search.trim()) {
+    searchParams.set("search", params.search.trim())
+  }
+  if (typeof params.employee_id === "number" && params.employee_id > 0) {
+    searchParams.set("employee_id", String(params.employee_id))
+  }
+  if (params.from_date && params.from_date.trim()) {
+    searchParams.set("from_date", params.from_date.trim())
+  }
+  if (params.to_date && params.to_date.trim()) {
+    searchParams.set("to_date", params.to_date.trim())
+  }
+  if (params.attendance_status && params.attendance_status.trim()) {
+    searchParams.set("attendance_status", params.attendance_status.trim())
+  }
+  const query = searchParams.toString()
+  return query ? `?${query}` : ""
+}
+
+function buildMyAttendanceScheduleQuery(params: MyAttendanceScheduleQueryParams) {
+  const searchParams = new URLSearchParams()
+  if (params.from_date && params.from_date.trim()) {
+    searchParams.set("from_date", params.from_date.trim())
+  }
+  if (params.to_date && params.to_date.trim()) {
+    searchParams.set("to_date", params.to_date.trim())
+  }
+  if (typeof params.days === "number" && params.days > 0) {
+    searchParams.set("days", String(params.days))
+  }
+  const query = searchParams.toString()
+  return query ? `?${query}` : ""
+}
+
 function extractUsersPagination(payload: unknown, fallbackPage: number, fallbackLimit: number) {
   const root = asRecord(payload)
   const rootData = asRecord(root?.data)
@@ -757,27 +1033,27 @@ function extractUsersPagination(payload: unknown, fallbackPage: number, fallback
   const rootResultPagination = asRecord(rootResult?.pagination)
 
   const page =
-    readNumberFromRecord(root, ["page", "currentPage"]) ??
-    readNumberFromRecord(rootResult, ["page", "currentPage"]) ??
-    readNumberFromRecord(rootMeta, ["page", "currentPage"]) ??
-    readNumberFromRecord(rootDataMeta, ["page", "currentPage"]) ??
-    readNumberFromRecord(rootResultMeta, ["page", "currentPage"]) ??
-    readNumberFromRecord(rootPagination, ["page", "currentPage"]) ??
-    readNumberFromRecord(rootDataPagination, ["page", "currentPage"]) ??
-    readNumberFromRecord(rootResultPagination, ["page", "currentPage"]) ??
-    readNumberFromRecord(rootData, ["page", "currentPage"]) ??
+    readNumberFromRecord(root, ["page", "currentPage", "current_page"]) ??
+    readNumberFromRecord(rootResult, ["page", "currentPage", "current_page"]) ??
+    readNumberFromRecord(rootMeta, ["page", "currentPage", "current_page"]) ??
+    readNumberFromRecord(rootDataMeta, ["page", "currentPage", "current_page"]) ??
+    readNumberFromRecord(rootResultMeta, ["page", "currentPage", "current_page"]) ??
+    readNumberFromRecord(rootPagination, ["page", "currentPage", "current_page"]) ??
+    readNumberFromRecord(rootDataPagination, ["page", "currentPage", "current_page"]) ??
+    readNumberFromRecord(rootResultPagination, ["page", "currentPage", "current_page"]) ??
+    readNumberFromRecord(rootData, ["page", "currentPage", "current_page"]) ??
     fallbackPage
 
   const limit =
-    readNumberFromRecord(root, ["limit", "perPage", "pageSize"]) ??
-    readNumberFromRecord(rootResult, ["limit", "perPage", "pageSize"]) ??
-    readNumberFromRecord(rootMeta, ["limit", "perPage", "pageSize"]) ??
-    readNumberFromRecord(rootDataMeta, ["limit", "perPage", "pageSize"]) ??
-    readNumberFromRecord(rootResultMeta, ["limit", "perPage", "pageSize"]) ??
-    readNumberFromRecord(rootPagination, ["limit", "perPage", "pageSize"]) ??
-    readNumberFromRecord(rootDataPagination, ["limit", "perPage", "pageSize"]) ??
-    readNumberFromRecord(rootResultPagination, ["limit", "perPage", "pageSize"]) ??
-    readNumberFromRecord(rootData, ["limit", "perPage", "pageSize"]) ??
+    readNumberFromRecord(root, ["limit", "perPage", "pageSize", "per_page"]) ??
+    readNumberFromRecord(rootResult, ["limit", "perPage", "pageSize", "per_page"]) ??
+    readNumberFromRecord(rootMeta, ["limit", "perPage", "pageSize", "per_page"]) ??
+    readNumberFromRecord(rootDataMeta, ["limit", "perPage", "pageSize", "per_page"]) ??
+    readNumberFromRecord(rootResultMeta, ["limit", "perPage", "pageSize", "per_page"]) ??
+    readNumberFromRecord(rootPagination, ["limit", "perPage", "pageSize", "per_page"]) ??
+    readNumberFromRecord(rootDataPagination, ["limit", "perPage", "pageSize", "per_page"]) ??
+    readNumberFromRecord(rootResultPagination, ["limit", "perPage", "pageSize", "per_page"]) ??
+    readNumberFromRecord(rootData, ["limit", "perPage", "pageSize", "per_page"]) ??
     fallbackLimit
 
   const total =
@@ -792,15 +1068,15 @@ function extractUsersPagination(payload: unknown, fallbackPage: number, fallback
     readNumberFromRecord(rootData, ["total", "totalItems", "count"])
 
   const totalPages =
-    readNumberFromRecord(root, ["totalPages", "pageCount"]) ??
-    readNumberFromRecord(rootResult, ["totalPages", "pageCount"]) ??
-    readNumberFromRecord(rootMeta, ["totalPages", "pageCount"]) ??
-    readNumberFromRecord(rootDataMeta, ["totalPages", "pageCount"]) ??
-    readNumberFromRecord(rootResultMeta, ["totalPages", "pageCount"]) ??
-    readNumberFromRecord(rootPagination, ["totalPages", "pageCount"]) ??
-    readNumberFromRecord(rootDataPagination, ["totalPages", "pageCount"]) ??
-    readNumberFromRecord(rootResultPagination, ["totalPages", "pageCount"]) ??
-    readNumberFromRecord(rootData, ["totalPages", "pageCount"])
+    readNumberFromRecord(root, ["totalPages", "pageCount", "total_pages"]) ??
+    readNumberFromRecord(rootResult, ["totalPages", "pageCount", "total_pages"]) ??
+    readNumberFromRecord(rootMeta, ["totalPages", "pageCount", "total_pages"]) ??
+    readNumberFromRecord(rootDataMeta, ["totalPages", "pageCount", "total_pages"]) ??
+    readNumberFromRecord(rootResultMeta, ["totalPages", "pageCount", "total_pages"]) ??
+    readNumberFromRecord(rootPagination, ["totalPages", "pageCount", "total_pages"]) ??
+    readNumberFromRecord(rootDataPagination, ["totalPages", "pageCount", "total_pages"]) ??
+    readNumberFromRecord(rootResultPagination, ["totalPages", "pageCount", "total_pages"]) ??
+    readNumberFromRecord(rootData, ["totalPages", "pageCount", "total_pages"])
 
   return {
     page: Math.max(1, Math.floor(page)),
@@ -816,7 +1092,14 @@ function normalizeSingle(payload: unknown): AdminRecord | null {
     return null
   }
 
-  const nested = [record.data, record.result, record.item, record.user, record.company]
+  const nested = [
+    record.data,
+    record.result,
+    record.item,
+    record.user,
+    record.company,
+    ...getNestedRecords(record),
+  ]
   for (const candidate of nested) {
     const value = asRecord(candidate)
     if (value) {
@@ -824,7 +1107,30 @@ function normalizeSingle(payload: unknown): AdminRecord | null {
     }
   }
 
-  if ("id" in record || "email" in record || "name" in record || "company_name" in record) {
+  if (
+    "id" in record ||
+    "email" in record ||
+    "name" in record ||
+    "company_name" in record ||
+    "device_name" in record ||
+    "deviceName" in record ||
+    "device_code" in record ||
+    "deviceCode" in record ||
+    "device_serial_number" in record ||
+    "deviceSerialNumber" in record ||
+    "device_model" in record ||
+    "deviceModel" in record ||
+    "door_name" in record ||
+    "doorName" in record ||
+    "door_no" in record ||
+    "doorNo" in record ||
+    "group_name" in record ||
+    "groupName" in record ||
+    "org_name" in record ||
+    "orgName" in record ||
+    "template_name" in record ||
+    "templateName" in record
+  ) {
     return record
   }
 
@@ -859,6 +1165,22 @@ function extractMessage(payload: unknown, status: number) {
   const candidate = record.message
   if (typeof candidate === "string" && candidate.trim()) {
     return candidate
+  }
+  if (Array.isArray(candidate)) {
+    const normalized = candidate
+      .filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+      .map((entry) => entry.trim())
+    if (normalized.length > 0) {
+      return normalized.join(". ")
+    }
+  }
+  const errorCandidate = record.error
+  if (typeof errorCandidate === "string" && errorCandidate.trim()) {
+    return errorCandidate.trim()
+  }
+  const detailCandidate = record.details
+  if (typeof detailCandidate === "string" && detailCandidate.trim()) {
+    return detailCandidate.trim()
   }
   return `Request failed with status ${status}`
 }
@@ -1123,6 +1445,987 @@ export async function listOffboardingWorkflows(
   return { rows, ...pagination }
 }
 
+async function listAttendanceCollectionPage(
+  path: string,
+  token: string,
+  params: AttendanceQueryParams = {}
+): Promise<PaginatedUsersResult> {
+  const fallbackPage = params.page && params.page > 0 ? params.page : 1
+  const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20
+  const query = buildUsersQuery(params)
+  const payload = await adminRequest<unknown>(`${path}${query}`, { token })
+  const rows = normalizeList(payload)
+  const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit)
+  return { rows, ...pagination }
+}
+
+async function listAllAttendanceCollection(
+  path: string,
+  token: string,
+  params: AttendanceQueryParams = {}
+): Promise<PaginatedUsersResult> {
+  const requestedLimit = params.limit && params.limit > 0 ? params.limit : 100
+  const pageSize = Math.min(requestedLimit, 100)
+  const startPage = params.page && params.page > 0 ? params.page : 1
+
+  const mergedRows: AdminRecord[] = []
+  let page = startPage
+  let total: number | null = null
+  let totalPages: number | null = null
+
+  while (true) {
+    const pageResult = await listAttendanceCollectionPage(path, token, {
+      ...params,
+      page,
+      limit: pageSize,
+    })
+
+    mergedRows.push(...pageResult.rows)
+    if (total === null && pageResult.total !== null) {
+      total = pageResult.total
+    }
+    if (totalPages === null && pageResult.totalPages !== null) {
+      totalPages = pageResult.totalPages
+    }
+
+    const hasMoreByCount = pageResult.rows.length === pageSize
+    const hasMoreByMeta = totalPages !== null ? page < totalPages : null
+
+    if (!hasMoreByCount) {
+      break
+    }
+
+    if (hasMoreByMeta === false) {
+      break
+    }
+
+    page += 1
+    if (page > 1000) {
+      break
+    }
+  }
+
+  return {
+    rows: mergedRows,
+    page: startPage,
+    limit: mergedRows.length || pageSize,
+    total,
+    totalPages,
+  }
+}
+
+export async function listAttendanceSettings(token: string, params: AttendanceQueryParams = {}) {
+  return listAllAttendanceCollection("/api/attendance/settings", token, params)
+}
+
+export async function listAttendancePolicies(token: string, params: AttendanceQueryParams = {}) {
+  return listAllAttendanceCollection("/api/attendance/policies", token, params)
+}
+
+export async function listAttendanceDevices(token: string, params: AttendanceQueryParams = {}) {
+  return listAllAttendanceCollection("/api/attendance/devices", token, params)
+}
+
+export async function listAttendanceDeviceEmployees(
+  token: string,
+  id: string | number,
+  params: AttendanceQueryParams = {}
+) {
+  return listAllAttendanceCollection(`/api/attendance/devices/${id}/employees`, token, params)
+}
+
+export async function listAttendanceCheckpoints(token: string, params: AttendanceQueryParams = {}) {
+  return listAllAttendanceCollection("/api/attendance/checkpoints", token, params)
+}
+
+export async function listAttendanceGeofences(token: string, params: AttendanceQueryParams = {}) {
+  return listAllAttendanceCollection("/api/attendance/geofences", token, params)
+}
+
+export async function listAttendanceWifiNetworks(token: string, params: AttendanceQueryParams = {}) {
+  return listAllAttendanceCollection("/api/attendance/wifi-networks", token, params)
+}
+
+export async function listAttendanceMobilePunches(token: string, params: AttendanceQueryParams = {}) {
+  return listAllAttendanceCollection("/api/attendance/mobile-punches", token, params)
+}
+
+export async function listAttendanceHolidays(token: string, params: AttendanceQueryParams = {}) {
+  return listAllAttendanceCollection("/api/attendance/holidays", token, params)
+}
+
+export async function listAttendanceHolidayGroups(token: string, params: AttendanceQueryParams = {}) {
+  return listAllAttendanceCollection("/api/attendance/holiday-groups", token, params)
+}
+
+export async function listAttendanceDeviceSyncLogs(token: string, params: AttendanceQueryParams = {}) {
+  return listAllAttendanceCollection("/api/attendance/device-sync-logs", token, params)
+}
+
+export async function listAttendanceDailySummaries(
+  token: string,
+  params: AttendanceQueryParams = {}
+) {
+  return listAllAttendanceCollection("/api/attendance/daily-summaries", token, params)
+}
+
+export async function getAttendanceDailySummary(
+  token: string,
+  employeeId: string | number,
+  date: string
+) {
+  const payload = await adminRequest<unknown>(`/api/attendance/daily-summaries/${employeeId}/${date}`, {
+    token,
+  })
+  return normalizeSingle(payload)
+}
+
+export async function listAttendanceProcessingJobs(
+  token: string,
+  params: AttendanceQueryParams = {}
+) {
+  return listAllAttendanceCollection("/api/attendance/processing/jobs", token, params)
+}
+
+export async function runPendingAttendanceProcessingJobs(token: string) {
+  return adminRequest<unknown>("/api/attendance/processing/jobs/run-pending", {
+    method: "POST",
+    token,
+  })
+}
+
+export async function queueAttendanceRecalculation(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/attendance/processing/recalculate", {
+    method: "POST",
+    token,
+    body: data,
+  })
+}
+
+export async function processAttendanceRange(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/attendance/processing/run-range", {
+    method: "POST",
+    token,
+    body: data,
+  })
+}
+
+export async function listAttendanceUnmatchedLogs(
+  token: string,
+  params: AttendanceQueryParams = {}
+) {
+  return listAllAttendanceCollection("/api/attendance/processing/unmatched-logs", token, params)
+}
+
+export async function createAttendanceMobilePunchCheckIn(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/attendance/mobile-punches/check-in", {
+    method: "POST",
+    token,
+    body: data,
+  })
+}
+
+export async function createAttendanceMobilePunchCheckOut(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/attendance/mobile-punches/check-out", {
+    method: "POST",
+    token,
+    body: data,
+  })
+}
+
+export async function approveAttendanceMobilePunchOverride(
+  token: string,
+  id: string | number,
+  data: AdminRecord = {}
+) {
+  return adminRequest<unknown>(`/api/attendance/mobile-punches/${id}/approve-override`, {
+    method: "PATCH",
+    token,
+    body: data,
+  })
+}
+
+export async function rejectAttendanceMobilePunchOverride(
+  token: string,
+  id: string | number,
+  data: AdminRecord = {}
+) {
+  return adminRequest<unknown>(`/api/attendance/mobile-punches/${id}/reject-override`, {
+    method: "PATCH",
+    token,
+    body: data,
+  })
+}
+
+async function listGenericCollection(
+  path: string,
+  token: string,
+  params: UsersQueryParams = {}
+): Promise<PaginatedUsersResult> {
+  const fallbackPage = params.page && params.page > 0 ? params.page : 1
+  const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20
+  const query = buildUsersQuery(params)
+  const payload = await adminRequest<unknown>(`${path}${query}`, { token })
+  const rows = normalizeList(payload)
+  const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit)
+  return { rows, ...pagination }
+}
+
+function shiftResourcePath(resource: ShiftResourceKey) {
+  return `/api/shift/${resource}`
+}
+
+function timetableResourcePath(resource: TimetableResourceKey) {
+  return `/api/timetable/${resource}`
+}
+
+function attendanceResourcePath(resource: AttendanceResourceKey) {
+  return `/api/attendance/${resource}`
+}
+
+function accessControlResourcePath(resource: AccessControlResourceKey) {
+  return `/api/access-control/${resource}`
+}
+
+export async function getAttendanceResourceById(
+  token: string,
+  resource: AttendanceResourceKey,
+  id: string | number
+) {
+  const payload = await adminRequest<unknown>(`${attendanceResourcePath(resource)}/${id}`, { token })
+  return normalizeSingle(payload)
+}
+
+export async function createAttendanceResource(
+  token: string,
+  resource: AttendanceResourceKey,
+  data: AdminRecord
+) {
+  return adminRequest<unknown>(attendanceResourcePath(resource), {
+    method: "POST",
+    token,
+    body: data,
+  })
+}
+
+export async function updateAttendanceResourceById(
+  token: string,
+  resource: Exclude<AttendanceResourceKey, "device-sync-logs" | "mobile-punches">,
+  id: string | number,
+  data: AdminRecord
+) {
+  return adminRequest<unknown>(`${attendanceResourcePath(resource)}/${id}`, {
+    method: "PATCH",
+    token,
+    body: data,
+  })
+}
+
+export async function deleteAttendanceResourceById(
+  token: string,
+  resource: Exclude<AttendanceResourceKey, "device-sync-logs" | "mobile-punches">,
+  id: string | number
+) {
+  return adminRequest<unknown>(`${attendanceResourcePath(resource)}/${id}`, {
+    method: "DELETE",
+    token,
+  })
+}
+
+export async function syncAttendanceDevice(token: string, id: string | number) {
+  return adminRequest<unknown>(`/api/attendance/devices/${id}/sync`, {
+    method: "POST",
+    token,
+  })
+}
+
+export async function syncAccessControlDevice(token: string, id: string | number) {
+  return adminRequest<unknown>(`/api/access-control/devices/${id}/sync`, {
+    method: "POST",
+    token,
+  })
+}
+
+export async function syncAccessControlDeviceDoors(token: string, id: string | number) {
+  return adminRequest<unknown>(`/api/access-control/doors/sync-from-device/${id}`, {
+    method: "POST",
+    token,
+  })
+}
+
+export async function syncAccessControlDeviceTemplates(token: string, id: string | number) {
+  return adminRequest<unknown>(`/api/access-control/schedule-templates/sync-from-device/${id}`, {
+    method: "POST",
+    token,
+  })
+}
+
+export async function syncAccessControlDeviceUsers(token: string, id: string | number) {
+  return adminRequest<unknown>(`/api/access-control/devices/${id}/sync/users`, {
+    method: "POST",
+    token,
+  })
+}
+
+export async function syncHikvisionDeviceFingerprints(token: string, deviceId: string | number) {
+  return adminRequest<unknown>(`/api/hikvision/devices/${deviceId}/sync-fingerprints`, {
+    method: "POST",
+    token,
+  })
+}
+
+export async function syncHikvisionDeviceUsers(token: string, deviceId: string | number) {
+  return adminRequest<unknown>(`/api/hikvision/devices/${deviceId}/sync-users`, {
+    method: "POST",
+    token,
+  })
+}
+
+export async function syncAccessControlDeviceWeekPlans(token: string, id: string | number) {
+  return adminRequest<unknown>(`/api/access-control/week-plans/sync-from-device/${id}`, {
+    method: "POST",
+    token,
+  })
+}
+
+export async function activateAttendancePolicy(token: string, id: string | number) {
+  return adminRequest<unknown>(`/api/attendance/policies/${id}/activate`, {
+    method: "PATCH",
+    token,
+  })
+}
+
+export async function listEmployeePositions(
+  token: string,
+  params: EmployeePositionsQueryParams = {}
+): Promise<PaginatedUsersResult> {
+  const fallbackPage = params.page && params.page > 0 ? params.page : 1
+  const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20
+  const query = buildEmployeePositionsQuery(params)
+  const payload = await adminRequest<unknown>(`/api/employee-positions${query}`, { token })
+  const rows = normalizeList(payload)
+  const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit)
+  return { rows, ...pagination }
+}
+
+export async function getEmployeePosition(token: string, id: string | number) {
+  const payload = await adminRequest<unknown>(`/api/employee-positions/${id}`, { token })
+  return normalizeSingle(payload)
+}
+
+export async function createEmployeePosition(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/employee-positions", {
+    method: "POST",
+    token,
+    body: data,
+  })
+}
+
+export async function patchEmployeePosition(token: string, id: string | number, data: AdminRecord) {
+  return adminRequest<unknown>(`/api/employee-positions/${id}`, {
+    method: "PATCH",
+    token,
+    body: data,
+  })
+}
+
+export async function deleteEmployeePosition(token: string, id: string | number) {
+  return adminRequest<unknown>(`/api/employee-positions/${id}`, {
+    method: "DELETE",
+    token,
+  })
+}
+
+export async function listEmployeeDesignations(
+  token: string,
+  params: EmployeeDesignationsQueryParams = {}
+): Promise<PaginatedUsersResult> {
+  const fallbackPage = params.page && params.page > 0 ? params.page : 1
+  const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20
+  const query = buildEmployeeDesignationsQuery(params)
+  const payload = await adminRequest<unknown>(`/api/employee-designations${query}`, { token })
+  const rows = normalizeList(payload)
+  const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit)
+  return { rows, ...pagination }
+}
+
+export async function getEmployeeDesignation(token: string, id: string | number) {
+  const payload = await adminRequest<unknown>(`/api/employee-designations/${id}`, { token })
+  return normalizeSingle(payload)
+}
+
+export async function createEmployeeDesignation(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/employee-designations", {
+    method: "POST",
+    token,
+    body: data,
+  })
+}
+
+export async function patchEmployeeDesignation(token: string, id: string | number, data: AdminRecord) {
+  return adminRequest<unknown>(`/api/employee-designations/${id}`, {
+    method: "PATCH",
+    token,
+    body: data,
+  })
+}
+
+export async function deleteEmployeeDesignation(token: string, id: string | number) {
+  return adminRequest<unknown>(`/api/employee-designations/${id}`, {
+    method: "DELETE",
+    token,
+  })
+}
+
+export async function listShiftResources(
+  token: string,
+  resource: ShiftResourceKey,
+  params: UsersQueryParams = {}
+) {
+  return listGenericCollection(shiftResourcePath(resource), token, params)
+}
+
+export async function getShiftResourceById(
+  token: string,
+  resource: ShiftResourceKey,
+  id: string | number
+) {
+  const payload = await adminRequest<unknown>(`${shiftResourcePath(resource)}/${id}`, { token })
+  return normalizeSingle(payload)
+}
+
+export async function createShiftResource(token: string, resource: ShiftResourceKey, data: AdminRecord) {
+  return adminRequest<unknown>(shiftResourcePath(resource), {
+    method: "POST",
+    token,
+    body: data,
+  })
+}
+
+export async function patchShiftResourceById(
+  token: string,
+  resource: ShiftResourceKey,
+  id: string | number,
+  data: AdminRecord
+) {
+  return adminRequest<unknown>(`${shiftResourcePath(resource)}/${id}`, {
+    method: "PATCH",
+    token,
+    body: data,
+  })
+}
+
+export async function deleteShiftResourceById(
+  token: string,
+  resource: ShiftResourceKey,
+  id: string | number
+) {
+  return adminRequest<unknown>(`${shiftResourcePath(resource)}/${id}`, {
+    method: "DELETE",
+    token,
+  })
+}
+
+export async function listTimetableResources(
+  token: string,
+  resource: TimetableResourceKey,
+  params: UsersQueryParams = {}
+) {
+  return listGenericCollection(timetableResourcePath(resource), token, params)
+}
+
+export async function getTimetableResourceById(
+  token: string,
+  resource: TimetableResourceKey,
+  id: string | number
+) {
+  const payload = await adminRequest<unknown>(`${timetableResourcePath(resource)}/${id}`, { token })
+  return normalizeSingle(payload)
+}
+
+export async function createTimetableResource(
+  token: string,
+  resource: TimetableResourceKey,
+  data: AdminRecord
+) {
+  return adminRequest<unknown>(timetableResourcePath(resource), {
+    method: "POST",
+    token,
+    body: data,
+  })
+}
+
+export async function patchTimetableResourceById(
+  token: string,
+  resource: TimetableResourceKey,
+  id: string | number,
+  data: AdminRecord
+) {
+  return adminRequest<unknown>(`${timetableResourcePath(resource)}/${id}`, {
+    method: "PATCH",
+    token,
+    body: data,
+  })
+}
+
+export async function deleteTimetableResourceById(
+  token: string,
+  resource: TimetableResourceKey,
+  id: string | number
+) {
+  return adminRequest<unknown>(`${timetableResourcePath(resource)}/${id}`, {
+    method: "DELETE",
+    token,
+  })
+}
+
+export async function listAccessControlResources(
+  token: string,
+  resource: AccessControlResourceKey,
+  params: UsersQueryParams = {}
+) {
+  return listGenericCollection(accessControlResourcePath(resource), token, params)
+}
+
+export async function getAccessControlResourceById(
+  token: string,
+  resource: AccessControlResourceKey,
+  id: string | number
+) {
+  const payload = await adminRequest<unknown>(`${accessControlResourcePath(resource)}/${id}`, {
+    token,
+  })
+  return normalizeSingle(payload)
+}
+
+export async function createAccessControlResource(
+  token: string,
+  resource: AccessControlResourceKey,
+  data: AdminRecord
+) {
+  return adminRequest<unknown>(accessControlResourcePath(resource), {
+    method: "POST",
+    token,
+    body: data,
+  })
+}
+
+export async function updateAccessControlResourceById(
+  token: string,
+  resource: AccessControlResourceKey,
+  id: string | number,
+  data: AdminRecord
+) {
+  return adminRequest<unknown>(`${accessControlResourcePath(resource)}/${id}`, {
+    method: "PATCH",
+    token,
+    body: data,
+  })
+}
+
+export async function deleteAccessControlResourceById(
+  token: string,
+  resource: AccessControlResourceKey,
+  id: string | number
+) {
+  return adminRequest<unknown>(`${accessControlResourcePath(resource)}/${id}`, {
+    method: "DELETE",
+    token,
+  })
+}
+
+export async function listAccessGroupDoors(token: string, groupId: string | number) {
+  const payload = await adminRequest<unknown>(`/api/access-control/groups/${groupId}/doors`, {
+    token,
+  })
+  return normalizeList(payload)
+}
+
+export async function assignAccessGroupDoors(
+  token: string,
+  groupId: string | number,
+  items: Array<{
+    door_id: string | number
+    schedule_template_id: string | number
+    device_id?: string | number | null
+  }>
+) {
+  return adminRequest<unknown>(`/api/access-control/groups/${groupId}/doors`, {
+    method: "POST",
+    token,
+    body: {
+      items: items
+        .map((item) => {
+          const doorId = Number(item.door_id)
+          const scheduleTemplateId = Number(item.schedule_template_id)
+          const deviceId =
+            item.device_id === undefined || item.device_id === null ? null : Number(item.device_id)
+
+          return {
+            door_id: doorId,
+            schedule_template_id: scheduleTemplateId,
+            ...(deviceId !== null && Number.isFinite(deviceId) ? { device_id: deviceId } : {}),
+          }
+        })
+        .filter(
+          (item) =>
+            Number.isFinite(item.door_id) && Number.isFinite(item.schedule_template_id)
+        ),
+    },
+  })
+}
+
+export async function removeAccessGroupDoor(
+  token: string,
+  groupId: string | number,
+  doorId: string | number
+) {
+  return adminRequest<unknown>(`/api/access-control/groups/${groupId}/doors/${doorId}`, {
+    method: "DELETE",
+    token,
+  })
+}
+
+export async function listAccessGroupEmployees(token: string, groupId: string | number) {
+  const payload = await adminRequest<unknown>(`/api/access-control/groups/${groupId}/employees`, {
+    token,
+  })
+  return normalizeList(payload)
+}
+
+export async function assignAccessGroupEmployees(
+  token: string,
+  groupId: string | number,
+  employeeIds: Array<string | number>
+) {
+  return adminRequest<unknown>(`/api/access-control/groups/${groupId}/employees`, {
+    method: "POST",
+    token,
+    body: {
+      employee_ids: employeeIds
+        .map((employeeId) => Number(employeeId))
+        .filter((employeeId) => Number.isFinite(employeeId)),
+    },
+  })
+}
+
+export async function removeAccessGroupEmployee(
+  token: string,
+  groupId: string | number,
+  employeeId: string | number
+) {
+  return adminRequest<unknown>(`/api/access-control/groups/${groupId}/employees/${employeeId}`, {
+    method: "DELETE",
+    token,
+  })
+}
+
+export async function assignEmployeeDevices(
+  token: string,
+  employeeId: string | number,
+  data: {
+    access_group_id: string | number
+    device_ids: Array<string | number>
+    valid_enabled?: boolean
+    valid_begin_time?: string
+    valid_end_time?: string
+    local_ui_right?: boolean
+    close_delay_enabled?: boolean
+    max_open_door_time?: number
+    open_door_time?: number
+    user_verify_mode?: string
+    metadata?: AdminRecord
+    sync_now?: boolean
+    continue_on_error?: boolean
+  }
+) {
+  const accessGroupId = Number(data.access_group_id)
+  return adminRequest<unknown>(`/api/access-control/employees/${employeeId}/devices`, {
+    method: "POST",
+    token,
+    body: {
+      access_group_id: accessGroupId,
+      device_ids: data.device_ids
+        .map((deviceId) => Number(deviceId))
+        .filter((deviceId) => Number.isFinite(deviceId)),
+      ...(typeof data.valid_enabled === "boolean" ? { valid_enabled: data.valid_enabled } : {}),
+      ...(data.valid_begin_time ? { valid_begin_time: data.valid_begin_time } : {}),
+      ...(data.valid_end_time ? { valid_end_time: data.valid_end_time } : {}),
+      ...(typeof data.local_ui_right === "boolean" ? { local_ui_right: data.local_ui_right } : {}),
+      ...(typeof data.close_delay_enabled === "boolean"
+        ? { close_delay_enabled: data.close_delay_enabled }
+        : {}),
+      ...(typeof data.max_open_door_time === "number"
+        ? { max_open_door_time: data.max_open_door_time }
+        : {}),
+      ...(typeof data.open_door_time === "number" ? { open_door_time: data.open_door_time } : {}),
+      ...(data.user_verify_mode ? { user_verify_mode: data.user_verify_mode } : {}),
+      ...(data.metadata ? { metadata: data.metadata } : {}),
+      ...(typeof data.sync_now === "boolean" ? { sync_now: data.sync_now } : {}),
+      ...(typeof data.continue_on_error === "boolean"
+        ? { continue_on_error: data.continue_on_error }
+        : {}),
+    },
+  })
+}
+
+export async function getEmployeeAccessCredentials(token: string, employeeId: string | number) {
+  const payload = await adminRequest<unknown>(`/api/access-control/employees/${employeeId}/credentials`, {
+    token,
+  })
+  return normalizeSingle(payload)
+}
+
+export async function createEmployeeAccessCredentials(
+  token: string,
+  employeeId: string | number,
+  data: AdminRecord
+) {
+  return adminRequest<unknown>(`/api/access-control/employees/${employeeId}/credentials`, {
+    method: "POST",
+    token,
+    body: data,
+  })
+}
+
+export async function updateEmployeeAccessCredentials(
+  token: string,
+  employeeId: string | number,
+  data: AdminRecord
+) {
+  return adminRequest<unknown>(`/api/access-control/employees/${employeeId}/credentials`, {
+    method: "PATCH",
+    token,
+    body: data,
+  })
+}
+
+export async function createEmployeeDevicePassword(
+  token: string,
+  employeeId: string | number,
+  deviceId: string | number,
+  data: AdminRecord
+) {
+  return adminRequest<unknown>(
+    `/api/access-control/employees/${employeeId}/devices/${deviceId}/users/password`,
+    {
+      method: "POST",
+      token,
+      body: data,
+    }
+  )
+}
+
+export async function updateEmployeeDevicePassword(
+  token: string,
+  employeeId: string | number,
+  deviceId: string | number,
+  data: AdminRecord
+) {
+  return adminRequest<unknown>(
+    `/api/access-control/employees/${employeeId}/devices/${deviceId}/users/password`,
+    {
+      method: "PATCH",
+      token,
+      body: data,
+    }
+  )
+}
+
+export async function captureEmployeeDeviceFingerprint(
+  token: string,
+  employeeId: string | number,
+  deviceId: string | number,
+  data: AdminRecord
+) {
+  return adminRequest<unknown>(
+    `/api/access-control/employees/${employeeId}/devices/${deviceId}/users/fingerprints/capture`,
+    {
+      method: "POST",
+      token,
+      body: data,
+    }
+  )
+}
+
+export async function listEmployeeDeviceFingerprints(
+  token: string,
+  employeeId: string | number,
+  deviceId: string | number
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/access-control/employees/${employeeId}/devices/${deviceId}/users/fingerprints`,
+    {
+      token,
+    }
+  )
+  return normalizeList(payload)
+}
+
+export async function listAttendanceDeviceAssignmentMatches(
+  token: string,
+  deviceId: string | number,
+  employeeId: string | number
+) {
+  const query = new URLSearchParams({
+    deviceId: String(deviceId),
+    employeeId: String(employeeId),
+  })
+
+  const payload = await adminRequest<unknown>(
+    `/api/access-control/attendance-devices/employee-device-assignment-matches?${query.toString()}`,
+    {
+      token,
+    }
+  )
+  return normalizeList(payload)
+}
+
+export async function syncEmployeeDeviceFingerprint(
+  token: string,
+  employeeId: string | number,
+  deviceId: string | number,
+  fingerprintId: string,
+  data: AdminRecord
+) {
+  return adminRequest<unknown>(
+    `/api/access-control/employees/${employeeId}/devices/${deviceId}/users/fingerprints/${fingerprintId}/sync`,
+    {
+      method: "POST",
+      token,
+      body: data,
+    }
+  )
+}
+
+export async function resyncEmployeeDeviceFingerprint(
+  token: string,
+  employeeId: string | number,
+  deviceId: string | number,
+  fingerprintId: string,
+  data: AdminRecord
+) {
+  return adminRequest<unknown>(
+    `/api/access-control/employees/${employeeId}/devices/${deviceId}/users/fingerprints/${fingerprintId}/resync`,
+    {
+      method: "POST",
+      token,
+      body: data,
+    }
+  )
+}
+
+export async function disableEmployeeDeviceFingerprint(
+  token: string,
+  employeeId: string | number,
+  deviceId: string | number,
+  fingerprintId: string
+) {
+  return adminRequest<unknown>(
+    `/api/access-control/employees/${employeeId}/devices/${deviceId}/users/fingerprints/${fingerprintId}/disable`,
+    {
+      method: "PATCH",
+      token,
+    }
+  )
+}
+
+export async function enableEmployeeDeviceFingerprint(
+  token: string,
+  employeeId: string | number,
+  deviceId: string | number,
+  fingerprintId: string
+) {
+  return adminRequest<unknown>(
+    `/api/access-control/employees/${employeeId}/devices/${deviceId}/users/fingerprints/${fingerprintId}/enable`,
+    {
+      method: "PATCH",
+      token,
+    }
+  )
+}
+
+export async function deleteEmployeeDeviceFingerprint(
+  token: string,
+  employeeId: string | number,
+  deviceId: string | number,
+  fingerprintId: string,
+  data: AdminRecord = {}
+) {
+  return adminRequest<unknown>(
+    `/api/access-control/employees/${employeeId}/devices/${deviceId}/users/fingerprints/${fingerprintId}`,
+    {
+      method: "DELETE",
+      token,
+      body: data,
+    }
+  )
+}
+
+export async function registerEmployeeDeviceUser(
+  token: string,
+  employeeId: string | number,
+  deviceId: string | number,
+  data: AdminRecord
+) {
+  return adminRequest<unknown>(
+    `/api/access-control/employees/${employeeId}/devices/${deviceId}/users/register`,
+    {
+      method: "POST",
+      token,
+      body: data,
+    }
+  )
+}
+
+export async function updateEmployeeDeviceUser(
+  token: string,
+  employeeId: string | number,
+  deviceId: string | number,
+  data: AdminRecord
+) {
+  return adminRequest<unknown>(
+    `/api/access-control/employees/${employeeId}/devices/${deviceId}/users`,
+    {
+      method: "PATCH",
+      token,
+      body: data,
+    }
+  )
+}
+
+export async function resyncEmployeeDeviceUser(
+  token: string,
+  employeeId: string | number,
+  deviceId: string | number
+) {
+  return adminRequest<unknown>(
+    `/api/access-control/employees/${employeeId}/devices/${deviceId}/users/resync`,
+    {
+      method: "POST",
+      token,
+    }
+  )
+}
+
+export async function removeEmployeeDeviceAssignment(
+  token: string,
+  employeeId: string | number,
+  deviceId: string | number
+) {
+  return adminRequest<unknown>(`/api/access-control/employees/${employeeId}/devices/${deviceId}`, {
+    method: "DELETE",
+    token,
+  })
+}
+
+export async function syncAccessControlDoorsFromDevice(token: string, deviceId: string | number) {
+  return adminRequest<unknown>(`/api/access-control/doors/sync-from-device/${deviceId}`, {
+    method: "POST",
+    token,
+  })
+}
+
 export async function createDepartment(token: string, data: AdminRecord) {
   return adminRequest<unknown>("/api/departments", {
     method: "POST",
@@ -1289,6 +2592,56 @@ export async function createLeaveRequest(token: string, data: AdminRecord) {
   })
 }
 
+export async function createMyLeaveRequest(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/me/leave/requests", {
+    method: "POST",
+    token,
+    body: data,
+  })
+}
+
+export async function listMyLeaveRequests(
+  token: string,
+  params: LeaveRequestsQueryParams = {}
+): Promise<PaginatedUsersResult> {
+  const fallbackPage = params.page && params.page > 0 ? params.page : 1
+  const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20
+  const query = buildLeaveRequestsQuery(params)
+  const payload = await adminRequest<unknown>(`/api/me/leave/requests${query}`, { token })
+  const rows = normalizeList(payload)
+  const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit)
+  return { rows, ...pagination }
+}
+
+export async function getMyLeaveRequest(token: string, id: string | number) {
+  const payload = await adminRequest<unknown>(`/api/me/leave/requests/${id}`, { token })
+  return normalizeSingle(payload)
+}
+
+export async function submitMyLeaveRequest(token: string, id: string | number) {
+  return adminRequest<unknown>(`/api/me/leave/requests/${id}/submit`, {
+    method: "POST",
+    token,
+  })
+}
+
+export async function cancelMyLeaveRequest(token: string, id: string | number, reason: string) {
+  return adminRequest<unknown>(`/api/me/leave/requests/${id}/cancel`, {
+    method: "POST",
+    token,
+    body: { reason },
+  })
+}
+
+export async function getMyLeaveRequestPdf(token: string, id: string | number) {
+  return adminRequest<unknown>(`/api/me/leave/requests/${id}/pdf`, { token })
+}
+
+export async function getLeaveRequest(token: string, id: string | number) {
+  const payload = await adminRequest<unknown>(`/api/leave/requests/${id}`, { token })
+  return normalizeSingle(payload)
+}
+
 export async function leaveRequestApprovalAction(
   token: string,
   id: string | number,
@@ -1442,6 +2795,22 @@ export async function addLeaveRequestDocument(
     token,
     body: data,
   })
+}
+
+export async function patchLeaveRequestMedicalDetail(
+  token: string,
+  leaveRequestId: string | number,
+  data: AdminRecord
+) {
+  return adminRequest<unknown>(`/api/leave/requests/${leaveRequestId}/medical-detail`, {
+    method: "PATCH",
+    token,
+    body: data,
+  })
+}
+
+export function getLeaveRequestPdfUrl(id: string | number) {
+  return buildUrl(`/api/leave/requests/${id}/pdf`)
 }
 
 export async function createOnboardingWorkflow(token: string, data: AdminRecord) {
@@ -1884,7 +3253,17 @@ export async function getCurrentAdmin(token: string) {
   return normalizeSingle(payload)
 }
 
+export async function getCurrentAdminProfile(token: string) {
+  const payload = await adminRequest<unknown>("/api/users/me", { token })
+  return normalizeSingle(payload)
+}
+
 export async function getMyCompany(token: string) {
+  const payload = await adminRequest<unknown>("/api/companies/my", { token })
+  return normalizeSingle(payload)
+}
+
+export async function getAdminCompany(token: string) {
   const payload = await adminRequest<unknown>("/api/companies/my", { token })
   return normalizeSingle(payload)
 }
@@ -1937,6 +3316,74 @@ export async function getCurrentEmployee(token: string) {
   }
 
   return normalizeSingle(payload)
+}
+
+export async function getMyProfile(token: string) {
+  const payload = await adminRequest<unknown>("/api/me/profile", { token })
+  return normalizeSingle(payload)
+}
+
+export async function getMyStatus(token: string) {
+  const payload = await adminRequest<unknown>("/api/me/status", { token })
+  return normalizeSingle(payload)
+}
+
+export async function getMyDashboard(token: string) {
+  const payload = await adminRequest<unknown>("/api/me/dashboard", { token })
+  return normalizeSingle(payload)
+}
+
+export async function listMyAttendanceHistory(
+  token: string,
+  params: MyAttendanceHistoryQueryParams = {}
+): Promise<PaginatedUsersResult> {
+  const fallbackPage = params.page && params.page > 0 ? params.page : 1
+  const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20
+  const query = buildMyAttendanceHistoryQuery(params)
+  const payload = await adminRequest<unknown>(`/api/me/attendance/history${query}`, { token })
+  const rows = normalizeList(payload)
+  const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit)
+  return { rows, ...pagination }
+}
+
+export async function listMyAttendancePunches(
+  token: string,
+  params: MyAttendancePunchesQueryParams = {}
+): Promise<PaginatedUsersResult> {
+  const fallbackPage = params.page && params.page > 0 ? params.page : 1
+  const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20
+  const query = buildMyAttendancePunchesQuery(params)
+  const payload = await adminRequest<unknown>(`/api/me/attendance/punches${query}`, { token })
+  const rows = normalizeList(payload)
+  const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit)
+  return { rows, ...pagination }
+}
+
+export async function getMyAttendanceSchedule(
+  token: string,
+  params: MyAttendanceScheduleQueryParams = {}
+) {
+  const query = buildMyAttendanceScheduleQuery(params)
+  const payload = await adminRequest<unknown>(`/api/me/attendance/schedule${query}`, { token })
+  return normalizeList(payload)
+}
+
+export async function getMyAttendanceToday(token: string) {
+  const payload = await adminRequest<unknown>("/api/me/attendance/today", { token })
+  return normalizeSingle(payload)
+}
+
+export async function listMyLeaveBalances(
+  token: string,
+  params: LeaveBalancesQueryParams = {}
+): Promise<PaginatedUsersResult> {
+  const fallbackPage = params.page && params.page > 0 ? params.page : 1
+  const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20
+  const query = buildLeaveBalancesQuery(params)
+  const payload = await adminRequest<unknown>(`/api/me/leave/balances${query}`, { token })
+  const rows = normalizeList(payload)
+  const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit)
+  return { rows, ...pagination }
 }
 
 export async function getUserById(id: string | number, token: string) {

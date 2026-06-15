@@ -93,9 +93,15 @@ const ADMIN_PORTAL_PERMISSION_KEYS = new Set([
   "attendance_settings:read",
   "attendance_devices:read",
   "attendance_policies:read",
+  "access_doors:read",
+  "access_schedule_templates:read",
+  "access_organizations:read",
+  "access_groups:read",
 ])
 
 const EMPLOYEE_RESTRICTED_ROUTE_PREFIXES = [
+  "/dashboard/attendance",
+  "/dashboard/access-control",
   "/dashboard/users",
   "/dashboard/roles",
   "/dashboard/permissions",
@@ -107,6 +113,10 @@ const EMPLOYEE_RESTRICTED_ROUTE_PREFIXES = [
   "/dashboard/operations/recruitment",
   "/dashboard/operations/reports",
   "/dashboard/employees/onboarding",
+  "/dashboard/leave-management/requests",
+  "/dashboard/leave-management/balances",
+  "/dashboard/leave-management/holidays",
+  "/dashboard/leave-management/policies",
   "/dashboard/leave-management/types",
   "/dashboard/leave-management/workflows",
 ]
@@ -798,6 +808,7 @@ export default function AdminDashboardView({
     isAdmin: false,
     permissionLabels: [],
   })
+  const [identityReady, setIdentityReady] = React.useState(false)
 
   React.useEffect(() => {
     if (typeof window === "undefined") {
@@ -880,6 +891,7 @@ export default function AdminDashboardView({
       isAdmin: userIsAdmin || tokenIsAdmin,
       permissionLabels: Array.from(permissionLabels),
     })
+    setIdentityReady(true)
   }, [resolveStoredTokens])
   const adminName =
     getStringValue(currentAdmin, ["full_name", "fullName", "name"]) ??
@@ -907,18 +919,22 @@ export default function AdminDashboardView({
   const roleLabels = React.useMemo(() => {
     const merged = new Set<string>()
     collectRoleLabels(currentAdmin).forEach((entry) => merged.add(entry))
-    collectRoleLabels(decodeJwtPayload(resolveStoredTokens().accessToken)).forEach((entry) => merged.add(entry))
+    collectRoleLabels(decodeJwtPayload(token)).forEach((entry) => merged.add(entry))
     const identityRole = (clientIdentity.role ?? "").toLowerCase().trim()
     if (identityRole) {
       merged.add(identityRole)
     }
     return Array.from(merged)
-  }, [clientIdentity.role, currentAdmin, resolveStoredTokens])
+  }, [clientIdentity.role, currentAdmin, token])
 
   const identityIsAdmin = roleLabels.some((role) => ADMIN_ROLE_KEYS.has(role))
   const accessMode = identityIsAdmin ? "admin" : "employee"
 
   React.useEffect(() => {
+    if (!identityReady) {
+      return
+    }
+
     if (accessMode !== "employee") {
       return
     }
@@ -932,14 +948,14 @@ export default function AdminDashboardView({
     if (EMPLOYEE_RESTRICTED_ROUTE_PREFIXES.some((prefix) => currentPath.startsWith(prefix))) {
       router.replace(SELF_SERVICE_HOME_ROUTE)
     }
-  }, [accessMode, pathname, router])
+  }, [accessMode, identityReady, pathname, router])
 
   return (
     <SidebarProvider
       style={
         {
-          "--sidebar-width": "calc(var(--spacing) * 72)",
-          "--header-height": "calc(var(--spacing) * 12)",
+          "--sidebar-width": "15.75rem",
+          "--header-height": "calc(var(--spacing) * 11)",
         } as React.CSSProperties
       }
     >
@@ -962,10 +978,10 @@ export default function AdminDashboardView({
         />
         <div className="flex flex-1 flex-col">
           <div className="@container/main flex flex-1 flex-col gap-2">
-            <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
+            <div className="flex flex-col gap-3 py-3 md:gap-4 md:py-4">
               {showOverview && useApis ? <SectionCards stats={stats} /> : null}
               {showOverview && useApis ? (
-                <div className="px-4 lg:px-6">
+                <div className="px-3 lg:px-4">
                   <ChartAreaInteractive data={chartData} />
                 </div>
               ) : null}

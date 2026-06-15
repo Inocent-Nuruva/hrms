@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { TableScrollContainer } from "@/components/common/table-scroll-container"
 import { countries as countryCodes } from "country-flag-icons"
 
 import {
@@ -492,29 +493,29 @@ export function BranchesView() {
 
       {error ? <p className="mb-3 text-sm text-rose-600">{error}</p> : null}
 
-      <div className="overflow-x-auto rounded-md border border-slate-200">
-        <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-50">
+      <TableScrollContainer>
+        <table className="w-full min-w-[900px] text-sm">
+          <thead className="bg-slate-50/90">
             <tr>
-              <th className="px-3 py-2 text-left font-semibold text-slate-700">Name</th>
-              <th className="px-3 py-2 text-left font-semibold text-slate-700">Code</th>
-              <th className="px-3 py-2 text-left font-semibold text-slate-700">Country</th>
-              <th className="px-3 py-2 text-left font-semibold text-slate-700">City</th>
-              <th className="px-3 py-2 text-left font-semibold text-slate-700">Status</th>
-              <th className="px-3 py-2 text-right font-semibold text-slate-700">Actions</th>
+              <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Name</th>
+              <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Code</th>
+              <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Country</th>
+              <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">City</th>
+              <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Status</th>
+              <th className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100 bg-white">
+          <tbody className="[&_tr:nth-child(odd)]:bg-slate-50/35 [&_tr]:border-t [&_tr]:border-slate-100 [&_tr:hover]:bg-slate-50/80">
             {rows.map((row, index) => {
               const id = readNumber(row, ["id"])
               return (
                 <tr key={String(id ?? index)}>
-                  <td className="px-3 py-2">{readString(row, ["name"])}</td>
-                  <td className="px-3 py-2">{readString(row, ["code"])}</td>
-                  <td className="px-3 py-2">{readString(row, ["country"])}</td>
-                  <td className="px-3 py-2">{readString(row, ["city"])}</td>
-                  <td className="px-3 py-2">{readString(row, ["status"])}</td>
-                  <td className="px-3 py-2 text-right">
+                  <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["name"])}</td>
+                  <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["code"])}</td>
+                  <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["country"])}</td>
+                  <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["city"])}</td>
+                  <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["status"])}</td>
+                  <td className="px-4 py-4 text-right">
                     <div className="inline-flex gap-2">
                       <button
                         type="button"
@@ -556,7 +557,7 @@ export function BranchesView() {
             ) : null}
           </tbody>
         </table>
-      </div>
+      </TableScrollContainer>
 
       <div className="mt-4 flex items-center justify-between gap-3">
         <p className="text-sm text-slate-600">
@@ -756,23 +757,23 @@ export function BranchesView() {
             </div>
             {accessError ? <p className="mt-2 text-sm text-rose-600">{accessError}</p> : null}
 
-            <div className="mt-4 overflow-x-auto rounded-md border border-slate-200">
-              <table className="min-w-full divide-y divide-slate-200 text-sm">
-                <thead className="bg-slate-50">
+            <TableScrollContainer className="mt-4">
+              <table className="w-full min-w-[900px] text-sm">
+                <thead className="bg-slate-50/90">
                   <tr>
-                    <th className="px-3 py-2 text-left font-semibold text-slate-700">User ID</th>
-                    <th className="px-3 py-2 text-left font-semibold text-slate-700">Name</th>
-                    <th className="px-3 py-2 text-right font-semibold text-slate-700">Action</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">User ID</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Name</th>
+                    <th className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Action</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 bg-white">
+                <tbody className="[&_tr:nth-child(odd)]:bg-slate-50/35 [&_tr]:border-t [&_tr]:border-slate-100 [&_tr:hover]:bg-slate-50/80">
                   {accessRows.map((row, index) => {
                     const userId = accessRowUserId(row)
                     return (
                       <tr key={String(userId ?? index)}>
-                        <td className="px-3 py-2">{userId ?? "-"}</td>
-                        <td className="px-3 py-2">{accessUserName(row, companyUsers)}</td>
-                        <td className="px-3 py-2 text-right">
+                        <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{userId ?? "-"}</td>
+                        <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{accessUserName(row, companyUsers)}</td>
+                        <td className="px-4 py-4 text-right">
                           <button
                             type="button"
                             className="rounded-md border border-rose-300 px-2 py-1 text-xs text-rose-700"
@@ -787,14 +788,14 @@ export function BranchesView() {
                   })}
                   {accessRows.length === 0 ? (
                     <tr>
-                      <td className="px-3 py-6 text-center text-slate-500" colSpan={3}>
+                      <td className="px-4 py-10 text-center text-sm text-slate-500" colSpan={3}>
                         No access assignments found.
                       </td>
                     </tr>
                   ) : null}
                 </tbody>
               </table>
-            </div>
+            </TableScrollContainer>
 
             <div className="mt-4 flex justify-end gap-2">
               <button

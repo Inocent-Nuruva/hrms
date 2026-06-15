@@ -1,12 +1,13 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { showSuccessAlert } from "@/lib/success-alert";
 import { showErrorAlert } from "@/lib/error-alert";
 import { EyeIcon, EyeOffIcon } from "lucide-react";
 
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAuth } from "@/hooks/useAuth";
+import { AUTH_STORAGE_KEYS } from "@/utils/constants";
 
 interface LoginFlowProps {
   defaultEmail?: string;
@@ -22,6 +23,22 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
   const [isDone, setIsDone] = useState(false);
   const [isHoveringSubmit, setIsHoveringSubmit] = useState(false);
   const { login, isLoading } = useAuth();
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const rememberedFlag = window.localStorage.getItem(AUTH_STORAGE_KEYS.rememberMe);
+    const rememberedEmail = window.localStorage.getItem(AUTH_STORAGE_KEYS.rememberedEmail) ?? "";
+    const shouldRemember = rememberedFlag === null ? true : rememberedFlag === "true";
+
+    setRememberMe(shouldRemember);
+
+    if (!defaultEmail && shouldRemember && rememberedEmail.trim()) {
+      setEmail(rememberedEmail);
+    }
+  }, [defaultEmail]);
 
   const handleLogin = async () => {
     const normalizedEmail = email.trim().toLowerCase();
@@ -58,6 +75,16 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
         setLoginError(message);
         showErrorAlert(message, "Invalid credentials");
         return;
+      }
+
+      if (typeof window !== "undefined") {
+        if (rememberMe) {
+          window.localStorage.setItem(AUTH_STORAGE_KEYS.rememberMe, "true");
+          window.localStorage.setItem(AUTH_STORAGE_KEYS.rememberedEmail, normalizedEmail);
+        } else {
+          window.localStorage.setItem(AUTH_STORAGE_KEYS.rememberMe, "false");
+          window.localStorage.removeItem(AUTH_STORAGE_KEYS.rememberedEmail);
+        }
       }
 
       setIsDone(true);
@@ -215,7 +242,16 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
             >
               <Checkbox
                 checked={rememberMe}
-                onCheckedChange={(checked) => setRememberMe(Boolean(checked))}
+                onCheckedChange={(checked) => {
+                  const nextValue = Boolean(checked);
+                  setRememberMe(nextValue);
+                  if (typeof window !== "undefined") {
+                    window.localStorage.setItem(AUTH_STORAGE_KEYS.rememberMe, String(nextValue));
+                    if (!nextValue) {
+                      window.localStorage.removeItem(AUTH_STORAGE_KEYS.rememberedEmail);
+                    }
+                  }
+                }}
                 className="border-[#c8d0ea] data-checked:border-[#303194] data-checked:bg-[#303194]"
               />
               Remember me

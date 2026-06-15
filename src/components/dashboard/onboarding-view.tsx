@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { HorizontalScrollContainer } from "@/components/common/horizontal-scroll-container"
 import { Ban, CheckCheck, Pencil, Plus, Trash2 } from "lucide-react"
 
 import {
@@ -1655,7 +1656,7 @@ export function OnboardingView() {
                       No steps added yet. Click Add Step to create your first workflow step.
                     </p>
                   ) : (
-                    <div className="overflow-x-auto rounded-lg border border-border">
+                    <HorizontalScrollContainer className="rounded-lg border border-border">
                       <Table>
                         <TableHeader>
                           <TableRow>
@@ -1762,7 +1763,7 @@ export function OnboardingView() {
                           ))}
                         </TableBody>
                       </Table>
-                    </div>
+                    </HorizontalScrollContainer>
                   )}
                 </div>
               </div>

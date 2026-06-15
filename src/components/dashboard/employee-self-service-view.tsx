@@ -1,20 +1,21 @@
 "use client"
 
 import * as React from "react"
+import { HorizontalScrollContainer } from "@/components/common/horizontal-scroll-container"
 import { Camera, Loader2, Pencil, X } from "lucide-react"
 
 import {
-  createLeaveRequest,
+  createMyLeaveRequest,
   getCurrentEmployee,
   getEmployeeById,
   getCurrentAdmin,
+  listAttendanceHolidays,
   listBranches,
   listDepartments,
   listEmployees,
-  listLeaveBalances,
-  listLeaveHolidays,
+  listMyLeaveBalances,
   listLeavePolicies,
-  listLeaveRequests,
+  listMyLeaveRequests,
   listLeaveTypes,
   updateUserById,
   type AdminRecord,
@@ -28,7 +29,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Dialog,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogPopup,
@@ -121,6 +121,21 @@ function formatDate(value: unknown) {
     return value
   }
   return parsed.toLocaleDateString()
+}
+
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      if (typeof reader.result === "string" && reader.result.trim()) {
+        resolve(reader.result)
+        return
+      }
+      reject(new Error("Could not read the selected file."))
+    }
+    reader.onerror = () => reject(new Error("Could not read the selected file."))
+    reader.readAsDataURL(file)
+  })
 }
 
 function formatUnknownValue(value: unknown) {
@@ -847,6 +862,7 @@ function SectionHeading({
 
 export function EmployeeSelfServiceProfileView() {
   const { loading, error, token, currentUser, employee, refresh } = useSelfEmployeeData()
+  const profilePhotoInputRef = React.useRef<HTMLInputElement | null>(null)
   const [isEditing, setIsEditing] = React.useState(false)
   const [activeTab, setActiveTab] = React.useState<SelfProfileTab>("summary")
   const [firstName, setFirstName] = React.useState("")
@@ -883,6 +899,7 @@ export function EmployeeSelfServiceProfileView() {
   const [sectionSaving, setSectionSaving] = React.useState(false)
   const [sectionError, setSectionError] = React.useState<string | null>(null)
   const [sectionErrorLines, setSectionErrorLines] = React.useState<string[]>([])
+  const [profilePhotoSaving, setProfilePhotoSaving] = React.useState(false)
   const [sectionValues, setSectionValues] = React.useState<Record<EditableUserField, string>>({
     first_name: "",
     last_name: "",
@@ -1028,6 +1045,55 @@ export function EmployeeSelfServiceProfileView() {
     }
   }, [loggedInUserId, refresh, sectionEditor, sectionValues, token])
 
+  const handleProfilePhotoChange = React.useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0]
+      event.target.value = ""
+
+      if (!file) {
+        return
+      }
+
+      if (!file.type.startsWith("image/")) {
+        setMessage("Please choose an image file for your profile photo.")
+        return
+      }
+
+      if (!token) {
+        setMessage("Session expired. Please sign in again.")
+        return
+      }
+
+      if (loggedInUserId === null) {
+        setMessage("Unable to resolve user id for profile photo update.")
+        return
+      }
+
+      if (file.size > 5 * 1024 * 1024) {
+        setMessage("Profile photo must be 5 MB or smaller.")
+        return
+      }
+
+      setProfilePhotoSaving(true)
+      setMessage(null)
+
+      try {
+        const dataUrl = await readFileAsDataUrl(file)
+        await updateUserById(loggedInUserId, token, {
+          profile_photo_url: dataUrl,
+        })
+        setMessage("Profile photo updated successfully.")
+        await refresh()
+      } catch (errorObject) {
+        const text = errorObject instanceof Error ? errorObject.message : "Failed to update profile photo."
+        setMessage(text)
+      } finally {
+        setProfilePhotoSaving(false)
+      }
+    },
+    [loggedInUserId, refresh, token]
+  )
+
   return (
     <div className="grid gap-4 px-4 lg:px-6">
       <Card>
@@ -1035,6 +1101,13 @@ export function EmployeeSelfServiceProfileView() {
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="group relative size-10 shrink-0 overflow-hidden rounded-full border border-slate-200 bg-slate-100 dark:border-slate-800 dark:bg-slate-900">
+                <input
+                  ref={profilePhotoInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(event) => void handleProfilePhotoChange(event)}
+                />
                 {profilePhotoUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={profilePhotoUrl} alt="Profile photo" className="size-full object-cover" />
@@ -1046,10 +1119,11 @@ export function EmployeeSelfServiceProfileView() {
                 <button
                   type="button"
                   className="absolute -right-1 -bottom-1 inline-flex size-5 items-center justify-center rounded-full bg-primary text-primary-foreground shadow transition-transform duration-300 hover:scale-105"
-                  aria-label="Edit profile photo"
-                  onClick={() => openSectionEditor("profile-photo", "Profile Photo", ["profile_photo_url"])}
+                  aria-label={profilePhotoSaving ? "Updating profile photo" : "Edit profile photo"}
+                  onClick={() => profilePhotoInputRef.current?.click()}
+                  disabled={profilePhotoSaving}
                 >
-                  <Camera className="size-3" />
+                  {profilePhotoSaving ? <Loader2 className="size-3 animate-spin" /> : <Camera className="size-3" />}
                 </button>
               </div>
               <CardTitle>My Details</CardTitle>
@@ -1079,7 +1153,7 @@ export function EmployeeSelfServiceProfileView() {
           {!loading && !error && (currentUser || employee) ? (
             <div className="grid gap-4">
               <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as SelfProfileTab)}>
-                <div className="overflow-x-auto">
+                <HorizontalScrollContainer>
                   <TabsList
                     variant="line"
                     size="sm"
@@ -1095,14 +1169,14 @@ export function EmployeeSelfServiceProfileView() {
                       </TabsTrigger>
                     ))}
                   </TabsList>
-                </div>
+                </HorizontalScrollContainer>
                 <TabsContent value={activeTab} className="mt-3">
                   <div key={activeTab} className="grid gap-4 animate-in slide-in-from-right-2 fade-in-0 duration-300">
 
               {activeTab === "summary" ? (
               <div className="grid gap-3">
-                <div className="grid gap-3 md:grid-cols-2 md:items-start">
-                <section className="summary-wave-card space-y-2 p-4">
+                <div className="grid gap-3 md:grid-cols-2 md:items-stretch">
+                <section className="summary-wave-card flex h-full flex-col space-y-2 p-4">
                   <SectionHeading
                     title="Identity"
                     onEdit={() => openSectionEditor("identity", "Identity", ["first_name", "last_name", "user_no"])}
@@ -1116,6 +1190,7 @@ export function EmployeeSelfServiceProfileView() {
                       {
                         label: "Employee No",
                         value:
+                          readString(currentUser, ["user_no", "employee_no", "employeeNo"], "") ||
                           readString(employee, ["employee_no", "employee_number", "employee_code", "employeeId", "user_no"], "") ||
                           readNestedEmployeeNumber(currentUser) ||
                           readString(currentUser, ["employee_no", "employeeNo", "employee_id", "employeeId", "user_no"], "-"),
@@ -1123,19 +1198,20 @@ export function EmployeeSelfServiceProfileView() {
                       {
                         label: "Full Name",
                         value:
+                          [readString(currentUser, ["first_name"], ""), readString(currentUser, ["last_name"], "")]
+                            .filter(Boolean)
+                            .join(" ") ||
                           readString(employee, ["full_name", "fullName", "name"], "") ||
                           [readString(employee, ["first_name"], ""), readString(employee, ["last_name"], "")]
                             .filter(Boolean)
                             .join(" ") ||
-                          [readString(currentUser, ["first_name"], ""), readString(currentUser, ["last_name"], "")]
-                            .filter(Boolean)
-                            .join(" "),
+                          "-",
                       },
                     ]}
                   />
                 </section>
 
-                <section className="summary-wave-card space-y-2 p-4">
+                <section className="summary-wave-card flex h-full flex-col space-y-2 p-4">
                   <SectionHeading
                     title="Contact & Employment"
                     onEdit={() => openSectionEditor("contact-employment", "Contact & Employment", ["email", "phone", "status"])}
@@ -1159,8 +1235,8 @@ export function EmployeeSelfServiceProfileView() {
                   <WaveSeparator variant="layered" className="my-1 md:my-2" />
                 </div>
 
-                <div className="grid gap-3 md:grid-cols-2 md:items-start">
-                <section className="summary-wave-card space-y-2 p-4">
+                <div className="grid gap-3 md:grid-cols-2 md:items-stretch">
+                <section className="summary-wave-card flex h-full flex-col space-y-2 p-4">
                   <SectionHeading
                     title="Organization"
                   />
@@ -1184,7 +1260,7 @@ export function EmployeeSelfServiceProfileView() {
                   />
                 </section>
 
-                <section className="summary-wave-card space-y-2 p-4">
+                <section className="summary-wave-card flex h-full flex-col space-y-2 p-4">
                   <SectionHeading
                     title="Role & Leadership"
                   />
@@ -1233,8 +1309,8 @@ export function EmployeeSelfServiceProfileView() {
               ) : null}
 
               {activeTab === "summary" && employee ? (
-                <div className="grid gap-4 md:grid-cols-2 md:items-start">
-                  <section className="summary-wave-card space-y-2 p-4">
+                <div className="grid gap-4 md:grid-cols-2 md:items-stretch">
+                  <section className="summary-wave-card flex h-full flex-col space-y-2 p-4">
                     <SectionHeading
                       title="Reporting & Assignment"
                     />
@@ -1295,7 +1371,7 @@ export function EmployeeSelfServiceProfileView() {
                       ]}
                     />
                   </section>
-                  <section className="summary-wave-card space-y-2 p-4">
+                  <section className="summary-wave-card flex h-full flex-col space-y-2 p-4">
                     <SectionHeading
                       title="Additional Details"
                       onEdit={() =>
@@ -1756,9 +1832,6 @@ export function EmployeeSelfServiceProfileView() {
             <DialogPopup from="bottom" className="sm:max-w-xl">
               <DialogHeader>
                 <DialogTitle>{sectionEditor ? `Edit ${sectionEditor.title}` : "Edit Section"}</DialogTitle>
-                <DialogDescription>
-                  Update this section fields. Changes are sent to <code>/api/users/{`{id}`}</code>.
-                </DialogDescription>
               </DialogHeader>
               <div className="grid gap-3">
                 {sectionEditor?.fields.map((field) => (
@@ -1875,6 +1948,10 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
   const { loading: loadingProfile, error: profileError, token, employee } = useSelfEmployeeData()
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
+  const [leaveTypesError, setLeaveTypesError] = React.useState<string | null>(null)
+  const [balancesError, setBalancesError] = React.useState<string | null>(null)
+  const [holidaysError, setHolidaysError] = React.useState<string | null>(null)
+  const [policiesError, setPoliciesError] = React.useState<string | null>(null)
   const [leaveTypes, setLeaveTypes] = React.useState<AdminRecord[]>([])
   const [requests, setRequests] = React.useState<AdminRecord[]>([])
   const [balances, setBalances] = React.useState<AdminRecord[]>([])
@@ -1891,6 +1968,23 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
 
   const employeeId = readNumber(employee, ["id", "employee_id"])
 
+  const readEndpointError = React.useCallback(
+    (errorObject: unknown, fallbackMessage: string) => {
+      const message = errorObject instanceof Error ? errorObject.message : fallbackMessage
+      const status =
+        typeof errorObject === "object" && errorObject !== null && "status" in errorObject
+          ? (errorObject as { status?: number }).status
+          : undefined
+
+      if (status === 403) {
+        return "This section is not available for your account yet."
+      }
+
+      return message
+    },
+    []
+  )
+
   const loadData = React.useCallback(async () => {
     if (!token || employeeId === null) {
       return
@@ -1898,28 +1992,61 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
 
     setLoading(true)
     setError(null)
+    setLeaveTypesError(null)
+    setBalancesError(null)
+    setHolidaysError(null)
+    setPoliciesError(null)
 
     try {
-      const [typesResult, requestsResult, balancesResult, holidaysResult, policiesResult] = await Promise.all([
+      const requestsResult = await listMyLeaveRequests(token, {
+        page: 1,
+        limit: 100,
+        sortBy: "created_at",
+        sortOrder: "DESC",
+      })
+      setRequests(requestsResult.rows)
+
+      const [typesResult, balancesResult, holidaysResult, policiesResult] = await Promise.allSettled([
         listLeaveTypes(token, { page: 1, limit: 100 }),
-        listLeaveRequests(token, { page: 1, limit: 100, employee_id: employeeId }),
-        listLeaveBalances(token, { page: 1, limit: 100, employee_id: employeeId }),
-        listLeaveHolidays(token, { page: 1, limit: 100 }),
+        listMyLeaveBalances(token, { page: 1, limit: 100 }),
+        listAttendanceHolidays(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
         listLeavePolicies(token, { page: 1, limit: 100 }),
       ])
 
-      setLeaveTypes(typesResult.rows)
-      setRequests(requestsResult.rows)
-      setBalances(balancesResult.rows)
-      setHolidays(holidaysResult.rows)
-      setPolicies(policiesResult.rows)
+      if (typesResult.status === "fulfilled") {
+        setLeaveTypes(typesResult.value.rows)
+      } else {
+        setLeaveTypes([])
+        setLeaveTypesError(readEndpointError(typesResult.reason, "Failed to load leave types."))
+      }
+
+      if (balancesResult.status === "fulfilled") {
+        setBalances(balancesResult.value.rows)
+      } else {
+        setBalances([])
+        setBalancesError(readEndpointError(balancesResult.reason, "Failed to load leave balances."))
+      }
+
+      if (holidaysResult.status === "fulfilled") {
+        setHolidays(holidaysResult.value.rows)
+      } else {
+        setHolidays([])
+        setHolidaysError(readEndpointError(holidaysResult.reason, "Failed to load holiday calendar."))
+      }
+
+      if (policiesResult.status === "fulfilled") {
+        setPolicies(policiesResult.value.rows)
+      } else {
+        setPolicies([])
+        setPoliciesError(readEndpointError(policiesResult.reason, "Failed to load leave policies."))
+      }
     } catch (errorObject) {
       const text = errorObject instanceof Error ? errorObject.message : "Failed to load leave data."
       setError(text)
     } finally {
       setLoading(false)
     }
-  }, [employeeId, token])
+  }, [employeeId, readEndpointError, token])
 
   React.useEffect(() => {
     void loadData()
@@ -1936,12 +2063,16 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
       return
     }
 
+    if (leaveTypes.length === 0) {
+      setMessage("Leave requests cannot be submitted until leave types are available to your account.")
+      return
+    }
+
     setLoading(true)
     setMessage(null)
 
     try {
-      await createLeaveRequest(token, {
-        employee_id: employeeId,
+      await createMyLeaveRequest(token, {
         leave_type_id: Number(requestForm.leave_type_id),
         start_date: requestForm.start_date,
         end_date: requestForm.end_date,
@@ -1952,7 +2083,10 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
       setMessage("Leave request submitted.")
       await loadData()
     } catch (errorObject) {
-      const text = errorObject instanceof Error ? errorObject.message : "Failed to submit leave request."
+      const text =
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to submit leave request."
       setMessage(text)
     } finally {
       setLoading(false)
@@ -1983,7 +2117,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
             <div className="space-y-1">
               <Label>Leave Type</Label>
               <Select value={requestForm.leave_type_id} onValueChange={(value) => setRequestForm((prev) => ({ ...prev, leave_type_id: value ?? "" }))}>
-                <SelectTrigger>
+                <SelectTrigger disabled={leaveTypes.length === 0}>
                   <SelectValue placeholder="Select leave type" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1996,6 +2130,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
                   })}
                 </SelectContent>
               </Select>
+              {leaveTypesError ? <p className="text-xs text-slate-500">{leaveTypesError}</p> : null}
             </div>
             <div className="space-y-1">
               <Label>Start Date</Label>
@@ -2009,7 +2144,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
               <Label>Reason</Label>
               <Input value={requestForm.reason} onChange={(event) => setRequestForm((prev) => ({ ...prev, reason: event.target.value }))} />
             </div>
-            <Button onClick={onRequestLeave} disabled={loading}>Submit Request</Button>
+            <Button onClick={onRequestLeave} disabled={loading || leaveTypes.length === 0}>Submit Request</Button>
           </CardContent>
         </Card>
 
@@ -2054,6 +2189,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
                 <p className="text-slate-600 dark:text-slate-300">Available: {String(row.available_days ?? row.remaining_days ?? "-")}</p>
               </div>
             ))}
+            {balancesError ? <p className="text-sm text-slate-500">{balancesError}</p> : null}
             {error ? <p className="text-sm text-red-600">{error}</p> : null}
           </CardContent>
         </Card>
@@ -2067,17 +2203,30 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
         <Card>
           <CardHeader>
             <CardTitle>Holiday Calendar</CardTitle>
-            <CardDescription>Company holidays that affect leave planning.</CardDescription>
+            <CardDescription>Office holidays from the attendance calendar.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
             {loading ? <p className="text-sm text-slate-500">Loading holidays...</p> : null}
             {!loading && holidays.length === 0 ? <p className="text-sm text-slate-500">No holidays found.</p> : null}
-            {holidays.map((row, index) => (
-              <div key={String(row.id ?? index)} className="rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800">
-                <p className="font-medium">{readString(row, ["name"], "Holiday")}</p>
-                <p className="text-slate-600 dark:text-slate-300">Date: {formatDate(row.holiday_date)}</p>
-              </div>
-            ))}
+            {holidays.map((row, index) => {
+              const holidayStart =
+                readString(row, ["holiday_date", "from_date", "start_date", "date"], "") || "-"
+              const holidayEnd = readString(row, ["to_date", "end_date"], "")
+              const holidayType = readString(row, ["type"], "")
+              const dateLabel =
+                holidayEnd && holidayEnd !== holidayStart
+                  ? `${formatDate(holidayStart)} - ${formatDate(holidayEnd)}`
+                  : formatDate(holidayStart)
+
+              return (
+                <div key={String(row.id ?? index)} className="rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800">
+                  <p className="font-medium">{readString(row, ["name", "title"], "Holiday")}</p>
+                  <p className="text-slate-600 dark:text-slate-300">Date: {dateLabel}</p>
+                  {holidayType ? <p className="text-slate-600 dark:text-slate-300">Type: {holidayType}</p> : null}
+                </div>
+              )
+            })}
+            {holidaysError ? <p className="text-sm text-slate-500">{holidaysError}</p> : null}
             {error ? <p className="text-sm text-red-600">{error}</p> : null}
           </CardContent>
         </Card>
@@ -2102,6 +2251,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
               <p className="text-slate-600 dark:text-slate-300">Accrual: {readString(row, ["accrual_method"], "-")}</p>
             </div>
           ))}
+          {policiesError ? <p className="text-sm text-slate-500">{policiesError}</p> : null}
           {error ? <p className="text-sm text-red-600">{error}</p> : null}
         </CardContent>
       </Card>

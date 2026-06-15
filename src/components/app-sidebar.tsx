@@ -13,6 +13,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarRail,
 } from "@/components/ui/sidebar"
 import { CommandIcon } from "lucide-react"
 import { UsersRound } from "@/components/animate-ui/icons/users-round"
@@ -66,9 +67,71 @@ const adminData = {
           title: "Onboarding",
           url: "/dashboard/employees/onboarding",
         },
+      ],
+    },
+    {
+      title: "Attendance",
+      icon: IAttendance,
+      items: [
         {
-          title: "Attendance",
-          url: "/dashboard/employees/attendance",
+          title: "Attendance Setup",
+          items: [
+            { title: "Settings", url: "/dashboard/attendance/settings" },
+            { title: "Policies", url: "/dashboard/attendance/policies" },
+            { title: "Holiday Groups", url: "/dashboard/attendance/holiday-groups" },
+            { title: "Holidays", url: "/dashboard/attendance/holidays" },
+            { title: "Devices", url: "/dashboard/attendance/devices" },
+            { title: "Geofences", url: "/dashboard/attendance/geofences" },
+            { title: "Wi-Fi Networks", url: "/dashboard/attendance/wifi-networks" },
+            { title: "Checkpoints", url: "/dashboard/attendance/checkpoints" },
+          ],
+        },
+        {
+          title: "Shift Management",
+          items: [
+            { title: "Shifts", url: "/dashboard/attendance/shifts" },
+            { title: "Shift Breaks", url: "/dashboard/attendance/shift-breaks" },
+            { title: "Shift Attendance Rules", url: "/dashboard/attendance/shift-attendance-rules" },
+            { title: "Shift Overtime Rules", url: "/dashboard/attendance/shift-overtime-rules" },
+            { title: "Shift Assignments", url: "/dashboard/attendance/shift-assignments" },
+            { title: "Shift Schedules", url: "/dashboard/attendance/shift-schedules" },
+            { title: "Shift Templates", url: "/dashboard/attendance/shift-templates" },
+            { title: "Rotation Groups and Rules", url: "/dashboard/attendance/shift-rotation-groups" },
+            { title: "Shift Change Requests", url: "/dashboard/attendance/shift-change-requests" },
+          ],
+        },
+        {
+          title: "Timetable Management",
+          items: [
+            { title: "Timetables", url: "/dashboard/attendance/timetables" },
+            { title: "Timetable Days", url: "/dashboard/attendance/timetable-days" },
+            { title: "Timetable Shift Rules", url: "/dashboard/attendance/timetable-shift-rules" },
+            { title: "Timetable Holiday Rules", url: "/dashboard/attendance/timetable-holiday-rules" },
+            { title: "Timetable Attendance Rules", url: "/dashboard/attendance/timetable-attendance-rules" },
+            { title: "Timetable Rotations and Rules", url: "/dashboard/attendance/timetable-rotations" },
+            { title: "Employee Timetables", url: "/dashboard/attendance/employee-timetables" },
+            { title: "Generated Schedules", url: "/dashboard/attendance/timetable-generated-schedules" },
+          ],
+        },
+        {
+          title: "Attendance Operations",
+          items: [
+            { title: "Mobile Punch Review", url: "/dashboard/attendance/mobile-punches" },
+            { title: "Daily Summaries", url: "/dashboard/attendance/daily-summaries" },
+            { title: "Recalculation Jobs", url: "/dashboard/attendance/recalculation-jobs" },
+            { title: "Unmatched Logs", url: "/dashboard/attendance/unmatched-logs" },
+            { title: "Device Sync Logs", url: "/dashboard/attendance/device-sync-logs" },
+          ],
+        },
+        {
+          title: "Employee Attendance",
+          items: [
+            { title: "Today", url: "/dashboard/attendance/today" },
+            { title: "Punch Action", url: "/dashboard/attendance/punch-action" },
+            { title: "Punch History", url: "/dashboard/attendance/punch-history" },
+            { title: "Attendance History", url: "/dashboard/attendance/attendance-history" },
+            { title: "Schedule Preview", url: "/dashboard/attendance/schedule-preview" },
+          ],
         },
       ],
     },
@@ -151,6 +214,22 @@ const adminData = {
       icon: IUsers,
       items: [
         {
+          title: "Doors",
+          url: "/dashboard/attendance/doors",
+        },
+        {
+          title: "Templates",
+          url: "/dashboard/attendance/templates",
+        },
+        {
+          title: "Organization",
+          url: "/dashboard/attendance/organizations",
+        },
+        {
+          title: "Groups",
+          url: "/dashboard/attendance/groups",
+        },
+        {
           title: "Roles",
           url: "/dashboard/roles",
         },
@@ -186,7 +265,45 @@ const adminSearchIndex = [
   { title: "Employees / Register", url: "/dashboard/employees/register", section: "Employees", keywords: ["employee", "onboard"] },
   { title: "Employees / Offboarding", url: "/dashboard/employees/offboarding", section: "Employees", keywords: ["employee", "exit"] },
   { title: "Employees / Onboarding", url: "/dashboard/employees/onboarding", section: "Employees", keywords: ["employee", "workflow", "request", "approve"] },
-  { title: "Employees / Attendance", url: "/dashboard/employees/attendance", section: "Employees", keywords: ["attendance", "timesheet"] },
+  { title: "Attendance / Attendance Setup / Settings", url: "/dashboard/attendance/settings", section: "Attendance Setup", keywords: ["attendance", "settings"] },
+  { title: "Attendance / Attendance Setup / Policies", url: "/dashboard/attendance/policies", section: "Attendance Setup", keywords: ["attendance", "policies"] },
+  { title: "Attendance / Attendance Setup / Holiday Groups", url: "/dashboard/attendance/holiday-groups", section: "Attendance Setup", keywords: ["attendance", "holiday groups", "calendar"] },
+  { title: "Attendance / Attendance Setup / Holidays", url: "/dashboard/attendance/holidays", section: "Attendance Setup", keywords: ["attendance", "holidays"] },
+  { title: "Attendance / Attendance Setup / Devices", url: "/dashboard/attendance/devices", section: "Attendance Setup", keywords: ["attendance", "devices"] },
+  { title: "Attendance / Attendance Setup / Geofences", url: "/dashboard/attendance/geofences", section: "Attendance Setup", keywords: ["attendance", "geofence", "gps", "location"] },
+  { title: "Attendance / Attendance Setup / Wi-Fi Networks", url: "/dashboard/attendance/wifi-networks", section: "Attendance Setup", keywords: ["attendance", "wifi", "network", "ssid"] },
+  { title: "Attendance / Attendance Setup / Checkpoints", url: "/dashboard/attendance/checkpoints", section: "Attendance Setup", keywords: ["attendance", "checkpoints"] },
+  { title: "Attendance / Shift Management / Shifts", url: "/dashboard/attendance/shifts", section: "Shift Management", keywords: ["attendance", "shift", "schedule"] },
+  { title: "Attendance / Shift Management / Shift Breaks", url: "/dashboard/attendance/shift-breaks", section: "Shift Management", keywords: ["attendance", "shift", "break"] },
+  { title: "Attendance / Shift Management / Shift Attendance Rules", url: "/dashboard/attendance/shift-attendance-rules", section: "Shift Management", keywords: ["attendance", "shift", "rules", "lateness"] },
+  { title: "Attendance / Shift Management / Shift Overtime Rules", url: "/dashboard/attendance/shift-overtime-rules", section: "Shift Management", keywords: ["attendance", "shift", "overtime"] },
+  { title: "Attendance / Shift Management / Shift Assignments", url: "/dashboard/attendance/shift-assignments", section: "Shift Management", keywords: ["attendance", "shift", "assignments"] },
+  { title: "Attendance / Shift Management / Shift Schedules", url: "/dashboard/attendance/shift-schedules", section: "Shift Management", keywords: ["attendance", "shift", "schedules"] },
+  { title: "Attendance / Shift Management / Shift Templates", url: "/dashboard/attendance/shift-templates", section: "Shift Management", keywords: ["attendance", "shift", "templates"] },
+  { title: "Attendance / Shift Management / Rotation Groups and Rules", url: "/dashboard/attendance/shift-rotation-groups", section: "Shift Management", keywords: ["attendance", "shift", "rotation"] },
+  { title: "Attendance / Shift Management / Shift Change Requests", url: "/dashboard/attendance/shift-change-requests", section: "Shift Management", keywords: ["attendance", "shift", "change", "requests"] },
+  { title: "Attendance / Timetable Management / Timetables", url: "/dashboard/attendance/timetables", section: "Timetable Management", keywords: ["attendance", "timetable"] },
+  { title: "Attendance / Timetable Management / Timetable Days", url: "/dashboard/attendance/timetable-days", section: "Timetable Management", keywords: ["attendance", "timetable", "days"] },
+  { title: "Attendance / Timetable Management / Timetable Shift Rules", url: "/dashboard/attendance/timetable-shift-rules", section: "Timetable Management", keywords: ["attendance", "timetable", "shift rules"] },
+  { title: "Attendance / Timetable Management / Timetable Holiday Rules", url: "/dashboard/attendance/timetable-holiday-rules", section: "Timetable Management", keywords: ["attendance", "timetable", "holiday rules"] },
+  { title: "Attendance / Timetable Management / Timetable Attendance Rules", url: "/dashboard/attendance/timetable-attendance-rules", section: "Timetable Management", keywords: ["attendance", "timetable", "attendance rules"] },
+  { title: "Attendance / Timetable Management / Timetable Rotations and Rules", url: "/dashboard/attendance/timetable-rotations", section: "Timetable Management", keywords: ["attendance", "timetable", "rotation"] },
+  { title: "Attendance / Timetable Management / Employee Timetables", url: "/dashboard/attendance/employee-timetables", section: "Timetable Management", keywords: ["attendance", "employee", "timetable"] },
+  { title: "Attendance / Timetable Management / Generated Schedules", url: "/dashboard/attendance/timetable-generated-schedules", section: "Timetable Management", keywords: ["attendance", "generated", "schedules"] },
+  { title: "Attendance / Attendance Operations / Mobile Punch Review", url: "/dashboard/attendance/mobile-punches", section: "Attendance Operations", keywords: ["attendance", "mobile", "punches", "check in", "check out"] },
+  { title: "Attendance / Attendance Operations / Daily Summaries", url: "/dashboard/attendance/daily-summaries", section: "Attendance Operations", keywords: ["attendance", "daily", "summaries", "processed"] },
+  { title: "Attendance / Attendance Operations / Recalculation Jobs", url: "/dashboard/attendance/recalculation-jobs", section: "Attendance Operations", keywords: ["attendance", "recalculation", "jobs", "processing"] },
+  { title: "Attendance / Attendance Operations / Unmatched Logs", url: "/dashboard/attendance/unmatched-logs", section: "Attendance Operations", keywords: ["attendance", "unmatched", "logs", "processing"] },
+  { title: "Attendance / Attendance Operations / Device Sync Logs", url: "/dashboard/attendance/device-sync-logs", section: "Attendance Operations", keywords: ["attendance", "sync logs"] },
+  { title: "Attendance / Employee Attendance / Today", url: "/dashboard/attendance/today", section: "Employee Attendance", keywords: ["attendance", "today", "state"] },
+  { title: "Attendance / Employee Attendance / Punch Action", url: "/dashboard/attendance/punch-action", section: "Employee Attendance", keywords: ["attendance", "punch", "check in", "check out"] },
+  { title: "Attendance / Employee Attendance / Punch History", url: "/dashboard/attendance/punch-history", section: "Employee Attendance", keywords: ["attendance", "punch history"] },
+  { title: "Attendance / Employee Attendance / Attendance History", url: "/dashboard/attendance/attendance-history", section: "Employee Attendance", keywords: ["attendance", "history"] },
+  { title: "Attendance / Employee Attendance / Schedule Preview", url: "/dashboard/attendance/schedule-preview", section: "Employee Attendance", keywords: ["attendance", "schedule preview"] },
+  { title: "Access Control / Doors", url: "/dashboard/attendance/doors", section: "Access Control", keywords: ["attendance", "doors", "access"] },
+  { title: "Access Control / Templates", url: "/dashboard/attendance/templates", section: "Access Control", keywords: ["attendance", "templates", "schedule"] },
+  { title: "Access Control / Organization", url: "/dashboard/attendance/organizations", section: "Access Control", keywords: ["attendance", "organization", "access"] },
+  { title: "Access Control / Groups", url: "/dashboard/attendance/groups", section: "Access Control", keywords: ["attendance", "groups", "access"] },
   { title: "Leave Management / Leave Types", url: "/dashboard/leave-management/types", section: "Leave", keywords: ["leave", "types", "vacation"] },
   { title: "Leave Management / Leave Requests", url: "/dashboard/leave-management/requests", section: "Leave", keywords: ["leave", "request", "approval"] },
   { title: "Leave Management / Leave Balances", url: "/dashboard/leave-management/balances", section: "Leave", keywords: ["leave", "balance", "quota"] },
@@ -226,7 +343,7 @@ const employeeData = {
     {
       title: "My Leave",
       icon: ILeave,
-      url: "/dashboard/leave-management/balances",
+      url: "/dashboard/me/leave/balances",
     },
     {
       title: "My Payroll",
@@ -236,7 +353,7 @@ const employeeData = {
     {
       title: "Office Holidays",
       icon: IHolidays,
-      url: "/dashboard/leave-management/holidays",
+      url: "/dashboard/me/leave/holidays",
     },
     {
       title: "My Promotion",
@@ -273,9 +390,9 @@ const employeeSearchIndex = [
   { title: "Registration", url: "/dashboard/employees/register", section: "Employees", keywords: ["employee", "register", "onboard"] },
   { title: "My Info", url: "/dashboard/me/profile", section: "Employees", keywords: ["profile", "my info", "account"] },
   { title: "My Attendance", url: "/dashboard/employees/attendance", section: "Employees", keywords: ["attendance", "timesheet"] },
-  { title: "My Leave", url: "/dashboard/leave-management/balances", section: "Leave", keywords: ["leave", "balance", "quota"] },
+  { title: "My Leave", url: "/dashboard/me/leave/balances", section: "Leave", keywords: ["leave", "balance", "quota"] },
   { title: "My Payroll", url: "/dashboard/operations/payroll", section: "Operations", keywords: ["salary", "payments", "payroll"] },
-  { title: "Office Holidays", url: "/dashboard/leave-management/holidays", section: "Leave", keywords: ["leave", "holiday", "calendar", "office"] },
+  { title: "Office Holidays", url: "/dashboard/me/leave/holidays", section: "Leave", keywords: ["leave", "holiday", "calendar", "office"] },
   { title: "My Promotion", url: "/dashboard/operations/promotion", section: "Operations", keywords: ["career", "upgrade"] },
   { title: "Offboarding", url: "/dashboard/employees/offboarding", section: "Employees", keywords: ["employee", "exit"] },
   { title: "Settings", url: "/dashboard/settings", section: "General", keywords: ["preferences", "account"] },
@@ -296,6 +413,20 @@ const ADMIN_ROUTE_PERMISSIONS: Record<string, string[]> = {
   "/dashboard/employees/register": ["employees:create"],
   "/dashboard/employees/offboarding": ["offboarding_requests:read", "offboarding_workflows:read"],
   "/dashboard/employees/onboarding": ["onboarding_requests:read", "onboarding_workflows:read"],
+  "/dashboard/attendance/settings": ["attendance_settings:read"],
+  "/dashboard/attendance/policies": ["attendance_policies:read"],
+  "/dashboard/attendance/devices": ["attendance_devices:read"],
+  "/dashboard/attendance/checkpoints": ["attendance_checkpoints:read"],
+  "/dashboard/attendance/holiday-groups": ["attendance_holiday_groups:read"],
+  "/dashboard/attendance/geofences": ["attendance_geofences:read"],
+  "/dashboard/attendance/wifi-networks": ["attendance_wifi_networks:read"],
+  "/dashboard/attendance/mobile-punches": ["attendance_mobile_punches:read"],
+  "/dashboard/attendance/doors": ["access_doors:read"],
+  "/dashboard/attendance/templates": ["access_schedule_templates:read"],
+  "/dashboard/attendance/organizations": ["access_organizations:read"],
+  "/dashboard/attendance/groups": ["access_groups:read"],
+  "/dashboard/attendance/holidays": ["attendance_holidays:read"],
+  "/dashboard/attendance/device-sync-logs": ["attendance_device_sync_logs:read"],
   "/dashboard/employees/attendance": [
     "attendance_devices:read",
     "attendance_settings:read",
@@ -350,7 +481,23 @@ function filterAdminNavByPermissions(navMain: typeof adminData.navMain, normaliz
       if ("url" in item) {
         return canAccessAdminRoute(item.url ?? "", normalizedPermissions) ? item : null
       }
-      const filteredItems = item.items.filter((subItem) => canAccessAdminRoute(subItem.url, normalizedPermissions))
+      const filteredItems = item.items
+        .map((subItem) => {
+          if ("url" in subItem) {
+            return canAccessAdminRoute(subItem.url, normalizedPermissions) ? subItem : null
+          }
+          const nestedItems = subItem.items.filter((nestedItem) =>
+            canAccessAdminRoute(nestedItem.url, normalizedPermissions)
+          )
+          if (nestedItems.length === 0) {
+            return null
+          }
+          return {
+            ...subItem,
+            items: nestedItems,
+          }
+        })
+        .filter((subItem): subItem is NonNullable<typeof subItem> => subItem !== null)
       if (filteredItems.length === 0) {
         return null
       }
@@ -433,6 +580,7 @@ export function AppSidebar({
           }}
         />
       </SidebarFooter>
+      <SidebarRail />
     </Sidebar>
   )
 }

@@ -21,11 +21,11 @@ export function SiteHeader({
   companyName,
 }: SiteHeaderProps) {
   return (
-    <header className="flex h-(--header-height) shrink-0 items-center gap-2 border-b transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height)">
-      <div className="flex w-full items-center gap-2 px-4 lg:px-6">
+    <header className="flex h-(--header-height) shrink-0 items-center gap-1.5 border-b transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height)">
+      <div className="flex w-full items-center gap-1.5 px-3 lg:px-4">
         <SidebarTrigger className="-ml-1" />
-        <Separator orientation="vertical" className="mx-1 h-4 data-vertical:self-auto" />
-        <div className="hidden items-center gap-2 text-xs text-muted-foreground lg:flex">
+        <Separator orientation="vertical" className="mx-1 h-3.5 data-vertical:self-auto" />
+        <div className="hidden items-center gap-1.5 text-[11px] text-muted-foreground lg:flex">
           <span>
             Admin:{" "}
             <span className="font-medium text-foreground">
@@ -41,7 +41,7 @@ export function SiteHeader({
           </span>
         </div>
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-1.5">
           <ThemeTogglerButton
             variant="outline"
             size="icon-sm"

@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { toast } from "sonner"
+import { showErrorAlert } from "@/lib/error-alert"
 import { showSuccessAlert } from "@/lib/success-alert"
 
 import { Badge } from "@/components/ui/badge"
@@ -278,6 +279,17 @@ function permissionLabel(permission: AdminRecord) {
   return "Unnamed permission"
 }
 
+function permissionScope(name: string) {
+  const normalized = name.trim()
+  if (!normalized) {
+    return "General"
+  }
+  if (!normalized.includes(":")) {
+    return "General"
+  }
+  return prettifyKey(normalized.split(":")[0] ?? "general")
+}
+
 function rolePermissionNamesFromRecord(row: AdminRecord): string[] {
   const source = row.permissions
   if (!Array.isArray(source)) {
@@ -379,7 +391,9 @@ export function DataTable({
     label: string
   } | null>(null)
   const [editingEntityForm, setEditingEntityForm] = React.useState<BasicEntityForm>(EMPTY_ENTITY_FORM)
+  const [initialEditingEntityForm, setInitialEditingEntityForm] = React.useState<BasicEntityForm>(EMPTY_ENTITY_FORM)
   const [editingRolePermissionNames, setEditingRolePermissionNames] = React.useState<string[]>([])
+  const [initialEditingRolePermissionNames, setInitialEditingRolePermissionNames] = React.useState<string[]>([])
 
   const columns = React.useMemo(() => {
     const baseColumns = getVisibleColumns(rows)
@@ -432,6 +446,39 @@ export function DataTable({
     },
     [permissionOptions]
   )
+
+  const isEditingEntityDirty = React.useMemo(() => {
+    if (!editingEntity) {
+      return false
+    }
+
+    const formChanged =
+      editingEntityForm.name !== initialEditingEntityForm.name ||
+      editingEntityForm.display_name !== initialEditingEntityForm.display_name ||
+      editingEntityForm.description !== initialEditingEntityForm.description
+
+    if (editingEntity.resource !== "roles") {
+      return formChanged
+    }
+
+    const currentPermissions = [...editingRolePermissionNames].sort()
+    const initialPermissions = [...initialEditingRolePermissionNames].sort()
+    const permissionsChanged =
+      currentPermissions.length !== initialPermissions.length ||
+      currentPermissions.some((value, index) => value !== initialPermissions[index])
+
+    return formChanged || permissionsChanged
+  }, [
+    editingEntity,
+    editingEntityForm.description,
+    editingEntityForm.display_name,
+    editingEntityForm.name,
+    editingRolePermissionNames,
+    initialEditingEntityForm.description,
+    initialEditingEntityForm.display_name,
+    initialEditingEntityForm.name,
+    initialEditingRolePermissionNames,
+  ])
 
   React.useEffect(() => {
     setSearchInput(usersQuery.search)
@@ -595,7 +642,9 @@ export function DataTable({
           : {}),
       })
       setEditingEntity(null)
+      setInitialEditingEntityForm(EMPTY_ENTITY_FORM)
       setEditingRolePermissionNames([])
+      setInitialEditingRolePermissionNames([])
       showSuccessAlert(`${RESOURCE_LABELS[editingEntity.resource]} updated.`)
     } catch (errorObject) {
       const message = errorObject instanceof Error ? errorObject.message : "Update failed."
@@ -647,10 +696,12 @@ export function DataTable({
     ? usersQuery.page < usersTotalPages
     : rows.length >= usersQuery.limit
   const canCreateResource = true
+  const isAccessControlResource =
+    activeResource === "roles" || activeResource === "permissions"
 
   return (
-    <div className="w-full flex-col justify-start gap-6">
-      <div className="flex flex-col gap-3 px-4 lg:px-6">
+    <div className="w-full flex-col justify-start gap-4">
+      <div className="flex flex-col gap-2 px-3 lg:px-4">
         <div className="flex items-center justify-end gap-3">
           {canCreateResource ? (
             <Drawer>
@@ -818,6 +869,38 @@ export function DataTable({
                           </button>
                         ))}
                       </div>
+                    </div>
+                  </>
+                ) : null}
+
+                {activeResource === "permissions" ? (
+                  <>
+                    <div className="space-y-1">
+                      <Label>Permission Name</Label>
+                      <Input
+                        value={roleForm.name}
+                        onChange={(event) =>
+                          setRoleForm((prev) => ({ ...prev, name: event.target.value }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Display Name</Label>
+                      <Input
+                        value={roleForm.display_name}
+                        onChange={(event) =>
+                          setRoleForm((prev) => ({ ...prev, display_name: event.target.value }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1 md:col-span-2">
+                      <Label>Description</Label>
+                      <Input
+                        value={roleForm.description}
+                        onChange={(event) =>
+                          setRoleForm((prev) => ({ ...prev, description: event.target.value }))
+                        }
+                      />
                     </div>
                   </>
                 ) : null}
@@ -990,177 +1073,333 @@ export function DataTable({
         ) : null}
       </div>
 
-      <div className="relative flex flex-col gap-4 overflow-auto px-4 lg:px-6">
-          <div className="rounded-lg border">
-            <Table>
-              <TableHeader
-                className="sticky top-0 z-10"
-                style={{ backgroundColor: "var(--table-header-accent-bg)" }}
-              >
-                <TableRow>
-                  {columns.map((column) => (
-                    <TableHead key={column} style={{ color: "var(--table-header-accent)" }}>
-                      {prettifyKey(column)}
-                    </TableHead>
-                  ))}
-                  <TableHead className="w-16 text-right" style={{ color: "var(--table-header-accent)" }}>
-                    Actions
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {!token ? (
-                  <TableRow>
-                    <TableCell colSpan={columns.length + 1} className="h-24 text-center text-muted-foreground">
-                      Sign in to load data.
-                    </TableCell>
-                  </TableRow>
-                ) : loading ? (
-                  <TableRow>
-                    <TableCell colSpan={columns.length + 1} className="h-24 text-center text-muted-foreground">
-                      Loading {RESOURCE_LABELS[activeResource].toLowerCase()}...
-                    </TableCell>
-                  </TableRow>
-                ) : error ? (
-                  <TableRow>
-                    <TableCell colSpan={columns.length + 1} className="h-24 text-center text-destructive">
-                      {error}
-                    </TableCell>
-                  </TableRow>
-                ) : rows.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={columns.length + 1} className="h-24 text-center text-muted-foreground">
-                      No records found.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  rows.map((row, index) => {
-                    const rowId = getRowId(row, index + 1)
-                    const rowLabel = stringifyValue(row.name ?? row.email ?? rowId)
+      <div className="relative flex flex-col gap-3 overflow-auto px-3 lg:px-4">
+          {isAccessControlResource ? (
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {!token ? (
+                <div className="rounded-lg border border-dashed border-slate-300 bg-white/80 p-6 text-sm text-muted-foreground">
+                  Sign in to load data.
+                </div>
+              ) : loading ? (
+                <div className="rounded-lg border border-dashed border-slate-300 bg-white/80 p-6 text-sm text-muted-foreground">
+                  Loading {RESOURCE_LABELS[activeResource].toLowerCase()}...
+                </div>
+              ) : error ? (
+                <div className="rounded-lg border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700">
+                  {error}
+                </div>
+              ) : rows.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-slate-300 bg-white/80 p-6 text-sm text-muted-foreground">
+                  No records found.
+                </div>
+              ) : (
+                rows.map((row, index) => {
+                  const rowId = getRowId(row, index + 1)
+                  const rowLabel = stringifyValue(row.name ?? row.display_name ?? row.email ?? rowId)
+                  const permissionNames =
+                    activeResource === "roles" ? rolePermissionNamesFromRecord(row) : []
+                  const permissionName =
+                    activeResource === "permissions"
+                      ? asPermissionName(row.name) ?? asPermissionName(row.display_name) ?? ""
+                      : ""
+                  const openRowEditor = () => {
+                    const nextEntityForm = toEntityForm(row)
+                    const nextRolePermissions =
+                      activeResource === "roles" ? rolePermissionNamesFromRecord(row) : []
+                    setEditingEntity({ resource: activeResource, id: rowId, label: rowLabel })
+                    setEditingEntityForm(nextEntityForm)
+                    setInitialEditingEntityForm(nextEntityForm)
+                    setEditingRolePermissionNames(nextRolePermissions)
+                    setInitialEditingRolePermissionNames(nextRolePermissions)
+                  }
 
-                    return (
-                      <TableRow key={`${rowId}`}>
-                        {columns.map((column) => (
-                          <TableCell key={`${rowId}-${column}`}>
-                            <span className="block max-w-[24rem] truncate">{stringifyValue(row[column])}</span>
-                          </TableCell>
-                        ))}
-                        <TableCell className="text-right">
+                  return (
+                    <div
+                      key={`${rowId}`}
+                      role="button"
+                      tabIndex={0}
+                      onClick={openRowEditor}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault()
+                          openRowEditor()
+                        }
+                      }}
+                      className="group rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-sm transition-colors duration-200 hover:border-slate-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-slate-300"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <h3 className="text-[1.05rem] font-semibold leading-6 text-slate-900">
+                            {activeResource === "roles" ? roleLabel(row) : permissionLabel(row)}
+                          </h3>
+                          <p className="mt-1 truncate text-xs font-medium tracking-[0.18em] text-slate-500">
+                            {activeResource === "roles"
+                              ? (typeof row.name === "string" && row.name.trim()) || "ROLE"
+                              : permissionName || "PERMISSION"}
+                          </p>
+                        </div>
+
+                        <div onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
                           <DropdownMenu>
                             <DropdownMenuTrigger
-                              render={<Button variant="ghost" size="icon" className="size-8" />}
+                              render={<Button variant="ghost" size="icon" className="size-8 rounded-full" />}
                             >
                               <EllipsisVerticalIcon />
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-52">
+                            <DropdownMenuItem
+                              onClick={() => {
+                                void navigator.clipboard
+                                  .writeText(JSON.stringify(row, null, 2))
+                                  .then(() => {
+                                    showSuccessAlert("Record details copied.")
+                                  })
+                                  .catch(() => {
+                                    showErrorAlert("Clipboard access was denied.")
+                                  })
+                              }}
+                            >
+                              <CopyIcon />
+                              Copy Details
+                            </DropdownMenuItem>
+
+                            {isEditableResource(activeResource) ? (
                               <DropdownMenuItem
                                 onClick={() => {
-                                  void navigator.clipboard.writeText(JSON.stringify(row, null, 2))
-                                  showSuccessAlert("Record details copied.")
+                                  openRowEditor()
                                 }}
                               >
-                                <CopyIcon />
-                                Copy Details
+                                <PencilIcon />
+                                Open Details
                               </DropdownMenuItem>
+                            ) : null}
 
-                              {activeResource === "users" ? (
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setEditingUser({ id: rowId, label: rowLabel })
-                                    setEditUserForm(toUserForm(row))
-                                  }}
-                                >
-                                  <PencilIcon />
-                                  Edit User
-                                </DropdownMenuItem>
-                              ) : null}
-
-                              {activeResource === "users" ? (
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setTargetPasswordUser({ id: rowId, label: rowLabel })
-                                    setTargetPassword("")
-                                  }}
-                                >
-                                  <KeyRoundIcon />
-                                  Set Password
-                                </DropdownMenuItem>
-                              ) : null}
-
-                              {(activeResource === "roles" || activeResource === "permissions") &&
-                              isEditableResource(activeResource) ? (
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setEditingEntity({ resource: activeResource, id: rowId, label: rowLabel })
-                                    setEditingEntityForm(toEntityForm(row))
-                                    if (activeResource === "roles") {
-                                      setEditingRolePermissionNames(rolePermissionNamesFromRecord(row))
-                                    } else {
-                                      setEditingRolePermissionNames([])
-                                    }
-                                  }}
-                                >
-                                  <PencilIcon />
-                                  Edit Record
-                                </DropdownMenuItem>
-                              ) : null}
-
-                              {isEditableResource(activeResource) ? <DropdownMenuSeparator /> : null}
-                              {isEditableResource(activeResource) ? (
-                                <DropdownMenuItem
-                                  variant="destructive"
-                                  onClick={() => void handleDelete(rowId)}
-                                >
-                                  <Trash2Icon />
-                                  Delete
-                                </DropdownMenuItem>
-                              ) : null}
+                            {isEditableResource(activeResource) ? <DropdownMenuSeparator /> : null}
+                            {isEditableResource(activeResource) ? (
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  setEditingEntity({ resource: activeResource, id: rowId, label: rowLabel })
+                                  setEditingEntityForm(toEntityForm(row))
+                                  if (activeResource === "roles") {
+                                    setEditingRolePermissionNames(rolePermissionNamesFromRecord(row))
+                                  } else {
+                                    setEditingRolePermissionNames([])
+                                  }
+                                }}
+                              >
+                                <PencilIcon />
+                                Edit Record
+                              </DropdownMenuItem>
+                            ) : null}
+                            {isEditableResource(activeResource) ? (
+                              <DropdownMenuItem
+                                variant="destructive"
+                                onClick={() => void handleDelete(rowId)}
+                              >
+                                <Trash2Icon />
+                                Delete
+                              </DropdownMenuItem>
+                            ) : null}
                             </DropdownMenuContent>
                           </DropdownMenu>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                        </div>
+                      </div>
 
-          <div className="flex items-center justify-between px-1 text-sm text-muted-foreground">
-            <div>
-              {activeResource === "users"
-                ? `${usersTotal ?? rows.length} users found`
-                : `${rows.length} ${RESOURCE_LABELS[activeResource].toLowerCase()} loaded`}
-            </div>
-            <Badge variant="outline">{activeResource}</Badge>
-          </div>
-
-          {activeResource === "users" ? (
-            <div className="flex items-center justify-between px-1 text-sm text-muted-foreground">
-              <div>
-                Page {usersQuery.page}
-                {usersTotalPages ? ` of ${usersTotalPages}` : ""}
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={!canPrevPage || loading}
-                  onClick={() => onUsersQueryChange({ page: usersQuery.page - 1 })}
-                >
-                  Previous
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={!canNextPage || loading}
-                  onClick={() => onUsersQueryChange({ page: usersQuery.page + 1 })}
-                >
-                  Next
-                </Button>
-              </div>
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {activeResource === "roles" ? (
+                          <>
+                            <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-700">
+                              {permissionNames.length} permissions
+                            </Badge>
+                            <Badge variant="secondary" className="bg-slate-100 text-slate-700">
+                              {typeof row.is_system_generated === "boolean" && row.is_system_generated ? "System role" : "Custom role"}
+                            </Badge>
+                          </>
+                        ) : (
+                          <>
+                            <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-700">
+                              {permissionScope(permissionName)}
+                            </Badge>
+                            <Badge variant="secondary" className="bg-slate-100 text-slate-700">
+                              {typeof row.is_system_generated === "boolean" && row.is_system_generated ? "System permission" : "Custom permission"}
+                            </Badge>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })
+              )}
             </div>
           ) : null}
+
+          {!isAccessControlResource ? (
+            <>
+              <div className="rounded-lg border">
+                <Table>
+                  <TableHeader
+                    className="sticky top-0 z-10"
+                    style={{ backgroundColor: "var(--table-header-accent-bg)" }}
+                  >
+                    <TableRow>
+                      {columns.map((column) => (
+                        <TableHead key={column} style={{ color: "var(--table-header-accent)" }}>
+                          {prettifyKey(column)}
+                        </TableHead>
+                      ))}
+                      <TableHead className="w-16 text-right" style={{ color: "var(--table-header-accent)" }}>
+                        Actions
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {!token ? (
+                      <TableRow>
+                        <TableCell colSpan={columns.length + 1} className="h-24 text-center text-muted-foreground">
+                          Sign in to load data.
+                        </TableCell>
+                      </TableRow>
+                    ) : loading ? (
+                      <TableRow>
+                        <TableCell colSpan={columns.length + 1} className="h-24 text-center text-muted-foreground">
+                          Loading {RESOURCE_LABELS[activeResource].toLowerCase()}...
+                        </TableCell>
+                      </TableRow>
+                    ) : error ? (
+                      <TableRow>
+                        <TableCell colSpan={columns.length + 1} className="h-24 text-center text-destructive">
+                          {error}
+                        </TableCell>
+                      </TableRow>
+                    ) : rows.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={columns.length + 1} className="h-24 text-center text-muted-foreground">
+                          No records found.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      rows.map((row, index) => {
+                        const rowId = getRowId(row, index + 1)
+                        const rowLabel = stringifyValue(row.name ?? row.email ?? rowId)
+
+                        return (
+                          <TableRow key={`${rowId}`}>
+                            {columns.map((column) => (
+                              <TableCell key={`${rowId}-${column}`}>
+                                <span className="block max-w-[24rem] truncate">{stringifyValue(row[column])}</span>
+                              </TableCell>
+                            ))}
+                            <TableCell className="text-right">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger
+                                  render={<Button variant="ghost" size="icon" className="size-8" />}
+                                >
+                                  <EllipsisVerticalIcon />
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-52">
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      void navigator.clipboard
+                                        .writeText(JSON.stringify(row, null, 2))
+                                        .then(() => {
+                                          showSuccessAlert("Record details copied.")
+                                        })
+                                        .catch(() => {
+                                          showErrorAlert("Clipboard access was denied.")
+                                        })
+                                    }}
+                                  >
+                                    <CopyIcon />
+                                    Copy Details
+                                  </DropdownMenuItem>
+
+                                  {activeResource === "users" ? (
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        setEditingUser({ id: rowId, label: rowLabel })
+                                        setEditUserForm(toUserForm(row))
+                                      }}
+                                    >
+                                      <PencilIcon />
+                                      Edit User
+                                    </DropdownMenuItem>
+                                  ) : null}
+
+                                  {activeResource === "users" ? (
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        setTargetPasswordUser({ id: rowId, label: rowLabel })
+                                        setTargetPassword("")
+                                      }}
+                                    >
+                                      <KeyRoundIcon />
+                                      Set Password
+                                    </DropdownMenuItem>
+                                  ) : null}
+
+                                  {isEditableResource(activeResource) ? <DropdownMenuSeparator /> : null}
+                                  {isEditableResource(activeResource) ? (
+                                    <DropdownMenuItem
+                                      variant="destructive"
+                                      onClick={() => void handleDelete(rowId)}
+                                    >
+                                      <Trash2Icon />
+                                      Delete
+                                    </DropdownMenuItem>
+                                  ) : null}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+
+              <div className="flex items-center justify-between px-1 text-sm text-muted-foreground">
+                <div>
+                  {activeResource === "users"
+                    ? `${usersTotal ?? rows.length} users found`
+                    : `${rows.length} ${RESOURCE_LABELS[activeResource].toLowerCase()} loaded`}
+                </div>
+                <Badge variant="outline">{activeResource}</Badge>
+              </div>
+
+              {activeResource === "users" ? (
+                <div className="flex items-center justify-between px-1 text-sm text-muted-foreground">
+                  <div>
+                    Page {usersQuery.page}
+                    {usersTotalPages ? ` of ${usersTotalPages}` : ""}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={!canPrevPage || loading}
+                      onClick={() => onUsersQueryChange({ page: usersQuery.page - 1 })}
+                    >
+                      Previous
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={!canNextPage || loading}
+                      onClick={() => onUsersQueryChange({ page: usersQuery.page + 1 })}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <div className="flex items-center justify-between px-1 text-sm text-muted-foreground">
+              <div>{rows.length} {RESOURCE_LABELS[activeResource].toLowerCase()} loaded</div>
+              <Badge variant="outline">{activeResource}</Badge>
+            </div>
+          )}
       </div>
 
       <Drawer open={Boolean(editingUser)} onOpenChange={(open) => !open && setEditingUser(null)}>
@@ -1302,14 +1541,25 @@ export function DataTable({
         onOpenChange={(open) => {
           if (!open) {
             setEditingEntity(null)
+            setInitialEditingEntityForm(EMPTY_ENTITY_FORM)
             setEditingRolePermissionNames([])
+            setInitialEditingRolePermissionNames([])
           }
         }}
       >
         <DrawerContent>
-          <DrawerHeader>
-            <DrawerTitle>Edit {editingEntity?.label ?? "record"}</DrawerTitle>
-            <DrawerDescription>Update the selected record details.</DrawerDescription>
+          <DrawerHeader className="md:flex-row md:items-start md:justify-between md:text-left">
+            <div className="space-y-1">
+              <DrawerTitle>Edit {editingEntity?.label ?? "record"}</DrawerTitle>
+              <DrawerDescription>Update the selected record details.</DrawerDescription>
+            </div>
+            <Button
+              onClick={handleSaveEntityEdit}
+              disabled={loading || !editingEntity || !isEditingEntityDirty}
+              className="mt-2 md:mt-0"
+            >
+              {isEditingEntityDirty ? "Save Changes" : "Saved"}
+            </Button>
           </DrawerHeader>
           <div className="grid gap-3 px-4 pb-2 md:grid-cols-2">
             <div className="space-y-1">
@@ -1341,8 +1591,25 @@ export function DataTable({
             </div>
             {editingEntity?.resource === "roles" ? (
               <div className="space-y-2 md:col-span-2">
-                <Label>Assigned Permissions</Label>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <Label>Assigned Permissions</Label>
+                  <span
+                    className={cn(
+                      "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium",
+                      isEditingEntityDirty
+                        ? "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
+                        : "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+                    )}
+                  >
+                    {isEditingEntityDirty ? "Not saved yet" : "All changes saved"}
+                  </span>
+                </div>
+                <p className="text-xs leading-5 text-slate-500">
+                  {isEditingEntityDirty
+                    ? "Permission changes are only local for now. Click Save Changes to apply them."
+                    : "The permissions below match what is currently saved for this role."}
+                </p>
+                <div className="grid max-h-80 gap-2 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50/70 p-3 md:grid-cols-2">
                   {permissionOptions.map((permission) => (
                     <button
                       key={permission.name}
@@ -1355,13 +1622,26 @@ export function DataTable({
                         )
                       }
                       className={cn(
-                        "rounded-md border px-2 py-1 text-sm",
+                        "flex items-start justify-between gap-3 rounded-lg border px-3 py-2 text-left text-sm transition-colors",
                         editingRolePermissionNames.includes(permission.name)
-                          ? "border-primary bg-primary text-primary-foreground"
-                          : "border-border bg-background"
+                          ? "border-blue-200 bg-blue-50 text-slate-900"
+                          : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
                       )}
                     >
-                      {permission.label}
+                      <span className="min-w-0">
+                        <span className="block truncate font-medium">{permission.label}</span>
+                        <span className="mt-0.5 block truncate text-xs text-slate-500">{permission.name}</span>
+                      </span>
+                      <span
+                        className={cn(
+                          "mt-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full border px-1.5 text-[11px] font-medium",
+                          editingRolePermissionNames.includes(permission.name)
+                            ? "border-blue-200 bg-white text-blue-700"
+                            : "border-slate-200 bg-slate-50 text-slate-500"
+                        )}
+                      >
+                        {editingRolePermissionNames.includes(permission.name) ? "On" : "Off"}
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -1370,9 +1650,6 @@ export function DataTable({
           </div>
           <Separator className="my-1" />
           <DrawerFooter>
-            <Button onClick={handleSaveEntityEdit} disabled={loading || !editingEntity}>
-              Save Changes
-            </Button>
             <DrawerClose asChild>
               <Button variant="outline">Cancel</Button>
             </DrawerClose>

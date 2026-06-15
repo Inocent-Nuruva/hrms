@@ -25,6 +25,10 @@ export default async function EmployeesViewPage({
   const { view } = await params
   const normalized = view?.toLowerCase()
 
+  if (normalized === "attendance") {
+    redirect("/dashboard/attendance")
+  }
+
   if (normalized === "departments") {
     redirect("/dashboard/departments")
   }

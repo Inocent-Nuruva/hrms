@@ -27,10 +27,45 @@ import { PanelLeftIcon } from "lucide-react"
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state"
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
-const SIDEBAR_WIDTH = "17.75rem"
-const SIDEBAR_WIDTH_MOBILE = "19rem"
+const SIDEBAR_WIDTH_MOBILE = "18rem"
 const SIDEBAR_WIDTH_ICON = "3rem"
 const SIDEBAR_KEYBOARD_SHORTCUT = "b"
+const SIDEBAR_WIDTH_STORAGE_KEY = "hrms.sidebar.width.v1"
+const SIDEBAR_DEFAULT_WIDTH_PX = 252
+const SIDEBAR_MIN_WIDTH_PX = 240
+const SIDEBAR_MAX_WIDTH_PX = 420
+
+function parseSidebarWidthValue(value: unknown) {
+  if (typeof value !== "string") {
+    return SIDEBAR_DEFAULT_WIDTH_PX
+  }
+
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return SIDEBAR_DEFAULT_WIDTH_PX
+  }
+
+  if (trimmed.endsWith("rem")) {
+    const parsed = Number(trimmed.slice(0, -3))
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed * 16
+    }
+  }
+
+  if (trimmed.endsWith("px")) {
+    const parsed = Number(trimmed.slice(0, -2))
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed
+    }
+  }
+
+  const parsed = Number(trimmed)
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return parsed
+  }
+
+  return SIDEBAR_DEFAULT_WIDTH_PX
+}
 
 type SidebarContextProps = {
   state: "expanded" | "collapsed"
@@ -40,6 +75,8 @@ type SidebarContextProps = {
   setOpenMobile: (open: boolean) => void
   isMobile: boolean
   toggleSidebar: () => void
+  sidebarWidth: number
+  setSidebarWidth: (width: number | ((width: number) => number)) => void
 }
 
 const SidebarContext = React.createContext<SidebarContextProps | null>(null)
@@ -68,6 +105,14 @@ function SidebarProvider({
 }) {
   const isMobile = useIsMobile()
   const [openMobile, setOpenMobile] = React.useState(false)
+  const styleWithSidebarWidth = style as
+    | (React.CSSProperties & Record<"--sidebar-width", string | number | undefined>)
+    | undefined
+  const initialSidebarWidth = React.useMemo(
+    () => parseSidebarWidthValue(styleWithSidebarWidth?.["--sidebar-width"]),
+    [styleWithSidebarWidth]
+  )
+  const [sidebarWidth, setSidebarWidthState] = React.useState(initialSidebarWidth)
 
   // This is the internal state of the sidebar.
   // We use openProp and setOpenProp for control from outside the component.
@@ -93,6 +138,22 @@ function SidebarProvider({
     return isMobile ? setOpenMobile((open) => !open) : setOpen((open) => !open)
   }, [isMobile, setOpen, setOpenMobile])
 
+  const setSidebarWidth = React.useCallback((value: number | ((value: number) => number)) => {
+    setSidebarWidthState((current) => {
+      const next = typeof value === "function" ? value(current) : value
+      const normalized = Math.min(
+        SIDEBAR_MAX_WIDTH_PX,
+        Math.max(SIDEBAR_MIN_WIDTH_PX, Math.round(next))
+      )
+
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(normalized))
+      }
+
+      return normalized
+    })
+  }, [])
+
   // Adds a keyboard shortcut to toggle the sidebar.
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -109,6 +170,19 @@ function SidebarProvider({
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [toggleSidebar])
 
+  React.useEffect(() => {
+    if (typeof window === "undefined") return
+    const stored = window.localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY)
+    if (!stored) return
+
+    const parsed = Number(stored)
+    if (!Number.isFinite(parsed)) return
+
+    setSidebarWidthState(
+      Math.min(SIDEBAR_MAX_WIDTH_PX, Math.max(SIDEBAR_MIN_WIDTH_PX, Math.round(parsed)))
+    )
+  }, [])
+
   // We add a state so that we can do data-state="expanded" or "collapsed".
   // This makes it easier to style the sidebar with Tailwind classes.
   const state = open ? "expanded" : "collapsed"
@@ -122,8 +196,10 @@ function SidebarProvider({
       openMobile,
       setOpenMobile,
       toggleSidebar,
+      sidebarWidth,
+      setSidebarWidth,
     }),
-    [state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar]
+    [state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar, sidebarWidth, setSidebarWidth]
   )
 
   return (
@@ -132,9 +208,9 @@ function SidebarProvider({
         data-slot="sidebar-wrapper"
         style={
           {
-            "--sidebar-width": SIDEBAR_WIDTH,
-            "--sidebar-width-icon": SIDEBAR_WIDTH_ICON,
             ...style,
+            "--sidebar-width": `${sidebarWidth}px`,
+            "--sidebar-width-icon": SIDEBAR_WIDTH_ICON,
           } as React.CSSProperties
         }
         className={cn(
@@ -233,7 +309,7 @@ function Sidebar({
           "fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear data-[side=left]:left-0 data-[side=left]:group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)] data-[side=right]:right-0 data-[side=right]:group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)] md:flex",
           // Adjust the padding for floating and inset variants.
           variant === "floating" || variant === "inset"
-            ? "p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4))+2px)]"
+            ? "p-1.5 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(3))+2px)]"
             : "group-data-[collapsible=icon]:w-(--sidebar-width-icon) group-data-[side=left]:border-r group-data-[side=right]:border-l",
           className
         )}
@@ -278,7 +354,9 @@ function SidebarTrigger({
 }
 
 function SidebarRail({ className, ...props }: React.ComponentProps<"button">) {
-  const { toggleSidebar } = useSidebar()
+  const { toggleSidebar, setSidebarWidth, state, isMobile } = useSidebar()
+  const draggingRef = React.useRef(false)
+  const movedRef = React.useRef(false)
 
   return (
     <button
@@ -286,7 +364,36 @@ function SidebarRail({ className, ...props }: React.ComponentProps<"button">) {
       data-slot="sidebar-rail"
       aria-label="Toggle Sidebar"
       tabIndex={-1}
-      onClick={toggleSidebar}
+      onClick={() => {
+        if (!movedRef.current) {
+          toggleSidebar()
+        }
+        movedRef.current = false
+      }}
+      onMouseDown={(event) => {
+        if (isMobile || state === "collapsed") {
+          return
+        }
+
+        event.preventDefault()
+        draggingRef.current = true
+        movedRef.current = false
+
+        const handleMouseMove = (moveEvent: MouseEvent) => {
+          if (!draggingRef.current) return
+          movedRef.current = true
+          setSidebarWidth(moveEvent.clientX)
+        }
+
+        const handleMouseUp = () => {
+          draggingRef.current = false
+          window.removeEventListener("mousemove", handleMouseMove)
+          window.removeEventListener("mouseup", handleMouseUp)
+        }
+
+        window.addEventListener("mousemove", handleMouseMove)
+        window.addEventListener("mouseup", handleMouseUp)
+      }}
       title="Toggle Sidebar"
       className={cn(
         "absolute inset-y-0 z-20 hidden w-4 transition-all ease-linear group-data-[side=left]:-right-4 group-data-[side=right]:left-0 after:absolute after:inset-y-0 after:start-1/2 after:w-[2px] hover:after:bg-sidebar-border sm:flex ltr:-translate-x-1/2 rtl:-translate-x-1/2",
@@ -307,7 +414,7 @@ function SidebarInset({ className, ...props }: React.ComponentProps<"main">) {
     <main
       data-slot="sidebar-inset"
       className={cn(
-        "relative flex w-full flex-1 flex-col bg-background md:peer-data-[variant=inset]:m-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:shadow-sm md:peer-data-[variant=inset]:peer-data-[state=collapsed]:ml-2",
+        "relative flex w-full flex-1 flex-col bg-background md:peer-data-[variant=inset]:m-1.5 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:shadow-sm md:peer-data-[variant=inset]:peer-data-[state=collapsed]:ml-2",
         className
       )}
       {...props}

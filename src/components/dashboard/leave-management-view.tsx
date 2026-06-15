@@ -1,10 +1,10 @@
 "use client"
 
 import * as React from "react"
-import { Check, Copy, FileText, Pencil, Plus, Trash2, Upload, X } from "lucide-react"
+import { TableScrollContainer } from "@/components/common/table-scroll-container"
+import { Check, Copy, Pencil, Plus, Trash2 } from "lucide-react"
 
 import {
-  addLeaveRequestDocument,
   adjustLeaveBalance,
   cancelLeaveRequest,
   createLeaveHoliday,
@@ -75,7 +75,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 
@@ -234,6 +233,7 @@ export function LeaveManagementView({
   const [pendingRequestCancel, setPendingRequestCancel] = React.useState<AdminRecord | null>(null)
   const [pendingPolicyDelete, setPendingPolicyDelete] = React.useState<AdminRecord | null>(null)
   const [pendingWorkflowDelete, setPendingWorkflowDelete] = React.useState<AdminRecord | null>(null)
+  const [typeDialogOpen, setTypeDialogOpen] = React.useState(false)
   const [requestDialogOpen, setRequestDialogOpen] = React.useState(false)
   const [balanceDialogOpen, setBalanceDialogOpen] = React.useState(false)
   const [holidayDialogOpen, setHolidayDialogOpen] = React.useState(false)
@@ -248,13 +248,6 @@ export function LeaveManagementView({
   const [editingWorkflowStepId, setEditingWorkflowStepId] = React.useState<number | null>(null)
   const [cancelReason, setCancelReason] = React.useState("Cancelled by admin")
   const [selectedWorkflowId, setSelectedWorkflowId] = React.useState("")
-  const [requestDocumentForm, setRequestDocumentForm] = React.useState({
-    request_id: "",
-    file_name: "",
-    file_type: "",
-    file_url: "",
-  })
-  const [requestDocumentFile, setRequestDocumentFile] = React.useState<File | null>(null)
   const [copiedLeaveId, setCopiedLeaveId] = React.useState("")
 
   const [typeForm, setTypeForm] = React.useState({
@@ -465,14 +458,6 @@ export function LeaveManagementView({
     return employee.includes(query) || leaveType.includes(query) || reason.includes(query) || dateRange.includes(query)
   })
 
-  const leaveRequestOptions: SearchableOption[] = requests
-    .map((row) => {
-      const id = readNumber(row, ["id"])
-      if (id === null) return null
-      return { value: String(id), label: leaveRequestLabel(row) }
-    })
-    .filter((option): option is SearchableOption => Boolean(option))
-
   async function submitTypeForm() {
     const token = readStoredToken()
     if (!token) {
@@ -501,6 +486,7 @@ export function LeaveManagementView({
         is_paid: "true",
         requires_attachment: "false",
       })
+      setTypeDialogOpen(false)
       await reloadAll()
     } catch (errorObject) {
       const message = errorObject instanceof Error ? errorObject.message : "Failed to create leave type."
@@ -1047,48 +1033,6 @@ export function LeaveManagementView({
     }
   }
 
-  async function submitRequestDocument() {
-    const token = readStoredToken()
-    if (!token) {
-      return
-    }
-    setSaving(true)
-    setError(null)
-    try {
-      const finalFileName = requestDocumentForm.file_name.trim() || requestDocumentFile?.name || ""
-      const extensionFromName = finalFileName.includes(".") ? finalFileName.split(".").pop() ?? "" : ""
-      const finalFileType =
-        requestDocumentForm.file_type.trim() ||
-        extensionFromName ||
-        requestDocumentFile?.type ||
-        ""
-      const finalFileUrl = requestDocumentForm.file_url.trim()
-
-      if (!finalFileName || !finalFileType || !finalFileUrl) {
-        const message = "Please select a file so name, type and URL can be filled automatically."
-        setError(message)
-        showErrorAlert(message)
-        setSaving(false)
-        return
-      }
-
-      await addLeaveRequestDocument(token, Number(requestDocumentForm.request_id), {
-        file_name: finalFileName,
-        file_type: finalFileType,
-        file_url: finalFileUrl,
-      })
-      setRequestDocumentForm({ request_id: "", file_name: "", file_type: "", file_url: "" })
-      setRequestDocumentFile(null)
-      await reloadAll()
-    } catch (errorObject) {
-      const message = errorObject instanceof Error ? errorObject.message : "Failed to attach leave document."
-      setError(message)
-      showErrorAlert(message)
-    } finally {
-      setSaving(false)
-    }
-  }
-
   async function toggleTypeStatus(row: AdminRecord) {
     const token = readStoredToken()
     const id = readNumber(row, ["id"])
@@ -1256,28 +1200,18 @@ export function LeaveManagementView({
 
       {tab === "types" ? (
         <div className="space-y-4">
-          <div className="grid gap-3 md:grid-cols-3">
-            <input className="h-10 rounded-md border border-slate-300 px-3 text-sm" placeholder="Type name" value={typeForm.name} onChange={(event) => setTypeForm((prev) => ({ ...prev, name: event.target.value }))} />
-            <input className="h-10 rounded-md border border-slate-300 px-3 text-sm" placeholder="Type code" value={typeForm.code} onChange={(event) => setTypeForm((prev) => ({ ...prev, code: event.target.value }))} />
-            <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={typeForm.status} onChange={(event) => setTypeForm((prev) => ({ ...prev, status: event.target.value }))}>
-              <option value="active">active</option>
-              <option value="inactive">inactive</option>
-            </select>
-            <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={typeForm.is_paid} onChange={(event) => setTypeForm((prev) => ({ ...prev, is_paid: event.target.value }))}>
-              <option value="true">Paid</option>
-              <option value="false">Unpaid</option>
-            </select>
-            <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={typeForm.requires_attachment} onChange={(event) => setTypeForm((prev) => ({ ...prev, requires_attachment: event.target.value }))}>
-              <option value="false">Attachment Optional</option>
-              <option value="true">Attachment Required</option>
-            </select>
-            <textarea className="min-h-20 rounded-md border border-slate-300 px-3 py-2 text-sm md:col-span-3" placeholder="Description" value={typeForm.description} onChange={(event) => setTypeForm((prev) => ({ ...prev, description: event.target.value }))} />
-            <button type="button" className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white md:col-span-3" disabled={saving} onClick={() => void submitTypeForm()}>
-              Add Leave Type
+          <div className="flex justify-end">
+            <button
+              type="button"
+              className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white"
+              onClick={() => setTypeDialogOpen(true)}
+            >
+              <Plus className="h-4 w-4" />
+              Create Leave Type
             </button>
           </div>
 
-          <div className="overflow-x-auto rounded-md border border-slate-200">
+          <TableScrollContainer>
             <div className="grid gap-3 border-b border-slate-200 p-3 md:grid-cols-2">
               <input
                 className="h-10 rounded-md border border-slate-300 px-3 text-sm"
@@ -1300,31 +1234,31 @@ export function LeaveManagementView({
                 <option value="completed">completed</option>
               </select>
             </div>
-            <table className="min-w-full divide-y divide-slate-200 text-sm">
-              <thead className="bg-slate-50">
+            <table className="w-full min-w-[900px] text-sm">
+              <thead className="bg-slate-50/90">
                 <tr>
-                  <th className="px-4 py-3 text-left text-[0.82rem] font-semibold uppercase tracking-[0.11em] text-slate-700">Name</th>
-                  <th className="px-4 py-3 text-left text-[0.82rem] font-semibold uppercase tracking-[0.11em] text-slate-700">Code</th>
-                  <th className="px-4 py-3 text-left text-[0.82rem] font-semibold uppercase tracking-[0.11em] text-slate-700">Status</th>
-                  <th className="px-4 py-3 text-left text-[0.82rem] font-semibold uppercase tracking-[0.11em] text-slate-700">Paid</th>
-                  <th className="px-4 py-3 text-right text-[0.82rem] font-semibold uppercase tracking-[0.11em] text-slate-700">Actions</th>
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Name</th>
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Code</th>
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Status</th>
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Paid</th>
+                  <th className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 bg-white">
+              <tbody className="[&_tr:nth-child(odd)]:bg-slate-50/35 [&_tr]:border-t [&_tr]:border-slate-100 [&_tr:hover]:bg-slate-50/80">
                 {types.map((row, index) => {
                   const id = readNumber(row, ["id"])
                   const isActive = readString(row, ["status"]) === "active"
                   return (
                     <tr key={String(id ?? index)}>
-                      <td className="px-4 py-3">{readString(row, ["name"])}</td>
-                      <td className="px-4 py-3">{readString(row, ["code"])}</td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["name"])}</td>
+                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["code"])}</td>
+                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">
                         <span className={isActive ? "inline-flex rounded-full bg-emerald-500 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white" : "inline-flex rounded-full bg-rose-500 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white"}>
                           {isActive ? "Active" : "Inactive"}
                         </span>
                       </td>
-                      <td className="px-4 py-3">{readBoolean(row, ["is_paid"]) ? "Yes" : "No"}</td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readBoolean(row, ["is_paid"]) ? "Yes" : "No"}</td>
+                      <td className="px-4 py-4 text-right">
                         <div className="inline-flex items-center gap-3">
                           <Switch checked={isActive} onCheckedChange={() => void toggleTypeStatus(row)} aria-label="Toggle Status" />
                           <button
@@ -1343,7 +1277,7 @@ export function LeaveManagementView({
                 })}
               </tbody>
             </table>
-          </div>
+          </TableScrollContainer>
         </div>
       ) : null}
 
@@ -1359,103 +1293,20 @@ export function LeaveManagementView({
             </button>
           </div>
 
-          <Card className="border-slate-200">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <FileText className="h-4 w-4" />
-                Attach Supporting Document
-              </CardTitle>
-              <CardDescription>Select request, upload one document, then attach it.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <SearchableSelect
-                id="leave-request-document-search"
-                value={requestDocumentForm.request_id}
-                options={leaveRequestOptions}
-                placeholder="Search request"
-                onValueChange={(value) => setRequestDocumentForm((prev) => ({ ...prev, request_id: value }))}
-              />
-
-              <label
-                htmlFor="leave-request-document-file"
-                className="flex min-h-28 cursor-pointer flex-col items-center justify-center gap-2 rounded-md border border-dashed border-slate-300 bg-slate-50/50 px-4 py-5 text-center transition-colors hover:bg-slate-100/70"
-              >
-                <div className="rounded-full bg-slate-100 p-2">
-                  <Upload className="h-5 w-5 text-slate-700" />
-                </div>
-                <p className="text-sm font-medium text-slate-800">
-                  {requestDocumentFile ? "Change file" : "Drop file here or click to browse"}
-                </p>
-                <p className="text-xs text-slate-500">PDF, DOC, DOCX, images and common docs</p>
-                <input
-                  id="leave-request-document-file"
-                  type="file"
-                  className="sr-only"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0] ?? null
-                    if (!file) {
-                      setRequestDocumentFile(null)
-                      setRequestDocumentForm((prev) => ({ ...prev, file_name: "", file_type: "", file_url: "" }))
-                      return
-                    }
-                    const extension = file.name.includes(".") ? (file.name.split(".").pop() ?? "") : ""
-                    const generatedUrl = URL.createObjectURL(file)
-                    setRequestDocumentFile(file)
-                    setRequestDocumentForm((prev) => ({
-                      ...prev,
-                      file_name: file.name,
-                      file_type: extension || file.type || "",
-                      file_url: generatedUrl,
-                    }))
-                  }}
-                />
-              </label>
-
-              {requestDocumentFile ? (
-                <div className="flex items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-2">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-slate-800">{requestDocumentForm.file_name}</p>
-                    <p className="text-xs text-slate-500">{requestDocumentForm.file_type || "unknown type"}</p>
-                  </div>
-                  <button
-                    type="button"
-                    className="rounded-md p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
-                    onClick={() => {
-                      setRequestDocumentFile(null)
-                      setRequestDocumentForm((prev) => ({ ...prev, file_name: "", file_type: "", file_url: "" }))
-                    }}
-                    aria-label="Remove selected file"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-              ) : null}
-
-              <button
-                type="button"
-                className="w-full rounded-md border border-slate-900 px-3 py-2 text-sm font-medium text-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={saving || !requestDocumentForm.request_id || !requestDocumentFile}
-                onClick={() => void submitRequestDocument()}
-              >
-                Attach Supporting Document
-              </button>
-            </CardContent>
-          </Card>
-
-          <div className="overflow-x-auto rounded-md border border-slate-200">
-            <table className="min-w-full divide-y divide-slate-200 text-sm">
-              <thead className="bg-slate-50">
+          <TableScrollContainer>
+            <table className="w-full min-w-[900px] text-sm">
+              <thead className="bg-slate-50/90">
                 <tr>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-700">Leave ID</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-700">Employee</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-700">Leave Type</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-700">Start</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-700">End</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-700">Status</th>
-                  <th className="px-3 py-2 text-right font-semibold text-slate-700">Actions</th>
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Leave ID</th>
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Employee</th>
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Leave Type</th>
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Start</th>
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">End</th>
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Status</th>
+                  <th className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 bg-white">
+              <tbody className="[&_tr:nth-child(odd)]:bg-slate-50/35 [&_tr]:border-t [&_tr]:border-slate-100 [&_tr:hover]:bg-slate-50/80">
                 {filteredRequests.map((row, index) => {
                   const id = readNumber(row, ["id"])
                   const status = readString(row, ["status"]).toLowerCase()
@@ -1464,7 +1315,7 @@ export function LeaveManagementView({
                   const showCancelAction = !isTerminal
                   return (
                     <tr key={String(id ?? index)}>
-                      <td className="px-3 py-2">
+                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">
                         <div className="inline-flex items-center gap-2">
                           <span>{leaveRequestLabel(row)}</span>
                           {leaveRequestLabel(row) !== "-" ? (
@@ -1480,7 +1331,7 @@ export function LeaveManagementView({
                                   setCopiedLeaveId(value)
                                   window.setTimeout(() => setCopiedLeaveId(""), 1200)
                                 } catch {
-                                  setError("Unable to copy leave ID.")
+                                  showErrorAlert("Clipboard access was denied.")
                                 }
                               }}
                             >
@@ -1493,12 +1344,12 @@ export function LeaveManagementView({
                           ) : null}
                         </div>
                       </td>
-                      <td className="px-3 py-2">{employeeLabel(readNumber(row, ["employee_id"]))}</td>
-                      <td className="px-3 py-2">{readString(row, ["leave_type_name", "leave_type", "leave_type_id"])}</td>
-                      <td className="px-3 py-2">{readString(row, ["start_date"])}</td>
-                      <td className="px-3 py-2">{readString(row, ["end_date"])}</td>
-                      <td className="px-3 py-2">{readString(row, ["status"])}</td>
-                      <td className="px-3 py-2 text-right">
+                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{employeeLabel(readNumber(row, ["employee_id"]))}</td>
+                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["leave_type_name", "leave_type", "leave_type_id"])}</td>
+                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["start_date"])}</td>
+                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["end_date"])}</td>
+                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["status"])}</td>
+                      <td className="px-4 py-4 text-right">
                         {isTerminal ? (
                           <span className="text-xs text-slate-500">No actions</span>
                         ) : (
@@ -1529,7 +1380,7 @@ export function LeaveManagementView({
                 })}
               </tbody>
             </table>
-          </div>
+          </TableScrollContainer>
         </div>
       ) : null}
 
@@ -1594,8 +1445,47 @@ export function LeaveManagementView({
         </DialogPopup>
       </Dialog>
 
-      {tab === "balances" ? (
-        <div className="space-y-4">
+      <Dialog open={typeDialogOpen} onOpenChange={setTypeDialogOpen}>
+        <DialogPopup from="bottom" className="sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Create Leave Type</DialogTitle>
+            <DialogDescription>Enter leave type details, then save them.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 md:grid-cols-3">
+            <input className="h-10 rounded-md border border-slate-300 px-3 text-sm" placeholder="Type name" value={typeForm.name} onChange={(event) => setTypeForm((prev) => ({ ...prev, name: event.target.value }))} />
+            <input className="h-10 rounded-md border border-slate-300 px-3 text-sm" placeholder="Type code" value={typeForm.code} onChange={(event) => setTypeForm((prev) => ({ ...prev, code: event.target.value }))} />
+            <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={typeForm.status} onChange={(event) => setTypeForm((prev) => ({ ...prev, status: event.target.value }))}>
+              <option value="active">active</option>
+              <option value="inactive">inactive</option>
+            </select>
+            <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={typeForm.is_paid} onChange={(event) => setTypeForm((prev) => ({ ...prev, is_paid: event.target.value }))}>
+              <option value="true">Paid</option>
+              <option value="false">Unpaid</option>
+            </select>
+            <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={typeForm.requires_attachment} onChange={(event) => setTypeForm((prev) => ({ ...prev, requires_attachment: event.target.value }))}>
+              <option value="false">Attachment Optional</option>
+              <option value="true">Attachment Required</option>
+            </select>
+            <div />
+            <textarea className="min-h-24 rounded-md border border-slate-300 px-3 py-2 text-sm md:col-span-3" placeholder="Description" value={typeForm.description} onChange={(event) => setTypeForm((prev) => ({ ...prev, description: event.target.value }))} />
+          </div>
+          <DialogFooter>
+            <button type="button" className="rounded-md border border-slate-300 px-4 py-2 text-sm" onClick={() => setTypeDialogOpen(false)}>
+              Cancel
+            </button>
+            <button type="button" className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white" disabled={saving} onClick={() => void submitTypeForm()}>
+              {saving ? "Saving..." : "Add Leave Type"}
+            </button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
+
+      <Dialog open={balanceDialogOpen} onOpenChange={setBalanceDialogOpen}>
+        <DialogPopup from="bottom" className="sm:max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Adjust Leave Balance</DialogTitle>
+            <DialogDescription>Enter the balance adjustment details, then save them.</DialogDescription>
+          </DialogHeader>
           <div className="grid gap-3 md:grid-cols-3">
             <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={balanceForm.employee_id} onChange={(event) => setBalanceForm((prev) => ({ ...prev, employee_id: event.target.value }))}>
               <option value="">Select employee</option>
@@ -1614,7 +1504,7 @@ export function LeaveManagementView({
               })}
             </select>
             <div className="space-y-1">
-              <p className="text-xs text-slate-500">Fiscal year to apply this balance adjustment (for example 2026).</p>
+              <p className="text-xs text-slate-500">Fiscal year to apply this balance adjustment.</p>
               <input className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm" placeholder="Fiscal year" value={balanceForm.fiscal_year} onChange={(event) => setBalanceForm((prev) => ({ ...prev, fiscal_year: event.target.value }))} />
             </div>
             <div className="space-y-1">
@@ -1629,45 +1519,24 @@ export function LeaveManagementView({
               <p className="text-xs text-slate-500">Days removed because they are no longer valid.</p>
               <input type="number" min={0} className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm" placeholder="Expired days" value={balanceForm.expired_days} onChange={(event) => setBalanceForm((prev) => ({ ...prev, expired_days: event.target.value }))} />
             </div>
-            <button type="button" className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white md:col-span-3" disabled={saving} onClick={() => void submitBalanceAdjustment()}>
-              Adjust Leave Balance
+          </div>
+          <DialogFooter>
+            <button type="button" className="rounded-md border border-slate-300 px-4 py-2 text-sm" onClick={() => setBalanceDialogOpen(false)}>
+              Cancel
             </button>
-          </div>
+            <button type="button" className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white" disabled={saving} onClick={() => void submitBalanceAdjustment()}>
+              {saving ? "Saving..." : "Adjust Leave Balance"}
+            </button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
 
-          <div className="overflow-x-auto rounded-md border border-slate-200">
-            <table className="min-w-full divide-y divide-slate-200 text-sm">
-              <thead className="bg-slate-50">
-                <tr>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-700">Employee</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-700">Type</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-700">Fiscal Year</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-700">Allocated</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-700">Used</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-700">Remaining</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 bg-white">
-                {balances.map((row, index) => {
-                  const id = readNumber(row, ["id"])
-                  return (
-                    <tr key={String(id ?? index)}>
-                      <td className="px-3 py-2">{employeeLabel(readNumber(row, ["employee_id"]))}</td>
-                      <td className="px-3 py-2">{readString(row, ["leave_type_name", "leave_type", "leave_type_id"])}</td>
-                      <td className="px-3 py-2">{readString(row, ["fiscal_year"])}</td>
-                      <td className="px-3 py-2">{String(readNumber(row, ["allocated_days"]) ?? "-")}</td>
-                      <td className="px-3 py-2">{String(readNumber(row, ["used_days"]) ?? "-")}</td>
-                      <td className="px-3 py-2">{String(readNumber(row, ["remaining_days"]) ?? "-")}</td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      ) : null}
-
-      {tab === "holidays" ? (
-        <div className="space-y-4">
+      <Dialog open={holidayDialogOpen} onOpenChange={setHolidayDialogOpen}>
+        <DialogPopup from="bottom" className="sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Add Holiday</DialogTitle>
+            <DialogDescription>Enter holiday details, then save them.</DialogDescription>
+          </DialogHeader>
           <div className="grid gap-3 md:grid-cols-3">
             <input className="h-10 rounded-md border border-slate-300 px-3 text-sm" placeholder="Holiday name" value={holidayForm.name} onChange={(event) => setHolidayForm((prev) => ({ ...prev, name: event.target.value }))} />
             <DatePickerPresets value={holidayForm.holiday_date} onChange={(value) => setHolidayForm((prev) => ({ ...prev, holiday_date: value }))} placeholder="Holiday date" />
@@ -1675,36 +1544,101 @@ export function LeaveManagementView({
               <option value="false">One-time</option>
               <option value="true">Recurring</option>
             </select>
-            <button type="button" className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white md:col-span-3" disabled={saving} onClick={() => void submitHolidayForm()}>
+          </div>
+          <DialogFooter>
+            <button type="button" className="rounded-md border border-slate-300 px-4 py-2 text-sm" onClick={() => setHolidayDialogOpen(false)}>
+              Cancel
+            </button>
+            <button type="button" className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white" disabled={saving} onClick={() => void submitHolidayForm()}>
+              {saving ? "Saving..." : "Add Holiday"}
+            </button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
+
+      {tab === "balances" ? (
+        <div className="space-y-4">
+          <div className="flex justify-end">
+            <button
+              type="button"
+              className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white"
+              onClick={() => setBalanceDialogOpen(true)}
+            >
+              <Plus className="h-4 w-4" />
+              Adjust Leave Balance
+            </button>
+          </div>
+
+          <TableScrollContainer>
+            <table className="w-full min-w-[900px] text-sm">
+              <thead className="bg-slate-50/90">
+                <tr>
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Employee</th>
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Type</th>
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Fiscal Year</th>
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Allocated</th>
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Used</th>
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Remaining</th>
+                </tr>
+              </thead>
+              <tbody className="[&_tr:nth-child(odd)]:bg-slate-50/35 [&_tr]:border-t [&_tr]:border-slate-100 [&_tr:hover]:bg-slate-50/80">
+                {balances.map((row, index) => {
+                  const id = readNumber(row, ["id"])
+                  return (
+                    <tr key={String(id ?? index)}>
+                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{employeeLabel(readNumber(row, ["employee_id"]))}</td>
+                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["leave_type_name", "leave_type", "leave_type_id"])}</td>
+                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["fiscal_year"])}</td>
+                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{String(readNumber(row, ["allocated_days"]) ?? "-")}</td>
+                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{String(readNumber(row, ["used_days"]) ?? "-")}</td>
+                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{String(readNumber(row, ["remaining_days"]) ?? "-")}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </TableScrollContainer>
+        </div>
+      ) : null}
+
+      {tab === "holidays" ? (
+        <div className="space-y-4">
+          <div className="flex justify-end">
+            <button
+              type="button"
+              className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white"
+              onClick={() => setHolidayDialogOpen(true)}
+            >
+              <Plus className="h-4 w-4" />
               Add Holiday
             </button>
           </div>
 
-          <div className="overflow-x-auto rounded-md border border-slate-200">
-            <table className="min-w-full divide-y divide-slate-200 text-sm">
-              <thead className="bg-slate-50">
+          <TableScrollContainer>
+            <table className="w-full min-w-[900px] text-sm">
+              <thead className="bg-slate-50/90">
                 <tr>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-700">Name</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-700">Date</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-700">Recurring</th>
-                  <th className="px-3 py-2 text-right font-semibold text-slate-700">Actions</th>
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Name</th>
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Date</th>
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Recurring</th>
+                  <th className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 bg-white">
+              <tbody className="[&_tr:nth-child(odd)]:bg-slate-50/35 [&_tr]:border-t [&_tr]:border-slate-100 [&_tr:hover]:bg-slate-50/80">
                 {holidays.map((row, index) => {
                   const id = readNumber(row, ["id"])
                   return (
                     <tr key={String(id ?? index)}>
-                      <td className="px-3 py-2">{readString(row, ["name"])}</td>
-                      <td className="px-3 py-2">{readString(row, ["holiday_date"])}</td>
-                      <td className="px-3 py-2">
+                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["name"])}</td>
+                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["holiday_date"])}</td>
+                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">
                         <Switch
                           checked={readBoolean(row, ["is_recurring"])}
                           onCheckedChange={() => void toggleHolidayRecurring(row)}
                           aria-label="Toggle recurring holiday"
                         />
                       </td>
-                      <td className="px-3 py-2 text-right">
+                      <td className="px-4 py-4 text-right">
                         <div className="inline-flex items-center gap-2">
                           <button
                             type="button"
@@ -1722,7 +1656,7 @@ export function LeaveManagementView({
                 })}
               </tbody>
             </table>
-          </div>
+          </TableScrollContainer>
         </div>
       ) : null}
 
@@ -1739,19 +1673,19 @@ export function LeaveManagementView({
             </button>
           </div>
 
-          <div className="overflow-x-auto rounded-md border border-slate-200">
-            <table className="min-w-full divide-y divide-slate-200 text-sm">
-              <thead className="bg-slate-50">
+          <TableScrollContainer>
+            <table className="w-full min-w-[900px] text-sm">
+              <thead className="bg-slate-50/90">
                 <tr>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-700">Name</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-700">Status</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-700">Accrual</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-700">Department</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-700">Position</th>
-                  <th className="px-3 py-2 text-right font-semibold text-slate-700">Actions</th>
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Name</th>
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Status</th>
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Accrual</th>
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Department</th>
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Position</th>
+                  <th className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 bg-white">
+              <tbody className="[&_tr:nth-child(odd)]:bg-slate-50/35 [&_tr]:border-t [&_tr]:border-slate-100 [&_tr:hover]:bg-slate-50/80">
                 {policies.map((row, index) => {
                   const id = readNumber(row, ["id", "policy_id"])
                   return (
@@ -1760,12 +1694,12 @@ export function LeaveManagementView({
                       className="cursor-pointer transition hover:bg-slate-50"
                       onClick={() => openPolicyPreview(row)}
                     >
-                      <td className="px-3 py-2 font-medium text-slate-900">{readString(row, ["name", "title"])}</td>
-                      <td className="px-3 py-2">{readString(row, ["status"])}</td>
-                      <td className="px-3 py-2">{readString(row, ["accrual_method"])}</td>
-                      <td className="px-3 py-2">{optionLabel(departments, readNumber(row, ["applicable_department_id"]), ["name", "title"])}</td>
-                      <td className="px-3 py-2">{optionLabel(positions, readNumber(row, ["applicable_position_id"]), ["name", "title"])}</td>
-                      <td className="px-3 py-2 text-right">
+                      <td className="px-4 py-4 text-sm font-medium text-slate-900 whitespace-nowrap">{readString(row, ["name", "title"])}</td>
+                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["status"])}</td>
+                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["accrual_method"])}</td>
+                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{optionLabel(departments, readNumber(row, ["applicable_department_id"]), ["name", "title"])}</td>
+                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{optionLabel(positions, readNumber(row, ["applicable_position_id"]), ["name", "title"])}</td>
+                      <td className="px-4 py-4 text-right">
                         <div className="inline-flex items-center gap-3">
                           <Switch
                             checked={readString(row, ["status"]).toLowerCase() === "active"}
@@ -1792,7 +1726,7 @@ export function LeaveManagementView({
                 })}
               </tbody>
             </table>
-          </div>
+          </TableScrollContainer>
 
           <Sheet open={policySheetOpen} onOpenChange={setPolicySheetOpen}>
             <SheetContent side="right" className="w-full overflow-y-auto data-[side=right]:w-full sm:data-[side=right]:w-1/2 data-[side=right]:sm:max-w-none">
@@ -1940,27 +1874,27 @@ export function LeaveManagementView({
             </button>
           </div>
 
-          <div className="overflow-x-auto rounded-md border border-slate-200">
-            <table className="min-w-full divide-y divide-slate-200 text-sm">
-              <thead className="bg-slate-50">
+          <TableScrollContainer>
+            <table className="w-full min-w-[900px] text-sm">
+              <thead className="bg-slate-50/90">
                 <tr>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-700">Workflow</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-700">Leave Type</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-700">Status</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-700">Default</th>
-                  <th className="px-3 py-2 text-right font-semibold text-slate-700">Actions</th>
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Workflow</th>
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Leave Type</th>
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Status</th>
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Default</th>
+                  <th className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 bg-white">
+              <tbody className="[&_tr:nth-child(odd)]:bg-slate-50/35 [&_tr]:border-t [&_tr]:border-slate-100 [&_tr:hover]:bg-slate-50/80">
                 {workflows.map((row, index) => {
                   const id = readNumber(row, ["id", "workflow_id"])
                   return (
                     <tr key={`workflow-${id ?? index}`}>
-                      <td className="px-3 py-2">{readString(row, ["name", "title"])}</td>
-                      <td className="px-3 py-2">{readString(row, ["leave_type_name", "leave_type", "leave_type_id"])}</td>
-                      <td className="px-3 py-2">{readString(row, ["status"])}</td>
-                      <td className="px-3 py-2">{readBoolean(row, ["is_default"]) ? "Yes" : "No"}</td>
-                      <td className="px-3 py-2 text-right">
+                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["name", "title"])}</td>
+                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["leave_type_name", "leave_type", "leave_type_id"])}</td>
+                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["status"])}</td>
+                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readBoolean(row, ["is_default"]) ? "Yes" : "No"}</td>
+                      <td className="px-4 py-4 text-right">
                         <div className="inline-flex items-center gap-2">
                           <Switch
                             checked={readString(row, ["status"]).toLowerCase() === "active"}
@@ -1983,7 +1917,7 @@ export function LeaveManagementView({
                 })}
               </tbody>
             </table>
-          </div>
+          </TableScrollContainer>
           <Sheet open={workflowSheetOpen} onOpenChange={setWorkflowSheetOpen}>
             <SheetContent side="right" className="w-full overflow-y-auto data-[side=right]:w-1/2 sm:max-w-none">
               <SheetHeader>

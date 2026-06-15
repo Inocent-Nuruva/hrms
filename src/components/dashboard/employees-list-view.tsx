@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { TableScrollContainer } from "@/components/common/table-scroll-container"
 import { useRouter } from "next/navigation"
 
 import {
@@ -238,18 +239,18 @@ export function EmployeesListView() {
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-md border border-slate-200">
-        <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-50">
+      <TableScrollContainer>
+        <table className="w-full min-w-[900px] text-sm">
+          <thead className="bg-slate-50/90">
             <tr>
-              <th className="px-3 py-2 text-left font-semibold text-slate-700">Employee No</th>
-              <th className="px-3 py-2 text-left font-semibold text-slate-700">Name</th>
-              <th className="px-3 py-2 text-left font-semibold text-slate-700">Email</th>
-              <th className="px-3 py-2 text-left font-semibold text-slate-700">Phone</th>
-              <th className="px-3 py-2 text-left font-semibold text-slate-700">Status</th>
+              <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Employee No</th>
+              <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Name</th>
+              <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Email</th>
+              <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Phone</th>
+              <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Status</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100 bg-white">
+          <tbody className="bg-white [&_tr:nth-child(odd)]:bg-slate-50/35 [&_tr]:border-t [&_tr]:border-slate-100 [&_tr]:transition-colors [&_tr]:hover:bg-slate-50">
             {rows.map((row, index) => {
               const primaryContact = getPrimaryContact(row)
               const employeeNo = readString(row, ["employee_no", "user_no", "employeeNo"])
@@ -260,7 +261,7 @@ export function EmployeesListView() {
                   className="cursor-pointer hover:bg-slate-50"
                   onClick={() => openEmployeeDetails(row)}
                 >
-                  <td className="px-3 py-2">
+                  <td className="px-4 py-4">
                     <button
                       type="button"
                       className="font-medium text-slate-800 hover:text-slate-950"
@@ -285,23 +286,23 @@ export function EmployeesListView() {
                       {missingItems.length} out of {REQUIRED_PROFILE_ITEMS.length} incomplete
                     </button>
                   </td>
-                  <td className="px-3 py-2">{employeeDisplayName(row)}</td>
-                  <td className="px-3 py-2">{primaryContact.email}</td>
-                  <td className="px-3 py-2">{primaryContact.phone}</td>
-                  <td className="px-3 py-2">{readString(row, ["employment_status", "status"])}</td>
+                  <td className="px-4 py-4 whitespace-nowrap">{employeeDisplayName(row)}</td>
+                  <td className="px-4 py-4 whitespace-nowrap">{primaryContact.email}</td>
+                  <td className="px-4 py-4 whitespace-nowrap">{primaryContact.phone}</td>
+                  <td className="px-4 py-4 whitespace-nowrap">{readString(row, ["employment_status", "status"])}</td>
                 </tr>
               )
             })}
             {!loading && rows.length === 0 ? (
               <tr>
-                <td className="px-3 py-6 text-center text-slate-500" colSpan={5}>
+                <td className="px-4 py-10 text-center text-slate-500" colSpan={5}>
                   No employees found.
                 </td>
               </tr>
             ) : null}
           </tbody>
         </table>
-      </div>
+      </TableScrollContainer>
 
       <div className="mt-4 flex items-center justify-between gap-3">
         <p className="text-sm text-slate-600">

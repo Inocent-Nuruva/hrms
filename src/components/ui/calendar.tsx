@@ -1,127 +1,125 @@
 "use client"
 
 import * as React from "react"
-import { addDays } from "date-fns"
-import { DayPicker } from "react-day-picker"
-import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react"
+import {
+  Calendar as HeroCalendar,
+} from "@heroui/react"
+import {
+  fromDateToLocal,
+  getLocalTimeZone,
+  type DateValue,
+} from "@internationalized/date"
 
 import { cn } from "@/lib/utils"
-import { buttonVariants } from "@/components/ui/button"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardFooter } from "@/components/ui/card"
 
-function Calendar({
-  className,
-  classNames,
-  showOutsideDays = true,
-  ...props
-}: React.ComponentProps<typeof DayPicker>) {
-  const [internalMonth, setInternalMonth] = React.useState<Date>(
-    new Date(new Date().getFullYear(), new Date().getMonth(), 1)
-  )
-
-  const controlledMonth =
-    "month" in props && props.month instanceof Date ? props.month : undefined
-  const currentMonth = controlledMonth ?? internalMonth
-
-  const setCalendarMonth = React.useCallback(
-    (nextMonth: Date) => {
-      setInternalMonth(nextMonth)
-      props.onMonthChange?.(nextMonth)
-    },
-    [props]
-  )
-
-  const isSingleMode = "mode" in props && props.mode === "single"
-  const onSelectSingle =
-    "onSelect" in props
-      ? (props.onSelect as ((date: Date | undefined) => void) | undefined)
-      : undefined
-
-  const applyPreset = (offset: number) => {
-    const nextDate = addDays(new Date(), offset)
-    onSelectSingle?.(nextDate)
-    setCalendarMonth(new Date(nextDate.getFullYear(), nextDate.getMonth(), 1))
-  }
-
-  const isDropdownCaption =
-    typeof props.captionLayout === "string" && props.captionLayout.startsWith("dropdown")
-
-  return (
-    <Card className={cn("mx-auto w-fit max-w-[300px]", className)} size="sm">
-      <CardContent>
-        <DayPicker
-          showOutsideDays={showOutsideDays}
-          month={currentMonth}
-          onMonthChange={setCalendarMonth}
-          fixedWeeks
-          className="p-0 [--cell-size:--spacing(9.5)]"
-          classNames={{
-            months: "flex flex-col sm:flex-row gap-4",
-            month: "space-y-4",
-            month_caption: "flex justify-center pt-1 relative items-center",
-            caption_label: isDropdownCaption ? "hidden" : "text-sm font-medium",
-            nav: "space-x-1 flex items-center",
-            button_previous: cn(
-              buttonVariants({ variant: "outline", size: "icon-sm" }),
-              "size-7 bg-transparent p-0 opacity-70 hover:opacity-100 absolute left-1"
-            ),
-            button_next: cn(
-              buttonVariants({ variant: "outline", size: "icon-sm" }),
-              "size-7 bg-transparent p-0 opacity-70 hover:opacity-100 absolute right-1"
-            ),
-            month_grid: "w-full border-collapse space-y-1",
-            weekdays: "flex",
-            weekday: "text-muted-foreground rounded-md w-9 font-normal text-[0.8rem] text-center",
-            week: "flex w-full mt-2",
-            day: "h-9 w-9 p-0 text-center text-sm relative [&:has([aria-selected])]:bg-accent [&:has([data-outside=true][aria-selected=true])]:bg-accent/50 first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md focus-within:relative focus-within:z-20",
-            day_button: cn(
-              buttonVariants({ variant: "ghost", size: "icon-sm" }),
-              "h-9 w-9 p-0 font-normal aria-selected:opacity-100"
-            ),
-            selected:
-              "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
-            today: "bg-accent text-accent-foreground",
-            outside: "text-muted-foreground opacity-50 aria-selected:bg-accent/50 aria-selected:text-muted-foreground aria-selected:opacity-30",
-            disabled: "text-muted-foreground opacity-50",
-            range_middle: "aria-selected:bg-accent aria-selected:text-accent-foreground",
-            hidden: "invisible",
-            ...classNames,
-          }}
-          components={{
-            Chevron: ({ orientation }) =>
-              orientation === "left" ? (
-                <ChevronLeftIcon className="h-4 w-4" />
-              ) : (
-                <ChevronRightIcon className="h-4 w-4" />
-              ),
-          }}
-          {...props}
-        />
-      </CardContent>
-      <CardFooter className="flex flex-wrap gap-2 border-t">
-        {[
-          { label: "Today", value: 0 },
-          { label: "Tomorrow", value: 1 },
-          { label: "In 3 days", value: 3 },
-          { label: "In a week", value: 7 },
-          { label: "In 2 weeks", value: 14 },
-        ].map((preset) => (
-          <Button
-            key={preset.value}
-            variant="outline"
-            size="sm"
-            className="flex-1"
-            type="button"
-            onClick={() => applyPreset(preset.value)}
-            disabled={!onSelectSingle || !isSingleMode}
-          >
-            {preset.label}
-          </Button>
-        ))}
-      </CardFooter>
-    </Card>
-  )
+type CalendarProps = {
+  className?: string
+  mode?: "single"
+  captionLayout?: string
+  selected?: Date
+  onSelect?: (date: Date | undefined) => void
+  fromYear?: number
+  toYear?: number
 }
 
-export { Calendar }
+function toCalendarValue(date?: Date) {
+  if (!date) {
+    return undefined
+  }
+
+  return fromDateToLocal(new Date(date.getFullYear(), date.getMonth(), date.getDate()))
+}
+
+function fromCalendarValue(value: DateValue | null | undefined) {
+  if (!value) {
+    return undefined
+  }
+
+  if ("timeZone" in value) {
+    return value.toDate()
+  }
+
+  return value.toDate(getLocalTimeZone())
+}
+
+export function Calendar({
+  className,
+  selected,
+  onSelect,
+  fromYear,
+  toYear,
+  mode: _mode,
+  captionLayout: _captionLayout,
+}: CalendarProps) {
+  const value = React.useMemo(() => toCalendarValue(selected), [selected])
+  const minValue = React.useMemo(
+    () => (typeof fromYear === "number" ? toCalendarValue(new Date(fromYear, 0, 1)) : undefined),
+    [fromYear]
+  )
+  const maxValue = React.useMemo(
+    () => (typeof toYear === "number" ? toCalendarValue(new Date(toYear, 11, 31)) : undefined),
+    [toYear]
+  )
+
+  return (
+    <div
+      className={cn(
+        "w-fit rounded-2xl border border-slate-200 bg-white p-3 shadow-xl shadow-slate-200/70 dark:border-slate-700 dark:bg-slate-900 dark:shadow-slate-950/40",
+        className
+      )}
+    >
+      <HeroCalendar
+        aria-label="Event date"
+        value={value}
+        minValue={minValue}
+        maxValue={maxValue}
+        onChange={(nextValue) => onSelect?.(fromCalendarValue(nextValue))}
+        className="calendar-modern w-full min-w-[18rem]"
+      >
+        <HeroCalendar.Header className="mb-3 grid grid-cols-[auto_1fr_auto] items-center gap-2">
+          <HeroCalendar.NavButton
+            slot="previous"
+            className="rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:hover:bg-slate-800"
+          />
+          <HeroCalendar.YearPickerTrigger className="flex items-center justify-center gap-2 rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700">
+            <HeroCalendar.YearPickerTriggerHeading />
+            <HeroCalendar.YearPickerTriggerIndicator />
+          </HeroCalendar.YearPickerTrigger>
+          <HeroCalendar.NavButton
+            slot="next"
+            className="rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:hover:bg-slate-800"
+          />
+        </HeroCalendar.Header>
+
+        <HeroCalendar.Grid className="w-full">
+          <HeroCalendar.GridHeader>
+            {(day) => (
+              <HeroCalendar.HeaderCell className="text-center text-[0.72rem] font-semibold uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
+                {day}
+              </HeroCalendar.HeaderCell>
+            )}
+          </HeroCalendar.GridHeader>
+          <HeroCalendar.GridBody>
+            {(date) => (
+              <HeroCalendar.Cell
+                date={date}
+                className="rounded-xl text-sm font-medium text-slate-700 transition data-[hovered=true]:bg-slate-100 data-[today=true]:ring-1 data-[today=true]:ring-slate-300 data-[selected=true]:bg-slate-900 data-[selected=true]:text-white data-[outside-month=true]:text-slate-300 data-[disabled=true]:text-slate-300 dark:text-slate-100 dark:data-[hovered=true]:bg-slate-800 dark:data-[today=true]:ring-slate-600 dark:data-[selected=true]:bg-white dark:data-[selected=true]:text-slate-900 dark:data-[outside-month=true]:text-slate-600 dark:data-[disabled=true]:text-slate-700"
+              />
+            )}
+          </HeroCalendar.GridBody>
+        </HeroCalendar.Grid>
+
+        <HeroCalendar.YearPickerGrid>
+          <HeroCalendar.YearPickerGridBody>
+            {({ year }) => (
+              <HeroCalendar.YearPickerCell
+                year={year}
+                className="rounded-xl text-sm font-medium text-slate-700 transition data-[hovered=true]:bg-slate-100 data-[selected=true]:bg-slate-900 data-[selected=true]:text-white dark:text-slate-100 dark:data-[hovered=true]:bg-slate-800 dark:data-[selected=true]:bg-white dark:data-[selected=true]:text-slate-900"
+              />
+            )}
+          </HeroCalendar.YearPickerGridBody>
+        </HeroCalendar.YearPickerGrid>
+      </HeroCalendar>
+    </div>
+  )
+}

@@ -6,6 +6,8 @@ export const API_BASE_URL =
 export const AUTH_STORAGE_KEYS = {
   tokens: "ess.auth.tokens",
   user: "ess.auth.user",
+  rememberMe: "ess.auth.rememberMe",
+  rememberedEmail: "ess.auth.rememberedEmail",
 } as const;
 
 export const ROUTES = {

@@ -9,6 +9,7 @@ import {
   CalendarDaysIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  MailIcon,
   PencilIcon,
   PlusIcon,
   Trash2Icon,
@@ -17,6 +18,8 @@ import {
 
 import {
   createEmployeeProfile,
+  getCurrentAdmin,
+  getCurrentEmployee,
   listBranches,
   listDepartments,
   listPositions,
@@ -91,6 +94,17 @@ type RegisterFormState = {
   roleId: string
 }
 
+type InitializedRegistrationFields = {
+  employeeNo: string
+  firstName: string
+  middleName: string
+  lastName: string
+  branch: string
+  department: string
+  position: string
+  roleId: string
+}
+
 type ContactFormState = {
   contactType: string
   isPrimary: boolean
@@ -98,6 +112,12 @@ type ContactFormState = {
   phoneNumber: string
   email: string
   notes: string
+}
+
+type InviteContactFormState = {
+  countryIso: string
+  phoneNumber: string
+  email: string
 }
 
 type AddressFormState = {
@@ -155,6 +175,17 @@ const EMPTY_FORM: RegisterFormState = {
   roleId: "",
 }
 
+const EMPTY_INITIALIZED_FIELDS: InitializedRegistrationFields = {
+  employeeNo: "",
+  firstName: "",
+  middleName: "",
+  lastName: "",
+  branch: "",
+  department: "",
+  position: "",
+  roleId: "",
+}
+
 const GENDER_OPTIONS = ["Male", "Female", "Non-binary", "Prefer not to say"]
 const MARITAL_STATUS_OPTIONS = ["Single", "Married", "Divorced", "Widowed"]
 const CONTACT_TYPE_OPTIONS = ["personal", "work"]
@@ -183,6 +214,40 @@ const MOBILE_MONEY_PROVIDER_OPTIONS = [
 ]
 const DEFAULT_MOBILE_MONEY_PROVIDER =
   MOBILE_MONEY_PROVIDER_OPTIONS.find((option) => option !== "none") ?? "M-Pesa"
+const REGISTRATION_STAFF_ROLE_NAMES = new Set([
+  "owner",
+  "platformowner",
+  "administrator",
+  "companyadministrator",
+  "hrmanager",
+  "managerheadofdepartmenthrmanager",
+  "hrofficer",
+  "junioremployeehrofficer",
+  "itadministrator",
+  "midlevelemployeeitadministrator",
+])
+const ADMIN_ROLE_KEYS = new Set([
+  "admin",
+  "administrator",
+  "super_admin",
+  "super-admin",
+  "company_admin",
+  "company-admin",
+  "hr_admin",
+  "hr-admin",
+  "owner",
+  "root",
+])
+
+const REGISTRATION_STAFF_ROLE_HINTS = [
+  "admin",
+  "administrator",
+  "owner",
+  "hrmanager",
+  "hrofficer",
+  "manager",
+  "itadministrator",
+]
 
 const EMPTY_CONTACT: ContactFormState = {
   contactType: "personal",
@@ -191,6 +256,12 @@ const EMPTY_CONTACT: ContactFormState = {
   phoneNumber: "",
   email: "",
   notes: "",
+}
+
+const EMPTY_INVITE_CONTACT: InviteContactFormState = {
+  countryIso: "TZ",
+  phoneNumber: "",
+  email: "",
 }
 
 const EMPTY_ADDRESS: AddressFormState = {
@@ -309,6 +380,34 @@ function normalizeRoleText(value: string) {
   return value.trim().toLowerCase().replace(/[\s_-]+/g, "")
 }
 
+function decodeBase64Url(input: string) {
+  try {
+    const normalized = input.replace(/-/g, "+").replace(/_/g, "/")
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=")
+    return atob(padded)
+  } catch {
+    return null
+  }
+}
+
+function decodeJwtPayload(token: string) {
+  const parts = token.split(".")
+  if (parts.length !== 3 || !parts[1]) {
+    return null
+  }
+
+  const decoded = decodeBase64Url(parts[1])
+  if (!decoded) {
+    return null
+  }
+
+  try {
+    return asRecord(JSON.parse(decoded))
+  } catch {
+    return null
+  }
+}
+
 function resolveDefaultRoleId(roleOptions: RoleOption[]) {
   if (roleOptions.length === 0) {
     return ""
@@ -337,6 +436,37 @@ function resolveDefaultRoleId(roleOptions: RoleOption[]) {
 
 function toText(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null
+}
+
+function readRecordId(record: AdminRecord | null) {
+  if (!record) {
+    return null
+  }
+  const value = record.id
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value
+  }
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) {
+      return parsed
+    }
+  }
+  return null
+}
+
+function findRecordByName(records: AdminRecord[], selectedName: string) {
+  const normalized = selectedName.trim().toLowerCase()
+  if (!normalized) {
+    return null
+  }
+
+  return (
+    records.find(
+      (record) => (readString(record, ["name", "title"]) ?? "").trim().toLowerCase() === normalized
+    ) ??
+    null
+  )
 }
 
 function toRoleOption(record: AdminRecord): RoleOption | null {
@@ -447,6 +577,226 @@ function resolveAccessTokenFromStorage() {
   )
 }
 
+function readStoredAuthUser() {
+  if (typeof window === "undefined") {
+    return null
+  }
+
+  const raw = window.localStorage.getItem(AUTH_STORAGE_KEYS.user)
+  if (!raw) {
+    return null
+  }
+
+  try {
+    return asRecord(JSON.parse(raw))
+  } catch {
+    return null
+  }
+}
+
+function resolveInitializedRegistrationFields(
+  sources: [AdminRecord | null, AdminRecord | null, AdminRecord | null]
+): Omit<InitializedRegistrationFields, "roleId"> & { roleName: string } {
+  const [currentEmployee, currentAdmin, storedUser] = sources
+
+  const employeeUser = asRecord(currentEmployee?.user)
+  const adminUser = asRecord(currentAdmin?.user)
+
+  const employeeNo =
+    readString(currentEmployee, ["employee_no", "employee_number", "employee_code", "employeeId", "user_no"]) ??
+    readString(currentAdmin, ["user_no", "employee_no", "employeeId", "employee_id"]) ??
+    readString(storedUser, ["employeeId", "employee_id", "employee_no", "user_no"]) ??
+    ""
+
+  const firstName =
+    readString(currentEmployee, ["first_name", "firstName"]) ??
+    readString(employeeUser, ["first_name", "firstName"]) ??
+    readString(currentAdmin, ["first_name", "firstName"]) ??
+    readString(adminUser, ["first_name", "firstName"]) ??
+    ""
+
+  const middleName =
+    readString(currentEmployee, ["middle_name", "middleName"]) ??
+    readString(employeeUser, ["middle_name", "middleName"]) ??
+    readString(currentAdmin, ["middle_name", "middleName"]) ??
+    readString(adminUser, ["middle_name", "middleName"]) ??
+    ""
+
+  const lastName =
+    readString(currentEmployee, ["last_name", "lastName"]) ??
+    readString(employeeUser, ["last_name", "lastName"]) ??
+    readString(currentAdmin, ["last_name", "lastName"]) ??
+    readString(adminUser, ["last_name", "lastName"]) ??
+    ""
+
+  const branch =
+    readString(asRecord(currentEmployee?.primary_branch), ["name", "branch_name"]) ??
+    readString(asRecord(currentEmployee?.branch), ["name", "branch_name"]) ??
+    readString(currentEmployee, ["branch_name", "branch"]) ??
+    ""
+
+  const department =
+    readString(asRecord(currentEmployee?.primary_department), ["name", "department_name"]) ??
+    readString(asRecord(currentEmployee?.department), ["name", "department_name"]) ??
+    readString(currentEmployee, ["department_name", "department"]) ??
+    ""
+
+  const position =
+    readString(asRecord(currentEmployee?.primary_position), ["name", "position_name"]) ??
+    readString(asRecord(currentEmployee?.position), ["name", "position_name"]) ??
+    readString(currentEmployee, ["position_name", "position", "designation_name"]) ??
+    ""
+
+  const roleName =
+    readString(currentAdmin, ["role", "role_name", "user_type"]) ??
+    readString(adminUser, ["role", "role_name", "user_type"]) ??
+    readString(storedUser, ["role", "role_name", "user_type"]) ??
+    ""
+
+  return {
+    employeeNo,
+    firstName,
+    middleName,
+    lastName,
+    branch,
+    department,
+    position,
+    roleName,
+  }
+}
+
+function resolveInitializedRoleId(
+  roleOptions: RoleOption[],
+  sources: [AdminRecord | null, AdminRecord | null, AdminRecord | null]
+) {
+  const [currentEmployee, currentAdmin, storedUser] = sources
+  const directRoleIdCandidates = [
+    toText(currentEmployee?.role_id),
+    toText(currentAdmin?.role_id),
+    toText(storedUser?.role_id),
+  ].filter((value): value is string => Boolean(value))
+
+  for (const candidate of directRoleIdCandidates) {
+    const match = roleOptions.find((role) => role.id === candidate)
+    if (match) {
+      return match.id
+    }
+  }
+
+  const roleName = resolveInitializedRegistrationFields(sources).roleName
+  if (!roleName) {
+    return ""
+  }
+
+  const normalizedRoleName = normalizeRoleText(roleName)
+  const byLabel =
+    roleOptions.find((role) => normalizeRoleText(role.label) === normalizedRoleName) ??
+    roleOptions.find((role) => normalizeRoleText(role.name) === normalizedRoleName) ??
+    roleOptions.find(
+      (role) =>
+        normalizeRoleText(role.label).includes(normalizedRoleName) ||
+        normalizedRoleName.includes(normalizeRoleText(role.label)) ||
+        normalizeRoleText(role.name).includes(normalizedRoleName) ||
+        normalizedRoleName.includes(normalizeRoleText(role.name))
+    )
+
+  return byLabel?.id ?? ""
+}
+
+function readRoleCandidate(value: unknown): string | null {
+  if (typeof value === "string" && value.trim()) {
+    return value.trim()
+  }
+  const record = asRecord(value)
+  if (!record) {
+    return null
+  }
+  return (
+    readString(record, [
+      "name",
+      "display_name",
+      "label",
+      "title",
+      "role",
+      "role_name",
+      "key",
+      "code",
+      "slug",
+      "type",
+      "user_type",
+    ]) ?? null
+  )
+}
+
+function collectRoleLabels(record: AdminRecord | null, sink: Set<string>) {
+  if (!record) {
+    return
+  }
+
+  const push = (value: unknown) => {
+    const role = readRoleCandidate(value)
+    if (role) {
+      sink.add(normalizeRoleText(role))
+    }
+  }
+
+  push(record.role)
+  push(record.user_type)
+  push(record.type)
+  push(record.role_name)
+  push(record.roleName)
+
+  for (const candidate of [record.roles, record.authorities, record.userRole, record.user_role]) {
+    if (Array.isArray(candidate)) {
+      candidate.forEach((entry) => push(entry))
+      continue
+    }
+    push(candidate)
+  }
+}
+
+function resolveAdminFlag(record: AdminRecord | null) {
+  if (!record) {
+    return false
+  }
+
+  const candidates = [
+    record.is_admin,
+    record.isAdmin,
+    record.admin,
+    record.is_super_admin,
+    record.isSuperAdmin,
+    record.super_admin,
+    record.superAdmin,
+  ]
+
+  return candidates.some((value) => value === true || value === 1 || value === "1" || value === "true")
+}
+
+function canManageOtherEmployees(
+  sources: [AdminRecord | null, AdminRecord | null, AdminRecord | null],
+  accessToken: string
+) {
+  const roleLabels = new Set<string>()
+  const decodedToken = decodeJwtPayload(accessToken)
+  const records = [...sources, decodedToken]
+
+  records.forEach((record) => {
+    collectRoleLabels(record, roleLabels)
+  })
+
+  if (records.some((record) => resolveAdminFlag(record))) {
+    return true
+  }
+
+  return Array.from(roleLabels).some(
+    (role) =>
+      REGISTRATION_STAFF_ROLE_NAMES.has(role) ||
+      ADMIN_ROLE_KEYS.has(role) ||
+      REGISTRATION_STAFF_ROLE_HINTS.some((hint) => role.includes(hint))
+  )
+}
+
 const REGISTER_DRAFT_STORAGE_KEY = "hrms.employee.register.draft.v1"
 
 function countryNameFromIso(isoCode: string) {
@@ -461,13 +811,15 @@ function countryNameFromIso(isoCode: string) {
 function AnimatedField({
   delayMs,
   children,
+  className,
 }: {
   delayMs: number
   children: React.ReactNode
+  className?: string
 }) {
   return (
     <div
-      className="animate-fade-up"
+      className={cn("animate-fade-up", className)}
       style={{ animationDelay: `${delayMs}ms`, opacity: 0 }}
     >
       {children}
@@ -480,17 +832,28 @@ function Field({
   htmlFor,
   delayMs,
   children,
+  hint,
+  reserveHintSpace = false,
+  className,
 }: {
   label: string
   htmlFor: string
   delayMs: number
   children: React.ReactNode
+  hint?: React.ReactNode
+  reserveHintSpace?: boolean
+  className?: string
 }) {
   return (
-    <AnimatedField delayMs={delayMs}>
-      <div className="grid gap-2">
+    <AnimatedField delayMs={delayMs} className={className}>
+      <div className="flex h-full flex-col gap-2">
         <Label htmlFor={htmlFor}>{label}</Label>
         {children}
+        {hint || reserveHintSpace ? (
+          <div className="min-h-4 text-xs text-muted-foreground">
+            {hint}
+          </div>
+        ) : null}
       </div>
     </AnimatedField>
   )
@@ -510,6 +873,12 @@ export function EmployeeRegisterForm() {
   const [draftContact, setDraftContact] = React.useState<ContactFormState>({ ...EMPTY_CONTACT })
   const [draftContactPhoneError, setDraftContactPhoneError] = React.useState("")
   const [draftContactEmailError, setDraftContactEmailError] = React.useState("")
+  const [isInviteMode, setIsInviteMode] = React.useState(false)
+  const [inviteContact, setInviteContact] = React.useState<InviteContactFormState>({
+    ...EMPTY_INVITE_CONTACT,
+  })
+  const [invitePhoneError, setInvitePhoneError] = React.useState("")
+  const [inviteEmailError, setInviteEmailError] = React.useState("")
   const [editingContactIndex, setEditingContactIndex] = React.useState<number | null>(null)
   const [isAddressDialogOpen, setIsAddressDialogOpen] = React.useState(false)
   const [draftAddress, setDraftAddress] = React.useState<AddressFormState>({ ...EMPTY_ADDRESS })
@@ -539,10 +908,28 @@ export function EmployeeRegisterForm() {
   const [rolesLoading, setRolesLoading] = React.useState(false)
   const [rolesError, setRolesError] = React.useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = React.useState(false)
+  const [initializedFields, setInitializedFields] = React.useState<InitializedRegistrationFields>(
+    EMPTY_INITIALIZED_FIELDS
+  )
+  const [isRegisteringOthers, setIsRegisteringOthers] = React.useState(false)
 
   const selectedRoleLabel = React.useMemo(
     () => roles.find((role) => role.id === form.roleId)?.label ?? "",
     [roles, form.roleId]
+  )
+  const roleDisplayValue = selectedRoleLabel || initializedFields.roleId
+  const lockedFields = React.useMemo(
+    () => ({
+      employeeNo: !isRegisteringOthers && Boolean(initializedFields.employeeNo),
+      firstName: false,
+      middleName: false,
+      lastName: false,
+      branch: !isRegisteringOthers && Boolean(initializedFields.branch),
+      department: !isRegisteringOthers && Boolean(initializedFields.department),
+      position: !isRegisteringOthers && Boolean(initializedFields.position),
+      roleId: true,
+    }),
+    [initializedFields, isRegisteringOthers]
   )
   const branchOptions = React.useMemo(
     () =>
@@ -566,10 +953,14 @@ export function EmployeeRegisterForm() {
     [positionRecords]
   )
   const currentStepIndex = REGISTER_STEP_ORDER.indexOf(currentStep)
-  const previousStep = currentStepIndex > 0 ? REGISTER_STEP_ORDER[currentStepIndex - 1] : null
-  const nextStep =
+  const visibleRegisterSteps: readonly RegisterStep[] = isInviteMode ? ["details"] : REGISTER_STEP_ORDER
+  const visibleCurrentStepIndex = visibleRegisterSteps.indexOf(currentStep as (typeof visibleRegisterSteps)[number])
+  const currentVisibleStepIndex = visibleCurrentStepIndex === -1 ? 0 : visibleCurrentStepIndex
+  const previousVisibleStep =
+    currentVisibleStepIndex > 0 ? visibleRegisterSteps[currentVisibleStepIndex - 1] : null
+  const nextVisibleStep =
     currentStepIndex < REGISTER_STEP_ORDER.length - 1
-      ? REGISTER_STEP_ORDER[currentStepIndex + 1]
+      ? visibleRegisterSteps[currentVisibleStepIndex + 1] ?? null
       : null
   const isDraftBankMobileMoney = draftBankAccount.paymentMode === "mobile_money"
   const getStepTransitionClass = React.useCallback(
@@ -616,6 +1007,33 @@ export function EmployeeRegisterForm() {
     }
     setDraftContactPhoneError("")
     setDraftContact((previous) => ({
+      ...previous,
+      phoneNumber: digitsOnly,
+    }))
+  }
+
+  const updateInviteContact = <K extends keyof InviteContactFormState>(
+    field: K,
+    value: InviteContactFormState[K]
+  ) => {
+    setInviteContact((previous) => ({
+      ...previous,
+      [field]: value,
+    }))
+  }
+
+  const updateInvitePhone = (nextValue: string) => {
+    const digitsOnly = nextValue.replace(/\D/g, "")
+    if (digitsOnly.length > 9) {
+      setInvitePhoneError("Phone number cannot exceed 9 digits.")
+      setInviteContact((previous) => ({
+        ...previous,
+        phoneNumber: digitsOnly.slice(0, 9),
+      }))
+      return
+    }
+    setInvitePhoneError("")
+    setInviteContact((previous) => ({
       ...previous,
       phoneNumber: digitsOnly,
     }))
@@ -996,14 +1414,101 @@ export function EmployeeRegisterForm() {
   }, [loadRoles])
 
   React.useEffect(() => {
+    const accessToken = resolveAccessTokenFromStorage()
+    if (!accessToken) {
+      setInitializedFields(EMPTY_INITIALIZED_FIELDS)
+      setIsInviteMode(false)
+      return
+    }
+
+    let isActive = true
+
+    const hydrateInitializedFields = async () => {
+      const storedUser = readStoredAuthUser()
+      const [currentAdminResult, currentEmployeeResult] = await Promise.allSettled([
+        getCurrentAdmin(accessToken),
+        getCurrentEmployee(accessToken),
+      ])
+
+      if (!isActive) {
+        return
+      }
+
+      const currentAdmin =
+        currentAdminResult.status === "fulfilled" ? currentAdminResult.value : null
+      const currentEmployee =
+        currentEmployeeResult.status === "fulfilled" ? currentEmployeeResult.value : null
+      const initializationSources: [AdminRecord | null, AdminRecord | null, AdminRecord | null] = [
+        currentEmployee,
+        currentAdmin,
+        storedUser,
+      ]
+      const registeringOthers = canManageOtherEmployees(initializationSources, accessToken)
+      setIsRegisteringOthers(registeringOthers)
+
+      if (registeringOthers) {
+        setInitializedFields(EMPTY_INITIALIZED_FIELDS)
+        setForm((previous) => ({
+          ...previous,
+          employeeNo: "",
+          firstName: "",
+          middleName: "",
+          lastName: "",
+          branch: "",
+          department: "",
+          position: "",
+          roleId: previous.roleId || resolveDefaultRoleId(roles),
+        }))
+        return
+      }
+
+      setIsInviteMode(false)
+
+      const nextInitializedFields = resolveInitializedRegistrationFields(initializationSources)
+      const nextRoleId = roles.length > 0 ? resolveInitializedRoleId(roles, initializationSources) : ""
+
+      setInitializedFields({
+        ...nextInitializedFields,
+        roleId: nextRoleId,
+      })
+
+      setForm((previous) => ({
+        ...previous,
+        employeeNo: nextInitializedFields.employeeNo || previous.employeeNo,
+        firstName: nextInitializedFields.firstName || previous.firstName,
+        middleName: nextInitializedFields.middleName || previous.middleName,
+        lastName: nextInitializedFields.lastName || previous.lastName,
+        branch: nextInitializedFields.branch || previous.branch,
+        department: nextInitializedFields.department || previous.department,
+        position: nextInitializedFields.position || previous.position,
+        roleId: nextRoleId || previous.roleId,
+      }))
+    }
+
+    void hydrateInitializedFields()
+
+    return () => {
+      isActive = false
+    }
+  }, [roles])
+
+  React.useEffect(() => {
+    if (!isRegisteringOthers && isInviteMode) {
+      setIsInviteMode(false)
+    }
+  }, [isInviteMode, isRegisteringOthers])
+
+  React.useEffect(() => {
     if (typeof window === "undefined") return
     try {
       const raw = window.localStorage.getItem(REGISTER_DRAFT_STORAGE_KEY)
       if (!raw) return
       const parsed = JSON.parse(raw) as {
         currentStep?: RegisterStep
+        isInviteMode?: boolean
         form?: RegisterFormState
         dob?: string | null
+        inviteContact?: InviteContactFormState
         contacts?: ContactFormState[]
         addresses?: AddressFormState[]
         relatives?: RelativeFormState[]
@@ -1013,8 +1518,14 @@ export function EmployeeRegisterForm() {
       if (parsed.currentStep && REGISTER_STEP_ORDER.includes(parsed.currentStep)) {
         setCurrentStep(parsed.currentStep)
       }
+      if (typeof parsed.isInviteMode === "boolean" && isRegisteringOthers) {
+        setIsInviteMode(parsed.isInviteMode)
+      }
       if (parsed.form) {
         setForm((previous) => ({ ...previous, ...parsed.form }))
+      }
+      if (parsed.inviteContact) {
+        setInviteContact((previous) => ({ ...previous, ...parsed.inviteContact }))
       }
       if (parsed.dob) {
         const nextDob = new Date(parsed.dob)
@@ -1030,14 +1541,16 @@ export function EmployeeRegisterForm() {
     } catch {
       // ignore corrupted draft
     }
-  }, [])
+  }, [isRegisteringOthers])
 
   React.useEffect(() => {
     if (typeof window === "undefined") return
     const payload = {
       currentStep,
+      isInviteMode,
       form,
       dob: dob ? dob.toISOString() : null,
+      inviteContact,
       contacts,
       addresses,
       relatives,
@@ -1045,7 +1558,7 @@ export function EmployeeRegisterForm() {
       bankAccounts,
     }
     window.localStorage.setItem(REGISTER_DRAFT_STORAGE_KEY, JSON.stringify(payload))
-  }, [currentStep, form, dob, contacts, addresses, relatives, identifications, bankAccounts])
+  }, [currentStep, isInviteMode, form, dob, inviteContact, contacts, addresses, relatives, identifications, bankAccounts])
 
   const submitRegistration = async () => {
     if (isSubmitting) {
@@ -1062,10 +1575,15 @@ export function EmployeeRegisterForm() {
       toast.error("First name and last name are required.")
       return
     }
+    if (isInviteMode && !form.middleName.trim()) {
+      toast.error("Middle name is required for send invite.")
+      return
+    }
 
-    const normalizedEmployeeNo = form.employeeNo.trim()
-    if (!normalizedEmployeeNo) {
-      toast.error("Employee number is required.")
+    const normalizedEmployeeNo = ""
+
+    if (isInviteMode && !form.branch.trim()) {
+      toast.error("Branch is required for send invite.")
       return
     }
 
@@ -1075,23 +1593,65 @@ export function EmployeeRegisterForm() {
       return
     }
 
-  const normalizedContacts = contacts
-      .map((contact) => ({
-        contact_type: contact.contactType.trim() || "personal",
-        is_primary: contact.isPrimary,
-        phone_number: joinPhoneWithCountryCode(
-          getDialCodeForCountry(contact.countryIso),
-          contact.phoneNumber
-        ),
-        email: contact.email.trim().toLowerCase(),
-        notes: contact.notes.trim(),
-      }))
-      .filter((contact) => Boolean(contact.email))
-
-    if (normalizedContacts.length === 0) {
-      setCurrentStep("contacts")
-      toast.error("At least one contact is required before saving employee.")
+    if (isInviteMode && !form.position.trim()) {
+      toast.error("Position is required for send invite.")
       return
+    }
+
+    let normalizedContacts: Array<{
+      contact_type: string
+      is_primary: boolean
+      phone_number: string
+      email: string
+      notes: string
+    }> = []
+
+    if (isInviteMode) {
+      const normalizedInviteEmail = inviteContact.email.trim().toLowerCase()
+      const normalizedInvitePhone = inviteContact.phoneNumber.trim()
+      if (!normalizedInvitePhone) {
+        toast.error("Phone number is required for send invite.")
+        return
+      }
+      if (!normalizedInviteEmail) {
+        toast.error("Email is required for send invite.")
+        return
+      }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedInviteEmail)) {
+        toast.error("Enter a valid email address for send invite.")
+        return
+      }
+      normalizedContacts = [
+        {
+          contact_type: "work",
+          is_primary: true,
+          phone_number: joinPhoneWithCountryCode(
+            getDialCodeForCountry(inviteContact.countryIso),
+            normalizedInvitePhone
+          ),
+          email: normalizedInviteEmail,
+          notes: "Created from send invite flow.",
+        },
+      ]
+    } else {
+      normalizedContacts = contacts
+        .map((contact) => ({
+          contact_type: contact.contactType.trim() || "personal",
+          is_primary: contact.isPrimary,
+          phone_number: joinPhoneWithCountryCode(
+            getDialCodeForCountry(contact.countryIso),
+            contact.phoneNumber
+          ),
+          email: contact.email.trim().toLowerCase(),
+          notes: contact.notes.trim(),
+        }))
+        .filter((contact) => Boolean(contact.email))
+
+      if (normalizedContacts.length === 0) {
+        setCurrentStep("contacts")
+        toast.error("At least one contact is required before saving employee.")
+        return
+      }
     }
 
     const normalizedAddresses = addresses
@@ -1175,7 +1735,30 @@ export function EmployeeRegisterForm() {
           bank.swift_code ||
           bank.mobile_money_provider ||
           bank.is_primary
-      )
+        )
+
+    const selectedBranchRecord = findRecordByName(branchRecords, form.branch)
+    const selectedDepartmentRecord = findRecordByName(departmentRecords, form.department)
+    const selectedPositionRecord = findRecordByName(positionRecords, form.position)
+    const selectedBranchId = readRecordId(selectedBranchRecord)
+    const selectedDepartmentId = readRecordId(selectedDepartmentRecord)
+    const selectedPositionId = readRecordId(selectedPositionRecord)
+    const selectedDesignationId = (() => {
+      if (!selectedPositionRecord) {
+        return null
+      }
+      const raw = selectedPositionRecord.designation_id
+      if (typeof raw === "number" && Number.isFinite(raw)) {
+        return raw
+      }
+      if (typeof raw === "string" && raw.trim()) {
+        const parsed = Number(raw)
+        if (Number.isFinite(parsed)) {
+          return parsed
+        }
+      }
+      return null
+    })()
 
     setIsSubmitting(true)
     try {
@@ -1183,6 +1766,11 @@ export function EmployeeRegisterForm() {
         employee_no: normalizedEmployeeNo,
         employment_status: "onboarding",
         employment_type: "full_time",
+        primary_branch_id: selectedBranchId ?? undefined,
+        primary_department_id: selectedDepartmentId ?? undefined,
+        primary_position_id: selectedPositionId ?? undefined,
+        primary_designation_id: selectedDesignationId ?? undefined,
+        position_id: selectedPositionId ?? undefined,
         first_name: form.firstName.trim(),
         middle_name: form.middleName.trim(),
         last_name: form.lastName.trim(),
@@ -1190,19 +1778,28 @@ export function EmployeeRegisterForm() {
         marital_status: form.maritalStatus || undefined,
         nationality: form.nationality || undefined,
         date_of_birth: dob ? dob.toISOString().slice(0, 10) : undefined,
+        departments: selectedDepartmentId
+          ? [
+              {
+                department_id: selectedDepartmentId,
+                is_primary: true,
+              },
+            ]
+          : undefined,
         contacts: normalizedContacts,
         addresses: normalizedAddresses,
         relatives: normalizedRelatives,
         identifications: normalizedIdentifications,
         bank_accounts: normalizedBankAccounts,
         metadata: {
-          branch: form.branch || undefined,
-          department: form.department || undefined,
-          position: form.position || undefined,
+          branch_name: form.branch || undefined,
+          department_name: form.department || undefined,
+          position_name: form.position || undefined,
           role_id: form.roleId || undefined,
+          registration_mode: isInviteMode ? "send_invite" : "full_registration",
         },
       })
-      showSuccessAlert("Employee saved successfully.")
+      showSuccessAlert(isInviteMode ? "Employee invite saved successfully." : "Employee saved successfully.")
       clearForm()
     } catch (errorObject) {
       toast.error(errorObject instanceof Error ? errorObject.message : "Failed to save employee.")
@@ -1217,6 +1814,10 @@ export function EmployeeRegisterForm() {
       ...EMPTY_FORM,
       roleId: resolveDefaultRoleId(roles),
     })
+    setIsInviteMode(false)
+    setInviteContact({ ...EMPTY_INVITE_CONTACT })
+    setInvitePhoneError("")
+    setInviteEmailError("")
     setDob(undefined)
     setContacts([])
     setAddresses([])
@@ -1251,10 +1852,25 @@ export function EmployeeRegisterForm() {
     <div className="px-4 lg:px-6">
       <Card className="animate-card-entrance overflow-visible">
         <CardHeader className="border-b">
-          <CardTitle className="flex items-center gap-2">
-            <UserPlus2Icon className="size-4" />
-            Employee Registration
-          </CardTitle>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <CardTitle className="flex items-center gap-2">
+              <UserPlus2Icon className="size-4" />
+              Employee Registration
+            </CardTitle>
+            {isRegisteringOthers ? (
+              <Button
+                type="button"
+                variant={isInviteMode ? "default" : "outline"}
+                onClick={() => {
+                  setIsInviteMode((previous) => !previous)
+                  setCurrentStep("details")
+                }}
+              >
+                <MailIcon />
+                {isInviteMode ? "Back To Full Registration" : "Send Invite"}
+              </Button>
+            ) : null}
+          </div>
         </CardHeader>
 
         <CardContent className="space-y-7 px-4 pb-7 pt-6 sm:px-5 lg:px-6">
@@ -1276,11 +1892,11 @@ export function EmployeeRegisterForm() {
                 aria-hidden="true"
                 className="pointer-events-none absolute top-0.5 bottom-0.5 left-0 z-0 rounded-md bg-primary shadow-sm transition-transform duration-500 ease-in-out"
                 style={{
-                  width: `${100 / REGISTER_STEP_ORDER.length}%`,
-                  transform: `translateX(${currentStepIndex * 100}%)`,
+                  width: `${100 / visibleRegisterSteps.length}%`,
+                  transform: `translateX(${currentVisibleStepIndex * 100}%)`,
                 }}
               />
-              {REGISTER_STEP_ORDER.map((step) => (
+              {visibleRegisterSteps.map((step) => (
                 <TabsTrigger
                   key={step}
                   value={step}
@@ -1304,6 +1920,7 @@ export function EmployeeRegisterForm() {
                       value={form.employeeNo}
                       onChange={(event) => updateField("employeeNo", event.target.value)}
                       placeholder="Enter employee number"
+                      disabled={lockedFields.employeeNo}
                     />
                   </Field>
 
@@ -1316,7 +1933,13 @@ export function EmployeeRegisterForm() {
                     />
                   </Field>
 
-                  <Field label="Middle Name" htmlFor="middleName" delayMs={80}>
+                  <Field
+                    label={isInviteMode ? "Middle Name" : "Middle Name"}
+                    htmlFor="middleName"
+                    delayMs={80}
+                    hint={isInviteMode ? "Required in send invite mode." : undefined}
+                    reserveHintSpace={isInviteMode}
+                  >
                     <Input
                       id="middleName"
                       value={form.middleName}
@@ -1335,167 +1958,235 @@ export function EmployeeRegisterForm() {
                   </Field>
 
                   <Field label="Branch" htmlFor="branch" delayMs={160}>
-                    <Select value={form.branch} onValueChange={(value) => updateField("branch", value ?? "")}>
-                      <SelectTrigger id="branch" className="w-full">
-                        <SelectValue placeholder="Select branch" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {branchOptions.map((option) => (
-                          <SelectItem key={option} value={option}>
-                            {option}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    {lockedFields.branch ? (
+                      <Input id="branch" value={form.branch} disabled />
+                    ) : (
+                      <Select value={form.branch} onValueChange={(value) => updateField("branch", value ?? "")}>
+                        <SelectTrigger id="branch" className="w-full">
+                          <SelectValue placeholder="Select branch" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {branchOptions.map((option) => (
+                            <SelectItem key={option} value={option}>
+                              {option}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
                   </Field>
 
                   <Field label="Department" htmlFor="department" delayMs={200}>
-                    <Select
-                      value={form.department}
-                      onValueChange={(value) => updateField("department", value ?? "")}
-                    >
-                      <SelectTrigger id="department" className="w-full">
-                        <SelectValue placeholder="Select department" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {departmentOptions.map((option) => (
-                          <SelectItem key={option} value={option}>
-                            {option}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    {lockedFields.department ? (
+                      <Input id="department" value={form.department} disabled />
+                    ) : (
+                      <Select
+                        value={form.department}
+                        onValueChange={(value) => updateField("department", value ?? "")}
+                      >
+                        <SelectTrigger id="department" className="w-full">
+                          <SelectValue placeholder="Select department" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {departmentOptions.map((option) => (
+                            <SelectItem key={option} value={option}>
+                              {option}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
                   </Field>
 
                   <Field label="Position" htmlFor="position" delayMs={240}>
-                    <Select value={form.position} onValueChange={(value) => updateField("position", value ?? "")}>
-                      <SelectTrigger id="position" className="w-full">
-                        <SelectValue placeholder="Select position" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {positionOptions.map((option) => (
-                          <SelectItem key={option} value={option}>
-                            {option}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </Field>
-
-                  <Field label="Gender" htmlFor="gender" delayMs={280}>
-                    <Select value={form.gender} onValueChange={(value) => updateField("gender", value ?? "")}>
-                      <SelectTrigger id="gender" className="w-full">
-                        <SelectValue placeholder="Select gender" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {GENDER_OPTIONS.map((option) => (
-                          <SelectItem key={option} value={option}>
-                            {option}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </Field>
-
-                  <Field label="Marital Status" htmlFor="maritalStatus" delayMs={320}>
-                    <Select
-                      value={form.maritalStatus}
-                      onValueChange={(value) => updateField("maritalStatus", value ?? "")}
-                    >
-                      <SelectTrigger id="maritalStatus" className="w-full">
-                        <SelectValue placeholder="Select marital status" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {MARITAL_STATUS_OPTIONS.map((option) => (
-                          <SelectItem key={option} value={option}>
-                            {option}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </Field>
-
-                  <Field label="Nationality" htmlFor="nationality" delayMs={360}>
-                    <div className="register-nationality relative z-[70] rounded-md border border-slate-300 px-2 py-2">
-                      <ReactFlagsSelect
-                        selected={form.nationality || ""}
-                        onSelect={(value) => updateField("nationality", value ?? "")}
-                        searchable
-                        searchPlaceholder="Search country"
-                        placeholder="Select nationality"
-                        alignOptionsToRight={false}
-                        className="w-full"
-                        selectButtonClassName="w-full"
-                        customLabels={{}}
-                      />
-                    </div>
-                    {form.nationality ? (
-                      <p className="text-xs text-muted-foreground">
-                        {countryNameFromIso(form.nationality)}
-                      </p>
-                    ) : null}
-                  </Field>
-
-                  <AnimatedField delayMs={400}>
-                    <div className="grid gap-2">
-                      <Label htmlFor="roleId">Roles</Label>
-                      <Select value={form.roleId} onValueChange={(value) => updateField("roleId", value ?? "")}>
-                        <SelectTrigger id="roleId" className="w-full">
-                          <SelectValue placeholder={rolesLoading ? "Loading roles..." : "Select role"}>
-                            {selectedRoleLabel || undefined}
-                          </SelectValue>
+                    {lockedFields.position ? (
+                      <Input id="position" value={form.position} disabled />
+                    ) : (
+                      <Select value={form.position} onValueChange={(value) => updateField("position", value ?? "")}>
+                        <SelectTrigger id="position" className="w-full">
+                          <SelectValue placeholder="Select position" />
                         </SelectTrigger>
                         <SelectContent>
-                          {roles.map((role) => (
-                            <SelectItem key={role.id} value={role.id}>
-                              {role.label}
+                          {positionOptions.map((option) => (
+                            <SelectItem key={option} value={option}>
+                              {option}
                             </SelectItem>
                           ))}
-                          {!rolesLoading && roles.length === 0 ? (
-                            <div className="px-2 py-1.5 text-sm text-muted-foreground">No roles available</div>
-                          ) : null}
                         </SelectContent>
                       </Select>
-                      {rolesError ? (
-                        <p
-                          className={cn(
-                            "text-xs",
-                            rolesError.includes("unavailable") ? "text-muted-foreground" : "text-destructive"
-                          )}
-                        >
-                          {rolesError}
-                        </p>
-                      ) : null}
-                    </div>
-                  </AnimatedField>
+                    )}
+                  </Field>
 
-                  <AnimatedField delayMs={440}>
-                    <div className="grid gap-2 md:col-span-2 xl:col-span-3">
-                      <Label htmlFor="dob-trigger">Date of Birth</Label>
-                      <Popover>
-                        <PopoverTrigger
-                          id="dob-trigger"
-                          className="flex h-9 w-full items-center justify-start gap-2 rounded-lg border border-input bg-background px-3 text-sm outline-none transition-colors hover:bg-muted/40 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                  {isInviteMode ? (
+                    <>
+                      <Field label="Phone Country" htmlFor="invite-country" delayMs={260}>
+                        <Select
+                          value={inviteContact.countryIso}
+                          onValueChange={(value) => updateInviteContact("countryIso", value as CountryIso)}
                         >
-                          <CalendarDaysIcon className="size-4 text-muted-foreground" />
-                          <span className={dob ? "text-foreground" : "text-muted-foreground"}>
-                            {dob ? dob.toLocaleDateString() : "Select date from calendar"}
-                          </span>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={dob}
-                            onSelect={setDob}
-                            captionLayout="dropdown"
-                            className="rounded-lg border bg-background"
-                            fromYear={1940}
-                            toYear={new Date().getFullYear()}
+                          <SelectTrigger id="invite-country" className="w-full">
+                            <SelectValue placeholder="Select country" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Object.entries(COUNTRY_LABELS).map(([isoCode, label]) => (
+                              <SelectItem key={isoCode} value={isoCode}>
+                                {label.primary} ({label.secondary})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </Field>
+
+                      <Field
+                        label="Phone Number"
+                        htmlFor="invite-phone"
+                        delayMs={280}
+                        hint={invitePhoneError || "Required for send invite."}
+                        reserveHintSpace
+                      >
+                        <Input
+                          id="invite-phone"
+                          inputMode="numeric"
+                          value={inviteContact.phoneNumber}
+                          onChange={(event) => updateInvitePhone(event.target.value)}
+                          placeholder="Enter phone number"
+                        />
+                      </Field>
+
+                      <Field
+                        label="Email"
+                        htmlFor="invite-email"
+                        delayMs={300}
+                        hint={inviteEmailError || "Required for send invite."}
+                        reserveHintSpace
+                      >
+                        <Input
+                          id="invite-email"
+                          type="email"
+                          value={inviteContact.email}
+                          onChange={(event) => {
+                            const nextValue = event.target.value
+                            setInviteEmailError("")
+                            updateInviteContact("email", nextValue)
+                          }}
+                          placeholder="Enter email address"
+                        />
+                      </Field>
+                    </>
+                  ) : null}
+
+                  {!isInviteMode ? (
+                    <>
+                      <Field label="Gender" htmlFor="gender" delayMs={280}>
+                        <Select value={form.gender} onValueChange={(value) => updateField("gender", value ?? "")}>
+                          <SelectTrigger id="gender" className="w-full">
+                            <SelectValue placeholder="Select gender" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {GENDER_OPTIONS.map((option) => (
+                              <SelectItem key={option} value={option}>
+                                {option}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </Field>
+
+                      <Field label="Marital Status" htmlFor="maritalStatus" delayMs={320}>
+                        <Select
+                          value={form.maritalStatus}
+                          onValueChange={(value) => updateField("maritalStatus", value ?? "")}
+                        >
+                          <SelectTrigger id="maritalStatus" className="w-full">
+                            <SelectValue placeholder="Select marital status" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {MARITAL_STATUS_OPTIONS.map((option) => (
+                              <SelectItem key={option} value={option}>
+                                {option}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </Field>
+
+                      <Field
+                        label="Nationality"
+                        htmlFor="nationality"
+                        delayMs={360}
+                        hint={form.nationality ? countryNameFromIso(form.nationality) : undefined}
+                        reserveHintSpace
+                        className="relative z-40 focus-within:z-[140]"
+                      >
+                        <div className="register-nationality relative z-[70] rounded-md border border-slate-300 px-2 py-2">
+                          <ReactFlagsSelect
+                            selected={form.nationality || ""}
+                            onSelect={(value) => updateField("nationality", value ?? "")}
+                            searchable
+                            searchPlaceholder="Search country"
+                            placeholder="Select nationality"
+                            alignOptionsToRight={false}
+                            className="w-full"
+                            selectButtonClassName="w-full"
+                            customLabels={{}}
                           />
-                        </PopoverContent>
-                      </Popover>
-                    </div>
-                  </AnimatedField>
+                        </div>
+                      </Field>
+
+                      <Field
+                        label="Roles"
+                        htmlFor="roleId"
+                        delayMs={400}
+                        hint={
+                          rolesError ? (
+                            <span
+                              className={cn(
+                                rolesError.includes("unavailable") ? "text-muted-foreground" : "text-destructive"
+                              )}
+                            >
+                              {rolesError}
+                            </span>
+                          ) : undefined
+                        }
+                        reserveHintSpace
+                      >
+                        <Input
+                          id="roleId"
+                          value={roleDisplayValue}
+                          placeholder={rolesLoading ? "Loading role..." : "Assigned automatically"}
+                          disabled
+                        />
+                      </Field>
+
+                      <AnimatedField delayMs={440}>
+                        <div className="grid gap-2 md:col-span-2 xl:col-span-3">
+                          <Label htmlFor="dob-trigger">Date of Birth</Label>
+                          <Popover>
+                            <PopoverTrigger
+                              id="dob-trigger"
+                              className="flex h-9 w-full items-center justify-start gap-2 rounded-lg border border-input bg-background px-3 text-sm outline-none transition-colors hover:bg-muted/40 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                            >
+                              <CalendarDaysIcon className="size-4 text-muted-foreground" />
+                              <span className={dob ? "text-foreground" : "text-muted-foreground"}>
+                                {dob ? dob.toLocaleDateString() : "Select date from calendar"}
+                              </span>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="start">
+                              <Calendar
+                                mode="single"
+                                selected={dob}
+                                onSelect={setDob}
+                                captionLayout="dropdown"
+                                className="rounded-lg border bg-background"
+                                fromYear={1940}
+                                toYear={new Date().getFullYear()}
+                              />
+                            </PopoverContent>
+                          </Popover>
+                        </div>
+                      </AnimatedField>
+                    </>
+                  ) : null}
                 </div>
               </TabsContent>
 
@@ -1884,12 +2575,12 @@ export function EmployeeRegisterForm() {
             Clear
           </Button>
           <div className="flex items-center gap-2">
-            {previousStep ? (
+            {previousVisibleStep ? (
               <Button
                 variant="outline"
                 onClick={() => {
                   setTabDirection("backward")
-                  setCurrentStep(previousStep)
+                  setCurrentStep(previousVisibleStep)
                 }}
               >
                 <ChevronLeftIcon />
@@ -1897,11 +2588,11 @@ export function EmployeeRegisterForm() {
               </Button>
             ) : null}
 
-            {nextStep ? (
+            {nextVisibleStep ? (
               <Button
                 onClick={() => {
                   setTabDirection("forward")
-                  setCurrentStep(nextStep)
+                  setCurrentStep(nextVisibleStep)
                 }}
               >
                 Next
@@ -1909,7 +2600,7 @@ export function EmployeeRegisterForm() {
               </Button>
             ) : (
               <Button onClick={() => void submitRegistration()} disabled={isSubmitting}>
-                {isSubmitting ? "Saving..." : "Save Employee"}
+                {isSubmitting ? "Saving..." : isInviteMode ? "Save Invite" : "Save Employee"}
               </Button>
             )}
           </div>

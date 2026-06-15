@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { TableScrollContainer } from "@/components/common/table-scroll-container"
 import { Plus } from "lucide-react"
 
 import {
@@ -19,12 +20,10 @@ import {
   getOffboardingProgress,
   listBranches,
   listDepartments,
-  listPositions,
   listEmployees,
   listOffboardingDocuments,
   listOffboardingRequests,
   listOffboardingWorkflows,
-  listUsers,
   rejectOffboardingRequest,
   submitOffboardingRequest,
   type AdminRecord,
@@ -120,8 +119,6 @@ export function OffboardingView() {
   const [employees, setEmployees] = React.useState<AdminRecord[]>([])
   const [branches, setBranches] = React.useState<AdminRecord[]>([])
   const [departments, setDepartments] = React.useState<AdminRecord[]>([])
-  const [positions, setPositions] = React.useState<AdminRecord[]>([])
-  const [users, setUsers] = React.useState<AdminRecord[]>([])
 
   const [requests, setRequests] = React.useState<AdminRecord[]>([])
   const [workflows, setWorkflows] = React.useState<AdminRecord[]>([])
@@ -241,24 +238,18 @@ export function OffboardingView() {
         employeesResult,
         branchesResult,
         departmentsResult,
-        positionsResult,
-        usersResult,
         requestsResult,
         workflowsResult,
       ] = await Promise.all([
         listEmployees(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
         listBranches(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
         listDepartments(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
-        listPositions(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
-        listUsers(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
         listOffboardingRequests(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
         listOffboardingWorkflows(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
       ])
       setEmployees(employeesResult.rows)
       setBranches(branchesResult.rows)
       setDepartments(departmentsResult.rows)
-      setPositions(positionsResult.rows)
-      setUsers(usersResult.rows)
       setRequests(requestsResult.rows)
       setWorkflows(workflowsResult.rows)
     } catch (errorObject) {
@@ -559,20 +550,20 @@ export function OffboardingView() {
             </div>
           </div>
 
-          <div className="overflow-x-auto rounded-md border border-slate-200">
-            <table className="min-w-full divide-y divide-slate-200 text-sm">
-              <thead className="bg-slate-50"><tr><th className="px-3 py-2 text-left font-semibold text-slate-700">Title</th><th className="px-3 py-2 text-left font-semibold text-slate-700">Employee</th><th className="px-3 py-2 text-left font-semibold text-slate-700">Type</th><th className="px-3 py-2 text-left font-semibold text-slate-700">Status</th><th className="px-3 py-2 text-left font-semibold text-slate-700">Last Working</th><th className="px-3 py-2 text-right font-semibold text-slate-700">Actions</th></tr></thead>
-              <tbody className="divide-y divide-slate-100 bg-white">
+          <TableScrollContainer>
+            <table className="w-full min-w-[900px] text-sm">
+              <thead className="bg-slate-50/90"><tr><th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Title</th><th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Employee</th><th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Type</th><th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Status</th><th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Last Working</th><th className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Actions</th></tr></thead>
+              <tbody className="[&_tr:nth-child(odd)]:bg-slate-50/35 [&_tr]:border-t [&_tr]:border-slate-100 [&_tr:hover]:bg-slate-50/80">
                 {requests.map((row, index) => {
                   const id = readNumber(row, ["id"])
                   return (
                     <tr key={`off-row-${id ?? index}`}>
-                      <td className="px-3 py-2">{readString(row, ["title"])}</td>
-                      <td className="px-3 py-2">{readString(row, ["employee_name", "employee_full_name", "employee_id"])}</td>
-                      <td className="px-3 py-2">{readString(row, ["offboarding_type"])}</td>
-                      <td className="px-3 py-2">{readString(row, ["status"])}</td>
-                      <td className="px-3 py-2">{readString(row, ["last_working_date"])}</td>
-                      <td className="px-3 py-2 text-right">
+                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["title"])}</td>
+                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["employee_name", "employee_full_name", "employee_id"])}</td>
+                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["offboarding_type"])}</td>
+                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["status"])}</td>
+                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["last_working_date"])}</td>
+                      <td className="px-4 py-4 text-right">
                         <div className="inline-flex gap-2">
                           <button type="button" className="rounded-md border border-slate-300 px-2 py-1 text-xs" onClick={() => void openRequestDetails(row)}>View</button>
                           <button type="button" className="rounded-md border border-blue-300 px-2 py-1 text-xs text-blue-700" onClick={() => void runRequestAction(row, "submit")}>Submit</button>
@@ -587,7 +578,7 @@ export function OffboardingView() {
                 })}
               </tbody>
             </table>
-          </div>
+          </TableScrollContainer>
         </div>
       ) : null}
 
@@ -693,18 +684,18 @@ export function OffboardingView() {
             <button type="button" className="rounded-md border border-slate-900 px-3 py-2 text-sm" onClick={() => void submitWorkflowStepForm()} disabled={saving}>Add Step</button>
           </div>
 
-          <div className="overflow-x-auto rounded-md border border-slate-200">
-            <table className="min-w-full divide-y divide-slate-200 text-sm">
-              <thead className="bg-slate-50"><tr><th className="px-3 py-2 text-left font-semibold text-slate-700">Workflow</th><th className="px-3 py-2 text-left font-semibold text-slate-700">Status</th><th className="px-3 py-2 text-left font-semibold text-slate-700">Default</th><th className="px-3 py-2 text-right font-semibold text-slate-700">Actions</th></tr></thead>
-              <tbody className="divide-y divide-slate-100 bg-white">
+          <TableScrollContainer>
+            <table className="w-full min-w-[900px] text-sm">
+              <thead className="bg-slate-50/90"><tr><th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Workflow</th><th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Status</th><th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Default</th><th className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Actions</th></tr></thead>
+              <tbody className="[&_tr:nth-child(odd)]:bg-slate-50/35 [&_tr]:border-t [&_tr]:border-slate-100 [&_tr:hover]:bg-slate-50/80">
                 {workflows.map((row, index) => {
                   const id = readNumber(row, ["id", "workflow_id"])
                   return (
                     <tr key={`off-wf-row-${id ?? index}`}>
-                      <td className="px-3 py-2">{readString(row, ["name", "title"])}</td>
-                      <td className="px-3 py-2">{readString(row, ["status"])}</td>
-                      <td className="px-3 py-2">{String(Boolean(row.is_default))}</td>
-                      <td className="px-3 py-2 text-right">
+                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["name", "title"])}</td>
+                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["status"])}</td>
+                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{String(Boolean(row.is_default))}</td>
+                      <td className="px-4 py-4 text-right">
                         <button type="button" className="rounded-md border border-rose-300 px-2 py-1 text-xs text-rose-700" onClick={async () => {
                           const token = readStoredToken()
                           if (!token || id === null) return
@@ -722,7 +713,7 @@ export function OffboardingView() {
                 })}
               </tbody>
             </table>
-          </div>
+          </TableScrollContainer>
         </div>
       ) : null}
 

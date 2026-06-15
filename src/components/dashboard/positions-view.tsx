@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { TableScrollContainer } from "@/components/common/table-scroll-container"
 
 import {
   createPosition,
@@ -375,35 +376,35 @@ export function PositionsView() {
 
       {error ? <p className="mb-3 text-sm text-rose-600">{error}</p> : null}
 
-      <div className="overflow-x-auto rounded-md border border-slate-200">
-        <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-50">
+      <TableScrollContainer>
+        <table className="w-full min-w-[900px] text-sm">
+          <thead className="bg-slate-50/90">
             <tr>
-              <th className="px-3 py-2 text-left font-semibold text-slate-700">Name</th>
-              <th className="px-3 py-2 text-left font-semibold text-slate-700">Code</th>
-              <th className="px-3 py-2 text-left font-semibold text-slate-700">Department</th>
-              <th className="px-3 py-2 text-left font-semibold text-slate-700">Designation</th>
-              <th className="px-3 py-2 text-left font-semibold text-slate-700">Level</th>
-              <th className="px-3 py-2 text-left font-semibold text-slate-700">Headcount</th>
-              <th className="px-3 py-2 text-left font-semibold text-slate-700">Manager</th>
-              <th className="px-3 py-2 text-left font-semibold text-slate-700">Status</th>
-              <th className="px-3 py-2 text-right font-semibold text-slate-700">Actions</th>
+              <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Name</th>
+              <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Code</th>
+              <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Department</th>
+              <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Designation</th>
+              <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Level</th>
+              <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Headcount</th>
+              <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Manager</th>
+              <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Status</th>
+              <th className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100 bg-white">
+          <tbody className="[&_tr:nth-child(odd)]:bg-slate-50/35 [&_tr]:border-t [&_tr]:border-slate-100 [&_tr:hover]:bg-slate-50/80">
             {rows.map((row, index) => {
               const id = readNumber(row, ["id"])
               return (
                 <tr key={String(id ?? index)}>
-                  <td className="px-3 py-2">{readString(row, ["name"])}</td>
-                  <td className="px-3 py-2">{readString(row, ["code"])}</td>
-                  <td className="px-3 py-2">{labelById(departments, readNumber(row, ["department_id"]))}</td>
-                  <td className="px-3 py-2">{labelById(designations, readNumber(row, ["designation_id"]))}</td>
-                  <td className="px-3 py-2">{String(readNumber(row, ["level"]) ?? "-")}</td>
-                  <td className="px-3 py-2">{String(readNumber(row, ["headcount"]) ?? "-")}</td>
-                  <td className="px-3 py-2">{readBoolean(row, ["is_manager"]) ? "Yes" : "No"}</td>
-                  <td className="px-3 py-2">{readString(row, ["status"])}</td>
-                  <td className="px-3 py-2 text-right">
+                  <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["name"])}</td>
+                  <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["code"])}</td>
+                  <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{labelById(departments, readNumber(row, ["department_id"]))}</td>
+                  <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{labelById(designations, readNumber(row, ["designation_id"]))}</td>
+                  <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{String(readNumber(row, ["level"]) ?? "-")}</td>
+                  <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{String(readNumber(row, ["headcount"]) ?? "-")}</td>
+                  <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readBoolean(row, ["is_manager"]) ? "Yes" : "No"}</td>
+                  <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["status"])}</td>
+                  <td className="px-4 py-4 text-right">
                     <div className="inline-flex gap-2">
                       <button
                         type="button"
@@ -431,14 +432,14 @@ export function PositionsView() {
             })}
             {!loading && rows.length === 0 ? (
               <tr>
-                <td className="px-3 py-6 text-center text-slate-500" colSpan={9}>
+                <td className="px-4 py-10 text-center text-sm text-slate-500" colSpan={9}>
                   No positions found.
                 </td>
               </tr>
             ) : null}
           </tbody>
         </table>
-      </div>
+      </TableScrollContainer>
 
       <div className="mt-4 flex items-center justify-between gap-3">
         <p className="text-sm text-slate-600">
