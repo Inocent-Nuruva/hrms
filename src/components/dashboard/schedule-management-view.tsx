@@ -9,6 +9,7 @@ import {
   clearPersistedFormState,
   persistFormState,
   readPersistedFormState,
+  readStoredCompanyName,
   RecordDetailsDialog,
 } from "@/components/dashboard/admin-view-shared"
 import {
@@ -826,7 +827,7 @@ function resolveVisibleColumns(section: ScheduleSectionKey, rows: AdminRecord[])
   return [...ordered, ...extras].slice(0, Math.max(ordered.length, 4))
 }
 
-function buildScheduleLookupLabelMaps(lookups: LookupState) {
+function buildScheduleLookupLabelMaps(lookups: LookupState, companyName: string | null) {
   const toMap = (rows: AdminRecord[], idKeys: string[], labelBuilder: (row: AdminRecord, id: number) => string) =>
     new Map<string, string>(
       rows
@@ -841,6 +842,8 @@ function buildScheduleLookupLabelMaps(lookups: LookupState) {
     )
 
   return {
+    company_id: new Map(companyName ? [["1", companyName]] : []),
+    companyId: new Map(companyName ? [["1", companyName]] : []),
     branch_id: toMap(lookups.branches, ["id", "branch_id"], (row, id) => {
       return readStringFromRecord(row, ["name", "branch_name", "title"]) ?? `Branch ${id}`
     }),
@@ -1618,6 +1621,9 @@ export function ScheduleManagementView({ section }: { section: string }) {
   const [deleteOpen, setDeleteOpen] = React.useState(false)
   const [detailsOpen, setDetailsOpen] = React.useState(false)
   const [selectedRow, setSelectedRow] = React.useState<AdminRecord | null>(null)
+  const [currentCompanyName, setCurrentCompanyName] = React.useState<string | null>(() =>
+    readStoredCompanyName()
+  )
 
   React.useEffect(() => {
     setCreateValues(readPersistedFormState(createDraftKey, initialFormState))
@@ -1637,6 +1643,10 @@ export function ScheduleManagementView({ section }: { section: string }) {
   React.useEffect(() => {
     persistFormState(createDraftKey, createValues)
   }, [createDraftKey, createValues])
+
+  React.useEffect(() => {
+    setCurrentCompanyName(readStoredCompanyName())
+  }, [])
 
   const editDraftKey = React.useMemo(() => {
     return editingId ? buildFormDraftStorageKey(`schedule:${activeSection}:edit:${editingId}`) : ""
@@ -1848,7 +1858,10 @@ export function ScheduleManagementView({ section }: { section: string }) {
   }, [fetchRows])
 
   const columns = React.useMemo(() => resolveVisibleColumns(activeSection, rows), [activeSection, rows])
-  const lookupMaps = React.useMemo(() => buildScheduleLookupLabelMaps(lookups), [lookups])
+  const lookupMaps = React.useMemo(
+    () => buildScheduleLookupLabelMaps(lookups, currentCompanyName),
+    [currentCompanyName, lookups]
+  )
 
   const onCreate = async () => {
     const token = readStoredToken()

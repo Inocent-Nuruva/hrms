@@ -18,6 +18,7 @@ import {
   formatAdminValue,
   persistFormState,
   readPersistedFormState,
+  readStoredCompanyName,
   RecordDetailsDialog,
 } from "@/components/dashboard/admin-view-shared"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
@@ -902,6 +903,7 @@ function toPayload(fields: FieldConfig[], values: Record<string, string>) {
 }
 
 function buildAttendanceLookupLabelMaps({
+  companyName,
   branches,
   policies,
   devices,
@@ -909,6 +911,7 @@ function buildAttendanceLookupLabelMaps({
   wifiNetworks,
   holidayGroups,
 }: {
+  companyName: string | null
   branches: AdminRecord[]
   policies: AdminRecord[]
   devices: AdminRecord[]
@@ -930,6 +933,8 @@ function buildAttendanceLookupLabelMaps({
     )
 
   return {
+    company_id: new Map(companyName ? [["1", companyName]] : []),
+    companyId: new Map(companyName ? [["1", companyName]] : []),
     branch_id: toMap(branches, ["id", "branch_id"], (row, id) => {
       return readStringFromRecord(row, ["name", "title", "display_name"]) ?? `Branch ${id}`
     }),
@@ -1475,6 +1480,9 @@ export function AttendanceManagementView({ section }: { section: string }) {
   const [detailsOpen, setDetailsOpen] = React.useState(false)
   const [selectedRow, setSelectedRow] = React.useState<AdminRecord | null>(null)
   const [guidanceDismissed, setGuidanceDismissed] = React.useState(false)
+  const [currentCompanyName, setCurrentCompanyName] = React.useState<string | null>(() =>
+    readStoredCompanyName()
+  )
 
   React.useEffect(() => {
     setCreateValues(readPersistedFormState(createDraftKey, initialCreateState))
@@ -1511,6 +1519,10 @@ export function AttendanceManagementView({ section }: { section: string }) {
     }
     setGuidanceDismissed(window.localStorage.getItem(guidanceStorageKey) === "true")
   }, [guidanceStorageKey])
+
+  React.useEffect(() => {
+    setCurrentCompanyName(readStoredCompanyName())
+  }, [])
 
   const supportsEditDelete = !isReadOnlySection
   const supportsCreate = !isReadOnlySection
@@ -1738,6 +1750,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
   const lookupMaps = React.useMemo(
     () =>
       buildAttendanceLookupLabelMaps({
+        companyName: currentCompanyName,
         branches,
         policies,
         devices,
@@ -1745,7 +1758,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
         wifiNetworks,
         holidayGroups,
       }),
-    [branches, devices, geofences, holidayGroups, policies, wifiNetworks]
+    [branches, currentCompanyName, devices, geofences, holidayGroups, policies, wifiNetworks]
   )
   const showDeviceContextColumn = isDeviceSyncLogsSection
   const sectionGuidance = React.useMemo(() => getSectionSetupGuidance(activeSection), [activeSection])
@@ -2035,10 +2048,10 @@ export function AttendanceManagementView({ section }: { section: string }) {
                 <PlusIcon className="h-4 w-4" />
               </button>
               <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-                <DialogPopup className="sm:max-w-2xl">
+                <DialogPopup className="flex max-h-[90vh] w-[min(920px,96vw)] flex-col overflow-hidden sm:max-w-4xl">
                   {renderSectionDialogHeader("Create")}
                   {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
-                  <div className="grid max-h-[60vh] gap-2 pr-1">
+                  <div className="grid min-h-0 flex-1 gap-2 overflow-y-auto pr-1 pb-2">
                     {activeSection === "wifi-networks" ? (
                       <div className="rounded-xl border border-sky-200 bg-sky-50/80 px-4 py-3 text-sm text-sky-950 dark:border-sky-900/70 dark:bg-sky-950/30 dark:text-sky-100">
                         <p className="font-medium">Wi-Fi details helper</p>
@@ -2075,7 +2088,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
                       </label>
                     ))}
                   </div>
-                  <DialogFooter>
+                  <DialogFooter className="mt-0 border-t border-slate-200 pt-3 dark:border-slate-800">
                     <button
                       type="button"
                       className="rounded-md border border-slate-300 px-3 py-1.5 text-sm"
@@ -2095,13 +2108,13 @@ export function AttendanceManagementView({ section }: { section: string }) {
             </>
           ) : null}
           <Dialog open={editOpen} onOpenChange={setEditOpen}>
-            <DialogPopup className="sm:max-w-2xl">
+            <DialogPopup className="flex max-h-[90vh] w-[min(920px,96vw)] flex-col overflow-hidden sm:max-w-4xl">
               {renderSectionDialogHeader("Edit")}
               {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
               {editingLoading ? (
                 <p className="text-sm text-slate-500">Loading latest record details...</p>
               ) : null}
-              <div className="max-h-[50vh] overflow-auto grid gap-2 pr-1">
+              <div className="grid min-h-0 flex-1 gap-2 overflow-y-auto pr-1 pb-2">
                 {activeSection === "wifi-networks" ? (
                   <div className="rounded-xl border border-sky-200 bg-sky-50/80 px-4 py-3 text-sm text-sky-950 dark:border-sky-900/70 dark:bg-sky-950/30 dark:text-sky-100">
                     <p className="font-medium">Wi-Fi details helper</p>
@@ -2138,7 +2151,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
                   </label>
                 ))}
               </div>
-              <DialogFooter>
+              <DialogFooter className="mt-0 border-t border-slate-200 pt-3 dark:border-slate-800">
                 <button
                   type="button"
                   className="rounded-md border border-slate-300 px-3 py-1.5 text-sm"

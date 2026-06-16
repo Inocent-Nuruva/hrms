@@ -383,6 +383,20 @@ function resolveRowId(row: AdminRecord, fallbackIndex: number) {
   return match ?? fallbackIndex
 }
 
+function toLookupMap(
+  rows: AdminRecord[],
+  idKeys: string[],
+  labelResolver: (row: AdminRecord, id: number) => string
+) {
+  const map = new Map<number, string>()
+  for (const row of rows) {
+    const id = readNumberFromRecord(row, idKeys)
+    if (id === null || map.has(id)) continue
+    map.set(id, labelResolver(row, id))
+  }
+  return map
+}
+
 function formatLoadError(errorObject: unknown, fallback: string) {
   if (errorObject instanceof Error && errorObject.message) {
     return errorObject.message
@@ -746,6 +760,75 @@ export function AccessControlManagementView({
   }, [fetchRows])
 
   const columns = React.useMemo(() => resolveVisibleColumns(rows), [rows])
+  const branchNameById = React.useMemo(
+    () =>
+      toLookupMap(branches, ["id", "branch_id"], (row, id) =>
+        readStringFromRecord(row, ["name", "title", "display_name", "branch_name"]) ?? `Branch ${id}`
+      ),
+    [branches]
+  )
+  const departmentNameById = React.useMemo(
+    () =>
+      toLookupMap(departments, ["id", "department_id"], (row, id) =>
+        readStringFromRecord(row, ["name", "title", "display_name", "department_name"]) ?? `Department ${id}`
+      ),
+    [departments]
+  )
+  const deviceNameById = React.useMemo(
+    () =>
+      toLookupMap(devices, ["id", "device_id"], (row, id) => {
+        const name = readStringFromRecord(row, ["device_name", "deviceName", "name"]) ?? `Device ${id}`
+        const code = readStringFromRecord(row, ["device_code", "deviceCode"])
+        return code ? `${name} (${code})` : name
+      }),
+    [devices]
+  )
+  const organizationNameById = React.useMemo(
+    () =>
+      toLookupMap(organizations, ["id", "organization_id", "organizationId"], (row, id) =>
+        readStringFromRecord(row, ["org_name", "orgName", "name"]) ?? `Organization ${id}`
+      ),
+    [organizations]
+  )
+
+  const resolveDisplayValue = React.useCallback(
+    (row: AdminRecord, column: string) => {
+      const branchId =
+        column === "branch_id" || column === "branchId"
+          ? readNumberFromRecord(row, [column])
+          : null
+      if (branchId !== null) {
+        return branchNameById.get(branchId) ?? `Branch ${branchId}`
+      }
+
+      const departmentId =
+        column === "department_id" || column === "departmentId"
+          ? readNumberFromRecord(row, [column])
+          : null
+      if (departmentId !== null) {
+        return departmentNameById.get(departmentId) ?? `Department ${departmentId}`
+      }
+
+      const deviceId =
+        column === "device_id" || column === "deviceId"
+          ? readNumberFromRecord(row, [column])
+          : null
+      if (deviceId !== null) {
+        return deviceNameById.get(deviceId) ?? `Device ${deviceId}`
+      }
+
+      const parentId =
+        column === "parent_id" || column === "parentId"
+          ? readNumberFromRecord(row, [column])
+          : null
+      if (parentId !== null) {
+        return organizationNameById.get(parentId) ?? `Organization ${parentId}`
+      }
+
+      return stringifyValue(row[column])
+    },
+    [branchNameById, departmentNameById, deviceNameById, organizationNameById]
+  )
 
   const onCreate = async () => {
     const token = readStoredToken()
@@ -916,7 +999,7 @@ export function AccessControlManagementView({
                       key={`${String(rowId)}-${column}`}
                       className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap"
                     >
-                      {stringifyValue(row[column])}
+                      {resolveDisplayValue(row, column)}
                     </td>
                   ))}
                   <td className="px-4 py-4">

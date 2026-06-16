@@ -777,8 +777,8 @@ export function AttendanceActivityView({ section }: { section: string }) {
       if (activeSection === "daily-summaries") {
         const [result, branchesResult, employeesResult] = await Promise.all([
           listAttendanceDailySummaries(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
-          listBranches(token, { page: 1, limit: 200, sortBy: "created_at", sortOrder: "DESC" }),
-          listEmployees(token, { page: 1, limit: 200, sortBy: "created_at", sortOrder: "DESC" }),
+          listBranches(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
+          listEmployees(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
         ])
         setRows(enrichRowsWithReadableNames(result.rows, branchesResult.rows, employeesResult.rows))
         setSingleRecord(null)

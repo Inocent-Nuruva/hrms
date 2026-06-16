@@ -88,6 +88,11 @@ export function NavMain({
     return defaultOpenGroups
   })
   const [hoveredLink, setHoveredLink] = React.useState<string | null>(null)
+  const groupedItems = React.useMemo(() => {
+    const expandable = items.filter((item) => item.items?.length)
+    const directLinks = items.filter((item) => !item.items?.length)
+    return { expandable, directLinks }
+  }, [items])
 
   const renderAnimatedIcon = React.useCallback((icon: React.ReactNode, key: string) => {
     if (!React.isValidElement(icon)) {
@@ -95,7 +100,7 @@ export function NavMain({
     }
     return React.cloneElement(icon as React.ReactElement<Record<string, unknown>>, {
       animate: hoveredLink === key ? "path-loop" : false,
-      size: 38,
+      size: 32,
     })
   }, [hoveredLink])
 
@@ -151,7 +156,7 @@ export function NavMain({
         <SidebarMenuSubItem key={key}>
           <SidebarMenuSubButton
             className={`cursor-pointer rounded-lg text-foreground !no-underline hover:!no-underline hover:bg-muted data-active:!bg-transparent data-active:!text-[var(--sidebar-active-link-color)] ${
-              depth === 0 ? "py-2 text-[0.72rem] font-medium leading-tight" : "py-2.5 text-[0.78rem] font-medium leading-tight"
+              depth === 0 ? "py-3 text-[0.78rem] font-medium leading-snug" : "py-3 text-[0.82rem] font-medium leading-snug"
             }`}
             isActive={isActive}
             onClick={() =>
@@ -182,8 +187,8 @@ export function NavMain({
               <SidebarMenuSub
                 className={
                   depth > 0
-                    ? "ml-3 border-l border-slate-200 pl-2"
-                    : "mx-1.5 border-l-0 px-0"
+                    ? "ml-3 space-y-1 border-l border-slate-200 pl-2 pt-1"
+                    : "mx-1.5 space-y-1.5 border-l-0 px-0 pt-1"
                 }
               >
                 {node.items?.map((child) => renderNode(child, depth + 1))}
@@ -199,10 +204,10 @@ export function NavMain({
         <SidebarMenuSubButton
           className={`rounded-lg !no-underline data-active:!bg-transparent data-active:!text-[var(--sidebar-active-link-color)] ${
             node.disabled
-              ? "cursor-not-allowed py-2.5 text-[0.78rem] leading-tight text-slate-400"
+              ? "cursor-not-allowed py-3 text-[0.82rem] leading-snug text-slate-400"
               : depth === 0
-                ? "cursor-pointer py-2 text-[0.72rem] leading-tight text-foreground hover:!no-underline hover:bg-muted"
-                : "cursor-pointer py-2.5 text-[0.78rem] leading-tight text-foreground hover:!no-underline hover:bg-muted"
+                ? "cursor-pointer py-3 text-[0.78rem] leading-snug text-foreground hover:!no-underline hover:bg-muted"
+                : "cursor-pointer py-3 text-[0.82rem] leading-snug text-foreground hover:!no-underline hover:bg-muted"
           }`}
           isActive={!node.disabled && Boolean(node.url) && currentPath === node.url}
           onClick={() => {
@@ -220,11 +225,11 @@ export function NavMain({
   return (
     <SidebarGroup>
       <SidebarGroupContent className="flex flex-col gap-2">
-        <SidebarMenu>
+        <SidebarMenu className="space-y-0">
           <SidebarMenuItem className="flex items-center gap-2">
             <SidebarMenuButton
               tooltip="Dashboard"
-              className="min-w-8 rounded-xl bg-transparent text-foreground duration-200 ease-linear hover:bg-muted hover:text-foreground data-active:!bg-transparent data-active:!text-[var(--sidebar-active-link-color)] [&_svg]:!text-[var(--sidebar-icon-color)]"
+              className="min-h-[2.6rem] h-auto min-w-8 rounded-xl bg-transparent py-2 text-[0.9rem] font-medium leading-snug text-foreground duration-200 ease-linear hover:bg-muted hover:text-foreground data-active:!bg-transparent data-active:!text-[var(--sidebar-active-link-color)] [&_svg]:!text-[var(--sidebar-icon-color)]"
               isActive={currentPath === "/dashboard"}
               onClick={() => {
                 router.push("/dashboard")
@@ -232,15 +237,15 @@ export function NavMain({
               onMouseEnter={() => setHoveredLink("__dashboard")}
               onMouseLeave={() => setHoveredLink((value) => (value === "__dashboard" ? null : value))}
             >
-              <LayoutDashboard size={48} animation="path-loop" animate={hoveredLink === "__dashboard" ? "path-loop" : false} />
-              <span>Dashboard</span>
+              <LayoutDashboard size={40} animation="path-loop" animate={hoveredLink === "__dashboard" ? "path-loop" : false} />
+              <span className="min-w-0 flex-1 text-left leading-[1.1rem] whitespace-normal">Dashboard</span>
             </SidebarMenuButton>
             <Dialog>
               <DialogTrigger
                 render={
                   <Button
                     size="icon"
-                    className="size-8 group-data-[collapsible=icon]:opacity-0"
+                    className="size-7 group-data-[collapsible=icon]:opacity-0"
                     variant="outline"
                     aria-label="Notifications"
                     title="Notifications"
@@ -269,12 +274,12 @@ export function NavMain({
             </Dialog>
           </SidebarMenuItem>
         </SidebarMenu>
-        <SidebarMenu>
-          {items.map((item) => (
+        <SidebarMenu className="space-y-0.5">
+          {groupedItems.expandable.map((item) => (
             <SidebarMenuItem key={item.title}>
               <SidebarMenuButton
                 tooltip={item.title}
-                className="cursor-pointer rounded-xl py-3.5 text-[0.95rem] font-medium text-foreground !no-underline hover:!no-underline hover:bg-muted data-active:!bg-transparent data-active:!text-[var(--sidebar-active-link-color)] [&_svg]:!text-[var(--sidebar-icon-color)]"
+                className="min-h-[2.6rem] h-auto cursor-pointer rounded-xl py-2 text-[0.9rem] font-medium leading-snug text-foreground !no-underline hover:!no-underline hover:bg-muted data-active:!bg-transparent data-active:!text-[var(--sidebar-active-link-color)] [&_svg]:!text-[var(--sidebar-icon-color)]"
                 isActive={
                   item.items ? nodeContainsCurrentPath(item, currentPath) : currentPath === item.url
                 }
@@ -294,13 +299,15 @@ export function NavMain({
                 onMouseLeave={() => setHoveredLink((value) => (value === item.title ? null : value))}
               >
                 {renderAnimatedIcon(item.icon, item.title)}
-                <span>{item.title}</span>
+                <span className="min-w-0 flex-1 text-left leading-[1.1rem] whitespace-normal">
+                  {item.title}
+                </span>
                 {item.items ? (
                   <ChevronDownIcon
                     className={
                       openGroups[item.title]
-                        ? "ml-auto transition-transform duration-300 rotate-180"
-                        : "ml-auto transition-transform duration-300"
+                        ? "ml-auto mt-0.5 shrink-0 self-start transition-transform duration-300 rotate-180"
+                        : "ml-auto mt-0.5 shrink-0 self-start transition-transform duration-300"
                     }
                   />
                 ) : null}
@@ -324,6 +331,49 @@ export function NavMain({
             </SidebarMenuItem>
           ))}
         </SidebarMenu>
+        {groupedItems.directLinks.length > 0 ? (
+          <SidebarMenu className="space-y-0.5 pt-1.5">
+            {groupedItems.directLinks.map((item) => (
+            <SidebarMenuItem key={item.title}>
+              <SidebarMenuButton
+                tooltip={item.title}
+                className="min-h-[2.6rem] h-auto cursor-pointer rounded-xl py-2 text-[0.9rem] font-medium leading-snug text-foreground !no-underline hover:!no-underline hover:bg-muted data-active:!bg-transparent data-active:!text-[var(--sidebar-active-link-color)] [&_svg]:!text-[var(--sidebar-icon-color)]"
+                isActive={
+                  item.items ? nodeContainsCurrentPath(item, currentPath) : currentPath === item.url
+                }
+                onClick={() => {
+                  if (!item.items) {
+                    if (item.url) {
+                      router.push(item.url)
+                    }
+                    return
+                  }
+                  setOpenGroups((previous) => ({
+                    ...previous,
+                    [item.title]: !previous[item.title],
+                  }))
+                }}
+                onMouseEnter={() => setHoveredLink(item.title)}
+                onMouseLeave={() => setHoveredLink((value) => (value === item.title ? null : value))}
+              >
+                {renderAnimatedIcon(item.icon, item.title)}
+                <span className="min-w-0 flex-1 text-left leading-[1.1rem] whitespace-normal">
+                  {item.title}
+                </span>
+                {item.items ? (
+                  <ChevronDownIcon
+                    className={
+                      openGroups[item.title]
+                        ? "ml-auto mt-0.5 shrink-0 self-start transition-transform duration-300 rotate-180"
+                        : "ml-auto mt-0.5 shrink-0 self-start transition-transform duration-300"
+                    }
+                  />
+                ) : null}
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            ))}
+          </SidebarMenu>
+        ) : null}
       </SidebarGroupContent>
     </SidebarGroup>
   )

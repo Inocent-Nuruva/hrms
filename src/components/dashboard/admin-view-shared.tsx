@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from "@/components/animate-ui/components/base/dialog"
 import type { AdminRecord } from "@/lib/admin-api"
+import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 
 const FORM_DRAFT_PREFIX = "hrms.form-draft"
 
@@ -163,6 +164,47 @@ export function clearPersistedFormState(storageKey: string) {
     return
   }
   window.localStorage.removeItem(storageKey)
+}
+
+export function readStoredCompanyName() {
+  if (typeof window === "undefined") {
+    return null
+  }
+
+  const rawUser = window.localStorage.getItem(AUTH_STORAGE_KEYS.user)
+  if (!rawUser) {
+    return null
+  }
+
+  try {
+    const parsed = JSON.parse(rawUser) as Record<string, unknown>
+    const candidates = [
+      parsed,
+      typeof parsed.company === "object" && parsed.company ? (parsed.company as Record<string, unknown>) : null,
+      typeof parsed.organization === "object" && parsed.organization ? (parsed.organization as Record<string, unknown>) : null,
+      typeof parsed.tenant === "object" && parsed.tenant ? (parsed.tenant as Record<string, unknown>) : null,
+    ].filter((entry): entry is Record<string, unknown> => Boolean(entry))
+
+    for (const candidate of candidates) {
+      const value = [
+        candidate.companyName,
+        candidate.company_name,
+        candidate.display_name,
+        candidate.company,
+        candidate.organization_name,
+        candidate.tenant_name,
+        candidate.name,
+      ].find((entry) => typeof entry === "string" && entry.trim())
+
+      if (typeof value === "string") {
+        return value.trim()
+      }
+    }
+  } catch {
+    return null
+  }
+
+  return null
 }
 
 export function RecordDetailsDialog({
