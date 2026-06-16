@@ -795,27 +795,35 @@ function stringifyLookupValue(value: unknown) {
   return ""
 }
 
-function resolveVisibleColumns(rows: AdminRecord[]) {
-  const preferred = [
-    "id",
-    "name",
-    "code",
-    "status",
-    "employee_id",
-    "shift_id",
-    "timetable_id",
-    "sequence_no",
-    "schedule_date",
-    "effective_from",
-    "effective_to",
-    "created_at",
-    "updated_at",
-  ]
+function resolveVisibleColumns(section: ScheduleSectionKey, rows: AdminRecord[]) {
+  const preferredBySection: Partial<Record<ScheduleSectionKey, string[]>> = {
+    shifts: ["name", "status", "start_time", "end_time"],
+    "shift-breaks": ["name", "shift_id", "start_time", "end_time"],
+    "shift-attendance-rules": ["shift_id", "late_after_minutes", "absent_after_minutes", "half_day_after_minutes"],
+    "shift-overtime-rules": ["shift_id", "overtime_start_after_minutes", "max_daily_overtime_minutes", "requires_approval"],
+    "shift-assignments": ["employee_id", "shift_id", "effective_from", "status"],
+    "shift-schedules": ["employee_id", "shift_id", "schedule_date", "is_off_day"],
+    "shift-templates": ["name", "template_type", "status"],
+    "shift-rotation-groups": ["name", "code", "cycle_days", "status"],
+    "shift-rotation-rules": ["rotation_group_id", "shift_id", "day_index", "is_off_day"],
+    "shift-change-requests": ["employee_id", "current_shift_id", "requested_shift_id", "status"],
+    timetables: ["name", "status", "timetable_type"],
+    "timetable-days": ["timetable_id", "day_of_week", "shift_id", "is_off_day"],
+    "timetable-shift-rules": ["timetable_id", "shift_id", "effective_from", "effective_to"],
+    "timetable-holiday-rules": ["timetable_id", "holiday_group_id", "action", "is_paid"],
+    "timetable-attendance-rules": ["timetable_id", "late_after_minutes", "absent_after_minutes", "half_day_after_minutes"],
+    "timetable-rotations": ["name", "rotation_group_id", "status"],
+    "timetable-rotation-rules": ["rotation_id", "shift_id", "day_index", "is_off_day"],
+    "employee-timetables": ["employee_id", "timetable_id", "effective_from", "status"],
+    "timetable-generated-schedules": ["employee_id", "timetable_id", "schedule_date", "generated_from_rotation"],
+  }
+
+  const preferred = preferredBySection[section] ?? ["name", "status", "created_at"]
   const keySet = new Set<string>()
   rows.forEach((row) => Object.keys(row).forEach((key) => keySet.add(key)))
   const ordered = preferred.filter((key) => keySet.has(key))
   const extras = Array.from(keySet).filter((key) => !ordered.includes(key)).sort((a, b) => a.localeCompare(b))
-  return [...ordered, ...extras].slice(0, 8)
+  return [...ordered, ...extras].slice(0, Math.max(ordered.length, 4))
 }
 
 function buildScheduleLookupLabelMaps(lookups: LookupState) {
@@ -1839,7 +1847,7 @@ export function ScheduleManagementView({ section }: { section: string }) {
     void fetchRows()
   }, [fetchRows])
 
-  const columns = React.useMemo(() => resolveVisibleColumns(rows), [rows])
+  const columns = React.useMemo(() => resolveVisibleColumns(activeSection, rows), [activeSection, rows])
   const lookupMaps = React.useMemo(() => buildScheduleLookupLabelMaps(lookups), [lookups])
 
   const onCreate = async () => {
@@ -1998,20 +2006,20 @@ export function ScheduleManagementView({ section }: { section: string }) {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-[#101826]/92">
+      <div className="mx-auto w-full max-w-6xl rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-sm dark:border-slate-800 dark:bg-[#101826]/92 lg:px-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div className="space-y-2">
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
               {config.moduleTitle}
             </p>
             <div>
-              <h1 className="text-3xl font-semibold tracking-tight text-slate-900 dark:text-slate-100">{config.title}</h1>
-              <p className="mt-2 max-w-3xl text-sm text-slate-600 dark:text-slate-300">{config.description}</p>
+              <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-100 md:text-[2rem]">{config.title}</h1>
+              <p className="mt-2 max-w-3xl text-[0.95rem] text-slate-600 dark:text-slate-300">{config.description}</p>
             </div>
           </div>
           <div className="flex items-center gap-3 self-start">
             <button
-              className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-300 px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              className="inline-flex h-9 items-center justify-center rounded-xl border border-slate-300 px-3.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
               type="button"
               onClick={() => {
                 setMessage(null)
@@ -2022,7 +2030,7 @@ export function ScheduleManagementView({ section }: { section: string }) {
               Refresh
             </button>
             <button
-              className="inline-flex h-11 items-center justify-center rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800"
+              className="inline-flex h-9 items-center justify-center rounded-xl bg-slate-900 px-3.5 text-sm font-semibold text-white transition hover:bg-slate-800"
               type="button"
               onClick={() => {
                 setFormError(null)
@@ -2038,20 +2046,20 @@ export function ScheduleManagementView({ section }: { section: string }) {
         {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
         {message ? <p className="mt-4 text-sm text-green-600">{message}</p> : null}
 
-        <div className="mt-6">
+        <div className="mt-5">
           <TableScrollContainer>
-            <table className="min-w-full min-w-[900px] text-left text-sm">
+            <table className="min-w-full min-w-[720px] text-left text-sm">
               <thead className="bg-[var(--table-header-accent-bg)] text-[var(--table-header-accent)] backdrop-blur-sm">
                 <tr>
                   {columns.map((column) => (
                     <th
                       key={column}
-                      className="px-4 py-3.5 text-xs font-semibold uppercase tracking-[0.08em] whitespace-nowrap"
+                      className="px-3 py-3 text-[0.7rem] font-semibold uppercase tracking-[0.08em] whitespace-nowrap"
                     >
                       {prettifyLabel(column)}
                     </th>
                   ))}
-                  <th className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.08em] whitespace-nowrap">
+                  <th className="px-3 py-3 text-right text-[0.7rem] font-semibold uppercase tracking-[0.08em] whitespace-nowrap">
                     Actions
                   </th>
                 </tr>
@@ -2079,11 +2087,11 @@ export function ScheduleManagementView({ section }: { section: string }) {
                         onClick={() => openDetailsDialog(row)}
                       >
                         {columns.map((column) => (
-                          <td key={column} className="px-4 py-4 text-slate-700 whitespace-nowrap dark:text-slate-200">
+                          <td key={column} className="px-3 py-3 text-[0.95rem] text-slate-700 whitespace-nowrap dark:text-slate-200">
                             {resolveScheduleCellValue(column, row, lookupMaps)}
                           </td>
                         ))}
-                        <td className="px-4 py-4">
+                        <td className="px-3 py-3">
                           <div className="flex items-center justify-end gap-2">
                             <button
                               className="inline-flex items-center rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:border-[color:rgb(var(--primary-rgb)/0.35)] hover:bg-[color:rgb(var(--primary-rgb)/0.10)] hover:text-[var(--primary)] dark:border-slate-700 dark:text-slate-200 dark:hover:border-[color:rgb(var(--primary-rgb)/0.45)] dark:hover:bg-[color:rgb(var(--primary-rgb)/0.18)]"

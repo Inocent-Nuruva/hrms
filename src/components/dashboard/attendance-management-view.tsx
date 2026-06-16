@@ -557,39 +557,26 @@ function formatAttendanceError(
   return fallbackMessage
 }
 
-function resolveVisibleColumns(rows: AdminRecord[]) {
-  const preferred = [
-    "id",
-    "device_name",
-    "name",
-    "device_code",
-    "code",
-    "device_model",
-    "status",
-    "type",
-    "branch_id",
-    "branchId",
-    "policy_set_id",
-    "employeeId",
-    "punchType",
-    "validationStatus",
-    "punchTime",
-    "attendanceDate",
-    "ssid",
-    "bssid",
-    "radiusMeters",
-    "securityType",
-    "device_id",
-    "ip_address",
-    "sync_mode",
-    "created_at",
-    "updated_at",
-  ]
+function resolveVisibleColumns(section: AttendanceSectionKey, rows: AdminRecord[]) {
+  const preferredBySection: Record<AttendanceSectionKey, string[]> = {
+    settings: ["name", "auto_calculate", "requires_approval", "overtime_rate_multiplier"],
+    policies: ["name", "is_active", "grace_period_minutes", "require_geo_fencing"],
+    devices: ["device_name", "status", "ip_address", "sync_mode"],
+    checkpoints: ["name", "type", "policy_set_id", "status"],
+    geofences: ["name", "status", "type", "branchId"],
+    "wifi-networks": ["name", "status", "ssid"],
+    "mobile-punches": ["employeeId", "attendanceDate", "punchType", "validationStatus"],
+    "holiday-groups": ["name", "status", "start_date", "end_date"],
+    holidays: ["name", "date", "type", "branch_id"],
+    "device-sync-logs": ["status", "records_synced", "created_at", "device_id"],
+  }
+
+  const preferred = preferredBySection[section] ?? ["name", "status", "type", "created_at"]
   const keySet = new Set<string>()
   rows.forEach((row) => Object.keys(row).forEach((key) => keySet.add(key)))
   const ordered = preferred.filter((key) => keySet.has(key))
   const extras = Array.from(keySet).filter((key) => !ordered.includes(key)).sort((a, b) => a.localeCompare(b))
-  return [...ordered, ...extras].slice(0, 8)
+  return [...ordered, ...extras].slice(0, Math.max(ordered.length, 4))
 }
 
 function getAttendanceDeviceLink(row: AdminRecord) {
@@ -1747,7 +1734,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
     }
   }, [fields])
 
-  const columns = React.useMemo(() => resolveVisibleColumns(rows), [rows])
+  const columns = React.useMemo(() => resolveVisibleColumns(activeSection, rows), [activeSection, rows])
   const lookupMaps = React.useMemo(
     () =>
       buildAttendanceLookupLabelMaps({
@@ -1967,12 +1954,12 @@ export function AttendanceManagementView({ section }: { section: string }) {
   }
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white/80 px-4 py-5 shadow-sm dark:border-slate-800 dark:bg-[#101826]/92 lg:px-6">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+    <div className="mx-auto w-full max-w-6xl rounded-xl border border-slate-200 bg-white/80 px-5 py-4 shadow-sm dark:border-slate-800 dark:bg-[#101826]/92 lg:px-6">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Attendance Management</h2>
+          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100 md:text-lg">Attendance Management</h2>
           <div className="flex items-center gap-1.5">
-            <p className="text-sm text-slate-500 capitalize dark:text-slate-400">{activeSection.replaceAll("-", " ")}</p>
+            <p className="text-[0.95rem] text-slate-500 capitalize dark:text-slate-400">{activeSection.replaceAll("-", " ")}</p>
             {activeSection === "devices" ? (
               <Tooltip>
                 <TooltipTrigger
@@ -2009,7 +1996,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
             ) : null}
           </div>
           {sectionGuidance.length && !guidanceDismissed ? (
-            <div className="mt-3 rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900 dark:border-sky-900/70 dark:bg-sky-950/35 dark:text-sky-100">
+            <div className="mt-3 max-w-4xl rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-[0.95rem] text-sky-900 dark:border-sky-900/70 dark:bg-sky-950/35 dark:text-sky-100">
               <div className="mb-2 flex items-start justify-between gap-3">
                 <div className="flex items-center gap-2 text-sky-900 dark:text-sky-100">
                   <InfoIcon className="mt-0.5 h-4 w-4 shrink-0" />
@@ -2040,7 +2027,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
             <>
               <button
                 type="button"
-                className="inline-flex h-10 w-10 items-center justify-center rounded-md bg-slate-900 text-white"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-slate-900 text-white"
                 onClick={() => setCreateOpen(true)}
                 aria-label={`Create ${activeSection.replaceAll("-", " ")}`}
                 title="Create"
@@ -2051,7 +2038,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
                 <DialogPopup className="sm:max-w-2xl">
                   {renderSectionDialogHeader("Create")}
                   {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
-                  <div className="max-h-[60vh] overflow-auto grid gap-2 pr-1">
+                  <div className="grid max-h-[60vh] gap-2 pr-1">
                     {activeSection === "wifi-networks" ? (
                       <div className="rounded-xl border border-sky-200 bg-sky-50/80 px-4 py-3 text-sm text-sky-950 dark:border-sky-900/70 dark:bg-sky-950/30 dark:text-sky-100">
                         <p className="font-medium">Wi-Fi details helper</p>
@@ -2218,7 +2205,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
           <button
             type="button"
             onClick={() => void fetchRows()}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-slate-300 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-300 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
             disabled={loading}
             aria-label="Refresh"
             title="Refresh"
@@ -2248,24 +2235,24 @@ export function AttendanceManagementView({ section }: { section: string }) {
       ) : null}
 
       <TableScrollContainer>
-        <table className="min-w-full min-w-[900px] text-sm">
+        <table className="min-w-full min-w-[720px] text-sm">
           <thead className="bg-[var(--table-header-accent-bg)] text-[var(--table-header-accent)] backdrop-blur-sm">
             <tr>
               {columns.map((column) => (
                 <th
                   key={column}
-                  className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] whitespace-nowrap"
+                  className="px-3 py-3 text-left text-[0.7rem] font-semibold uppercase tracking-[0.08em] whitespace-nowrap"
                 >
                   {column.replaceAll("_", " ")}
                 </th>
               ))}
               {showDeviceContextColumn ? (
-                <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] whitespace-nowrap">
+                <th className="px-3 py-3 text-left text-[0.7rem] font-semibold uppercase tracking-[0.08em] whitespace-nowrap">
                   Related device
                 </th>
               ) : null}
               {supportsEditDelete ? (
-                <th className="w-24 px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.08em] whitespace-nowrap">
+                <th className="w-24 px-3 py-3 text-right text-[0.7rem] font-semibold uppercase tracking-[0.08em] whitespace-nowrap">
                   Actions
                 </th>
               ) : null}
@@ -2291,13 +2278,13 @@ export function AttendanceManagementView({ section }: { section: string }) {
                 {columns.map((column) => (
                   <td
                     key={`${String(row.id ?? index)}-${column}`}
-                    className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap dark:text-slate-200"
+                    className="px-3 py-3 text-[0.95rem] text-slate-700 whitespace-nowrap dark:text-slate-200"
                   >
                     {resolveAttendanceCellValue(column, row, lookupMaps)}
                   </td>
                 ))}
                 {showDeviceContextColumn ? (
-                  <td className="px-4 py-4">
+                  <td className="px-3 py-3">
                     {(() => {
                       const deviceLink = getAttendanceDeviceLink(row)
                       if (!deviceLink) {
@@ -2318,7 +2305,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
                   </td>
                 ) : null}
                 {supportsEditDelete ? (
-                  <td className="px-4 py-4">
+                  <td className="px-3 py-3">
                     <div className="flex justify-end gap-2">
                       {activeSection === "policies" ? (
                       <button
