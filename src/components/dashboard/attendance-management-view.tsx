@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { CircleHelpIcon, InfoIcon, PencilIcon, PlusIcon, RefreshCwIcon, Trash2Icon, XIcon } from "lucide-react"
 import {
   Dialog,
@@ -592,7 +593,7 @@ function resolveVisibleColumns(rows: AdminRecord[]) {
 }
 
 function getAttendanceDeviceLink(row: AdminRecord) {
-  const deviceId = readNumberFromRecord(row, ["device_id", "deviceId", "attendance_device_id"])
+  const deviceId = readNumberFromRecord(row, ["device_id", "deviceId", "attendance_device_id", "id"])
   if (deviceId === null) {
     return null
   }
@@ -1441,6 +1442,7 @@ function shouldShowField(
 }
 
 export function AttendanceManagementView({ section }: { section: string }) {
+  const router = useRouter()
   const activeSection = ROUTE_TO_SECTION[section] ?? "settings"
   const isDeviceSyncLogsSection = activeSection === "device-sync-logs"
   const isReadOnlySection = READ_ONLY_SECTIONS.has(activeSection)
@@ -1920,6 +1922,18 @@ export function AttendanceManagementView({ section }: { section: string }) {
     setDetailsOpen(true)
   }
 
+  const handleRowClick = (row: AdminRecord) => {
+    if (activeSection === "devices") {
+      const deviceLink = getAttendanceDeviceLink(row)
+      if (deviceLink) {
+        router.push(deviceLink.href)
+        return
+      }
+    }
+
+    openDetailsDialog(row)
+  }
+
   const renderSectionDialogHeader = (mode: "Create" | "Edit") => {
     const description = getSectionFormDescription(activeSection)
     const useInfoTooltip = activeSection === "geofences"
@@ -2272,7 +2286,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
               <tr
                 key={String(row.id ?? index)}
                 className="cursor-pointer"
-                onClick={() => openDetailsDialog(row)}
+                onClick={() => handleRowClick(row)}
               >
                 {columns.map((column) => (
                   <td
