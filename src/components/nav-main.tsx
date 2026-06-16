@@ -151,7 +151,7 @@ export function NavMain({
         <SidebarMenuSubItem key={key}>
           <SidebarMenuSubButton
             className={`cursor-pointer rounded-lg text-foreground !no-underline hover:!no-underline hover:bg-muted data-active:!bg-transparent data-active:!text-[var(--sidebar-active-link-color)] ${
-              depth === 0 ? "py-2 text-[0.76rem] font-medium" : "py-2.5 text-[0.8rem] font-medium"
+              depth === 0 ? "py-2 text-[0.72rem] font-medium leading-tight" : "py-2.5 text-[0.78rem] font-medium leading-tight"
             }`}
             isActive={isActive}
             onClick={() =>
@@ -161,7 +161,7 @@ export function NavMain({
               }))
             }
           >
-            <span>{node.title}</span>
+            <span className="min-w-0 flex-1 truncate">{node.title}</span>
             <ChevronDownIcon
               className={
                 openGroups[node.title]
@@ -179,7 +179,13 @@ export function NavMain({
             }
           >
             <div className="overflow-hidden">
-              <SidebarMenuSub className={depth > 0 ? "ml-3 border-l border-slate-200 pl-2" : ""}>
+              <SidebarMenuSub
+                className={
+                  depth > 0
+                    ? "ml-3 border-l border-slate-200 pl-2"
+                    : "mx-1.5 border-l-0 px-0"
+                }
+              >
                 {node.items?.map((child) => renderNode(child, depth + 1))}
               </SidebarMenuSub>
             </div>
@@ -193,10 +199,10 @@ export function NavMain({
         <SidebarMenuSubButton
           className={`rounded-lg !no-underline data-active:!bg-transparent data-active:!text-[var(--sidebar-active-link-color)] ${
             node.disabled
-              ? "cursor-not-allowed py-2.5 text-[0.8rem] text-slate-400"
+              ? "cursor-not-allowed py-2.5 text-[0.78rem] leading-tight text-slate-400"
               : depth === 0
-                ? "cursor-pointer py-2 text-[0.76rem] text-foreground hover:!no-underline hover:bg-muted"
-                : "cursor-pointer py-2.5 text-[0.8rem] text-foreground hover:!no-underline hover:bg-muted"
+                ? "cursor-pointer py-2 text-[0.72rem] leading-tight text-foreground hover:!no-underline hover:bg-muted"
+                : "cursor-pointer py-2.5 text-[0.78rem] leading-tight text-foreground hover:!no-underline hover:bg-muted"
           }`}
           isActive={!node.disabled && Boolean(node.url) && currentPath === node.url}
           onClick={() => {
@@ -205,7 +211,7 @@ export function NavMain({
             }
           }}
         >
-          <span>{node.title}</span>
+          <span className="min-w-0 flex-1 truncate">{node.title}</span>
         </SidebarMenuSubButton>
       </SidebarMenuSubItem>
     )
