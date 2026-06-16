@@ -2,8 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
-import { CircleHelpIcon, PencilIcon, PlusIcon, RefreshCwIcon, Trash2Icon } from "lucide-react"
+import { CircleHelpIcon, InfoIcon, PencilIcon, PlusIcon, RefreshCwIcon, Trash2Icon, XIcon } from "lucide-react"
 import {
   Dialog,
   DialogDescription,
@@ -12,6 +11,15 @@ import {
   DialogPopup,
   DialogTitle,
 } from "@/components/animate-ui/components/base/dialog"
+import {
+  buildFormDraftStorageKey,
+  clearPersistedFormState,
+  formatAdminValue,
+  persistFormState,
+  readPersistedFormState,
+  RecordDetailsDialog,
+} from "@/components/dashboard/admin-view-shared"
+import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 import {
   Tooltip,
   TooltipContent,
@@ -45,7 +53,7 @@ const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 
 type AttendanceSectionKey = AttendanceResourceKey
 
-type FieldType = "text" | "number" | "boolean" | "select" | "password" | "json"
+type FieldType = "text" | "number" | "boolean" | "select" | "password" | "json" | "date"
 type FieldOption = string | { label: string; value: string }
 
 type FieldConfig = {
@@ -429,9 +437,9 @@ const SECTION_FIELDS: Record<AttendanceSectionKey, FieldConfig[]> = {
     { key: "description", label: "Description", type: "text" },
   ],
   holidays: [
-    { key: "holiday_group_id", label: "Holiday Group ID", type: "number", required: true },
+    { key: "holiday_group_id", label: "Holiday Group", type: "select", required: true },
     { key: "name", label: "Name", type: "text", required: true },
-    { key: "date", label: "Date", type: "text", required: true, placeholder: "YYYY-MM-DD" },
+    { key: "date", label: "Date", type: "date", required: true, placeholder: "YYYY-MM-DD" },
     { key: "type", label: "Type", type: "select", required: true, options: ["PUBLIC", "COMPANY", "RELIGIOUS", "OPTIONAL"] },
     { key: "is_paid", label: "Is Paid", type: "boolean" },
     { key: "affects_overtime", label: "Affects Overtime", type: "boolean" },
@@ -546,15 +554,6 @@ function formatAttendanceError(
   }
 
   return fallbackMessage
-}
-
-function stringifyValue(value: unknown): string {
-  if (value === null || value === undefined) return "-"
-  if (typeof value === "string") return value.trim() || "-"
-  if (typeof value === "number" || typeof value === "boolean") return String(value)
-  if (Array.isArray(value)) return value.length ? `${value.length} item(s)` : "-"
-  if (typeof value === "object") return "Object"
-  return "-"
 }
 
 function resolveVisibleColumns(rows: AdminRecord[]) {
@@ -834,6 +833,11 @@ function buildEditState(fields: FieldConfig[], row: AdminRecord) {
       continue
     }
 
+    if (field.type === "date" && typeof value === "string" && value.trim()) {
+      next[field.key] = value.trim().slice(0, 10)
+      continue
+    }
+
     next[field.key] = String(value)
   }
 
@@ -909,6 +913,92 @@ function toPayload(fields: FieldConfig[], values: Record<string, string>) {
   return payload
 }
 
+function buildAttendanceLookupLabelMaps({
+  branches,
+  policies,
+  devices,
+  geofences,
+  wifiNetworks,
+  holidayGroups,
+}: {
+  branches: AdminRecord[]
+  policies: AdminRecord[]
+  devices: AdminRecord[]
+  geofences: AdminRecord[]
+  wifiNetworks: AdminRecord[]
+  holidayGroups: AdminRecord[]
+}) {
+  const toMap = (rows: AdminRecord[], idKeys: string[], labelBuilder: (row: AdminRecord, id: number) => string) =>
+    new Map<string, string>(
+      rows
+        .map((row) => {
+          const id = readNumberFromRecord(row, idKeys)
+          if (id === null) {
+            return null
+          }
+          return [String(id), labelBuilder(row, id)] as const
+        })
+        .filter((entry): entry is readonly [string, string] => entry !== null)
+    )
+
+  return {
+    branch_id: toMap(branches, ["id", "branch_id"], (row, id) => {
+      return readStringFromRecord(row, ["name", "title", "display_name"]) ?? `Branch ${id}`
+    }),
+    branchId: toMap(branches, ["id", "branch_id"], (row, id) => {
+      return readStringFromRecord(row, ["name", "title", "display_name"]) ?? `Branch ${id}`
+    }),
+    geofence_id: toMap(geofences, ["id"], (row, id) => {
+      return readStringFromRecord(row, ["name"]) ?? `Geofence ${id}`
+    }),
+    wifi_network_id: toMap(wifiNetworks, ["id", "wifi_network_id"], (row, id) => {
+      return readStringFromRecord(row, ["name", "ssid"]) ?? `WiFi ${id}`
+    }),
+    policy_set_id: toMap(policies, ["id", "policy_set_id"], (row, id) => {
+      return readStringFromRecord(row, ["name", "title"]) ?? `Policy ${id}`
+    }),
+    device_id: toMap(devices, ["id", "device_id", "attendance_device_id"], (row, id) => {
+      return readStringFromRecord(row, ["device_name", "name", "vendor_name"]) ?? `Device ${id}`
+    }),
+    holiday_group_id: toMap(holidayGroups, ["id", "holiday_group_id"], (row, id) => {
+      return readStringFromRecord(row, ["name", "title"]) ?? `Holiday Group ${id}`
+    }),
+  } satisfies Record<string, Map<string, string>>
+}
+
+function resolveAttendanceCellValue(
+  column: string,
+  row: AdminRecord,
+  lookupMaps: Record<string, Map<string, string>>
+) {
+  const raw = row[column]
+  const map = lookupMaps[column]
+  if (map && (typeof raw === "string" || typeof raw === "number")) {
+    return map.get(String(raw)) ?? formatAdminValue(raw)
+  }
+  return formatAdminValue(raw)
+}
+
+function isFieldDisabled(
+  section: AttendanceSectionKey,
+  fieldKey: string,
+  values: Record<string, string>
+) {
+  if (section === "geofences") {
+    const type = values.type ?? ""
+
+    if (fieldKey === "polygonCoordinates") {
+      return type !== "POLYGON"
+    }
+
+    if (fieldKey === "latitude" || fieldKey === "longitude" || fieldKey === "radiusMeters") {
+      return type === "POLYGON"
+    }
+  }
+
+  return false
+}
+
 function FieldInput({
   field,
   value,
@@ -918,11 +1008,13 @@ function FieldInput({
   devices = [],
   geofences = [],
   wifiNetworks = [],
+  holidayGroups = [],
   branchesLoading = false,
   policiesLoading = false,
   devicesLoading = false,
   geofencesLoading = false,
   wifiNetworksLoading = false,
+  holidayGroupsLoading = false,
   disabled = false,
 }: {
   field: FieldConfig
@@ -933,11 +1025,13 @@ function FieldInput({
   devices?: AdminRecord[]
   geofences?: AdminRecord[]
   wifiNetworks?: AdminRecord[]
+  holidayGroups?: AdminRecord[]
   branchesLoading?: boolean
   policiesLoading?: boolean
   devicesLoading?: boolean
   geofencesLoading?: boolean
   wifiNetworksLoading?: boolean
+  holidayGroupsLoading?: boolean
   disabled?: boolean
 }) {
   if (field.key === "branch_id" || field.key === "branchId") {
@@ -1029,6 +1123,37 @@ function FieldInput({
           return (
             <option key={`wifi-network-${id}-${index}`} value={String(id)}>
               {bssid ? `${name} (${bssid})` : name}
+            </option>
+          )
+        })}
+      </select>
+    )
+  }
+
+  if (field.key === "holiday_group_id") {
+    return (
+      <select
+        className={`w-full rounded-md border px-2 py-1.5 text-sm ${
+          disabled
+            ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400"
+            : "border-slate-300 bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
+        }`}
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        <option value="">
+          {holidayGroupsLoading ? "Loading holiday groups..." : "Select holiday group"}
+        </option>
+        {holidayGroups.map((group, index) => {
+          const id = readNumberFromRecord(group, ["id", "holiday_group_id"])
+          if (id === null) {
+            return null
+          }
+          const name = readStringFromRecord(group, ["name", "title"]) ?? `Holiday Group ${id}`
+          return (
+            <option key={`holiday-group-${id}-${index}`} value={String(id)}>
+              {name}
             </option>
           )
         })}
@@ -1195,6 +1320,16 @@ function FieldInput({
     )
   }
 
+  if (field.type === "date") {
+    return (
+      <DatePickerPresets
+        value={value}
+        onChange={onChange}
+        placeholder={field.placeholder || `Select ${field.label}`}
+      />
+    )
+  }
+
   if (field.key === "allowedIpCidrs") {
     return (
       <textarea
@@ -1306,7 +1441,6 @@ function shouldShowField(
 }
 
 export function AttendanceManagementView({ section }: { section: string }) {
-  const router = useRouter()
   const activeSection = ROUTE_TO_SECTION[section] ?? "settings"
   const isDeviceSyncLogsSection = activeSection === "device-sync-logs"
   const isReadOnlySection = READ_ONLY_SECTIONS.has(activeSection)
@@ -1316,19 +1450,32 @@ export function AttendanceManagementView({ section }: { section: string }) {
   const [devices, setDevices] = React.useState<AdminRecord[]>([])
   const [geofences, setGeofences] = React.useState<AdminRecord[]>([])
   const [wifiNetworks, setWifiNetworks] = React.useState<AdminRecord[]>([])
+  const [holidayGroups, setHolidayGroups] = React.useState<AdminRecord[]>([])
   const [branchesLoading, setBranchesLoading] = React.useState(false)
   const [policiesLoading, setPoliciesLoading] = React.useState(false)
   const [devicesLoading, setDevicesLoading] = React.useState(false)
   const [geofencesLoading, setGeofencesLoading] = React.useState(false)
   const [wifiNetworksLoading, setWifiNetworksLoading] = React.useState(false)
+  const [holidayGroupsLoading, setHolidayGroupsLoading] = React.useState(false)
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [formError, setFormError] = React.useState<string | null>(null)
   const [message, setMessage] = React.useState<string | null>(null)
 
   const fields = React.useMemo(() => SECTION_FIELDS[activeSection], [activeSection])
-  const [createValues, setCreateValues] = React.useState<Record<string, string>>(() => buildInitialState(fields))
-  const [editValues, setEditValues] = React.useState<Record<string, string>>(() => buildInitialState(fields))
+  const initialCreateState = React.useMemo(() => buildInitialState(fields), [fields])
+  const createDraftKey = React.useMemo(
+    () => buildFormDraftStorageKey(`attendance:${activeSection}:create`),
+    [activeSection]
+  )
+  const guidanceStorageKey = React.useMemo(
+    () => buildFormDraftStorageKey(`attendance:${activeSection}:guidance-hidden`),
+    [activeSection]
+  )
+  const [createValues, setCreateValues] = React.useState<Record<string, string>>(() =>
+    readPersistedFormState(createDraftKey, initialCreateState)
+  )
+  const [editValues, setEditValues] = React.useState<Record<string, string>>(() => initialCreateState)
   const [editingId, setEditingId] = React.useState("")
   const [editingLoading, setEditingLoading] = React.useState(false)
   const [deletingId, setDeletingId] = React.useState("")
@@ -1336,18 +1483,45 @@ export function AttendanceManagementView({ section }: { section: string }) {
   const [createOpen, setCreateOpen] = React.useState(false)
   const [editOpen, setEditOpen] = React.useState(false)
   const [deleteOpen, setDeleteOpen] = React.useState(false)
+  const [detailsOpen, setDetailsOpen] = React.useState(false)
+  const [selectedRow, setSelectedRow] = React.useState<AdminRecord | null>(null)
+  const [guidanceDismissed, setGuidanceDismissed] = React.useState(false)
 
   React.useEffect(() => {
-    setCreateValues(buildInitialState(fields))
-    setEditValues(buildInitialState(fields))
+    setCreateValues(readPersistedFormState(createDraftKey, initialCreateState))
+    setEditValues(initialCreateState)
     setEditingId("")
     setEditingLoading(false)
     setDeletingId("")
     setActivatingId("")
+    setSelectedRow(null)
+    setDetailsOpen(false)
     setError(null)
     setFormError(null)
     setMessage(null)
-  }, [fields])
+  }, [createDraftKey, initialCreateState])
+
+  React.useEffect(() => {
+    persistFormState(createDraftKey, createValues)
+  }, [createDraftKey, createValues])
+
+  const editDraftKey = React.useMemo(() => {
+    return editingId ? buildFormDraftStorageKey(`attendance:${activeSection}:edit:${editingId}`) : ""
+  }, [activeSection, editingId])
+
+  React.useEffect(() => {
+    if (!editDraftKey) {
+      return
+    }
+    persistFormState(editDraftKey, editValues)
+  }, [editDraftKey, editValues])
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") {
+      return
+    }
+    setGuidanceDismissed(window.localStorage.getItem(guidanceStorageKey) === "true")
+  }, [guidanceStorageKey])
 
   const supportsEditDelete = !isReadOnlySection
   const supportsCreate = !isReadOnlySection
@@ -1525,7 +1699,65 @@ export function AttendanceManagementView({ section }: { section: string }) {
     }
   }, [fields])
 
+  React.useEffect(() => {
+    const needsHolidayGroups = fields.some((field) => field.key === "holiday_group_id")
+    if (!needsHolidayGroups) {
+      setHolidayGroups([])
+      setHolidayGroupsLoading(false)
+      return
+    }
+
+    const token = readStoredToken()
+    if (!token) {
+      setHolidayGroups([])
+      return
+    }
+
+    let cancelled = false
+
+    const loadHolidayGroups = async () => {
+      setHolidayGroupsLoading(true)
+      try {
+        const result = await listAttendanceHolidayGroups(token, {
+          page: 1,
+          limit: 100,
+          sortBy: "created_at",
+          sortOrder: "DESC",
+        })
+        if (!cancelled) {
+          setHolidayGroups(result.rows)
+        }
+      } catch {
+        if (!cancelled) {
+          setHolidayGroups([])
+        }
+      } finally {
+        if (!cancelled) {
+          setHolidayGroupsLoading(false)
+        }
+      }
+    }
+
+    void loadHolidayGroups()
+
+    return () => {
+      cancelled = true
+    }
+  }, [fields])
+
   const columns = React.useMemo(() => resolveVisibleColumns(rows), [rows])
+  const lookupMaps = React.useMemo(
+    () =>
+      buildAttendanceLookupLabelMaps({
+        branches,
+        policies,
+        devices,
+        geofences,
+        wifiNetworks,
+        holidayGroups,
+      }),
+    [branches, devices, geofences, holidayGroups, policies, wifiNetworks]
+  )
   const showDeviceContextColumn = isDeviceSyncLogsSection
   const sectionGuidance = React.useMemo(() => getSectionSetupGuidance(activeSection), [activeSection])
 
@@ -1543,7 +1775,8 @@ export function AttendanceManagementView({ section }: { section: string }) {
       setError(null)
       setFormError(null)
       setCreateOpen(false)
-      setCreateValues(buildInitialState(fields))
+      clearPersistedFormState(createDraftKey)
+      setCreateValues(initialCreateState)
       await fetchRows()
     } catch (errorObject) {
       setFormError(errorObject instanceof Error ? errorObject.message : "Create failed.")
@@ -1569,6 +1802,11 @@ export function AttendanceManagementView({ section }: { section: string }) {
       setError(null)
       setFormError(null)
       setEditOpen(false)
+      if (editDraftKey) {
+        clearPersistedFormState(editDraftKey)
+      }
+      setEditValues(initialCreateState)
+      setEditingId("")
       await fetchRows()
     } catch (errorObject) {
       setFormError(errorObject instanceof Error ? errorObject.message : "Update failed.")
@@ -1644,7 +1882,9 @@ export function AttendanceManagementView({ section }: { section: string }) {
     }
 
     setEditingId(String(recordId))
-    setEditValues(buildEditState(fields, row))
+    const initialEditState = buildEditState(fields, row)
+    const initialDraftKey = buildFormDraftStorageKey(`attendance:${activeSection}:edit:${String(recordId)}`)
+    setEditValues(readPersistedFormState(initialDraftKey, initialEditState))
     setEditingLoading(true)
     setEditOpen(true)
     setFormError(null)
@@ -1653,9 +1893,10 @@ export function AttendanceManagementView({ section }: { section: string }) {
     void (async () => {
       try {
         const latest = await getAttendanceResourceById(token, activeSection, recordId)
-        setEditValues(buildEditState(fields, latest ? { ...row, ...latest } : row))
+        const latestState = buildEditState(fields, latest ? { ...row, ...latest } : row)
+        setEditValues(readPersistedFormState(initialDraftKey, latestState))
       } catch {
-        setEditValues(buildEditState(fields, row))
+        setEditValues(readPersistedFormState(initialDraftKey, initialEditState))
       } finally {
         setEditingLoading(false)
       }
@@ -1674,13 +1915,50 @@ export function AttendanceManagementView({ section }: { section: string }) {
     setFormError(null)
   }
 
+  const openDetailsDialog = (row: AdminRecord) => {
+    setSelectedRow(row)
+    setDetailsOpen(true)
+  }
+
+  const renderSectionDialogHeader = (mode: "Create" | "Edit") => {
+    const description = getSectionFormDescription(activeSection)
+    const useInfoTooltip = activeSection === "geofences"
+
+    return (
+      <DialogHeader>
+        <div className="flex items-center gap-2">
+          <DialogTitle>{mode} {activeSection.replaceAll("-", " ")}</DialogTitle>
+          {useInfoTooltip ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-700 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:text-slate-100"
+                    aria-label={`About ${activeSection.replaceAll("-", " ")}`}
+                  />
+                }
+              >
+                <InfoIcon className="h-3.5 w-3.5" />
+              </TooltipTrigger>
+              <TooltipContent side="top" align="start" className="max-w-80 text-left leading-relaxed">
+                {description}
+              </TooltipContent>
+            </Tooltip>
+          ) : null}
+        </div>
+        {!useInfoTooltip ? <DialogDescription>{description}</DialogDescription> : null}
+      </DialogHeader>
+    )
+  }
+
   return (
-    <div className="rounded-xl border border-slate-200 bg-white/80 px-4 py-5 shadow-sm lg:px-6">
+    <div className="rounded-xl border border-slate-200 bg-white/80 px-4 py-5 shadow-sm dark:border-slate-800 dark:bg-[#101826]/92 lg:px-6">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-slate-900">Attendance Management</h2>
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Attendance Management</h2>
           <div className="flex items-center gap-1.5">
-            <p className="text-sm text-slate-500 capitalize">{activeSection.replaceAll("-", " ")}</p>
+            <p className="text-sm text-slate-500 capitalize dark:text-slate-400">{activeSection.replaceAll("-", " ")}</p>
             {activeSection === "devices" ? (
               <Tooltip>
                 <TooltipTrigger
@@ -1700,9 +1978,43 @@ export function AttendanceManagementView({ section }: { section: string }) {
                 </TooltipContent>
               </Tooltip>
             ) : null}
+            {sectionGuidance.length && guidanceDismissed ? (
+              <button
+                type="button"
+                className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-700 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:text-slate-100"
+                aria-label="Show setup guidance"
+                onClick={() => {
+                  setGuidanceDismissed(false)
+                  if (typeof window !== "undefined") {
+                    window.localStorage.removeItem(guidanceStorageKey)
+                  }
+                }}
+              >
+                <InfoIcon className="h-3.5 w-3.5" />
+              </button>
+            ) : null}
           </div>
-          {sectionGuidance.length ? (
-            <div className="mt-3 rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900">
+          {sectionGuidance.length && !guidanceDismissed ? (
+            <div className="mt-3 rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900 dark:border-sky-900/70 dark:bg-sky-950/35 dark:text-sky-100">
+              <div className="mb-2 flex items-start justify-between gap-3">
+                <div className="flex items-center gap-2 text-sky-900 dark:text-sky-100">
+                  <InfoIcon className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span className="text-xs font-semibold uppercase tracking-[0.2em]">Setup Guidance</span>
+                </div>
+                <button
+                  type="button"
+                  className="inline-flex h-6 w-6 items-center justify-center rounded-full text-sky-700 transition hover:bg-sky-100 hover:text-sky-950 dark:text-sky-300 dark:hover:bg-sky-900/60 dark:hover:text-sky-50"
+                  aria-label="Hide setup guidance"
+                  onClick={() => {
+                    setGuidanceDismissed(true)
+                    if (typeof window !== "undefined") {
+                      window.localStorage.setItem(guidanceStorageKey, "true")
+                    }
+                  }}
+                >
+                  <XIcon className="h-4 w-4" />
+                </button>
+              </div>
               {sectionGuidance.map((line, index) => (
                 <p key={`${activeSection}-guidance-${index}`}>{line}</p>
               ))}
@@ -1723,12 +2035,19 @@ export function AttendanceManagementView({ section }: { section: string }) {
               </button>
               <Dialog open={createOpen} onOpenChange={setCreateOpen}>
                 <DialogPopup className="sm:max-w-2xl">
-                  <DialogHeader>
-                    <DialogTitle>Create {activeSection.replaceAll("-", " ")}</DialogTitle>
-                    <DialogDescription>{getSectionFormDescription(activeSection)}</DialogDescription>
-                  </DialogHeader>
+                  {renderSectionDialogHeader("Create")}
                   {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
                   <div className="max-h-[60vh] overflow-auto grid gap-2 pr-1">
+                    {activeSection === "wifi-networks" ? (
+                      <div className="rounded-xl border border-sky-200 bg-sky-50/80 px-4 py-3 text-sm text-sky-950 dark:border-sky-900/70 dark:bg-sky-950/30 dark:text-sky-100">
+                        <p className="font-medium">Wi-Fi details helper</p>
+                        <p className="mt-1 text-sky-900 dark:text-sky-200">
+                          Browsers cannot read saved or current SSID, BSSID, security type, or allowed CIDRs directly from a device.
+                          The best workflow is to connect a phone or laptop to the target Wi-Fi, then copy those values from device
+                          settings and router or LAN configuration.
+                        </p>
+                      </div>
+                    ) : null}
                     {fields
                       .filter((field) => shouldShowField(activeSection, field.key, createValues))
                       .map((field) => (
@@ -1742,11 +2061,14 @@ export function AttendanceManagementView({ section }: { section: string }) {
                           devices={devices}
                           geofences={geofences}
                           wifiNetworks={wifiNetworks}
+                          holidayGroups={holidayGroups}
                           branchesLoading={branchesLoading}
                           policiesLoading={policiesLoading}
                           devicesLoading={devicesLoading}
                           geofencesLoading={geofencesLoading}
                           wifiNetworksLoading={wifiNetworksLoading}
+                          holidayGroupsLoading={holidayGroupsLoading}
+                          disabled={isFieldDisabled(activeSection, field.key, createValues)}
                           onChange={(next) => setCreateValues((prev) => ({ ...prev, [field.key]: next }))}
                         />
                       </label>
@@ -1773,15 +2095,22 @@ export function AttendanceManagementView({ section }: { section: string }) {
           ) : null}
           <Dialog open={editOpen} onOpenChange={setEditOpen}>
             <DialogPopup className="sm:max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>Edit {activeSection.replaceAll("-", " ")}</DialogTitle>
-                <DialogDescription>{getSectionFormDescription(activeSection)}</DialogDescription>
-              </DialogHeader>
+              {renderSectionDialogHeader("Edit")}
               {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
               {editingLoading ? (
                 <p className="text-sm text-slate-500">Loading latest record details...</p>
               ) : null}
               <div className="max-h-[50vh] overflow-auto grid gap-2 pr-1">
+                {activeSection === "wifi-networks" ? (
+                  <div className="rounded-xl border border-sky-200 bg-sky-50/80 px-4 py-3 text-sm text-sky-950 dark:border-sky-900/70 dark:bg-sky-950/30 dark:text-sky-100">
+                    <p className="font-medium">Wi-Fi details helper</p>
+                    <p className="mt-1 text-sky-900 dark:text-sky-200">
+                      Browsers cannot read saved or current SSID, BSSID, security type, or allowed CIDRs directly from a device.
+                      The best workflow is to connect a phone or laptop to the target Wi-Fi, then copy those values from device
+                      settings and router or LAN configuration.
+                    </p>
+                  </div>
+                ) : null}
                 {fields
                   .filter((field) => shouldShowField(activeSection, field.key, editValues))
                   .map((field) => (
@@ -1795,12 +2124,14 @@ export function AttendanceManagementView({ section }: { section: string }) {
                       devices={devices}
                       geofences={geofences}
                       wifiNetworks={wifiNetworks}
+                      holidayGroups={holidayGroups}
                       branchesLoading={branchesLoading}
                       policiesLoading={policiesLoading}
                       devicesLoading={devicesLoading}
                       geofencesLoading={geofencesLoading}
                       wifiNetworksLoading={wifiNetworksLoading}
-                      disabled={Boolean(field.readOnlyOnEdit)}
+                      holidayGroupsLoading={holidayGroupsLoading}
+                      disabled={Boolean(field.readOnlyOnEdit) || isFieldDisabled(activeSection, field.key, editValues)}
                       onChange={(next) => setEditValues((prev) => ({ ...prev, [field.key]: next }))}
                     />
                   </label>
@@ -1860,11 +2191,20 @@ export function AttendanceManagementView({ section }: { section: string }) {
               </DialogFooter>
             </DialogPopup>
           </Dialog>
+          <RecordDetailsDialog
+            open={detailsOpen}
+            onOpenChange={setDetailsOpen}
+            title={`${activeSection.replaceAll("-", " ")} details`}
+            description="Selected row details"
+            row={selectedRow}
+            resolveLabel={(key) => key.replaceAll("_", " ")}
+            resolveValue={(key, row) => resolveAttendanceCellValue(key, row, lookupMaps)}
+          />
 
           <button
             type="button"
             onClick={() => void fetchRows()}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-slate-300 text-slate-700 hover:bg-slate-50"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-slate-300 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
             disabled={loading}
             aria-label="Refresh"
             title="Refresh"
@@ -1894,30 +2234,30 @@ export function AttendanceManagementView({ section }: { section: string }) {
       ) : null}
 
       <TableScrollContainer>
-        <table className="w-full min-w-[900px] text-sm">
-          <thead className="bg-slate-50/90">
+        <table className="min-w-full min-w-[900px] text-sm">
+          <thead className="bg-[var(--table-header-accent-bg)] text-[var(--table-header-accent)] backdrop-blur-sm">
             <tr>
               {columns.map((column) => (
                 <th
                   key={column}
-                  className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap"
+                  className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] whitespace-nowrap"
                 >
                   {column.replaceAll("_", " ")}
                 </th>
               ))}
               {showDeviceContextColumn ? (
-                <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">
+                <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] whitespace-nowrap">
                   Related device
                 </th>
               ) : null}
               {supportsEditDelete ? (
-                <th className="w-24 px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">
+                <th className="w-24 px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.08em] whitespace-nowrap">
                   Actions
                 </th>
               ) : null}
             </tr>
           </thead>
-          <tbody className="[&_tr:nth-child(odd)]:bg-slate-50/35 [&_tr]:border-t [&_tr]:border-slate-100 [&_tr:hover]:bg-slate-50/80">
+          <tbody className="bg-white dark:bg-slate-950 [&_tr:nth-child(odd)]:bg-slate-50/35 dark:[&_tr:nth-child(odd)]:bg-slate-900/60 [&_tr]:border-t [&_tr]:border-slate-100 dark:[&_tr]:border-slate-800 [&_tr:hover]:bg-slate-50/80 dark:[&_tr:hover]:bg-slate-900/90">
             {!loading && !error && rows.length === 0 ? (
               <tr>
                 <td
@@ -1931,26 +2271,15 @@ export function AttendanceManagementView({ section }: { section: string }) {
             {rows.map((row, index) => (
               <tr
                 key={String(row.id ?? index)}
-                className={activeSection === "devices" ? "cursor-pointer hover:bg-slate-50" : undefined}
-                onClick={
-                  activeSection === "devices"
-                    ? () => {
-                        const rowId = row.id
-                        if (rowId === null || rowId === undefined) {
-                          setFormError("This device does not have an id to open.")
-                          return
-                        }
-                        router.push(`/dashboard/attendance/devices/${String(rowId)}`)
-                      }
-                    : undefined
-                }
+                className="cursor-pointer"
+                onClick={() => openDetailsDialog(row)}
               >
                 {columns.map((column) => (
                   <td
                     key={`${String(row.id ?? index)}-${column}`}
-                    className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap"
+                    className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap dark:text-slate-200"
                   >
-                    {stringifyValue(row[column])}
+                    {resolveAttendanceCellValue(column, row, lookupMaps)}
                   </td>
                 ))}
                 {showDeviceContextColumn ? (
@@ -1964,10 +2293,11 @@ export function AttendanceManagementView({ section }: { section: string }) {
                       return (
                         <Link
                           href={deviceLink.href}
-                          className="inline-flex flex-col text-slate-900 underline decoration-slate-300 underline-offset-4 hover:text-slate-700"
+                          className="inline-flex flex-col text-slate-900 underline decoration-slate-300 underline-offset-4 hover:text-slate-700 dark:text-slate-100 dark:decoration-slate-600 dark:hover:text-slate-200"
+                          onClick={(event) => event.stopPropagation()}
                         >
                           <span className="font-medium">{deviceLink.label}</span>
-                          <span className="text-xs text-slate-500 no-underline">{deviceLink.detail}</span>
+                          <span className="text-xs text-slate-500 no-underline dark:text-slate-400">{deviceLink.detail}</span>
                         </Link>
                       )
                     })()}
@@ -1977,12 +2307,15 @@ export function AttendanceManagementView({ section }: { section: string }) {
                   <td className="px-4 py-4">
                     <div className="flex justify-end gap-2">
                       {activeSection === "policies" ? (
-                        <button
-                          type="button"
-                          className="inline-flex h-8 items-center justify-center rounded-md border border-slate-300 px-2 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                          onClick={() => void onActivatePolicy(row)}
-                          aria-label="Activate policy"
-                          title="Activate policy"
+                      <button
+                        type="button"
+                        className="inline-flex h-8 items-center justify-center rounded-md border border-slate-300 px-2 text-xs font-medium text-slate-700 hover:border-[color:rgb(var(--primary-rgb)/0.35)] hover:bg-[color:rgb(var(--primary-rgb)/0.10)] hover:text-[var(--primary)] disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:border-[color:rgb(var(--primary-rgb)/0.45)] dark:hover:bg-[color:rgb(var(--primary-rgb)/0.18)]"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          void onActivatePolicy(row)
+                        }}
+                        aria-label="Activate policy"
+                        title="Activate policy"
                           disabled={activatingId === String(row.id ?? "")}
                         >
                           Activate
@@ -1990,7 +2323,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
                       ) : null}
                       <button
                         type="button"
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 text-slate-700 hover:bg-slate-50"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 text-slate-700 hover:border-[color:rgb(var(--primary-rgb)/0.35)] hover:bg-[color:rgb(var(--primary-rgb)/0.10)] hover:text-[var(--primary)] dark:border-slate-700 dark:text-slate-200 dark:hover:border-[color:rgb(var(--primary-rgb)/0.45)] dark:hover:bg-[color:rgb(var(--primary-rgb)/0.18)]"
                         onClick={(event) => {
                           event.stopPropagation()
                           openEditDialog(row)

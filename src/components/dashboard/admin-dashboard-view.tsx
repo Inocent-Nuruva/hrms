@@ -4,15 +4,23 @@ import * as React from "react"
 import { usePathname, useRouter } from "next/navigation"
 
 import { AppSidebar } from "@/components/app-sidebar"
-import {
-  ChartAreaInteractive,
-  type AdminChartPoint,
-} from "@/components/chart-area-interactive"
 import { DataTable } from "@/components/data-table"
 import { AccountSettingsPanel } from "@/components/dashboard/account-settings-panel"
-import { SectionCards } from "@/components/section-cards"
 import { SiteHeader } from "@/components/site-header"
+import dynamic from "next/dynamic"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
+
+const HrAnalyticsDashboard = dynamic(
+  () => import("@/components/dashboard/hr-analytics-dashboard"),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="px-4 py-8 text-sm text-slate-500">
+        Loading workforce analytics…
+      </div>
+    ),
+  }
+)
 import {
   createResource,
   deleteResource,
@@ -347,6 +355,8 @@ function resolvePermissionLabels(root: AdminRecord | null) {
   return labels
 }
 
+type AdminChartPoint = { date: string; users: number; otherResources: number }
+
 function buildChartData(collections: AdminResourceCollections): AdminChartPoint[] {
   const buckets = new Map<string, { users: number; otherResources: number }>()
 
@@ -425,6 +435,7 @@ export default function AdminDashboardView({
   const [error, setError] = React.useState<string | null>(null)
   const [chartData, setChartData] = React.useState<AdminChartPoint[]>([])
   const [currentAdmin, setCurrentAdmin] = React.useState<AdminRecord | null>(null)
+  const [overviewRefreshKey, setOverviewRefreshKey] = React.useState(0)
   const [myCompany, setMyCompany] = React.useState<AdminRecord | null>(null)
   const [usersQuery, setUsersQuery] =
     React.useState<Required<UsersQueryParams>>(DEFAULT_USERS_QUERY)
@@ -675,6 +686,15 @@ export default function AdminDashboardView({
     }
     await loadData(accessToken)
   }
+
+  const handleHeaderRefresh = React.useCallback(() => {
+    if (showOverview) {
+      setOverviewRefreshKey((k) => k + 1)
+    }
+    if (useApis) {
+      void refreshCurrentResource()
+    }
+  }, [showOverview, useApis, refreshCurrentResource])
 
   const handleCreate = async (resource: AdminResourceKey, payload: AdminRecord) => {
     const accessToken = resolveStoredTokens().accessToken
@@ -971,7 +991,7 @@ export default function AdminDashboardView({
       />
       <SidebarInset>
         <SiteHeader
-          onRefresh={refreshCurrentResource}
+          onRefresh={handleHeaderRefresh}
           loading={loading}
           adminName={adminName}
           companyName={companyName}
@@ -979,12 +999,7 @@ export default function AdminDashboardView({
         <div className="flex flex-1 flex-col">
           <div className="@container/main flex flex-1 flex-col gap-2">
             <div className="flex flex-col gap-3 py-3 md:gap-4 md:py-4">
-              {showOverview && useApis ? <SectionCards stats={stats} /> : null}
-              {showOverview && useApis ? (
-                <div className="px-3 lg:px-4">
-                  <ChartAreaInteractive data={chartData} />
-                </div>
-              ) : null}
+              {showOverview ? <HrAnalyticsDashboard refreshKey={overviewRefreshKey} /> : null}
               {children}
               {activeResource && useApis ? (
                 <DataTable

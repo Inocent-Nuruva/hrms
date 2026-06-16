@@ -12,6 +12,7 @@ import {
 } from "lucide-react"
 
 import { TableScrollContainer } from "@/components/common/table-scroll-container"
+import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 import {
   createAttendanceMobilePunchCheckIn,
   createAttendanceMobilePunchCheckOut,
@@ -69,27 +70,27 @@ const SECTION_CONFIG: Record<AttendanceActivitySectionKey, SectionConfig> = {
   },
   today: {
     title: "Today",
-    groupTitle: "Employee Attendance",
+    groupTitle: "My Attendance",
     description: "See your current attendance state for today.",
   },
   "punch-action": {
     title: "Punch Action",
-    groupTitle: "Employee Attendance",
+    groupTitle: "My Attendance",
     description: "Submit a mobile check-in or check-out using your current location and optional network details.",
   },
   "punch-history": {
     title: "Punch History",
-    groupTitle: "Employee Attendance",
+    groupTitle: "My Attendance",
     description: "Review your recorded punch events.",
   },
   "attendance-history": {
     title: "Attendance History",
-    groupTitle: "Employee Attendance",
+    groupTitle: "My Attendance",
     description: "Review your attendance history records.",
   },
   "schedule-preview": {
     title: "Schedule Preview",
-    groupTitle: "Employee Attendance",
+    groupTitle: "My Attendance",
     description: "Preview the schedule entries currently available for you.",
   },
 }
@@ -140,13 +141,74 @@ function prettifyLabel(value: string): string {
     .replace(/\b\w/g, (char) => char.toUpperCase())
 }
 
+function isIsoDateString(value: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) || /^\d{4}-\d{2}-\d{2}T/.test(value)
+}
+
+function isTimeValue(value: string) {
+  return /^\d{2}:\d{2}(:\d{2})?$/.test(value)
+}
+
+function formatDisplayDate(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return new Intl.DateTimeFormat("en-GB", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      timeZone: "UTC",
+    }).format(date)
+  }
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date)
+}
+
+function formatDisplayTime(value: string) {
+  const [hours, minutes] = value.split(":")
+  const hourNumber = Number(hours)
+  const minuteNumber = Number(minutes)
+  if (!Number.isInteger(hourNumber) || !Number.isInteger(minuteNumber)) {
+    return value
+  }
+
+  const date = new Date()
+  date.setHours(hourNumber, minuteNumber, 0, 0)
+  return new Intl.DateTimeFormat("en-GB", {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date)
+}
+
 function stringifyValue(value: unknown): string {
   if (value === null || value === undefined) return "-"
-  if (typeof value === "string") return value.trim() || "-"
+  if (typeof value === "string") {
+    const trimmed = value.trim()
+    if (!trimmed) return "-"
+    if (isIsoDateString(trimmed)) {
+      return formatDisplayDate(trimmed)
+    }
+    if (isTimeValue(trimmed)) {
+      return formatDisplayTime(trimmed)
+    }
+    return trimmed
+  }
   if (typeof value === "number" || typeof value === "boolean") return String(value)
   if (Array.isArray(value)) return value.length ? `${value.length} item(s)` : "-"
   if (typeof value === "object") return JSON.stringify(value)
   return "-"
+}
+
+function formatOptionalValue(value: unknown, fallback: string) {
+  const formatted = stringifyValue(value)
+  return formatted === "-" ? fallback : formatted
 }
 
 function readFirstValue(record: AdminRecord | null | undefined, keys: string[]) {
@@ -213,14 +275,22 @@ function TodayOverview({ record }: { record: AdminRecord | null }) {
 
   const status =
     readFirstValue(record, ["attendance_status", "status", "summary_status", "state"]) ?? "Pending"
-  const scheduleStart =
-    readFirstValue(record, ["schedule_start_at", "schedule_start_time", "shift_start_at", "start_time"]) ?? "Not set"
-  const scheduleEnd =
-    readFirstValue(record, ["schedule_end_at", "schedule_end_time", "shift_end_at", "end_time"]) ?? "Not set"
-  const firstPunch =
-    readFirstValue(record, ["first_check_in_at", "first_punch_at", "check_in_at", "clock_in_at"]) ?? "Not recorded"
-  const lastPunch =
-    readFirstValue(record, ["last_check_out_at", "last_punch_at", "check_out_at", "clock_out_at"]) ?? "Not recorded"
+  const scheduleStart = formatOptionalValue(
+    readFirstValue(record, ["schedule_start_at", "schedule_start_time", "shift_start_at", "start_time"]),
+    "Not set"
+  )
+  const scheduleEnd = formatOptionalValue(
+    readFirstValue(record, ["schedule_end_at", "schedule_end_time", "shift_end_at", "end_time"]),
+    "Not set"
+  )
+  const firstPunch = formatOptionalValue(
+    readFirstValue(record, ["first_check_in_at", "first_punch_at", "check_in_at", "clock_in_at"]),
+    "Not recorded"
+  )
+  const lastPunch = formatOptionalValue(
+    readFirstValue(record, ["last_check_out_at", "last_punch_at", "check_out_at", "clock_out_at"]),
+    "Not recorded"
+  )
   const workedHours =
     readFirstValue(record, ["worked_hours", "worked_duration", "total_worked_hours", "hours_worked"]) ?? "Still calculating"
   const branch =
@@ -514,7 +584,6 @@ function buildPunchPayload(values: Record<string, string>) {
   return {
     latitude,
     longitude,
-    employeeId: asNumber(values.employeeId),
     geofenceId: asNumber(values.geofenceId),
     wifiNetworkId: asNumber(values.wifiNetworkId),
     accuracyMeters: asNumber(values.accuracyMeters),
@@ -606,7 +675,6 @@ export function AttendanceActivityView({ section }: { section: string }) {
   const [geofences, setGeofences] = React.useState<AdminRecord[]>([])
   const [wifiNetworks, setWifiNetworks] = React.useState<AdminRecord[]>([])
   const [punchValues, setPunchValues] = React.useState<Record<string, string>>({
-    employeeId: "",
     geofenceId: "",
     wifiNetworkId: "",
     latitude: "",
@@ -866,10 +934,6 @@ export function AttendanceActivityView({ section }: { section: string }) {
                 <input className="rounded-md border border-slate-300 px-3 py-2" value={punchValues.accuracyMeters} onChange={(event) => setPunchValues((current) => ({ ...current, accuracyMeters: event.target.value }))} />
               </label>
               <label className="grid gap-1 text-sm">
-                <span className="font-medium text-slate-700">Employee Id</span>
-                <input className="rounded-md border border-slate-300 px-3 py-2" value={punchValues.employeeId} onChange={(event) => setPunchValues((current) => ({ ...current, employeeId: event.target.value }))} />
-              </label>
-              <label className="grid gap-1 text-sm">
                 <span className="font-medium text-slate-700">Geofence</span>
                 <select className="rounded-md border border-slate-300 px-3 py-2" value={punchValues.geofenceId} onChange={(event) => setPunchValues((current) => ({ ...current, geofenceId: event.target.value }))}>
                   <option value="">Select geofence</option>
@@ -934,8 +998,8 @@ export function AttendanceActivityView({ section }: { section: string }) {
               <div className="rounded-xl border border-slate-200 p-4">
                 <h2 className="text-base font-semibold text-slate-900">Queue Recalculation</h2>
                 <div className="mt-4 grid gap-3">
-                  <input className="rounded-md border border-slate-300 px-3 py-2 text-sm" type="date" value={recalculateValues.start_date} onChange={(event) => setRecalculateValues((current) => ({ ...current, start_date: event.target.value }))} />
-                  <input className="rounded-md border border-slate-300 px-3 py-2 text-sm" type="date" value={recalculateValues.end_date} onChange={(event) => setRecalculateValues((current) => ({ ...current, end_date: event.target.value }))} />
+                  <DatePickerPresets value={recalculateValues.start_date} onChange={(value) => setRecalculateValues((current) => ({ ...current, start_date: value }))} placeholder="Start date" />
+                  <DatePickerPresets value={recalculateValues.end_date} onChange={(value) => setRecalculateValues((current) => ({ ...current, end_date: value }))} placeholder="End date" />
                   <input className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="Employee Id (optional)" value={recalculateValues.employee_id} onChange={(event) => setRecalculateValues((current) => ({ ...current, employee_id: event.target.value }))} />
                   <input className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="Reason" value={recalculateValues.reason} onChange={(event) => setRecalculateValues((current) => ({ ...current, reason: event.target.value }))} />
                   <select className="rounded-md border border-slate-300 px-3 py-2 text-sm" value={recalculateValues.process_immediately} onChange={(event) => setRecalculateValues((current) => ({ ...current, process_immediately: event.target.value }))}>
@@ -950,8 +1014,8 @@ export function AttendanceActivityView({ section }: { section: string }) {
               <div className="rounded-xl border border-slate-200 p-4">
                 <h2 className="text-base font-semibold text-slate-900">Process Attendance Range</h2>
                 <div className="mt-4 grid gap-3">
-                  <input className="rounded-md border border-slate-300 px-3 py-2 text-sm" type="date" value={rangeValues.start_date} onChange={(event) => setRangeValues((current) => ({ ...current, start_date: event.target.value }))} />
-                  <input className="rounded-md border border-slate-300 px-3 py-2 text-sm" type="date" value={rangeValues.end_date} onChange={(event) => setRangeValues((current) => ({ ...current, end_date: event.target.value }))} />
+                  <DatePickerPresets value={rangeValues.start_date} onChange={(value) => setRangeValues((current) => ({ ...current, start_date: value }))} placeholder="Start date" />
+                  <DatePickerPresets value={rangeValues.end_date} onChange={(value) => setRangeValues((current) => ({ ...current, end_date: value }))} placeholder="End date" />
                   <input className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="Employee Id (optional)" value={rangeValues.employee_id} onChange={(event) => setRangeValues((current) => ({ ...current, employee_id: event.target.value }))} />
                   <input className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="Batch size" value={rangeValues.batch_size} onChange={(event) => setRangeValues((current) => ({ ...current, batch_size: event.target.value }))} />
                   <select className="rounded-md border border-slate-300 px-3 py-2 text-sm" value={rangeValues.rebuild_summaries} onChange={(event) => setRangeValues((current) => ({ ...current, rebuild_summaries: event.target.value }))}>

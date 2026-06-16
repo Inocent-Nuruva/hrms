@@ -2,8 +2,15 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { PencilIcon, PlusIcon, RefreshCwIcon, Trash2Icon } from "lucide-react"
+import { Clock3Icon, PencilIcon, PlusIcon, RefreshCwIcon, Trash2Icon } from "lucide-react"
 
+import {
+  buildFormDraftStorageKey,
+  clearPersistedFormState,
+  persistFormState,
+  readPersistedFormState,
+  RecordDetailsDialog,
+} from "@/components/dashboard/admin-view-shared"
 import {
   Dialog,
   DialogDescription,
@@ -13,6 +20,8 @@ import {
   DialogTitle,
 } from "@/components/animate-ui/components/base/dialog"
 import { TableScrollContainer } from "@/components/common/table-scroll-container"
+import { DatePickerPresets } from "@/components/ui/date-picker-presets"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import {
   createShiftResource,
   createTimetableResource,
@@ -26,6 +35,7 @@ import {
   listBranches,
   listDepartments,
   listEmployees,
+  listUsers,
   listShiftResources,
   listTimetableResources,
   patchShiftResourceById,
@@ -34,6 +44,7 @@ import {
   type ShiftResourceKey,
   type TimetableResourceKey,
 } from "@/lib/admin-api"
+import { cn } from "@/lib/utils"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 
 type ScheduleSectionKey = ShiftResourceKey | TimetableResourceKey
@@ -43,6 +54,7 @@ type FieldType =
   | "number"
   | "date"
   | "time"
+  | "duration"
   | "boolean"
   | "select"
   | "textarea"
@@ -56,6 +68,7 @@ type FieldConfig = {
   hidden?: boolean
   placeholder?: string
   helpText?: string
+  autoFillLabelFromOption?: boolean
   options?: Array<{ label: string; value: string }>
 }
 
@@ -121,6 +134,10 @@ const DAY_OF_WEEK_OPTIONS = DAY_OF_WEEK_LABELS.map((label, index) => ({
   value: String(index),
 }))
 
+const TIME_HOUR_OPTIONS = Array.from({ length: 24 }, (_, index) => String(index).padStart(2, "0"))
+const MINUTE_OPTIONS = Array.from({ length: 60 }, (_, index) => String(index).padStart(2, "0"))
+const DURATION_HOUR_OPTIONS = Array.from({ length: 25 }, (_, index) => String(index))
+
 const DAY_OF_WEEK_VALUE_MAP: Record<string, string> = {
   MONDAY: "0",
   TUESDAY: "1",
@@ -152,21 +169,21 @@ const SECTION_CONFIG: Record<ScheduleSectionKey, SectionConfig> = {
     description: "Manage the master shift definitions used across attendance scheduling.",
     fields: [
       { key: "name", label: "Shift Name", type: "text", required: true, placeholder: "Morning Shift" },
-      { key: "code", label: "Shift Code", type: "text", required: true, placeholder: "MORNING" },
+      { key: "code", label: "Shift Code", type: "text", hidden: true, placeholder: "MORNING" },
       { key: "description", label: "Description", type: "textarea", placeholder: "Optional note about this shift." },
       { key: "shift_type", label: "Shift Type", type: "select", required: true, options: SHIFT_TYPE_OPTIONS },
       { key: "branch_id", label: "Branch", type: "select" },
       { key: "department_id", label: "Department", type: "select" },
       { key: "start_time", label: "Start Time", type: "time", required: true },
       { key: "end_time", label: "End Time", type: "time", required: true },
-      { key: "expected_work_minutes", label: "Expected Work Minutes", type: "number", required: true },
-      { key: "minimum_work_minutes", label: "Minimum Work Minutes", type: "number", required: true },
-      { key: "half_day_minutes", label: "Half Day Minutes", type: "number", required: true },
-      { key: "grace_in_minutes", label: "Grace In Minutes", type: "number" },
-      { key: "grace_out_minutes", label: "Grace Out Minutes", type: "number" },
-      { key: "late_after_minutes", label: "Late After Minutes", type: "number" },
-      { key: "early_leave_after_minutes", label: "Early Leave After Minutes", type: "number" },
-      { key: "max_overtime_minutes", label: "Max Overtime Minutes", type: "number" },
+      { key: "expected_work_minutes", label: "Expected Work Duration", type: "duration", required: true },
+      { key: "minimum_work_minutes", label: "Minimum Work Duration", type: "duration", required: true },
+      { key: "half_day_minutes", label: "Half Day Threshold", type: "duration", required: true },
+      { key: "grace_in_minutes", label: "Grace In", type: "duration" },
+      { key: "grace_out_minutes", label: "Grace Out", type: "duration" },
+      { key: "late_after_minutes", label: "Late After", type: "duration" },
+      { key: "early_leave_after_minutes", label: "Early Leave After", type: "duration" },
+      { key: "max_overtime_minutes", label: "Max Overtime", type: "duration" },
       { key: "status", label: "Status", type: "select", options: STATUS_OPTIONS },
       { key: "is_night_shift", label: "Night Shift", type: "boolean" },
       { key: "crosses_midnight", label: "Crosses Midnight", type: "boolean" },
@@ -184,10 +201,10 @@ const SECTION_CONFIG: Record<ScheduleSectionKey, SectionConfig> = {
     fields: [
       { key: "shift_id", label: "Shift", type: "select", required: true },
       { key: "name", label: "Break Name", type: "text", required: true, placeholder: "Lunch Break" },
-      { key: "break_type", label: "Break Type", type: "select", required: true, options: BREAK_TYPE_OPTIONS },
+      { key: "break_type", label: "Break Type", type: "select", required: true, options: BREAK_TYPE_OPTIONS, autoFillLabelFromOption: true },
       { key: "start_time", label: "Start Time", type: "time", required: true },
       { key: "end_time", label: "End Time", type: "time", required: true },
-      { key: "duration_minutes", label: "Duration Minutes", type: "number", required: true },
+      { key: "duration_minutes", label: "Break Duration", type: "duration", required: true },
       { key: "is_paid", label: "Paid Break", type: "boolean" },
       { key: "is_flexible", label: "Flexible Break", type: "boolean" },
     ],
@@ -199,9 +216,9 @@ const SECTION_CONFIG: Record<ScheduleSectionKey, SectionConfig> = {
     description: "Manage late, absent, and validation rules that apply to a shift.",
     fields: [
       { key: "shift_id", label: "Shift", type: "select", required: true },
-      { key: "late_after_minutes", label: "Late After Minutes", type: "number", required: true },
-      { key: "absent_after_minutes", label: "Absent After Minutes", type: "number", required: true },
-      { key: "half_day_after_minutes", label: "Half Day After Minutes", type: "number", required: true },
+      { key: "late_after_minutes", label: "Late After", type: "duration", required: true },
+      { key: "absent_after_minutes", label: "Absent After", type: "duration", required: true },
+      { key: "half_day_after_minutes", label: "Half Day After", type: "duration", required: true },
       { key: "allow_multiple_checkin", label: "Allow Multiple Check-Ins", type: "boolean" },
       { key: "auto_mark_absent", label: "Auto Mark Absent", type: "boolean" },
       { key: "allow_mobile_attendance", label: "Allow Mobile Attendance", type: "boolean" },
@@ -217,8 +234,8 @@ const SECTION_CONFIG: Record<ScheduleSectionKey, SectionConfig> = {
     description: "Manage overtime qualification and calculation rules for a shift.",
     fields: [
       { key: "shift_id", label: "Shift", type: "select", required: true },
-      { key: "overtime_start_after_minutes", label: "Start Overtime After Minutes", type: "number", required: true },
-      { key: "max_daily_overtime_minutes", label: "Max Daily Overtime Minutes", type: "number", required: true },
+      { key: "overtime_start_after_minutes", label: "Start Overtime After", type: "duration", required: true },
+      { key: "max_daily_overtime_minutes", label: "Max Daily Overtime", type: "duration", required: true },
       { key: "overtime_rate_multiplier", label: "Overtime Rate Multiplier", type: "number", required: true },
       { key: "weekend_multiplier", label: "Weekend Multiplier", type: "number", required: true },
       { key: "holiday_multiplier", label: "Holiday Multiplier", type: "number", required: true },
@@ -373,8 +390,8 @@ const SECTION_CONFIG: Record<ScheduleSectionKey, SectionConfig> = {
       { key: "expected_check_out_time", label: "Expected Check-Out Time", type: "time" },
       { key: "flexible_start_from", label: "Flexible Start From", type: "time" },
       { key: "flexible_start_to", label: "Flexible Start To", type: "time" },
-      { key: "minimum_work_minutes", label: "Minimum Work Minutes", type: "number" },
-      { key: "break_minutes", label: "Break Minutes", type: "number" },
+      { key: "minimum_work_minutes", label: "Minimum Work Duration", type: "duration" },
+      { key: "break_minutes", label: "Break Duration", type: "duration" },
       { key: "is_working_day", label: "Working Day", type: "boolean" },
       { key: "allow_flexible_time", label: "Allow Flexible Time", type: "boolean" },
       { key: "overtime_allowed", label: "Overtime Allowed", type: "boolean" },
@@ -414,10 +431,10 @@ const SECTION_CONFIG: Record<ScheduleSectionKey, SectionConfig> = {
     description: "Manage timetable-level attendance validation and tolerance rules.",
     fields: [
       { key: "timetable_id", label: "Timetable", type: "select", required: true },
-      { key: "late_after_minutes", label: "Late After Minutes", type: "number", required: true },
-      { key: "half_day_after_minutes", label: "Half Day After Minutes", type: "number", required: true },
-      { key: "absent_after_minutes", label: "Absent After Minutes", type: "number", required: true },
-      { key: "max_overtime_minutes", label: "Max Overtime Minutes", type: "number", required: true },
+      { key: "late_after_minutes", label: "Late After", type: "duration", required: true },
+      { key: "half_day_after_minutes", label: "Half Day After", type: "duration", required: true },
+      { key: "absent_after_minutes", label: "Absent After", type: "duration", required: true },
+      { key: "max_overtime_minutes", label: "Max Overtime", type: "duration", required: true },
       { key: "allow_early_checkin", label: "Allow Early Check-In", type: "boolean" },
       { key: "allow_late_checkout", label: "Allow Late Checkout", type: "boolean" },
       { key: "auto_absent_if_no_checkin", label: "Auto Absent If No Check-In", type: "boolean" },
@@ -537,11 +554,68 @@ function prettifyLabel(value: string): string {
     .replace(/\b\w/g, (char) => char.toUpperCase())
 }
 
+function isIsoDateString(value: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) || /^\d{4}-\d{2}-\d{2}T/.test(value)
+}
+
+function isTimeValue(value: string) {
+  return /^\d{2}:\d{2}(:\d{2})?$/.test(value)
+}
+
+function formatDisplayDate(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return new Intl.DateTimeFormat("en-GB", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      timeZone: "UTC",
+    }).format(date)
+  }
+
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date)
+}
+
+function formatDisplayTime(value: string) {
+  const [hours, minutes] = value.split(":")
+  const hourNumber = Number(hours)
+  const minuteNumber = Number(minutes)
+  if (!Number.isInteger(hourNumber) || !Number.isInteger(minuteNumber)) {
+    return value
+  }
+
+  const date = new Date()
+  date.setHours(hourNumber, minuteNumber, 0, 0)
+  return new Intl.DateTimeFormat("en-GB", {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date)
+}
+
 function stringifyValue(value: unknown): string {
   if (value === null || value === undefined) return "-"
   if (typeof value === "string") {
     const trimmed = value.trim()
-    return trimmed || "-"
+    if (!trimmed) {
+      return "-"
+    }
+    if (isIsoDateString(trimmed)) {
+      return formatDisplayDate(trimmed)
+    }
+    if (isTimeValue(trimmed)) {
+      return formatDisplayTime(trimmed)
+    }
+    return trimmed
   }
   if (typeof value === "number" || typeof value === "boolean") return String(value)
   if (Array.isArray(value)) return value.length ? `${value.length} item(s)` : "-"
@@ -587,6 +661,54 @@ function readNestedRecord(row: AdminRecord, keys: string[]) {
 
 function buildInitialValues(fields: FieldConfig[]) {
   return Object.fromEntries(fields.map((field) => [field.key, ""]))
+}
+
+function minutesToDurationParts(value: string) {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return { hours: "", minutes: "" }
+  }
+  const totalMinutes = Math.floor(parsed)
+  return {
+    hours: String(Math.floor(totalMinutes / 60)),
+    minutes: String(totalMinutes % 60),
+  }
+}
+
+function durationPartsToMinutes(hoursValue: string, minutesValue: string) {
+  const trimmedHours = hoursValue.trim()
+  const trimmedMinutes = minutesValue.trim()
+
+  if (!trimmedHours && !trimmedMinutes) {
+    return ""
+  }
+
+  const hours = trimmedHours ? Number(trimmedHours) : 0
+  const minutes = trimmedMinutes ? Number(trimmedMinutes) : 0
+
+  if (!Number.isFinite(hours) || hours < 0 || !Number.isFinite(minutes) || minutes < 0 || minutes > 59) {
+    return ""
+  }
+
+  return String(hours * 60 + minutes)
+}
+
+function timeValueToParts(value: string) {
+  if (!isTimeValue(value)) {
+    return { hours: "", minutes: "" }
+  }
+  const [hours, minutes] = value.split(":")
+  return { hours, minutes }
+}
+
+function timePartsToValue(hoursValue: string, minutesValue: string) {
+  if (!hoursValue && !minutesValue) {
+    return ""
+  }
+  if (!hoursValue || !minutesValue) {
+    return ""
+  }
+  return `${hoursValue.padStart(2, "0")}:${minutesValue.padStart(2, "0")}`
 }
 
 function buildEditValues(fields: FieldConfig[], row: AdminRecord) {
@@ -654,6 +776,10 @@ function buildEditValues(fields: FieldConfig[], row: AdminRecord) {
         continue
       }
     }
+    if (field.type === "date" && typeof value === "string" && value.trim()) {
+      values[field.key] = value.trim().slice(0, 10)
+      continue
+    }
     values[field.key] = String(value)
   }
   return values
@@ -690,6 +816,58 @@ function resolveVisibleColumns(rows: AdminRecord[]) {
   const ordered = preferred.filter((key) => keySet.has(key))
   const extras = Array.from(keySet).filter((key) => !ordered.includes(key)).sort((a, b) => a.localeCompare(b))
   return [...ordered, ...extras].slice(0, 8)
+}
+
+function buildScheduleLookupLabelMaps(lookups: LookupState) {
+  const toMap = (rows: AdminRecord[], idKeys: string[], labelBuilder: (row: AdminRecord, id: number) => string) =>
+    new Map<string, string>(
+      rows
+        .map((row) => {
+          const id = readNumberFromRecord(row, idKeys)
+          if (id === null) {
+            return null
+          }
+          return [String(id), labelBuilder(row, id)] as const
+        })
+        .filter((entry): entry is readonly [string, string] => entry !== null)
+    )
+
+  return {
+    branch_id: toMap(lookups.branches, ["id", "branch_id"], (row, id) => {
+      return readStringFromRecord(row, ["name", "branch_name", "title"]) ?? `Branch ${id}`
+    }),
+    department_id: toMap(lookups.departments, ["id", "department_id"], (row, id) => {
+      return readStringFromRecord(row, ["name", "department_name", "title"]) ?? `Department ${id}`
+    }),
+    shift_id: toMap(lookups.shifts, ["id", "shift_id", "shiftId"], (row, id) => {
+      return readStringFromRecord(row, ["name", "shift_name", "title"]) ?? `Shift ${id}`
+    }),
+    timetable_id: toMap(lookups.timetables, ["id", "timetable_id", "timetableId"], (row, id) => {
+      return readStringFromRecord(row, ["name", "timetable_name", "title"]) ?? `Timetable ${id}`
+    }),
+    holiday_group_id: toMap(lookups.holidayGroups, ["id", "holiday_group_id"], (row, id) => {
+      return readStringFromRecord(row, ["name", "group_name", "title"]) ?? `Holiday Group ${id}`
+    }),
+    holiday_id: toMap(lookups.holidays, ["id", "holiday_id", "holidayId"], (row, id) => {
+      return readStringFromRecord(row, ["name", "holiday_name", "title"]) ?? `Holiday ${id}`
+    }),
+    rotation_group_id: toMap(lookups.rotationGroups, ["id", "rotation_group_id", "rotationGroupId"], (row, id) => {
+      return readStringFromRecord(row, ["name", "rotation_group_name", "title"]) ?? `Rotation Group ${id}`
+    }),
+  } satisfies Record<string, Map<string, string>>
+}
+
+function resolveScheduleCellValue(
+  column: string,
+  row: AdminRecord,
+  lookupMaps: Record<string, Map<string, string>>
+) {
+  const raw = row[column]
+  const map = lookupMaps[column]
+  if (map && (typeof raw === "string" || typeof raw === "number")) {
+    return map.get(String(raw)) ?? stringifyValue(raw)
+  }
+  return stringifyValue(raw)
 }
 
 function resolveRowId(row: AdminRecord, fallbackIndex: number) {
@@ -779,7 +957,7 @@ function toPayload(
       continue
     }
 
-    if (field.type === "number") {
+    if (field.type === "number" || field.type === "duration") {
       const parsed = Number(trimmed)
       if (!Number.isFinite(parsed)) {
         throw new Error(`${field.label} must be a valid number.`)
@@ -912,36 +1090,47 @@ function mapLookupOptions(field: FieldConfig, lookups: LookupState) {
     case "employee_id":
       return lookups.employees
         .map((row) => {
-          const nestedEmployee = readNestedRecord(row, ["employee", "user"])
+          const directNestedEmployee = readNestedRecord(row, ["employee", "user", "staff", "person"])
+          const nestedEmployee = directNestedEmployee
+            ? readNestedRecord(directNestedEmployee, ["user", "employee"]) ?? directNestedEmployee
+            : null
           const id =
-            readNumberFromRecord(row, ["id", "employee_id", "employeeId", "user_id", "userId"]) ??
+            readNumberFromRecord(row, ["id", "employee_id", "employeeId", "user_id", "userId", "staff_id", "staffId", "person_id", "personId"]) ??
             (nestedEmployee
-              ? readNumberFromRecord(nestedEmployee, ["id", "employee_id", "employeeId", "user_id", "userId"])
+              ? readNumberFromRecord(nestedEmployee, ["id", "employee_id", "employeeId", "user_id", "userId", "staff_id", "staffId", "person_id", "personId"])
               : null)
           if (id === null) {
             return null
           }
-          const topLevelName = [row.first_name, row.middle_name, row.last_name]
+          const topLevelName = [row.first_name, row.firstName, row.middle_name, row.middleName, row.last_name, row.lastName]
+            .filter((value, index) => index % 3 === 0 ? true : true)
             .filter((value) => typeof value === "string" && value.trim())
             .join(" ")
             .trim()
           const nestedName = nestedEmployee
-            ? [nestedEmployee.first_name, nestedEmployee.middle_name, nestedEmployee.last_name]
-                .filter((value) => typeof value === "string" && value.trim())
-                .join(" ")
-                .trim()
+            ? [
+                nestedEmployee.first_name,
+                nestedEmployee.firstName,
+                nestedEmployee.middle_name,
+                nestedEmployee.middleName,
+                nestedEmployee.last_name,
+                nestedEmployee.lastName,
+              ]
+            .filter((value) => typeof value === "string" && value.trim())
+            .join(" ")
+            .trim()
             : ""
           const fallbackName = topLevelName || nestedName
           const fullName =
-            readStringFromRecord(row, ["full_name", "fullName", "display_name", "displayName", "name"]) ??
+            readStringFromRecord(row, ["full_name", "fullName", "display_name", "displayName", "name", "employee_name", "employeeName"]) ??
             (nestedEmployee
-              ? readStringFromRecord(nestedEmployee, ["full_name", "fullName", "display_name", "displayName", "name"])
+              ? readStringFromRecord(nestedEmployee, ["full_name", "fullName", "display_name", "displayName", "name", "employee_name", "employeeName"])
               : null) ??
             fallbackName
           const employeeNo =
-            readStringFromRecord(row, ["employee_no", "employeeNo", "employee_number", "employee_code", "user_no"]) ??
+            readStringFromRecord(row, ["employee_no", "employeeNo", "employee_number", "employee_code", "user_no", "staff_no", "staffNo", "code"]) ??
             (nestedEmployee
-              ? readStringFromRecord(nestedEmployee, ["employee_no", "employeeNo", "employee_number", "employee_code", "user_no"])
+              ? readStringFromRecord(nestedEmployee, ["employee_no", "employeeNo", "employee_number", "employee_code", "user_no", "staff_no", "staffNo", "code"])
               : null)
           const label = fullName && employeeNo ? `${fullName} (${employeeNo})` : fullName || employeeNo || `Employee ${id}`
           return { value: String(id), label }
@@ -963,8 +1152,8 @@ function mapLookupOptions(field: FieldConfig, lookups: LookupState) {
             return null
           }
           const name =
-            readStringFromRecord(row, ["name", "shift_name", "shiftName"]) ??
-            (nestedShift ? readStringFromRecord(nestedShift, ["name", "shift_name", "shiftName"]) : null)
+            readStringFromRecord(row, ["name", "shift_name", "shiftName", "title"]) ??
+            (nestedShift ? readStringFromRecord(nestedShift, ["name", "shift_name", "shiftName", "title"]) : null)
           const code =
             readStringFromRecord(row, ["code", "shift_code", "shiftCode"]) ??
             (nestedShift ? readStringFromRecord(nestedShift, ["code", "shift_code", "shiftCode"]) : null)
@@ -1027,6 +1216,246 @@ function mapLookupOptions(field: FieldConfig, lookups: LookupState) {
     default:
       return []
   }
+}
+
+function TimeSelectField({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (value: string) => void
+}) {
+  const parts = React.useMemo(() => timeValueToParts(value), [value])
+  return (
+    <DualWheelPickerField
+      value={value}
+      parts={parts}
+      title="Time Picker"
+      emptyLabel="Select time"
+      emptyHint="24-hour format"
+      preview={parts.hours && parts.minutes ? `${parts.hours}:${parts.minutes}` : "--:--"}
+      displayValue={parts.hours && parts.minutes ? formatDisplayTime(`${parts.hours}:${parts.minutes}`) : ""}
+      displayHint={parts.hours && parts.minutes ? `${parts.hours}:${parts.minutes}` : "24-hour format"}
+      applyLabel="Apply time"
+      firstLabel="Hour"
+      secondLabel="Minute"
+      firstOptions={TIME_HOUR_OPTIONS}
+      secondOptions={MINUTE_OPTIONS}
+      parseValue={timeValueToParts}
+      composeValue={timePartsToValue}
+      formatOption={(option) => option}
+      onChange={onChange}
+    />
+  )
+}
+
+function DurationSelectField({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (value: string) => void
+}) {
+  const parts = React.useMemo(() => minutesToDurationParts(value), [value])
+
+  return (
+    <DualWheelPickerField
+      value={value}
+      parts={parts}
+      title="Duration Picker"
+      emptyLabel="Select duration"
+      emptyHint="hours and minutes"
+      preview={parts.hours || parts.minutes ? `${parts.hours || "0"} hr ${parts.minutes || "0"} min` : "-- hr -- min"}
+      displayValue={parts.hours || parts.minutes ? `${parts.hours || "0"} hr` : ""}
+      displayHint={parts.hours || parts.minutes ? `${parts.minutes || "0"} min` : "hours and minutes"}
+      applyLabel="Apply duration"
+      firstLabel="Hours"
+      secondLabel="Minutes"
+      firstOptions={DURATION_HOUR_OPTIONS}
+      secondOptions={MINUTE_OPTIONS}
+      parseValue={minutesToDurationParts}
+      composeValue={durationPartsToMinutes}
+      formatOption={(option, kind) => (kind === "hours" ? `${option} hr` : `${option} min`)}
+      onChange={onChange}
+    />
+  )
+}
+
+function DualWheelPickerField({
+  value,
+  parts,
+  title,
+  emptyLabel,
+  emptyHint,
+  preview,
+  displayValue,
+  displayHint,
+  applyLabel,
+  firstLabel,
+  secondLabel,
+  firstOptions,
+  secondOptions,
+  parseValue,
+  composeValue,
+  formatOption,
+  onChange,
+}: {
+  value: string
+  parts: { hours: string; minutes: string }
+  title: string
+  emptyLabel: string
+  emptyHint: string
+  preview: string
+  displayValue: string
+  displayHint: string
+  applyLabel: string
+  firstLabel: string
+  secondLabel: string
+  firstOptions: string[]
+  secondOptions: string[]
+  parseValue: (value: string) => { hours: string; minutes: string }
+  composeValue: (hoursValue: string, minutesValue: string) => string
+  formatOption: (option: string, kind: "hours" | "minutes") => string
+  onChange: (value: string) => void
+}) {
+  const [open, setOpen] = React.useState(false)
+  const [draft, setDraft] = React.useState(parts)
+
+  React.useEffect(() => {
+    if (!open) {
+      setDraft(parseValue(value))
+    }
+  }, [open, parseValue, value])
+
+  const canApply = Boolean(draft.hours && draft.minutes)
+
+  const updateDraft = (key: "hours" | "minutes", nextValue: string) => {
+    setDraft((current) => ({
+      ...current,
+      [key]: nextValue,
+    }))
+  }
+
+  const handleApply = () => {
+    if (!canApply) {
+      return
+    }
+    onChange(composeValue(draft.hours, draft.minutes))
+    setOpen(false)
+  }
+
+  const handleClear = () => {
+    setDraft({ hours: "", minutes: "" })
+    onChange("")
+    setOpen(false)
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        render={
+          <button
+            type="button"
+            className={cn(
+              "flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm transition dark:border-slate-700 dark:bg-slate-950/60",
+              open ? "border-[var(--primary)] shadow-sm" : "border-slate-300",
+              displayValue ? "text-slate-900 dark:text-slate-100" : "text-slate-400 dark:text-slate-500"
+            )}
+          >
+            <span className="flex min-w-0 items-center gap-2">
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-500 dark:bg-slate-900 dark:text-slate-300">
+                <Clock3Icon className="h-4 w-4" />
+              </span>
+              <span className="flex min-w-0 flex-col">
+                <span className="truncate font-medium">{displayValue || emptyLabel}</span>
+                <span className="text-xs text-slate-500 dark:text-slate-400">{displayHint || emptyHint}</span>
+              </span>
+            </span>
+            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Set</span>
+          </button>
+        }
+      />
+      <PopoverContent className="w-[min(22rem,calc(100vw-2rem))] rounded-2xl border border-slate-200 bg-white p-0 shadow-xl dark:border-slate-800 dark:bg-slate-950">
+        <div className="border-b border-slate-100 bg-slate-50/80 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/80">
+          <p className="text-xs font-medium uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">{title}</p>
+          <div className="mt-2 flex items-end gap-2">
+            <span className="text-3xl font-semibold text-slate-900 dark:text-slate-100">{preview}</span>
+          </div>
+        </div>
+        <div className="grid grid-cols-[1fr_auto_1fr] gap-3 p-4">
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">{firstLabel}</p>
+            <div className="max-h-56 space-y-1 overflow-y-auto rounded-2xl bg-slate-50 p-2 dark:bg-slate-900">
+              {firstOptions.map((option) => {
+                const selected = draft.hours === option
+                return (
+                  <button
+                    key={option}
+                    type="button"
+                    className={cn(
+                      "flex w-full items-center justify-center rounded-xl px-3 py-2 text-sm font-medium transition",
+                      selected
+                        ? "bg-[var(--primary)] text-[var(--primary-foreground)] shadow-sm"
+                        : "text-slate-600 hover:bg-white hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                    )}
+                    onClick={() => updateDraft("hours", option)}
+                  >
+                    {formatOption(option, "hours")}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+          <div className="flex items-center justify-center text-2xl font-semibold text-slate-300 dark:text-slate-700">:</div>
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">{secondLabel}</p>
+            <div className="max-h-56 space-y-1 overflow-y-auto rounded-2xl bg-slate-50 p-2 dark:bg-slate-900">
+              {secondOptions.map((option) => {
+                const selected = draft.minutes === option
+                return (
+                  <button
+                    key={option}
+                    type="button"
+                    className={cn(
+                      "flex w-full items-center justify-center rounded-xl px-3 py-2 text-sm font-medium transition",
+                      selected
+                        ? "bg-[var(--primary)] text-[var(--primary-foreground)] shadow-sm"
+                        : "text-slate-600 hover:bg-white hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                    )}
+                    onClick={() => updateDraft("minutes", option)}
+                  >
+                    {formatOption(option, "minutes")}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 dark:border-slate-800">
+          <button
+            type="button"
+            className="text-sm font-medium text-slate-500 transition hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
+            onClick={handleClear}
+          >
+            Clear
+          </button>
+          <button
+            type="button"
+            className={cn(
+              "rounded-full px-4 py-2 text-sm font-semibold transition",
+              canApply
+                ? "bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90"
+                : "cursor-not-allowed bg-slate-200 text-slate-400 dark:bg-slate-800 dark:text-slate-500"
+            )}
+            onClick={handleApply}
+            disabled={!canApply}
+          >
+            {applyLabel}
+          </button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
 }
 
 function FormField({
@@ -1126,6 +1555,18 @@ function FormField({
     )
   }
 
+  if (field.type === "date") {
+    return <DatePickerPresets value={value} onChange={onChange} placeholder={`Select ${field.label}`} />
+  }
+
+  if (field.type === "time") {
+    return <TimeSelectField value={value} onChange={onChange} />
+  }
+
+  if (field.type === "duration") {
+    return <DurationSelectField value={value} onChange={onChange} />
+  }
+
   return (
     <input
       className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
@@ -1142,6 +1583,11 @@ export function ScheduleManagementView({ section }: { section: string }) {
   const activeSection = React.useMemo(() => resolveSection(section), [section])
   const config = React.useMemo(() => SECTION_CONFIG[activeSection], [activeSection])
   const fields = React.useMemo(() => config.fields, [config.fields])
+  const initialFormState = React.useMemo(() => buildInitialValues(fields), [fields])
+  const createDraftKey = React.useMemo(
+    () => buildFormDraftStorageKey(`schedule:${activeSection}:create`),
+    [activeSection]
+  )
 
   const [rows, setRows] = React.useState<AdminRecord[]>([])
   const [lookups, setLookups] = React.useState<LookupState>(EMPTY_LOOKUPS)
@@ -1152,27 +1598,48 @@ export function ScheduleManagementView({ section }: { section: string }) {
   const [formError, setFormError] = React.useState<string | null>(null)
   const [lookupError, setLookupError] = React.useState<string | null>(null)
   const [currentUserId, setCurrentUserId] = React.useState<number | null>(null)
-  const [createValues, setCreateValues] = React.useState<Record<string, string>>(() => buildInitialValues(fields))
-  const [editValues, setEditValues] = React.useState<Record<string, string>>(() => buildInitialValues(fields))
+  const [createValues, setCreateValues] = React.useState<Record<string, string>>(() =>
+    readPersistedFormState(createDraftKey, initialFormState)
+  )
+  const [editValues, setEditValues] = React.useState<Record<string, string>>(() => initialFormState)
   const [editingId, setEditingId] = React.useState("")
   const [deletingId, setDeletingId] = React.useState("")
   const [editRecord, setEditRecord] = React.useState<AdminRecord | null>(null)
   const [createOpen, setCreateOpen] = React.useState(false)
   const [editOpen, setEditOpen] = React.useState(false)
   const [deleteOpen, setDeleteOpen] = React.useState(false)
+  const [detailsOpen, setDetailsOpen] = React.useState(false)
+  const [selectedRow, setSelectedRow] = React.useState<AdminRecord | null>(null)
 
   React.useEffect(() => {
-    setCreateValues(buildInitialValues(fields))
-    setEditValues(buildInitialValues(fields))
+    setCreateValues(readPersistedFormState(createDraftKey, initialFormState))
+    setEditValues(initialFormState)
     setEditingId("")
     setDeletingId("")
     setEditRecord(null)
+    setSelectedRow(null)
+    setDetailsOpen(false)
     setError(null)
     setMessage(null)
     setFormError(null)
     setLookupError(null)
     setCurrentUserId(null)
-  }, [fields, activeSection])
+  }, [activeSection, createDraftKey, initialFormState])
+
+  React.useEffect(() => {
+    persistFormState(createDraftKey, createValues)
+  }, [createDraftKey, createValues])
+
+  const editDraftKey = React.useMemo(() => {
+    return editingId ? buildFormDraftStorageKey(`schedule:${activeSection}:edit:${editingId}`) : ""
+  }, [activeSection, editingId])
+
+  React.useEffect(() => {
+    if (!editDraftKey) {
+      return
+    }
+    persistFormState(editDraftKey, editValues)
+  }, [editDraftKey, editValues])
 
   React.useEffect(() => {
     const token = readStoredToken()
@@ -1243,7 +1710,13 @@ export function ScheduleManagementView({ section }: { section: string }) {
             ? listDepartments(token, { page: 1, limit: 100 })
             : Promise.resolve({ rows: [] }),
           needed.has("employee_id")
-            ? listEmployees(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" })
+            ? listEmployees(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }).then(async (result) => {
+              if (result.rows.length > 0) {
+                return result
+              }
+              const fallback = await listUsers(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" })
+              return { rows: fallback.rows }
+            })
             : Promise.resolve({ rows: [] }),
           [
             "shift_id",
@@ -1367,6 +1840,7 @@ export function ScheduleManagementView({ section }: { section: string }) {
   }, [fetchRows])
 
   const columns = React.useMemo(() => resolveVisibleColumns(rows), [rows])
+  const lookupMaps = React.useMemo(() => buildScheduleLookupLabelMaps(lookups), [lookups])
 
   const onCreate = async () => {
     const token = readStoredToken()
@@ -1381,7 +1855,8 @@ export function ScheduleManagementView({ section }: { section: string }) {
       setMessage("Created successfully.")
       setFormError(null)
       setCreateOpen(false)
-      setCreateValues(buildInitialValues(fields))
+      clearPersistedFormState(createDraftKey)
+      setCreateValues(initialFormState)
       await fetchRows()
       router.refresh()
     } catch (errorObject) {
@@ -1403,7 +1878,9 @@ export function ScheduleManagementView({ section }: { section: string }) {
       }
       setEditingId(id)
       setEditRecord(record)
-      setEditValues(buildEditValues(fields, record))
+      const initialEditState = buildEditValues(fields, record)
+      const initialEditDraftKey = buildFormDraftStorageKey(`schedule:${activeSection}:edit:${id}`)
+      setEditValues(readPersistedFormState(initialEditDraftKey, initialEditState))
       setFormError(null)
       setEditOpen(true)
     } catch (errorObject) {
@@ -1424,6 +1901,10 @@ export function ScheduleManagementView({ section }: { section: string }) {
       setMessage("Updated successfully.")
       setFormError(null)
       setEditOpen(false)
+      if (editDraftKey) {
+        clearPersistedFormState(editDraftKey)
+      }
+      setEditValues(initialFormState)
       setEditingId("")
       setEditRecord(null)
       await fetchRows()
@@ -1473,10 +1954,31 @@ export function ScheduleManagementView({ section }: { section: string }) {
             value={values[field.key] ?? ""}
             lookups={lookups}
             onChange={(nextValue) =>
-              onChange((current) => ({
-                ...current,
-                [field.key]: nextValue,
-              }))
+              onChange((current) => {
+                const nextState: Record<string, string> = {
+                  ...current,
+                  [field.key]: nextValue,
+                }
+
+                if (field.key === "break_type" && field.autoFillLabelFromOption) {
+                  const selectedOption = (field.options ?? []).find((option) => option.value === nextValue)
+                  const suggestedName = selectedOption
+                    ? `${selectedOption.label.trim()} Break`
+                    : ""
+                  const currentName = current.name?.trim() ?? ""
+                  const currentBreakType = current.break_type?.trim() ?? ""
+                  const previousOption = (field.options ?? []).find((option) => option.value === currentBreakType)
+                  const previousSuggestedName = previousOption
+                    ? `${previousOption.label.trim()} Break`
+                    : ""
+
+                  if (suggestedName && (!currentName || currentName === previousSuggestedName)) {
+                    nextState.name = suggestedName
+                  }
+                }
+
+                return nextState
+              })
             }
           />
           {field.helpText ? <span className="text-xs text-slate-500">{field.helpText}</span> : null}
@@ -1489,22 +1991,27 @@ export function ScheduleManagementView({ section }: { section: string }) {
     </div>
   )
 
+  const openDetailsDialog = (row: AdminRecord) => {
+    setSelectedRow(row)
+    setDetailsOpen(true)
+  }
+
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-[#101826]/92">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
               {config.moduleTitle}
             </p>
             <div>
-              <h1 className="text-3xl font-semibold tracking-tight text-slate-900">{config.title}</h1>
-              <p className="mt-2 max-w-3xl text-sm text-slate-600">{config.description}</p>
+              <h1 className="text-3xl font-semibold tracking-tight text-slate-900 dark:text-slate-100">{config.title}</h1>
+              <p className="mt-2 max-w-3xl text-sm text-slate-600 dark:text-slate-300">{config.description}</p>
             </div>
           </div>
           <div className="flex items-center gap-3 self-start">
             <button
-              className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-300 px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-300 px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
               type="button"
               onClick={() => {
                 setMessage(null)
@@ -1518,7 +2025,6 @@ export function ScheduleManagementView({ section }: { section: string }) {
               className="inline-flex h-11 items-center justify-center rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800"
               type="button"
               onClick={() => {
-                setCreateValues(buildInitialValues(fields))
                 setFormError(null)
                 setCreateOpen(true)
               }}
@@ -1534,18 +2040,23 @@ export function ScheduleManagementView({ section }: { section: string }) {
 
         <div className="mt-6">
           <TableScrollContainer>
-            <table className="w-full min-w-[900px] text-left text-sm">
-              <thead className="bg-slate-50/90 text-slate-500">
+            <table className="min-w-full min-w-[900px] text-left text-sm">
+              <thead className="bg-[var(--table-header-accent-bg)] text-[var(--table-header-accent)] backdrop-blur-sm">
                 <tr>
                   {columns.map((column) => (
-                    <th key={column} className="px-4 py-3.5 text-xs font-semibold uppercase tracking-[0.08em] whitespace-nowrap">
+                    <th
+                      key={column}
+                      className="px-4 py-3.5 text-xs font-semibold uppercase tracking-[0.08em] whitespace-nowrap"
+                    >
                       {prettifyLabel(column)}
                     </th>
                   ))}
-                  <th className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.08em] whitespace-nowrap">Actions</th>
+                  <th className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.08em] whitespace-nowrap">
+                    Actions
+                  </th>
                 </tr>
               </thead>
-              <tbody className="bg-white [&_tr:nth-child(odd)]:bg-slate-50/35 [&_tr]:border-t [&_tr]:border-slate-100 [&_tr]:transition-colors [&_tr]:hover:bg-slate-50">
+              <tbody className="bg-white dark:bg-slate-950 [&_tr:nth-child(odd)]:bg-slate-50/35 dark:[&_tr:nth-child(odd)]:bg-slate-900/60 [&_tr]:border-t [&_tr]:border-slate-100 dark:[&_tr]:border-slate-800 [&_tr]:transition-colors [&_tr]:hover:bg-slate-50 dark:[&_tr]:text-slate-200 dark:[&_tr]:hover:bg-slate-900/90">
                 {loading ? (
                   <tr>
                     <td colSpan={columns.length + 1} className="px-4 py-10 text-center text-slate-500">
@@ -1562,18 +2073,25 @@ export function ScheduleManagementView({ section }: { section: string }) {
                   rows.map((row, index) => {
                     const rowId = resolveRowId(row, index)
                     return (
-                      <tr key={`${activeSection}-${String(rowId)}-${index}`} className="align-top">
+                      <tr
+                        key={`${activeSection}-${String(rowId)}-${index}`}
+                        className="align-top cursor-pointer"
+                        onClick={() => openDetailsDialog(row)}
+                      >
                         {columns.map((column) => (
-                          <td key={column} className="px-4 py-4 text-slate-700 whitespace-nowrap">
-                            {stringifyValue(row[column])}
+                          <td key={column} className="px-4 py-4 text-slate-700 whitespace-nowrap dark:text-slate-200">
+                            {resolveScheduleCellValue(column, row, lookupMaps)}
                           </td>
                         ))}
                         <td className="px-4 py-4">
                           <div className="flex items-center justify-end gap-2">
                             <button
-                              className="inline-flex items-center rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+                              className="inline-flex items-center rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:border-[color:rgb(var(--primary-rgb)/0.35)] hover:bg-[color:rgb(var(--primary-rgb)/0.10)] hover:text-[var(--primary)] dark:border-slate-700 dark:text-slate-200 dark:hover:border-[color:rgb(var(--primary-rgb)/0.45)] dark:hover:bg-[color:rgb(var(--primary-rgb)/0.18)]"
                               type="button"
-                              onClick={() => void openEdit(String(rowId))}
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                void openEdit(String(rowId))
+                              }}
                             >
                               <PencilIcon className="mr-1.5 h-3.5 w-3.5" />
                               Edit
@@ -1581,7 +2099,8 @@ export function ScheduleManagementView({ section }: { section: string }) {
                             <button
                               className="inline-flex items-center rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-50"
                               type="button"
-                              onClick={() => {
+                              onClick={(event) => {
+                                event.stopPropagation()
                                 setDeletingId(String(rowId))
                                 setDeleteOpen(true)
                               }}
@@ -1599,6 +2118,16 @@ export function ScheduleManagementView({ section }: { section: string }) {
             </table>
           </TableScrollContainer>
         </div>
+
+        <RecordDetailsDialog
+          open={detailsOpen}
+          onOpenChange={setDetailsOpen}
+          title={`${config.title} details`}
+          description="Selected row details"
+          row={selectedRow}
+          resolveLabel={(key) => prettifyLabel(key)}
+          resolveValue={(key, row) => resolveScheduleCellValue(key, row, lookupMaps)}
+        />
       </div>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>

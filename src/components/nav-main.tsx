@@ -95,7 +95,7 @@ export function NavMain({
     }
     return React.cloneElement(icon as React.ReactElement<Record<string, unknown>>, {
       animate: hoveredLink === key ? "path-loop" : false,
-      size: 42,
+      size: 38,
     })
   }, [hoveredLink])
 
@@ -151,7 +151,7 @@ export function NavMain({
         <SidebarMenuSubItem key={key}>
           <SidebarMenuSubButton
             className={`cursor-pointer rounded-lg text-foreground !no-underline hover:!no-underline hover:bg-muted data-active:!bg-transparent data-active:!text-[var(--sidebar-active-link-color)] ${
-              depth === 0 ? "py-2.5 text-[0.8rem] font-medium" : "py-3 text-[0.85rem] font-medium"
+              depth === 0 ? "py-2 text-[0.76rem] font-medium" : "py-2.5 text-[0.8rem] font-medium"
             }`}
             isActive={isActive}
             onClick={() =>
@@ -193,10 +193,10 @@ export function NavMain({
         <SidebarMenuSubButton
           className={`rounded-lg !no-underline data-active:!bg-transparent data-active:!text-[var(--sidebar-active-link-color)] ${
             node.disabled
-              ? "cursor-not-allowed py-3 text-[0.85rem] text-slate-400"
+              ? "cursor-not-allowed py-2.5 text-[0.8rem] text-slate-400"
               : depth === 0
-                ? "cursor-pointer py-2.5 text-[0.8rem] text-foreground hover:!no-underline hover:bg-muted"
-                : "cursor-pointer py-3 text-[0.85rem] text-foreground hover:!no-underline hover:bg-muted"
+                ? "cursor-pointer py-2 text-[0.76rem] text-foreground hover:!no-underline hover:bg-muted"
+                : "cursor-pointer py-2.5 text-[0.8rem] text-foreground hover:!no-underline hover:bg-muted"
           }`}
           isActive={!node.disabled && Boolean(node.url) && currentPath === node.url}
           onClick={() => {
@@ -268,7 +268,7 @@ export function NavMain({
             <SidebarMenuItem key={item.title}>
               <SidebarMenuButton
                 tooltip={item.title}
-                className="cursor-pointer rounded-xl py-5 text-[1rem] font-medium text-foreground !no-underline hover:!no-underline hover:bg-muted data-active:!bg-transparent data-active:!text-[var(--sidebar-active-link-color)] [&_svg]:!text-[var(--sidebar-icon-color)]"
+                className="cursor-pointer rounded-xl py-3.5 text-[0.95rem] font-medium text-foreground !no-underline hover:!no-underline hover:bg-muted data-active:!bg-transparent data-active:!text-[var(--sidebar-active-link-color)] [&_svg]:!text-[var(--sidebar-icon-color)]"
                 isActive={
                   item.items ? nodeContainsCurrentPath(item, currentPath) : currentPath === item.url
                 }
