@@ -8,7 +8,8 @@ import {
   useColorScheme,
   View,
 } from 'react-native';
-import { Building2, CalendarRange, Clock3, MapPin, MoveRight, ShieldCheck, UserRound } from 'lucide-react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Building2, CalendarRange, Clock3, MapPin, MoveRight, UserRound } from 'lucide-react-native';
 import { useQuery } from '@tanstack/react-query';
 
 import { api, normalizeList } from '../lib/api';
@@ -30,7 +31,6 @@ export function HomeScreen({ auth, onTabChange }: Props) {
   const backgroundColor = isDark ? COLORS.backgroundDark : COLORS.background;
   const textColor = isDark ? COLORS.onSurfaceDark : COLORS.onSurface;
   const mutedColor = isDark ? COLORS.onSurfaceVariantDark : COLORS.onSurfaceVariant;
-  const subtleBlock = isDark ? COLORS.surfaceVariantDark : '#f5f5f5';
 
   const { data: balances = [], isLoading: balancesLoading, refetch: refetchBalances } = useQuery({
     queryKey: ['mobileHomeLeaveBalances'],
@@ -57,98 +57,93 @@ export function HomeScreen({ auth, onTabChange }: Props) {
   const employeeNo = employee?.employee_no || employee?.user_no || auth.user?.employeeId || '—';
 
   return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor }}
-      contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={balancesLoading || requestsLoading} onRefresh={onRefresh} colors={[COLORS.primary]} />}
-    >
-      <Card style={styles.heroCard}>
-        <StatusPill label="Employee Portal" tone="neutral" />
-        <View style={styles.heroHeader}>
-          <View>
-            <Text style={[styles.heroTitle, { color: textColor }]}>Good {getTimeOfDay()}, {firstName}</Text>
-            <Text style={[styles.heroCopy, { color: mutedColor }]}>
-              Your self-service workspace mirrors the web portal with the same clean, focused design language.
-            </Text>
-          </View>
-          <View style={[styles.heroBadge, { backgroundColor: subtleBlock }]}>
-            <ShieldCheck size={20} color={textColor} />
-          </View>
-        </View>
-        <View style={styles.quickActions}>
-          <Button
-            onPress={() => onTabChange?.('attendance')}
-            style={styles.flexButton}
-            rightIcon={<MoveRight size={16} color="#ffffff" />}
-          >
-            Open attendance
-          </Button>
-          <Button
-            variant="secondary"
-            onPress={() => onTabChange?.('leave')}
-            style={styles.flexButton}
-          >
-            Manage leave
-          </Button>
-        </View>
-      </Card>
-
-      <View style={styles.statsRow}>
-        <MiniStat icon={<Building2 size={18} color={textColor} />} label="Branch" value={branch} mutedColor={mutedColor} textColor={textColor} />
-        <MiniStat icon={<UserRound size={18} color={textColor} />} label="Employee No" value={employeeNo} mutedColor={mutedColor} textColor={textColor} />
-      </View>
-
-      <Card>
-        <Text style={[styles.sectionTitle, { color: textColor }]}>Assignment overview</Text>
-        <View style={styles.infoList}>
-          <InfoRow icon={<MapPin size={16} color={mutedColor} />} label="Department" value={department} textColor={textColor} mutedColor={mutedColor} />
-          <InfoRow icon={<Clock3 size={16} color={mutedColor} />} label="Position" value={position} textColor={textColor} mutedColor={mutedColor} />
-        </View>
-      </Card>
-
-      <Card>
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: textColor }]}>Leave balances</Text>
-          <TouchableOpacity onPress={() => onTabChange?.('leave')}>
-            <Text style={[styles.linkText, { color: textColor }]}>View all</Text>
-          </TouchableOpacity>
-        </View>
-        {balances.length ? (
-          balances.slice(0, 3).map((item, index: number) => (
-            <View key={index} style={[styles.listRow, index !== 0 ? styles.withTopBorder : null]}>
-              <Text style={[styles.primaryValue, { color: textColor }]}>{item.leave_type?.name || item.name || 'Leave'}</Text>
-              <StatusPill label={`${item.remaining ?? item.balance ?? '—'} days`} tone="info" />
+    <SafeAreaView style={{ flex: 1, backgroundColor }} edges={['top']}>
+      <ScrollView
+        style={{ flex: 1, backgroundColor }}
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl refreshing={balancesLoading || requestsLoading} onRefresh={onRefresh} colors={[COLORS.primary]} />}
+      >
+        <Card style={styles.heroCard}>
+          <View style={styles.heroHeader}>
+            <View>
+              <Text style={[styles.heroTitle, { color: textColor }]}>Good {getTimeOfDay()}, {firstName}</Text>
             </View>
-          ))
-        ) : (
-          <Text style={[styles.emptyText, { color: mutedColor }]}>No leave balances available yet.</Text>
-        )}
-      </Card>
+          </View>
+          <View style={styles.quickActions}>
+            <Button
+              onPress={() => onTabChange?.('attendance')}
+              style={styles.flexButton}
+              rightIcon={<MoveRight size={16} color="#ffffff" />}
+            >
+              Open attendance
+            </Button>
+            <Button
+              variant="secondary"
+              onPress={() => onTabChange?.('leave')}
+              style={styles.flexButton}
+            >
+              Manage leave
+            </Button>
+          </View>
+        </Card>
 
-      <Card>
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: textColor }]}>Recent requests</Text>
-          <CalendarRange size={18} color={mutedColor} />
+        <View style={styles.statsRow}>
+          <MiniStat icon={<Building2 size={18} color={COLORS.primary} />} label="Branch" value={branch} mutedColor={mutedColor} textColor={textColor} />
+          <MiniStat icon={<UserRound size={18} color={COLORS.primary} />} label="Employee No" value={employeeNo} mutedColor={mutedColor} textColor={textColor} />
         </View>
-        {recentRequests.length ? (
-          recentRequests.map((request, index: number) => (
-            <View key={index} style={[styles.requestRow, index !== 0 ? styles.withTopBorder : null]}>
-              <View style={{ flex: 1, paddingRight: 12 }}>
-                <Text style={[styles.primaryValue, { color: textColor }]}>
-                  {request.leave_type?.name || request.leave_type_name || 'Leave request'}
-                </Text>
-                <Text style={[styles.secondaryValue, { color: mutedColor }]}>
-                  {formatDate(request.start_date)} - {formatDate(request.end_date)}
-                </Text>
+
+        <Card>
+          <Text style={[styles.sectionTitle, { color: textColor }]}>Assignment overview</Text>
+          <View style={styles.infoList}>
+            <InfoRow icon={<MapPin size={16} color={COLORS.primary} />} label="Department" value={department} textColor={textColor} mutedColor={mutedColor} />
+            <InfoRow icon={<Clock3 size={16} color={COLORS.primary} />} label="Position" value={position} textColor={textColor} mutedColor={mutedColor} />
+          </View>
+        </Card>
+
+        <Card>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: textColor }]}>Leave balances</Text>
+            <TouchableOpacity onPress={() => onTabChange?.('leave')}>
+              <Text style={[styles.linkText, { color: COLORS.primary }]}>View all</Text>
+            </TouchableOpacity>
+          </View>
+          {balances.length ? (
+            balances.slice(0, 3).map((item, index: number) => (
+              <View key={index} style={[styles.listRow, index !== 0 ? styles.withTopBorder : null]}>
+                <Text style={[styles.primaryValue, { color: textColor }]}>{item.leave_type?.name || item.name || 'Leave'}</Text>
+                <StatusPill label={`${item.remaining ?? item.balance ?? '—'} days`} tone="info" />
               </View>
-              <StatusPill label={String(request.status || 'pending')} tone={statusTone(request.status)} />
-            </View>
-          ))
-        ) : (
-          <Text style={[styles.emptyText, { color: mutedColor }]}>No recent leave requests found.</Text>
-        )}
-      </Card>
-    </ScrollView>
+            ))
+          ) : (
+            <Text style={[styles.emptyText, { color: mutedColor }]}>No leave balances available yet.</Text>
+          )}
+        </Card>
+
+        <Card>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: textColor }]}>Recent requests</Text>
+            <CalendarRange size={18} color={COLORS.primary} />
+          </View>
+          {recentRequests.length ? (
+            recentRequests.map((request, index: number) => (
+              <View key={index} style={[styles.requestRow, index !== 0 ? styles.withTopBorder : null]}>
+                <View style={{ flex: 1, paddingRight: 12 }}>
+                  <Text style={[styles.primaryValue, { color: textColor }]}>
+                    {request.leave_type?.name || request.leave_type_name || 'Leave request'}
+                  </Text>
+                  <Text style={[styles.secondaryValue, { color: mutedColor }]}>
+                    {formatDate(request.start_date)} - {formatDate(request.end_date)}
+                  </Text>
+                </View>
+                <StatusPill label={String(request.status || 'pending')} tone={statusTone(request.status)} />
+              </View>
+            ))
+          ) : (
+            <Text style={[styles.emptyText, { color: mutedColor }]}>No recent leave requests found.</Text>
+          )}
+        </Card>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
@@ -232,15 +227,7 @@ const styles = StyleSheet.create({
   },
   heroHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     gap: 14,
-  },
-  heroBadge: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   heroTitle: {
     fontSize: 28,
@@ -248,12 +235,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: -0.8,
     marginTop: 10,
-  },
-  heroCopy: {
-    marginTop: 8,
-    fontSize: 14,
-    lineHeight: 21,
-    maxWidth: 460,
   },
   quickActions: {
     flexDirection: 'row',

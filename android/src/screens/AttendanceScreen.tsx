@@ -8,6 +8,8 @@ import {
   useColorScheme,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import * as Location from 'expo-location';
 import { Clock3, MapPinned, ShieldCheck } from 'lucide-react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
@@ -38,7 +40,10 @@ export function AttendanceScreen({ auth }: Props) {
   });
 
   const checkInMutation = useMutation({
-    mutationFn: () => api.checkIn({ notes: 'Mobile check-in' }),
+    mutationFn: async () => {
+      const payload = await getPunchLocation();
+      return api.checkIn(payload);
+    },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['mobileAttendancePunches'] });
       Alert.alert('Checked in', 'Your attendance punch was recorded successfully.');
@@ -47,7 +52,10 @@ export function AttendanceScreen({ auth }: Props) {
   });
 
   const checkOutMutation = useMutation({
-    mutationFn: () => api.checkOut({ notes: 'Mobile check-out' }),
+    mutationFn: async () => {
+      const payload = await getPunchLocation();
+      return api.checkOut(payload);
+    },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['mobileAttendancePunches'] });
       Alert.alert('Checked out', 'Your check-out punch was recorded successfully.');
@@ -88,84 +96,98 @@ export function AttendanceScreen({ auth }: Props) {
   });
 
   return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor }}
-      contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={punchesQuery.isFetching} onRefresh={onRefresh} colors={[COLORS.primary]} />}
-    >
-      <Card style={styles.heroCard}>
-        <StatusPill label="Attendance" tone="neutral" />
-        <View style={styles.heroRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.heroTitle, { color: textColor }]}>Track today’s work time</Text>
-            <Text style={[styles.heroCopy, { color: mutedColor }]}>
-              Punch in or out with the same clean monochrome product styling used across the web portal.
-            </Text>
+    <SafeAreaView style={{ flex: 1, backgroundColor }} edges={['top']}>
+      <ScrollView
+        style={{ flex: 1, backgroundColor }}
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl refreshing={punchesQuery.isFetching} onRefresh={onRefresh} colors={[COLORS.primary]} />}
+      >
+        <Card style={styles.heroCard}>
+          <View style={styles.heroRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.heroTitle, { color: textColor }]}>Track today’s work time</Text>
+            </View>
+            <View style={[styles.heroIconWrap, { backgroundColor: subtleBlock }]}>
+              <Clock3 size={22} color={COLORS.primary} />
+            </View>
           </View>
-          <View style={[styles.heroIconWrap, { backgroundColor: subtleBlock }]}>
-            <Clock3 size={22} color={textColor} />
+          <View style={styles.metaRow}>
+            <MiniMeta label="Employee" value={employeeName} textColor={textColor} mutedColor={mutedColor} />
+            <MiniMeta label="Today" value={todayLabel} textColor={textColor} mutedColor={mutedColor} />
           </View>
-        </View>
-        <View style={styles.metaRow}>
-          <MiniMeta label="Employee" value={employeeName} textColor={textColor} mutedColor={mutedColor} />
-          <MiniMeta label="Today" value={todayLabel} textColor={textColor} mutedColor={mutedColor} />
-        </View>
-      </Card>
+        </Card>
 
-      <View style={styles.actionRow}>
-        <Button onPress={runCheckIn} loading={busy && checkInMutation.isPending} style={styles.flexButton}>
-          Check in
-        </Button>
-        <Button
-          variant="outline"
-          onPress={runCheckOut}
-          loading={busy && checkOutMutation.isPending}
-          style={styles.flexButton}
-        >
-          Check out
-        </Button>
-      </View>
-
-      <Card>
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: textColor }]}>Recent punches</Text>
-          <ShieldCheck size={18} color={mutedColor} />
+        <View style={styles.actionRow}>
+          <Button onPress={runCheckIn} loading={busy && checkInMutation.isPending} style={styles.flexButton}>
+            Check in
+          </Button>
+          <Button
+            variant="outline"
+            onPress={runCheckOut}
+            loading={busy && checkOutMutation.isPending}
+            style={styles.flexButton}
+          >
+            Check out
+          </Button>
         </View>
-        {punchesQuery.data?.length ? (
-          punchesQuery.data.map((item, index: number) => {
-            const type = item.punch_type || item.type || item.punchType || 'Punch';
-            const timestamp = item.punched_at || item.timestamp || item.created_at;
-            const status = String(item.validation_status || item.status || 'Recorded');
-            return (
-              <View key={index} style={[styles.punchRow, index !== 0 ? styles.withTopBorder : null]}>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.punchTitle, { color: textColor }]}>
-                    {String(type).replaceAll('_', ' ')}
-                  </Text>
-                  <Text style={[styles.punchMeta, { color: mutedColor }]}>
-                    {formatDateTime(timestamp)}
-                  </Text>
+
+        <Card>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: textColor }]}>Recent punches</Text>
+            <ShieldCheck size={18} color={COLORS.primary} />
+          </View>
+          {punchesQuery.data?.length ? (
+            punchesQuery.data.map((item, index: number) => {
+              const type = item.punch_type || item.type || item.punchType || 'Punch';
+              const timestamp = item.punched_at || item.timestamp || item.created_at;
+              const status = String(item.validation_status || item.status || 'Recorded');
+              return (
+                <View key={index} style={[styles.punchRow, index !== 0 ? styles.withTopBorder : null]}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.punchTitle, { color: textColor }]}>
+                      {String(type).replaceAll('_', ' ')}
+                    </Text>
+                    <Text style={[styles.punchMeta, { color: mutedColor }]}>
+                      {formatDateTime(timestamp)}
+                    </Text>
+                  </View>
+                  <StatusPill label={status} tone={statusTone(status)} />
                 </View>
-                <StatusPill label={status} tone={statusTone(status)} />
-              </View>
-            );
-          })
-        ) : (
-          <Text style={[styles.emptyText, { color: mutedColor }]}>No punches recorded yet.</Text>
-        )}
-      </Card>
+              );
+            })
+          ) : (
+            <Text style={[styles.emptyText, { color: mutedColor }]}>No punches recorded yet.</Text>
+          )}
+        </Card>
 
-      <Card>
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: textColor }]}>Validation note</Text>
-          <MapPinned size={18} color={mutedColor} />
-        </View>
-        <Text style={[styles.noteText, { color: mutedColor }]}>
-          Your organization may require approved location, device, or checkpoint validation before a punch is accepted.
-        </Text>
-      </Card>
-    </ScrollView>
+        <Card>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: textColor }]}>Validation note</Text>
+            <MapPinned size={18} color={COLORS.primary} />
+          </View>
+          <Text style={[styles.noteText, { color: mutedColor }]}>
+            Your organization may require approved location, device, or checkpoint validation before a punch is accepted.
+          </Text>
+        </Card>
+      </ScrollView>
+    </SafeAreaView>
   );
+}
+
+async function getPunchLocation() {
+  const permission = await Location.requestForegroundPermissionsAsync();
+  if (permission.status !== 'granted') {
+    throw new Error('Location permission is required before checking in or out.');
+  }
+
+  const position = await Location.getCurrentPositionAsync({
+    accuracy: Location.Accuracy.Balanced,
+  });
+
+  return {
+    latitude: position.coords.latitude,
+    longitude: position.coords.longitude,
+  };
 }
 
 function MiniMeta({
@@ -235,11 +257,6 @@ const styles = StyleSheet.create({
     lineHeight: 32,
     fontWeight: '800',
     letterSpacing: -0.8,
-  },
-  heroCopy: {
-    marginTop: 8,
-    fontSize: 14,
-    lineHeight: 21,
   },
   metaRow: {
     flexDirection: 'row',

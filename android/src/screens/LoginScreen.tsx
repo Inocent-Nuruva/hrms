@@ -13,11 +13,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Eye, EyeOff, ShieldCheck, Sparkles } from 'lucide-react-native';
 
-import { APP_NAME, COLORS } from '../lib/config';
+import { COLORS } from '../lib/config';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Input } from '../components/ui/input';
-import { StatusPill } from '../components/ui/status-pill';
 
 interface LoginScreenProps {
   auth: {
@@ -81,25 +80,11 @@ export function LoginScreen({ auth }: LoginScreenProps) {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
         <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
           <View style={styles.heroBlock}>
-            <StatusPill label="Employee Self-Service" tone="neutral" />
-            <View style={styles.logoRow}>
-              <View style={[styles.logoTile, { backgroundColor: textColor }]}>
-                <Text style={[styles.logoLetter, { color: isDark ? COLORS.backgroundDark : '#ffffff' }]}>
-                  {APP_NAME.slice(0, 1)}
-                </Text>
-              </View>
-              <View style={styles.logoTextWrap}>
-                <Text style={[styles.brandName, { color: textColor }]}>{APP_NAME}</Text>
-                <Text style={[styles.brandTagline, { color: mutedColor }]}>Unified employee portal</Text>
-              </View>
-            </View>
             <Text style={[styles.headline, { color: textColor }]}>
               {showOtp ? 'Complete secure sign in' : 'Welcome back'}
             </Text>
             <Text style={[styles.supportingCopy, { color: mutedColor }]}>
-              {showOtp
-                ? 'Confirm the one-time code to finish your login securely.'
-                : 'Use the same account and product styling you already know from the web portal.'}
+              {showOtp ? 'Confirm the one-time code to finish your login securely.' : ''}
             </Text>
           </View>
 
@@ -212,53 +197,32 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 28,
     justifyContent: 'center',
+    alignItems: 'center',
   },
   heroBlock: {
     marginBottom: 18,
     gap: 14,
-  },
-  logoRow: {
-    flexDirection: 'row',
+    width: '100%',
     alignItems: 'center',
-    gap: 14,
-  },
-  logoTile: {
-    width: 58,
-    height: 58,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  logoLetter: {
-    fontSize: 26,
-    fontWeight: '800',
-  },
-  logoTextWrap: {
-    gap: 2,
-  },
-  brandName: {
-    fontSize: 24,
-    fontWeight: '800',
-    letterSpacing: -0.6,
-  },
-  brandTagline: {
-    fontSize: 13,
-    fontWeight: '500',
   },
   headline: {
     fontSize: 28,
     fontWeight: '800',
     letterSpacing: -0.8,
     lineHeight: 32,
+    textAlign: 'center',
   },
   supportingCopy: {
     fontSize: 15,
     lineHeight: 22,
     maxWidth: 520,
+    textAlign: 'center',
   },
   authCard: {
     paddingTop: 20,
     paddingBottom: 16,
+    width: '100%',
+    maxWidth: 520,
   },
   cardHeader: {
     flexDirection: 'row',

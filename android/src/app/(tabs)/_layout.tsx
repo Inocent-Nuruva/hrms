@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { Tabs, useRouter } from 'expo-router';
 import { CalendarDays, Clock3, House, UserRound } from 'lucide-react-native';
 import { ActivityIndicator, View, StyleSheet, useColorScheme } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../hooks/useAuth';
 import { COLORS } from '../../lib/config';
 
@@ -9,6 +10,7 @@ export default function TabLayout() {
   const auth = useAuth();
   const router = useRouter();
   const isDark = useColorScheme() === 'dark';
+  const insets = useSafeAreaInsets();
 
   // Protect the entire tab group - redirect to login if session lost
   useEffect(() => {
@@ -29,13 +31,13 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: isDark ? COLORS.onSurfaceDark : COLORS.onSurface,
+        tabBarActiveTintColor: COLORS.primary,
         tabBarInactiveTintColor: isDark ? COLORS.onSurfaceVariantDark : COLORS.onSurfaceVariant,
         tabBarStyle: {
           backgroundColor: isDark ? COLORS.surfaceDark : COLORS.surface,
           borderTopColor: isDark ? COLORS.outlineDark : COLORS.outline,
-          height: 70,
-          paddingBottom: 10,
+          height: 60 + insets.bottom,
+          paddingBottom: Math.max(insets.bottom, 10),
           paddingTop: 8,
         },
         tabBarLabelStyle: { fontSize: 11, fontWeight: '700', letterSpacing: 0.2 },

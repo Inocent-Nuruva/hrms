@@ -23,11 +23,11 @@ export const STORAGE_KEYS = {
 export const QUERY_STALE_TIME = 1000 * 60 * 2; // 2 minutes
 export const QUERY_CACHE_TIME = 1000 * 60 * 10; // 10 minutes
 
-// Classic shadcn/ui inspired neutral palette (clean, timeless, excellent contrast)
+// Shared mobile palette aligned with the web self-service portal.
 export const COLORS = {
-  // Brand (classic zinc/black for shadcn feel)
-  primary: '#18181b',       // zinc-900
-  primaryDark: '#0a0a0a',
+  // Brand (web portal blue)
+  primary: '#303194',
+  primaryDark: '#262777',
   onPrimary: '#ffffff',
 
   // Light (shadcn-like)
@@ -46,11 +46,11 @@ export const COLORS = {
   onSurfaceVariantDark: '#a1a1aa',
   outlineDark: '#3f3f46',
 
-  // Semantic (kept subtle)
+  // Semantic
   success: '#15803d',
   error: '#b91c1c',
   warning: '#a16207',
-  info: '#1e40af',
+  info: '#303194',
 } as const;
 
 export type ColorKey = keyof typeof COLORS;

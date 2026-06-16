@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   Alert,
+  Modal,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -9,7 +10,8 @@ import {
   useColorScheme,
   View,
 } from 'react-native';
-import { CalendarDays, FileText, Landmark, Plus } from 'lucide-react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { CalendarDays, FileText, Landmark, Plus, X } from 'lucide-react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api, normalizeList } from '../lib/api';
@@ -49,6 +51,7 @@ export function LeaveScreen({ auth }: Props) {
   const textColor = isDark ? COLORS.onSurfaceDark : COLORS.onSurface;
   const mutedColor = isDark ? COLORS.onSurfaceVariantDark : COLORS.onSurfaceVariant;
   const subtleBlock = isDark ? COLORS.surfaceVariantDark : '#f5f5f5';
+  const overlayColor = isDark ? 'rgba(9,9,11,0.82)' : 'rgba(15,23,42,0.32)';
   const apiWithPolicies: MobileApi = api;
 
   const balancesQuery = useQuery({
@@ -117,102 +120,35 @@ export function LeaveScreen({ auth }: Props) {
   };
 
   return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor }}
-      contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={false} onRefresh={onRefresh} colors={[COLORS.primary]} />}
-    >
-      <Card style={styles.heroCard}>
-        <StatusPill label="Leave Management" tone="neutral" />
-        <View style={styles.heroHeader}>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.heroTitle, { color: textColor }]}>Plan, request, and review leave</Text>
-            <Text style={[styles.heroCopy, { color: mutedColor }]}>
-              The same user-focused leave experience from the web app, adapted into a compact mobile flow.
-            </Text>
+    <SafeAreaView style={{ flex: 1, backgroundColor }} edges={['top']}>
+      <ScrollView
+        style={{ flex: 1, backgroundColor }}
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl refreshing={false} onRefresh={onRefresh} colors={[COLORS.primary]} />}
+      >
+        <Card style={styles.heroCard}>
+          <View style={styles.heroHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.heroTitle, { color: textColor }]}>Plan, request, and review leave</Text>
+            </View>
+            <View style={[styles.heroIcon, { backgroundColor: subtleBlock }]}>
+              <CalendarDays size={22} color={COLORS.primary} />
+            </View>
           </View>
-          <View style={[styles.heroIcon, { backgroundColor: subtleBlock }]}>
-            <CalendarDays size={22} color={textColor} />
-          </View>
-        </View>
-        <Button
-          onPress={() => setShowApplyForm((current) => !current)}
-          variant={showApplyForm ? 'secondary' : 'default'}
-          leftIcon={<Plus size={16} color={showApplyForm ? textColor : '#ffffff'} />}
-        >
-          {showApplyForm ? 'Hide request form' : 'New leave request'}
-        </Button>
-      </Card>
-
-      <SegmentedControl
-        value={activeTab}
-        onChange={(next) => setActiveTab(next as LeaveTab)}
-        options={LEAVE_TABS.map((item) => ({ key: item.key, label: item.label }))}
-      />
-
-      {showApplyForm ? (
-        <Card>
-          <Text style={[styles.sectionTitle, { color: textColor }]}>Create leave request</Text>
-          <Text style={[styles.formCopy, { color: mutedColor }]}>
-            Choose a leave type, then provide the same date range details you would submit on the web portal.
-          </Text>
-
-          <Text style={[styles.fieldLabel, { color: mutedColor }]}>Leave type</Text>
-          <View style={styles.chipWrap}>
-            {(typesQuery.data || []).slice(0, 10).map((type) => {
-              const id = String(type.id);
-              const selected = form.leave_type_id === id;
-              return (
-                <TouchableOpacity
-                  key={id}
-                  onPress={() => setForm((current) => ({ ...current, leave_type_id: id }))}
-                  style={[
-                    styles.choiceChip,
-                    {
-                      backgroundColor: selected ? COLORS.primary : subtleBlock,
-                      borderColor: selected ? COLORS.primary : isDark ? COLORS.outlineDark : COLORS.outline,
-                    },
-                  ]}
-                >
-                  <Text style={{ color: selected ? '#ffffff' : textColor, fontSize: 13, fontWeight: '700' }}>
-                    {type.name || type.display_name || `Type ${id}`}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-
-          <Input
-            label="Start date"
-            value={form.start_date}
-            onChangeText={(value) => setForm((current) => ({ ...current, start_date: value }))}
-            placeholder="YYYY-MM-DD"
-          />
-          <Input
-            label="End date"
-            value={form.end_date}
-            onChangeText={(value) => setForm((current) => ({ ...current, end_date: value }))}
-            placeholder="YYYY-MM-DD"
-          />
-          <Input
-            label="Reason"
-            value={form.reason}
-            onChangeText={(value) => setForm((current) => ({ ...current, reason: value }))}
-            placeholder="Optional supporting note"
-            multiline
-            style={{ minHeight: 96 }}
-          />
-
-          <View style={styles.formActions}>
-            <Button variant="ghost" onPress={() => setShowApplyForm(false)} style={styles.flexButton}>
-              Cancel
-            </Button>
-            <Button onPress={submitRequest} loading={submitMutation.isPending} style={styles.flexButton}>
-              Submit request
-            </Button>
-          </View>
+          <Button
+            onPress={() => setShowApplyForm((current) => !current)}
+            variant={showApplyForm ? 'secondary' : 'default'}
+            leftIcon={<Plus size={16} color={showApplyForm ? textColor : '#ffffff'} />}
+          >
+            {showApplyForm ? 'Hide request form' : 'New leave request'}
+          </Button>
         </Card>
-      ) : null}
+
+        <SegmentedControl
+          value={activeTab}
+          onChange={(next) => setActiveTab(next as LeaveTab)}
+          options={LEAVE_TABS.map((item) => ({ key: item.key, label: item.label }))}
+        />
 
       {activeTab === 'requests' ? (
         <Card>
@@ -290,7 +226,76 @@ export function LeaveScreen({ auth }: Props) {
           )}
         </Card>
       ) : null}
-    </ScrollView>
+      </ScrollView>
+
+      <Modal visible={showApplyForm} animationType="slide" transparent onRequestClose={() => setShowApplyForm(false)}>
+        <View style={[styles.modalOverlay, { backgroundColor: overlayColor }]}>
+          <Card style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.sectionTitle, { color: textColor }]}>New leave request</Text>
+              <TouchableOpacity onPress={() => setShowApplyForm(false)} style={[styles.closeButton, { backgroundColor: subtleBlock }]}>
+                <X size={16} color={textColor} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={[styles.fieldLabel, { color: mutedColor }]}>Leave type</Text>
+            <View style={styles.chipWrap}>
+              {(typesQuery.data || []).slice(0, 10).map((type) => {
+                const id = String(type.id);
+                const selected = form.leave_type_id === id;
+                return (
+                  <TouchableOpacity
+                    key={id}
+                    onPress={() => setForm((current) => ({ ...current, leave_type_id: id }))}
+                    style={[
+                      styles.choiceChip,
+                      {
+                        backgroundColor: selected ? COLORS.primary : subtleBlock,
+                        borderColor: selected ? COLORS.primary : isDark ? COLORS.outlineDark : COLORS.outline,
+                      },
+                    ]}
+                  >
+                    <Text style={{ color: selected ? '#ffffff' : textColor, fontSize: 13, fontWeight: '700' }}>
+                      {type.name || type.display_name || `Type ${id}`}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <Input
+              label="Start date"
+              value={form.start_date}
+              onChangeText={(value) => setForm((current) => ({ ...current, start_date: value }))}
+              placeholder="YYYY-MM-DD"
+            />
+            <Input
+              label="End date"
+              value={form.end_date}
+              onChangeText={(value) => setForm((current) => ({ ...current, end_date: value }))}
+              placeholder="YYYY-MM-DD"
+            />
+            <Input
+              label="Reason"
+              value={form.reason}
+              onChangeText={(value) => setForm((current) => ({ ...current, reason: value }))}
+              placeholder="Optional supporting note"
+              multiline
+              style={{ minHeight: 96 }}
+            />
+
+            <View style={styles.formActions}>
+              <Button variant="ghost" onPress={() => setShowApplyForm(false)} style={styles.flexButton}>
+                Cancel
+              </Button>
+              <Button onPress={submitRequest} loading={submitMutation.isPending} style={styles.flexButton}>
+                Submit request
+              </Button>
+            </View>
+          </Card>
+        </View>
+      </Modal>
+    </SafeAreaView>
   );
 }
 
@@ -355,11 +360,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: -0.8,
   },
-  heroCopy: {
-    marginTop: 8,
-    fontSize: 14,
-    lineHeight: 21,
-  },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -370,12 +370,6 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '700',
     letterSpacing: -0.2,
-  },
-  formCopy: {
-    fontSize: 14,
-    lineHeight: 21,
-    marginTop: 6,
-    marginBottom: 12,
   },
   fieldLabel: {
     fontSize: 12,
@@ -400,6 +394,27 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
     marginTop: 6,
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    padding: 18,
+  },
+  modalCard: {
+    maxHeight: '88%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  closeButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   flexButton: {
     flex: 1,

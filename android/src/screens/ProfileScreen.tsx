@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   RefreshControl,
@@ -8,7 +8,8 @@ import {
   useColorScheme,
   View,
 } from 'react-native';
-import { BadgeCheck, BriefcaseBusiness, Building2, CreditCard, Mail, Phone, UserRound } from 'lucide-react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { BadgeCheck, BriefcaseBusiness, Building2, CreditCard, LogOut, Mail, Phone, UserRound } from 'lucide-react-native';
 
 import { api } from '../lib/api';
 import { COLORS } from '../lib/config';
@@ -16,7 +17,6 @@ import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Input } from '../components/ui/input';
 import { SegmentedControl } from '../components/ui/segmented-control';
-import { StatusPill } from '../components/ui/status-pill';
 
 type MobileRecord = Record<string, unknown>;
 
@@ -30,7 +30,7 @@ const PROFILE_SECTIONS = [
 type ProfileSection = typeof PROFILE_SECTIONS[number]['key'];
 
 interface Props {
-  auth: { user?: MobileRecord | null; employee?: MobileRecord | null; refreshProfile: () => Promise<void> };
+  auth: { user?: MobileRecord | null; employee?: MobileRecord | null; refreshProfile: () => Promise<void>; logout?: () => Promise<void> };
 }
 
 export function ProfileScreen({ auth }: Props) {
@@ -38,7 +38,6 @@ export function ProfileScreen({ auth }: Props) {
   const backgroundColor = isDark ? COLORS.backgroundDark : COLORS.background;
   const textColor = isDark ? COLORS.onSurfaceDark : COLORS.onSurface;
   const mutedColor = isDark ? COLORS.onSurfaceVariantDark : COLORS.onSurfaceVariant;
-  const subtleBlock = isDark ? COLORS.surfaceVariantDark : '#f5f5f5';
 
   const employee = useMemo<MobileRecord>(
     () => (auth.employee && typeof auth.employee === 'object' ? auth.employee : {}),
@@ -55,6 +54,14 @@ export function ProfileScreen({ auth }: Props) {
   const [firstName, setFirstName] = useState(readString(user, ['first_name', 'firstName'], ''));
   const [lastName, setLastName] = useState(readString(user, ['last_name', 'lastName'], ''));
   const [phone, setPhone] = useState(readString(employee, ['phone', 'phone_number'], ''));
+  const [emailInput, setEmailInput] = useState(readString(user, ['email'], ''));
+
+  useEffect(() => {
+    setFirstName(readString(user, ['first_name', 'firstName'], ''));
+    setLastName(readString(user, ['last_name', 'lastName'], ''));
+    setPhone(readString(employee, ['phone', 'phone_number'], ''));
+    setEmailInput(readString(user, ['email'], ''));
+  }, [employee, user]);
 
   const fullName = useMemo(() => {
     return (
@@ -106,30 +113,40 @@ export function ProfileScreen({ auth }: Props) {
     await auth.refreshProfile();
   }, [auth]);
 
+  const onLogout = React.useCallback(() => {
+    Alert.alert('Logout', 'Do you want to sign out from the mobile app?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Logout',
+        style: 'destructive',
+        onPress: () => {
+          void auth.logout?.();
+        },
+      },
+    ]);
+  }, [auth]);
+
   return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor }}
-      contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={false} onRefresh={onRefresh} colors={[COLORS.primary]} />}
-    >
-      <Card style={styles.heroCard}>
-        <StatusPill label="My Profile" tone="neutral" />
-        <View style={styles.heroRow}>
-          <View style={[styles.avatar, { backgroundColor: textColor }]}>
-            <Text style={[styles.avatarText, { color: isDark ? COLORS.backgroundDark : '#ffffff' }]}>
-              {fullName.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}
-            </Text>
+    <SafeAreaView style={{ flex: 1, backgroundColor }} edges={['top']}>
+      <ScrollView
+        style={{ flex: 1, backgroundColor }}
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl refreshing={false} onRefresh={onRefresh} colors={[COLORS.primary]} />}
+      >
+        <Card style={styles.heroCard}>
+          <View style={styles.heroRow}>
+            <View style={[styles.avatar, { backgroundColor: COLORS.primary }]}>
+              <Text style={styles.avatarText}>
+                {fullName.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}
+              </Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.name, { color: textColor }]}>{fullName}</Text>
+              <Text style={[styles.subtext, { color: mutedColor }]}>{email}</Text>
+              <Text style={[styles.subtext, { color: mutedColor }]}>{employeeNo}</Text>
+            </View>
           </View>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.name, { color: textColor }]}>{fullName}</Text>
-            <Text style={[styles.subtext, { color: mutedColor }]}>{email}</Text>
-            <Text style={[styles.subtext, { color: mutedColor }]}>{employeeNo}</Text>
-          </View>
-          <View style={[styles.badgeBox, { backgroundColor: subtleBlock }]}>
-            <BadgeCheck size={20} color={textColor} />
-          </View>
-        </View>
-      </Card>
+        </Card>
 
       <SegmentedControl
         value={activeSection}
@@ -142,6 +159,7 @@ export function ProfileScreen({ auth }: Props) {
           <Text style={[styles.sectionTitle, { color: textColor }]}>Edit profile</Text>
           <Input label="First name" value={firstName} onChangeText={setFirstName} />
           <Input label="Last name" value={lastName} onChangeText={setLastName} />
+          <Input label="Email" value={emailInput} editable={false} />
           <Input label="Phone" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
           <View style={styles.actionRow}>
             <Button variant="ghost" onPress={() => setEditing(false)} style={styles.flexButton}>Cancel</Button>
@@ -153,6 +171,15 @@ export function ProfileScreen({ auth }: Props) {
           Edit basic profile
         </Button>
       )}
+
+      <Button
+        variant="ghost"
+        onPress={onLogout}
+        leftIcon={<LogOut size={16} color={COLORS.primary} />}
+        textStyle={{ color: COLORS.primary }}
+      >
+        Logout
+      </Button>
 
       {activeSection === 'summary' ? (
         <Card>
@@ -238,7 +265,8 @@ export function ProfileScreen({ auth }: Props) {
           ) : null}
         </Card>
       ) : null}
-    </ScrollView>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
@@ -325,13 +353,7 @@ const styles = StyleSheet.create({
   avatarText: {
     fontSize: 24,
     fontWeight: '800',
-  },
-  badgeBox: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
+    color: '#ffffff',
   },
   name: {
     fontSize: 26,
