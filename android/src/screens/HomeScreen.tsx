@@ -17,11 +17,12 @@ import { COLORS } from '../lib/config';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { StatusPill } from '../components/ui/status-pill';
+import type { UseAuthReturn } from '../hooks/useAuth';
 
 type MobileRecord = Record<string, unknown>;
 
 interface Props {
-  auth: { user?: MobileRecord | null; employee?: MobileRecord | null; refreshProfile: () => Promise<void> };
+  auth: UseAuthReturn;
   onTabChange?: (tab: 'attendance' | 'leave') => void;
 }
 

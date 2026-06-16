@@ -199,6 +199,8 @@ export function useAuth() {
   };
 }
 
+export type UseAuthReturn = ReturnType<typeof useAuth>;
+
 function extractTokens(payload: unknown): AuthTokens | null {
   if (!payload || typeof payload !== 'object') return null;
   const p = payload as AnyRecord;

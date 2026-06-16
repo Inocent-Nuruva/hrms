@@ -17,6 +17,7 @@ import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Input } from '../components/ui/input';
 import { SegmentedControl } from '../components/ui/segmented-control';
+import type { UseAuthReturn } from '../hooks/useAuth';
 
 type MobileRecord = Record<string, unknown>;
 
@@ -30,7 +31,7 @@ const PROFILE_SECTIONS = [
 type ProfileSection = typeof PROFILE_SECTIONS[number]['key'];
 
 interface Props {
-  auth: { user?: MobileRecord | null; employee?: MobileRecord | null; refreshProfile: () => Promise<void>; logout?: () => Promise<void> };
+  auth: UseAuthReturn;
 }
 
 export function ProfileScreen({ auth }: Props) {

@@ -18,11 +18,10 @@ import { COLORS } from '../lib/config';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { StatusPill } from '../components/ui/status-pill';
-
-type MobileRecord = Record<string, unknown>;
+import type { UseAuthReturn } from '../hooks/useAuth';
 
 interface Props {
-  auth: { user?: MobileRecord | null; employee?: MobileRecord | null };
+  auth: UseAuthReturn;
 }
 
 export function AttendanceScreen({ auth }: Props) {

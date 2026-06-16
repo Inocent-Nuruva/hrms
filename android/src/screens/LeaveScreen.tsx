@@ -21,6 +21,7 @@ import { Card } from '../components/ui/card';
 import { Input } from '../components/ui/input';
 import { SegmentedControl } from '../components/ui/segmented-control';
 import { StatusPill } from '../components/ui/status-pill';
+import type { UseAuthReturn } from '../hooks/useAuth';
 
 type MobileRecord = Record<string, unknown>;
 type MobileApi = typeof api & {
@@ -37,7 +38,7 @@ const LEAVE_TABS = [
 type LeaveTab = typeof LEAVE_TABS[number]['key'];
 
 interface Props {
-  auth: { user?: MobileRecord | null; employee?: MobileRecord | null; refreshProfile?: () => Promise<void> };
+  auth: UseAuthReturn;
 }
 
 export function LeaveScreen({ auth }: Props) {

@@ -17,16 +17,10 @@ import { COLORS } from '../lib/config';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Input } from '../components/ui/input';
+import type { UseAuthReturn } from '../hooks/useAuth';
 
 interface LoginScreenProps {
-  auth: {
-    login: (email: string, password: string) => Promise<unknown>;
-    verifyOtp: (code: string) => Promise<void>;
-    isLoading: boolean;
-    error: string | null;
-    requiresOtp: boolean;
-    resetOtp: () => void;
-  };
+  auth: UseAuthReturn;
 }
 
 export function LoginScreen({ auth }: LoginScreenProps) {
