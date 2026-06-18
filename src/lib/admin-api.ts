@@ -114,13 +114,22 @@ export interface OffboardingWorkflowsQueryParams extends UsersQueryParams {
 }
 
 export interface AttendanceQueryParams extends UsersQueryParams {
+  employee_id?: number
+  employee_no?: string
+  from_date?: string
+  to_date?: string
+  organization_id?: number
   status?: string
+  attendance_status?: string
 }
 
 export interface MyAttendanceHistoryQueryParams extends UsersQueryParams {
   employee_id?: number
+  employee_no?: string
   from_date?: string
   to_date?: string
+  organization_id?: number
+  status?: string
   attendance_status?: string
 }
 
@@ -993,14 +1002,21 @@ function buildMyAttendanceHistoryQuery(params: MyAttendanceHistoryQueryParams) {
   if (typeof params.employee_id === "number" && params.employee_id > 0) {
     searchParams.set("employee_id", String(params.employee_id))
   }
+  if (params.employee_no && params.employee_no.trim()) {
+    searchParams.set("employee_no", params.employee_no.trim())
+  }
   if (params.from_date && params.from_date.trim()) {
     searchParams.set("from_date", params.from_date.trim())
   }
   if (params.to_date && params.to_date.trim()) {
     searchParams.set("to_date", params.to_date.trim())
   }
-  if (params.attendance_status && params.attendance_status.trim()) {
-    searchParams.set("attendance_status", params.attendance_status.trim())
+  if (typeof params.organization_id === "number" && params.organization_id > 0) {
+    searchParams.set("organization_id", String(params.organization_id))
+  }
+  const status = params.status?.trim() || params.attendance_status?.trim()
+  if (status) {
+    searchParams.set("status", status)
   }
   const query = searchParams.toString()
   return query ? `?${query}` : ""
@@ -1594,8 +1610,8 @@ export async function runPendingAttendanceProcessingJobs(token: string) {
   })
 }
 
-export async function queueAttendanceRecalculation(token: string, data: AdminRecord) {
-  return adminRequest<unknown>("/api/attendance/processing/recalculate", {
+export async function rebuildAttendanceDailySummaries(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/attendance/daily-summaries/rebuild", {
     method: "POST",
     token,
     body: data,

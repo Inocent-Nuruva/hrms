@@ -15,7 +15,7 @@ export function TableScrollContainer({
   return (
     <HorizontalScrollContainer
       className={cn(
-        "w-full max-w-full overflow-x-auto overscroll-x-contain rounded-2xl border border-slate-200 bg-white shadow-sm",
+        "w-full max-w-full overflow-x-hidden rounded-2xl border border-slate-200 bg-white shadow-sm [&_table]:w-full [&_table]:min-w-0 [&_table]:table-fixed [&_th]:whitespace-normal [&_td]:whitespace-normal [&_th]:break-words [&_td]:break-words",
         className
       )}
       {...props}

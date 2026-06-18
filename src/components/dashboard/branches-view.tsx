@@ -494,7 +494,7 @@ export function BranchesView() {
       {error ? <p className="mb-3 text-sm text-rose-600">{error}</p> : null}
 
       <TableScrollContainer>
-        <table className="w-full min-w-[900px] text-sm">
+        <table className="w-full min-w-[720px] text-sm">
           <thead className="bg-slate-50/90">
             <tr>
               <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Name</th>
@@ -758,7 +758,7 @@ export function BranchesView() {
             {accessError ? <p className="mt-2 text-sm text-rose-600">{accessError}</p> : null}
 
             <TableScrollContainer className="mt-4">
-              <table className="w-full min-w-[900px] text-sm">
+              <table className="w-full min-w-[720px] text-sm">
                 <thead className="bg-slate-50/90">
                   <tr>
                     <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">User ID</th>

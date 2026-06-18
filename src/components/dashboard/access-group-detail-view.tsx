@@ -804,7 +804,7 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
             </div>
 
             <TableScrollContainer>
-              <table className="w-full min-w-[900px] text-sm">
+              <table className="w-full min-w-[720px] text-sm">
                 <thead className="bg-slate-50/90">
                   <tr>
                     {doorColumns.map((column) => (
@@ -905,7 +905,7 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
             </div>
 
             <TableScrollContainer>
-              <table className="w-full min-w-[900px] text-sm">
+              <table className="w-full min-w-[720px] text-sm">
                 <thead className="bg-slate-50/90">
                   <tr>
                     {employeeColumns.map((column) => (

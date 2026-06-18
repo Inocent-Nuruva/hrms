@@ -83,6 +83,17 @@ type LeaveManagementViewProps = {
   activeTab?: LeaveTab
   showTabButtons?: boolean
 }
+type WorkflowStepPayload = {
+  approval_level: number
+  approver_type: string
+  action_type: string
+  role_id?: number
+  position_id?: number
+  company_user_id?: number
+  assigned_branch_id?: number
+  assigned_department_id?: number
+  is_required: boolean
+}
 
 function readStoredToken() {
   if (typeof window === "undefined") {
@@ -149,6 +160,40 @@ function readBoolean(row: AdminRecord, keys: string[]) {
     }
   }
   return false
+}
+
+function buildWorkflowStepPayload(form: {
+  approval_level: string
+  approver_type: string
+  action_type: string
+  role_id: string
+  position_id: string
+  company_user_id: string
+  assigned_branch_id: string
+  assigned_department_id: string
+  is_required: string
+}): WorkflowStepPayload {
+  return {
+    approval_level: Number(form.approval_level),
+    approver_type: form.approver_type,
+    action_type: form.action_type,
+    role_id: form.role_id ? Number(form.role_id) : undefined,
+    position_id: form.position_id ? Number(form.position_id) : undefined,
+    company_user_id: form.company_user_id ? Number(form.company_user_id) : undefined,
+    assigned_branch_id: form.assigned_branch_id ? Number(form.assigned_branch_id) : undefined,
+    assigned_department_id: form.assigned_department_id ? Number(form.assigned_department_id) : undefined,
+    is_required: form.is_required === "true",
+  }
+}
+
+function getWorkflowStepFieldHint(approverType: string) {
+  if (approverType === "position") {
+    return "Use Position to choose who approves this step. Role and Company User are ignored for this step."
+  }
+  if (approverType === "company_user") {
+    return "Use Company User to assign a specific approver. Role and Position are ignored for this step."
+  }
+  return "Use Role to route this step by role. Position and Company User are ignored for this step."
 }
 
 function leaveRequestLabel(row: AdminRecord) {
@@ -808,6 +853,12 @@ export function LeaveManagementView({
       showErrorAlert(message)
       return
     }
+    if (editingWorkflowId === null && workflowSteps.length === 0) {
+      const message = "Add at least one workflow step before creating the workflow."
+      setError(message)
+      showErrorAlert(message)
+      return
+    }
     setSaving(true)
     setError(null)
     try {
@@ -817,7 +868,17 @@ export function LeaveManagementView({
           leave_type_id: Number(workflowForm.leave_type_id),
           status: workflowForm.status,
           is_default: workflowForm.is_default === "true",
-          steps: [],
+          steps: workflowSteps.map((row) => buildWorkflowStepPayload({
+            approval_level: String(readNumber(row, ["approval_level"]) ?? 1),
+            approver_type: readString(row, ["approver_type"]) === "-" ? "role" : String(row.approver_type ?? "role"),
+            action_type: readString(row, ["action_type"]) === "-" ? "recommend" : String(row.action_type ?? "recommend"),
+            role_id: String(readNumber(row, ["role_id"]) ?? ""),
+            position_id: String(readNumber(row, ["position_id"]) ?? ""),
+            company_user_id: String(readNumber(row, ["company_user_id"]) ?? ""),
+            assigned_branch_id: String(readNumber(row, ["assigned_branch_id"]) ?? ""),
+            assigned_department_id: String(readNumber(row, ["assigned_department_id"]) ?? ""),
+            is_required: readBoolean(row, ["is_required"]) ? "true" : "false",
+          })),
         })
       } else {
         await patchLeaveWorkflow(token, editingWorkflowId, {
@@ -834,6 +895,9 @@ export function LeaveManagementView({
         is_default: "false",
       })
       setEditingWorkflowId(null)
+      setSelectedWorkflowId("")
+      setWorkflowSteps([])
+      setWorkflowSheetOpen(false)
       await reloadAll()
     } catch (errorObject) {
       const message = errorObject instanceof Error ? errorObject.message : "Failed to create leave workflow."
@@ -899,23 +963,72 @@ export function LeaveManagementView({
   async function submitWorkflowStepForm(workflowIdOverride?: string) {
     const token = readStoredToken()
     const workflowId = workflowIdOverride ?? selectedWorkflowId
-    if (!token || !workflowId) {
+    const stepPayload = buildWorkflowStepPayload(workflowStepForm)
+
+    if (!Number.isFinite(stepPayload.approval_level) || stepPayload.approval_level < 1) {
+      const message = "Approval level must be 1 or higher."
+      setError(message)
+      showErrorAlert(message)
+      return
+    }
+    if (stepPayload.approver_type === "role" && !stepPayload.role_id) {
+      const message = "Choose a role for this workflow step."
+      setError(message)
+      showErrorAlert(message)
+      return
+    }
+    if (stepPayload.approver_type === "position" && !stepPayload.position_id) {
+      const message = "Choose a position for this workflow step."
+      setError(message)
+      showErrorAlert(message)
+      return
+    }
+    if (stepPayload.approver_type === "company_user" && !stepPayload.company_user_id) {
+      const message = "Choose a company user for this workflow step."
+      setError(message)
+      showErrorAlert(message)
+      return
+    }
+
+    if (!workflowId) {
+      const draftStepId = editingWorkflowStepId ?? -Date.now()
+      const draftStep: AdminRecord = {
+        id: draftStepId,
+        step_id: draftStepId,
+        approval_level: stepPayload.approval_level,
+        approver_type: stepPayload.approver_type,
+        action_type: stepPayload.action_type,
+        role_id: stepPayload.role_id ?? null,
+        position_id: stepPayload.position_id ?? null,
+        company_user_id: stepPayload.company_user_id ?? null,
+        assigned_branch_id: stepPayload.assigned_branch_id ?? null,
+        assigned_department_id: stepPayload.assigned_department_id ?? null,
+        is_required: stepPayload.is_required,
+      }
+
+      setWorkflowSteps((current) => {
+        if (editingWorkflowStepId === null) {
+          return [...current, draftStep].sort((left, right) => (readNumber(left, ["approval_level"]) ?? 0) - (readNumber(right, ["approval_level"]) ?? 0))
+        }
+        return current
+          .map((row) => {
+            const id = readNumber(row, ["id", "step_id"])
+            return id === editingWorkflowStepId ? draftStep : row
+          })
+          .sort((left, right) => (readNumber(left, ["approval_level"]) ?? 0) - (readNumber(right, ["approval_level"]) ?? 0))
+      })
+      setWorkflowStepForm((prev) => ({ ...prev, approval_level: String((Number(prev.approval_level) || 0) + 1) }))
+      setEditingWorkflowStepId(null)
+      setStepDialogOpen(false)
+      return
+    }
+
+    if (!token) {
       return
     }
     setSaving(true)
     setError(null)
     try {
-      const stepPayload = {
-        approval_level: Number(workflowStepForm.approval_level),
-        approver_type: workflowStepForm.approver_type,
-        action_type: workflowStepForm.action_type,
-        role_id: workflowStepForm.role_id ? Number(workflowStepForm.role_id) : undefined,
-        position_id: workflowStepForm.position_id ? Number(workflowStepForm.position_id) : undefined,
-        company_user_id: workflowStepForm.company_user_id ? Number(workflowStepForm.company_user_id) : undefined,
-        assigned_branch_id: workflowStepForm.assigned_branch_id ? Number(workflowStepForm.assigned_branch_id) : undefined,
-        assigned_department_id: workflowStepForm.assigned_department_id ? Number(workflowStepForm.assigned_department_id) : undefined,
-        is_required: workflowStepForm.is_required === "true",
-      }
       if (editingWorkflowStepId === null) {
         await createLeaveWorkflowStep(token, workflowId, stepPayload)
       } else {
@@ -1017,7 +1130,17 @@ export function LeaveManagementView({
   async function removeWorkflowStep(row: AdminRecord) {
     const token = readStoredToken()
     const stepId = readNumber(row, ["id", "step_id"])
-    if (!token || !selectedWorkflowId || stepId === null) {
+    if (stepId === null) {
+      return
+    }
+    if (!selectedWorkflowId) {
+      setWorkflowSteps((current) => current.filter((entry) => {
+        const entryId = readNumber(entry, ["id", "step_id"])
+        return entryId !== stepId
+      }))
+      return
+    }
+    if (!token) {
       return
     }
     setSaving(true)
@@ -1234,7 +1357,7 @@ export function LeaveManagementView({
                 <option value="completed">completed</option>
               </select>
             </div>
-            <table className="w-full min-w-[900px] text-sm">
+            <table className="w-full min-w-[720px] text-sm">
               <thead className="bg-slate-50/90">
                 <tr>
                   <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Name</th>
@@ -1294,7 +1417,7 @@ export function LeaveManagementView({
           </div>
 
           <TableScrollContainer>
-            <table className="w-full min-w-[900px] text-sm">
+            <table className="w-full min-w-[720px] text-sm">
               <thead className="bg-slate-50/90">
                 <tr>
                   <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Leave ID</th>
@@ -1570,7 +1693,7 @@ export function LeaveManagementView({
           </div>
 
           <TableScrollContainer>
-            <table className="w-full min-w-[900px] text-sm">
+            <table className="w-full min-w-[720px] text-sm">
               <thead className="bg-slate-50/90">
                 <tr>
                   <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Employee</th>
@@ -1615,7 +1738,7 @@ export function LeaveManagementView({
           </div>
 
           <TableScrollContainer>
-            <table className="w-full min-w-[900px] text-sm">
+            <table className="w-full min-w-[720px] text-sm">
               <thead className="bg-slate-50/90">
                 <tr>
                   <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Name</th>
@@ -1674,7 +1797,7 @@ export function LeaveManagementView({
           </div>
 
           <TableScrollContainer>
-            <table className="w-full min-w-[900px] text-sm">
+            <table className="w-full min-w-[720px] text-sm">
               <thead className="bg-slate-50/90">
                 <tr>
                   <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Name</th>
@@ -1875,7 +1998,7 @@ export function LeaveManagementView({
           </div>
 
           <TableScrollContainer>
-            <table className="w-full min-w-[900px] text-sm">
+            <table className="w-full min-w-[720px] text-sm">
               <thead className="bg-slate-50/90">
                 <tr>
                   <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Workflow</th>
@@ -1952,7 +2075,9 @@ export function LeaveManagementView({
                     </button>
                   </div>
                   {workflowSteps.length === 0 ? (
-                    <p className="text-sm text-slate-500">No steps yet. Use Add Workflow Step to create approval flow.</p>
+                    <p className="text-sm text-slate-500">
+                      No steps yet. Use Add Workflow Step to stage approval steps here, then save the workflow once the flow looks right.
+                    </p>
                   ) : (
                     <div className="space-y-2">
                       {workflowSteps.map((row, index) => {
@@ -1997,43 +2122,90 @@ export function LeaveManagementView({
                 <DialogTitle>{editingWorkflowStepId === null ? "Add Workflow Step" : "Edit Workflow Step"}</DialogTitle>
                 <DialogDescription>Define approver, level, and assignment for this step.</DialogDescription>
               </DialogHeader>
-              <div className="grid gap-3 md:grid-cols-3">
-                <input type="number" min={1} className="h-10 rounded-md border border-slate-300 px-3 text-sm" placeholder="Approval level" value={workflowStepForm.approval_level} onChange={(event) => setWorkflowStepForm((prev) => ({ ...prev, approval_level: event.target.value }))} />
-                <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={workflowStepForm.action_type} onChange={(event) => setWorkflowStepForm((prev) => ({ ...prev, action_type: event.target.value }))}>
-                  <option value="recommend">recommend</option><option value="verify">verify</option><option value="approve">approve</option>
-                </select>
-                <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={workflowStepForm.approver_type} onChange={(event) => setWorkflowStepForm((prev) => ({ ...prev, approver_type: event.target.value }))}>
-                  <option value="role">role</option><option value="position">position</option><option value="company_user">company_user</option>
-                </select>
-                <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={workflowStepForm.role_id} onChange={(event) => setWorkflowStepForm((prev) => ({ ...prev, role_id: event.target.value }))}>
-                  <option value="">Role (optional)</option>{roles.map((row, index) => { const id = readNumber(row, ["id", "role_id"]); if (id === null) return null; return <option key={`dlg-role-${id}-${index}`} value={String(id)}>{readString(row, ["display_name", "name"])}</option> })}
-                </select>
-                <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={workflowStepForm.position_id} onChange={(event) => setWorkflowStepForm((prev) => ({ ...prev, position_id: event.target.value }))}>
-                  <option value="">Position (optional)</option>{positions.map((row, index) => { const id = readNumber(row, ["id", "position_id"]); if (id === null) return null; return <option key={`dlg-pos-${id}-${index}`} value={String(id)}>{readString(row, ["name", "title"])}</option> })}
-                </select>
-                <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={workflowStepForm.company_user_id} onChange={(event) => setWorkflowStepForm((prev) => ({ ...prev, company_user_id: event.target.value }))}>
-                  <option value="">Company user (optional)</option>{employeeOptions.map((option) => <option key={`dlg-user-${option.value}`} value={option.value}>{option.label}</option>)}
-                </select>
-                <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={workflowStepForm.assigned_branch_id} onChange={(event) => setWorkflowStepForm((prev) => ({ ...prev, assigned_branch_id: event.target.value }))}>
-                  <option value="">Assigned branch (optional)</option>{branches.map((row, index) => { const id = readNumber(row, ["id", "branch_id"]); if (id === null) return null; return <option key={`dlg-branch-${id}-${index}`} value={String(id)}>{readString(row, ["name", "title"])}</option> })}
-                </select>
-                <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={workflowStepForm.assigned_department_id} onChange={(event) => setWorkflowStepForm((prev) => ({ ...prev, assigned_department_id: event.target.value }))}>
-                  <option value="">Assigned department (optional)</option>{departments.map((row, index) => { const id = readNumber(row, ["id", "department_id"]); if (id === null) return null; return <option key={`dlg-dept-${id}-${index}`} value={String(id)}>{readString(row, ["name", "title"])}</option> })}
-                </select>
-                <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={workflowStepForm.is_required} onChange={(event) => setWorkflowStepForm((prev) => ({ ...prev, is_required: event.target.value }))}>
-                  <option value="true">Required</option><option value="false">Optional</option>
-                </select>
+              <div className="space-y-3">
+                <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                  <p className="font-semibold text-slate-700">Step guide</p>
+                  <p>
+                    1. Set the approval level order. 2. Choose what the step does. 3. Choose how the approver is assigned. 4. Optionally narrow the step by branch or department.
+                  </p>
+                  <p className="mt-1">{getWorkflowStepFieldHint(workflowStepForm.approver_type)}</p>
+                </div>
+                <div className="grid gap-3 md:grid-cols-3">
+                  <label className="grid gap-1 text-sm font-medium text-slate-700">
+                    <span>Approval level</span>
+                    <input type="number" min={1} className="h-10 rounded-md border border-slate-300 px-3 text-sm font-normal" placeholder="Approval level" value={workflowStepForm.approval_level} onChange={(event) => setWorkflowStepForm((prev) => ({ ...prev, approval_level: event.target.value }))} />
+                  </label>
+                  <label className="grid gap-1 text-sm font-medium text-slate-700">
+                    <span>Step action</span>
+                    <select className="h-10 rounded-md border border-slate-300 px-3 text-sm font-normal" value={workflowStepForm.action_type} onChange={(event) => setWorkflowStepForm((prev) => ({ ...prev, action_type: event.target.value }))}>
+                      <option value="recommend">recommend</option><option value="verify">verify</option><option value="approve">approve</option>
+                    </select>
+                  </label>
+                  <label className="grid gap-1 text-sm font-medium text-slate-700">
+                    <span>Approver assignment type</span>
+                    <select
+                      className="h-10 rounded-md border border-slate-300 px-3 text-sm font-normal"
+                      value={workflowStepForm.approver_type}
+                      onChange={(event) => {
+                        const nextType = event.target.value
+                        setWorkflowStepForm((prev) => ({
+                          ...prev,
+                          approver_type: nextType,
+                          role_id: nextType === "role" ? prev.role_id : "",
+                          position_id: nextType === "position" ? prev.position_id : "",
+                          company_user_id: nextType === "company_user" ? prev.company_user_id : "",
+                        }))
+                      }}
+                    >
+                      <option value="role">role</option><option value="position">position</option><option value="company_user">company user</option>
+                    </select>
+                  </label>
+                  <label className="grid gap-1 text-sm font-medium text-slate-700">
+                    <span>Role</span>
+                    <select disabled={workflowStepForm.approver_type !== "role"} className="h-10 rounded-md border border-slate-300 px-3 text-sm font-normal disabled:cursor-not-allowed disabled:bg-slate-100" value={workflowStepForm.role_id} onChange={(event) => setWorkflowStepForm((prev) => ({ ...prev, role_id: event.target.value }))}>
+                      <option value="">Role (optional)</option>{roles.map((row, index) => { const id = readNumber(row, ["id", "role_id"]); if (id === null) return null; return <option key={`dlg-role-${id}-${index}`} value={String(id)}>{readString(row, ["display_name", "name"])}</option> })}
+                    </select>
+                  </label>
+                  <label className="grid gap-1 text-sm font-medium text-slate-700">
+                    <span>Position</span>
+                    <select disabled={workflowStepForm.approver_type !== "position"} className="h-10 rounded-md border border-slate-300 px-3 text-sm font-normal disabled:cursor-not-allowed disabled:bg-slate-100" value={workflowStepForm.position_id} onChange={(event) => setWorkflowStepForm((prev) => ({ ...prev, position_id: event.target.value }))}>
+                      <option value="">Position (optional)</option>{positions.map((row, index) => { const id = readNumber(row, ["id", "position_id"]); if (id === null) return null; return <option key={`dlg-pos-${id}-${index}`} value={String(id)}>{readString(row, ["name", "title"])}</option> })}
+                    </select>
+                  </label>
+                  <label className="grid gap-1 text-sm font-medium text-slate-700">
+                    <span>Company user</span>
+                    <select disabled={workflowStepForm.approver_type !== "company_user"} className="h-10 rounded-md border border-slate-300 px-3 text-sm font-normal disabled:cursor-not-allowed disabled:bg-slate-100" value={workflowStepForm.company_user_id} onChange={(event) => setWorkflowStepForm((prev) => ({ ...prev, company_user_id: event.target.value }))}>
+                      <option value="">Company user (optional)</option>{employeeOptions.map((option) => <option key={`dlg-user-${option.value}`} value={option.value}>{option.label}</option>)}
+                    </select>
+                  </label>
+                  <label className="grid gap-1 text-sm font-medium text-slate-700">
+                    <span>Assigned branch</span>
+                    <select className="h-10 rounded-md border border-slate-300 px-3 text-sm font-normal" value={workflowStepForm.assigned_branch_id} onChange={(event) => setWorkflowStepForm((prev) => ({ ...prev, assigned_branch_id: event.target.value }))}>
+                      <option value="">Assigned branch (optional)</option>{branches.map((row, index) => { const id = readNumber(row, ["id", "branch_id"]); if (id === null) return null; return <option key={`dlg-branch-${id}-${index}`} value={String(id)}>{readString(row, ["name", "title"])}</option> })}
+                    </select>
+                  </label>
+                  <label className="grid gap-1 text-sm font-medium text-slate-700">
+                    <span>Assigned department</span>
+                    <select className="h-10 rounded-md border border-slate-300 px-3 text-sm font-normal" value={workflowStepForm.assigned_department_id} onChange={(event) => setWorkflowStepForm((prev) => ({ ...prev, assigned_department_id: event.target.value }))}>
+                      <option value="">Assigned department (optional)</option>{departments.map((row, index) => { const id = readNumber(row, ["id", "department_id"]); if (id === null) return null; return <option key={`dlg-dept-${id}-${index}`} value={String(id)}>{readString(row, ["name", "title"])}</option> })}
+                    </select>
+                  </label>
+                  <label className="grid gap-1 text-sm font-medium text-slate-700">
+                    <span>Requirement</span>
+                    <select className="h-10 rounded-md border border-slate-300 px-3 text-sm font-normal" value={workflowStepForm.is_required} onChange={(event) => setWorkflowStepForm((prev) => ({ ...prev, is_required: event.target.value }))}>
+                      <option value="true">Required</option><option value="false">Optional</option>
+                    </select>
+                  </label>
+                </div>
               </div>
               <DialogFooter>
                 <button type="button" className="rounded-md border border-slate-300 px-3 py-2 text-sm" onClick={() => setStepDialogOpen(false)}>Cancel</button>
                 <button type="button" className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white" disabled={saving} onClick={async () => {
                   const targetWorkflowId = selectedWorkflowId || (editingWorkflowId !== null ? String(editingWorkflowId) : "")
-                  if (!targetWorkflowId) {
-                    showErrorAlert("Save workflow details first, then add steps.")
-                    return
+                  if (targetWorkflowId) {
+                    setSelectedWorkflowId(targetWorkflowId)
                   }
-                  setSelectedWorkflowId(targetWorkflowId)
-                  await submitWorkflowStepForm(targetWorkflowId)
+                  await submitWorkflowStepForm(targetWorkflowId || undefined)
                 }}>
                   {editingWorkflowStepId === null ? "Add Step" : "Save Step"}
                 </button>

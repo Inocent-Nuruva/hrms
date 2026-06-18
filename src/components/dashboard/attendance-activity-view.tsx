@@ -7,6 +7,7 @@ import {
   Clock3Icon,
   MapPinIcon,
   RefreshCwIcon,
+  SearchIcon,
   ShieldCheckIcon,
   TimerResetIcon,
 } from "lucide-react"
@@ -18,6 +19,7 @@ import {
   createAttendanceMobilePunchCheckOut,
   getMyAttendanceSchedule,
   getMyAttendanceToday,
+  rebuildAttendanceDailySummaries,
   listAttendanceDailySummaries,
   listAttendanceGeofences,
   listAttendanceProcessingJobs,
@@ -28,7 +30,6 @@ import {
   listMyAttendanceHistory,
   listMyAttendancePunches,
   processAttendanceRange,
-  queueAttendanceRecalculation,
   runPendingAttendanceProcessingJobs,
   type AdminRecord,
 } from "@/lib/admin-api"
@@ -51,6 +52,15 @@ type SectionConfig = {
 }
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
+const DAILY_SUMMARY_STATUS_OPTIONS = [
+  "PRESENT",
+  "ABSENT",
+  "LATE",
+  "HALF_DAY",
+  "OFF_DAY",
+  "HOLIDAY",
+  "ON_LEAVE",
+]
 
 const SECTION_CONFIG: Record<AttendanceActivitySectionKey, SectionConfig> = {
   "daily-summaries": {
@@ -122,6 +132,12 @@ function resolveSection(section: string): AttendanceActivitySectionKey {
   return (
     Object.keys(SECTION_CONFIG).includes(section) ? section : "daily-summaries"
   ) as AttendanceActivitySectionKey
+}
+
+function getTodayDateInputValue() {
+  const now = new Date()
+  const offset = now.getTimezoneOffset() * 60_000
+  return new Date(now.getTime() - offset).toISOString().slice(0, 10)
 }
 
 function formatLoadError(errorObject: unknown, fallback: string) {
@@ -475,6 +491,110 @@ function readStringFromRow(row: AdminRecord, keys: string[]) {
   return null
 }
 
+function readNestedRecord(row: AdminRecord, keys: string[]) {
+  for (const key of keys) {
+    const value = row[key]
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      return value as AdminRecord
+    }
+  }
+  return null
+}
+
+function getEmployeeOptionLabel(employee: AdminRecord) {
+  const id = readNumberFromRow(employee, ["id", "employee_id", "employeeId"])
+  const employeeNo = readStringFromRow(employee, ["employee_no", "employeeNo", "employee_number"])
+  const fullName =
+    readStringFromRow(employee, ["employee_name", "employeeName", "full_name", "fullName", "display_name", "name"]) ??
+    [
+      readStringFromRow(employee, ["first_name", "firstName", "preferred_name", "preferredName"]),
+      readStringFromRow(employee, ["middle_name", "middleName"]),
+      readStringFromRow(employee, ["last_name", "lastName"]),
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .trim()
+
+  const parts = [fullName || "Employee", employeeNo || null, id !== null ? `ID ${id}` : null].filter(Boolean)
+  return parts.join(" · ")
+}
+
+function getBranchOptionLabel(branch: AdminRecord) {
+  return (
+    readStringFromRow(branch, ["branch_name", "branchName", "name", "title"]) ??
+    (readNumberFromRow(branch, ["id", "branch_id", "branchId"]) !== null
+      ? `Branch ${readNumberFromRow(branch, ["id", "branch_id", "branchId"])}`
+      : "Branch")
+  )
+}
+
+function normalizeDateOnly(value: string | null) {
+  if (!value) return ""
+  const trimmed = value.trim()
+  if (!trimmed) return ""
+  return trimmed.slice(0, 10)
+}
+
+function applyDailySummaryFilters(
+  rows: AdminRecord[],
+  filters: Record<string, string>
+) {
+  const fromDate = normalizeDateOnly(filters.from_date || null)
+  const toDate = normalizeDateOnly(filters.to_date || null)
+  const employeeId = filters.employee_id.trim()
+  const organizationId = filters.organization_id.trim()
+  const status = filters.status.trim().toUpperCase()
+
+  return rows.filter((row) => {
+    const attendanceDate = normalizeDateOnly(
+      readStringFromRow(row, [
+        "attendance_date",
+        "attendanceDate",
+        "date",
+        "summary_date",
+        "summaryDate",
+        "work_date",
+        "workDate",
+      ])
+    )
+
+    if (fromDate && (!attendanceDate || attendanceDate < fromDate)) {
+      return false
+    }
+
+    if (toDate && (!attendanceDate || attendanceDate > toDate)) {
+      return false
+    }
+
+    if (employeeId) {
+      const rowEmployeeId = readNumberFromRow(row, ["employee_id", "employeeId", "id"])
+      if (rowEmployeeId === null || String(rowEmployeeId) !== employeeId) {
+        return false
+      }
+    }
+
+    if (organizationId) {
+      const rowOrganizationId = readNumberFromRow(row, ["branch_id", "branchId", "organization_id", "organizationId"])
+      if (rowOrganizationId === null || String(rowOrganizationId) !== organizationId) {
+        return false
+      }
+    }
+
+    if (status) {
+      const rowStatus = (
+        readStringFromRow(row, ["attendance_status", "attendanceStatus", "status", "summary_status", "summaryStatus", "state"]) ?? ""
+      )
+        .trim()
+        .toUpperCase()
+      if (rowStatus !== status) {
+        return false
+      }
+    }
+
+    return true
+  })
+}
+
 function enrichRowsWithReadableNames(rows: AdminRecord[], branches: AdminRecord[], employees: AdminRecord[]) {
   const branchNameById = new Map<number, string>()
   const employeeNameById = new Map<number, string>()
@@ -520,34 +640,155 @@ function enrichRowsWithReadableNames(rows: AdminRecord[], branches: AdminRecord[
       }
     }
 
+    const nestedEmployee = readNestedRecord(row, ["employee"])
+    if (!readStringFromRow(next, ["employee_name", "employeeName"]) && nestedEmployee) {
+      const nestedEmployeeNo = readStringFromRow(nestedEmployee, ["employee_no", "employeeNo"])
+      const nestedEmployeeName =
+        readStringFromRow(nestedEmployee, ["full_name", "fullName", "display_name", "displayName", "name"]) ??
+        [
+          readStringFromRow(nestedEmployee, ["first_name", "firstName", "preferred_name", "preferredName"]),
+          readStringFromRow(nestedEmployee, ["middle_name", "middleName"]),
+          readStringFromRow(nestedEmployee, ["last_name", "lastName"]),
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .trim()
+
+      if (nestedEmployeeName) {
+        next.employee_name = nestedEmployeeNo ? `${nestedEmployeeName} (${nestedEmployeeNo})` : nestedEmployeeName
+      }
+    }
+
+    if (!readStringFromRow(next, ["attendance_date"]) ) {
+      const attendanceDate = readStringFromRow(row, [
+        "attendance_date",
+        "attendanceDate",
+        "date",
+        "summary_date",
+        "summaryDate",
+        "work_date",
+        "workDate",
+      ])
+      if (attendanceDate) {
+        next.attendance_date = attendanceDate
+      }
+    }
+
+    if (!readStringFromRow(next, ["timetable_used"])) {
+      const timetableUsed = readStringFromRow(row, [
+        "timetable_used",
+        "timetableUsed",
+        "timetable_name",
+        "timetableName",
+        "timetable_used_name",
+        "timetableUsedName",
+        "shift_name",
+        "shiftName",
+        "schedule_name",
+        "scheduleName",
+        "schedule_source",
+        "scheduleSource",
+      ])
+      if (timetableUsed) {
+        next.timetable_used = timetableUsed
+      }
+    }
+
+    if (!readStringFromRow(next, ["attendance_status"])) {
+      const attendanceStatus = readStringFromRow(row, [
+        "attendance_status",
+        "attendanceStatus",
+        "status",
+        "summary_status",
+        "summaryStatus",
+        "state",
+      ])
+      if (attendanceStatus) {
+        next.attendance_status = attendanceStatus
+      }
+    }
+
+    if (!readStringFromRow(next, ["check_in_time"])) {
+      const checkInTime = readStringFromRow(row, [
+        "check_in_time",
+        "checkInTime",
+        "check_in_at",
+        "checkInAt",
+        "first_check_in_at",
+        "firstCheckInAt",
+        "first_punch_at",
+        "firstPunchAt",
+        "clock_in_at",
+        "clockInAt",
+        "expected_check_in_time",
+        "expectedCheckInTime",
+      ])
+      if (checkInTime) {
+        next.check_in_time = checkInTime
+      }
+    }
+
+    if (!readStringFromRow(next, ["check_out_time"])) {
+      const checkOutTime = readStringFromRow(row, [
+        "check_out_time",
+        "checkOutTime",
+        "check_out_at",
+        "checkOutAt",
+        "last_check_out_at",
+        "lastCheckOutAt",
+        "last_punch_at",
+        "lastPunchAt",
+        "clock_out_at",
+        "clockOutAt",
+        "expected_check_out_time",
+        "expectedCheckOutTime",
+      ])
+      if (checkOutTime) {
+        next.check_out_time = checkOutTime
+      }
+    }
+
     return next
   })
 }
 
-function resolveVisibleColumns(rows: AdminRecord[]) {
-  const preferred = [
-    "id",
-    "employee_name",
-    "employee_no",
-    "employee_id",
-    "employee_no",
-    "date",
-    "attendance_date",
-    "punch_type",
-    "status",
-    "attendance_status",
-    "branch_name",
-    "branch_id",
-    "job_status",
-    "created_at",
-    "updated_at",
-    "start_date",
-    "end_date",
-    "shift_name",
-    "schedule_date",
-  ]
+function resolveVisibleColumns(rows: AdminRecord[], section: AttendanceActivitySectionKey) {
+  const preferred =
+    section === "daily-summaries"
+      ? [
+          "employee_name",
+          "branch_name",
+          "attendance_date",
+          "attendance_status",
+          "timetable_used",
+          "check_in_time",
+          "check_out_time",
+        ]
+      : [
+          "id",
+          "employee_name",
+          "employee_no",
+          "employee_id",
+          "date",
+          "attendance_date",
+          "punch_type",
+          "status",
+          "attendance_status",
+          "branch_name",
+          "branch_id",
+          "job_status",
+          "created_at",
+          "updated_at",
+          "start_date",
+          "end_date",
+          "shift_name",
+          "schedule_date",
+        ]
   const keySet = new Set<string>()
   rows.forEach((row) => Object.keys(row).forEach((key) => keySet.add(key)))
+  if (section === "daily-summaries") {
+    return preferred
+  }
   const ordered = preferred.filter((key) => {
     if (!keySet.has(key)) {
       return false
@@ -561,7 +802,103 @@ function resolveVisibleColumns(rows: AdminRecord[]) {
     return true
   })
   const extras = Array.from(keySet).filter((key) => !ordered.includes(key)).sort((a, b) => a.localeCompare(b))
-  return [...ordered, ...extras].slice(0, 8)
+  const limit = 8
+  return [...ordered, ...extras].slice(0, limit)
+}
+
+function resolveDailySummaryCellValue(column: string, row: AdminRecord) {
+  const nestedEmployee = readNestedRecord(row, ["employee"])
+  if (column === "employee_name") {
+    const nestedEmployeeFullName =
+      [
+        readFirstValue(nestedEmployee, ["first_name", "firstName"]),
+        readFirstValue(nestedEmployee, ["middle_name", "middleName"]),
+        readFirstValue(nestedEmployee, ["last_name", "lastName"]),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .trim() || null
+
+    return (
+      readFirstValue(row, ["employee_name", "employeeName", "full_name", "fullName", "display_name", "displayName", "name"]) ??
+      readFirstValue(nestedEmployee, [
+        "full_name",
+        "fullName",
+        "display_name",
+        "displayName",
+        "name",
+        "preferred_name",
+        "preferredName",
+      ]) ??
+      nestedEmployeeFullName
+    )
+  }
+  if (column === "branch_name") {
+    return readFirstValue(row, ["branch_name", "branchName", "branch", "location_name", "locationName", "site_name", "siteName"])
+  }
+  if (column === "attendance_date") {
+    return readFirstValue(row, ["attendance_date", "attendanceDate", "date", "summary_date", "summaryDate", "work_date", "workDate"])
+  }
+  if (column === "attendance_status") {
+    return readFirstValue(row, ["attendance_status", "attendanceStatus", "status", "summary_status", "summaryStatus", "state"])
+  }
+  if (column === "timetable_used") {
+    return readFirstValue(row, [
+      "timetable_used",
+      "timetableUsed",
+      "timetable_name",
+      "timetableName",
+      "timetable_used_name",
+      "timetableUsedName",
+      "shift_name",
+      "shiftName",
+      "schedule_name",
+      "scheduleName",
+      "schedule_source",
+      "scheduleSource",
+      "timetable",
+    ])
+  }
+  if (column === "check_in_time") {
+    return readFirstValue(row, [
+      "check_in_time",
+      "checkInTime",
+      "check_in_at",
+      "checkInAt",
+      "first_check_in_at",
+      "firstCheckInAt",
+      "first_punch_at",
+      "firstPunchAt",
+      "clock_in_at",
+      "clockInAt",
+      "expected_check_in_time",
+      "expectedCheckInTime",
+    ])
+  }
+  if (column === "check_out_time") {
+    return readFirstValue(row, [
+      "check_out_time",
+      "checkOutTime",
+      "check_out_at",
+      "checkOutAt",
+      "last_check_out_at",
+      "lastCheckOutAt",
+      "last_punch_at",
+      "lastPunchAt",
+      "clock_out_at",
+      "clockOutAt",
+      "expected_check_out_time",
+      "expectedCheckOutTime",
+    ])
+  }
+  return row[column]
+}
+
+function resolveTableCellValue(section: AttendanceActivitySectionKey, column: string, row: AdminRecord) {
+  if (section === "daily-summaries") {
+    return resolveDailySummaryCellValue(column, row)
+  }
+  return row[column]
 }
 
 function asNumber(value: string) {
@@ -604,8 +941,9 @@ function buildRecalculatePayload(values: Record<string, string>) {
     start_date: values.start_date.trim(),
     end_date: values.end_date.trim(),
     employee_id: asNumber(values.employee_id),
+    force_rebuild: values.force_rebuild === "true",
     reason: values.reason.trim() || undefined,
-    process_immediately: values.process_immediately === "true",
+    async: values.async === "true",
   }
 }
 
@@ -624,12 +962,18 @@ function buildRangePayload(values: Record<string, string>) {
   }
 }
 
-function TableBlock({ rows }: { rows: AdminRecord[] }) {
-  const columns = React.useMemo(() => resolveVisibleColumns(rows), [rows])
+function TableBlock({
+  rows,
+  section,
+}: {
+  rows: AdminRecord[]
+  section: AttendanceActivitySectionKey
+}) {
+  const columns = React.useMemo(() => resolveVisibleColumns(rows, section), [rows, section])
 
   return (
     <TableScrollContainer>
-      <table className="w-full min-w-[900px] text-left text-sm">
+      <table className="w-full min-w-[680px] text-left text-sm md:min-w-[760px]">
         <thead className="bg-slate-50/90 text-slate-500">
           <tr>
             {columns.map((column) => (
@@ -650,8 +994,8 @@ function TableBlock({ rows }: { rows: AdminRecord[] }) {
             rows.map((row, index) => (
               <tr key={`row-${index}`} className="align-top">
                 {columns.map((column) => (
-                  <td key={column} className="px-4 py-4 text-slate-700 whitespace-nowrap">
-                    {stringifyValue(row[column])}
+                  <td key={column} className="px-4 py-4 text-slate-700 break-words whitespace-normal">
+                    {stringifyValue(resolveTableCellValue(section, column, row))}
                   </td>
                 ))}
               </tr>
@@ -674,6 +1018,29 @@ export function AttendanceActivityView({ section }: { section: string }) {
   const [error, setError] = React.useState<string | null>(null)
   const [geofences, setGeofences] = React.useState<AdminRecord[]>([])
   const [wifiNetworks, setWifiNetworks] = React.useState<AdminRecord[]>([])
+  const [branches, setBranches] = React.useState<AdminRecord[]>([])
+  const [employees, setEmployees] = React.useState<AdminRecord[]>([])
+  const [employeeSearch, setEmployeeSearch] = React.useState("")
+  const [dailySummaryFilters, setDailySummaryFilters] = React.useState<Record<string, string>>(() => {
+    const today = getTodayDateInputValue()
+    return {
+      from_date: today,
+      to_date: today,
+      employee_id: "",
+      organization_id: "",
+      status: "",
+    }
+  })
+  const filteredEmployeeOptions = React.useMemo(() => {
+    const search = employeeSearch.trim().toLowerCase()
+    if (!search) {
+      return employees
+    }
+
+    return employees.filter((employee) =>
+      getEmployeeOptionLabel(employee).toLowerCase().includes(search)
+    )
+  }, [employeeSearch, employees])
   const [punchValues, setPunchValues] = React.useState<Record<string, string>>({
     geofenceId: "",
     wifiNetworkId: "",
@@ -691,7 +1058,8 @@ export function AttendanceActivityView({ section }: { section: string }) {
     end_date: "",
     employee_id: "",
     reason: "",
-    process_immediately: "true",
+    force_rebuild: "true",
+    async: "true",
   })
   const [rangeValues, setRangeValues] = React.useState<Record<string, string>>({
     start_date: "",
@@ -776,11 +1144,24 @@ export function AttendanceActivityView({ section }: { section: string }) {
 
       if (activeSection === "daily-summaries") {
         const [result, branchesResult, employeesResult] = await Promise.all([
-          listAttendanceDailySummaries(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
-          listBranches(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
-          listEmployees(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
+          listAttendanceDailySummaries(token, {
+            page: 1,
+            limit: 100,
+            sortBy: "created_at",
+            sortOrder: "DESC",
+            from_date: dailySummaryFilters.from_date || undefined,
+            to_date: dailySummaryFilters.to_date || undefined,
+            employee_id: dailySummaryFilters.employee_id ? Number(dailySummaryFilters.employee_id) : undefined,
+            organization_id: dailySummaryFilters.organization_id ? Number(dailySummaryFilters.organization_id) : undefined,
+            status: dailySummaryFilters.status || undefined,
+          }),
+          listBranches(token, { page: 1, limit: 200, sortBy: "created_at", sortOrder: "DESC" }),
+          listEmployees(token, { page: 1, limit: 200, sortBy: "created_at", sortOrder: "DESC" }),
         ])
-        setRows(enrichRowsWithReadableNames(result.rows, branchesResult.rows, employeesResult.rows))
+        const enrichedRows = enrichRowsWithReadableNames(result.rows, branchesResult.rows, employeesResult.rows)
+        setBranches(branchesResult.rows)
+        setEmployees(employeesResult.rows)
+        setRows(applyDailySummaryFilters(enrichedRows, dailySummaryFilters))
         setSingleRecord(null)
         return
       }
@@ -808,7 +1189,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
     } finally {
       setLoading(false)
     }
-  }, [activeSection, config.title])
+  }, [activeSection, config.title, dailySummaryFilters])
 
   React.useEffect(() => {
     void fetchSectionData()
@@ -860,12 +1241,12 @@ export function AttendanceActivityView({ section }: { section: string }) {
       return
     }
     try {
-      await queueAttendanceRecalculation(token, buildRecalculatePayload(recalculateValues))
-      setMessage("Attendance recalculation queued successfully.")
+      await rebuildAttendanceDailySummaries(token, buildRecalculatePayload(recalculateValues))
+      setMessage("Attendance summary rebuild started successfully.")
       setError(null)
       await fetchSectionData()
     } catch (errorObject) {
-      setError(formatLoadError(errorObject, "Could not queue attendance recalculation."))
+      setError(formatLoadError(errorObject, "Could not start the attendance summary rebuild."))
     }
   }
 
@@ -914,9 +1295,128 @@ export function AttendanceActivityView({ section }: { section: string }) {
         {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
         {message ? <p className="mt-4 text-sm text-green-600">{message}</p> : null}
 
-        {loading ? <p className="mt-6 text-sm text-slate-500">Loading…</p> : null}
+        {loading ? (
+          <p className="mt-6 text-sm text-slate-500">
+            {activeSection === "daily-summaries" && rows.length ? "Updating results…" : "Loading…"}
+          </p>
+        ) : null}
 
         {!loading && activeSection === "today" ? <TodayOverview record={singleRecord} /> : null}
+
+        {activeSection === "daily-summaries" ? (
+          <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex flex-col gap-1">
+                  <h2 className="text-base font-semibold text-slate-900">Filters</h2>
+                </div>
+                <label className="relative block w-full lg:max-w-sm">
+                  <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    className="h-10 w-full rounded-md border border-slate-300 bg-white pl-10 pr-3 text-sm text-slate-900 placeholder:text-slate-400"
+                    value={employeeSearch}
+                    onChange={(event) => setEmployeeSearch(event.target.value)}
+                    placeholder="Search employee by name, number, or ID"
+                  />
+                </label>
+              </div>
+              <div className="grid gap-4 lg:grid-cols-12">
+                <div className="grid gap-1 sm:grid-cols-2 lg:col-span-4 lg:grid-cols-2">
+                  <span className="text-sm font-medium text-slate-700">From date</span>
+                  <DatePickerPresets
+                    value={dailySummaryFilters.from_date}
+                    onChange={(value) => setDailySummaryFilters((current) => ({ ...current, from_date: value }))}
+                    placeholder="From date"
+                  />
+                  <span className="text-sm font-medium text-slate-700">To date</span>
+                  <DatePickerPresets
+                    value={dailySummaryFilters.to_date}
+                    onChange={(value) => setDailySummaryFilters((current) => ({ ...current, to_date: value }))}
+                    placeholder="To date"
+                  />
+                </div>
+                <label className="grid gap-1 text-sm lg:col-span-4">
+                  <span className="font-medium text-slate-700">Employee</span>
+                  <select
+                    className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
+                    value={dailySummaryFilters.employee_id}
+                    onChange={(event) => setDailySummaryFilters((current) => ({ ...current, employee_id: event.target.value }))}
+                  >
+                    <option value="">All employees</option>
+                    {filteredEmployeeOptions.map((employee, index) => {
+                      const employeeId = readNumberFromRow(employee, ["id", "employee_id", "employeeId"])
+                      if (employeeId === null) return null
+                      return (
+                        <option key={`attendance-employee-${employeeId}-${index}`} value={String(employeeId)}>
+                          {getEmployeeOptionLabel(employee)}
+                        </option>
+                      )
+                    })}
+                  </select>
+                </label>
+                <div className="grid gap-3 sm:grid-cols-2 lg:col-span-4">
+                  <label className="grid gap-1 text-sm">
+                  <span className="font-medium text-slate-700">Organization</span>
+                  <select
+                    className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
+                    value={dailySummaryFilters.organization_id}
+                    onChange={(event) => setDailySummaryFilters((current) => ({ ...current, organization_id: event.target.value }))}
+                  >
+                    <option value="">All organizations</option>
+                    {branches.map((branch, index) => {
+                      const branchId = readNumberFromRow(branch, ["id", "branch_id", "branchId"])
+                      if (branchId === null) return null
+                      return (
+                        <option key={`attendance-branch-${branchId}-${index}`} value={String(branchId)}>
+                          {getBranchOptionLabel(branch)}
+                        </option>
+                      )
+                    })}
+                  </select>
+                  </label>
+                  <label className="grid gap-1 text-sm">
+                    <span className="font-medium text-slate-700">Status</span>
+                    <select
+                      className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
+                      value={dailySummaryFilters.status}
+                      onChange={(event) => setDailySummaryFilters((current) => ({ ...current, status: event.target.value }))}
+                    >
+                      <option value="">All statuses</option>
+                      {DAILY_SUMMARY_STATUS_OPTIONS.map((status) => (
+                        <option key={status} value={status}>
+                          {prettifyLabel(status)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              </div>
+              <div className="flex flex-col gap-3 border-t border-slate-200 pt-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs text-slate-500">
+                  Filter results update automatically as you change values.
+                </p>
+                <button
+                  className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 sm:self-start"
+                  type="button"
+                  onClick={() => {
+                    const today = getTodayDateInputValue()
+                    setEmployeeSearch("")
+                    setDailySummaryFilters({
+                      from_date: today,
+                      to_date: today,
+                      employee_id: "",
+                      organization_id: "",
+                      status: "",
+                    })
+                    setMessage(null)
+                  }}
+                >
+                  Reset To Today
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         {!loading && activeSection === "punch-action" ? (
           <div className="mt-6 grid gap-4">
@@ -996,18 +1496,22 @@ export function AttendanceActivityView({ section }: { section: string }) {
             </div>
             <div className="grid gap-6 xl:grid-cols-2">
               <div className="rounded-xl border border-slate-200 p-4">
-                <h2 className="text-base font-semibold text-slate-900">Queue Recalculation</h2>
+                <h2 className="text-base font-semibold text-slate-900">Rebuild Daily Summaries</h2>
                 <div className="mt-4 grid gap-3">
                   <DatePickerPresets value={recalculateValues.start_date} onChange={(value) => setRecalculateValues((current) => ({ ...current, start_date: value }))} placeholder="Start date" />
                   <DatePickerPresets value={recalculateValues.end_date} onChange={(value) => setRecalculateValues((current) => ({ ...current, end_date: value }))} placeholder="End date" />
                   <input className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="Employee Id (optional)" value={recalculateValues.employee_id} onChange={(event) => setRecalculateValues((current) => ({ ...current, employee_id: event.target.value }))} />
                   <input className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="Reason" value={recalculateValues.reason} onChange={(event) => setRecalculateValues((current) => ({ ...current, reason: event.target.value }))} />
-                  <select className="rounded-md border border-slate-300 px-3 py-2 text-sm" value={recalculateValues.process_immediately} onChange={(event) => setRecalculateValues((current) => ({ ...current, process_immediately: event.target.value }))}>
-                    <option value="true">Process immediately</option>
-                    <option value="false">Queue only</option>
+                  <select className="rounded-md border border-slate-300 px-3 py-2 text-sm" value={recalculateValues.force_rebuild} onChange={(event) => setRecalculateValues((current) => ({ ...current, force_rebuild: event.target.value }))}>
+                    <option value="true">Force rebuild existing summaries</option>
+                    <option value="false">Upsert without clearing</option>
+                  </select>
+                  <select className="rounded-md border border-slate-300 px-3 py-2 text-sm" value={recalculateValues.async} onChange={(event) => setRecalculateValues((current) => ({ ...current, async: event.target.value }))}>
+                    <option value="true">Queue in background</option>
+                    <option value="false">Run synchronously</option>
                   </select>
                   <button className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-300 px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50" type="button" onClick={() => void queueRecalculation()}>
-                    Queue Recalculation
+                    Rebuild Daily Summaries
                   </button>
                 </div>
               </div>
@@ -1032,16 +1536,16 @@ export function AttendanceActivityView({ section }: { section: string }) {
                 </div>
               </div>
             </div>
-            <TableBlock rows={rows} />
+            <TableBlock rows={rows} section={activeSection} />
           </div>
         ) : null}
 
-        {!loading &&
+        {(activeSection === "daily-summaries" || !loading) &&
         activeSection !== "today" &&
         activeSection !== "punch-action" &&
         activeSection !== "recalculation-jobs" ? (
           <div className="mt-6">
-            <TableBlock rows={rows} />
+            <TableBlock rows={rows} section={activeSection} />
           </div>
         ) : null}
       </div>

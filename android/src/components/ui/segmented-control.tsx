@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, useColorScheme, View } from 'react-native';
+import { Animated, Pressable, StyleSheet, Text, useColorScheme, View } from 'react-native';
 
 import { COLORS } from '../../lib/config';
 
@@ -18,9 +18,27 @@ export function SegmentedControl({
   options: Segment[];
 }) {
   const isDark = useColorScheme() === 'dark';
+  const [width, setWidth] = React.useState(0);
+  const translateX = React.useRef(new Animated.Value(0)).current;
+  const activeIndex = Math.max(
+    0,
+    options.findIndex((option) => option.key === value)
+  );
+  const segmentWidth = width && options.length ? (width - 8 - (options.length - 1) * 4) / options.length : 0;
+
+  React.useEffect(() => {
+    if (!segmentWidth) return;
+    Animated.spring(translateX, {
+      toValue: activeIndex * (segmentWidth + 4),
+      useNativeDriver: true,
+      speed: 20,
+      bounciness: 6,
+    }).start();
+  }, [activeIndex, segmentWidth, translateX]);
 
   return (
     <View
+      onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
       style={[
         styles.container,
         {
@@ -29,6 +47,19 @@ export function SegmentedControl({
         },
       ]}
     >
+      {segmentWidth ? (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.activeSegment,
+            {
+              width: segmentWidth,
+              backgroundColor: isDark ? '#f4f4f5' : COLORS.primary,
+              transform: [{ translateX }],
+            },
+          ]}
+        />
+      ) : null}
       {options.map((option) => {
         const active = option.key === value;
         return (
@@ -37,7 +68,6 @@ export function SegmentedControl({
             onPress={() => onChange(option.key)}
             style={[
               styles.segment,
-              active ? { backgroundColor: isDark ? '#f4f4f5' : COLORS.primary } : null,
             ]}
           >
             <Text
@@ -72,6 +102,14 @@ const styles = StyleSheet.create({
     padding: 4,
     gap: 4,
     width: '100%',
+    position: 'relative',
+  },
+  activeSegment: {
+    position: 'absolute',
+    top: 4,
+    bottom: 4,
+    left: 4,
+    borderRadius: 12,
   },
   segment: {
     flex: 1,
@@ -79,6 +117,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 9,
     alignItems: 'center',
+    zIndex: 1,
   },
   segmentText: {
     fontSize: 12,

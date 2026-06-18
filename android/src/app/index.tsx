@@ -1,6 +1,13 @@
 import { Redirect } from 'expo-router';
 
+import { useAuth } from '../hooks/useAuth';
+
 export default function Index() {
-  // expo-router root will decide between login or (tabs) via _layout
-  return <Redirect href="/(tabs)" />;
+  const auth = useAuth();
+
+  if (auth.isLoading) {
+    return null;
+  }
+
+  return <Redirect href={auth.isAuthenticated ? '/(tabs)' : '/login'} />;
 }

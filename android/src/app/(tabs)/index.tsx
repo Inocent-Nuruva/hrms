@@ -10,6 +10,7 @@ export default function HomeTab() {
     <HomeScreen
       auth={auth}
       onTabChange={(tab) => {
+        if (tab === 'profile') router.push('/(tabs)/profile');
         if (tab === 'attendance') router.push('/(tabs)/attendance');
         if (tab === 'leave') router.push('/(tabs)/leave');
       }}

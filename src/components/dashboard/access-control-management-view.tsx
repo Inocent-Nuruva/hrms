@@ -956,7 +956,7 @@ export function AccessControlManagementView({
       {message ? <p className="mb-3 text-sm text-green-700">{message}</p> : null}
 
       <TableScrollContainer>
-        <table className="w-full min-w-[900px] text-sm">
+        <table className="w-full min-w-[720px] text-sm">
           <thead className="bg-slate-50/90">
             <tr>
               {columns.map((column) => (

@@ -1,15 +1,24 @@
 import React, { useEffect } from 'react';
 import { Tabs, useRouter } from 'expo-router';
 import { CalendarDays, Clock3, House, UserRound } from 'lucide-react-native';
-import { ActivityIndicator, View, StyleSheet, useColorScheme } from 'react-native';
+import { ActivityIndicator, Animated, Pressable, View, StyleSheet, type GestureResponderEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../hooks/useAuth';
 import { COLORS } from '../../lib/config';
+import { useThemePreference } from '../../hooks/useThemePreference';
+
+interface AnimatedTabBarButtonProps {
+  accessibilityState?: { selected?: boolean };
+  children?: React.ReactNode;
+  onLongPress?: ((event: GestureResponderEvent) => void) | null;
+  onPress?: ((event: GestureResponderEvent) => void) | null;
+  style?: any;
+}
 
 export default function TabLayout() {
   const auth = useAuth();
   const router = useRouter();
-  const isDark = useColorScheme() === 'dark';
+  const { isDark } = useThemePreference();
   const insets = useSafeAreaInsets();
 
   // Protect the entire tab group - redirect to login if session lost
@@ -35,13 +44,29 @@ export default function TabLayout() {
         tabBarInactiveTintColor: isDark ? COLORS.onSurfaceVariantDark : COLORS.onSurfaceVariant,
         tabBarStyle: {
           backgroundColor: isDark ? COLORS.surfaceDark : COLORS.surface,
+          borderTopWidth: StyleSheet.hairlineWidth,
           borderTopColor: isDark ? COLORS.outlineDark : COLORS.outline,
-          height: 60 + insets.bottom,
-          paddingBottom: Math.max(insets.bottom, 10),
+          height: 68 + insets.bottom,
+          paddingBottom: Math.max(insets.bottom, 8),
           paddingTop: 8,
+          shadowColor: '#000000',
+          shadowOpacity: isDark ? 0.16 : 0.06,
+          shadowOffset: { width: 0, height: -6 },
+          shadowRadius: 12,
+          elevation: 8,
         },
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '700', letterSpacing: 0.2 },
-        tabBarItemStyle: { paddingVertical: 2 },
+        tabBarLabelStyle: { fontSize: 11, fontWeight: '700', letterSpacing: 0.2, marginTop: 1 },
+        tabBarItemStyle: {
+          marginHorizontal: 6,
+          marginVertical: 4,
+          borderRadius: 18,
+          paddingVertical: 2,
+        },
+        tabBarActiveBackgroundColor: 'transparent',
+        tabBarButton: (props) => <AnimatedTabBarButton {...props} />,
+        sceneStyle: {
+          backgroundColor: isDark ? COLORS.backgroundDark : '#f7f4ef',
+        },
       }}
     >
       <Tabs.Screen
@@ -68,11 +93,53 @@ export default function TabLayout() {
       <Tabs.Screen
         name="profile"
         options={{
-          title: 'Me',
+          title: 'Info',
           tabBarIcon: ({ color }) => <UserRound size={19} color={color} strokeWidth={2.25} />,
         }}
       />
     </Tabs>
+  );
+}
+
+function AnimatedTabBarButton({
+  accessibilityState,
+  children,
+  onLongPress,
+  onPress,
+  style,
+  ...rest
+}: AnimatedTabBarButtonProps) {
+  const selected = Boolean(accessibilityState?.selected);
+  const scale = React.useRef(new Animated.Value(selected ? 1.04 : 1)).current;
+  const translateY = React.useRef(new Animated.Value(selected ? -2 : 0)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.spring(scale, {
+        toValue: selected ? 1.04 : 1,
+        useNativeDriver: true,
+        speed: 24,
+        bounciness: 5,
+      }),
+      Animated.spring(translateY, {
+        toValue: selected ? -2 : 0,
+        useNativeDriver: true,
+        speed: 24,
+        bounciness: 5,
+      }),
+    ]).start();
+  }, [scale, selected, translateY]);
+
+  return (
+    <Pressable
+      {...rest}
+      accessibilityState={accessibilityState}
+      onLongPress={onLongPress}
+      onPress={onPress}
+      style={style}
+    >
+      <Animated.View style={{ transform: [{ scale }, { translateY }] }}>{children}</Animated.View>
+    </Pressable>
   );
 }
 

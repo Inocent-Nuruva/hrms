@@ -67,6 +67,8 @@ type FieldConfig = {
   type: FieldType
   required?: boolean
   hidden?: boolean
+  createOnly?: boolean
+  editOnly?: boolean
   placeholder?: string
   helpText?: string
   autoFillLabelFromOption?: boolean
@@ -266,15 +268,28 @@ const SECTION_CONFIG: Record<ScheduleSectionKey, SectionConfig> = {
     moduleTitle: "Shift Management",
     description: "Manage dated schedule entries generated from or attached to shifts.",
     fields: [
-      { key: "employee_id", label: "Employee", type: "select", required: true },
-      { key: "shift_id", label: "Shift", type: "select", required: true },
-      { key: "schedule_date", label: "Schedule Date", type: "date", required: true },
-      { key: "override_shift_id", label: "Override Shift", type: "select" },
-      { key: "holiday_id", label: "Holiday", type: "select" },
+      {
+        key: "employee_id",
+        label: "Employee",
+        type: "select",
+        required: true,
+        helpText: "Choose one employee for a single schedule, or use Bulk Employees below to create the same schedule for many employees at once.",
+      },
+      {
+        key: "employee_ids",
+        label: "Bulk Employees",
+        type: "multiselect",
+        createOnly: true,
+        helpText: "Optional. Every selected employee will receive the same shift, date, and schedule settings in one action.",
+      },
+      { key: "shift_id", label: "Shift", type: "select", required: true, helpText: "This is the main shift to assign on the selected date." },
+      { key: "schedule_date", label: "Schedule Date", type: "date", required: true, helpText: "Date when this shift schedule should apply." },
+      { key: "override_shift_id", label: "Override Shift", type: "select", helpText: "Use this only when the schedule should differ from the main shift for that date." },
+      { key: "holiday_id", label: "Holiday", type: "select", helpText: "Optional holiday linked to this schedule entry." },
       { key: "assigned_by", label: "Assigned By User Id", type: "number", hidden: true },
-      { key: "remarks", label: "Remarks", type: "textarea" },
-      { key: "generated_from_rotation", label: "Generated From Rotation", type: "boolean" },
-      { key: "is_off_day", label: "Off Day", type: "boolean" },
+      { key: "remarks", label: "Remarks", type: "textarea", helpText: "Optional note for admins about why this schedule was created or adjusted." },
+      { key: "generated_from_rotation", label: "Generated From Rotation", type: "boolean", helpText: "Set Yes when this schedule came from a rotation pattern." },
+      { key: "is_off_day", label: "Off Day", type: "boolean", helpText: "Set Yes when the selected date should be treated as an off day." },
     ],
   },
   "shift-templates": {
@@ -960,7 +975,11 @@ function toPayload(
     const raw = values[field.key] ?? ""
     const trimmed = raw.trim()
 
-    if (field.required && !trimmed) {
+    if (
+      field.required &&
+      !trimmed &&
+      !(field.key === "employee_id" && fieldKeys.has("employee_ids") && (values.employee_ids ?? "").trim())
+    ) {
       throw new Error(`${field.label} is required.`)
     }
 
@@ -1099,6 +1118,7 @@ function mapLookupOptions(field: FieldConfig, lookups: LookupState) {
         return readStringFromRecord(row, ["name", "department_name", "title"]) ?? `Department ${id}`
       })
     case "employee_id":
+    case "employee_ids":
       return lookups.employees
         .map((row) => {
           const directNestedEmployee = readNestedRecord(row, ["employee", "user", "staff", "person"])
@@ -1872,8 +1892,43 @@ export function ScheduleManagementView({ section }: { section: string }) {
 
     try {
       const payload = toPayload(fields, createValues, { currentUserId })
-      await createScheduleRow(token, activeSection, payload)
-      setMessage("Created successfully.")
+      if (activeSection === "shift-schedules") {
+        const bulkEmployeeIds = Array.isArray(payload.employee_ids)
+          ? payload.employee_ids.map((entry) => String(entry).trim()).filter(Boolean)
+          : []
+        const singleEmployeeId =
+          typeof payload.employee_id === "string" || typeof payload.employee_id === "number"
+            ? String(payload.employee_id).trim()
+            : ""
+        const targetEmployeeIds = bulkEmployeeIds.length > 0
+          ? bulkEmployeeIds
+          : singleEmployeeId
+            ? [singleEmployeeId]
+            : []
+
+        if (targetEmployeeIds.length === 0) {
+          throw new Error("Select one employee or choose Bulk Employees before creating schedules.")
+        }
+
+        const basePayload = { ...payload }
+        delete basePayload.employee_ids
+        await Promise.all(
+          targetEmployeeIds.map((employeeId) =>
+            createScheduleRow(token, activeSection, {
+              ...basePayload,
+              employee_id: employeeId,
+            })
+          )
+        )
+        setMessage(
+          targetEmployeeIds.length > 1
+            ? `Created ${targetEmployeeIds.length} shift schedules successfully.`
+            : "Created successfully."
+        )
+      } else {
+        await createScheduleRow(token, activeSection, payload)
+        setMessage("Created successfully.")
+      }
       setFormError(null)
       setCreateOpen(false)
       clearPersistedFormState(createDraftKey)
@@ -1957,11 +2012,12 @@ export function ScheduleManagementView({ section }: { section: string }) {
 
   const renderForm = (
     values: Record<string, string>,
-    onChange: React.Dispatch<React.SetStateAction<Record<string, string>>>
+    onChange: React.Dispatch<React.SetStateAction<Record<string, string>>>,
+    mode: "create" | "edit"
   ) => (
     <div className="grid gap-4 md:grid-cols-2">
       {fields.map((field) => (
-        field.hidden ? null : (
+        field.hidden || (field.createOnly && mode !== "create") || (field.editOnly && mode !== "edit") ? null : (
         <label
           key={field.key}
           className={`grid gap-1 text-sm ${field.type === "textarea" || field.type === "multiselect" ? "md:col-span-2" : ""}`}
@@ -2155,9 +2211,14 @@ export function ScheduleManagementView({ section }: { section: string }) {
         <DialogPopup className="flex max-h-[90vh] w-[min(1100px,96vw)] flex-col overflow-hidden sm:max-w-5xl">
           <DialogHeader>
             <DialogTitle>Create {config.title.toLowerCase()}</DialogTitle>
+            {activeSection === "shift-schedules" ? (
+              <DialogDescription>
+                Use Employee for a single schedule, or Bulk Employees to assign the same shift and date to many employees in one action. Shift and Schedule Date are the main required fields.
+              </DialogDescription>
+            ) : null}
           </DialogHeader>
           <div className="min-h-0 flex-1 overflow-y-auto pr-1">
-            {renderForm(createValues, setCreateValues)}
+            {renderForm(createValues, setCreateValues, "create")}
           </div>
           <DialogFooter>
             <button
@@ -2182,9 +2243,14 @@ export function ScheduleManagementView({ section }: { section: string }) {
         <DialogPopup className="flex max-h-[90vh] w-[min(1100px,96vw)] flex-col overflow-hidden sm:max-w-5xl">
           <DialogHeader>
             <DialogTitle>Edit {config.title.toLowerCase()}</DialogTitle>
+            {activeSection === "shift-schedules" ? (
+              <DialogDescription>
+                Update the selected employee schedule details here. Bulk Employees is only available when creating new schedules.
+              </DialogDescription>
+            ) : null}
           </DialogHeader>
           <div className="min-h-0 flex-1 overflow-y-auto pr-1">
-            {renderForm(editValues, setEditValues)}
+            {renderForm(editValues, setEditValues, "edit")}
           </div>
           <DialogFooter>
             <button

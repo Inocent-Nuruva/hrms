@@ -1,15 +1,16 @@
 import React from 'react';
-import { View, StyleSheet, ViewStyle, useColorScheme } from 'react-native';
+import { View, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 
 import { COLORS } from '../../lib/config';
+import { useThemePreference } from '../../hooks/useThemePreference';
 
 interface CardProps {
   children: React.ReactNode;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
 }
 
 export function Card({ children, style }: CardProps) {
-  const isDark = useColorScheme() === 'dark';
+  const { isDark } = useThemePreference();
 
   return (
     <View
@@ -30,7 +31,7 @@ export function Card({ children, style }: CardProps) {
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 22,
+    borderRadius: 14,
     borderWidth: 1,
     padding: 18,
     shadowOffset: { width: 0, height: 10 },

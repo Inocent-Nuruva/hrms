@@ -1944,7 +1944,7 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
             </div>
 
             <TableScrollContainer>
-              <table className="w-full min-w-[900px] text-sm">
+              <table className="w-full min-w-[720px] text-sm">
                 <thead className="bg-slate-50/90">
                   <tr>
                     {["employee_no", "employee_name", "status", "created_at"].map((column) => (

@@ -1,13 +1,28 @@
 import React from 'react';
-import { View, ActivityIndicator, StyleSheet, useColorScheme, type ViewStyle } from 'react-native';
+import { View, ActivityIndicator, StyleSheet, useColorScheme, type ViewStyle, Platform } from 'react-native';
 import { PaperProvider, MD3LightTheme, MD3DarkTheme } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import * as Notifications from 'expo-notifications';
 
 import { COLORS } from '../lib/config';
-import { useAuth } from '../hooks/useAuth';
+import { AuthProvider, useAuth } from '../hooks/useAuth';
+import { NotificationsProvider } from '../hooks/useNotifications';
+import { ThemePreferenceProvider, useThemePreference } from '../hooks/useThemePreference';
+import { ToastProvider } from '../hooks/useToast';
+
+if (Platform.OS !== 'web') {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -29,9 +44,10 @@ function createAppTheme(colorScheme: 'light' | 'dark' | null | 'unspecified' | u
       ...base.colors,
       primary: COLORS.primary,
       onPrimary: COLORS.onPrimary,
-      primaryContainer: isDark ? '#1f215a' : '#e8ebff',
-      onPrimaryContainer: isDark ? '#eef1ff' : '#25267a',
-      secondary: COLORS.primary,
+      primaryContainer: isDark ? '#1f2a5e' : '#e0e5f5',
+      onPrimaryContainer: isDark ? '#e0e5f5' : '#1f2a5e',
+      secondary: COLORS.accent,
+      onSecondary: COLORS.onAccent,
       surface: isDark ? COLORS.surfaceDark : COLORS.surface,
       surfaceVariant: isDark ? COLORS.surfaceVariantDark : COLORS.surfaceVariant,
       onSurface: isDark ? COLORS.onSurfaceDark : COLORS.onSurface,
@@ -40,11 +56,11 @@ function createAppTheme(colorScheme: 'light' | 'dark' | null | 'unspecified' | u
       background: isDark ? COLORS.backgroundDark : COLORS.background,
       elevation: {
         level0: isDark ? COLORS.backgroundDark : COLORS.background,
-        level1: isDark ? '#141417' : '#fafafa',
-        level2: isDark ? '#18181b' : '#f7f7f7',
-        level3: isDark ? '#202024' : '#f4f4f5',
-        level4: isDark ? '#242428' : '#f0f0f0',
-        level5: isDark ? '#2a2a2f' : '#ebebeb',
+        level1: isDark ? '#1a2138' : '#f0f2f8',
+        level2: isDark ? '#1f2740' : '#e8ebf5',
+        level3: isDark ? '#242f5c' : '#e0e5f5',
+        level4: isDark ? '#2a3566' : '#d8ddf0',
+        level5: isDark ? '#2f3a70' : '#d0d8f0',
       },
       error: COLORS.error,
       onError: '#ffffff',
@@ -53,38 +69,61 @@ function createAppTheme(colorScheme: 'light' | 'dark' | null | 'unspecified' | u
 }
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
-  const appTheme = createAppTheme(colorScheme);
-  const auth = useAuth();
-
-  // Always render providers + Stack.
-  // Individual routes (login / tabs) will handle redirects based on auth.
   return (
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
-        <PaperProvider theme={appTheme}>
-          <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="login" />
-            <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="index" />
-          </Stack>
-
-          {/* Global loading overlay while restoring session */}
-          {auth.isLoading && (
-            <View style={[StyleSheet.absoluteFillObject, styles.loadingOverlay, { backgroundColor: appTheme.colors.background }] }>
-              <ActivityIndicator size="large" color={COLORS.primary} />
-            </View>
-          )}
-        </PaperProvider>
+        <ThemePreferenceProvider>
+          <ThemedApp />
+        </ThemePreferenceProvider>
       </QueryClientProvider>
     </SafeAreaProvider>
   );
 }
 
+function ThemedApp() {
+  const { colorScheme } = useThemePreference();
+  const appTheme = createAppTheme(colorScheme);
+
+  return (
+    <PaperProvider theme={appTheme}>
+      <AuthProvider>
+        <ToastProvider>
+          <NotificationsProvider>
+            <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
+            <RootNavigator backgroundColor={appTheme.colors.background} />
+          </NotificationsProvider>
+        </ToastProvider>
+      </AuthProvider>
+    </PaperProvider>
+  );
+}
+
+function RootNavigator({ backgroundColor }: { backgroundColor: string }) {
+  const auth = useAuth();
+
+  return (
+    <>
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="login" />
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="index" />
+        <Stack.Screen name="promotions" />
+        <Stack.Screen name="shift" />
+        <Stack.Screen name="payroll" />
+      </Stack>
+
+      {auth.isLoading && (
+        <View style={[StyleSheet.absoluteFill, styles.loadingOverlay, { backgroundColor }]}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+        </View>
+      )}
+    </>
+  );
+}
+
 const styles = StyleSheet.create<{ loadingOverlay: ViewStyle }>({
   loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 100,

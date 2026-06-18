@@ -1,7 +1,8 @@
 import React from 'react';
-import { TextInput, StyleSheet, TextInputProps, View, Text, useColorScheme } from 'react-native';
+import { TextInput, StyleSheet, TextInputProps, View, Text } from 'react-native';
 
 import { COLORS } from '../../lib/config';
+import { useThemePreference } from '../../hooks/useThemePreference';
 
 interface InputProps extends TextInputProps {
   label?: string;
@@ -9,7 +10,7 @@ interface InputProps extends TextInputProps {
 }
 
 export function Input({ label, hint, style, ...props }: InputProps) {
-  const isDark = useColorScheme() === 'dark';
+  const { isDark } = useThemePreference();
 
   return (
     <View style={styles.wrapper}>

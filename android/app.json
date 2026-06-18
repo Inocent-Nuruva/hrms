@@ -36,6 +36,20 @@
           }
         }
       ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Allow HRMS to use Face ID or biometrics for quick sign in."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "sounds": [
+            "./assets/sounds/mixkit-software-interface-remove-2576.wav"
+          ]
+        }
+      ],
       "expo-secure-store",
       "expo-status-bar"
     ],

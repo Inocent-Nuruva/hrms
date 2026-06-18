@@ -45,6 +45,7 @@ import {
   listAttendanceSettings,
   listAttendanceWifiNetworks,
   listBranches,
+  listEmployees,
   updateAttendanceResourceById,
   type AdminRecord,
   type AttendanceResourceKey,
@@ -566,7 +567,7 @@ function resolveVisibleColumns(section: AttendanceSectionKey, rows: AdminRecord[
     checkpoints: ["name", "type", "policy_set_id", "status"],
     geofences: ["name", "status", "type", "branchId"],
     "wifi-networks": ["name", "status", "ssid"],
-    "mobile-punches": ["employeeId", "attendanceDate", "punchType", "validationStatus"],
+    "mobile-punches": ["employee_name", "attendanceDate", "punchType", "validationStatus"],
     "holiday-groups": ["name", "status", "start_date", "end_date"],
     holidays: ["name", "date", "type", "branch_id"],
     "device-sync-logs": ["status", "records_synced", "created_at", "device_id"],
@@ -575,6 +576,9 @@ function resolveVisibleColumns(section: AttendanceSectionKey, rows: AdminRecord[
   const preferred = preferredBySection[section] ?? ["name", "status", "type", "created_at"]
   const keySet = new Set<string>()
   rows.forEach((row) => Object.keys(row).forEach((key) => keySet.add(key)))
+  if (section === "mobile-punches") {
+    return preferred
+  }
   const ordered = preferred.filter((key) => keySet.has(key))
   const extras = Array.from(keySet).filter((key) => !ordered.includes(key)).sort((a, b) => a.localeCompare(b))
   return [...ordered, ...extras].slice(0, Math.max(ordered.length, 4))
@@ -904,6 +908,7 @@ function toPayload(fields: FieldConfig[], values: Record<string, string>) {
 
 function buildAttendanceLookupLabelMaps({
   companyName,
+  employees,
   branches,
   policies,
   devices,
@@ -912,6 +917,7 @@ function buildAttendanceLookupLabelMaps({
   holidayGroups,
 }: {
   companyName: string | null
+  employees: AdminRecord[]
   branches: AdminRecord[]
   policies: AdminRecord[]
   devices: AdminRecord[]
@@ -935,6 +941,34 @@ function buildAttendanceLookupLabelMaps({
   return {
     company_id: new Map(companyName ? [["1", companyName]] : []),
     companyId: new Map(companyName ? [["1", companyName]] : []),
+    employee_id: toMap(employees, ["id", "employee_id", "employeeId"], (row, id) => {
+      const employeeNo = readStringFromRecord(row, ["employee_no", "employeeNo"])
+      const fullName =
+        readStringFromRecord(row, ["employee_name", "employeeName", "full_name", "fullName", "display_name", "displayName", "name"]) ??
+        [
+          readStringFromRecord(row, ["first_name", "firstName", "preferred_name", "preferredName"]),
+          readStringFromRecord(row, ["middle_name", "middleName"]),
+          readStringFromRecord(row, ["last_name", "lastName"]),
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .trim()
+      return fullName ? (employeeNo ? `${fullName} (${employeeNo})` : fullName) : `Employee ${id}`
+    }),
+    employeeId: toMap(employees, ["id", "employee_id", "employeeId"], (row, id) => {
+      const employeeNo = readStringFromRecord(row, ["employee_no", "employeeNo"])
+      const fullName =
+        readStringFromRecord(row, ["employee_name", "employeeName", "full_name", "fullName", "display_name", "displayName", "name"]) ??
+        [
+          readStringFromRecord(row, ["first_name", "firstName", "preferred_name", "preferredName"]),
+          readStringFromRecord(row, ["middle_name", "middleName"]),
+          readStringFromRecord(row, ["last_name", "lastName"]),
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .trim()
+      return fullName ? (employeeNo ? `${fullName} (${employeeNo})` : fullName) : `Employee ${id}`
+    }),
     branch_id: toMap(branches, ["id", "branch_id"], (row, id) => {
       return readStringFromRecord(row, ["name", "title", "display_name"]) ?? `Branch ${id}`
     }),
@@ -964,6 +998,23 @@ function resolveAttendanceCellValue(
   row: AdminRecord,
   lookupMaps: Record<string, Map<string, string>>
 ) {
+  if (column === "employee_name") {
+    const directName =
+      readStringFromRecord(row, ["employee_name", "employeeName", "full_name", "fullName", "display_name", "displayName", "name"])
+    if (directName) {
+      return directName
+    }
+
+    const rawEmployeeId = row.employeeId ?? row.employee_id
+    if (typeof rawEmployeeId === "string" || typeof rawEmployeeId === "number") {
+      return (
+        lookupMaps.employeeId?.get(String(rawEmployeeId)) ??
+        lookupMaps.employee_id?.get(String(rawEmployeeId)) ??
+        formatAdminValue(rawEmployeeId)
+      )
+    }
+  }
+
   const raw = row[column]
   const map = lookupMaps[column]
   if (map && (typeof raw === "string" || typeof raw === "number")) {
@@ -1440,12 +1491,14 @@ export function AttendanceManagementView({ section }: { section: string }) {
   const isReadOnlySection = READ_ONLY_SECTIONS.has(activeSection)
   const [rows, setRows] = React.useState<AdminRecord[]>([])
   const [branches, setBranches] = React.useState<AdminRecord[]>([])
+  const [employees, setEmployees] = React.useState<AdminRecord[]>([])
   const [policies, setPolicies] = React.useState<AdminRecord[]>([])
   const [devices, setDevices] = React.useState<AdminRecord[]>([])
   const [geofences, setGeofences] = React.useState<AdminRecord[]>([])
   const [wifiNetworks, setWifiNetworks] = React.useState<AdminRecord[]>([])
   const [holidayGroups, setHolidayGroups] = React.useState<AdminRecord[]>([])
   const [branchesLoading, setBranchesLoading] = React.useState(false)
+  const [employeesLoading, setEmployeesLoading] = React.useState(false)
   const [policiesLoading, setPoliciesLoading] = React.useState(false)
   const [devicesLoading, setDevicesLoading] = React.useState(false)
   const [geofencesLoading, setGeofencesLoading] = React.useState(false)
@@ -1557,6 +1610,52 @@ export function AttendanceManagementView({ section }: { section: string }) {
   React.useEffect(() => {
     void fetchRows()
   }, [fetchRows])
+
+  React.useEffect(() => {
+    const needsEmployees = activeSection === "mobile-punches"
+    if (!needsEmployees) {
+      setEmployees([])
+      setEmployeesLoading(false)
+      return
+    }
+
+    const token = readStoredToken()
+    if (!token) {
+      setEmployees([])
+      return
+    }
+
+    let cancelled = false
+
+    const loadEmployees = async () => {
+      setEmployeesLoading(true)
+      try {
+        const result = await listEmployees(token, {
+          page: 1,
+          limit: 200,
+          sortBy: "created_at",
+          sortOrder: "DESC",
+        })
+        if (!cancelled) {
+          setEmployees(result.rows)
+        }
+      } catch {
+        if (!cancelled) {
+          setEmployees([])
+        }
+      } finally {
+        if (!cancelled) {
+          setEmployeesLoading(false)
+        }
+      }
+    }
+
+    void loadEmployees()
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeSection])
 
   React.useEffect(() => {
     const needsBranches = fields.some(
@@ -1751,6 +1850,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
     () =>
       buildAttendanceLookupLabelMaps({
         companyName: currentCompanyName,
+        employees,
         branches,
         policies,
         devices,
@@ -1758,7 +1858,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
         wifiNetworks,
         holidayGroups,
       }),
-    [branches, currentCompanyName, devices, geofences, holidayGroups, policies, wifiNetworks]
+    [branches, currentCompanyName, devices, employees, geofences, holidayGroups, policies, wifiNetworks]
   )
   const showDeviceContextColumn = isDeviceSyncLogsSection
   const sectionGuidance = React.useMemo(() => getSectionSetupGuidance(activeSection), [activeSection])

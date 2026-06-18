@@ -1,5 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { COLORS } from '../../lib/config';
 
 type Tone = 'neutral' | 'success' | 'warning' | 'danger' | 'info';
 
@@ -7,8 +8,8 @@ const TONE_STYLES: Record<Tone, { backgroundColor: string; color: string }> = {
   neutral: { backgroundColor: '#f4f4f5', color: '#27272a' },
   success: { backgroundColor: '#dcfce7', color: '#166534' },
   warning: { backgroundColor: '#fef3c7', color: '#92400e' },
-  danger: { backgroundColor: '#fee2e2', color: '#b91c1c' },
-  info: { backgroundColor: '#e0ecff', color: '#1d4ed8' },
+  danger: { backgroundColor: '#fee2e2', color: '#dd3740' },
+  info: { backgroundColor: '#e0e5f5', color: COLORS.primary || '#2e3d8a' },
 }
 
 export function StatusPill({ label, tone = 'neutral' }: { label: string; tone?: Tone }) {

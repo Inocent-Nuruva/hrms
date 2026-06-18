@@ -1,6 +1,12 @@
-import { useState, useEffect, useCallback } from 'react';
+import { createContext, createElement, useState, useEffect, useCallback, useContext, type ReactNode } from 'react';
+import { Platform } from 'react-native';
 import { api, saveTokens, clearTokens, loadTokensFromStorage, AuthTokens, AuthUser } from '../lib/api';
 import * as SecureStore from '../lib/secure-store'; // use wrapper (fixes ExpoSecureStore.default.setValueWithKeyAsync on web)
+import {
+  authenticateWithBiometrics as promptBiometricAuth,
+  getBiometricStatus,
+  setBiometricEnabled as storeBiometricEnabled,
+} from '../lib/biometrics';
 import { normalizeSingle } from '../lib/api';
 
 type AnyRecord = Record<string, unknown>;
@@ -8,33 +14,64 @@ type AnyRecord = Record<string, unknown>;
 interface AuthState {
   isLoading: boolean;
   isAuthenticated: boolean;
+  hasStoredSession: boolean;
   user: AuthUser | null;
   employee: any | null;
   error: string | null;
   requiresOtp: boolean;
   tempToken: string | null;
+  biometricEnabled: boolean;
+  biometricEnrolled: boolean;
+  biometricLocked: boolean;
+  biometricSupported: boolean;
+  biometricTypeLabel: string;
 }
 
-export function useAuth() {
+function useProvideAuth() {
   const [state, setState] = useState<AuthState>({
     isLoading: true,
     isAuthenticated: false,
+    hasStoredSession: false,
     user: null,
     employee: null,
     error: null,
     requiresOtp: false,
     tempToken: null,
+    biometricEnabled: false,
+    biometricEnrolled: false,
+    biometricLocked: false,
+    biometricSupported: false,
+    biometricTypeLabel: 'Fingerprint',
   });
 
   const resetOtp = useCallback(() => {
     setState((s) => ({ ...s, requiresOtp: false, tempToken: null, error: null }));
   }, []);
 
-  const loadSession = useCallback(async () => {
+  const clearError = useCallback(() => {
+    setState((s) => ({ ...s, error: null }));
+  }, []);
+
+  const loadSession = useCallback(async ({ skipBiometricLock = false }: { skipBiometricLock?: boolean } = {}) => {
     setState((s) => ({ ...s, isLoading: true }));
-    const tokens = await loadTokensFromStorage();
+    const [tokens, biometricStatus] = await Promise.all([
+      loadTokensFromStorage(),
+      getBiometricStatus(),
+    ]);
     if (!tokens) {
-      setState((s) => ({ ...s, isLoading: false, isAuthenticated: false }));
+      setState((s) => ({
+        ...s,
+        isLoading: false,
+        isAuthenticated: false,
+        hasStoredSession: biometricStatus.enabled,
+        user: null,
+        employee: null,
+        biometricEnabled: biometricStatus.enabled,
+        biometricEnrolled: biometricStatus.enrolled,
+        biometricLocked: false,
+        biometricSupported: biometricStatus.supported,
+        biometricTypeLabel: biometricStatus.label,
+      }));
       return;
     }
 
@@ -49,24 +86,33 @@ export function useAuth() {
       const employee = await normalizeSingle(empPayload);
 
       // Fallbacks for name
+      const empName = employee ? [employee.first_name, employee.last_name, employee.full_name].filter(Boolean).join(' ') : '';
       const finalUser: AuthUser = user || {
         id: 'me',
-        fullName: 'Employee',
-        email: '',
+        fullName: empName || 'Employee',
+        email: (user as any)?.email || (employee as any)?.email || '',
       };
 
       // Persist lightly
       if (user) await SecureStore.setItemAsync('hrms.user', JSON.stringify(user)).catch(() => {});
       if (employee) await SecureStore.setItemAsync('hrms.employee', JSON.stringify(employee)).catch(() => {});
 
+      const biometricLocked = biometricStatus.enabled && !skipBiometricLock;
+
       setState({
         isLoading: false,
-        isAuthenticated: true,
+        isAuthenticated: !biometricLocked,
+        hasStoredSession: true,
         user: finalUser,
         employee,
         error: null,
         requiresOtp: false,
         tempToken: null,
+        biometricEnabled: biometricStatus.enabled,
+        biometricEnrolled: biometricStatus.enrolled,
+        biometricLocked,
+        biometricSupported: biometricStatus.supported,
+        biometricTypeLabel: biometricStatus.label,
       });
     } catch (e: unknown) {
       // Invalid token probably
@@ -74,11 +120,17 @@ export function useAuth() {
       setState({
         isLoading: false,
         isAuthenticated: false,
+        hasStoredSession: biometricStatus.enabled,
         user: null,
         employee: null,
         error: null,
         requiresOtp: false,
         tempToken: null,
+        biometricEnabled: biometricStatus.enabled,
+        biometricEnrolled: biometricStatus.enrolled,
+        biometricLocked: false,
+        biometricSupported: biometricStatus.supported,
+        biometricTypeLabel: biometricStatus.label,
       });
     }
   }, []);
@@ -138,11 +190,12 @@ export function useAuth() {
       setState((s) => ({
         ...s,
         isLoading: false,
+        hasStoredSession: !!tokens,
         requiresOtp: false,
         tempToken: null,
       }));
 
-      await loadSession();
+      await loadSession({ skipBiometricLock: true });
       return { requiresOtp: false };
     } catch (e: unknown) {
       const msg = (e as Error)?.message || 'Login failed. Check your credentials.';
@@ -162,7 +215,7 @@ export function useAuth() {
       if (tokens) await saveTokens(tokens);
 
       setState((s) => ({ ...s, requiresOtp: false, tempToken: null, isLoading: false }));
-      await loadSession();
+      await loadSession({ skipBiometricLock: true });
     } catch (e: unknown) {
       const msg = (e as Error)?.message || 'Invalid code. Please try again.';
       setState((s) => ({ ...s, isLoading: false, error: msg }));
@@ -172,25 +225,124 @@ export function useAuth() {
 
   const logout = useCallback(async () => {
     const rt = (await SecureStore.getItemAsync('hrms.refreshToken')) || undefined;
+    const biometricStatus = await getBiometricStatus();
     await api.logout(rt);
-    await clearTokens();
+    if (!biometricStatus.enabled) {
+      await clearTokens();
+    }
     setState({
       isLoading: false,
       isAuthenticated: false,
+      hasStoredSession: biometricStatus.enabled,
       user: null,
       employee: null,
       error: null,
       requiresOtp: false,
       tempToken: null,
+      biometricEnabled: biometricStatus.enabled,
+      biometricEnrolled: biometricStatus.enrolled,
+      biometricLocked: false,
+      biometricSupported: biometricStatus.supported,
+      biometricTypeLabel: biometricStatus.label,
     });
   }, []);
 
   const refreshProfile = useCallback(async () => {
-    await loadSession();
+    await loadSession({ skipBiometricLock: true });
   }, [loadSession]);
+
+  const enableBiometricLogin = useCallback(async () => {
+    setState((s) => ({ ...s, isLoading: true, error: null }));
+
+    try {
+      const biometricStatus = await getBiometricStatus();
+      if (!biometricStatus.supported || !biometricStatus.enrolled) {
+        throw new Error(
+          Platform.OS === 'web'
+            ? 'Fingerprint login is only available in the Android or iPhone app, not the browser preview.'
+            : 'Fingerprint login is not available on this device yet.'
+        );
+      }
+
+      const confirmed = await promptBiometricAuth(
+        biometricStatus.label,
+        `Confirm your ${biometricStatus.label.toLowerCase()} to enable quick sign in`
+      );
+
+      if (!confirmed) {
+        throw new Error(`${biometricStatus.label} confirmation was cancelled.`);
+      }
+
+      await storeBiometricEnabled(true);
+      setState((s) => ({
+        ...s,
+        isLoading: false,
+        hasStoredSession: true,
+        biometricEnabled: true,
+        biometricEnrolled: biometricStatus.enrolled,
+        biometricSupported: biometricStatus.supported,
+        biometricTypeLabel: biometricStatus.label,
+      }));
+      return true;
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : 'Unable to enable fingerprint login.';
+      setState((s) => ({ ...s, isLoading: false, error: message }));
+      throw e;
+    }
+  }, []);
+
+  const disableBiometricLogin = useCallback(async () => {
+    await storeBiometricEnabled(false);
+    const biometricStatus = await getBiometricStatus();
+    setState((s) => ({
+        ...s,
+        biometricEnabled: false,
+        biometricEnrolled: biometricStatus.enrolled,
+        biometricLocked: false,
+        biometricSupported: biometricStatus.supported,
+        biometricTypeLabel: biometricStatus.label,
+      }));
+  }, []);
+
+  const authenticateWithBiometricLogin = useCallback(async () => {
+    if (!state.biometricEnabled) {
+      return false;
+    }
+
+    setState((s) => ({ ...s, isLoading: true, error: null }));
+
+    try {
+      const confirmed = await promptBiometricAuth(
+        state.biometricTypeLabel,
+        `Use ${state.biometricTypeLabel.toLowerCase()} to sign in`
+      );
+
+      if (confirmed) {
+        await loadSession({ skipBiometricLock: true });
+        // loadSession sets isLoading:false and isAuthenticated:true + user data
+      } else {
+        setState((s) => ({
+          ...s,
+          isLoading: false,
+          isAuthenticated: false,
+          biometricLocked: true,
+        }));
+      }
+
+      return confirmed;
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : 'Fingerprint authentication failed.';
+      setState((s) => ({ ...s, isLoading: false, error: message }));
+      throw e;
+    }
+  }, [state.biometricEnabled, state.biometricTypeLabel, loadSession]);
 
   return {
     ...state,
+    authenticateWithBiometricLogin,
+    clearError,
+    disableBiometricLogin,
+    enableBiometricLogin,
     login,
     verifyOtp,
     logout,
@@ -199,7 +351,22 @@ export function useAuth() {
   };
 }
 
-export type UseAuthReturn = ReturnType<typeof useAuth>;
+export type UseAuthReturn = ReturnType<typeof useProvideAuth>;
+
+const AuthContext = createContext<UseAuthReturn | null>(null);
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const auth = useProvideAuth();
+  return createElement(AuthContext.Provider, { value: auth }, children);
+}
+
+export function useAuth() {
+  const auth = useContext(AuthContext);
+  if (!auth) {
+    throw new Error('useAuth must be used within an AuthProvider.');
+  }
+  return auth;
+}
 
 function extractTokens(payload: unknown): AuthTokens | null {
   if (!payload || typeof payload !== 'object') return null;

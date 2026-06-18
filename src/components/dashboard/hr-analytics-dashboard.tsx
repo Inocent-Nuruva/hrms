@@ -22,6 +22,7 @@ import {
   listOffboardingRequests,
   type AdminRecord,
 } from "@/lib/admin-api"
+import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
@@ -77,6 +78,16 @@ function formatDateShort(value: unknown): string {
   const d = new Date(String(value))
   if (Number.isNaN(d.getTime())) return "-"
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+}
+
+function formatInputDate(value: Date) {
+  return value.toISOString().slice(0, 10)
+}
+
+function shiftDays(value: Date, days: number) {
+  const next = new Date(value)
+  next.setDate(next.getDate() + days)
+  return next
 }
 
 function getEmployeeName(row: AdminRecord): string {
@@ -181,7 +192,15 @@ interface Metric {
   value: string | number
   sub?: string
   icon: React.ComponentType<{ className?: string }>
+  tone?: "slate" | "blue" | "emerald" | "amber" | "rose"
 }
+
+type PagedRowsResult = {
+  rows: AdminRecord[]
+  total: number | null
+}
+
+type AttendanceListResult = AdminRecord[] | { rows?: AdminRecord[] }
 
 interface HrAnalyticsDashboardProps {
   refreshKey?: number
@@ -192,7 +211,8 @@ export default function HrAnalyticsDashboard({ refreshKey = 0 }: HrAnalyticsDash
   const [error, setError] = React.useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
 
-  const [range, setRange] = React.useState<"7d" | "30d" | "90d" | "all">("30d")
+  const [fromDate, setFromDate] = React.useState(() => formatInputDate(shiftDays(new Date(), -30)))
+  const [toDate, setToDate] = React.useState(() => formatInputDate(new Date()))
 
   const [employees, setEmployees] = React.useState<AdminRecord[]>([])
   const [employeesTotal, setEmployeesTotal] = React.useState<number | null>(null)
@@ -221,45 +241,36 @@ export default function HrAnalyticsDashboard({ refreshKey = 0 }: HrAnalyticsDash
     setLoading(true)
     setError(null)
 
-    // Compute date filters for this range (closed over current range)
-    let from_date: string | undefined
-    let to_date: string | undefined
-    if (range !== "all") {
-      const now = new Date()
-      const from = new Date(now)
-      const days = range === "7d" ? 7 : range === "30d" ? 30 : 90
-      from.setDate(from.getDate() - days)
-      from_date = from.toISOString().slice(0, 10)
-      to_date = now.toISOString().slice(0, 10)
-    }
+    const from_date = fromDate.trim() || undefined
+    const to_date = toDate.trim() || undefined
 
-    const leaveParams: any = { page: 1, limit: 40 }
+    const leaveParams: Record<string, string | number> = { page: 1, limit: 40 }
     if (from_date) leaveParams.from_date = from_date
     if (to_date) leaveParams.to_date = to_date
 
-    const attParams: any = { page: 1, limit: 30 }
+    const attParams: Record<string, string | number> = { page: 1, limit: 30 }
     if (from_date) attParams.from_date = from_date
     if (to_date) attParams.to_date = to_date
 
     try {
       const [empRes, deptRes, leaveRes, attRes, onboardRes, offboardRes] = await Promise.all([
-        listEmployees(token, { page: 1, limit: 200 }).catch(() => ({ rows: [] as AdminRecord[], total: null })),
-        listDepartments(token, { page: 1, limit: 100 }).catch(() => ({ rows: [] as AdminRecord[], total: null })),
-        listLeaveRequests(token, leaveParams).catch(() => ({ rows: [] as AdminRecord[], total: null })),
-        listAttendanceDailySummaries(token, attParams).catch(() => [] as AdminRecord[]),
-        listOnboardingRequests(token, { page: 1, limit: 50 }).catch(() => ({ rows: [] as AdminRecord[] })),
-        listOffboardingRequests(token, { page: 1, limit: 50 }).catch(() => ({ rows: [] as AdminRecord[] })),
+        listEmployees(token, { page: 1, limit: 200 }).catch((): PagedRowsResult => ({ rows: [], total: null })),
+        listDepartments(token, { page: 1, limit: 100 }).catch((): PagedRowsResult => ({ rows: [], total: null })),
+        listLeaveRequests(token, leaveParams).catch((): PagedRowsResult => ({ rows: [], total: null })),
+        listAttendanceDailySummaries(token, attParams).catch((): AttendanceListResult => []),
+        listOnboardingRequests(token, { page: 1, limit: 50 }).catch((): PagedRowsResult => ({ rows: [], total: null })),
+        listOffboardingRequests(token, { page: 1, limit: 50 }).catch((): PagedRowsResult => ({ rows: [], total: null })),
       ])
 
-      const empRows = (empRes as any).rows ?? []
-      const deptRows = (deptRes as any).rows ?? []
-      const leaveRows = (leaveRes as any).rows ?? []
-      const attRows = Array.isArray(attRes) ? attRes : ((attRes as any)?.rows ?? [])
-      const onboardRows = (onboardRes as any).rows ?? []
-      const offboardRows = (offboardRes as any).rows ?? []
+      const empRows = empRes.rows ?? []
+      const deptRows = deptRes.rows ?? []
+      const leaveRows = leaveRes.rows ?? []
+      const attRows = Array.isArray(attRes) ? attRes : (attRes.rows ?? [])
+      const onboardRows = onboardRes.rows ?? []
+      const offboardRows = offboardRes.rows ?? []
 
       setEmployees(empRows)
-      setEmployeesTotal((empRes as any).total ?? empRows.length)
+      setEmployeesTotal(empRes.total ?? empRows.length)
       setDepartments(deptRows)
       setLeaveRequests(leaveRows)
       setAttendanceSummaries(attRows)
@@ -275,8 +286,8 @@ export default function HrAnalyticsDashboard({ refreshKey = 0 }: HrAnalyticsDash
         if (did == null) return null
         const nm = readString(d, ["name", "department_name", "title"]) || `Dept #${did}`
         try {
-          const res = await listEmployees(token, { page: 1, limit: 1, department_id: did } as any)
-          const cnt = (res as any).total ?? (res as any).rows?.length ?? 0
+          const res = await listEmployees(token, { page: 1, limit: 1, department_id: did })
+          const cnt = res.total ?? res.rows?.length ?? 0
           return [nm, cnt] as [string, number]
         } catch {
           return [nm, 0] as [string, number]
@@ -290,7 +301,7 @@ export default function HrAnalyticsDashboard({ refreshKey = 0 }: HrAnalyticsDash
     } finally {
       setLoading(false)
     }
-  }, [range])
+  }, [fromDate, toDate])
 
   React.useEffect(() => {
     void fetchAll()
@@ -378,11 +389,10 @@ export default function HrAnalyticsDashboard({ refreshKey = 0 }: HrAnalyticsDash
 
   // Surface more: hires within the chosen date range (client-side on the loaded sample)
   const hiresInRange = React.useMemo(() => {
-    if (range === "all") return 0
-    const now = new Date()
-    const from = new Date(now)
-    const days = range === "7d" ? 7 : range === "30d" ? 30 : 90
-    from.setDate(from.getDate() - days)
+    if (!fromDate || !toDate) return 0
+    const from = new Date(fromDate)
+    const to = new Date(toDate)
+    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return 0
     let c = 0
     for (const e of employees) {
       const ds = readString(e, [
@@ -397,10 +407,10 @@ export default function HrAnalyticsDashboard({ refreshKey = 0 }: HrAnalyticsDash
       if (!ds) continue
       const d = new Date(ds)
       if (isNaN(d.getTime())) continue
-      if (d >= from && d <= now) c += 1
+      if (d >= from && d <= to) c += 1
     }
     return c
-  }, [employees, range])
+  }, [employees, fromDate, toDate])
 
   const pendingOnboarding = React.useMemo(() => {
     return onboardingRequests.filter((r) => {
@@ -422,209 +432,137 @@ export default function HrAnalyticsDashboard({ refreshKey = 0 }: HrAnalyticsDash
       value: totalHeadcount,
       sub: `${activeCount} active • ${activePct}%`,
       icon: UsersIcon,
+      tone: "blue",
     },
     {
       label: "Departments",
       value: departments.length || departmentHeadcounts.length || "-",
       sub: "Active structures",
       icon: Building2Icon,
+      tone: "slate",
     },
     {
       label: "Pending Leave",
       value: pendingLeaves,
       sub: "Awaiting action",
       icon: CalendarIcon,
+      tone: "amber",
     },
     {
       label: "Attendance",
       value: attendanceRate != null ? `${attendanceRate}%` : "—",
       sub: attendanceRate != null ? "Last period" : "No summary data",
       icon: ClockIcon,
+      tone: "emerald",
     },
     {
       label: "New hires",
       value: hiresInRange,
-      sub: range === "all" ? "All time (sample)" : `Last ${range}`,
+      sub: fromDate && toDate ? `${formatDateShort(fromDate)} - ${formatDateShort(toDate)}` : "Selected range",
       icon: UserCheckIcon,
+      tone: "blue",
     },
     {
       label: "Onboarding",
       value: pendingOnboarding,
       sub: "open requests",
       icon: UserPlusIcon,
+      tone: "emerald",
     },
     {
       label: "Offboarding",
       value: pendingOffboarding,
       sub: "open requests",
       icon: UserMinusIcon,
+      tone: "rose",
     },
   ]
 
   const statusOrder = ["active", "onboarding", "suspended", "terminated", "exited"]
 
-  const rangeOptions: Array<{ key: "7d" | "30d" | "90d" | "all"; label: string }> = [
-    { key: "7d", label: "7d" },
-    { key: "30d", label: "30d" },
-    { key: "90d", label: "90d" },
-    { key: "all", label: "All" },
-  ]
-
   return (
-    <div className="px-4 pb-10 pt-2 lg:px-6">
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
-        <div>
-          <div className="text-xs font-medium uppercase tracking-[0.08em] text-slate-500">Company overview</div>
-          <h1 className="text-xl font-semibold tracking-tight text-slate-900">Workforce Analytics</h1>
-          <div className="mt-2 flex items-center gap-1.5">
-            <span className="mr-1 text-[11px] uppercase tracking-[0.06em] text-slate-500">Range</span>
-            {rangeOptions.map((opt) => {
-              const active = range === opt.key
+    <div className="px-4 pb-10 pt-3 lg:px-6">
+      <section className="border-b border-slate-200 pb-5">
+        <div className="flex flex-col gap-5">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+            <div className="space-y-2">
+              <div>
+                <h1 className="text-2xl font-normal tracking-[-0.04em] text-slate-700 sm:text-[2.85rem]">
+                  Workforce Analytics
+                </h1>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 xl:justify-end">
+              <div className="grid min-w-[260px] gap-2 sm:grid-cols-2">
+                <DatePickerPresets value={fromDate} onChange={setFromDate} placeholder="From date" />
+                <DatePickerPresets value={toDate} onChange={setToDate} placeholder="To date" />
+              </div>
+              <button
+                type="button"
+                onClick={() => fetchAll()}
+                disabled={loading}
+                className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+              >
+                <RefreshCwIcon className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+                Refresh data
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setFromDate(formatInputDate(shiftDays(new Date(), -30)))
+                  setToDate(formatInputDate(new Date()))
+                }}
+                className="inline-flex items-center rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              >
+                Reset dates
+              </button>
+              <div className="text-xs text-slate-500">
+                {lastUpdated ? `Updated ${lastUpdated}` : "Waiting for latest sync"}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2 xl:grid-cols-4">
+            {metrics.map((m, idx) => {
               return (
-                <button
-                  key={opt.key}
-                  type="button"
-                  onClick={() => setRange(opt.key)}
-                  disabled={loading}
-                  className={`rounded-md border px-2.5 py-0.5 text-xs font-medium transition-colors ${
-                    active
-                      ? "border-slate-900 bg-slate-900 text-white"
-                      : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
-                  }`}
-                >
-                  {opt.label}
-                </button>
+                <div key={idx} className="flex items-start justify-between gap-4 border-b border-slate-200 pb-4 last:border-b-0 sm:last:border-b sm:nth-[3]:border-b-0 xl:border-b-0">
+                  <div className="min-w-0">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                      {m.label}
+                    </div>
+                    <div className="mt-2 text-4xl font-semibold tracking-[-0.05em] text-slate-950">
+                      {m.value}
+                    </div>
+                    {m.sub ? <div className="mt-1 text-sm leading-5 text-slate-500">{m.sub}</div> : null}
+                  </div>
+                </div>
               )
             })}
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => fetchAll()}
-          disabled={loading}
-          className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-        >
-          <RefreshCwIcon className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-          Refresh
-        </button>
-      </div>
+      </section>
 
       {error ? (
-        <div className="mb-4 flex items-start gap-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+        <div className="mt-5 flex items-start gap-2 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 shadow-sm">
           <AlertCircleIcon className="mt-0.5 h-4 w-4" />
           <span>{error}</span>
         </div>
       ) : null}
 
-      {/* Metrics */}
-      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7">
-        {metrics.map((m, idx) => {
-          const Icon = m.icon
-          return (
-            <div
-              key={idx}
-              className="rounded-xl border border-slate-200 bg-white px-4 py-3.5"
-            >
-              <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-slate-500">
-                <Icon className="h-3.5 w-3.5" />
-                {m.label}
-              </div>
-              <div className="mt-1.5 text-2xl font-semibold tabular-nums text-slate-900">{m.value}</div>
-              {m.sub ? <div className="mt-0.5 text-xs text-slate-500">{m.sub}</div> : null}
-            </div>
-          )
-        })}
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-        {/* Status breakdown */}
-        <div className="lg:col-span-5 rounded-xl border border-slate-200 bg-white">
-          <div className="border-b border-slate-100 px-4 py-3">
-            <div className="text-sm font-medium text-slate-800">Employment Status</div>
-            <div className="text-xs text-slate-500">Distribution from loaded records</div>
-          </div>
-          <div className="p-4">
-            {Object.keys(statusCounts).length === 0 ? (
-              <div className="py-6 text-center text-sm text-slate-500">No employee records yet.</div>
-            ) : (
-              <div className="space-y-2">
-                {statusOrder
-                  .filter((s) => statusCounts[s] != null)
-                  .concat(Object.keys(statusCounts).filter((s) => !statusOrder.includes(s)))
-                  .map((status) => {
-                    const count = statusCounts[status] || 0
-                    const pct = totalHeadcount > 0 ? Math.round((count / totalHeadcount) * 100) : 0
-                    return (
-                      <div key={status} className="flex items-center gap-3 text-sm">
-                        <div className="w-28 shrink-0 font-medium text-slate-700 capitalize">{status}</div>
-                        <div className="flex-1">
-                          <div className="h-2 w-full rounded bg-slate-100">
-                            <div
-                              className="h-2 rounded bg-slate-800"
-                              style={{ width: `${pct}%` }}
-                            />
-                          </div>
-                        </div>
-                        <div className="w-16 text-right tabular-nums text-slate-600">
-                          {count} <span className="text-slate-400">({pct}%)</span>
-                        </div>
-                      </div>
-                    )
-                  })}
-              </div>
-            )}
-          </div>
-          <div className="border-t border-slate-100 px-4 py-2 text-[11px] text-slate-500">
-            {totalHeadcount} total • based on current sample
-          </div>
-        </div>
-
-        {/* Department breakdown - clean horizontal bars (accurate counts via backend filter) */}
-        <div className="lg:col-span-7 rounded-xl border border-slate-200 bg-white">
-          <div className="border-b border-slate-100 px-4 py-3">
-            <div className="text-sm font-medium text-slate-800">Employees by Department</div>
-            <div className="text-xs text-slate-500">Top populated departments (live counts)</div>
-          </div>
-          <div className="p-4">
-            {departmentHeadcounts.length === 0 ? (
-              <div className="py-6 text-center text-sm text-slate-500">No departments found.</div>
-            ) : (
-              <div className="space-y-2.5">
-                {departmentHeadcounts.map(([name, count]) => {
-                  const width = Math.max(4, Math.round((count / maxDeptCount) * 100))
-                  return (
-                    <div key={name} className="grid grid-cols-[1fr,auto] items-center gap-x-4 text-sm">
-                      <div className="truncate pr-2 text-slate-700" title={name}>{name}</div>
-                      <div className="text-right tabular-nums text-slate-500 w-9">{count}</div>
-                      <div className="col-span-2 mt-1">
-                        <div className="h-1.5 w-full rounded bg-slate-100">
-                          <div className="h-1.5 rounded bg-slate-700" style={{ width: `${width}%` }} />
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-                {departmentHeadcounts.every(([, c]) => c === 0) && (
-                  <div className="pt-1 text-[11px] text-amber-600">All shown as 0 — no employees assigned or filter returned no matches. Check employee department linkages.</div>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-
+      <div className="mt-6 grid grid-cols-1 gap-x-8 gap-y-8 lg:grid-cols-12 lg:items-start">
         {/* Leave snapshot + recent requests */}
-        <div className="lg:col-span-5 rounded-xl border border-slate-200 bg-white">
-          <div className="border-b border-slate-100 px-4 py-3 flex items-center justify-between">
+        <section className="self-start lg:col-span-4">
+          <div className="flex items-center justify-between border-b border-slate-200 pb-3">
             <div>
-              <div className="text-sm font-medium text-slate-800">Leave Requests</div>
+              <div className="text-sm font-semibold text-slate-900">Leave Requests</div>
               <div className="text-xs text-slate-500">
-                {range === "all" ? "Latest activity" : `In selected range (${range})`}
+                {fromDate && toDate ? `${formatDateShort(fromDate)} to ${formatDateShort(toDate)}` : "Latest activity"}
               </div>
             </div>
             <div className="text-xs font-medium text-slate-500 tabular-nums">{leaveRequests.length} shown</div>
           </div>
 
-          <div className="p-4">
+          <div className="pt-4">
             {/* Status pills */}
             <div className="mb-3 flex flex-wrap gap-2">
               {Object.keys(leaveStatusCounts).length === 0 && (
@@ -635,7 +573,7 @@ export default function HrAnalyticsDashboard({ refreshKey = 0 }: HrAnalyticsDash
                 .map(([st, ct]) => (
                   <span
                     key={st}
-                    className="inline-flex items-center rounded-full border border-slate-200 px-2.5 py-0.5 text-xs text-slate-700"
+                    className="inline-flex items-center rounded-full border border-slate-200 px-2.5 py-1 text-xs text-slate-700"
                   >
                     {st} <span className="ml-1 font-mono text-slate-400">· {ct}</span>
                   </span>
@@ -644,7 +582,7 @@ export default function HrAnalyticsDashboard({ refreshKey = 0 }: HrAnalyticsDash
 
             {/* Recent leave list */}
             {recentLeaves.length > 0 ? (
-              <div className="overflow-hidden rounded-md border border-slate-100">
+              <div className="overflow-hidden">
                 <table className="w-full text-xs">
                   <thead className="bg-slate-50 text-slate-500">
                     <tr>
@@ -674,22 +612,22 @@ export default function HrAnalyticsDashboard({ refreshKey = 0 }: HrAnalyticsDash
               <div className="py-2 text-sm text-slate-500">No leave requests to display.</div>
             )}
           </div>
-        </div>
+        </section>
 
         {/* Recent people + attendance summary */}
-        <div className="lg:col-span-7 rounded-xl border border-slate-200 bg-white">
-          <div className="border-b border-slate-100 px-4 py-3">
-            <div className="text-sm font-medium text-slate-800">Recent People</div>
+        <section className="lg:col-span-5">
+          <div className="border-b border-slate-200 pb-3">
+            <div className="text-sm font-semibold text-slate-900">Recent People</div>
             <div className="text-xs text-slate-500">Newest records (current snapshot)</div>
           </div>
-          <div className="p-4">
+          <div className="pt-4">
             {recentEmployees.length === 0 ? (
               <div className="py-5 text-sm text-slate-500">No employee records loaded.</div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="min-w-full text-sm">
                   <thead>
-                    <tr className="border-b border-slate-100 text-left text-xs font-medium text-slate-500">
+                    <tr className="border-b border-slate-100 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
                       <th className="px-2 pb-2">Employee No</th>
                       <th className="px-2 pb-2">Name</th>
                       <th className="px-2 pb-2">Status</th>
@@ -702,7 +640,7 @@ export default function HrAnalyticsDashboard({ refreshKey = 0 }: HrAnalyticsDash
                         <td className="px-2 py-2.5 font-mono text-xs text-slate-500">{getEmployeeNo(emp)}</td>
                         <td className="px-2 py-2.5 font-medium">{getEmployeeName(emp)}</td>
                         <td className="px-2 py-2.5">
-                          <span className="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-600 capitalize">
+                          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700 capitalize">
                             {getEmploymentStatus(emp)}
                           </span>
                         </td>
@@ -718,15 +656,125 @@ export default function HrAnalyticsDashboard({ refreshKey = 0 }: HrAnalyticsDash
           </div>
 
           {attendanceRate != null && (
-            <div className="border-t border-slate-100 px-4 py-2.5 text-xs text-slate-500">
+            <div className="mt-4 border-t border-slate-200 pt-3 text-xs text-slate-500">
               Attendance rate (from summaries): <span className="font-medium text-slate-700">{attendanceRate}%</span>
             </div>
           )}
-        </div>
+        </section>
+
+        {/* Status breakdown */}
+        <section className="self-start lg:col-span-3">
+          <div className="border-b border-slate-200 pb-3">
+            <div className="text-sm font-semibold text-slate-900">Employment Status</div>
+            <div className="text-xs text-slate-500">Current workforce mix from loaded records</div>
+          </div>
+          <div className="space-y-4 pt-4">
+            {Object.keys(statusCounts).length === 0 ? (
+              <div className="py-6 text-center text-sm text-slate-500">No employee records yet.</div>
+            ) : (
+              <>
+                <div className="space-y-3">
+                  {statusOrder
+                    .filter((s) => statusCounts[s] != null)
+                    .concat(Object.keys(statusCounts).filter((s) => !statusOrder.includes(s)))
+                    .map((status) => {
+                      const count = statusCounts[status] || 0
+                      const pct = totalHeadcount > 0 ? Math.round((count / totalHeadcount) * 100) : 0
+                      const isActive = status === "active"
+                      return (
+                        <div key={status} className="space-y-2">
+                          <div className="flex items-center justify-between gap-3 text-sm">
+                            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                              {status}
+                            </div>
+                            <div className="tabular-nums text-slate-500">
+                              <span className="mr-2 text-xl font-semibold text-slate-900">{count}</span>
+                              {pct}%
+                            </div>
+                          </div>
+                          <div className="h-2 rounded-full bg-slate-200/80">
+                            <div
+                              className={isActive ? "h-2 rounded-full bg-emerald-500" : "h-2 rounded-full bg-slate-500"}
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                        </div>
+                      )
+                    })}
+                </div>
+                <div className="text-sm text-slate-600">
+                  <span className="font-medium text-slate-900">{totalHeadcount}</span> total employees in the current sample.
+                </div>
+              </>
+            )}
+          </div>
+        </section>
+
+        {/* Department breakdown */}
+        <section className="self-start lg:col-span-12">
+          <div className="border-b border-slate-200 pb-3">
+            <div className="text-sm font-semibold text-slate-900">Employees by Department</div>
+            <div className="text-xs text-slate-500">Top populated departments (live counts)</div>
+          </div>
+          <div className="space-y-5 pt-4">
+            {departmentHeadcounts.length === 0 ? (
+              <div className="py-6 text-center text-sm text-slate-500">No departments found.</div>
+            ) : (
+              <>
+                <div className="grid gap-6 sm:grid-cols-3">
+                  {departmentHeadcounts.slice(0, 3).map(([name, count], index) => (
+                    <div key={name} className="min-w-0">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                            Rank {index + 1}
+                          </div>
+                          <div className="mt-2 truncate text-base font-semibold text-slate-900" title={name}>
+                            {name}
+                          </div>
+                        </div>
+                        <div className="shrink-0 text-3xl font-semibold tracking-[-0.04em] text-slate-900">{count}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid gap-x-8 gap-y-4 lg:grid-cols-2">
+                  {departmentHeadcounts.map(([name, count]) => {
+                    const width = Math.max(4, Math.round((count / maxDeptCount) * 100))
+                    return (
+                      <div key={name} className="space-y-2">
+                        <div className="mb-2 flex items-center justify-between gap-4">
+                          <div className="truncate text-sm font-medium text-slate-800" title={name}>
+                            {name}
+                          </div>
+                          <div className="text-sm font-medium tabular-nums text-slate-500">
+                            {count}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="h-2 w-full rounded-full bg-slate-200/80">
+                            <div className="h-2 rounded-full bg-sky-600" style={{ width: `${width}%` }} />
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {departmentHeadcounts.every(([, c]) => c === 0) && (
+                  <div className="text-[11px] text-amber-700">
+                    All shown as 0 — no employees assigned or filter returned no matches. Check employee department linkages.
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </section>
       </div>
 
       <div className="mt-4 text-[11px] text-slate-400">
-        {lastUpdated ? `Last updated ${lastUpdated}` : "Loading data…"} • Data sampled from API (range: {range}). Refresh via header or local button.
+        {lastUpdated ? `Last updated ${lastUpdated}` : "Loading data…"} • Data sampled from API using the selected dates. Refresh via header or local button.
       </div>
     </div>
   )

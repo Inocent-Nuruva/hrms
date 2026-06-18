@@ -1,6 +1,8 @@
 import React from 'react';
-import { TouchableOpacity, Text, StyleSheet, ViewStyle, TextStyle, ActivityIndicator, useColorScheme, View } from 'react-native';
+import { Text, StyleSheet, ViewStyle, TextStyle, ActivityIndicator, View } from 'react-native';
 import { COLORS } from '../../lib/config';
+import { useThemePreference } from '../../hooks/useThemePreference';
+import { TouchableScale } from './touchable-scale';
 
 type Variant = 'default' | 'secondary' | 'outline' | 'ghost' | 'destructive';
 
@@ -27,7 +29,7 @@ export function Button({
   leftIcon,
   rightIcon,
 }: ButtonProps) {
-  const isDark = useColorScheme() === 'dark';
+  const { isDark } = useThemePreference();
   const baseStyle = styles.base;
   let variantStyle = {};
   let textVariantStyle = {};
@@ -38,9 +40,9 @@ export function Button({
     textVariantStyle = { color: '#fff' };
     spinnerColor = '#fff';
   } else if (variant === 'secondary') {
-    variantStyle = { backgroundColor: isDark ? COLORS.surfaceVariantDark : COLORS.surfaceVariant };
-    textVariantStyle = { color: isDark ? COLORS.onSurfaceDark : COLORS.onSurface };
-    spinnerColor = isDark ? COLORS.onSurfaceDark : COLORS.onSurface;
+    variantStyle = { backgroundColor: COLORS.accent };
+    textVariantStyle = { color: COLORS.onAccent };
+    spinnerColor = COLORS.onAccent;
   } else if (variant === 'outline') {
     variantStyle = {
       borderWidth: 1,
@@ -54,17 +56,17 @@ export function Button({
     textVariantStyle = { color: isDark ? COLORS.onSurfaceDark : COLORS.onSurface };
     spinnerColor = isDark ? COLORS.onSurfaceDark : COLORS.onSurface;
   } else if (variant === 'destructive') {
-    variantStyle = { backgroundColor: '#b91c1c' };
+    variantStyle = { backgroundColor: COLORS.error || '#dd3740' };
     textVariantStyle = { color: '#fff' };
     spinnerColor = '#fff';
   }
 
   return (
-    <TouchableOpacity
+    <TouchableScale
       onPress={onPress}
       disabled={disabled || loading}
       style={[baseStyle, variantStyle, disabled && styles.disabled, style]}
-      activeOpacity={0.85}
+      pressedScale={0.98}
     >
       {loading ? <ActivityIndicator size="small" color={spinnerColor} /> : null}
       {!loading && leftIcon ? <View style={styles.iconWrap}>{leftIcon}</View> : null}
@@ -74,7 +76,7 @@ export function Button({
         </Text>
       ) : null}
       {!loading && rightIcon ? <View style={styles.iconWrap}>{rightIcon}</View> : null}
-    </TouchableOpacity>
+    </TouchableScale>
   );
 }
 
@@ -87,6 +89,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
+    alignSelf: 'stretch',
   },
   text: {
     fontSize: 15,

@@ -13,7 +13,7 @@ function Table({ className, ...props }: React.ComponentProps<"table">) {
     >
       <table
         data-slot="table"
-        className={cn("w-full min-w-[900px] caption-bottom text-left text-sm", className)}
+        className={cn("w-full min-w-[720px] caption-bottom text-left text-sm", className)}
         {...props}
       />
     </TableScrollContainer>

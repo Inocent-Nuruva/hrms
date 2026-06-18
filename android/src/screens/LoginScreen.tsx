@@ -9,14 +9,17 @@ import {
   Text,
   ActivityIndicator,
   useColorScheme,
+  useWindowDimensions,
 } from 'react-native';
+import { TouchableScale } from '../components/ui/touchable-scale';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Eye, EyeOff, ShieldCheck, Sparkles } from 'lucide-react-native';
+import { Eye, EyeOff, Fingerprint, ShieldCheck, Sparkles } from 'lucide-react-native';
 
 import { COLORS } from '../lib/config';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Input } from '../components/ui/input';
+import { useToast } from '../hooks/useToast';
 import type { UseAuthReturn } from '../hooks/useAuth';
 
 interface LoginScreenProps {
@@ -25,11 +28,13 @@ interface LoginScreenProps {
 
 export function LoginScreen({ auth }: LoginScreenProps) {
   const isDark = useColorScheme() === 'dark';
+  const { height: windowHeight } = useWindowDimensions();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [otp, setOtp] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [localError, setLocalError] = useState<string | null>(null);
+
+  const toast = useToast();
 
   const backgroundColor = isDark ? COLORS.backgroundDark : COLORS.background;
   const mutedColor = isDark ? COLORS.onSurfaceVariantDark : COLORS.onSurfaceVariant;
@@ -37,31 +42,46 @@ export function LoginScreen({ auth }: LoginScreenProps) {
   const subtlePanel = isDark ? COLORS.surfaceVariantDark : '#f5f5f5';
 
   const showOtp = auth.requiresOtp;
-  const errorMessage = auth.error || localError;
+  const showBiometricLogin = auth.biometricEnabled && auth.hasStoredSession && !showOtp;
 
   const handleLogin = async () => {
-    setLocalError(null);
     if (!email.trim() || !password.trim()) {
-      setLocalError('Enter your email and password to continue.');
+      toast.error('Enter your email and password to continue.');
       return;
     }
     try {
       await auth.login(email.trim(), password);
-    } catch {
-      // surfaced through auth.error
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Login failed. Please try again.';
+      toast.error(msg, {
+        action: {
+          label: 'Retry',
+          onPress: () => {
+            // re-attempt with current values
+            void handleLogin();
+          },
+        },
+      });
     }
   };
 
   const handleVerify = async () => {
-    setLocalError(null);
     if (otp.trim().length < 4) {
-      setLocalError('Enter the verification code sent to your account.');
+      toast.error('Enter the verification code sent to your account.');
       return;
     }
     try {
       await auth.verifyOtp(otp.trim());
-    } catch {
-      // surfaced through auth.error
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Invalid code. Please try again.';
+      toast.error(msg, {
+        action: {
+          label: 'Retry',
+          onPress: () => {
+            void handleVerify();
+          },
+        },
+      });
     }
   };
 
@@ -71,8 +91,23 @@ export function LoginScreen({ auth }: LoginScreenProps) {
         <View style={[styles.orbOne, { backgroundColor: isDark ? '#1f2937' : '#e5e7eb' }]} />
         <View style={[styles.orbTwo, { backgroundColor: isDark ? '#27272a' : '#f5f5f5' }]} />
       </View>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
-        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 18 : 0}
+        style={styles.flex}
+      >
+        <ScrollView
+          contentContainerStyle={[
+            styles.scrollContent,
+            {
+              minHeight: windowHeight,
+              justifyContent: windowHeight < 760 ? 'flex-start' : 'center',
+            },
+          ]}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          showsVerticalScrollIndicator={false}
+        >
           <View style={styles.heroBlock}>
             <Text style={[styles.headline, { color: textColor }]}>
               {showOtp ? 'Complete secure sign in' : 'Welcome back'}
@@ -88,17 +123,17 @@ export function LoginScreen({ auth }: LoginScreenProps) {
                 <Text style={[styles.cardEyebrow, { color: mutedColor }]}>
                   {showOtp ? 'Step 2 of 2' : 'Sign in'}
                 </Text>
-                <Text style={[styles.cardTitle, { color: textColor }]}>
-                  {showOtp ? 'Verify your account' : 'Access your workspace'}
-                </Text>
-              </View>
-              <View style={[styles.iconBadge, { backgroundColor: subtlePanel }]}>
-                {showOtp ? (
-                  <ShieldCheck size={18} color={textColor} />
-                ) : (
-                  <Sparkles size={18} color={textColor} />
+                {showOtp && (
+                  <Text style={[styles.cardTitle, { color: textColor }]}>
+                    Verify your account
+                  </Text>
                 )}
               </View>
+              {showOtp && (
+                <View style={[styles.iconBadge, { backgroundColor: subtlePanel }]}>
+                  <ShieldCheck size={18} color={textColor} />
+                </View>
+              )}
             </View>
 
             {!showOtp ? (
@@ -122,7 +157,7 @@ export function LoginScreen({ auth }: LoginScreenProps) {
                   />
                   <Pressable
                     onPress={() => setShowPassword((current) => !current)}
-                    style={[styles.eyeButton, { backgroundColor: subtlePanel }]}
+                    style={styles.eyeButton}
                   >
                     {showPassword ? (
                       <EyeOff size={16} color={mutedColor} />
@@ -137,7 +172,9 @@ export function LoginScreen({ auth }: LoginScreenProps) {
                 <Input
                   label="Verification code"
                   value={otp}
-                  onChangeText={(value) => setOtp(value.replace(/\D/g, '').slice(0, 6))}
+                  onChangeText={(value) => {
+                    setOtp(value.replace(/\D/g, '').slice(0, 6));
+                  }}
                   keyboardType="number-pad"
                   placeholder="123456"
                   hint="Enter the code sent by your organization."
@@ -148,19 +185,25 @@ export function LoginScreen({ auth }: LoginScreenProps) {
               </>
             )}
 
-            {errorMessage ? (
-              <View style={[styles.errorBox, { backgroundColor: isDark ? '#331b1b' : '#fef2f2', borderColor: isDark ? '#7f1d1d' : '#fecaca' }]}>
-                <Text style={styles.errorText}>{errorMessage}</Text>
-              </View>
-            ) : null}
-
-            <Button
-              onPress={showOtp ? handleVerify : handleLogin}
-              loading={auth.isLoading}
-              style={styles.submitButton}
-            >
-              {showOtp ? 'Verify and continue' : 'Sign in'}
-            </Button>
+            <View style={styles.actionRow}>
+              <Button
+                onPress={showOtp ? handleVerify : handleLogin}
+                loading={auth.isLoading}
+                style={[styles.submitButton, { flex: 1 }]}
+              >
+                {showOtp ? 'Verify and continue' : 'Sign in'}
+              </Button>
+              {!showOtp && showBiometricLogin && (
+                <TouchableScale
+                  onPress={() => {
+                    void auth.authenticateWithBiometricLogin();
+                  }}
+                  style={[styles.biometricIcon, { backgroundColor: COLORS.accent }]}
+                >
+                  <Fingerprint size={20} color="#ffffff" />
+                </TouchableScale>
+              )}
+            </View>
             {showOtp ? (
               <Button onPress={auth.resetOtp} variant="ghost">
                 Back to login
@@ -168,9 +211,6 @@ export function LoginScreen({ auth }: LoginScreenProps) {
             ) : null}
           </Card>
 
-          <Text style={[styles.footerText, { color: mutedColor }]}>
-            Secure employee access for attendance, leave, and profile actions.
-          </Text>
           {auth.isLoading ? <ActivityIndicator style={styles.loader} color={COLORS.primary} /> : null}
         </ScrollView>
       </KeyboardAvoidingView>
@@ -189,8 +229,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingHorizontal: 22,
     paddingTop: 20,
-    paddingBottom: 28,
-    justifyContent: 'center',
+    paddingBottom: 120,
     alignItems: 'center',
   },
   heroBlock: {
@@ -218,6 +257,7 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 520,
   },
+
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -256,22 +296,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  errorBox: {
-    borderWidth: 1,
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginTop: 4,
-    marginBottom: 12,
-  },
-  errorText: {
-    color: '#b91c1c',
-    fontSize: 13,
-    fontWeight: '600',
-  },
+
   submitButton: {
     marginTop: 4,
     marginBottom: 4,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    width: '100%',
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  biometricIcon: {
+    width: 48,
+    height: 46,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   backLink: {
     fontSize: 13,
