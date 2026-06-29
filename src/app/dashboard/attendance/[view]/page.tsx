@@ -1,7 +1,5 @@
 import { redirect } from "next/navigation"
 
-import AdminDashboardView from "@/components/dashboard/admin-dashboard-view"
-import { AccessControlManagementClient } from "@/components/dashboard/access-control-management-client"
 import { AttendanceActivityClient } from "@/components/dashboard/attendance-activity-client"
 import { AttendanceManagementClient } from "@/components/dashboard/attendance-management-client"
 import { ScheduleManagementClient } from "@/components/dashboard/schedule-management-client"
@@ -25,32 +23,25 @@ const ALLOWED_VIEWS = new Set([
   "recalculation-jobs",
   "unmatched-logs",
   "today",
-  "punch-action",
   "punch-history",
   "attendance-history",
   "schedule-preview",
   "shifts",
   "shift-breaks",
-  "shift-attendance-rules",
-  "shift-overtime-rules",
   "shift-assignments",
   "shift-schedules",
-  "shift-templates",
   "shift-rotation-groups",
   "shift-rotation-rules",
-  "shift-change-requests",
   "timetables",
   "timetable-days",
-  "timetable-shift-rules",
   "timetable-holiday-rules",
-  "timetable-attendance-rules",
   "timetable-rotations",
   "timetable-rotation-rules",
   "employee-timetables",
-  "timetable-generated-schedules",
 ])
 
 const ACCESS_CONTROL_ATTENDANCE_VIEWS = new Set([
+  "devices",
   "doors",
   "templates",
   "organizations",
@@ -60,23 +51,16 @@ const ACCESS_CONTROL_ATTENDANCE_VIEWS = new Set([
 const SCHEDULE_ATTENDANCE_VIEWS = new Set([
   "shifts",
   "shift-breaks",
-  "shift-attendance-rules",
-  "shift-overtime-rules",
   "shift-assignments",
   "shift-schedules",
-  "shift-templates",
   "shift-rotation-groups",
   "shift-rotation-rules",
-  "shift-change-requests",
   "timetables",
   "timetable-days",
-  "timetable-shift-rules",
   "timetable-holiday-rules",
-  "timetable-attendance-rules",
   "timetable-rotations",
   "timetable-rotation-rules",
   "employee-timetables",
-  "timetable-generated-schedules",
 ])
 
 const ACTIVITY_ATTENDANCE_VIEWS = new Set([
@@ -84,7 +68,6 @@ const ACTIVITY_ATTENDANCE_VIEWS = new Set([
   "recalculation-jobs",
   "unmatched-logs",
   "today",
-  "punch-action",
   "punch-history",
   "attendance-history",
   "schedule-preview",
@@ -100,21 +83,21 @@ export default async function AttendanceViewPage({ params }: AttendanceViewPageP
   const { view } = await params
   const normalized = view?.toLowerCase()
 
-  if (!ALLOWED_VIEWS.has(normalized)) {
-    redirect("/dashboard/attendance/settings")
+  if (ACCESS_CONTROL_ATTENDANCE_VIEWS.has(normalized)) {
+    redirect(`/dashboard/access-control/${normalized}`)
   }
 
-  return (
-    <AdminDashboardView>
-      {ACCESS_CONTROL_ATTENDANCE_VIEWS.has(normalized) ? (
-        <AccessControlManagementClient section={normalized} moduleTitle="Attendance Management" />
-      ) : SCHEDULE_ATTENDANCE_VIEWS.has(normalized) ? (
-        <ScheduleManagementClient section={normalized} />
-      ) : ACTIVITY_ATTENDANCE_VIEWS.has(normalized) ? (
-        <AttendanceActivityClient section={normalized} />
-      ) : (
-        <AttendanceManagementClient section={normalized} />
-      )}
-    </AdminDashboardView>
-  )
+  if (!ALLOWED_VIEWS.has(normalized)) {
+    redirect("/dashboard/attendance")
+  }
+
+  if (SCHEDULE_ATTENDANCE_VIEWS.has(normalized)) {
+    return <ScheduleManagementClient section={normalized} />
+  }
+
+  if (ACTIVITY_ATTENDANCE_VIEWS.has(normalized)) {
+    return <AttendanceActivityClient section={normalized} />
+  }
+
+  return <AttendanceManagementClient section={normalized} />
 }

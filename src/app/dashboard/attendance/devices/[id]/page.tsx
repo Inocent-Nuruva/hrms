@@ -1,4 +1,3 @@
-import AdminDashboardView from "@/components/dashboard/admin-dashboard-view"
 import { AttendanceDeviceDetailView } from "@/components/dashboard/attendance-device-detail-view"
 
 export default async function AttendanceDeviceDetailPage({
@@ -8,9 +7,5 @@ export default async function AttendanceDeviceDetailPage({
 }) {
   const { id } = await params
 
-  return (
-    <AdminDashboardView>
-      <AttendanceDeviceDetailView deviceId={id} />
-    </AdminDashboardView>
-  )
+  return <AttendanceDeviceDetailView deviceId={id} />
 }

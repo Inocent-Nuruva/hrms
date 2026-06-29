@@ -30,6 +30,7 @@ import { LayoutDashboard } from "@/components/animate-ui/icons/layout-dashboard"
 type NavMainNode = {
   title: string
   url?: string
+  matchUrls?: string[]
   resource?: AdminResourceKey
   items?: NavMainNode[]
   disabled?: boolean
@@ -40,7 +41,12 @@ type NavMainItem = NavMainNode & {
 }
 
 function nodeContainsCurrentPath(node: NavMainNode, currentPath: string): boolean {
-  if (node.url && currentPath === node.url) {
+  if (
+    (node.url && (currentPath === node.url || currentPath.startsWith(`${node.url}/`))) ||
+    (node.matchUrls ?? []).some(
+      (url) => currentPath === url || currentPath.startsWith(`${url}/`)
+    )
+  ) {
     return true
   }
 

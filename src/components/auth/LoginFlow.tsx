@@ -22,6 +22,7 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
   const [rememberMe, setRememberMe] = useState(true);
   const [isDone, setIsDone] = useState(false);
   const [isHoveringSubmit, setIsHoveringSubmit] = useState(false);
+  const [inputsMounted, setInputsMounted] = useState(false);
   const { login, isLoading } = useAuth();
 
   useEffect(() => {
@@ -39,6 +40,11 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
       setEmail(rememberedEmail);
     }
   }, [defaultEmail]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setInputsMounted(true), 60);
+    return () => clearTimeout(t);
+  }, []);
 
   const handleLogin = async () => {
     const normalizedEmail = email.trim().toLowerCase();
@@ -107,139 +113,73 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
   };
 
   return (
-    <div
-      style={{
-        width: "100%",
-      }}
-    >
-      <div style={{ padding: "40px 40px 36px" }}>
-        <div style={{ textAlign: "center", marginBottom: 24 }}>
-          <h1
+    <div className="w-full">
+      {!isDone ? (
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div
+            className="space-y-1"
             style={{
-              fontSize: 22,
-              fontWeight: 800,
-              color: "#1a1f36",
-              lineHeight: 1.2,
-              marginBottom: 6,
-              margin: "0 0 6px",
+              opacity: inputsMounted ? 1 : 0,
+              transform: inputsMounted ? "translateY(0)" : "translateY(8px)",
+              transition: "opacity 220ms ease, transform 220ms ease",
+              transitionDelay: "60ms",
             }}
           >
-            HRMS Admin Portal
-          </h1>
-          <p style={{ fontSize: 14, color: "#6b7280", lineHeight: 1.5, margin: 0 }}>
-            Sign in with your admin credentials
-          </p>
-        </div>
+            <label className="text-[10px] font-medium text-foreground">Email</label>
+            <input
+              type="email"
+              value={email}
+              autoComplete="username"
+              onChange={(event) => {
+                setEmail(event.target.value);
+                if (loginError) setLoginError(null);
+              }}
+              placeholder="admin@company.com"
+              className="flex h-8 w-full rounded-md border border-input bg-background px-2.5 py-1 text-xs ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            />
+          </div>
 
-        {!isDone ? (
-          <form
-            onSubmit={handleSubmit}
-            style={{ display: "flex", flexDirection: "column", gap: 14 }}
+          <div
+            className="space-y-1"
+            style={{
+              opacity: inputsMounted ? 1 : 0,
+              transform: inputsMounted ? "translateY(0)" : "translateY(8px)",
+              transition: "opacity 220ms ease, transform 220ms ease",
+              transitionDelay: "140ms",
+            }}
           >
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <label style={{ fontSize: 13, fontWeight: 600, color: "#1a1f36" }}>Email</label>
+            <label className="text-[10px] font-medium text-foreground">Password</label>
+            <div className="relative">
               <input
-                className="transition-[box-shadow,border-color] focus:outline-none focus:ring-4 focus:ring-[#303194]/20 focus:border-[#303194]"
-                type="email"
-                value={email}
-                autoComplete="username"
+                type={showPassword ? "text" : "password"}
+                value={password}
+                autoComplete="current-password"
                 onChange={(event) => {
-                  setEmail(event.target.value);
+                  setPassword(event.target.value);
                   if (loginError) setLoginError(null);
                 }}
-                placeholder="admin@company.com"
-                style={{
-                  width: "100%",
-                  padding: "12px 14px",
-                  border: "2px solid #e5e7eb",
-                  borderRadius: 10,
-                  fontSize: 14,
-                  fontFamily: "var(--font)",
-                  color: "#1a1f36",
-                  background: "#fafafa",
-                }}
+                placeholder="Enter password"
+                className="flex h-8 w-full rounded-md border border-input bg-background px-2.5 py-1 pr-9 text-xs ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
               />
-            </div>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <label style={{ fontSize: 13, fontWeight: 600, color: "#1a1f36" }}>Password</label>
-              <div style={{ position: "relative" }}>
-                <input
-                  className="transition-[box-shadow,border-color] focus:outline-none focus:ring-4 focus:ring-[#303194]/20 focus:border-[#303194]"
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  autoComplete="current-password"
-                  onChange={(event) => {
-                    setPassword(event.target.value);
-                    if (loginError) setLoginError(null);
-                  }}
-                  placeholder="Enter password"
-                  style={{
-                    width: "100%",
-                    padding: "12px 42px 12px 14px",
-                    border: "2px solid #e5e7eb",
-                    borderRadius: 10,
-                    fontSize: 14,
-                    fontFamily: "var(--font)",
-                    color: "#1a1f36",
-                    background: "#fafafa",
-                  }}
-                />
-                <button
-                  type="button"
-                  aria-label={showPassword ? "Hide password" : "Show password"}
-                  onClick={() => setShowPassword((current) => !current)}
-                  style={{
-                    position: "absolute",
-                    right: 10,
-                    top: "50%",
-                    transform: "translateY(-50%)",
-                    border: "none",
-                    background: "transparent",
-                    color: "#6b7280",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    width: 24,
-                    height: 24,
-                    cursor: "pointer",
-                    padding: 0,
-                  }}
-                >
-                  {showPassword ? <EyeOffIcon size={16} /> : <EyeIcon size={16} />}
-                </button>
-              </div>
-            </div>
-
-            {loginError ? (
-              <p
-                style={{
-                  margin: 0,
-                  padding: "10px 12px",
-                  borderRadius: 10,
-                  border: "1px solid #fecaca",
-                  background: "#fef2f2",
-                  color: "#b91c1c",
-                  fontSize: 13,
-                  fontWeight: 600,
-                }}
+              <button
+                type="button"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                onClick={() => setShowPassword((current) => !current)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
               >
-                {loginError}
-              </p>
-            ) : null}
+                {showPassword ? <EyeOffIcon size={14} /> : <EyeIcon size={14} />}
+              </button>
+            </div>
+          </div>
 
-            <label
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 8,
-                fontSize: 13,
-                fontWeight: 600,
-                color: "#4b5563",
-                cursor: "pointer",
-                userSelect: "none",
-              }}
-            >
+          {loginError && (
+            <div className="rounded-md border border-destructive/20 bg-destructive/5 px-2.5 py-1.5 text-[10px] text-destructive">
+              {loginError}
+            </div>
+          )}
+
+          <div className="flex items-center justify-between text-[10px]">
+            <label className="flex items-center gap-1 text-muted-foreground cursor-pointer">
               <Checkbox
                 checked={rememberMe}
                 onCheckedChange={(checked) => {
@@ -252,91 +192,20 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
                     }
                   }
                 }}
-                className="border-[#c8d0ea] data-checked:border-[#303194] data-checked:bg-[#303194]"
+                className="data-checked:bg-[#303194] data-checked:border-[#303194] focus-visible:ring-[#303194]/50"
               />
               Remember me
             </label>
+          </div>
 
-            <button
-              type="submit"
-              disabled={isLoading}
-              onMouseEnter={() => setIsHoveringSubmit(true)}
-              onMouseLeave={() => setIsHoveringSubmit(false)}
-              style={{
-                position: "relative",
-                overflow: "hidden",
-                width: "100%",
-                padding: 14,
-                background: isLoading
-                  ? "rgba(48,49,148,0.65)"
-                  : isHoveringSubmit
-                    ? "white"
-                    : "#303194",
-                color: isHoveringSubmit ? "#303194" : "white",
-                border: "1px solid #303194",
-                borderRadius: 12,
-                fontSize: 15,
-                fontWeight: 700,
-                fontFamily: "var(--font)",
-                cursor: isLoading ? "not-allowed" : "pointer",
-                boxShadow: isLoading ? "none" : "0 4px 14px rgba(48,49,148,0.4)",
-                transition: "all 0.28s cubic-bezier(0.22, 1, 0.36, 1)",
-              }}
-            >
-              {!isLoading ? (
-                <span
-                  aria-hidden="true"
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    left: isHoveringSubmit ? "115%" : "-40%",
-                    zIndex: 1,
-                    height: "100%",
-                    width: "35%",
-                    transform: "skewX(-12deg)",
-                    background: "rgba(255,255,255,0.25)",
-                    opacity: isHoveringSubmit ? 1 : 0,
-                    pointerEvents: "none",
-                    transition: "all 0.5s",
-                  }}
-                />
-              ) : null}
-              <span style={{ position: "relative", zIndex: 2 }}>
-              {isLoading ? "Signing in..." : "Sign In"}
-              </span>
-            </button>
-          </form>
-        ) : null}
-      </div>
-
-      {!isDone ? (
-        <div
-          style={{
-            borderTop: "1px solid rgba(148, 163, 184, 0.25)",
-            padding: "14px 40px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 8,
-          }}
-        >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="#9ca3af"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="inline-flex h-8 w-full items-center justify-center rounded-md bg-[#303194] px-3 text-[10px] font-semibold text-white transition-all hover:bg-[#252882] active:scale-[0.985] disabled:opacity-70 disabled:cursor-not-allowed"
           >
-            <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
-            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-          </svg>
-          <span style={{ fontSize: 12, color: "#9ca3af", fontWeight: 500 }}>
-            Email + password authentication
-          </span>
-        </div>
+            {isLoading ? "Signing in..." : "Sign In"}
+          </button>
+        </form>
       ) : null}
     </div>
   );

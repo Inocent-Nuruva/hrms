@@ -34,6 +34,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
+import { SearchToggleField } from "@/components/common/search-toggle-field"
 import {
   Table,
   TableBody,
@@ -992,11 +993,17 @@ export function DataTable({
           <div className="rounded-lg border p-3">
             <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
               <div className="space-y-1">
-                <Label>Search</Label>
-                <Input
+                <SearchToggleField
+                  className="w-full"
+                  label="Search users"
                   value={searchInput}
                   placeholder="Search name, email, phone, user number"
-                  onChange={(event) => setSearchInput(event.target.value)}
+                  onChange={(value) => {
+                    setSearchInput(value)
+                    if (!value) {
+                      onUsersQueryChange({ search: "" })
+                    }
+                  }}
                   onKeyDown={(event) => {
                     if (event.key === "Enter") {
                       onUsersQueryChange({ search: searchInput })
@@ -1235,7 +1242,7 @@ export function DataTable({
 
           {!isAccessControlResource ? (
             <>
-              <div className="rounded-lg border">
+              <div className="rounded-lg border-0 bg-transparent shadow-none">
                 <Table>
                   <TableHeader
                     className="sticky top-0 z-10"

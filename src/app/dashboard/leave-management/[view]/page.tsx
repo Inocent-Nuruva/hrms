@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation"
 
-import AdminDashboardView from "@/components/dashboard/admin-dashboard-view"
 import { LeaveManagementView } from "@/components/dashboard/leave-management-view"
 
 const ALLOWED_VIEWS = new Set(["types", "requests", "balances", "holidays", "policies", "workflows"])
@@ -20,12 +19,8 @@ export default async function LeaveManagementViewPage({
   const normalized = view?.toLowerCase()
 
   if (!ALLOWED_VIEWS.has(normalized)) {
-    redirect("/dashboard/leave-management/types")
+    redirect("/dashboard/leave-management")
   }
 
-  return (
-    <AdminDashboardView>
-      <LeaveManagementView activeTab={normalized as LeaveView} showTabButtons={false} />
-    </AdminDashboardView>
-  )
+  return <LeaveManagementView activeTab={normalized as LeaveView} showTabButtons={false} />
 }

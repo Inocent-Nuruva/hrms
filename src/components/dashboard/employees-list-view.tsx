@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { SearchToggleField } from "@/components/common/search-toggle-field"
 import { TableScrollContainer } from "@/components/common/table-scroll-container"
 import { useRouter } from "next/navigation"
 
@@ -204,18 +205,6 @@ export function EmployeesListView() {
   return (
     <div className="rounded-xl border border-slate-200 bg-white/80 px-4 py-5 shadow-sm lg:px-6">
       <div className="mb-4 flex flex-wrap items-end gap-3">
-        <div className="min-w-[220px] flex-1">
-          <label className="mb-1 block text-sm font-medium text-slate-700">Search</label>
-          <input
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-            placeholder="Search name, email, phone, user_no"
-            value={query.search}
-            onChange={(event) => {
-              setPage(1)
-              setQuery((previous) => ({ ...previous, search: event.target.value }))
-            }}
-          />
-        </div>
         <div>
           <label className="mb-1 block text-sm font-medium text-slate-700">Status</label>
           <select
@@ -237,6 +226,15 @@ export function EmployeesListView() {
             <option value="exited">Exited</option>
           </select>
         </div>
+        <SearchToggleField
+          className="min-w-[220px]"
+          placeholder="Search name, email, phone, user_no"
+          value={query.search}
+          onChange={(value) => {
+            setPage(1)
+            setQuery((previous) => ({ ...previous, search: value }))
+          }}
+        />
       </div>
 
       <TableScrollContainer>

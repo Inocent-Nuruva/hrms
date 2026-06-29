@@ -7,9 +7,8 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
-import { Clock3, MapPin, Navigation, ShieldCheck } from 'lucide-react-native';
+import { Clock3, Navigation, ShieldCheck } from 'lucide-react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api, normalizeList, buildMobilePunchPayload, formatAttendancePunchError, readMobilePunchContext } from '../lib/api';
@@ -47,18 +46,6 @@ export function AttendanceScreen({ auth }: Props) {
     queryKey: ['mobileAttendanceToday'],
     queryFn: async () => asRecord(await api.getMyAttendanceToday()),
     enabled: auth.isAuthenticated,
-  });
-
-  const locationQuery = useQuery({
-    queryKey: ['mobileAttendanceLocation'],
-    queryFn: async () => readCurrentLocationLabel(),
-    staleTime: 1000 * 60 * 5,
-  });
-
-  const punchContextQuery = useQuery({
-    queryKey: ['mobileAttendancePunchContext'],
-    queryFn: async () => readPunchContextDetails(),
-    staleTime: 1000 * 60 * 5,
   });
 
   const checkInMutation = useMutation({
@@ -103,10 +90,8 @@ export function AttendanceScreen({ auth }: Props) {
     await Promise.all([
       punchesQuery.refetch(),
       todayQuery.refetch(),
-      locationQuery.refetch(),
-      punchContextQuery.refetch(),
     ]);
-  }, [locationQuery, punchContextQuery, punchesQuery, todayQuery]);
+  }, [punchesQuery, todayQuery]);
 
   const attendanceSummary = useMemo(
     () => buildAttendanceSummary(punchesQuery.data, todayQuery.data),
@@ -122,98 +107,69 @@ export function AttendanceScreen({ auth }: Props) {
       <ScrollView
         style={{ flex: 1, backgroundColor }}
         contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={punchesQuery.isFetching || todayQuery.isFetching || locationQuery.isFetching || punchContextQuery.isFetching} onRefresh={onRefresh} colors={[COLORS.primary]} />}
+        refreshControl={<RefreshControl refreshing={punchesQuery.isFetching || todayQuery.isFetching} onRefresh={onRefresh} colors={[COLORS.primary]} />}
       >
-        <ScreenTransition>
+        <ScreenTransition style={{ flex: 1 }}>
+          <View style={styles.topContent}>
+            <View style={styles.dateWrap}>
+              <Text style={[styles.dateText, { color: textColor }]}>
+                {new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}
+              </Text>
+            </View>
 
-          <View style={[styles.mapShell, { backgroundColor: panelColor, borderColor: lineColor }]}>
-            <View style={[styles.mapBackdrop, { backgroundColor: isDark ? '#1f2740' : '#e8ebf5' }]}>
-              <View style={[styles.mapRoadHorizontal, { backgroundColor: isDark ? '#a8b3d0' : '#c5cde0' }]} />
-              <View style={[styles.mapRoadVertical, { backgroundColor: isDark ? '#a8b3d0' : '#c5cde0' }]} />
-              <View style={[styles.mapMarkerRing, { backgroundColor: 'rgba(17, 24, 39, 0.12)' }]}>
-                <View style={[styles.mapMarkerCore, { backgroundColor: isDark ? COLORS.surfaceDark : '#e8ebf5' }]}>
-                  <Text style={styles.mapMarkerText}>
-                    {readInitials(auth.user?.fullName || `${auth.employee?.first_name || ''} ${auth.employee?.last_name || ''}`)}
-                  </Text>
+            <TouchableScale
+              style={styles.fingerprintAction}
+              pressedScale={0.97}
+              onPress={() => {
+                setStatusMessage(null);
+                if (primaryAction === 'in') {
+                  void checkInMutation.mutateAsync();
+                } else {
+                  void checkOutMutation.mutateAsync();
+                }
+              }}
+            >
+              <View style={styles.fingerprintGlow}>
+                <View style={styles.fingerprintCircle}>
+                  <Navigation size={16} color={COLORS.primary} style={styles.fingerprintAccent} />
+                  <ShieldCheck size={48} color={COLORS.primary} />
                 </View>
               </View>
-              <View style={[styles.mapPinAccent, { backgroundColor: COLORS.primary }]} />
-              <View style={[styles.mapPinAccentTwo, { backgroundColor: COLORS.accent }]} />
+              <Text style={[styles.fingerprintLabel, { color: textColor }]}>{actionLabel}</Text>
+            </TouchableScale>
+
+            <View style={[styles.statsCard, { backgroundColor: panelColor, borderColor: lineColor }]}>
+              <StatItem label="Check In" value={attendanceSummary.checkInTime} textColor={textColor} mutedColor={mutedColor} />
+              <View style={[styles.verticalDivider, { backgroundColor: lineColor }]} />
+              <StatItem label="Check Out" value={attendanceSummary.checkOutTime} textColor={textColor} mutedColor={mutedColor} />
+              <View style={[styles.verticalDivider, { backgroundColor: lineColor }]} />
+              <StatItem label="Total Hrs." value={attendanceSummary.totalHours} textColor={textColor} mutedColor={mutedColor} />
             </View>
-          </View>
 
-          <View style={[styles.locationCard, { backgroundColor: panelColor, borderColor: lineColor }]}>
-            <MapPin size={18} color={COLORS.primary} />
-            <Text style={[styles.locationText, { color: textColor }]}>
-              {locationQuery.data || 'Current location unavailable'}
-            </Text>
-          </View>
-
-          <View style={[styles.contextCard, { backgroundColor: panelColor, borderColor: lineColor }]}>
-            <View style={styles.contextGrid}>
-              <ContextItem label="Wi-Fi SSID" value={punchContextQuery.data?.wifiSsid || 'Unavailable'} textColor={textColor} mutedColor={mutedColor} />
-              <ContextItem label="BSSID" value={punchContextQuery.data?.wifiBssid || 'Unavailable'} textColor={textColor} mutedColor={mutedColor} />
-              <ContextItem label="Latitude" value={punchContextQuery.data?.latitude || '--'} textColor={textColor} mutedColor={mutedColor} />
-              <ContextItem label="Longitude" value={punchContextQuery.data?.longitude || '--'} textColor={textColor} mutedColor={mutedColor} />
-            </View>
-          </View>
-
-          <View style={styles.dateWrap}>
-            <Text style={[styles.dateText, { color: textColor }]}>
-              {new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}
-            </Text>
-          </View>
-
-          <TouchableScale
-            style={styles.fingerprintAction}
-            pressedScale={0.97}
-            onPress={() => {
-              setStatusMessage(null);
-              if (primaryAction === 'in') {
-                void checkInMutation.mutateAsync();
-              } else {
-                void checkOutMutation.mutateAsync();
-              }
-            }}
-          >
-            <View style={styles.fingerprintGlow}>
-              <View style={styles.fingerprintCircle}>
-                <Navigation size={16} color={COLORS.primary} style={styles.fingerprintAccent} />
-                <ShieldCheck size={48} color={COLORS.primary} />
+            {statusMessage ? (
+              <View style={[styles.statusBanner, { backgroundColor: isDark ? COLORS.surfaceVariantDark : '#e8ebf5', borderColor: isDark ? COLORS.outlineDark : COLORS.outline }]}>
+                <Text style={[styles.statusBannerText, { color: textColor }]}>{statusMessage}</Text>
               </View>
-            </View>
-            <Text style={[styles.fingerprintLabel, { color: textColor }]}>{actionLabel}</Text>
-          </TouchableScale>
-
-          <View style={[styles.statsCard, { backgroundColor: panelColor, borderColor: lineColor }]}>
-            <StatItem label="Check In" value={attendanceSummary.checkInTime} textColor={textColor} mutedColor={mutedColor} />
-            <View style={[styles.verticalDivider, { backgroundColor: lineColor }]} />
-            <StatItem label="Check Out" value={attendanceSummary.checkOutTime} textColor={textColor} mutedColor={mutedColor} />
-            <View style={[styles.verticalDivider, { backgroundColor: lineColor }]} />
-            <StatItem label="Total Hrs." value={attendanceSummary.totalHours} textColor={textColor} mutedColor={mutedColor} />
+            ) : null}
           </View>
 
-          {statusMessage ? (
-            <View style={[styles.statusBanner, { backgroundColor: isDark ? COLORS.surfaceVariantDark : '#e8ebf5', borderColor: isDark ? COLORS.outlineDark : COLORS.outline }]}>
-              <Text style={[styles.statusBannerText, { color: textColor }]}>{statusMessage}</Text>
+          <View style={styles.centeredContainer}>
+            <View style={styles.centeredActions}>
+              <TouchableScale
+                style={[styles.secondaryButton, { backgroundColor: COLORS.primary }]}
+                pressedScale={0.98}
+                onPress={() => router.push('/punch-details')}
+              >
+                <Text style={styles.secondaryButtonText}>Punch Details</Text>
+              </TouchableScale>
+              <TouchableScale
+                style={[styles.secondaryButton, { backgroundColor: COLORS.accent }]}
+                pressedScale={0.98}
+                onPress={() => router.push('/my-location')}
+              >
+                <Text style={styles.secondaryButtonText}>My Location</Text>
+              </TouchableScale>
             </View>
-          ) : null}
-
-          <View style={styles.bottomActions}>
-            <TouchableScale
-              style={[styles.secondaryButton, { backgroundColor: COLORS.primary }]}
-              pressedScale={0.98}
-              onPress={() => router.push('/(tabs)/attendance')}
-            >
-              <Text style={styles.secondaryButtonText}>Punch Details</Text>
-            </TouchableScale>
-            <TouchableScale
-              style={[styles.secondaryButton, { backgroundColor: COLORS.accent }]}
-              pressedScale={0.98}
-              onPress={() => router.push('/(tabs)/attendance')}
-            >
-              <Text style={styles.secondaryButtonText}>My Attendance</Text>
-            </TouchableScale>
           </View>
         </ScreenTransition>
       </ScrollView>
@@ -241,26 +197,7 @@ function StatItem({
   );
 }
 
-function ContextItem({
-  label,
-  value,
-  textColor,
-  mutedColor,
-}: {
-  label: string;
-  value: string;
-  textColor: string;
-  mutedColor: string;
-}) {
-  return (
-    <View style={styles.contextItem}>
-      <Text style={[styles.contextLabel, { color: mutedColor }]}>{label}</Text>
-      <Text style={[styles.contextValue, { color: textColor }]} numberOfLines={1}>
-        {value}
-      </Text>
-    </View>
-  );
-}
+
 
 function buildAttendanceSummary(items: unknown[] | undefined, todayRecord: MobileRecord | null | undefined) {
   const todayKey = new Date().toISOString().slice(0, 10);
@@ -368,184 +305,35 @@ function formatTime(value: string) {
   }
 }
 
-async function readCurrentLocationLabel() {
-  try {
-    const permission = await Location.requestForegroundPermissionsAsync();
-    if (permission.status !== 'granted') return 'Location permission not granted';
 
-    const position = await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.Balanced,
-    });
-    const places = await Location.reverseGeocodeAsync({
-      latitude: position.coords.latitude,
-      longitude: position.coords.longitude,
-    });
-    const place = places[0];
-    if (!place) return 'Current location detected';
-    return [place.name, place.street, place.city, place.region, place.country].filter(Boolean).join(', ');
-  } catch {
-    return 'Current location unavailable';
-  }
-}
-
-async function readPunchContextDetails() {
-  try {
-    const context = await readMobilePunchContext();
-
-    return {
-      wifiSsid: context.wifiSsid || 'Unavailable',
-      wifiBssid: context.wifiBssid || 'Unavailable',
-      latitude: context.latitude.toFixed(6),
-      longitude: context.longitude.toFixed(6),
-    };
-  } catch {
-    return {
-      wifiSsid: 'Unavailable',
-      wifiBssid: 'Unavailable',
-      latitude: '--',
-      longitude: '--',
-    };
-  }
-}
 
 
 const styles = StyleSheet.create({
   content: {
     paddingTop: 6,
     paddingBottom: 28,
+    flexGrow: 1,
   },
-  mapShell: {
-    marginHorizontal: 16,
-    marginTop: 0,
-    borderRadius: 20,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  mapBackdrop: {
-    height: 124,
-    position: 'relative',
-    overflow: 'hidden',
-  },
-  mapRoadHorizontal: {
-    position: 'absolute',
-    top: 72,
-    left: -40,
-    right: -40,
-    height: 34,
-    borderRadius: 17,
-    transform: [{ rotate: '-8deg' }],
-    opacity: 0.92,
-  },
-  mapRoadVertical: {
-    position: 'absolute',
-    top: -20,
-    bottom: -20,
-    left: '45%',
-    width: 34,
-    borderRadius: 17,
-    transform: [{ rotate: '6deg' }],
-    opacity: 0.92,
-  },
-  mapMarkerRing: {
-    position: 'absolute',
-    top: 38,
-    left: '50%',
-    marginLeft: -28,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  mapMarkerCore: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  mapMarkerText: {
-    color: '#ffffff',
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  mapPinAccent: {
-    position: 'absolute',
-    top: 44,
-    left: 46,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-  },
-  mapPinAccentTwo: {
-    position: 'absolute',
-    bottom: 38,
-    right: 62,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-  },
-  locationCard: {
-    marginHorizontal: 16,
-    marginTop: -12,
-    borderRadius: 16,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-  },
-  locationText: {
-    flex: 1,
-    fontSize: 13,
-    lineHeight: 18,
-    fontWeight: '600',
-  },
-  contextCard: {
-    marginHorizontal: 16,
-    marginTop: 8,
-    borderRadius: 16,
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-  },
-  contextGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  contextItem: {
-    width: '48%',
-    minWidth: 0,
-    borderRadius: 12,
-    backgroundColor: 'rgba(148, 163, 184, 0.08)',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    gap: 2,
-  },
-  contextLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
-  },
-  contextValue: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
+  topContent: {},
   dateWrap: {
     alignItems: 'center',
-    marginTop: 10,
+    marginTop: 6,
   },
   dateText: {
     fontSize: 16,
     fontWeight: '800',
     letterSpacing: -0.4,
   },
+  sectionTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 8,
+    letterSpacing: 0.3,
+    color: '#6b7280',
+  },
   fingerprintAction: {
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: 4,
   },
   fingerprintGlow: {
     padding: 8,
@@ -573,7 +361,7 @@ const styles = StyleSheet.create({
   },
   statsCard: {
     marginHorizontal: 16,
-    marginTop: 14,
+    marginTop: 6,
     borderRadius: 16,
     borderWidth: 1,
     paddingVertical: 12,
@@ -601,7 +389,7 @@ const styles = StyleSheet.create({
   },
   statusBanner: {
     marginHorizontal: 16,
-    marginTop: 12,
+    marginTop: 6,
     borderRadius: 16,
     borderWidth: 1,
     paddingHorizontal: 14,
@@ -613,11 +401,17 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     textAlign: 'center',
   },
-  bottomActions: {
+  centeredContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+  },
+  centeredActions: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: 16,
-    marginTop: 14,
   },
   secondaryButton: {
     flex: 1,

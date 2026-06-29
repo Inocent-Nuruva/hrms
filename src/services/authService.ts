@@ -17,6 +17,16 @@ function asRecord(value: unknown): UnknownRecord | null {
   return typeof value === "object" && value !== null ? (value as UnknownRecord) : null;
 }
 
+function asRecordArray(value: unknown): UnknownRecord[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((entry) => asRecord(entry))
+    .filter((entry): entry is UnknownRecord => Boolean(entry));
+}
+
 function readString(record: UnknownRecord | null, keys: string[]): string | undefined {
   if (!record) {
     return undefined;
@@ -68,6 +78,28 @@ function readBoolean(record: UnknownRecord | null, keys: string[]): boolean | un
   return undefined;
 }
 
+function readRole(record: UnknownRecord | null): string | undefined {
+  const direct = readString(record, ["role", "user_type"]);
+  if (direct) {
+    return direct;
+  }
+
+  const roles = Array.isArray(record?.roles) ? record.roles : [];
+  for (const role of roles) {
+    if (typeof role === "string" && role.trim()) {
+      return role.trim();
+    }
+
+    const roleRecord = asRecord(role);
+    const roleName = readString(roleRecord, ["name", "display_name", "displayName", "role"]);
+    if (roleName) {
+      return roleName;
+    }
+  }
+
+  return undefined;
+}
+
 function normalizeTokens(payload: unknown): AuthTokens | undefined {
   const root = asRecord(payload);
   const rootData = asRecord(root?.data);
@@ -102,6 +134,9 @@ function normalizeUser(payload: unknown): AuthUser | undefined {
   const root = asRecord(payload);
   const rootData = asRecord(root?.data);
   const rootResult = asRecord(root?.result);
+  const rootCompanies = asRecordArray(root?.companies);
+  const rootDataCompanies = asRecordArray(rootData?.companies);
+  const rootResultCompanies = asRecordArray(rootResult?.companies);
   const userCandidates = [
     asRecord(root?.user),
     asRecord(rootData?.user),
@@ -118,25 +153,67 @@ function normalizeUser(payload: unknown): AuthUser | undefined {
 
     const id = candidate.id ?? candidate.user_id;
     const email = readString(candidate, ["email"]);
+    const companyCandidates = [
+      asRecord(candidate.company),
+      asRecord(candidate.active_company),
+      asRecord(root?.company),
+      asRecord(root?.active_company),
+      asRecord(rootData?.company),
+      asRecord(rootData?.active_company),
+      asRecord(rootResult?.company),
+      asRecord(rootResult?.active_company),
+      rootCompanies[0] ?? null,
+      rootDataCompanies[0] ?? null,
+      rootResultCompanies[0] ?? null,
+    ];
+    const membershipCandidates = [
+      asRecord(candidate.active_company_membership),
+      asRecord(root?.active_company_membership),
+      asRecord(rootData?.active_company_membership),
+      asRecord(rootResult?.active_company_membership),
+      rootCompanies[0] ?? null,
+      rootDataCompanies[0] ?? null,
+      rootResultCompanies[0] ?? null,
+    ];
+    const fullNameParts = [readString(candidate, ["first_name", "firstName"]), readString(candidate, ["last_name", "lastName"])]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
     const fullName =
       readString(candidate, ["fullName", "full_name", "name"]) ??
-      [readString(candidate, ["first_name", "firstName"]), readString(candidate, ["last_name", "lastName"])]
-        .filter(Boolean)
-        .join(" ")
-        .trim();
+      (fullNameParts || (email ? email.split("@")[0]?.replace(/[._-]+/g, " ").trim() : undefined));
 
     if ((typeof id === "string" || typeof id === "number") && email && fullName) {
       const companyRecord = asRecord(candidate.company);
+      const resolvedCompanyRecord =
+        companyCandidates.find((entry) => entry && (readString(entry, ["name", "company_name", "companyName"]) || readNumber(entry, ["id", "company_id", "companyId"]))) ??
+        companyRecord;
+      const resolvedMembershipRecord =
+        membershipCandidates.find((entry) => entry && (readString(entry, ["employee_no", "user_no"]) || readNumber(entry, ["employee_id", "employeeId", "membershipId"]))) ??
+        null;
+      const employeeId =
+        readString(candidate, ["employee_no", "employeeId", "employee_id", "user_no"]) ??
+        readString(resolvedMembershipRecord, ["employee_no", "employeeId", "employee_id", "user_no"]) ??
+        (() => {
+          const numericEmployeeId =
+            readNumber(candidate, ["employee_id", "employeeId"]) ??
+            readNumber(resolvedMembershipRecord, ["employee_id", "employeeId", "employeeId"]);
+          return numericEmployeeId !== null && numericEmployeeId !== undefined
+            ? String(numericEmployeeId)
+            : undefined;
+        })();
       return {
         id,
         fullName,
         email,
-        role: readString(candidate, ["role", "user_type"]),
-        employeeId: readString(candidate, ["employeeId", "employee_id", "user_no"]),
-        companyId: readNumber(candidate, ["companyId", "company_id"]),
+        role: readRole(candidate),
+        employeeId,
+        companyId:
+          readNumber(candidate, ["companyId", "company_id"]) ??
+          readNumber(resolvedCompanyRecord, ["companyId", "company_id", "id"]),
         companyName:
           readString(candidate, ["companyName", "company_name", "organization_name"]) ??
-          readString(companyRecord, ["name", "company_name", "display_name"]),
+          readString(resolvedCompanyRecord, ["companyName", "company_name", "name", "display_name"]),
       };
     }
   }
@@ -222,18 +299,25 @@ export const authService = {
   },
 
   changePassword(payload: ChangePasswordRequest, token: string) {
-    return apiRequest<void>("/api/auth/change-password", {
+    return apiRequest<void>("/api/users/me/change-password", {
       method: "POST",
       body: payload,
       token,
     });
   },
 
-  getCurrentUser(token: string) {
-    return apiRequest<AuthUser>("/api/auth/me", {
+  async getCurrentUser(token: string) {
+    const response = await apiRequest<unknown>("/api/users/me", {
       method: "GET",
       token,
     });
+
+    const user = normalizeUser(response);
+    if (!user) {
+      throw new Error("Current user response is missing required profile fields.");
+    }
+
+    return user;
   },
 
   logout(tokens?: AuthTokens) {

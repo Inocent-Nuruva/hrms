@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Tabs, useRouter } from 'expo-router';
+import { Tabs, useRouter, useRootNavigationState } from 'expo-router';
 import { CalendarDays, Clock3, House, UserRound } from 'lucide-react-native';
 import { ActivityIndicator, Animated, Pressable, View, StyleSheet, type GestureResponderEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -20,13 +20,21 @@ export default function TabLayout() {
   const router = useRouter();
   const { isDark } = useThemePreference();
   const insets = useSafeAreaInsets();
+  const navigationState = useRootNavigationState();
 
-  // Protect the entire tab group - redirect to login if session lost
+  // Protect the entire tab group - redirect to login if session lost.
+  // We wait for navigationState?.key so that expo-router's internal linking
+  // (getInitialURL promise in useLinking.native) has a mounted navigator to
+  // update. Without this, you can get:
+  //   "Can't perform a React state update on a component that hasn't mounted yet"
   useEffect(() => {
+    if (!navigationState?.key) return;
+
     if (!auth.isLoading && !auth.isAuthenticated) {
+      // Use replace to avoid adding to history stack on cold start
       router.replace('/login');
     }
-  }, [auth.isLoading, auth.isAuthenticated, router]);
+  }, [auth.isLoading, auth.isAuthenticated, router, navigationState?.key]);
 
   if (auth.isLoading || !auth.isAuthenticated) {
     return (

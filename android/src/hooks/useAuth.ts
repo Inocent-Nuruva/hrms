@@ -82,7 +82,7 @@ function useProvideAuth() {
         api.getCurrentEmployee().catch(() => null),
       ]);
 
-      const user = (await normalizeSingle(userPayload)) as AuthUser | null;
+      const user = extractUser(userPayload);
       const employee = await normalizeSingle(empPayload);
 
       // Fallbacks for name
@@ -394,10 +394,24 @@ function extractTokens(payload: unknown): AuthTokens | null {
 function extractUser(payload: unknown): AuthUser | null {
   if (!payload || typeof payload !== 'object') return null;
   const p = payload as AnyRecord;
-  const root = (p.data as AnyRecord)?.user || (p.result as AnyRecord)?.user || (p.user as AnyRecord) || (p.data as AnyRecord) || (p.result as AnyRecord) || p;
+  const rootPayload = (p.data as AnyRecord) || (p.result as AnyRecord) || p;
+  const root =
+    (p.data as AnyRecord)?.user ||
+    (p.result as AnyRecord)?.user ||
+    (p.user as AnyRecord) ||
+    (p.data as AnyRecord) ||
+    (p.result as AnyRecord) ||
+    p;
   if (!root) return null;
 
   const r = root as AnyRecord;
+  const activeCompany = (r.active_company as AnyRecord) || (rootPayload.active_company as AnyRecord) || (p.company as AnyRecord);
+  const companies = Array.isArray(p.companies)
+    ? (p.companies as AnyRecord[])
+    : Array.isArray(rootPayload.companies)
+      ? (rootPayload.companies as AnyRecord[])
+      : [];
+  const firstCompany = companies.find((entry) => entry && typeof entry === 'object') || null;
   const id = r.id || r.user_id || r.sub;
   const email = r.email as string | undefined;
   let fullName = (r.fullName as string) || (r.full_name as string) || (r.name as string);
@@ -408,13 +422,43 @@ function extractUser(payload: unknown): AuthUser | null {
   }
   if (!id || !email) return null;
 
+  const employeeId =
+    (r.employee_no as string) ||
+    (r.employeeId as string) ||
+    (r.employee_id as string) ||
+    (r.user_no as string) ||
+    (typeof r.employee_id === 'number' ? String(r.employee_id) : undefined) ||
+    (typeof rootPayload.employee_id === 'number' ? String(rootPayload.employee_id) : undefined);
+
+  const role =
+    (r.role as string) ||
+    (r.user_type as string) ||
+    (Array.isArray(r.roles) && typeof r.roles[0] === 'string' ? (r.roles[0] as string) : undefined) ||
+    (Array.isArray(r.roles) && r.roles[0] && typeof r.roles[0] === 'object'
+      ? ((r.roles[0] as AnyRecord).name as string | undefined)
+      : undefined);
+
+  const companyId =
+    (typeof r.companyId === 'number' ? r.companyId : undefined) ||
+    (typeof activeCompany?.id === 'number' ? activeCompany.id : undefined) ||
+    (typeof activeCompany?.company_id === 'number' ? activeCompany.company_id : undefined) ||
+    (typeof firstCompany?.companyId === 'number' ? firstCompany.companyId : undefined);
+
+  const companyName =
+    (r.companyName as string) ||
+    (r.company_name as string) ||
+    (activeCompany?.name as string) ||
+    (activeCompany?.company_name as string) ||
+    (firstCompany?.companyName as string) ||
+    (firstCompany?.company_name as string);
+
   return {
     id: (id ?? 'me') as string | number,
     fullName: fullName || 'Employee',
     email,
-    employeeId: (r.employeeId as string) || (r.employee_id as string) || (r.user_no as string),
-    role: (r.role as string) || (r.user_type as string),
-    companyId: r.companyId as number | undefined,
-    companyName: (r.companyName as string) || (r.company_name as string),
+    employeeId,
+    role,
+    companyId,
+    companyName,
   };
 }

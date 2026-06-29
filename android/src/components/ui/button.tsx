@@ -1,5 +1,5 @@
 import React from 'react';
-import { Text, StyleSheet, ViewStyle, TextStyle, ActivityIndicator, View } from 'react-native';
+import { Text, StyleSheet, ViewStyle, TextStyle, ActivityIndicator, View, type StyleProp } from 'react-native';
 import { COLORS } from '../../lib/config';
 import { useThemePreference } from '../../hooks/useThemePreference';
 import { TouchableScale } from './touchable-scale';
@@ -11,8 +11,8 @@ interface ButtonProps {
   onPress?: () => void;
   variant?: Variant;
   disabled?: boolean;
-  style?: ViewStyle;
-  textStyle?: TextStyle;
+  style?: StyleProp<ViewStyle>;
+  textStyle?: StyleProp<TextStyle>;
   loading?: boolean;
   leftIcon?: React.ReactNode;
   rightIcon?: React.ReactNode;

@@ -194,6 +194,34 @@ const SECTION_FIELDS: Record<AttendanceSectionKey, FieldConfig[]> = {
     { key: "ignore_missing_checkout_if_hours_valid", label: "Ignore Missing Check-Out If Hours Are Enough", description: "Choose Yes if valid total hours can still count even without a final check-out.", type: "boolean" },
   ],
   devices: [
+    {
+      key: "device_name",
+      label: "Device Name",
+      description: "Friendly name for the terminal as admins will search for it later.",
+      type: "text",
+      placeholder: "e.g Main Gate Terminal",
+    },
+    {
+      key: "device_code",
+      label: "Device Code",
+      description: "Short unique code used to quickly verify the created device record.",
+      type: "text",
+      placeholder: "e.g DAR-MAIN-01",
+    },
+    {
+      key: "device_serial_number",
+      label: "Serial Number",
+      description: "Hardware serial number reported by the attendance device.",
+      type: "text",
+      placeholder: "e.g DS-K1T804AMF-00012345",
+    },
+    {
+      key: "device_model",
+      label: "Model",
+      description: "Exact model name to make similar terminals easier to distinguish.",
+      type: "text",
+      placeholder: "e.g DS-K1T804AMF",
+    },
     { key: "vendor_name", label: "Vendor Name", type: "text", required: true },
     { key: "ip_address", label: "IP Address", type: "text", required: true },
     { key: "port", label: "Port", type: "number", required: true },
@@ -531,6 +559,44 @@ function readStringFromRecord(row: AdminRecord, keys: string[]) {
   return null
 }
 
+function buildAttendanceDeviceIdentity(row: AdminRecord, resolveBranchName?: (branchId: number | null) => string) {
+  const branchId = readNumberFromRecord(row, ["branch_id", "branchId"])
+  const branchName = resolveBranchName ? resolveBranchName(branchId) : null
+
+  return {
+    id: readNumberFromRecord(row, ["id", "device_id", "attendance_device_id"]),
+    name: readStringFromRecord(row, ["device_name", "deviceName", "name", "title"]),
+    code: readStringFromRecord(row, ["device_code", "deviceCode"]),
+    serial: readStringFromRecord(row, ["device_serial_number", "deviceSerialNumber", "serial_no"]),
+    model: readStringFromRecord(row, ["device_model", "deviceModel", "model"]),
+    vendor: readStringFromRecord(row, ["vendor_name", "vendorName"]),
+    integrationType: readStringFromRecord(row, ["integration_type", "integrationType"]),
+    branchId,
+    branchName: branchName && branchName !== "-" ? branchName : null,
+    status: readStringFromRecord(row, ["status"]),
+    ipAddress: readStringFromRecord(row, ["ip_address"]),
+  }
+}
+
+function getAttendanceDeviceSearchText(row: AdminRecord, resolveBranchName?: (branchId: number | null) => string) {
+  const identity = buildAttendanceDeviceIdentity(row, resolveBranchName)
+  return [
+    identity.id,
+    identity.name,
+    identity.code,
+    identity.serial,
+    identity.model,
+    identity.vendor,
+    identity.integrationType,
+    identity.branchName,
+    identity.status,
+    identity.ipAddress,
+  ]
+    .filter((value) => value !== null && value !== undefined)
+    .join(" ")
+    .toLowerCase()
+}
+
 function formatAttendanceError(
   errorObject: unknown,
   section: AttendanceSectionKey,
@@ -563,7 +629,7 @@ function resolveVisibleColumns(section: AttendanceSectionKey, rows: AdminRecord[
   const preferredBySection: Record<AttendanceSectionKey, string[]> = {
     settings: ["name", "auto_calculate", "requires_approval", "overtime_rate_multiplier"],
     policies: ["name", "is_active", "grace_period_minutes", "require_geo_fencing"],
-    devices: ["device_name", "status", "ip_address", "sync_mode"],
+    devices: ["device_code", "device_serial_number", "device_model", "branch_id", "vendor_name", "integration_type", "status", "ip_address"],
     checkpoints: ["name", "type", "policy_set_id", "status"],
     geofences: ["name", "status", "type", "branchId"],
     "wifi-networks": ["name", "status", "ssid"],
@@ -591,15 +657,23 @@ function getAttendanceDeviceLink(row: AdminRecord) {
   }
 
   const deviceLabel =
-    readStringFromRecord(row, ["device_name", "deviceName", "vendor_name", "name"]) ??
+    readStringFromRecord(row, ["device_name", "deviceName", "device_code", "device_serial_number", "vendor_name", "name"]) ??
     `Device ${deviceId}`
 
   const ipAddress = readStringFromRecord(row, ["ip_address"])
+  const serial = readStringFromRecord(row, ["device_serial_number", "deviceSerialNumber", "serial_no"])
+  const detailParts = [`ID ${deviceId}`]
+  if (serial) {
+    detailParts.push(serial)
+  }
+  if (ipAddress) {
+    detailParts.push(ipAddress)
+  }
 
   return {
     href: `/dashboard/attendance/devices/${deviceId}`,
     label: deviceLabel,
-    detail: ipAddress ? `ID ${deviceId} • ${ipAddress}` : `ID ${deviceId}`,
+    detail: detailParts.join(" • "),
   }
 }
 
@@ -985,7 +1059,10 @@ function buildAttendanceLookupLabelMaps({
       return readStringFromRecord(row, ["name", "title"]) ?? `Policy ${id}`
     }),
     device_id: toMap(devices, ["id", "device_id", "attendance_device_id"], (row, id) => {
-      return readStringFromRecord(row, ["device_name", "name", "vendor_name"]) ?? `Device ${id}`
+      const name = readStringFromRecord(row, ["device_name", "name", "vendor_name"]) ?? `Device ${id}`
+      const code = readStringFromRecord(row, ["device_code", "deviceCode"])
+      const serial = readStringFromRecord(row, ["device_serial_number", "deviceSerialNumber", "serial_no"])
+      return code ? `${name} (${code})` : serial ? `${name} (${serial})` : name
     }),
     holiday_group_id: toMap(holidayGroups, ["id", "holiday_group_id"], (row, id) => {
       return readStringFromRecord(row, ["name", "title"]) ?? `Holiday Group ${id}`
@@ -1259,10 +1336,11 @@ function FieldInput({
           }
           const name =
             readStringFromRecord(device, ["device_name", "name", "vendor_name"]) ?? `Device ${id}`
-          const ipAddress = readStringFromRecord(device, ["ip_address"])
+          const code = readStringFromRecord(device, ["device_code", "deviceCode"])
+          const serial = readStringFromRecord(device, ["device_serial_number", "deviceSerialNumber", "serial_no"])
           return (
             <option key={`device-${id}-${index}`} value={String(id)}>
-              {ipAddress ? `${name} (${ipAddress})` : name}
+              {code ? `${name} (${code})` : serial ? `${name} (${serial})` : name}
             </option>
           )
         })}
@@ -1498,7 +1576,6 @@ export function AttendanceManagementView({ section }: { section: string }) {
   const [wifiNetworks, setWifiNetworks] = React.useState<AdminRecord[]>([])
   const [holidayGroups, setHolidayGroups] = React.useState<AdminRecord[]>([])
   const [branchesLoading, setBranchesLoading] = React.useState(false)
-  const [employeesLoading, setEmployeesLoading] = React.useState(false)
   const [policiesLoading, setPoliciesLoading] = React.useState(false)
   const [devicesLoading, setDevicesLoading] = React.useState(false)
   const [geofencesLoading, setGeofencesLoading] = React.useState(false)
@@ -1536,6 +1613,19 @@ export function AttendanceManagementView({ section }: { section: string }) {
   const [currentCompanyName, setCurrentCompanyName] = React.useState<string | null>(() =>
     readStoredCompanyName()
   )
+  const [deviceSearch, setDeviceSearch] = React.useState("")
+  const [deviceBranchFilter, setDeviceBranchFilter] = React.useState("all")
+  const [deviceVendorFilter, setDeviceVendorFilter] = React.useState("all")
+  const [deviceIntegrationFilter, setDeviceIntegrationFilter] = React.useState("all")
+  const [focusedDeviceFingerprint, setFocusedDeviceFingerprint] = React.useState<{
+    code?: string
+    serial?: string
+    model?: string
+    vendor?: string
+    branchId?: number
+    integrationType?: string
+    ipAddress?: string
+  } | null>(null)
 
   React.useEffect(() => {
     setCreateValues(readPersistedFormState(createDraftKey, initialCreateState))
@@ -1549,6 +1639,11 @@ export function AttendanceManagementView({ section }: { section: string }) {
     setError(null)
     setFormError(null)
     setMessage(null)
+    setDeviceSearch("")
+    setDeviceBranchFilter("all")
+    setDeviceVendorFilter("all")
+    setDeviceIntegrationFilter("all")
+    setFocusedDeviceFingerprint(null)
   }, [createDraftKey, initialCreateState])
 
   React.useEffect(() => {
@@ -1615,7 +1710,6 @@ export function AttendanceManagementView({ section }: { section: string }) {
     const needsEmployees = activeSection === "mobile-punches"
     if (!needsEmployees) {
       setEmployees([])
-      setEmployeesLoading(false)
       return
     }
 
@@ -1628,7 +1722,6 @@ export function AttendanceManagementView({ section }: { section: string }) {
     let cancelled = false
 
     const loadEmployees = async () => {
-      setEmployeesLoading(true)
       try {
         const result = await listEmployees(token, {
           page: 1,
@@ -1644,9 +1737,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
           setEmployees([])
         }
       } finally {
-        if (!cancelled) {
-          setEmployeesLoading(false)
-        }
+        // No-op: employee rows are only used for label lookups in this view.
       }
     }
 
@@ -1845,7 +1936,6 @@ export function AttendanceManagementView({ section }: { section: string }) {
     }
   }, [fields])
 
-  const columns = React.useMemo(() => resolveVisibleColumns(activeSection, rows), [activeSection, rows])
   const lookupMaps = React.useMemo(
     () =>
       buildAttendanceLookupLabelMaps({
@@ -1860,8 +1950,77 @@ export function AttendanceManagementView({ section }: { section: string }) {
       }),
     [branches, currentCompanyName, devices, employees, geofences, holidayGroups, policies, wifiNetworks]
   )
+  const resolveBranchName = React.useCallback(
+    (branchId: number | null) => {
+      if (branchId === null) {
+        return "-"
+      }
+      return lookupMaps.branch_id?.get(String(branchId)) ?? lookupMaps.branchId?.get(String(branchId)) ?? `Branch ${branchId}`
+    },
+    [lookupMaps]
+  )
+  const filteredRows = React.useMemo(() => {
+    if (activeSection !== "devices") {
+      return rows
+    }
+
+    const normalizedSearch = deviceSearch.trim().toLowerCase()
+    return rows.filter((row) => {
+      const identity = buildAttendanceDeviceIdentity(row, resolveBranchName)
+      if (deviceBranchFilter !== "all" && String(identity.branchId ?? "") !== deviceBranchFilter) {
+        return false
+      }
+      if (deviceVendorFilter !== "all" && (identity.vendor ?? "").toLowerCase() !== deviceVendorFilter) {
+        return false
+      }
+      if (
+        deviceIntegrationFilter !== "all" &&
+        (identity.integrationType ?? "").toLowerCase() !== deviceIntegrationFilter
+      ) {
+        return false
+      }
+      if (normalizedSearch && !getAttendanceDeviceSearchText(row, resolveBranchName).includes(normalizedSearch)) {
+        return false
+      }
+      return true
+    })
+  }, [
+    activeSection,
+    deviceBranchFilter,
+    deviceIntegrationFilter,
+    deviceSearch,
+    deviceVendorFilter,
+    resolveBranchName,
+    rows,
+  ])
+  const columns = React.useMemo(
+    () => resolveVisibleColumns(activeSection, filteredRows),
+    [activeSection, filteredRows]
+  )
   const showDeviceContextColumn = isDeviceSyncLogsSection
   const sectionGuidance = React.useMemo(() => getSectionSetupGuidance(activeSection), [activeSection])
+  const deviceVendorOptions = React.useMemo(
+    () =>
+      Array.from(
+        new Set(
+          rows
+            .map((row) => buildAttendanceDeviceIdentity(row).vendor?.toLowerCase() ?? "")
+            .filter(Boolean)
+        )
+      ).sort((a, b) => a.localeCompare(b)),
+    [rows]
+  )
+  const deviceIntegrationOptions = React.useMemo(
+    () =>
+      Array.from(
+        new Set(
+          rows
+            .map((row) => buildAttendanceDeviceIdentity(row).integrationType?.toLowerCase() ?? "")
+            .filter(Boolean)
+        )
+      ).sort((a, b) => a.localeCompare(b)),
+    [rows]
+  )
 
   const onCreate = async () => {
     const token = readStoredToken()
@@ -1873,7 +2032,42 @@ export function AttendanceManagementView({ section }: { section: string }) {
       const payload = toPayload(fields, createValues)
       validateAttendancePayload(activeSection, payload)
       await createAttendanceResource(token, activeSection, payload)
-      setMessage("Created successfully.")
+      if (activeSection === "devices") {
+        const fingerprint = {
+          code: typeof payload.device_code === "string" ? payload.device_code : undefined,
+          serial:
+            typeof payload.device_serial_number === "string" ? payload.device_serial_number : undefined,
+          model: typeof payload.device_model === "string" ? payload.device_model : undefined,
+          vendor: typeof payload.vendor_name === "string" ? payload.vendor_name : undefined,
+          branchId: typeof payload.branch_id === "number" ? payload.branch_id : undefined,
+          integrationType:
+            typeof payload.integration_type === "string" ? payload.integration_type : undefined,
+          ipAddress: typeof payload.ip_address === "string" ? payload.ip_address : undefined,
+        }
+        setFocusedDeviceFingerprint(fingerprint)
+        const preferredSearchTerm =
+          fingerprint.code ??
+          fingerprint.serial ??
+          fingerprint.ipAddress ??
+          fingerprint.model ??
+          fingerprint.vendor ??
+          ""
+        setDeviceSearch(preferredSearchTerm)
+        setDeviceBranchFilter(
+          typeof fingerprint.branchId === "number" ? String(fingerprint.branchId) : "all"
+        )
+        setDeviceVendorFilter(fingerprint.vendor ? fingerprint.vendor.toLowerCase() : "all")
+        setDeviceIntegrationFilter(
+          fingerprint.integrationType ? fingerprint.integrationType.toLowerCase() : "all"
+        )
+        setMessage(
+          preferredSearchTerm
+            ? `Created successfully. Filtered the device list to help verify ${preferredSearchTerm}.`
+            : "Created successfully."
+        )
+      } else {
+        setMessage("Created successfully.")
+      }
       setError(null)
       setFormError(null)
       setCreateOpen(false)
@@ -2140,7 +2334,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
             <>
               <button
                 type="button"
-                className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-slate-900 text-white"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-[var(--primary)] text-white transition hover:brightness-95"
                 onClick={() => setCreateOpen(true)}
                 aria-label={`Create ${activeSection.replaceAll("-", " ")}`}
                 title="Create"
@@ -2199,7 +2393,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
                     >
                       Cancel
                     </button>
-                    <button type="button" onClick={() => void onCreate()} className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white">
+                    <button type="button" onClick={() => void onCreate()} className="rounded-md bg-[var(--primary)] px-3 py-1.5 text-sm text-white transition hover:brightness-95">
                       Create
                     </button>
                   </DialogFooter>
@@ -2318,12 +2512,12 @@ export function AttendanceManagementView({ section }: { section: string }) {
           <button
             type="button"
             onClick={() => void fetchRows()}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-300 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-300 text-primary hover:bg-slate-50 dark:border-slate-700 dark:text-primary dark:hover:bg-slate-800"
             disabled={loading}
             aria-label="Refresh"
             title="Refresh"
           >
-            <RefreshCwIcon className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+            <RefreshCwIcon className={`h-4 w-4 text-primary ${loading ? "animate-spin" : ""}`} />
           </button>
         </div>
       </div>
@@ -2344,6 +2538,73 @@ export function AttendanceManagementView({ section }: { section: string }) {
           >
             Go to attendance devices
           </Link>
+        </div>
+      ) : null}
+
+      {activeSection === "devices" ? (
+        <div className="mb-4 space-y-3 rounded-xl border border-slate-200 bg-slate-50/80 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">Device verification tools</p>
+              <p className="text-xs text-slate-600">
+                Search by code, serial, model, vendor, branch, integration type, or IP right after creating a device.
+              </p>
+            </div>
+            <p className="text-xs text-slate-600">
+              Showing {filteredRows.length} of {rows.length} devices
+            </p>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <input
+              type="text"
+              className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+              value={deviceSearch}
+              onChange={(event) => setDeviceSearch(event.target.value)}
+              placeholder="Search code, serial, model, vendor, branch or IP"
+            />
+            <select
+              className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+              value={deviceBranchFilter}
+              onChange={(event) => setDeviceBranchFilter(event.target.value)}
+            >
+              <option value="all">All branches</option>
+              {branches.map((branch, index) => {
+                const branchId = readNumberFromRecord(branch, ["id", "branch_id"])
+                if (branchId === null) {
+                  return null
+                }
+                return (
+                  <option key={`device-branch-filter-${branchId}-${index}`} value={String(branchId)}>
+                    {resolveBranchName(branchId)}
+                  </option>
+                )
+              })}
+            </select>
+            <select
+              className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+              value={deviceVendorFilter}
+              onChange={(event) => setDeviceVendorFilter(event.target.value)}
+            >
+              <option value="all">All vendors</option>
+              {deviceVendorOptions.map((vendor) => (
+                <option key={vendor} value={vendor}>
+                  {vendor}
+                </option>
+              ))}
+            </select>
+            <select
+              className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+              value={deviceIntegrationFilter}
+              onChange={(event) => setDeviceIntegrationFilter(event.target.value)}
+            >
+              <option value="all">All integrations</option>
+              {deviceIntegrationOptions.map((integration) => (
+                <option key={integration} value={integration}>
+                  {integration}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       ) : null}
 
@@ -2372,7 +2633,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
             </tr>
           </thead>
           <tbody className="bg-white dark:bg-slate-950 [&_tr:nth-child(odd)]:bg-slate-50/35 dark:[&_tr:nth-child(odd)]:bg-slate-900/60 [&_tr]:border-t [&_tr]:border-slate-100 dark:[&_tr]:border-slate-800 [&_tr:hover]:bg-slate-50/80 dark:[&_tr:hover]:bg-slate-900/90">
-            {!loading && !error && rows.length === 0 ? (
+            {!loading && !error && filteredRows.length === 0 ? (
               <tr>
                 <td
                   className="px-4 py-10 text-sm text-slate-500"
@@ -2382,10 +2643,26 @@ export function AttendanceManagementView({ section }: { section: string }) {
                 </td>
               </tr>
             ) : null}
-            {rows.map((row, index) => (
+            {filteredRows.map((row, index) => (
               <tr
                 key={String(row.id ?? index)}
-                className="cursor-pointer"
+                className={`cursor-pointer ${
+                  activeSection === "devices" && focusedDeviceFingerprint
+                    ? (() => {
+                        const identity = buildAttendanceDeviceIdentity(row, resolveBranchName)
+                        const isFocusedMatch =
+                          (!focusedDeviceFingerprint.code || identity.code === focusedDeviceFingerprint.code) &&
+                          (!focusedDeviceFingerprint.serial || identity.serial === focusedDeviceFingerprint.serial) &&
+                          (!focusedDeviceFingerprint.model || identity.model === focusedDeviceFingerprint.model) &&
+                          (!focusedDeviceFingerprint.vendor || identity.vendor === focusedDeviceFingerprint.vendor) &&
+                          (!focusedDeviceFingerprint.integrationType ||
+                            identity.integrationType === focusedDeviceFingerprint.integrationType) &&
+                          (!focusedDeviceFingerprint.ipAddress || identity.ipAddress === focusedDeviceFingerprint.ipAddress) &&
+                          (!focusedDeviceFingerprint.branchId || identity.branchId === focusedDeviceFingerprint.branchId)
+                        return isFocusedMatch ? "bg-emerald-50/70 dark:bg-emerald-950/30" : ""
+                      })()
+                    : ""
+                }`}
                 onClick={() => handleRowClick(row)}
               >
                 {columns.map((column) => (

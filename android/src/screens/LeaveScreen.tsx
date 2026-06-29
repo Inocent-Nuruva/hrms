@@ -193,22 +193,18 @@ export function LeaveScreen({ auth, requestId }: Props) {
       >
         <ScreenTransition>
 
-          <View style={styles.heroCard}>
-            <View style={styles.heroHeader}>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.heroTitle, { color: textColor }]}>Plan, request, and review leave</Text>
-              </View>
-              <View style={[styles.heroIcon, { backgroundColor: subtleBlock }]}>
-                <CalendarDays size={22} color={COLORS.primary} />
-              </View>
-            </View>
+          <View style={{ marginBottom: 12 }}>
             <Button
               onPress={() => setShowApplyForm((current) => !current)}
               variant="default"
               leftIcon={<Plus size={16} color="#ffffff" />}
+              style={{ marginBottom: 8 }}
             >
               New leave request
             </Button>
+            <Text style={[styles.heroTitleSmall, { color: mutedColor }]}>
+              Plan, request, and review your time off
+            </Text>
           </View>
 
           <SegmentedControl
@@ -349,7 +345,7 @@ export function LeaveScreen({ auth, requestId }: Props) {
 
       <Modal visible={showApplyForm} animationType="slide" transparent onRequestClose={() => setShowApplyForm(false)}>
         <View style={[styles.modalOverlay, { backgroundColor: overlayColor }]}>
-          <View style={[styles.modalCard, { backgroundColor: isDark ? COLORS.surfaceDark : COLORS.surface, borderColor: outlineColor, borderWidth: 1, borderRadius: 14, padding: 18 }]}>
+          <View style={{ backgroundColor: isDark ? COLORS.surfaceDark : COLORS.surface, padding: 20, borderRadius: 16, maxHeight: '85%' }}>
             <View style={styles.modalHeader}>
               <Text style={[styles.sectionTitle, { color: textColor }]}>New leave request</Text>
               <TouchableScale onPress={() => setShowApplyForm(false)} style={[styles.closeButton, { backgroundColor: subtleBlock }]} pressedScale={0.95}>
@@ -422,7 +418,7 @@ export function LeaveScreen({ auth, requestId }: Props) {
       <Modal visible={selectingLeaveType} transparent animationType="fade" onRequestClose={() => setSelectingLeaveType(false)}>
         <View style={[styles.pickerOverlay, { backgroundColor: overlayColor }]}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setSelectingLeaveType(false)} />
-          <View style={[styles.dropdownCard, { backgroundColor: isDark ? COLORS.surfaceDark : COLORS.surface, borderColor: outlineColor }]}>
+          <View style={{ backgroundColor: isDark ? COLORS.surfaceDark : COLORS.surface, borderRadius: 14, overflow: 'hidden', marginHorizontal: 20, marginTop: 'auto', marginBottom: 'auto' }}>
             {leaveTypes.map((item) => {
               const id = String(item.id ?? '');
               const selected = form.leave_type_id === id;
@@ -449,7 +445,7 @@ export function LeaveScreen({ auth, requestId }: Props) {
       <Modal visible={Boolean(selectingDateField)} transparent animationType="fade" onRequestClose={() => setSelectingDateField(null)}>
         <View style={[styles.pickerOverlay, { backgroundColor: overlayColor }]}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setSelectingDateField(null)} />
-          <View style={[styles.calendarCard, { backgroundColor: isDark ? COLORS.surfaceDark : COLORS.surface, borderColor: outlineColor }]}>
+          <View style={{ backgroundColor: isDark ? COLORS.surfaceDark : COLORS.surface, borderRadius: 20, padding: 16, marginHorizontal: 20, marginTop: 'auto', marginBottom: 'auto' }}>
             <View style={styles.calendarHeader}>
               <TouchableScale style={[styles.calendarNav, { backgroundColor: subtleBlock }]} onPress={() => setCalendarMonth((current) => shiftMonth(current, -1))} pressedScale={0.94}>
                 <ChevronLeft size={18} color={textColor} />
@@ -678,31 +674,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 6,
     paddingBottom: 36,
-    gap: 14,
+    gap: 8,
   },
-  heroCard: {
-    marginTop: 0,
-    gap: 14,
-    paddingVertical: 4,
-  },
-  heroHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 14,
-  },
-  heroIcon: {
-    width: 46,
-    height: 46,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  heroTitle: {
-    marginTop: 10,
-    fontSize: 20,
-    lineHeight: 24,
-    fontWeight: '700',
-    letterSpacing: -0.4,
+  heroTitleSmall: {
+    fontSize: 13,
+    marginTop: 4,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -724,9 +700,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     padding: 18,
-  },
-  modalCard: {
-    maxHeight: '88%',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -783,8 +756,6 @@ const styles = StyleSheet.create({
   dateFieldText: {
     fontSize: 15,
   },
-  textArea: {
-  },
   hiddenTextAreaInput: {
     minHeight: 110,
     borderRadius: 14,
@@ -806,11 +777,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 18,
   },
-  dropdownCard: {
-    borderWidth: 1,
-    borderRadius: 18,
-    overflow: 'hidden',
-  },
   dropdownOption: {
     paddingHorizontal: 16,
     paddingVertical: 15,
@@ -818,11 +784,6 @@ const styles = StyleSheet.create({
   dropdownOptionText: {
     fontSize: 15,
     fontWeight: '600',
-  },
-  calendarCard: {
-    borderWidth: 1,
-    borderRadius: 20,
-    padding: 16,
   },
   calendarHeader: {
     flexDirection: 'row',
@@ -871,15 +832,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   listRow: {
-    paddingVertical: 16,
-    marginBottom: 6,
+    paddingVertical: 14,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
   balanceRow: {
-    paddingVertical: 16,
-    marginBottom: 6,
+    paddingVertical: 14,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',

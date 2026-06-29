@@ -18,6 +18,10 @@ export interface AdminStats {
   companies: number
 }
 
+function unsupportedAdminEndpoint(message: string): never {
+  throw new Error(message)
+}
+
 export interface AdminResourceCollections {
   users: AdminRecord[]
   roles: AdminRecord[]
@@ -153,6 +157,17 @@ export interface MyAttendanceScheduleQueryParams {
   days?: number
 }
 
+export interface SelfServiceRequestQueryParams extends UsersQueryParams {
+  status?: string
+  date_from?: string
+  date_to?: string
+}
+
+export interface TeamAttendanceQueryParams extends UsersQueryParams {
+  date_from?: string
+  date_to?: string
+}
+
 export interface EmployeePositionsQueryParams extends UsersQueryParams {
   employee_id?: number
   position_id?: number
@@ -246,6 +261,123 @@ export const EMPLOYEE_STATUS_VALUES = [
 ] as const
 
 export type EmployeeStatusValue = (typeof EMPLOYEE_STATUS_VALUES)[number]
+
+export type OnboardingAttendanceMode = "shift" | "timetable"
+
+export interface OnboardingShiftProvisioning {
+  shift_id: number
+  effective_from?: string
+  effective_to?: string | null
+  rotation_group_id?: number | null
+  is_primary?: boolean
+}
+
+export interface OnboardingTimetableProvisioning {
+  timetable_id: number
+  effective_from?: string
+  effective_to?: string | null
+}
+
+export interface OnboardingDeviceProvisioning {
+  employee_no?: string
+  access_group_id: number
+  organization_id?: number
+  valid_enabled?: boolean
+  valid_begin_time?: string
+  valid_end_time?: string
+  local_ui_right?: boolean
+  close_delay_enabled?: boolean
+  max_open_door_time?: number
+  open_door_time?: number
+  user_verify_mode?: string
+  metadata?: Record<string, unknown>
+  device_ids: number[]
+  sync_now?: boolean
+  continue_on_error?: boolean
+}
+
+export interface OnboardingProvisioning {
+  role_ids?: number[]
+  branch_access_ids?: number[]
+  attendance_mode?: OnboardingAttendanceMode
+  shift_assignment?: OnboardingShiftProvisioning
+  timetable_assignment?: OnboardingTimetableProvisioning
+  device_assignment?: OnboardingDeviceProvisioning
+}
+
+export interface EmployeeOnboardingInput {
+  auto_start?: boolean
+  workflow_id?: number
+  title?: string
+  description?: string
+  planned_start_date?: string
+  planned_completion_date?: string
+  submit?: boolean
+  provisioning?: OnboardingProvisioning
+}
+
+export interface CreateOnboardingRequestPayload {
+  employee_id: number
+  workflow_id?: number
+  title: string
+  description?: string
+  planned_start_date?: string
+  planned_completion_date?: string
+  submit?: boolean
+  provisioning?: OnboardingProvisioning
+}
+
+export interface CreateEmployeePayload {
+  employee_no: string
+  first_name: string
+  middle_name?: string
+  last_name: string
+  preferred_name?: string
+  gender?: string
+  date_of_birth?: string
+  marital_status?: string
+  nationality?: string
+  profile_photo_url?: string
+  primary_branch_id?: number
+  primary_department_id?: number
+  primary_position_id?: number
+  primary_designation_id?: number
+  position_id?: number
+  employment_status?: EmployeeStatusValue
+  employment_type?: "full_time" | "part_time" | "contract" | "intern" | "consultant" | "temporary"
+  hire_date?: string
+  probation_end_date?: string
+  confirmation_date?: string
+  exit_date?: string
+  reports_to?: number
+  exit_reason?: string
+  notes?: string
+  metadata?: Record<string, unknown>
+  departments?: Array<{ department_id: number; is_primary?: boolean }>
+  contacts?: Array<Record<string, unknown>>
+  addresses?: Array<Record<string, unknown>>
+  relatives?: Array<Record<string, unknown>>
+  identifications?: Array<Record<string, unknown>>
+  bank_accounts?: Array<Record<string, unknown>>
+  academic_qualifications?: Array<Record<string, unknown>>
+  professional_qualifications?: Array<Record<string, unknown>>
+  experience_details?: Array<Record<string, unknown>>
+  onboarding?: EmployeeOnboardingInput
+}
+
+export type CreateEmployeeResponse = AdminRecord & {
+  onboarding_request?: (AdminRecord & {
+    id?: number
+    onboarding_no?: string
+    title?: string
+    status?: string
+    progress_percentage?: string
+    planned_start_date?: string | null
+    planned_completion_date?: string | null
+    provisioning?: OnboardingProvisioning | null
+    metadata?: Record<string, unknown> | null
+  }) | null
+}
 
 export function isEmployeeStatusValue(value: unknown): value is EmployeeStatusValue {
   return (
@@ -1037,6 +1169,54 @@ function buildMyAttendanceScheduleQuery(params: MyAttendanceScheduleQueryParams)
   return query ? `?${query}` : ""
 }
 
+function buildSelfServiceRequestQuery(params: SelfServiceRequestQueryParams) {
+  const searchParams = new URLSearchParams()
+  if (typeof params.page === "number" && params.page > 0) {
+    searchParams.set("page", String(params.page))
+  }
+  if (typeof params.limit === "number" && params.limit > 0) {
+    searchParams.set("limit", String(params.limit))
+  }
+  if (params.sortBy && params.sortBy.trim()) {
+    searchParams.set("sortBy", params.sortBy.trim())
+  }
+  if (params.sortOrder === "ASC" || params.sortOrder === "DESC") {
+    searchParams.set("sortOrder", params.sortOrder)
+  }
+  if (params.search && params.search.trim()) {
+    searchParams.set("search", params.search.trim())
+  }
+  if (params.status && params.status.trim()) {
+    searchParams.set("status", params.status.trim())
+  }
+  if (params.date_from && params.date_from.trim()) {
+    searchParams.set("date_from", params.date_from.trim())
+  }
+  if (params.date_to && params.date_to.trim()) {
+    searchParams.set("date_to", params.date_to.trim())
+  }
+  const query = searchParams.toString()
+  return query ? `?${query}` : ""
+}
+
+function buildTeamAttendanceQuery(params: TeamAttendanceQueryParams) {
+  const searchParams = new URLSearchParams()
+  if (typeof params.page === "number" && params.page > 0) {
+    searchParams.set("page", String(params.page))
+  }
+  if (typeof params.limit === "number" && params.limit > 0) {
+    searchParams.set("limit", String(params.limit))
+  }
+  if (params.date_from && params.date_from.trim()) {
+    searchParams.set("date_from", params.date_from.trim())
+  }
+  if (params.date_to && params.date_to.trim()) {
+    searchParams.set("date_to", params.date_to.trim())
+  }
+  const query = searchParams.toString()
+  return query ? `?${query}` : ""
+}
+
 function extractUsersPagination(payload: unknown, fallbackPage: number, fallbackLimit: number) {
   const root = asRecord(payload)
   const rootData = asRecord(root?.data)
@@ -1103,6 +1283,11 @@ function extractUsersPagination(payload: unknown, fallbackPage: number, fallback
 }
 
 function normalizeSingle(payload: unknown): AdminRecord | null {
+  const directList = asArray(payload)
+  if (directList) {
+    return directList[0] ?? null
+  }
+
   const record = asRecord(payload)
   if (!record) {
     return null
@@ -1531,11 +1716,11 @@ async function listAllAttendanceCollection(
 }
 
 export async function listAttendanceSettings(token: string, params: AttendanceQueryParams = {}) {
-  return listAllAttendanceCollection("/api/attendance/settings", token, params)
+  return listAllAttendanceCollection("/api/attendance/config/policies", token, params)
 }
 
 export async function listAttendancePolicies(token: string, params: AttendanceQueryParams = {}) {
-  return listAllAttendanceCollection("/api/attendance/policies", token, params)
+  return listAllAttendanceCollection("/api/attendance/config/policies", token, params)
 }
 
 export async function listAttendanceDevices(token: string, params: AttendanceQueryParams = {}) {
@@ -1688,15 +1873,46 @@ async function listGenericCollection(
 }
 
 function shiftResourcePath(resource: ShiftResourceKey) {
-  return `/api/shift/${resource}`
+  const resourcePathMap: Partial<Record<ShiftResourceKey, string>> = {
+    shifts: "/api/attendance/schedule-definitions/shifts",
+    "shift-breaks": "/api/attendance/schedule-definitions/shift-breaks",
+    "shift-rotation-groups": "/api/attendance/schedule-definitions/shift-rotation-groups",
+    "shift-rotation-rules": "/api/attendance/schedule-definitions/shift-rotation-rules",
+    "shift-assignments": "/api/attendance/assignments/shifts",
+    "shift-schedules": "/api/attendance/schedules/manual-overrides",
+  }
+
+  return resourcePathMap[resource] ?? `/api/shift/${resource}`
 }
 
 function timetableResourcePath(resource: TimetableResourceKey) {
-  return `/api/timetable/${resource}`
+  const resourcePathMap: Partial<Record<TimetableResourceKey, string>> = {
+    timetables: "/api/attendance/schedule-definitions/timetables",
+    "timetable-days": "/api/attendance/schedule-definitions/timetable-days",
+    "timetable-holiday-rules": "/api/attendance/schedule-definitions/timetable-holiday-rules",
+    "timetable-rotations": "/api/attendance/schedule-definitions/timetable-rotations",
+    "timetable-rotation-rules": "/api/attendance/schedule-definitions/timetable-rotation-rules",
+    "employee-timetables": "/api/attendance/assignments/timetables",
+  }
+
+  return resourcePathMap[resource] ?? `/api/timetable/${resource}`
 }
 
 function attendanceResourcePath(resource: AttendanceResourceKey) {
-  return `/api/attendance/${resource}`
+  const resourcePathMap: Record<AttendanceResourceKey, string> = {
+    settings: "/api/attendance/config/policies",
+    policies: "/api/attendance/config/policies",
+    devices: "/api/attendance/devices",
+    checkpoints: "/api/attendance/checkpoints",
+    geofences: "/api/attendance/geofences",
+    "wifi-networks": "/api/attendance/wifi-networks",
+    "mobile-punches": "/api/attendance/mobile-punches",
+    "holiday-groups": "/api/attendance/holiday-groups",
+    holidays: "/api/attendance/holidays",
+    "device-sync-logs": "/api/attendance/device-sync-logs",
+  }
+
+  return resourcePathMap[resource]
 }
 
 function accessControlResourcePath(resource: AccessControlResourceKey) {
@@ -1755,11 +1971,24 @@ export async function syncAttendanceDevice(token: string, id: string | number) {
   })
 }
 
-export async function syncAccessControlDevice(token: string, id: string | number) {
-  return adminRequest<unknown>(`/api/access-control/devices/${id}/sync`, {
+export async function getAttendanceDeviceSyncStatus(token: string, id: string | number) {
+  const payload = await adminRequest<unknown>(`/api/attendance/devices/${id}/sync-status`, { token })
+  return normalizeSingle(payload) ?? asRecord(payload)
+}
+
+export async function testAttendanceDeviceConnection(token: string, id: string | number) {
+  return adminRequest<unknown>(`/api/attendance/devices/${id}/test-connection`, {
     method: "POST",
     token,
   })
+}
+
+export async function getAccessControlAttendanceDeviceSyncStatus(token: string, id: string | number) {
+  const payload = await adminRequest<unknown>(
+    `/api/access-control/attendance-devices/${id}/sync-status`,
+    { token }
+  )
+  return normalizeSingle(payload) ?? asRecord(payload)
 }
 
 export async function syncAccessControlDeviceDoors(token: string, id: string | number) {
@@ -1771,13 +2000,6 @@ export async function syncAccessControlDeviceDoors(token: string, id: string | n
 
 export async function syncAccessControlDeviceTemplates(token: string, id: string | number) {
   return adminRequest<unknown>(`/api/access-control/schedule-templates/sync-from-device/${id}`, {
-    method: "POST",
-    token,
-  })
-}
-
-export async function syncAccessControlDeviceUsers(token: string, id: string | number) {
-  return adminRequest<unknown>(`/api/access-control/devices/${id}/sync/users`, {
     method: "POST",
     token,
   })
@@ -1805,7 +2027,7 @@ export async function syncAccessControlDeviceWeekPlans(token: string, id: string
 }
 
 export async function activateAttendancePolicy(token: string, id: string | number) {
-  return adminRequest<unknown>(`/api/attendance/policies/${id}/activate`, {
+  return adminRequest<unknown>(`/api/attendance/config/policies/${id}/activate`, {
     method: "PATCH",
     token,
   })
@@ -2185,35 +2407,38 @@ export async function assignEmployeeDevices(
   })
 }
 
-export async function getEmployeeAccessCredentials(token: string, employeeId: string | number) {
-  const payload = await adminRequest<unknown>(`/api/access-control/employees/${employeeId}/credentials`, {
-    token,
-  })
-  return normalizeSingle(payload)
+export async function getEmployeeAccessCredentials(_token: string, _employeeId: string | number) {
+  void _token
+  void _employeeId
+  unsupportedAdminEndpoint(
+    "Employee access credential management is not available in the current backend API."
+  )
 }
 
 export async function createEmployeeAccessCredentials(
-  token: string,
-  employeeId: string | number,
-  data: AdminRecord
+  _token: string,
+  _employeeId: string | number,
+  _data: AdminRecord
 ) {
-  return adminRequest<unknown>(`/api/access-control/employees/${employeeId}/credentials`, {
-    method: "POST",
-    token,
-    body: data,
-  })
+  void _token
+  void _employeeId
+  void _data
+  unsupportedAdminEndpoint(
+    "Employee access credential creation is not available in the current backend API."
+  )
 }
 
 export async function updateEmployeeAccessCredentials(
-  token: string,
-  employeeId: string | number,
-  data: AdminRecord
+  _token: string,
+  _employeeId: string | number,
+  _data: AdminRecord
 ) {
-  return adminRequest<unknown>(`/api/access-control/employees/${employeeId}/credentials`, {
-    method: "PATCH",
-    token,
-    body: data,
-  })
+  void _token
+  void _employeeId
+  void _data
+  unsupportedAdminEndpoint(
+    "Employee access credential updates are not available in the current backend API."
+  )
 }
 
 export async function createEmployeeDevicePassword(
@@ -2897,7 +3122,7 @@ export async function deleteOnboardingWorkflowStep(
   })
 }
 
-export async function createOnboardingRequest(token: string, data: AdminRecord) {
+export async function createOnboardingRequest(token: string, data: CreateOnboardingRequestPayload) {
   return adminRequest<unknown>("/api/onboarding/requests", {
     method: "POST",
     token,
@@ -2962,10 +3187,9 @@ export async function completeOnboardingRequest(token: string, id: string | numb
 }
 
 export async function submitOnboardingRequest(token: string, id: string | number) {
-  return adminRequest<unknown>(`/api/onboarding/requests/${id}/submit`, {
-    method: "POST",
-    token,
-  })
+  unsupportedAdminEndpoint(
+    `Onboarding request submission is no longer exposed as a standalone endpoint in the current API spec. Request ${id} should be created with submit=true instead.`
+  )
 }
 
 export async function reactivateOnboardingRequest(token: string, id: string | number) {
@@ -2979,9 +3203,8 @@ export async function reactivateOnboardingRequest(token: string, id: string | nu
 }
 
 export async function deleteOnboardingRequest(token: string, id: string | number) {
-  return adminRequest<unknown>(`/api/onboarding/requests/${id}`, {
-    method: "DELETE",
-    token,
+  return cancelOnboardingRequest(token, id, {
+    reason: "Cancelled by admin",
   })
 }
 
@@ -3276,12 +3499,14 @@ export async function getCurrentAdminProfile(token: string) {
 
 export async function getMyCompany(token: string) {
   const payload = await adminRequest<unknown>("/api/companies/my", { token })
-  return normalizeSingle(payload)
+  const companies = normalizeList(payload)
+  return companies[0] ?? normalizeSingle(payload)
 }
 
 export async function getAdminCompany(token: string) {
   const payload = await adminRequest<unknown>("/api/companies/my", { token })
-  return normalizeSingle(payload)
+  const companies = normalizeList(payload)
+  return companies[0] ?? normalizeSingle(payload)
 }
 
 export async function createResource(resource: AdminResourceKey, token: string, data: AdminRecord) {
@@ -3292,12 +3517,13 @@ export async function createResource(resource: AdminResourceKey, token: string, 
   })
 }
 
-export async function createEmployeeProfile(token: string, data: AdminRecord) {
-  return adminRequest<unknown>("/api/employees", {
+export async function createEmployeeProfile(token: string, data: CreateEmployeePayload) {
+  const payload = await adminRequest<unknown>("/api/employees", {
     method: "POST",
     token,
     body: data,
   })
+  return ((normalizeSingle(payload) ?? asRecord(payload) ?? {}) as CreateEmployeeResponse)
 }
 
 export async function getEmployeeById(id: string | number, token: string) {
@@ -3346,7 +3572,82 @@ export async function getMyStatus(token: string) {
 
 export async function getMyDashboard(token: string) {
   const payload = await adminRequest<unknown>("/api/me/dashboard", { token })
+  return asRecord(payload) ?? normalizeSingle(payload)
+}
+
+export async function getMyAttendanceAssignments(token: string) {
+  const payload = await adminRequest<unknown>("/api/me/attendance/assignments", { token })
+  return normalizeSingle(payload) ?? asRecord(payload)
+}
+
+export async function createMyAttendanceCheckIn(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/me/attendance/check-in", {
+    method: "POST",
+    token,
+    body: data,
+  })
+}
+
+export async function createMyAttendanceCheckOut(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/me/attendance/check-out", {
+    method: "POST",
+    token,
+    body: data,
+  })
+}
+
+export async function createMyAttendanceCorrectionRequest(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/me/attendance/correction-requests", {
+    method: "POST",
+    token,
+    body: data,
+  })
+}
+
+export async function listMyAttendanceCorrectionRequests(
+  token: string,
+  params: SelfServiceRequestQueryParams = {}
+): Promise<PaginatedUsersResult> {
+  const fallbackPage = params.page && params.page > 0 ? params.page : 1
+  const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20
+  const query = buildSelfServiceRequestQuery(params)
+  const payload = await adminRequest<unknown>(`/api/me/attendance/correction-requests${query}`, { token })
+  const rows = normalizeList(payload)
+  const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit)
+  return { rows, ...pagination }
+}
+
+export async function getMyAttendanceCorrectionRequest(token: string, id: string | number) {
+  const payload = await adminRequest<unknown>(`/api/me/attendance/correction-requests/${id}`, { token })
   return normalizeSingle(payload)
+}
+
+export async function cancelMyAttendanceCorrectionRequest(
+  token: string,
+  id: string | number,
+  data: AdminRecord = {}
+) {
+  return adminRequest<unknown>(`/api/me/attendance/correction-requests/${id}/cancel`, {
+    method: "POST",
+    token,
+    body: data,
+  })
+}
+
+export async function submitMyAttendanceCorrectionRequest(token: string, id: string | number) {
+  return adminRequest<unknown>(`/api/me/attendance/correction-requests/${id}/submit`, {
+    method: "POST",
+    token,
+  })
+}
+
+export async function getMyAttendanceOverview(
+  token: string,
+  params: MyAttendanceHistoryQueryParams = {}
+) {
+  const query = buildMyAttendanceHistoryQuery(params)
+  const payload = await adminRequest<unknown>(`/api/me/attendance/overview${query}`, { token })
+  return normalizeSingle(payload) ?? asRecord(payload)
 }
 
 export async function listMyAttendanceHistory(
@@ -3389,17 +3690,149 @@ export async function getMyAttendanceToday(token: string) {
   return normalizeSingle(payload)
 }
 
+export async function createMyProfileUpdateRequest(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/me/profile-update-requests", {
+    method: "POST",
+    token,
+    body: data,
+  })
+}
+
+export async function listMyProfileUpdateRequests(
+  token: string,
+  params: SelfServiceRequestQueryParams = {}
+): Promise<PaginatedUsersResult> {
+  const fallbackPage = params.page && params.page > 0 ? params.page : 1
+  const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20
+  const query = buildSelfServiceRequestQuery(params)
+  const payload = await adminRequest<unknown>(`/api/me/profile-update-requests${query}`, { token })
+  const rows = normalizeList(payload)
+  const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit)
+  return { rows, ...pagination }
+}
+
+export async function getMyProfileUpdateRequest(token: string, id: string | number) {
+  const payload = await adminRequest<unknown>(`/api/me/profile-update-requests/${id}`, { token })
+  return normalizeSingle(payload)
+}
+
+export async function cancelMyProfileUpdateRequest(
+  token: string,
+  id: string | number,
+  data: AdminRecord = {}
+) {
+  return adminRequest<unknown>(`/api/me/profile-update-requests/${id}/cancel`, {
+    method: "POST",
+    token,
+    body: data,
+  })
+}
+
+export async function submitMyProfileUpdateRequest(token: string, id: string | number) {
+  return adminRequest<unknown>(`/api/me/profile-update-requests/${id}/submit`, {
+    method: "POST",
+    token,
+  })
+}
+
+export async function listMyTeamAttendance(
+  token: string,
+  params: TeamAttendanceQueryParams = {}
+): Promise<PaginatedUsersResult> {
+  const fallbackPage = params.page && params.page > 0 ? params.page : 1
+  const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20
+  const query = buildTeamAttendanceQuery(params)
+  const payload = await adminRequest<unknown>(`/api/me/team/attendance${query}`, { token })
+  const rows = normalizeList(payload)
+  const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit)
+  return { rows, ...pagination }
+}
+
+export async function listCurrentCompanyUsers(
+  token: string,
+  params: UsersQueryParams = {}
+): Promise<PaginatedUsersResult> {
+  return listGenericCollection("/api/companies/current/users", token, params)
+}
+
+export async function createCurrentCompanyUser(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/companies/current/users", {
+    method: "POST",
+    token,
+    body: data,
+  })
+}
+
+export async function deleteCurrentCompanyUser(token: string, userId: string | number) {
+  return adminRequest<unknown>(`/api/companies/current/users/${userId}`, {
+    method: "DELETE",
+    token,
+  })
+}
+
+export async function assignRoleToCurrentCompanyUser(
+  token: string,
+  userId: string | number,
+  roleId: string | number
+) {
+  return adminRequest<unknown>(`/api/companies/current/users/${userId}/roles`, {
+    method: "POST",
+    token,
+    body: { role_id: Number(roleId) },
+  })
+}
+
+export async function revokeRoleFromCurrentCompanyUser(
+  token: string,
+  userId: string | number,
+  roleId: string | number
+) {
+  return adminRequest<unknown>(`/api/companies/current/users/${userId}/roles/${roleId}`, {
+    method: "DELETE",
+    token,
+  })
+}
+
+export async function assignPermissionToCurrentCompanyUser(
+  token: string,
+  userId: string | number,
+  permissionId: string | number
+) {
+  return adminRequest<unknown>(`/api/companies/current/users/${userId}/permissions`, {
+    method: "POST",
+    token,
+    body: { permission_id: Number(permissionId) },
+  })
+}
+
+export async function revokePermissionFromCurrentCompanyUser(
+  token: string,
+  userId: string | number,
+  permissionId: string | number
+) {
+  return adminRequest<unknown>(`/api/companies/current/users/${userId}/permissions/${permissionId}`, {
+    method: "DELETE",
+    token,
+  })
+}
+
 export async function listMyLeaveBalances(
   token: string,
   params: LeaveBalancesQueryParams = {}
-): Promise<PaginatedUsersResult> {
+): Promise<PaginatedUsersResult & { current_fiscal_year?: string; totals?: Record<string, number> }> {
   const fallbackPage = params.page && params.page > 0 ? params.page : 1
   const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20
   const query = buildLeaveBalancesQuery(params)
   const payload = await adminRequest<unknown>(`/api/me/leave/balances${query}`, { token })
   const rows = normalizeList(payload)
   const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit)
-  return { rows, ...pagination }
+  const record = asRecord(payload) || {}
+  return {
+    rows,
+    ...pagination,
+    current_fiscal_year: (record.current_fiscal_year || record.currentFiscalYear || "2026") as string,
+    totals: (record.totals || {}) as Record<string, number>,
+  }
 }
 
 export async function getUserById(id: string | number, token: string) {

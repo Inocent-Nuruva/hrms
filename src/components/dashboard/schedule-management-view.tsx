@@ -2088,18 +2088,17 @@ export function ScheduleManagementView({ section }: { section: string }) {
           </div>
           <div className="flex items-center gap-3 self-start">
             <button
-              className="inline-flex h-9 items-center justify-center rounded-xl border border-slate-300 px-3.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-300 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
               type="button"
               onClick={() => {
                 setMessage(null)
                 void fetchRows()
               }}
             >
-              <RefreshCwIcon className="mr-2 h-4 w-4" />
-              Refresh
+              <RefreshCwIcon className="h-4 w-4 text-primary" />
             </button>
             <button
-              className="inline-flex h-9 items-center justify-center rounded-xl bg-slate-900 px-3.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+              className="inline-flex h-9 items-center justify-center rounded-xl bg-[var(--primary)] px-3.5 text-sm font-semibold text-white transition hover:brightness-95"
               type="button"
               onClick={() => {
                 setFormError(null)
@@ -2230,7 +2229,7 @@ export function ScheduleManagementView({ section }: { section: string }) {
             </button>
             <button
               type="button"
-              className="inline-flex h-11 items-center justify-center rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800"
+              className="inline-flex h-11 items-center justify-center rounded-xl bg-[var(--primary)] px-4 text-sm font-semibold text-white transition hover:brightness-95"
               onClick={() => void onCreate()}
             >
               Create
@@ -2262,7 +2261,7 @@ export function ScheduleManagementView({ section }: { section: string }) {
             </button>
             <button
               type="button"
-              className="inline-flex h-11 items-center justify-center rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800"
+              className="inline-flex h-11 items-center justify-center rounded-xl bg-[var(--primary)] px-4 text-sm font-semibold text-white transition hover:brightness-95"
               onClick={() => void onEdit()}
             >
               Save

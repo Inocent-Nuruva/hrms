@@ -25,19 +25,6 @@ function hexToRgb(hex: string) {
   }
 }
 
-function rgbToHex(r: number, g: number, b: number) {
-  return `#${[r, g, b].map((part) => part.toString(16).padStart(2, "0")).join("")}`
-}
-
-function shift(hex: string, delta: number) {
-  const rgb = hexToRgb(hex)
-  if (!rgb) {
-    return hex
-  }
-  const clamp = (value: number) => Math.max(0, Math.min(255, value))
-  return rgbToHex(clamp(rgb.r + delta), clamp(rgb.g + delta), clamp(rgb.b + delta))
-}
-
 function applyAccent(accent: string) {
   if (typeof document === "undefined") {
     return
@@ -45,10 +32,14 @@ function applyAccent(accent: string) {
   const root = document.documentElement
   const rgb = hexToRgb(accent)
   const headerBg = rgb ? `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.14)` : "rgba(17, 17, 17, 0.14)"
+  const railBg = rgb ? `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.10)` : "rgba(17, 17, 17, 0.10)"
+  const railBorder = rgb ? `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.16)` : "rgba(17, 17, 17, 0.16)"
   root.style.setProperty("--sidebar-icon-color", accent)
   root.style.setProperty("--sidebar-active-link-color", accent)
   root.style.setProperty("--table-header-accent", accent)
   root.style.setProperty("--table-header-accent-bg", headerBg)
+  root.style.setProperty("--section-tab-rail-bg", railBg)
+  root.style.setProperty("--section-tab-rail-border", railBorder)
   root.style.setProperty("--primary", accent)
   root.style.setProperty("--accent", accent)
   root.style.setProperty("--ring", accent)

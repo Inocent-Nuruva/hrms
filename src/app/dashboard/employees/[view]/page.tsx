@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation"
 
-import AdminDashboardView from "@/components/dashboard/admin-dashboard-view"
 import { EmployeesListView } from "@/components/dashboard/employees-list-view"
 import { EmployeeRegisterForm } from "@/components/dashboard/employee-register-form"
 import { OnboardingView } from "@/components/dashboard/onboarding-view"
@@ -34,40 +33,24 @@ export default async function EmployeesViewPage({
   }
 
   if (!ALLOWED_VIEWS.has(normalized)) {
-    redirect("/dashboard/employees/register")
+    redirect("/dashboard/employees")
   }
 
   if (normalized === "register") {
-    return (
-      <AdminDashboardView>
-        <EmployeeRegisterForm />
-      </AdminDashboardView>
-    )
+    return <EmployeeRegisterForm />
   }
 
   if (normalized === "all") {
-    return (
-      <AdminDashboardView>
-        <EmployeesListView />
-      </AdminDashboardView>
-    )
+    return <EmployeesListView />
   }
 
   if (normalized === "onboarding") {
-    return (
-      <AdminDashboardView>
-        <OnboardingView />
-      </AdminDashboardView>
-    )
+    return <OnboardingView />
   }
 
   if (normalized === "offboarding") {
-    return (
-      <AdminDashboardView>
-        <OffboardingView />
-      </AdminDashboardView>
-    )
+    return <OffboardingView />
   }
 
-  return <AdminDashboardView />
+  return null
 }

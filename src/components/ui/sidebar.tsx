@@ -35,6 +35,27 @@ const SIDEBAR_DEFAULT_WIDTH_PX = 252
 const SIDEBAR_MIN_WIDTH_PX = 240
 const SIDEBAR_MAX_WIDTH_PX = 420
 
+function readSidebarOpenState(defaultOpen: boolean) {
+  if (typeof document === "undefined") {
+    return defaultOpen
+  }
+
+  const cookieValue = document.cookie
+    .split("; ")
+    .find((entry) => entry.startsWith(`${SIDEBAR_COOKIE_NAME}=`))
+    ?.split("=")[1]
+
+  if (cookieValue === "true") {
+    return true
+  }
+
+  if (cookieValue === "false") {
+    return false
+  }
+
+  return defaultOpen
+}
+
 function parseSidebarWidthValue(value: unknown) {
   if (typeof value !== "string") {
     return SIDEBAR_DEFAULT_WIDTH_PX
@@ -116,7 +137,7 @@ function SidebarProvider({
 
   // This is the internal state of the sidebar.
   // We use openProp and setOpenProp for control from outside the component.
-  const [_open, _setOpen] = React.useState(defaultOpen)
+  const [_open, _setOpen] = React.useState(() => readSidebarOpenState(defaultOpen))
   const open = openProp ?? _open
   const setOpen = React.useCallback(
     (value: boolean | ((value: boolean) => boolean)) => {
@@ -414,7 +435,7 @@ function SidebarInset({ className, ...props }: React.ComponentProps<"main">) {
     <main
       data-slot="sidebar-inset"
       className={cn(
-        "relative flex w-full flex-1 flex-col bg-background md:peer-data-[variant=inset]:m-1.5 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:shadow-sm md:peer-data-[variant=inset]:peer-data-[state=collapsed]:ml-2",
+        "relative flex w-full flex-1 flex-col bg-background md:peer-data-[variant=inset]:m-1.5 md:peer-data-[variant=inset]:ml-1 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:shadow-sm md:peer-data-[variant=inset]:peer-data-[state=collapsed]:ml-2",
         className
       )}
       {...props}

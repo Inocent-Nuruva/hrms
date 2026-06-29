@@ -1,7 +1,5 @@
 import { redirect } from "next/navigation"
 
-import AdminDashboardView from "@/components/dashboard/admin-dashboard-view"
-
 const ALLOWED_VIEWS = new Set([
   "promotion",
   "recruitment",
@@ -25,5 +23,5 @@ export default async function OperationsViewPage({
     redirect("/dashboard/operations/promotion")
   }
 
-  return <AdminDashboardView />
+  return null
 }

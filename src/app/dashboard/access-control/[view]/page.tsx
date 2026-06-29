@@ -1,5 +1,8 @@
 import { redirect } from "next/navigation"
 
+import { AccessControlManagementClient } from "@/components/dashboard/access-control-management-client"
+import { AttendanceManagementClient } from "@/components/dashboard/attendance-management-client"
+
 interface AccessControlViewPageProps {
   params: Promise<{
     view: string
@@ -13,11 +16,21 @@ export default async function AccessControlViewPage({
   const normalized = view?.toLowerCase()
 
   const redirectMap: Record<string, string> = {
-    doors: "/dashboard/attendance/doors",
-    templates: "/dashboard/attendance/templates",
-    organizations: "/dashboard/attendance/organizations",
-    groups: "/dashboard/attendance/groups",
+    roles: "/dashboard/roles",
+    permissions: "/dashboard/permissions",
   }
 
-  redirect(redirectMap[normalized] ?? "/dashboard/roles")
+  if (redirectMap[normalized]) {
+    redirect(redirectMap[normalized])
+  }
+
+  if (normalized === "devices") {
+    return <AttendanceManagementClient section="devices" />
+  }
+
+  if (!["doors", "templates", "organizations", "groups"].includes(normalized)) {
+    redirect("/dashboard/access-control")
+  }
+
+  return <AccessControlManagementClient section={normalized} moduleTitle="Access Control" />
 }

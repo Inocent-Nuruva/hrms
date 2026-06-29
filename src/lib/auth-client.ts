@@ -11,33 +11,11 @@ import type {
   VerifyOTPResponse,
 } from "../types/auth";
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 const MOCK_DELAY_MS = 1500; // simulated network latency in dev/mock mode
 const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK_AUTH === "true";
 
-// ── Generic fetch wrapper ─────────────────────────────────────────────────────
-
-async function apiFetch<T>(
-  path: string,
-  body: unknown
-): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-    credentials: "include",            // send cookies for session-based auth
-  });
-
-  if (!res.ok) {
-    let message = `HTTP ${res.status}`;
-    try {
-      const json = await res.json();
-      message = json?.message ?? message;
-    } catch {}
-    throw new Error(message);
-  }
-
-  return res.json() as Promise<T>;
+function unsupportedAuthFlow(message: string): never {
+  throw new Error(message)
 }
 
 // ── Mock helpers ──────────────────────────────────────────────────────────────
@@ -77,29 +55,31 @@ function mockVerifyOTP(req: VerifyOTPRequest): VerifyOTPResponse {
 /**
  * Send a one-time passcode to the given contact.
  *
- * POST /api/auth/send-otp
- * Body: { contact: string, method: "email" | "phone" }
+ * This legacy OTP helper flow is not exposed by the current backend API.
  */
 export async function sendOTP(req: SendOTPRequest): Promise<SendOTPResponse> {
   if (USE_MOCK) {
     await delay(MOCK_DELAY_MS);
     return mockSendOTP(req);
   }
-  return apiFetch<SendOTPResponse>("/api/auth/send-otp", req);
+  unsupportedAuthFlow(
+    "Verification code delivery is not available in the current API. Use the main login and onboarding flow instead."
+  );
 }
 
 /**
  * Verify the one-time passcode and exchange it for a session token.
  *
- * POST /api/auth/verify-otp
- * Body: { contact: string, otp: string }
+ * This legacy OTP verification flow is not exposed by the current backend API.
  */
 export async function verifyOTP(req: VerifyOTPRequest): Promise<VerifyOTPResponse> {
   if (USE_MOCK) {
     await delay(MOCK_DELAY_MS);
     return mockVerifyOTP(req);
   }
-  return apiFetch<VerifyOTPResponse>("/api/auth/verify-otp", req);
+  unsupportedAuthFlow(
+    "Verification code confirmation is not available in the current API. Use the main login and onboarding flow instead."
+  );
 }
 
 /**

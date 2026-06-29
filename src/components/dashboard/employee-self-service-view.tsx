@@ -1,10 +1,26 @@
 "use client"
 
 import * as React from "react"
-import { HorizontalScrollContainer } from "@/components/common/horizontal-scroll-container"
-import { Camera, Loader2, Pencil, X } from "lucide-react"
+import {
+  BriefcaseIcon,
+  Building2Icon,
+  CalendarIcon,
+  ClockIcon,
+  Loader2,
+  MailIcon,
+  MapPinIcon,
+
+  PhoneIcon,
+  UserIcon,
+  UsersIcon,
+} from "lucide-react"
+import { LumaSpin } from "@/components/ui/luma-spin"
 
 import {
+  getMyAttendanceAssignments,
+  getMyAttendanceOverview,
+  getMyDashboard,
+  getMyStatus,
   createMyLeaveRequest,
   getCurrentEmployee,
   getEmployeeById,
@@ -13,11 +29,16 @@ import {
   listBranches,
   listDepartments,
   listEmployees,
+  listMyAttendanceCorrectionRequests,
   listMyLeaveBalances,
   listLeavePolicies,
   listMyLeaveRequests,
   listLeaveTypes,
+  listMyProfileUpdateRequests,
+  listMyTeamAttendance,
   updateUserById,
+  cancelMyLeaveRequest,
+  submitMyLeaveRequest,
   type AdminRecord,
 } from "@/lib/admin-api"
 import { API_BASE_URL, AUTH_STORAGE_KEYS } from "@/utils/constants"
@@ -26,9 +47,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import Link from "next/link"
+import { usePathname, useSearchParams } from "next/navigation"
+import { cn } from "@/lib/utils"
 import {
   Dialog,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogPopup,
@@ -43,6 +67,8 @@ type SelfProfileTab = "summary" | "assignments" | "personal" | "records"
 type EmployeeSelfServiceLeaveViewProps = {
   tab: SelfLeaveTab
 }
+
+const SELF_SERVICE_UNAVAILABLE_MESSAGE = "This section is not available for your account yet."
 
 function asRecord(value: unknown): AdminRecord | null {
   return typeof value === "object" && value !== null ? (value as AdminRecord) : null
@@ -123,21 +149,6 @@ function formatDate(value: unknown) {
   return parsed.toLocaleDateString()
 }
 
-function readFileAsDataUrl(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => {
-      if (typeof reader.result === "string" && reader.result.trim()) {
-        resolve(reader.result)
-        return
-      }
-      reject(new Error("Could not read the selected file."))
-    }
-    reader.onerror = () => reject(new Error("Could not read the selected file."))
-    reader.readAsDataURL(file)
-  })
-}
-
 function formatUnknownValue(value: unknown) {
   if (value === null || value === undefined) {
     return "-"
@@ -163,6 +174,53 @@ function formatEmploymentType(value: unknown) {
     .filter(Boolean)
     .map((item) => item[0]?.toUpperCase() + item.slice(1))
     .join(" ")
+}
+
+function formatPunchState(value: unknown): string {
+  if (!value) return "No activity";
+  const str = String(value).trim();
+  if (!str) return "No activity";
+
+  const lower = str.toLowerCase().replace(/[- ]/g, "_");
+
+  const semanticMap: Record<string, string> = {
+    not_checked_in: "Not checked in",
+    no_activity: "No activity",
+    checked_in: "Checked in",
+    checked_out: "Checked out",
+    on_break: "On break",
+    present: "Present",
+    absent: "Absent",
+    late: "Late",
+    half_day: "Half day",
+    off_day: "Off day",
+    holiday: "Holiday",
+    on_leave: "On leave",
+  };
+
+  if (semanticMap[lower]) {
+    return semanticMap[lower];
+  }
+
+  // Fallback: make it title case
+  return str
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function formatProcessingState(value: unknown): string {
+  if (!value) return "";
+  const str = String(value).trim();
+  if (!str) return "";
+  const lower = str.toLowerCase().replace(/[- ]/g, "_");
+  const map: Record<string, string> = {
+    pending: "Pending",
+    processed: "Processed",
+    recalculating: "Recalculating",
+    in_progress: "In progress",
+  };
+  if (map[lower]) return map[lower];
+  return str.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 function readStoredToken() {
@@ -759,6 +817,84 @@ function WaveInfoRows({
   )
 }
 
+function readArray(value: unknown) {
+  return Array.isArray(value) ? value : []
+}
+
+function formatDateTime(value: unknown) {
+  if (typeof value !== "string" || !value.trim()) {
+    return "-"
+  }
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) {
+    return value
+  }
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(parsed)
+}
+
+function SelfServiceStatCard({
+  label,
+  value,
+  hint,
+}: {
+  label: string
+  value: string
+  hint?: string
+}) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50/90 p-3.5">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{label}</p>
+      <p className="mt-2 text-base font-semibold text-slate-900">{value}</p>
+      {hint ? <p className="mt-1 text-xs text-slate-500">{hint}</p> : null}
+    </div>
+  )
+}
+
+function RequestStatusList({
+  title,
+  emptyText,
+  rows,
+}: {
+  title: string
+  emptyText: string
+  rows: AdminRecord[]
+}) {
+  return (
+    <Card className="summary-wave-card">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">{title}</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3 pt-0">
+        {rows.length === 0 ? <EmptyStateRow text={emptyText} /> : null}
+        {rows.map((row, index) => {
+          const titleText =
+            readString(row, ["title", "request_no", "leave_no", "reference_no", "reference"], "") ||
+            readString(row, ["reason", "request_type", "change_type"], "Request")
+          const createdAt =
+            formatDateTime(row.created_at) !== "-" ? formatDateTime(row.created_at) : formatDate(row.date)
+          return (
+            <div key={String(row.id ?? index)} className="rounded-md border border-slate-200 p-3">
+              <div className="flex items-start justify-between gap-3">
+                <p className="font-medium text-slate-900">{titleText}</p>
+                <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-slate-600">
+                  {readString(row, ["status"], "draft")}
+                </span>
+              </div>
+              <p className="mt-1 text-sm text-slate-600">{createdAt}</p>
+            </div>
+          )
+        })}
+      </CardContent>
+    </Card>
+  )
+}
+
 type WaveSeparatorVariant = "subtle" | "layered"
 
 function WaveSeparator({
@@ -830,65 +966,13 @@ function formatApiErrorLines(errorObject: unknown, fallback: string) {
   return [fallback]
 }
 
-function SectionEditButton({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon"
-      className="size-7 text-slate-500 transition-all duration-300 hover:-translate-y-0.5 hover:text-primary"
-      aria-label={`Edit ${label}`}
-      onClick={onClick}
-    >
-      <Pencil className="size-3.5 transition-transform duration-300 hover:rotate-12" />
-    </Button>
-  )
-}
-
-function SectionHeading({
-  title,
-  onEdit,
-}: {
-  title: string
-  onEdit?: () => void
-}) {
-  return (
-    <div className="flex items-center justify-between gap-2">
-      <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">{title}</h3>
-      {onEdit ? <SectionEditButton label={title} onClick={onEdit} /> : null}
-    </div>
-  )
-}
 
 export function EmployeeSelfServiceProfileView() {
   const { loading, error, token, currentUser, employee, refresh } = useSelfEmployeeData()
-  const profilePhotoInputRef = React.useRef<HTMLInputElement | null>(null)
-  const [isEditing, setIsEditing] = React.useState(false)
-  const [activeTab, setActiveTab] = React.useState<SelfProfileTab>("summary")
-  const [firstName, setFirstName] = React.useState("")
-  const [lastName, setLastName] = React.useState("")
-  const [email, setEmail] = React.useState("")
-  const [phoneNumber, setPhoneNumber] = React.useState("")
-  const [saving, setSaving] = React.useState(false)
+  const searchParams = useSearchParams()
+  const pathname = usePathname()
+  const activeTab = (searchParams?.get("tab") as SelfProfileTab) || "summary"
   const [message, setMessage] = React.useState<string | null>(null)
-  const profilePhotoUrl =
-    readString(employee, ["profile_photo_url"], "") ||
-    readString(asRecord(employee?.company_user), ["profile_photo_url"], "") ||
-    readString(asRecord(asRecord(employee?.company_user)?.user), ["profile_photo_url"], "")
-  const fullName =
-    readString(employee, ["full_name", "fullName", "name"], "") ||
-    [readString(employee, ["first_name"], ""), readString(employee, ["last_name"], "")]
-      .filter(Boolean)
-      .join(" ") ||
-    [readString(currentUser, ["first_name"], ""), readString(currentUser, ["last_name"], "")]
-      .filter(Boolean)
-      .join(" ")
-  const initials = (fullName || readString(currentUser, ["email"], "U"))
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("")
   const tabs: Array<{ key: SelfProfileTab; label: string }> = [
     { key: "summary", label: "Summary" },
     { key: "assignments", label: "Assignments" },
@@ -899,7 +983,14 @@ export function EmployeeSelfServiceProfileView() {
   const [sectionSaving, setSectionSaving] = React.useState(false)
   const [sectionError, setSectionError] = React.useState<string | null>(null)
   const [sectionErrorLines, setSectionErrorLines] = React.useState<string[]>([])
-  const [profilePhotoSaving, setProfilePhotoSaving] = React.useState(false)
+  const [dashboardOverview, setDashboardOverview] = React.useState<AdminRecord | null>(null)
+  const [employmentStatus, setEmploymentStatus] = React.useState<AdminRecord | null>(null)
+  const [attendanceOverview, setAttendanceOverview] = React.useState<AdminRecord | null>(null)
+  const [attendanceAssignments, setAttendanceAssignments] = React.useState<AdminRecord | null>(null)
+  const [teamAttendance, setTeamAttendance] = React.useState<AdminRecord[]>([])
+  const [correctionRequests, setCorrectionRequests] = React.useState<AdminRecord[]>([])
+  const [profileUpdateRequests, setProfileUpdateRequests] = React.useState<AdminRecord[]>([])
+  const [selfServiceNotes, setSelfServiceNotes] = React.useState<string[]>([])
   const [sectionValues, setSectionValues] = React.useState<Record<EditableUserField, string>>({
     first_name: "",
     last_name: "",
@@ -912,65 +1003,6 @@ export function EmployeeSelfServiceProfileView() {
   })
   const loggedInUserId = React.useMemo(() => resolveLoggedInUserId(currentUser, token), [currentUser, token])
 
-  React.useEffect(() => {
-    if (!currentUser && !employee) {
-      return
-    }
-    setFirstName(readString(currentUser, ["first_name", "firstName"], ""))
-    setLastName(readString(currentUser, ["last_name", "lastName"], ""))
-    setEmail(readString(currentUser, ["email"], ""))
-    const companyUser = asRecord(employee?.company_user)
-    const nestedUser = asRecord(companyUser?.user)
-    const linkedUser = nestedUser ?? companyUser
-    const linkedPhone = readString(linkedUser, ["phone", "phone_number"], "")
-    const myPhone = readString(currentUser, ["phone", "phone_number"], "")
-    setPhoneNumber(myPhone || linkedPhone)
-  }, [currentUser, employee])
-
-  const handleProfileUpdate = async () => {
-    if (!token) {
-      setMessage("Session expired. Please sign in again.")
-      return
-    }
-    if (loggedInUserId === null) {
-      setMessage("Unable to resolve user id for profile update.")
-      return
-    }
-
-    setSaving(true)
-    setMessage(null)
-
-    try {
-      const payload: AdminRecord = {}
-      if (firstName.trim()) {
-        payload.first_name = firstName.trim()
-      }
-      if (lastName.trim()) {
-        payload.last_name = lastName.trim()
-      }
-      if (email.trim()) {
-        payload.email = email.trim()
-      }
-      if (phoneNumber.trim()) {
-        payload.phone = phoneNumber.trim()
-      }
-      if (!Object.keys(payload).length) {
-        setMessage("Nothing to update.")
-        return
-      }
-
-      await updateUserById(loggedInUserId, token, payload)
-      setIsEditing(false)
-      setMessage("Profile updated successfully.")
-      await refresh()
-    } catch (errorObject) {
-      const text = errorObject instanceof Error ? errorObject.message : "Failed to update profile."
-      setMessage(text)
-    } finally {
-      setSaving(false)
-    }
-  }
-
   const baseEditorValues = React.useMemo(
     () => ({
       first_name: readString(currentUser, ["first_name", "firstName"], ""),
@@ -980,9 +1012,9 @@ export function EmployeeSelfServiceProfileView() {
       password: "",
       user_no: readString(currentUser, ["user_no", "employee_no"], ""),
       status: readString(currentUser, ["status"], "") || readString(employee, ["employment_status"], ""),
-      profile_photo_url: profilePhotoUrl || "",
+      profile_photo_url: "",
     }),
-    [currentUser, employee, profilePhotoUrl]
+    [currentUser, employee]
   )
 
   const openSectionEditor = React.useCallback(
@@ -1045,244 +1077,322 @@ export function EmployeeSelfServiceProfileView() {
     }
   }, [loggedInUserId, refresh, sectionEditor, sectionValues, token])
 
-  const handleProfilePhotoChange = React.useCallback(
-    async (event: React.ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0]
-      event.target.value = ""
+  React.useEffect(() => {
+    if (!token) {
+      setDashboardOverview(null)
+      setEmploymentStatus(null)
+      setAttendanceOverview(null)
+      setAttendanceAssignments(null)
+      setTeamAttendance([])
+      setCorrectionRequests([])
+      setProfileUpdateRequests([])
+      setSelfServiceNotes([])
+      return
+    }
 
-      if (!file) {
+    let cancelled = false
+
+    void Promise.allSettled([
+      getMyDashboard(token),
+      getMyStatus(token),
+      getMyAttendanceOverview(token, { page: 1, limit: 20, sortBy: "created_at", sortOrder: "DESC" }),
+      getMyAttendanceAssignments(token),
+      listMyTeamAttendance(token, { page: 1, limit: 5 }),
+      listMyAttendanceCorrectionRequests(token, { page: 1, limit: 5, sortBy: "created_at", sortOrder: "DESC" }),
+      listMyProfileUpdateRequests(token, { page: 1, limit: 5, sortBy: "created_at", sortOrder: "DESC" }),
+    ]).then((results) => {
+      if (cancelled) {
         return
       }
 
-      if (!file.type.startsWith("image/")) {
-        setMessage("Please choose an image file for your profile photo.")
-        return
+      const notes: string[] = []
+      const [
+        dashboardResult,
+        statusResult,
+        overviewResult,
+        assignmentsResult,
+        teamResult,
+        correctionsResult,
+        profileUpdatesResult,
+      ] = results
+
+      setDashboardOverview(dashboardResult.status === "fulfilled" ? asRecord(dashboardResult.value) : null)
+      setEmploymentStatus(statusResult.status === "fulfilled" ? asRecord(statusResult.value) : null)
+      setAttendanceOverview(overviewResult.status === "fulfilled" ? asRecord(overviewResult.value) : null)
+      setAttendanceAssignments(assignmentsResult.status === "fulfilled" ? asRecord(assignmentsResult.value) : null)
+      setTeamAttendance(teamResult.status === "fulfilled" ? teamResult.value.rows : [])
+
+      if (correctionsResult.status === "fulfilled") {
+        setCorrectionRequests(correctionsResult.value.rows)
+      } else {
+        setCorrectionRequests([])
+        const message = correctionsResult.reason instanceof Error ? correctionsResult.reason.message : ""
+        if (message) {
+          notes.push(`Correction requests: ${message}`)
+        }
       }
 
-      if (!token) {
-        setMessage("Session expired. Please sign in again.")
-        return
+      if (profileUpdatesResult.status === "fulfilled") {
+        setProfileUpdateRequests(profileUpdatesResult.value.rows)
+      } else {
+        setProfileUpdateRequests([])
+        const message =
+          profileUpdatesResult.reason instanceof Error ? profileUpdatesResult.reason.message : ""
+        if (message) {
+          notes.push(`Profile update requests: ${message}`)
+        }
       }
 
-      if (loggedInUserId === null) {
-        setMessage("Unable to resolve user id for profile photo update.")
-        return
-      }
+      setSelfServiceNotes(notes)
+    })
 
-      if (file.size > 5 * 1024 * 1024) {
-        setMessage("Profile photo must be 5 MB or smaller.")
-        return
-      }
+    return () => {
+      cancelled = true
+    }
+  }, [token])
 
-      setProfilePhotoSaving(true)
-      setMessage(null)
-
-      try {
-        const dataUrl = await readFileAsDataUrl(file)
-        await updateUserById(loggedInUserId, token, {
-          profile_photo_url: dataUrl,
-        })
-        setMessage("Profile photo updated successfully.")
-        await refresh()
-      } catch (errorObject) {
-        const text = errorObject instanceof Error ? errorObject.message : "Failed to update profile photo."
-        setMessage(text)
-      } finally {
-        setProfilePhotoSaving(false)
-      }
-    },
-    [loggedInUserId, refresh, token]
+  const attendanceTodayRecord = React.useMemo(
+    () =>
+      asRecord(attendanceOverview?.today) ??
+      asRecord(dashboardOverview?.attendance_today) ??
+      asRecord(dashboardOverview?.attendance_overview),
+    [attendanceOverview, dashboardOverview]
   )
+  const dashboardLeave = React.useMemo(() => asRecord(dashboardOverview?.leave), [dashboardOverview])
+  const dashboardActions = React.useMemo(
+    () => asRecord(dashboardOverview?.action_flags) ?? asRecord(attendanceTodayRecord?.action_flags),
+    [attendanceTodayRecord, dashboardOverview]
+  )
+  const scheduleDays = React.useMemo(
+    () =>
+      readArray(asRecord(dashboardOverview?.schedule_preview)?.days)
+        .map((entry) => asRecord(entry))
+        .filter((entry): entry is AdminRecord => entry !== null),
+    [dashboardOverview]
+  )
+  const assignmentSummaryRows = React.useMemo(() => {
+    if (!attendanceAssignments) {
+      return [] as Array<{ label: string; value: string }>
+    }
+
+    const defaultTimetable = asRecord(attendanceAssignments.default_timetable)
+    const defaultShift = asRecord(attendanceAssignments.default_shift)
+
+    return [
+      { label: "Default Timetable", value: readString(defaultTimetable, ["name", "code"], "-") },
+      { label: "Default Shift", value: readString(defaultShift, ["name", "code"], "-") },
+      { label: "Shift Assignments", value: String(readArray(attendanceAssignments.shift_assignments).length) },
+      { label: "Timetable Assignments", value: String(readArray(attendanceAssignments.timetable_assignments).length) },
+      { label: "Schedule Overrides", value: String(readArray(attendanceAssignments.schedule_overrides).length) },
+    ]
+  }, [attendanceAssignments])
 
   return (
-    <div className="grid gap-4 px-4 lg:px-6">
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="group relative size-10 shrink-0 overflow-hidden rounded-full border border-slate-200 bg-slate-100 dark:border-slate-800 dark:bg-slate-900">
-                <input
-                  ref={profilePhotoInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(event) => void handleProfilePhotoChange(event)}
-                />
-                {profilePhotoUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={profilePhotoUrl} alt="Profile photo" className="size-full object-cover" />
-                ) : (
-                  <div className="flex size-full items-center justify-center text-sm font-semibold text-slate-700 dark:text-slate-200">
-                    {initials || "U"}
-                  </div>
+    <div className="grid gap-4">
+      <div className="glass-scrollbar overflow-x-auto">
+        <div className="inline-flex min-w-full items-center gap-4 border-b border-border/80">
+          {tabs.map((tab) => {
+            const isActive = activeTab === tab.key
+            return (
+              <Link
+                key={tab.key}
+                href={`${pathname}?tab=${tab.key}`}
+                className={cn(
+                  "border-b-2 px-1 py-2 text-[0.92rem] font-medium whitespace-nowrap transition-colors duration-200",
+                  isActive
+                    ? "border-[var(--primary)] text-[var(--primary)]"
+                    : "border-transparent text-slate-600 hover:text-slate-900"
                 )}
-                <button
-                  type="button"
-                  className="absolute -right-1 -bottom-1 inline-flex size-5 items-center justify-center rounded-full bg-primary text-primary-foreground shadow transition-transform duration-300 hover:scale-105"
-                  aria-label={profilePhotoSaving ? "Updating profile photo" : "Edit profile photo"}
-                  onClick={() => profilePhotoInputRef.current?.click()}
-                  disabled={profilePhotoSaving}
-                >
-                  {profilePhotoSaving ? <Loader2 className="size-3 animate-spin" /> : <Camera className="size-3" />}
-                </button>
+              >
+                {tab.label}
+              </Link>
+            )
+          })}
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex flex-col items-center justify-center gap-4 py-10">
+          <LumaSpin />
+          <p className="text-sm text-muted-foreground">Loading your profile...</p>
+        </div>
+      ) : null}
+      {!loading && error ? <p className="text-sm text-red-600">{error}</p> : null}
+      {!loading && !error && (currentUser || employee) ? (
+        <div key={activeTab} className="grid gap-4 animate-in slide-in-from-right-2 fade-in-0 duration-300">
+          {activeTab === "summary" ? (
+            <div className="space-y-4">
+              {/* Top identity header - no card */}
+              <div>
+                <div className="text-lg font-semibold tracking-tight text-foreground">
+                  {([readString(currentUser, ["first_name"], ""), readString(currentUser, ["last_name"], "")].filter(Boolean).join(" ") ||
+                    [readString(employee, ["first_name"], ""), readString(employee, ["last_name"], "")].filter(Boolean).join(" ") ||
+                    "You")}
+                </div>
+                <div className="text-xs text-muted-foreground mt-0.5">
+                  {readString(currentUser, ["user_no", "employee_no", "employeeNo"], "") ||
+                    readString(employee, ["employee_no", "employee_number", "employee_code", "user_no"], "") ||
+                    readNestedEmployeeNumber(currentUser) ||
+                    "-"}
+                  {" · "}
+                  {readString(asRecord(employee?.primary_position), ["name", "position_name"], "") ||
+                    readString(asRecord(employee?.position), ["name", "position_name"], "") ||
+                    "Position"}{" · "}
+                  {resolveDepartmentNameFromEmployee(employee) ||
+                    readString(asRecord(employee?.primary_department), ["name", "department_name"], "") ||
+                    readString(employee, ["department_name", "department"], "") ||
+                    "Department"}
+                </div>
+                <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                  <span>Hired <span className="font-medium text-foreground">{formatDate(employee?.hire_date)}</span></span>
+                  <span>Status <span className="font-medium text-foreground">{readString(employee, ["employment_status", "status"], "-")}</span></span>
+                </div>
               </div>
-              <CardTitle>My Details</CardTitle>
-            </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              onClick={() => {
-                if (isEditing) {
-                  setIsEditing(false)
-                  setMessage(null)
-                  return
-                }
-                setIsEditing(true)
-              }}
-              disabled={loading || saving}
-              aria-label={isEditing ? "Cancel editing profile" : "Edit profile"}
-            >
-              {isEditing ? <X className="size-4" /> : <Pencil className="size-4" />}
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {loading ? <p className="text-sm text-slate-500">Loading your profile...</p> : null}
-          {!loading && error ? <p className="text-sm text-red-600">{error}</p> : null}
-          {!loading && !error && (currentUser || employee) ? (
-            <div className="grid gap-4">
-              <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as SelfProfileTab)}>
-                <HorizontalScrollContainer>
-                  <TabsList
-                    variant="line"
-                    size="sm"
-                    className="profile-tabs-list inline-flex min-w-max gap-1 rounded-lg border border-slate-200 px-1 py-1 dark:border-slate-800"
-                  >
-                    {tabs.map((tab) => (
-                      <TabsTrigger
-                        key={tab.key}
-                        value={tab.key}
-                        className="profile-tabs-trigger data-[state=active]:rounded-md data-[state=active]:bg-slate-100 dark:data-[state=active]:bg-slate-800"
-                      >
-                        {tab.label}
-                      </TabsTrigger>
-                    ))}
-                  </TabsList>
-                </HorizontalScrollContainer>
-                <TabsContent value={activeTab} className="mt-3">
-                  <div key={activeTab} className="grid gap-4 animate-in slide-in-from-right-2 fade-in-0 duration-300">
 
-              {activeTab === "summary" ? (
-              <div className="grid gap-3">
-                <div className="grid gap-3 md:grid-cols-2 md:items-stretch">
-                <section className="summary-wave-card flex h-full flex-col space-y-2 p-4">
-                  <SectionHeading
-                    title="Identity"
-                    onEdit={() => openSectionEditor("identity", "Identity", ["first_name", "last_name", "user_no"])}
-                  />
-                  <WaveInfoRows
-                    rows={[
-                      {
-                        label: "Employee ID",
-                        value: readString(employee, ["id", "employee_id", "employeeId"], "-"),
-                      },
-                      {
-                        label: "Employee No",
-                        value:
-                          readString(currentUser, ["user_no", "employee_no", "employeeNo"], "") ||
-                          readString(employee, ["employee_no", "employee_number", "employee_code", "employeeId", "user_no"], "") ||
+              {/* light separator line after header */}
+              <div className="border-t border-border/60" />
+
+              {/* Identity */}
+              <div>
+                <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Identity</div>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  <div className="flex gap-2.5">
+                    <UserIcon className="mt-0.5 size-3.5 text-primary shrink-0" />
+                    <div className="text-xs">
+                      <div className="text-muted-foreground">Employee ID</div>
+                      <div className="font-medium text-foreground">{readString(employee, ["id", "employee_id", "employeeId"], "-")}</div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2.5">
+                    <UserIcon className="mt-0.5 size-3.5 text-primary shrink-0" />
+                    <div className="text-xs">
+                      <div className="text-muted-foreground">Employee No</div>
+                      <div className="font-medium text-foreground">
+                        {readString(currentUser, ["user_no", "employee_no", "employeeNo"], "") ||
+                          readString(employee, ["employee_no", "employee_number", "employee_code", "user_no"], "") ||
                           readNestedEmployeeNumber(currentUser) ||
-                          readString(currentUser, ["employee_no", "employeeNo", "employee_id", "employeeId", "user_no"], "-"),
-                      },
-                      {
-                        label: "Full Name",
-                        value:
-                          [readString(currentUser, ["first_name"], ""), readString(currentUser, ["last_name"], "")]
-                            .filter(Boolean)
-                            .join(" ") ||
-                          readString(employee, ["full_name", "fullName", "name"], "") ||
-                          [readString(employee, ["first_name"], ""), readString(employee, ["last_name"], "")]
-                            .filter(Boolean)
-                            .join(" ") ||
-                          "-",
-                      },
-                    ]}
-                  />
-                </section>
-
-                <section className="summary-wave-card flex h-full flex-col space-y-2 p-4">
-                  <SectionHeading
-                    title="Contact & Employment"
-                    onEdit={() => openSectionEditor("contact-employment", "Contact & Employment", ["email", "phone", "status"])}
-                  />
-                  <WaveInfoRows
-                    rows={[
-                      { label: "Email", value: readString(currentUser, ["email"]) },
-                      {
-                        label: "Phone",
-                        value: readString(employee, ["phone", "phone_number"], "") || readString(currentUser, ["phone", "phone_number"]),
-                      },
-                      { label: "Employment Status", value: readString(employee, ["employment_status", "status"], "-") },
-                      { label: "Employment Type", value: formatEmploymentType(employee?.employment_type) },
-                      { label: "Hire Date", value: formatDate(employee?.hire_date) },
-                    ]}
-                  />
-                </section>
+                          "-"}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2.5">
+                    <UserIcon className="mt-0.5 size-3.5 text-primary shrink-0" />
+                    <div className="text-xs">
+                      <div className="text-muted-foreground">Full Name</div>
+                      <div className="font-medium text-foreground">
+                        {[readString(currentUser, ["first_name"], ""), readString(currentUser, ["last_name"], "")].filter(Boolean).join(" ") ||
+                          [readString(employee, ["first_name"], ""), readString(employee, ["last_name"], "")].filter(Boolean).join(" ") ||
+                          "-"}
+                      </div>
+                    </div>
+                  </div>
                 </div>
+              </div>
 
-                <div>
-                  <WaveSeparator variant="layered" className="my-1 md:my-2" />
+              <div className="border-t border-border/50" />
+
+              {/* Contact & Employment */}
+              <div>
+                <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Contact &amp; Employment</div>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  <div className="flex gap-2.5">
+                    <MailIcon className="mt-0.5 size-3.5 text-primary shrink-0" />
+                    <div className="text-xs">
+                      <div className="text-muted-foreground">Email</div>
+                      <div className="font-medium text-foreground">{readString(currentUser, ["email"], "-")}</div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2.5">
+                    <PhoneIcon className="mt-0.5 size-3.5 text-primary shrink-0" />
+                    <div className="text-xs">
+                      <div className="text-muted-foreground">Phone</div>
+                      <div className="font-medium text-foreground">
+                        {readString(employee, ["phone", "phone_number"], "") || readString(currentUser, ["phone", "phone_number"], "-")}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2.5">
+                    <BriefcaseIcon className="mt-0.5 size-3.5 text-primary shrink-0" />
+                    <div className="text-xs">
+                      <div className="text-muted-foreground">Employment Type</div>
+                      <div className="font-medium text-foreground">{formatEmploymentType(employee?.employment_type)}</div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2.5">
+                    <CalendarIcon className="mt-0.5 size-3.5 text-primary shrink-0" />
+                    <div className="text-xs">
+                      <div className="text-muted-foreground">Hire Date</div>
+                      <div className="font-medium text-foreground">{formatDate(employee?.hire_date)}</div>
+                    </div>
+                  </div>
                 </div>
+              </div>
 
-                <div className="grid gap-3 md:grid-cols-2 md:items-stretch">
-                <section className="summary-wave-card flex h-full flex-col space-y-2 p-4">
-                  <SectionHeading
-                    title="Organization"
-                  />
-                  <WaveInfoRows
-                    rows={[
-                      {
-                        label: "Branch",
-                        value:
-                          resolveBranchNameFromEmployee(employee) ||
+              <div className="border-t border-border/50" />
+
+              {/* Organization */}
+              <div>
+                <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Organization</div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="flex gap-2.5">
+                    <Building2Icon className="mt-0.5 size-3.5 text-primary shrink-0" />
+                    <div className="text-xs">
+                      <div className="text-muted-foreground">Branch</div>
+                      <div className="font-medium text-foreground">
+                        {resolveBranchNameFromEmployee(employee) ||
                           readString(asRecord(employee?.branch), ["name", "branch_name"], "") ||
-                          readString(employee, ["branch_name", "branch"], "-"),
-                      },
-                      {
-                        label: "Department",
-                        value:
-                          resolveDepartmentNameFromEmployee(employee) ||
+                          readString(employee, ["branch_name", "branch"], "-")}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2.5">
+                    <Building2Icon className="mt-0.5 size-3.5 text-primary shrink-0" />
+                    <div className="text-xs">
+                      <div className="text-muted-foreground">Department</div>
+                      <div className="font-medium text-foreground">
+                        {resolveDepartmentNameFromEmployee(employee) ||
                           readString(asRecord(employee?.department), ["name", "department_name"], "") ||
-                          readString(employee, ["department_name", "department"], "-"),
-                      },
-                    ]}
-                  />
-                </section>
+                          readString(employee, ["department_name", "department"], "-")}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
 
-                <section className="summary-wave-card flex h-full flex-col space-y-2 p-4">
-                  <SectionHeading
-                    title="Role & Leadership"
-                  />
-                  <WaveInfoRows
-                    rows={[
-                      {
-                        label: "Position",
-                        value:
-                          readString(asRecord(employee?.primary_position), ["name", "position_name"], "") ||
+              <div className="border-t border-border/50" />
+
+              {/* Role & Reporting */}
+              <div>
+                <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Role &amp; Reporting</div>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  <div className="flex gap-2.5">
+                    <BriefcaseIcon className="mt-0.5 size-3.5 text-primary shrink-0" />
+                    <div className="text-xs">
+                      <div className="text-muted-foreground">Position</div>
+                      <div className="font-medium text-foreground">
+                        {readString(asRecord(employee?.primary_position), ["name", "position_name"], "") ||
                           readString(asRecord(employee?.position), ["name", "position_name"], "") ||
-                          readString(employee, ["position_name", "position", "designation_name"], "-"),
-                      },
-                      {
-                        label: "Designation",
-                        value:
-                          readString(asRecord(employee?.primary_designation), ["name", "designation_name"], "") ||
+                          readString(employee, ["position_name", "position", "designation_name"], "-")}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2.5">
+                    <BriefcaseIcon className="mt-0.5 size-3.5 text-primary shrink-0" />
+                    <div className="text-xs">
+                      <div className="text-muted-foreground">Designation</div>
+                      <div className="font-medium text-foreground">
+                        {readString(asRecord(employee?.primary_designation), ["name", "designation_name"], "") ||
                           readString(asRecord(employee?.designation), ["name", "designation_name"], "") ||
-                          readString(employee, ["designation_name", "designation"], "-"),
-                      },
-                      {
-                        label: "Manager",
-                        value: (() => {
+                          readString(employee, ["designation_name", "designation"], "-")}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2.5">
+                    <UsersIcon className="mt-0.5 size-3.5 text-primary shrink-0" />
+                    <div className="text-xs">
+                      <div className="text-muted-foreground">Reports To</div>
+                      <div className="font-medium text-foreground">
+                        {(() => {
                           const manager = asRecord(employee?.manager)
                           const managerCompanyUser = asRecord(manager?.company_user)
                           const managerUser = asRecord(managerCompanyUser?.user)
@@ -1295,539 +1405,881 @@ export function EmployeeSelfServiceProfileView() {
                               .join(" ") ||
                             readString(manager, ["name"], "-")
                           )
-                        })(),
-                      },
-                    ]}
-                  />
-                </section>
+                        })()}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2.5">
+                    <UserIcon className="mt-0.5 size-3.5 text-primary shrink-0" />
+                    <div className="text-xs">
+                      <div className="text-muted-foreground">Manager No</div>
+                      <div className="font-medium text-foreground">
+                        {(() => {
+                          const manager = asRecord(employee?.manager)
+                          const managerCompanyUser = asRecord(manager?.company_user)
+                          const managerUser = asRecord(managerCompanyUser?.user)
+                          return readString(manager, ["employee_no"], "") || readString(managerUser, ["user_no"], "-")
+                        })()}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
-              ) : null}
 
-              {activeTab === "summary" && employee ? (
-                <WaveSeparator variant="layered" className="my-2 md:my-3" />
-              ) : null}
+              <div className="border-t border-border/50" />
 
-              {activeTab === "summary" && employee ? (
-                <div className="grid gap-4 md:grid-cols-2 md:items-stretch">
-                  <section className="summary-wave-card flex h-full flex-col space-y-2 p-4">
-                    <SectionHeading
-                      title="Reporting & Assignment"
-                    />
-                    <WaveInfoRows
-                      rows={[
-                        {
-                          label: "Reports To",
-                          value: (() => {
-                            const manager = asRecord(employee.manager)
-                            const managerCompanyUser = asRecord(manager?.company_user)
-                            const managerUser = asRecord(managerCompanyUser?.user)
-                            return (
-                              [readString(manager, ["first_name"], ""), readString(manager, ["last_name"], "")]
-                                .filter(Boolean)
-                                .join(" ") ||
-                              [readString(managerUser, ["first_name"], ""), readString(managerUser, ["last_name"], "")]
-                                .filter(Boolean)
-                                .join(" ") ||
-                              readString(manager, ["name"], "-")
-                            )
-                          })(),
-                        },
-                        {
-                          label: "Manager Employee No",
-                          value: (() => {
-                            const manager = asRecord(employee.manager)
-                            const managerCompanyUser = asRecord(manager?.company_user)
-                            const managerUser = asRecord(managerCompanyUser?.user)
-                            return readString(manager, ["employee_no"], "") || readString(managerUser, ["user_no"], "-")
-                          })(),
-                        },
-                        {
-                          label: "Primary Branch",
-                          value:
-                            readString(asRecord(employee.primary_branch), ["name", "branch_name"], "") ||
-                            resolveBranchNameFromEmployee(employee) ||
-                            "-",
-                        },
-                        {
-                          label: "Primary Department",
-                          value:
-                            readString(asRecord(employee.primary_department), ["name", "department_name"], "") ||
-                            resolveDepartmentNameFromEmployee(employee) ||
-                            "-",
-                        },
-                        {
-                          label: "Primary Position",
-                          value:
-                            readString(asRecord(employee.primary_position), ["name", "position_name"], "") ||
-                            readString(asRecord(employee.position), ["name", "position_name"], "-"),
-                        },
-                        {
-                          label: "Primary Designation",
-                          value:
-                            readString(asRecord(employee.primary_designation), ["name", "designation_name"], "") ||
-                            readString(asRecord(employee.designation), ["name", "designation_name"], "-"),
-                        },
-                      ]}
-                    />
-                  </section>
-                  <section className="summary-wave-card flex h-full flex-col space-y-2 p-4">
-                    <SectionHeading
-                      title="Additional Details"
-                      onEdit={() =>
-                        openSectionEditor("additional-details", "Additional Details", [
-                          "first_name",
-                          "last_name",
-                          "phone",
-                          "email",
-                          "user_no",
-                          "status",
-                          "password",
-                        ])
-                      }
-                    />
-                    <WaveInfoRows
-                      rows={[
-                        { label: "Middle Name", value: readString(employee, ["middle_name"], "-") },
-                        { label: "Preferred Name", value: readString(employee, ["preferred_name"], "-") },
-                        { label: "Gender", value: readString(employee, ["gender"], "-") },
-                        { label: "Date of Birth", value: formatDate(employee.date_of_birth) },
-                        { label: "Marital Status", value: readString(employee, ["marital_status"], "-") },
-                        { label: "Nationality", value: readString(employee, ["nationality"], "-") },
-                        { label: "Exit Reason", value: readString(employee, ["exit_reason"], "-") },
-                        { label: "Probation End Date", value: formatDate(employee.probation_end_date) },
-                        { label: "Confirmation Date", value: formatDate(employee.confirmation_date) },
-                        { label: "Exit Date", value: formatDate(employee.exit_date) },
-                        { label: "Notes", value: readString(employee, ["notes"], "-") },
-                      ]}
-                    />
-                  </section>
+              {/* Snapshots */}
+              <div>
+                <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Attendance</div>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 text-xs">
+                  <div className="flex gap-2 py-0.5">
+                    <ClockIcon className="mt-0.5 size-3.5 text-primary shrink-0" />
+                    <div>
+                      <div className="text-muted-foreground">Punch State</div>
+                      <div className="font-medium text-foreground">{formatPunchState(readString(attendanceTodayRecord, ["punch_state", "status"], ""))}</div>
+                      {readString(attendanceTodayRecord, ["processing_state"], "") && (
+                        <div className="text-[10px] text-muted-foreground">{formatProcessingState(readString(attendanceTodayRecord, ["processing_state"], ""))}</div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex gap-2 py-0.5">
+                    <div>
+                      <div className="text-muted-foreground">Allowed to check in</div>
+                      <div className="font-medium text-foreground">{formatUnknownValue(dashboardActions?.can_check_in)}</div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 py-0.5">
+                    <div>
+                      <div className="text-muted-foreground">Allowed to check out</div>
+                      <div className="font-medium text-foreground">{formatUnknownValue(dashboardActions?.can_check_out)}</div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 py-0.5">
+                    <CalendarIcon className="mt-0.5 size-3.5 text-primary shrink-0" />
+                    <div>
+                      <div className="text-muted-foreground">Upcoming Schedule</div>
+                      <div className="font-medium text-foreground">{String(scheduleDays.length)} days</div>
+                      <div className="text-[10px] text-muted-foreground">preview available</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-border/50" />
+
+              <div>
+                <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Self-Service</div>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 text-xs">
+                  <div className="flex gap-2 py-0.5">
+                    <div>
+                      <div className="text-muted-foreground">Employment</div>
+                      <div className="font-medium text-foreground">{readString(employmentStatus, ["employment_status", "status"], "-")}</div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 py-0.5">
+                    <div>
+                      <div className="text-muted-foreground">Leave Balances</div>
+                      <div className="font-medium text-foreground">{String(readArray(dashboardLeave?.balances).length)}</div>
+                      <div className="text-[10px] text-muted-foreground">{readArray(dashboardLeave?.pending_requests).length} pending</div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 py-0.5">
+                    <div>
+                      <div className="text-muted-foreground">Pending Corrections</div>
+                      <div className="font-medium text-foreground">{String(correctionRequests.filter((row) => readString(row, ["status"], "").toLowerCase() !== "cancelled").length)}</div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 py-0.5">
+                    <div>
+                      <div className="text-muted-foreground">Profile Updates</div>
+                      <div className="font-medium text-foreground">{String(profileUpdateRequests.filter((row) => readString(row, ["status"], "").toLowerCase() !== "cancelled").length)}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {selfServiceNotes.length > 0 ? (
+                <div>
+                  <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Notes</div>
+                  <div className="text-xs text-muted-foreground space-y-0.5 pl-1">
+                    {selfServiceNotes.map((note, i) => (
+                      <p key={i}>{note}</p>
+                    ))}
+                  </div>
                 </div>
               ) : null}
+            </div>
+          ) : null}
 
-              {activeTab === "assignments" && employee ? (
-                <WaveSeparator variant="subtle" className="my-1 md:my-2" />
-              ) : null}
-
-              {activeTab === "assignments" && employee ? (
-                <div className="grid gap-4 md:grid-cols-2">
-                  <Card className="summary-wave-card">
-                    <CardHeader className="pb-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <CardTitle className="text-base">Department Assignments</CardTitle>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-3 pt-0">
-                      {Array.isArray(employee.departments) && employee.departments.length ? (
-                        employee.departments.map((entry, index) => {
-                          const record = asRecord(entry)
-                          const department = asRecord(record?.department)
-                          const branch = asRecord(department?.branch)
-                          return (
-                            <div key={`department-${index}`} className="assignment-detail-card">
-                              <InfoRow label="Department" value={readString(department, ["name", "department_name"], "-")} />
-                              <InfoRow label="Code" value={readString(department, ["code"], "-")} />
-                              <InfoRow label="Branch" value={readString(branch, ["name", "branch_name"], "-")} />
-                              <InfoRow label="Primary" value={formatUnknownValue(record?.is_primary)} />
-                              <InfoRow label="Status" value={readString(department, ["status"], "-")} />
+          {activeTab === "assignments" && employee ? (
+            <div className="space-y-5">
+              {/* Department Assignments */}
+              <div>
+                <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Department Assignments</div>
+                {Array.isArray(employee.departments) && employee.departments.length ? (
+                  employee.departments.map((entry, index) => {
+                    const record = asRecord(entry)
+                    const department = asRecord(record?.department)
+                    const branch = asRecord(department?.branch)
+                    return (
+                      <div key={`department-${index}`} className={index > 0 ? "mt-3 pt-3 border-t border-border/50" : ""}>
+                        <div className="grid gap-3 sm:grid-cols-2 text-xs">
+                          <div className="flex gap-2.5">
+                            <Building2Icon className="mt-0.5 size-3.5 text-primary shrink-0" />
+                            <div>
+                              <div className="text-muted-foreground">Department</div>
+                              <div className="font-medium text-foreground">{readString(department, ["name", "department_name"], "-")}</div>
                             </div>
-                          )
-                        })
-                      ) : (
-                        <EmptyStateRow text="No department assignments available." />
-                      )}
-                    </CardContent>
-                  </Card>
-                </div>
-              ) : null}
-
-              {activeTab === "assignments" && employee ? (
-                <div className="grid gap-4 md:grid-cols-2">
-                  <Card className="summary-wave-card">
-                    <CardHeader className="pb-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <CardTitle className="text-base">Position Assignments</CardTitle>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-3 pt-0">
-                      {Array.isArray(employee.position_assignments) && employee.position_assignments.length ? (
-                        employee.position_assignments.map((entry, index) => {
-                          const record = asRecord(entry)
-                          const position = asRecord(record?.position)
-                          const designation = asRecord(record?.designation)
-                          return (
-                            <div key={`position-assignment-${index}`} className="assignment-detail-card">
-                              <InfoRow label="Position" value={readString(position, ["name", "position_name"], "-")} />
-                              <InfoRow label="Designation" value={readString(designation, ["name", "designation_name"], "-")} />
-                              <InfoRow label="Assignment Type" value={readString(record, ["assignment_type"], "-")} />
-                              <InfoRow label="Status" value={readString(record, ["status"], "-")} />
-                              <InfoRow label="Start Date" value={formatDate(record?.start_date)} />
-                              <InfoRow label="End Date" value={formatDate(record?.end_date)} />
-                              <InfoRow label="Primary" value={formatUnknownValue(record?.is_primary)} />
-                              <InfoRow label="Notes" value={readString(record, ["notes"], "-")} />
+                          </div>
+                          <div className="flex gap-2.5">
+                            <div>
+                              <div className="text-muted-foreground">Code</div>
+                              <div className="font-medium text-foreground">{readString(department, ["code"], "-")}</div>
                             </div>
-                          )
-                        })
-                      ) : (
-                        <EmptyStateRow text="No position assignments available." />
-                      )}
-                    </CardContent>
-                  </Card>
-
-                  <Card className="summary-wave-card">
-                    <CardHeader className="pb-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <CardTitle className="text-base">Designation Assignments</CardTitle>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-3 pt-0">
-                      {Array.isArray(employee.designation_assignments) && employee.designation_assignments.length ? (
-                        employee.designation_assignments.map((entry, index) => {
-                          const record = asRecord(entry)
-                          const designation = asRecord(record?.designation)
-                          return (
-                            <div key={`designation-assignment-${index}`} className="assignment-detail-card">
-                              <InfoRow label="Designation" value={readString(designation, ["name", "designation_name"], "-")} />
-                              <InfoRow label="Code" value={readString(designation, ["code"], "-")} />
-                              <InfoRow label="Current" value={formatUnknownValue(record?.is_current)} />
-                              <InfoRow label="Start Date" value={formatDate(record?.start_date)} />
-                              <InfoRow label="End Date" value={formatDate(record?.end_date)} />
-                              <InfoRow label="Remarks" value={readString(record, ["remarks"], "-")} />
+                          </div>
+                          <div className="flex gap-2.5">
+                            <MapPinIcon className="mt-0.5 size-3.5 text-primary shrink-0" />
+                            <div>
+                              <div className="text-muted-foreground">Branch</div>
+                              <div className="font-medium text-foreground">{readString(branch, ["name", "branch_name"], "-")}</div>
                             </div>
-                          )
-                        })
-                      ) : (
-                        <EmptyStateRow text="No designation assignments available." />
-                      )}
-                    </CardContent>
-                  </Card>
-                </div>
-              ) : null}
+                          </div>
+                          <div className="flex gap-2.5">
+                            <div>
+                              <div className="text-muted-foreground">Primary</div>
+                              <div className="font-medium text-foreground">{formatUnknownValue(record?.is_primary)}</div>
+                            </div>
+                          </div>
+                          <div className="flex gap-2.5">
+                            <div>
+                              <div className="text-muted-foreground">Status</div>
+                              <div className="font-medium text-foreground">{readString(department, ["status"], "-")}</div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })
+                ) : (
+                  <div className="text-xs text-muted-foreground">No department assignments available.</div>
+                )}
+              </div>
+
+              <div className="border-t border-border/50" />
+
+              {/* Position Assignments */}
+              <div>
+                <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Position Assignments</div>
+                {Array.isArray(employee.position_assignments) && employee.position_assignments.length ? (
+                  employee.position_assignments.map((entry, index) => {
+                    const record = asRecord(entry)
+                    const position = asRecord(record?.position)
+                    const designation = asRecord(record?.designation)
+                    return (
+                      <div key={`position-assignment-${index}`} className={index > 0 ? "mt-3 pt-3 border-t border-border/50" : ""}>
+                        <div className="grid gap-3 sm:grid-cols-2 text-xs">
+                          <div className="flex gap-2.5">
+                            <BriefcaseIcon className="mt-0.5 size-3.5 text-primary shrink-0" />
+                            <div>
+                              <div className="text-muted-foreground">Position</div>
+                              <div className="font-medium text-foreground">{readString(position, ["name", "position_name"], "-")}</div>
+                            </div>
+                          </div>
+                          <div className="flex gap-2.5">
+                            <div>
+                              <div className="text-muted-foreground">Designation</div>
+                              <div className="font-medium text-foreground">{readString(designation, ["name", "designation_name"], "-")}</div>
+                            </div>
+                          </div>
+                          <div className="flex gap-2.5">
+                            <div>
+                              <div className="text-muted-foreground">Assignment Type</div>
+                              <div className="font-medium text-foreground">{readString(record, ["assignment_type"], "-")}</div>
+                            </div>
+                          </div>
+                          <div className="flex gap-2.5">
+                            <div>
+                              <div className="text-muted-foreground">Status</div>
+                              <div className="font-medium text-foreground">{readString(record, ["status"], "-")}</div>
+                            </div>
+                          </div>
+                          <div className="flex gap-2.5">
+                            <CalendarIcon className="mt-0.5 size-3.5 text-primary shrink-0" />
+                            <div>
+                              <div className="text-muted-foreground">Start Date</div>
+                              <div className="font-medium text-foreground">{formatDate(record?.start_date)}</div>
+                            </div>
+                          </div>
+                          <div className="flex gap-2.5">
+                            <div>
+                              <div className="text-muted-foreground">End Date</div>
+                              <div className="font-medium text-foreground">{formatDate(record?.end_date)}</div>
+                            </div>
+                          </div>
+                          <div className="flex gap-2.5">
+                            <div>
+                              <div className="text-muted-foreground">Primary</div>
+                              <div className="font-medium text-foreground">{formatUnknownValue(record?.is_primary)}</div>
+                            </div>
+                          </div>
+                          <div className="flex gap-2.5">
+                            <div>
+                              <div className="text-muted-foreground">Notes</div>
+                              <div className="font-medium text-foreground">{readString(record, ["notes"], "-")}</div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })
+                ) : (
+                  <div className="text-xs text-muted-foreground">No position assignments available.</div>
+                )}
+              </div>
+
+              <div className="border-t border-border/50" />
+
+              {/* Designation Assignments */}
+              <div>
+                <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Designation Assignments</div>
+                {Array.isArray(employee.designation_assignments) && employee.designation_assignments.length ? (
+                  employee.designation_assignments.map((entry, index) => {
+                    const record = asRecord(entry)
+                    const designation = asRecord(record?.designation)
+                    return (
+                      <div key={`designation-assignment-${index}`} className={index > 0 ? "mt-3 pt-3 border-t border-border/50" : ""}>
+                        <div className="grid gap-3 sm:grid-cols-2 text-xs">
+                          <div className="flex gap-2.5">
+                            <BriefcaseIcon className="mt-0.5 size-3.5 text-primary shrink-0" />
+                            <div>
+                              <div className="text-muted-foreground">Designation</div>
+                              <div className="font-medium text-foreground">{readString(designation, ["name", "designation_name"], "-")}</div>
+                            </div>
+                          </div>
+                          <div className="flex gap-2.5">
+                            <div>
+                              <div className="text-muted-foreground">Code</div>
+                              <div className="font-medium text-foreground">{readString(designation, ["code"], "-")}</div>
+                            </div>
+                          </div>
+                          <div className="flex gap-2.5">
+                            <div>
+                              <div className="text-muted-foreground">Current</div>
+                              <div className="font-medium text-foreground">{formatUnknownValue(record?.is_current)}</div>
+                            </div>
+                          </div>
+                          <div className="flex gap-2.5">
+                            <CalendarIcon className="mt-0.5 size-3.5 text-primary shrink-0" />
+                            <div>
+                              <div className="text-muted-foreground">Start Date</div>
+                              <div className="font-medium text-foreground">{formatDate(record?.start_date)}</div>
+                            </div>
+                          </div>
+                          <div className="flex gap-2.5">
+                            <div>
+                              <div className="text-muted-foreground">End Date</div>
+                              <div className="font-medium text-foreground">{formatDate(record?.end_date)}</div>
+                            </div>
+                          </div>
+                          <div className="flex gap-2.5">
+                            <div>
+                              <div className="text-muted-foreground">Remarks</div>
+                              <div className="font-medium text-foreground">{readString(record, ["remarks"], "-")}</div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })
+                ) : (
+                  <div className="text-xs text-muted-foreground">No designation assignments available.</div>
+                )}
+              </div>
+
+              <div className="border-t border-border/50" />
+
+              {/* Attendance Assignment Summary */}
+              <div>
+                <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Attendance Assignment Summary</div>
+                {assignmentSummaryRows.length ? (
+                  <div className="grid gap-3 sm:grid-cols-2 text-xs">
+                    {assignmentSummaryRows.map((row, idx) => (
+                      <div key={idx} className="flex gap-2.5">
+                        <div>
+                          <div className="text-muted-foreground">{row.label}</div>
+                          <div className="font-medium text-foreground">{row.value}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-xs text-muted-foreground">No attendance assignment summary is available yet.</div>
+                )}
+              </div>
+
+              <div className="border-t border-border/50" />
+
+              {/* Upcoming Schedule Preview */}
+              <div>
+                <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Upcoming Schedule Preview</div>
+                {scheduleDays.length ? (
+                  <div className="space-y-3 text-xs">
+                    {scheduleDays.slice(0, 5).map((day, index) => {
+                      const shift = asRecord(day.shift)
+                      const timetable = asRecord(day.timetable)
+                      return (
+                        <div key={String(day.date ?? index)} className={index > 0 ? "pt-3 border-t border-border/50" : ""}>
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <div className="flex gap-2.5">
+                              <CalendarIcon className="mt-0.5 size-3.5 text-primary shrink-0" />
+                              <div>
+                                <div className="text-muted-foreground">Date</div>
+                                <div className="font-medium text-foreground">{formatDate(day.date)}</div>
+                              </div>
+                            </div>
+                            <div className="flex gap-2.5">
+                              <div>
+                                <div className="text-muted-foreground">Source</div>
+                                <div className="font-medium text-foreground">{readString(day, ["source"], "-")}</div>
+                              </div>
+                            </div>
+                            <div className="flex gap-2.5">
+                              <div>
+                                <div className="text-muted-foreground">Shift</div>
+                                <div className="font-medium text-foreground">{readString(shift, ["name", "code"], "-")}</div>
+                              </div>
+                            </div>
+                            <div className="flex gap-2.5">
+                              <div>
+                                <div className="text-muted-foreground">Time</div>
+                                <div className="font-medium text-foreground">{`${readString(shift, ["start_time"], "-")} to ${readString(shift, ["end_time"], "-")}`}</div>
+                              </div>
+                            </div>
+                            <div className="flex gap-2.5">
+                              <div>
+                                <div className="text-muted-foreground">Timetable</div>
+                                <div className="font-medium text-foreground">{readString(timetable, ["name", "code"], "-")}</div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-xs text-muted-foreground">No schedule preview has been published yet.</div>
+                )}
+              </div>
+            </div>
+          ) : null}
 
               {activeTab === "personal" && employee ? (
-                <div className="grid gap-4 md:grid-cols-2">
-                  <Card className="summary-wave-card">
-                    <CardHeader className="pb-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <CardTitle className="text-base">Contacts</CardTitle>
-                        <SectionEditButton
-                          label="Contacts"
-                          onClick={() => openSectionEditor("contacts", "Contacts", ["phone", "email"])}
-                        />
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-3 pt-0">
-                      {Array.isArray(employee.contacts) && employee.contacts.length ? (
-                        employee.contacts.map((entry, index) => {
-                          const record = asRecord(entry)
-                          return (
-                            <div key={`contact-${index}`} className="rounded-md p-3">
-                              <InfoRow label="Type" value={readString(record, ["contact_type"], "-")} />
-                              <InfoRow label="Phone" value={readString(record, ["phone_number", "phone"], "-")} />
-                              <InfoRow label="Email" value={readString(record, ["email"], "-")} />
-                              <InfoRow label="Primary" value={formatUnknownValue(record?.is_primary)} />
-                              <InfoRow label="Verified" value={formatUnknownValue(record?.is_verified)} />
-                              <InfoRow label="Notes" value={readString(record, ["notes"], "-")} />
+                <div className="space-y-5">
+                  {/* Contacts */}
+                  <div>
+                    <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Contacts</div>
+                    {Array.isArray(employee.contacts) && employee.contacts.length ? (
+                      employee.contacts.map((entry, index) => {
+                        const record = asRecord(entry)
+                        return (
+                          <div key={`contact-${index}`} className={index > 0 ? "mt-3 pt-3 border-t border-border/50" : ""}>
+                            <div className="grid gap-3 sm:grid-cols-2 text-xs">
+                              <div className="flex gap-2.5">
+                                <div>
+                                  <div className="text-muted-foreground">Type</div>
+                                  <div className="font-medium text-foreground">{readString(record, ["contact_type"], "-")}</div>
+                                </div>
+                              </div>
+                              <div className="flex gap-2.5">
+                                <div>
+                                  <div className="text-muted-foreground">Phone</div>
+                                  <div className="font-medium text-foreground">{readString(record, ["phone_number", "phone"], "-")}</div>
+                                </div>
+                              </div>
+                              <div className="flex gap-2.5">
+                                <div>
+                                  <div className="text-muted-foreground">Email</div>
+                                  <div className="font-medium text-foreground">{readString(record, ["email"], "-")}</div>
+                                </div>
+                              </div>
+                              <div className="flex gap-2.5">
+                                <div>
+                                  <div className="text-muted-foreground">Primary</div>
+                                  <div className="font-medium text-foreground">{formatUnknownValue(record?.is_primary)}</div>
+                                </div>
+                              </div>
+                              <div className="flex gap-2.5">
+                                <div>
+                                  <div className="text-muted-foreground">Verified</div>
+                                  <div className="font-medium text-foreground">{formatUnknownValue(record?.is_verified)}</div>
+                                </div>
+                              </div>
+                              <div className="flex gap-2.5">
+                                <div>
+                                  <div className="text-muted-foreground">Notes</div>
+                                  <div className="font-medium text-foreground">{readString(record, ["notes"], "-")}</div>
+                                </div>
+                              </div>
                             </div>
-                          )
-                        })
-                      ) : (
-                        <EmptyStateRow text="No contacts available." />
-                      )}
-                    </CardContent>
-                  </Card>
-
-                  <Card className="summary-wave-card">
-                    <CardHeader className="pb-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <CardTitle className="text-base">Addresses</CardTitle>
-                        <SectionEditButton
-                          label="Addresses"
-                          onClick={() => openSectionEditor("addresses", "Addresses", ["status", "user_no"])}
-                        />
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-3 pt-0">
-                      {Array.isArray(employee.addresses) && employee.addresses.length ? (
-                        employee.addresses.map((entry, index) => {
-                          const record = asRecord(entry)
-                          return (
-                            <div key={`address-${index}`} className="rounded-md p-3">
-                              <InfoRow label="Type" value={readString(record, ["address_type", "type"], "-")} />
-                              <InfoRow label="Address" value={readString(record, ["address_line", "address"], "-")} />
-                              <InfoRow label="City" value={readString(record, ["city"], "-")} />
-                              <InfoRow label="Country" value={readString(record, ["country"], "-")} />
-                            </div>
-                          )
-                        })
-                      ) : (
-                        <EmptyStateRow text="No addresses available." />
-                      )}
-                    </CardContent>
-                  </Card>
-
-                  <Card className="summary-wave-card">
-                    <CardHeader className="pb-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <CardTitle className="text-base">Relatives</CardTitle>
-                        <SectionEditButton
-                          label="Relatives"
-                          onClick={() => openSectionEditor("relatives", "Relatives", ["phone", "email"])}
-                        />
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-3 pt-0">
-                      {Array.isArray(employee.relatives) && employee.relatives.length ? (
-                        employee.relatives.map((entry, index) => {
-                          const record = asRecord(entry)
-                          return (
-                            <div key={`relative-${index}`} className="rounded-md p-3">
-                              <InfoRow label="Name" value={readString(record, ["name", "full_name"], "-")} />
-                              <InfoRow label="Relationship" value={readString(record, ["relationship"], "-")} />
-                              <InfoRow label="Phone" value={readString(record, ["phone_number", "phone"], "-")} />
-                            </div>
-                          )
-                        })
-                      ) : (
-                        <EmptyStateRow text="No relatives available." />
-                      )}
-                    </CardContent>
-                  </Card>
-                </div>
-              ) : null}
-
-              {activeTab === "records" && employee ? (
-                <WaveSeparator variant="subtle" inverted className="my-1 md:my-2" />
-              ) : null}
-
-              {activeTab === "records" && employee ? (
-                <div className="grid gap-4 md:grid-cols-2">
-                  <Card className="summary-wave-card">
-                    <CardHeader className="pb-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <CardTitle className="text-base">Identifications</CardTitle>
-                        <SectionEditButton
-                          label="Identifications"
-                          onClick={() => openSectionEditor("identifications", "Identifications", ["status", "user_no"])}
-                        />
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-3 pt-0">
-                      {Array.isArray(employee.identifications) && employee.identifications.length ? (
-                        employee.identifications.map((entry, index) => {
-                          const record = asRecord(entry)
-                          return (
-                            <div key={`identification-${index}`} className="rounded-md p-3">
-                              <InfoRow label="Type" value={readString(record, ["identification_type", "type"], "-")} />
-                              <InfoRow label="Number" value={readString(record, ["number", "id_number"], "-")} />
-                              <InfoRow label="Issue Date" value={formatDate(record?.issue_date)} />
-                              <InfoRow label="Expiry Date" value={formatDate(record?.expiry_date)} />
-                            </div>
-                          )
-                        })
-                      ) : (
-                        <EmptyStateRow text="No identifications available." />
-                      )}
-                    </CardContent>
-                  </Card>
-
-                  <Card className="summary-wave-card">
-                    <CardHeader className="pb-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <CardTitle className="text-base">Bank Accounts</CardTitle>
-                        <SectionEditButton
-                          label="Bank Accounts"
-                          onClick={() => openSectionEditor("bank-accounts", "Bank Accounts", ["status", "user_no"])}
-                        />
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-3 pt-0">
-                      {Array.isArray(employee.bank_accounts) && employee.bank_accounts.length ? (
-                        employee.bank_accounts.map((entry, index) => {
-                          const record = asRecord(entry)
-                          return (
-                            <div key={`bank-${index}`} className="rounded-md p-3">
-                              <InfoRow label="Bank Name" value={readString(record, ["bank_name"], "-")} />
-                              <InfoRow label="Account Name" value={readString(record, ["account_name"], "-")} />
-                              <InfoRow label="Account Number" value={readString(record, ["account_number"], "-")} />
-                              <InfoRow label="Currency" value={readString(record, ["currency"], "-")} />
-                            </div>
-                          )
-                        })
-                      ) : (
-                        <EmptyStateRow text="No bank accounts available." />
-                      )}
-                    </CardContent>
-                  </Card>
-                </div>
-              ) : null}
-
-              {activeTab === "records" && employee ? (
-                <WaveSeparator variant="subtle" className="my-1 md:my-2" />
-              ) : null}
-
-              {activeTab === "records" && employee ? (
-                <div className="grid gap-4 md:grid-cols-2">
-                  <Card className="summary-wave-card">
-                    <CardHeader className="pb-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <CardTitle className="text-base">Academic Qualifications</CardTitle>
-                        <SectionEditButton
-                          label="Academic Qualifications"
-                          onClick={() => openSectionEditor("academic-qualifications", "Academic Qualifications", ["status", "user_no"])}
-                        />
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-3 pt-0">
-                      {Array.isArray(employee.academic_qualifications) && employee.academic_qualifications.length ? (
-                        employee.academic_qualifications.map((entry, index) => {
-                          const record = asRecord(entry)
-                          return (
-                            <div key={`academic-${index}`} className="rounded-md p-3">
-                              <InfoRow label="Qualification" value={readString(record, ["qualification", "name"], "-")} />
-                              <InfoRow label="Institution" value={readString(record, ["institution"], "-")} />
-                              <InfoRow label="Year" value={readString(record, ["year"], "-")} />
-                            </div>
-                          )
-                        })
-                      ) : (
-                        <EmptyStateRow text="No academic qualifications available." />
-                      )}
-                    </CardContent>
-                  </Card>
-
-                  <Card className="summary-wave-card">
-                    <CardHeader className="pb-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <CardTitle className="text-base">Professional Qualifications</CardTitle>
-                        <SectionEditButton
-                          label="Professional Qualifications"
-                          onClick={() => openSectionEditor("professional-qualifications", "Professional Qualifications", ["status", "user_no"])}
-                        />
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-3 pt-0">
-                      {Array.isArray(employee.professional_qualifications) && employee.professional_qualifications.length ? (
-                        employee.professional_qualifications.map((entry, index) => {
-                          const record = asRecord(entry)
-                          return (
-                            <div key={`professional-${index}`} className="rounded-md p-3">
-                              <InfoRow label="Qualification" value={readString(record, ["qualification", "name"], "-")} />
-                              <InfoRow label="Issuer" value={readString(record, ["issuer", "institution"], "-")} />
-                              <InfoRow label="Year" value={readString(record, ["year"], "-")} />
-                            </div>
-                          )
-                        })
-                      ) : (
-                        <EmptyStateRow text="No professional qualifications available." />
-                      )}
-                    </CardContent>
-                  </Card>
-                </div>
-              ) : null}
-
-              {activeTab === "records" && employee ? (
-                <div className="grid gap-4 md:grid-cols-2">
-                  <Card className="summary-wave-card">
-                    <CardHeader className="pb-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <CardTitle className="text-base">Experience Details</CardTitle>
-                        <SectionEditButton
-                          label="Experience Details"
-                          onClick={() => openSectionEditor("experience-details", "Experience Details", ["status", "user_no"])}
-                        />
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-3 pt-0">
-                      {Array.isArray(employee.experience_details) && employee.experience_details.length ? (
-                        employee.experience_details.map((entry, index) => {
-                          const record = asRecord(entry)
-                          return (
-                            <div key={`experience-${index}`} className="rounded-md p-3">
-                              <InfoRow label="Company" value={readString(record, ["company_name", "company"], "-")} />
-                              <InfoRow label="Role" value={readString(record, ["role", "position"], "-")} />
-                              <InfoRow label="Start Date" value={formatDate(record?.start_date)} />
-                              <InfoRow label="End Date" value={formatDate(record?.end_date)} />
-                            </div>
-                          )
-                        })
-                      ) : (
-                        <EmptyStateRow text="No experience details available." />
-                      )}
-                    </CardContent>
-                  </Card>
-
-                  <Card className="summary-wave-card">
-                    <CardHeader className="pb-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <CardTitle className="text-base">Documents</CardTitle>
-                        <SectionEditButton
-                          label="Documents"
-                          onClick={() => openSectionEditor("documents", "Documents", ["status", "user_no"])}
-                        />
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-3 pt-0">
-                      {Array.isArray(employee.documents) && employee.documents.length ? (
-                        employee.documents.map((entry, index) => {
-                          const record = asRecord(entry)
-                          return (
-                            <div key={`document-${index}`} className="rounded-md p-3">
-                              <InfoRow label="Type" value={readString(record, ["document_type", "type"], "-")} />
-                              <InfoRow label="Title" value={readString(record, ["title", "name"], "-")} />
-                              <InfoRow label="Status" value={readString(record, ["status"], "-")} />
-                              <InfoRow label="Uploaded At" value={formatDate(record?.created_at)} />
-                            </div>
-                          )
-                        })
-                      ) : (
-                        <EmptyStateRow text="No documents available." />
-                      )}
-                    </CardContent>
-                  </Card>
-                </div>
-              ) : null}
-
-              
+                          </div>
+                        )
+                      })
+                    ) : (
+                      <div className="text-xs text-muted-foreground">No contacts available.</div>
+                    )}
                   </div>
-                </TabsContent>
-              </Tabs>
-            </div>
-          ) : null}
-          {isEditing ? (
-            <div className="mt-4 grid animate-in slide-in-from-top-2 fade-in-0 duration-300 gap-3 border-t border-slate-200 pt-4 dark:border-slate-800">
-              <div className="space-y-1">
-                <Label>First Name</Label>
-                <Input value={firstName} onChange={(event) => setFirstName(event.target.value)} />
-              </div>
-              <div className="space-y-1">
-                <Label>Last Name</Label>
-                <Input value={lastName} onChange={(event) => setLastName(event.target.value)} />
-              </div>
-              <div className="space-y-1">
-                <Label>Email</Label>
-                <Input type="email" value={email} onChange={(event) => setEmail(event.target.value)} />
-              </div>
-              <div className="space-y-1">
-                <Label>Phone Number</Label>
-                <Input value={phoneNumber} onChange={(event) => setPhoneNumber(event.target.value)} />
-              </div>
-              <div className="flex gap-2">
-                <Button onClick={handleProfileUpdate} disabled={saving || loading}>Save Profile</Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setIsEditing(false)
-                    setMessage(null)
-                  }}
-                  disabled={saving}
-                >
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          ) : null}
+
+                  <div className="border-t border-border/50" />
+
+                  {/* Addresses */}
+                  <div>
+                    <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Addresses</div>
+                    {Array.isArray(employee.addresses) && employee.addresses.length ? (
+                      employee.addresses.map((entry, index) => {
+                        const record = asRecord(entry)
+                        return (
+                          <div key={`address-${index}`} className={index > 0 ? "mt-3 pt-3 border-t border-border/50" : ""}>
+                            <div className="grid gap-3 sm:grid-cols-2 text-xs">
+                              <div className="flex gap-2.5">
+                                <div>
+                                  <div className="text-muted-foreground">Type</div>
+                                  <div className="font-medium text-foreground">{readString(record, ["address_type", "type"], "-")}</div>
+                                </div>
+                              </div>
+                              <div className="flex gap-2.5">
+                                <div>
+                                  <div className="text-muted-foreground">Address</div>
+                                  <div className="font-medium text-foreground">{readString(record, ["address_line", "address"], "-")}</div>
+                                </div>
+                              </div>
+                              <div className="flex gap-2.5">
+                                <div>
+                                  <div className="text-muted-foreground">City</div>
+                                  <div className="font-medium text-foreground">{readString(record, ["city"], "-")}</div>
+                                </div>
+                              </div>
+                              <div className="flex gap-2.5">
+                                <div>
+                                  <div className="text-muted-foreground">Country</div>
+                                  <div className="font-medium text-foreground">{readString(record, ["country"], "-")}</div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })
+                    ) : (
+                      <div className="text-xs text-muted-foreground">No addresses available.</div>
+                    )}
+                  </div>
+
+                  <div className="border-t border-border/50" />
+
+                  {/* Relatives */}
+                  <div>
+                    <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Relatives</div>
+                    {Array.isArray(employee.relatives) && employee.relatives.length ? (
+                      employee.relatives.map((entry, index) => {
+                        const record = asRecord(entry)
+                        return (
+                          <div key={`relative-${index}`} className={index > 0 ? "mt-3 pt-3 border-t border-border/50" : ""}>
+                            <div className="grid gap-3 sm:grid-cols-2 text-xs">
+                              <div className="flex gap-2.5">
+                                <div>
+                                  <div className="text-muted-foreground">Name</div>
+                                  <div className="font-medium text-foreground">{readString(record, ["name", "full_name"], "-")}</div>
+                                </div>
+                              </div>
+                              <div className="flex gap-2.5">
+                                <div>
+                                  <div className="text-muted-foreground">Relationship</div>
+                                  <div className="font-medium text-foreground">{readString(record, ["relationship"], "-")}</div>
+                                </div>
+                              </div>
+                              <div className="flex gap-2.5">
+                                <div>
+                                  <div className="text-muted-foreground">Phone</div>
+                                  <div className="font-medium text-foreground">{readString(record, ["phone_number", "phone"], "-")}</div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })
+                    ) : (
+                      <div className="text-xs text-muted-foreground">No relatives available.</div>
+                    )}
+                  </div>
+                </div>
+              ) : null}
+
+              {activeTab === "records" ? (
+                <div className="space-y-5">
+                  {/* Attendance Correction Requests */}
+                  <div>
+                    <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Attendance Correction Requests</div>
+                    {correctionRequests.length === 0 ? (
+                      <div className="text-xs text-muted-foreground">No attendance correction requests found.</div>
+                    ) : (
+                      correctionRequests.map((row, index) => {
+                        const titleText =
+                          readString(row, ["title", "request_no", "leave_no", "reference_no", "reference"], "") ||
+                          readString(row, ["reason", "request_type", "change_type"], "Request")
+                        const createdAt =
+                          formatDateTime(row.created_at) !== "-" ? formatDateTime(row.created_at) : formatDate(row.date)
+                        return (
+                          <div key={String(row.id ?? index)} className={index > 0 ? "mt-3 pt-3 border-t border-border/50" : ""}>
+                            <div className="flex items-start justify-between gap-3 text-xs">
+                              <p className="font-medium text-foreground">{titleText}</p>
+                              <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                {readString(row, ["status"], "draft")}
+                              </span>
+                            </div>
+                            <p className="mt-0.5 text-[10px] text-muted-foreground">{createdAt}</p>
+                          </div>
+                        )
+                      })
+                    )}
+                  </div>
+
+                  <div className="border-t border-border/50" />
+
+                  {/* Profile Update Requests */}
+                  <div>
+                    <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Profile Update Requests</div>
+                    {profileUpdateRequests.length === 0 ? (
+                      <div className="text-xs text-muted-foreground">No profile update requests found.</div>
+                    ) : (
+                      profileUpdateRequests.map((row, index) => {
+                        const titleText =
+                          readString(row, ["title", "request_no", "leave_no", "reference_no", "reference"], "") ||
+                          readString(row, ["reason", "request_type", "change_type"], "Request")
+                        const createdAt =
+                          formatDateTime(row.created_at) !== "-" ? formatDateTime(row.created_at) : formatDate(row.date)
+                        return (
+                          <div key={String(row.id ?? index)} className={index > 0 ? "mt-3 pt-3 border-t border-border/50" : ""}>
+                            <div className="flex items-start justify-between gap-3 text-xs">
+                              <p className="font-medium text-foreground">{titleText}</p>
+                              <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                {readString(row, ["status"], "draft")}
+                              </span>
+                            </div>
+                            <p className="mt-0.5 text-[10px] text-muted-foreground">{createdAt}</p>
+                          </div>
+                        )
+                      })
+                    )}
+                  </div>
+
+                  <div className="border-t border-border/50" />
+
+                  {/* Direct Reports Today */}
+                  <div>
+                    <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Direct Reports Today</div>
+                    {teamAttendance.length === 0 ? (
+                      <div className="text-xs text-muted-foreground">No team attendance rows were returned for your account.</div>
+                    ) : (
+                      teamAttendance.map((row, index) => {
+                        const nestedEmployee = asRecord(row.employee)
+                        const employeeLabel =
+                          readString(row, ["employee_name", "full_name", "name"], "") ||
+                          readString(nestedEmployee, ["full_name", "name"], "") ||
+                          [readString(nestedEmployee, ["first_name"], ""), readString(nestedEmployee, ["last_name"], "")]
+                            .filter(Boolean)
+                            .join(" ") ||
+                          "Direct report"
+                        return (
+                          <div key={String(row.id ?? index)} className={index > 0 ? "mt-2 pt-2 border-t border-border/50" : ""}>
+                            <div className="grid gap-3 sm:grid-cols-2 text-xs">
+                              <div className="flex gap-2.5">
+                                <div>
+                                  <div className="text-muted-foreground">Employee</div>
+                                  <div className="font-medium text-foreground">{employeeLabel}</div>
+                                </div>
+                              </div>
+                              <div className="flex gap-2.5">
+                                <div>
+                                  <div className="text-muted-foreground">Date</div>
+                                  <div className="font-medium text-foreground">{formatDate(row.date ?? row.attendance_date)}</div>
+                                </div>
+                              </div>
+                              <div className="flex gap-2.5">
+                                <div>
+                                  <div className="text-muted-foreground">Status</div>
+                                  <div className="font-medium text-foreground">{readString(row, ["status", "attendance_status"], "-")}</div>
+                                </div>
+                              </div>
+                              <div className="flex gap-2.5">
+                                <div>
+                                  <div className="text-muted-foreground">Check In</div>
+                                  <div className="font-medium text-foreground">{formatUnknownValue(row.check_in_at ?? row.first_punch_at)}</div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })
+                    )}
+                  </div>
+                </div>
+              ) : null}
+
+              {activeTab === "records" && employee ? (
+                <div className="space-y-5">
+                  {/* Identifications */}
+                  <div>
+                    <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Identifications</div>
+                    {Array.isArray(employee.identifications) && employee.identifications.length ? (
+                      employee.identifications.map((entry, index) => {
+                        const record = asRecord(entry)
+                        return (
+                          <div key={`identification-${index}`} className={index > 0 ? "mt-3 pt-3 border-t border-border/50" : ""}>
+                            <div className="grid gap-3 sm:grid-cols-2 text-xs">
+                              <div className="flex gap-2.5">
+                                <div>
+                                  <div className="text-muted-foreground">Type</div>
+                                  <div className="font-medium text-foreground">{readString(record, ["identification_type", "type"], "-")}</div>
+                                </div>
+                              </div>
+                              <div className="flex gap-2.5">
+                                <div>
+                                  <div className="text-muted-foreground">Number</div>
+                                  <div className="font-medium text-foreground">{readString(record, ["number", "id_number"], "-")}</div>
+                                </div>
+                              </div>
+                              <div className="flex gap-2.5">
+                                <div>
+                                  <div className="text-muted-foreground">Issue Date</div>
+                                  <div className="font-medium text-foreground">{formatDate(record?.issue_date)}</div>
+                                </div>
+                              </div>
+                              <div className="flex gap-2.5">
+                                <div>
+                                  <div className="text-muted-foreground">Expiry Date</div>
+                                  <div className="font-medium text-foreground">{formatDate(record?.expiry_date)}</div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })
+                    ) : (
+                      <div className="text-xs text-muted-foreground">No identifications available.</div>
+                    )}
+                  </div>
+
+                  <div className="border-t border-border/50" />
+
+                  {/* Bank Accounts */}
+                  <div>
+                    <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Bank Accounts</div>
+                    {Array.isArray(employee.bank_accounts) && employee.bank_accounts.length ? (
+                      employee.bank_accounts.map((entry, index) => {
+                        const record = asRecord(entry)
+                        return (
+                          <div key={`bank-${index}`} className={index > 0 ? "mt-3 pt-3 border-t border-border/50" : ""}>
+                            <div className="grid gap-3 sm:grid-cols-2 text-xs">
+                              <div className="flex gap-2.5">
+                                <div>
+                                  <div className="text-muted-foreground">Bank Name</div>
+                                  <div className="font-medium text-foreground">{readString(record, ["bank_name"], "-")}</div>
+                                </div>
+                              </div>
+                              <div className="flex gap-2.5">
+                                <div>
+                                  <div className="text-muted-foreground">Account Name</div>
+                                  <div className="font-medium text-foreground">{readString(record, ["account_name"], "-")}</div>
+                                </div>
+                              </div>
+                              <div className="flex gap-2.5">
+                                <div>
+                                  <div className="text-muted-foreground">Account Number</div>
+                                  <div className="font-medium text-foreground">{readString(record, ["account_number"], "-")}</div>
+                                </div>
+                              </div>
+                              <div className="flex gap-2.5">
+                                <div>
+                                  <div className="text-muted-foreground">Currency</div>
+                                  <div className="font-medium text-foreground">{readString(record, ["currency"], "-")}</div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })
+                    ) : (
+                      <div className="text-xs text-muted-foreground">No bank accounts available.</div>
+                    )}
+                  </div>
+
+                  <div className="border-t border-border/50" />
+
+                  {/* Academic Qualifications */}
+                  <div>
+                    <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Academic Qualifications</div>
+                    {Array.isArray(employee.academic_qualifications) && employee.academic_qualifications.length ? (
+                      employee.academic_qualifications.map((entry, index) => {
+                        const record = asRecord(entry)
+                        return (
+                          <div key={`academic-${index}`} className={index > 0 ? "mt-3 pt-3 border-t border-border/50" : ""}>
+                            <div className="grid gap-3 sm:grid-cols-2 text-xs">
+                              <div className="flex gap-2.5">
+                                <div>
+                                  <div className="text-muted-foreground">Qualification</div>
+                                  <div className="font-medium text-foreground">{readString(record, ["qualification", "name"], "-")}</div>
+                                </div>
+                              </div>
+                              <div className="flex gap-2.5">
+                                <div>
+                                  <div className="text-muted-foreground">Institution</div>
+                                  <div className="font-medium text-foreground">{readString(record, ["institution"], "-")}</div>
+                                </div>
+                              </div>
+                              <div className="flex gap-2.5">
+                                <div>
+                                  <div className="text-muted-foreground">Year</div>
+                                  <div className="font-medium text-foreground">{readString(record, ["year"], "-")}</div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })
+                    ) : (
+                      <div className="text-xs text-muted-foreground">No academic qualifications available.</div>
+                    )}
+                  </div>
+
+                  <div className="border-t border-border/50" />
+
+                  {/* Professional Qualifications */}
+                  <div>
+                    <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Professional Qualifications</div>
+                    {Array.isArray(employee.professional_qualifications) && employee.professional_qualifications.length ? (
+                      employee.professional_qualifications.map((entry, index) => {
+                        const record = asRecord(entry)
+                        return (
+                          <div key={`professional-${index}`} className={index > 0 ? "mt-3 pt-3 border-t border-border/50" : ""}>
+                            <div className="grid gap-3 sm:grid-cols-2 text-xs">
+                              <div className="flex gap-2.5">
+                                <div>
+                                  <div className="text-muted-foreground">Qualification</div>
+                                  <div className="font-medium text-foreground">{readString(record, ["qualification", "name"], "-")}</div>
+                                </div>
+                              </div>
+                              <div className="flex gap-2.5">
+                                <div>
+                                  <div className="text-muted-foreground">Issuer</div>
+                                  <div className="font-medium text-foreground">{readString(record, ["issuer", "institution"], "-")}</div>
+                                </div>
+                              </div>
+                              <div className="flex gap-2.5">
+                                <div>
+                                  <div className="text-muted-foreground">Year</div>
+                                  <div className="font-medium text-foreground">{readString(record, ["year"], "-")}</div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })
+                    ) : (
+                      <div className="text-xs text-muted-foreground">No professional qualifications available.</div>
+                    )}
+                  </div>
+
+                  <div className="border-t border-border/50" />
+
+                  {/* Experience Details */}
+                  <div>
+                    <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Experience Details</div>
+                    {Array.isArray(employee.experience_details) && employee.experience_details.length ? (
+                      employee.experience_details.map((entry, index) => {
+                        const record = asRecord(entry)
+                        return (
+                          <div key={`experience-${index}`} className={index > 0 ? "mt-3 pt-3 border-t border-border/50" : ""}>
+                            <div className="grid gap-3 sm:grid-cols-2 text-xs">
+                              <div className="flex gap-2.5">
+                                <div>
+                                  <div className="text-muted-foreground">Company</div>
+                                  <div className="font-medium text-foreground">{readString(record, ["company_name", "company"], "-")}</div>
+                                </div>
+                              </div>
+                              <div className="flex gap-2.5">
+                                <div>
+                                  <div className="text-muted-foreground">Role</div>
+                                  <div className="font-medium text-foreground">{readString(record, ["role", "position"], "-")}</div>
+                                </div>
+                              </div>
+                              <div className="flex gap-2.5">
+                                <div>
+                                  <div className="text-muted-foreground">Start Date</div>
+                                  <div className="font-medium text-foreground">{formatDate(record?.start_date)}</div>
+                                </div>
+                              </div>
+                              <div className="flex gap-2.5">
+                                <div>
+                                  <div className="text-muted-foreground">End Date</div>
+                                  <div className="font-medium text-foreground">{formatDate(record?.end_date)}</div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })
+                    ) : (
+                      <div className="text-xs text-muted-foreground">No experience details available.</div>
+                    )}
+                  </div>
+
+                  <div className="border-t border-border/50" />
+
+                  {/* Documents */}
+                  <div>
+                    <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Documents</div>
+                    {Array.isArray(employee.documents) && employee.documents.length ? (
+                      employee.documents.map((entry, index) => {
+                        const record = asRecord(entry)
+                        return (
+                          <div key={`document-${index}`} className={index > 0 ? "mt-3 pt-3 border-t border-border/50" : ""}>
+                            <div className="grid gap-3 sm:grid-cols-2 text-xs">
+                              <div className="flex gap-2.5">
+                                <div>
+                                  <div className="text-muted-foreground">Type</div>
+                                  <div className="font-medium text-foreground">{readString(record, ["document_type", "type"], "-")}</div>
+                                </div>
+                              </div>
+                              <div className="flex gap-2.5">
+                                <div>
+                                  <div className="text-muted-foreground">Title</div>
+                                  <div className="font-medium text-foreground">{readString(record, ["title", "name"], "-")}</div>
+                                </div>
+                              </div>
+                              <div className="flex gap-2.5">
+                                <div>
+                                  <div className="text-muted-foreground">Status</div>
+                                  <div className="font-medium text-foreground">{readString(record, ["status"], "-")}</div>
+                                </div>
+                              </div>
+                              <div className="flex gap-2.5">
+                                <div>
+                                  <div className="text-muted-foreground">Uploaded At</div>
+                                  <div className="font-medium text-foreground">{formatDate(record?.created_at)}</div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })
+                    ) : (
+                      <div className="text-xs text-muted-foreground">No documents available.</div>
+                    )}
+                  </div>
+                </div>
+              ) : null}
+
+          </div>
+        ) : null}
           <Dialog open={Boolean(sectionEditor)} onOpenChange={(open) => (!open ? setSectionEditor(null) : undefined)}>
             <DialogPopup from="bottom" className="sm:max-w-xl">
               <DialogHeader>
@@ -1865,8 +2317,6 @@ export function EmployeeSelfServiceProfileView() {
               </DialogFooter>
             </DialogPopup>
           </Dialog>
-        </CardContent>
-      </Card>
 
       {message ? <p className="px-1 text-sm text-slate-700 dark:text-slate-300">{message}</p> : null}
     </div>
@@ -1884,7 +2334,12 @@ export function EmployeeOrganizationView() {
           <CardDescription>Read-only information about your branch, department, and role context.</CardDescription>
         </CardHeader>
         <CardContent>
-          {loading ? <p className="text-sm text-slate-500">Loading organization details...</p> : null}
+          {loading ? (
+            <div className="flex flex-col items-center justify-center gap-4 py-10">
+              <LumaSpin />
+              <p className="text-sm text-muted-foreground">Loading organization details...</p>
+            </div>
+          ) : null}
           {!loading && error ? <p className="text-sm text-red-600">{error}</p> : null}
           {!loading && !error && employee ? (
             <div className="grid gap-4 md:grid-cols-2">
@@ -1919,7 +2374,12 @@ export function EmployeePromotionView() {
           <CardDescription>Track your current level and promotion-related context.</CardDescription>
         </CardHeader>
         <CardContent>
-          {loading ? <p className="text-sm text-slate-500">Loading promotion context...</p> : null}
+          {loading ? (
+            <div className="flex flex-col items-center justify-center gap-4 py-10">
+              <LumaSpin />
+              <p className="text-sm text-muted-foreground">Loading promotion context...</p>
+            </div>
+          ) : null}
           {!loading && error ? <p className="text-sm text-red-600">{error}</p> : null}
           {!loading && !error && employee ? (
             <div className="grid gap-4 md:grid-cols-2">
@@ -1945,6 +2405,12 @@ export function EmployeePromotionView() {
 }
 
 export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveViewProps) {
+  type LeaveBalancesResponse = {
+    rows: AdminRecord[]
+    current_fiscal_year?: string
+    totals?: Record<string, number>
+  }
+
   const { loading: loadingProfile, error: profileError, token, employee } = useSelfEmployeeData()
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -1955,9 +2421,14 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
   const [leaveTypes, setLeaveTypes] = React.useState<AdminRecord[]>([])
   const [requests, setRequests] = React.useState<AdminRecord[]>([])
   const [balances, setBalances] = React.useState<AdminRecord[]>([])
+  const [leaveBalancesFull, setLeaveBalancesFull] = React.useState<LeaveBalancesResponse | null>(null)
   const [holidays, setHolidays] = React.useState<AdminRecord[]>([])
   const [policies, setPolicies] = React.useState<AdminRecord[]>([])
   const [message, setMessage] = React.useState<string | null>(null)
+  const [requestDialogOpen, setRequestDialogOpen] = React.useState(false)
+  const [cancelDialogOpen, setCancelDialogOpen] = React.useState(false)
+  const [requestToCancel, setRequestToCancel] = React.useState<number | string | null>(null)
+  const [cancelReason, setCancelReason] = React.useState("")
 
   const [requestForm, setRequestForm] = React.useState({
     leave_type_id: "",
@@ -1967,6 +2438,62 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
   })
 
   const employeeId = readNumber(employee, ["id", "employee_id"])
+  const leaveTabs = [
+    { key: "requests", label: "Requests" },
+    { key: "balances", label: "Balances" },
+    { key: "holidays", label: "Holidays" },
+    { key: "policies", label: "Policies" },
+  ] as const
+  const [activeTab, setActiveTab] = React.useState<SelfLeaveTab>(tab)
+
+  React.useEffect(() => {
+    setActiveTab(tab)
+  }, [tab])
+
+  const setActiveLeaveTab = React.useCallback((nextTab: SelfLeaveTab) => {
+    setActiveTab(nextTab)
+    if (typeof window !== "undefined") {
+      window.history.replaceState(window.history.state, "", `/dashboard/me/leave/${nextTab}`)
+    }
+  }, [])
+
+  const availableLeaveTypes = React.useMemo(() => {
+    const options = new Map<string, { id: string; label: string }>()
+
+    const addOption = (idValue: unknown, labelValue: unknown) => {
+      const id = readNumberish(idValue)
+      const label = typeof labelValue === "string" ? labelValue.trim() : ""
+      if (id === null || !label) {
+        return
+      }
+      options.set(String(id), { id: String(id), label })
+    }
+
+    leaveTypes.forEach((row) => {
+      addOption(row.id ?? row.leave_type_id, readString(row, ["name", "code"], ""))
+    })
+
+    balances.forEach((row) => {
+      const leaveType = asRecord(row.leave_type)
+      addOption(leaveType?.id ?? row.leave_type_id, readString(leaveType, ["name", "code"], ""))
+    })
+
+    requests.forEach((row) => {
+      const leaveType = asRecord(row.leave_type)
+      addOption(leaveType?.id ?? row.leave_type_id, readString(leaveType, ["name", "code"], ""))
+    })
+
+    policies.forEach((row) => {
+      const policyTypes = Array.isArray(row.leave_types) ? row.leave_types : []
+      policyTypes.forEach((entry) => {
+        const policyType = asRecord(entry)
+        const leaveType = asRecord(policyType?.leave_type)
+        addOption(leaveType?.id ?? policyType?.leave_type_id, readString(leaveType, ["name", "code"], ""))
+      })
+    })
+
+    return Array.from(options.values())
+  }, [balances, leaveTypes, policies, requests])
 
   const readEndpointError = React.useCallback(
     (errorObject: unknown, fallbackMessage: string) => {
@@ -1977,7 +2504,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
           : undefined
 
       if (status === 403) {
-        return "This section is not available for your account yet."
+        return SELF_SERVICE_UNAVAILABLE_MESSAGE
       }
 
       return message
@@ -2022,8 +2549,10 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
 
       if (balancesResult.status === "fulfilled") {
         setBalances(balancesResult.value.rows)
+        setLeaveBalancesFull(balancesResult.value)
       } else {
         setBalances([])
+        setLeaveBalancesFull(null)
         setBalancesError(readEndpointError(balancesResult.reason, "Failed to load leave balances."))
       }
 
@@ -2063,7 +2592,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
       return
     }
 
-    if (leaveTypes.length === 0) {
+    if (availableLeaveTypes.length === 0) {
       setMessage("Leave requests cannot be submitted until leave types are available to your account.")
       return
     }
@@ -2074,13 +2603,15 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
     try {
       await createMyLeaveRequest(token, {
         leave_type_id: Number(requestForm.leave_type_id),
-        start_date: requestForm.start_date,
-        end_date: requestForm.end_date,
+        start_date: requestForm.start_date ? `${requestForm.start_date}T00:00:00` : "",
+        end_date: requestForm.end_date ? `${requestForm.end_date}T00:00:00` : "",
         reason: requestForm.reason.trim(),
         submit: true,
       })
       setRequestForm({ leave_type_id: "", start_date: "", end_date: "", reason: "" })
       setMessage("Leave request submitted.")
+      setRequestDialogOpen(false)
+      setActiveLeaveTab("requests")
       await loadData()
     } catch (errorObject) {
       const text =
@@ -2093,8 +2624,84 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
     }
   }
 
+  const onCancelRequest = async (id: number | string, reason: string = "Cancelled by user") => {
+    if (!token) return
+    setLoading(true)
+    setMessage(null)
+    try {
+      await cancelMyLeaveRequest(token, id, reason)
+      setMessage("Leave request cancelled.")
+      await loadData()
+    } catch (errorObject) {
+      const text = errorObject instanceof Error ? errorObject.message : "Failed to cancel request."
+      setMessage(text)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const openCancelDialog = (id: number | string) => {
+    setRequestToCancel(id)
+    setCancelReason("")
+    setCancelDialogOpen(true)
+  }
+
+  const onConfirmCancelRequest = async () => {
+    if (requestToCancel === null) {
+      return
+    }
+    await onCancelRequest(requestToCancel, cancelReason.trim() || "Cancelled by user")
+    setCancelDialogOpen(false)
+    setRequestToCancel(null)
+    setCancelReason("")
+  }
+
+  const onDownloadPdf = async (id: number | string) => {
+    if (!token) return
+    try {
+      const base = API_BASE_URL || "http://192.168.1.30:8888"
+      const res = await fetch(`${base}/api/me/leave/requests/${id}/pdf`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) throw new Error("Failed to generate PDF")
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `leave_request_${id}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (errorObject) {
+      const text = errorObject instanceof Error ? errorObject.message : "Failed to download PDF."
+      setMessage(text)
+    }
+  }
+
+  const onSubmitRequest = async (id: number | string) => {
+    if (!token) return
+    setLoading(true)
+    setMessage(null)
+    try {
+      await submitMyLeaveRequest(token, id)
+      setMessage("Leave request submitted.")
+      await loadData()
+    } catch (errorObject) {
+      const text = errorObject instanceof Error ? errorObject.message : "Failed to submit request."
+      setMessage(text)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   if (loadingProfile) {
-    return <div className="px-4 py-2 text-sm text-slate-500">Loading your profile...</div>
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 py-10">
+        <LumaSpin />
+        <p className="text-sm text-muted-foreground">Loading your profile...</p>
+      </div>
+    )
   }
 
   if (profileError) {
@@ -2105,145 +2712,151 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
     return <div className="px-4 py-2 text-sm text-red-600">Employee profile not found.</div>
   }
 
-  if (tab === "requests") {
-    return (
-      <div className="grid gap-4 px-4 lg:px-6 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Request Leave</CardTitle>
-            <CardDescription>Submit a new leave request.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="space-y-1">
-              <Label>Leave Type</Label>
-              <Select value={requestForm.leave_type_id} onValueChange={(value) => setRequestForm((prev) => ({ ...prev, leave_type_id: value ?? "" }))}>
-                <SelectTrigger disabled={leaveTypes.length === 0}>
-                  <SelectValue placeholder="Select leave type" />
-                </SelectTrigger>
-                <SelectContent>
-                  {leaveTypes.map((row) => {
-                    const id = readNumber(row, ["id"])
-                    if (id === null) {
-                      return null
-                    }
-                    return <SelectItem key={id} value={String(id)}>{readString(row, ["name", "code"], `Type #${id}`)}</SelectItem>
-                  })}
-                </SelectContent>
-              </Select>
-              {leaveTypesError ? <p className="text-xs text-slate-500">{leaveTypesError}</p> : null}
+  let tabContent: React.ReactNode = null
+  if (activeTab === "requests") {
+    tabContent = (
+      <div className="space-y-4 px-4 lg:px-6">
+        <section className="space-y-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <Button type="button" onClick={() => setRequestDialogOpen(true)} className="sm:hidden">
+                New Leave Request
+              </Button>
             </div>
+            <Button type="button" onClick={() => setRequestDialogOpen(true)} className="hidden sm:inline-flex sm:self-start">
+              New Leave Request
+            </Button>
+          </div>
+          <div className="space-y-2 pt-3">
             <div className="space-y-1">
-              <Label>Start Date</Label>
-              <Input type="date" value={requestForm.start_date} onChange={(event) => setRequestForm((prev) => ({ ...prev, start_date: event.target.value }))} />
+              <h2 className="text-3xl font-semibold tracking-tight text-foreground">My Requests</h2>
             </div>
-            <div className="space-y-1">
-              <Label>End Date</Label>
-              <Input type="date" value={requestForm.end_date} onChange={(event) => setRequestForm((prev) => ({ ...prev, end_date: event.target.value }))} />
-            </div>
-            <div className="space-y-1">
-              <Label>Reason</Label>
-              <Input value={requestForm.reason} onChange={(event) => setRequestForm((prev) => ({ ...prev, reason: event.target.value }))} />
-            </div>
-            <Button onClick={onRequestLeave} disabled={loading || leaveTypes.length === 0}>Submit Request</Button>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>My Requests</CardTitle>
-            <CardDescription>View your submitted leave requests.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
             {requests.length === 0 ? <p className="text-sm text-slate-500">No leave requests found.</p> : null}
-            {requests.map((row, index) => (
-              <div key={String(row.id ?? index)} className="rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800">
-                <p className="font-medium">{readString(row, ["leave_no", "request_no", "reason"], "Request")}</p>
-                <p className="text-slate-600 dark:text-slate-300">{formatDate(row.start_date)} to {formatDate(row.end_date)}</p>
-                <p className="text-slate-600 dark:text-slate-300">Status: {readString(row, ["status"], "pending")}</p>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+            {requests.map((row, index) => {
+              const id = readNumber(row, ["id"])
+              const status = readString(row, ["status"], "pending").toLowerCase()
+              const canCancel = ["pending", "draft"].includes(status)
+              return (
+                <div key={String(row.id ?? index)} className="rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800">
+                  <p className="font-medium">{readString(row, ["leave_no", "request_no", "reason"], "Request")}</p>
+                  <p className="text-slate-600 dark:text-slate-300">{formatDate(row.start_date)} to {formatDate(row.end_date)}</p>
+                  <p className="text-slate-600 dark:text-slate-300">Status: {readString(row, ["status"], "pending")}</p>
+                  <p className="text-slate-600 dark:text-slate-300">Leave Type: {readString(asRecord(row.leave_type), ["name"], "-")}</p>
+                  <div className="mt-2 flex gap-2">
+                    {id && (
+                      <Button variant="outline" size="sm" onClick={() => void onDownloadPdf(id)} disabled={loading}>
+                        Download PDF
+                      </Button>
+                    )}
+                    {id && canCancel && (
+                      <Button variant="destructive" size="sm" onClick={() => openCancelDialog(id)} disabled={loading}>
+                        Cancel
+                      </Button>
+                    )}
+                    {id && status === "draft" && (
+                      <Button size="sm" onClick={() => void onSubmitRequest(id)} disabled={loading}>
+                        Submit
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </section>
 
         {message ? <p className="text-sm text-slate-700 md:col-span-2 dark:text-slate-300">{message}</p> : null}
         {error ? <p className="text-sm text-red-600 md:col-span-2">{error}</p> : null}
       </div>
     )
   }
-
-  if (tab === "balances") {
-    return (
-      <div className="grid gap-4 px-4 lg:px-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Leave Balances</CardTitle>
-            <CardDescription>Your current leave balances by leave type and fiscal year.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {loading ? <p className="text-sm text-slate-500">Loading balances...</p> : null}
-            {!loading && balances.length === 0 ? <p className="text-sm text-slate-500">No balance records found.</p> : null}
-            {balances.map((row, index) => (
-              <div key={String(row.id ?? index)} className="rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800">
-                <p className="font-medium">{readString(asRecord(row.leave_type), ["name"], "Leave type")}</p>
-                <p className="text-slate-600 dark:text-slate-300">Fiscal Year: {readString(row, ["fiscal_year"], "-")}</p>
-                <p className="text-slate-600 dark:text-slate-300">Available: {String(row.available_days ?? row.remaining_days ?? "-")}</p>
+  if (activeTab === "balances") {
+    const fiscalYear = leaveBalancesFull?.current_fiscal_year || "2026"
+    const showBalancesError = balancesError && balancesError !== SELF_SERVICE_UNAVAILABLE_MESSAGE
+    tabContent = (
+      <section className="space-y-4 px-4 py-2 lg:px-6">
+        <div className="space-y-1">
+          <h2 className="text-2xl font-semibold tracking-tight text-foreground">Leave Balances</h2>
+          <p className="text-sm text-muted-foreground">Fiscal Year: {fiscalYear}</p>
+        </div>
+        {loading ? (
+          <div className="flex items-center gap-2 py-2">
+            <LumaSpin />
+            <p className="text-sm text-muted-foreground">Loading balances...</p>
+          </div>
+        ) : null}
+        {!loading && balances.length === 0 ? <p className="text-sm text-slate-500">No balance records found.</p> : null}
+        <div className="space-y-2">
+          {balances.map((row, index) => (
+            <div key={String(row.id ?? index)} className="rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800">
+              <p className="font-medium">{readString(asRecord(row.leave_type), ["name"], "Leave type")}</p>
+              <p className="text-slate-600 dark:text-slate-300">Fiscal Year: {readString(row, ["fiscal_year"], fiscalYear)}</p>
+              <div className="mt-1 grid grid-cols-2 gap-2 text-xs">
+                <div>Allocated: {String(row.allocated_days ?? "-")}</div>
+                <div>Used: {String(row.used_days ?? "-")}</div>
+                <div>Pending: {String(row.pending_days ?? "-")}</div>
+                <div>Available: {String(row.available_days ?? row.remaining_days ?? "-")}</div>
               </div>
-            ))}
-            {balancesError ? <p className="text-sm text-slate-500">{balancesError}</p> : null}
-            {error ? <p className="text-sm text-red-600">{error}</p> : null}
-          </CardContent>
-        </Card>
-      </div>
+            </div>
+          ))}
+        </div>
+        {showBalancesError ? <p className="text-sm text-slate-500">{balancesError}</p> : null}
+        {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      </section>
     )
   }
 
-  if (tab === "holidays") {
-    return (
-      <div className="grid gap-4 px-4 lg:px-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Holiday Calendar</CardTitle>
-            <CardDescription>Office holidays from the attendance calendar.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {loading ? <p className="text-sm text-slate-500">Loading holidays...</p> : null}
-            {!loading && holidays.length === 0 ? <p className="text-sm text-slate-500">No holidays found.</p> : null}
-            {holidays.map((row, index) => {
-              const holidayStart =
-                readString(row, ["holiday_date", "from_date", "start_date", "date"], "") || "-"
-              const holidayEnd = readString(row, ["to_date", "end_date"], "")
-              const holidayType = readString(row, ["type"], "")
-              const dateLabel =
-                holidayEnd && holidayEnd !== holidayStart
-                  ? `${formatDate(holidayStart)} - ${formatDate(holidayEnd)}`
-                  : formatDate(holidayStart)
+  if (activeTab === "holidays") {
+    const showHolidaysError = holidaysError && holidaysError !== SELF_SERVICE_UNAVAILABLE_MESSAGE
+    tabContent = (
+      <section className="space-y-4 px-4 py-2 lg:px-6">
+        <h2 className="text-2xl font-semibold tracking-tight text-foreground">Holiday Calendar</h2>
+        {loading ? (
+          <div className="flex flex-col items-center justify-center gap-2 py-4">
+            <LumaSpin />
+            <p className="text-sm text-muted-foreground">Loading holidays...</p>
+          </div>
+        ) : null}
+        {!loading && holidays.length === 0 ? <p className="text-sm text-slate-500">No holidays found.</p> : null}
+        <div className="space-y-2">
+          {holidays.map((row, index) => {
+            const holidayStart =
+              readString(row, ["holiday_date", "from_date", "start_date", "date"], "") || "-"
+            const holidayEnd = readString(row, ["to_date", "end_date"], "")
+            const holidayType = readString(row, ["type"], "")
+            const dateLabel =
+              holidayEnd && holidayEnd !== holidayStart
+                ? `${formatDate(holidayStart)} - ${formatDate(holidayEnd)}`
+                : formatDate(holidayStart)
 
-              return (
-                <div key={String(row.id ?? index)} className="rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800">
-                  <p className="font-medium">{readString(row, ["name", "title"], "Holiday")}</p>
-                  <p className="text-slate-600 dark:text-slate-300">Date: {dateLabel}</p>
-                  {holidayType ? <p className="text-slate-600 dark:text-slate-300">Type: {holidayType}</p> : null}
-                </div>
-              )
-            })}
-            {holidaysError ? <p className="text-sm text-slate-500">{holidaysError}</p> : null}
-            {error ? <p className="text-sm text-red-600">{error}</p> : null}
-          </CardContent>
-        </Card>
-      </div>
+            return (
+              <div key={String(row.id ?? index)} className="rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800">
+                <p className="font-medium">{readString(row, ["name", "title"], "Holiday")}</p>
+                <p className="text-slate-600 dark:text-slate-300">Date: {dateLabel}</p>
+                {holidayType ? <p className="text-slate-600 dark:text-slate-300">Type: {holidayType}</p> : null}
+              </div>
+            )
+          })}
+        </div>
+        {showHolidaysError ? <p className="text-sm text-slate-500">{holidaysError}</p> : null}
+        {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      </section>
     )
   }
 
-  return (
-    <div className="grid gap-4 px-4 lg:px-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Leave Policies</CardTitle>
-          <CardDescription>Read-only policy guidance for your leave requests.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {loading ? <p className="text-sm text-slate-500">Loading policies...</p> : null}
-          {!loading && policies.length === 0 ? <p className="text-sm text-slate-500">No leave policies found.</p> : null}
+  if (activeTab === "policies") {
+    const showPoliciesError = policiesError && policiesError !== SELF_SERVICE_UNAVAILABLE_MESSAGE
+    tabContent = (
+      <section className="space-y-4 px-4 py-2 lg:px-6">
+        <h2 className="text-2xl font-semibold tracking-tight text-foreground">Leave Policies</h2>
+        {loading ? (
+          <div className="flex flex-col items-center justify-center gap-2 py-4">
+            <LumaSpin />
+            <p className="text-sm text-muted-foreground">Loading policies...</p>
+          </div>
+        ) : null}
+        {!loading && policies.length === 0 ? <p className="text-sm text-slate-500">No leave policies found.</p> : null}
+        <div className="space-y-2">
           {policies.map((row, index) => (
             <div key={String(row.id ?? index)} className="rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800">
               <p className="font-medium">{readString(row, ["name"], "Policy")}</p>
@@ -2251,10 +2864,127 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
               <p className="text-slate-600 dark:text-slate-300">Accrual: {readString(row, ["accrual_method"], "-")}</p>
             </div>
           ))}
-          {policiesError ? <p className="text-sm text-slate-500">{policiesError}</p> : null}
-          {error ? <p className="text-sm text-red-600">{error}</p> : null}
-        </CardContent>
-      </Card>
+        </div>
+        {showPoliciesError ? <p className="text-sm text-slate-500">{policiesError}</p> : null}
+        {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      </section>
+    )
+  }
+
+  return (
+    <div>
+      <div className="sticky top-(--header-height) z-40 mb-4 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+        <div className="glass-scrollbar overflow-x-auto">
+          <div className="inline-flex min-w-full items-center gap-4 border-b border-border/80">
+            {leaveTabs.map((t) => {
+              const isActive = activeTab === t.key
+              return (
+                <button
+                  key={t.key}
+                  type="button"
+                  onClick={() => setActiveLeaveTab(t.key)}
+                  className={cn(
+                    "border-b-2 px-1 py-2 text-[0.92rem] font-medium whitespace-nowrap transition-colors duration-200",
+                    isActive
+                      ? "border-[var(--primary)] text-[var(--primary)]"
+                      : "border-transparent text-slate-600 hover:text-slate-900"
+                  )}
+                >
+                  {t.label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+      {tabContent}
+      <Dialog open={requestDialogOpen} onOpenChange={setRequestDialogOpen}>
+        <DialogPopup className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Request Leave</DialogTitle>
+            <DialogDescription>Submit a new leave request without leaving this page.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <div className="space-y-1">
+              <Label>Leave Type</Label>
+              <Select value={requestForm.leave_type_id} onValueChange={(value) => setRequestForm((prev) => ({ ...prev, leave_type_id: value ?? "" }))}>
+                <SelectTrigger>
+                  <SelectValue placeholder={availableLeaveTypes.length > 0 ? "Select leave type" : "No leave types available"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableLeaveTypes.map((row) => (
+                    <SelectItem key={row.id} value={row.id}>
+                      {row.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {availableLeaveTypes.length === 0 && leaveTypesError ? <p className="text-xs text-slate-500">{leaveTypesError}</p> : null}
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <Label>Start Date</Label>
+                <Input type="date" value={requestForm.start_date} onChange={(event) => setRequestForm((prev) => ({ ...prev, start_date: event.target.value }))} />
+              </div>
+              <div className="space-y-1">
+                <Label>End Date</Label>
+                <Input type="date" value={requestForm.end_date} onChange={(event) => setRequestForm((prev) => ({ ...prev, end_date: event.target.value }))} />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label>Reason</Label>
+              <textarea
+                className="min-h-24 rounded-md border border-slate-300 px-3 py-2 text-sm"
+                value={requestForm.reason}
+                onChange={(event) => setRequestForm((prev) => ({ ...prev, reason: event.target.value }))}
+              />
+            </div>
+            {message ? <p className="text-sm text-slate-700 dark:text-slate-300">{message}</p> : null}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setRequestDialogOpen(false)}>
+              Close
+            </Button>
+            <Button type="button" onClick={() => void onRequestLeave()} disabled={loading || availableLeaveTypes.length === 0}>
+              Submit Request
+            </Button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
+      <Dialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+        <DialogPopup className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Cancel Leave Request</DialogTitle>
+            <DialogDescription>Provide a short reason for cancelling this leave request.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2">
+            <Label htmlFor="cancel-reason">Reason</Label>
+            <textarea
+              id="cancel-reason"
+              className="min-h-24 rounded-md border border-slate-300 px-3 py-2 text-sm"
+              maxLength={2000}
+              value={cancelReason}
+              onChange={(event) => setCancelReason(event.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setCancelDialogOpen(false)
+                setRequestToCancel(null)
+                setCancelReason("")
+              }}
+            >
+              Close
+            </Button>
+            <Button type="button" variant="destructive" onClick={() => void onConfirmCancelRequest()} disabled={loading}>
+              Cancel Request
+            </Button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
     </div>
   )
 }

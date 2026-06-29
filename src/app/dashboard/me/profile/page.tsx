@@ -1,10 +1,10 @@
-import AdminDashboardView from "@/components/dashboard/admin-dashboard-view"
+import { Suspense } from "react"
 import { EmployeeSelfServiceProfileView } from "@/components/dashboard/employee-self-service-view"
 
 export default function DashboardSelfProfilePage() {
   return (
-    <AdminDashboardView>
+    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading profile...</div>}>
       <EmployeeSelfServiceProfileView />
-    </AdminDashboardView>
+    </Suspense>
   )
 }

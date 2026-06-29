@@ -206,6 +206,60 @@ interface HrAnalyticsDashboardProps {
   refreshKey?: number
 }
 
+function AnimatedMetricValue({ value }: { value: string | number }) {
+  const [displayValue, setDisplayValue] = React.useState(() =>
+    typeof value === "number" ? "0" : typeof value === "string" && value.endsWith("%") ? "0%" : String(value)
+  )
+
+  React.useEffect(() => {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      let frame = 0
+      const duration = 650
+      const startedAt = performance.now()
+
+      const tick = (now: number) => {
+        const progress = Math.min((now - startedAt) / duration, 1)
+        const eased = 1 - Math.pow(1 - progress, 3)
+        setDisplayValue(String(Math.round(value * eased)))
+        if (progress < 1) {
+          frame = window.requestAnimationFrame(tick)
+        }
+      }
+
+      frame = window.requestAnimationFrame(tick)
+      return () => window.cancelAnimationFrame(frame)
+    }
+
+    if (typeof value === "string" && value.endsWith("%")) {
+      const numeric = Number(value.replace("%", ""))
+      if (!Number.isFinite(numeric)) {
+        setDisplayValue(value)
+        return
+      }
+
+      let frame = 0
+      const duration = 650
+      const startedAt = performance.now()
+
+      const tick = (now: number) => {
+        const progress = Math.min((now - startedAt) / duration, 1)
+        const eased = 1 - Math.pow(1 - progress, 3)
+        setDisplayValue(`${Math.round(numeric * eased)}%`)
+        if (progress < 1) {
+          frame = window.requestAnimationFrame(tick)
+        }
+      }
+
+      frame = window.requestAnimationFrame(tick)
+      return () => window.cancelAnimationFrame(frame)
+    }
+
+    setDisplayValue(String(value))
+  }, [value])
+
+  return <>{displayValue}</>
+}
+
 export default function HrAnalyticsDashboard({ refreshKey = 0 }: HrAnalyticsDashboardProps) {
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
@@ -501,10 +555,9 @@ export default function HrAnalyticsDashboard({ refreshKey = 0 }: HrAnalyticsDash
                 type="button"
                 onClick={() => fetchAll()}
                 disabled={loading}
-                className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 bg-white text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
               >
-                <RefreshCwIcon className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-                Refresh data
+                <RefreshCwIcon className={`h-4 w-4 text-primary ${loading ? "animate-spin" : ""}`} />
               </button>
               <button
                 type="button"
@@ -525,13 +578,16 @@ export default function HrAnalyticsDashboard({ refreshKey = 0 }: HrAnalyticsDash
           <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2 xl:grid-cols-4">
             {metrics.map((m, idx) => {
               return (
-                <div key={idx} className="flex items-start justify-between gap-4 border-b border-slate-200 pb-4 last:border-b-0 sm:last:border-b sm:nth-[3]:border-b-0 xl:border-b-0">
+                <div
+                  key={idx}
+                  className="flex items-start justify-between gap-4 border-b border-slate-200 pb-4 transition-transform duration-500 ease-out last:border-b-0 sm:last:border-b sm:nth-[3]:border-b-0 xl:border-b-0"
+                >
                   <div className="min-w-0">
                     <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
                       {m.label}
                     </div>
                     <div className="mt-2 text-4xl font-semibold tracking-[-0.05em] text-slate-950">
-                      {m.value}
+                      <AnimatedMetricValue value={m.value} />
                     </div>
                     {m.sub ? <div className="mt-1 text-sm leading-5 text-slate-500">{m.sub}</div> : null}
                   </div>
@@ -551,7 +607,7 @@ export default function HrAnalyticsDashboard({ refreshKey = 0 }: HrAnalyticsDash
 
       <div className="mt-6 grid grid-cols-1 gap-x-8 gap-y-8 lg:grid-cols-12 lg:items-start">
         {/* Leave snapshot + recent requests */}
-        <section className="self-start lg:col-span-4">
+        <section className="self-start lg:col-span-6">
           <div className="flex items-center justify-between border-b border-slate-200 pb-3">
             <div>
               <div className="text-sm font-semibold text-slate-900">Leave Requests</div>
@@ -614,56 +670,8 @@ export default function HrAnalyticsDashboard({ refreshKey = 0 }: HrAnalyticsDash
           </div>
         </section>
 
-        {/* Recent people + attendance summary */}
-        <section className="lg:col-span-5">
-          <div className="border-b border-slate-200 pb-3">
-            <div className="text-sm font-semibold text-slate-900">Recent People</div>
-            <div className="text-xs text-slate-500">Newest records (current snapshot)</div>
-          </div>
-          <div className="pt-4">
-            {recentEmployees.length === 0 ? (
-              <div className="py-5 text-sm text-slate-500">No employee records loaded.</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-100 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
-                      <th className="px-2 pb-2">Employee No</th>
-                      <th className="px-2 pb-2">Name</th>
-                      <th className="px-2 pb-2">Status</th>
-                      <th className="px-2 pb-2">Department</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-slate-700">
-                    {recentEmployees.map((emp, idx) => (
-                      <tr key={idx}>
-                        <td className="px-2 py-2.5 font-mono text-xs text-slate-500">{getEmployeeNo(emp)}</td>
-                        <td className="px-2 py-2.5 font-medium">{getEmployeeName(emp)}</td>
-                        <td className="px-2 py-2.5">
-                          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700 capitalize">
-                            {getEmploymentStatus(emp)}
-                          </span>
-                        </td>
-                        <td className="px-2 py-2.5 text-slate-500">
-                          {getDepartmentNameFromEmployee(emp) || "—"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-          {attendanceRate != null && (
-            <div className="mt-4 border-t border-slate-200 pt-3 text-xs text-slate-500">
-              Attendance rate (from summaries): <span className="font-medium text-slate-700">{attendanceRate}%</span>
-            </div>
-          )}
-        </section>
-
         {/* Status breakdown */}
-        <section className="self-start lg:col-span-3">
+        <section className="self-start lg:col-span-6">
           <div className="border-b border-slate-200 pb-3">
             <div className="text-sm font-semibold text-slate-900">Employment Status</div>
             <div className="text-xs text-slate-500">Current workforce mix from loaded records</div>
@@ -708,6 +716,54 @@ export default function HrAnalyticsDashboard({ refreshKey = 0 }: HrAnalyticsDash
               </>
             )}
           </div>
+        </section>
+
+        {/* Recent people + attendance summary */}
+        <section className="lg:col-span-12">
+          <div className="border-b border-slate-200 pb-3">
+            <div className="text-sm font-semibold text-slate-900">Recent People</div>
+            <div className="text-xs text-slate-500">Newest records (current snapshot)</div>
+          </div>
+          <div className="pt-4">
+            {recentEmployees.length === 0 ? (
+              <div className="py-5 text-sm text-slate-500">No employee records loaded.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                      <th className="px-2 pb-2">Employee No</th>
+                      <th className="px-2 pb-2">Name</th>
+                      <th className="px-2 pb-2">Status</th>
+                      <th className="px-2 pb-2">Department</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-slate-700">
+                    {recentEmployees.map((emp, idx) => (
+                      <tr key={idx}>
+                        <td className="px-2 py-2.5 font-mono text-xs text-slate-500">{getEmployeeNo(emp)}</td>
+                        <td className="px-2 py-2.5 font-medium">{getEmployeeName(emp)}</td>
+                        <td className="px-2 py-2.5">
+                          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700 capitalize">
+                            {getEmploymentStatus(emp)}
+                          </span>
+                        </td>
+                        <td className="px-2 py-2.5 text-slate-500">
+                          {getDepartmentNameFromEmployee(emp) || "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {attendanceRate != null && (
+            <div className="mt-4 border-t border-slate-200 pt-3 text-xs text-slate-500">
+              Attendance rate (from summaries): <span className="font-medium text-slate-700">{attendanceRate}%</span>
+            </div>
+          )}
         </section>
 
         {/* Department breakdown */}
@@ -774,7 +830,7 @@ export default function HrAnalyticsDashboard({ refreshKey = 0 }: HrAnalyticsDash
       </div>
 
       <div className="mt-4 text-[11px] text-slate-400">
-        {lastUpdated ? `Last updated ${lastUpdated}` : "Loading data…"} • Data sampled from API using the selected dates. Refresh via header or local button.
+        {lastUpdated ? `Last updated ${lastUpdated}` : "Loading data…"}
       </div>
     </div>
   )

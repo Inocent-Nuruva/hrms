@@ -30,6 +30,23 @@ export interface AuthUser {
 let accessToken: string | null = null;
 let refreshPromise: Promise<string | null> | null = null;
 
+function readManifestVersion(): string | undefined {
+  const expoConfigVersion = Constants.expoConfig?.version?.trim();
+  if (expoConfigVersion) {
+    return expoConfigVersion;
+  }
+
+  const manifest2Version = Constants.manifest2?.extra?.expoClient?.version;
+  if (typeof manifest2Version === 'string' && manifest2Version.trim()) {
+    return manifest2Version.trim();
+  }
+
+  const legacyManifest = Constants.manifest as { version?: unknown } | null | undefined;
+  return typeof legacyManifest?.version === 'string' && legacyManifest.version.trim()
+    ? legacyManifest.version.trim()
+    : undefined;
+}
+
 export async function loadTokensFromStorage(): Promise<AuthTokens | null> {
   try {
     const [at, rt] = await Promise.all([
@@ -389,6 +406,11 @@ export const api = {
     return request<unknown>(`/api/me/attendance/punches${q}`);
   },
 
+  async listMyAttendanceHistory(params: Record<string, unknown> = {}) {
+    const q = buildQuery(params);
+    return request<unknown>(`/api/me/attendance/history${q}`);
+  },
+
   async getMyAttendanceToday() {
     return request<unknown>('/api/me/attendance/today');
   },
@@ -433,6 +455,11 @@ export async function normalizeList(payload: unknown): Promise<Record<string, un
 }
 
 export async function normalizeSingle(payload: unknown): Promise<Record<string, unknown> | null> {
+  if (Array.isArray(payload)) {
+    const first = payload[0];
+    return first && typeof first === 'object' ? (first as Record<string, unknown>) : null;
+  }
+
   const r = (payload || {}) as Record<string, unknown>;
   const candidates = [r.data, r.result, r.item, r.employee, r.user, r];
   for (const c of candidates) {
@@ -565,11 +592,7 @@ export async function buildMobilePunchPayload(options: {
     .trim() || 'mobile-device';
 
   const employeeId = await resolveMobileEmployeeId();
-  const appVersion =
-    Constants.expoConfig?.version?.trim() ||
-    Constants.manifest2?.extra?.expoClient?.version ||
-    Constants.manifest?.version ||
-    undefined;
+  const appVersion = readManifestVersion();
 
   const deviceInfo = {
     platform: Platform.OS,

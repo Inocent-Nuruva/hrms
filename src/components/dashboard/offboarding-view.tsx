@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { TableScrollContainer } from "@/components/common/table-scroll-container"
-import { Plus } from "lucide-react"
+import { Plus, RefreshCw } from "lucide-react"
 
 import {
   addOffboardingDocument,
@@ -489,7 +489,9 @@ export function OffboardingView() {
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <button type="button" className={tab === "requests" ? "rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white" : "rounded-md border border-slate-300 px-3 py-2 text-sm"} onClick={() => setTab("requests")}>Requests</button>
         <button type="button" className={tab === "workflows" ? "rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white" : "rounded-md border border-slate-300 px-3 py-2 text-sm"} onClick={() => setTab("workflows")}>Workflows</button>
-        <button type="button" className="ml-auto rounded-md border border-slate-300 px-3 py-2 text-sm" onClick={() => void reloadAll()}>{loading ? "Refreshing..." : "Refresh"}</button>
+        <button type="button" className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-300 text-sm" onClick={() => void reloadAll()} disabled={loading}>
+          <RefreshCw className={`h-4 w-4 text-primary ${loading ? "animate-spin" : ""}`} />
+        </button>
       </div>
 
       {error ? <p className="mb-3 text-sm text-rose-600">{error}</p> : null}

@@ -5,6 +5,7 @@ import {
   AlarmClockCheckIcon,
   CalendarDaysIcon,
   Clock3Icon,
+  Filter,
   MapPinIcon,
   RefreshCwIcon,
   SearchIcon,
@@ -15,16 +16,19 @@ import {
 import { TableScrollContainer } from "@/components/common/table-scroll-container"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 import {
-  createAttendanceMobilePunchCheckIn,
-  createAttendanceMobilePunchCheckOut,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
+import {
+  createMyAttendanceCheckIn,
+  createMyAttendanceCheckOut,
   getMyAttendanceSchedule,
   getMyAttendanceToday,
   rebuildAttendanceDailySummaries,
   listAttendanceDailySummaries,
-  listAttendanceGeofences,
   listAttendanceProcessingJobs,
   listAttendanceUnmatchedLogs,
-  listAttendanceWifiNetworks,
   listBranches,
   listEmployees,
   listMyAttendanceHistory,
@@ -81,12 +85,12 @@ const SECTION_CONFIG: Record<AttendanceActivitySectionKey, SectionConfig> = {
   today: {
     title: "Today",
     groupTitle: "My Attendance",
-    description: "See your current attendance state for today.",
+    description: "",
   },
   "punch-action": {
     title: "Punch Action",
     groupTitle: "My Attendance",
-    description: "Submit a mobile check-in or check-out using your current location and optional network details.",
+    description: "",
   },
   "punch-history": {
     title: "Punch History",
@@ -96,12 +100,12 @@ const SECTION_CONFIG: Record<AttendanceActivitySectionKey, SectionConfig> = {
   "attendance-history": {
     title: "Attendance History",
     groupTitle: "My Attendance",
-    description: "Review your attendance history records.",
+    description: "",
   },
   "schedule-preview": {
     title: "Schedule Preview",
     groupTitle: "My Attendance",
-    description: "Preview the schedule entries currently available for you.",
+    description: "",
   },
 }
 
@@ -277,48 +281,42 @@ function statusTone(statusValue: string | null) {
 function TodayOverview({ record }: { record: AdminRecord | null }) {
   if (!record) {
     return (
-      <div className="mt-6 rounded-[28px] border border-slate-200 bg-white p-8 text-center shadow-sm">
-        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-slate-500">
-          <CalendarDaysIcon className="h-6 w-6" />
-        </div>
-        <h2 className="mt-4 text-xl font-semibold text-slate-900">No attendance summary yet</h2>
-        <p className="mt-2 text-sm text-slate-600">
-          Your attendance data for today has not been published yet. Refresh again in a moment.
-        </p>
+      <div className="py-4 text-sm text-muted-foreground">
+        No attendance summary yet. Your data for today has not been published.
       </div>
     )
   }
 
-  const status =
-    readFirstValue(record, ["attendance_status", "status", "summary_status", "state"]) ?? "Pending"
+  const effective = record && record.summary && typeof record.summary === "object" && !Array.isArray(record.summary)
+    ? (record.summary as AdminRecord)
+    : (record || {})
+
+  const status = (
+    readWithFallback(record, ["punch_state", "processing_state"], null) ||
+    readWithFallback(effective, ["attendance_status", "status", "summary_status", "state"], null)
+  ) ?? "Pending"
   const scheduleStart = formatOptionalValue(
-    readFirstValue(record, ["schedule_start_at", "schedule_start_time", "shift_start_at", "start_time"]),
+    readWithFallback(record, ["schedule_start_at", "schedule_start_time", "shift_start_at", "start_time"], effective),
     "Not set"
   )
   const scheduleEnd = formatOptionalValue(
-    readFirstValue(record, ["schedule_end_at", "schedule_end_time", "shift_end_at", "end_time"]),
+    readWithFallback(record, ["schedule_end_at", "schedule_end_time", "shift_end_at", "end_time"], effective),
     "Not set"
   )
   const firstPunch = formatOptionalValue(
-    readFirstValue(record, ["first_check_in_at", "first_punch_at", "check_in_at", "clock_in_at"]),
+    readWithFallback(record, ["first_punch", "first_check_in_at", "first_punch_at", "check_in_at", "clock_in_at"], null),
     "Not recorded"
   )
   const lastPunch = formatOptionalValue(
-    readFirstValue(record, ["last_check_out_at", "last_punch_at", "check_out_at", "clock_out_at"]),
+    readWithFallback(record, ["last_punch", "last_check_out_at", "last_punch_at", "check_out_at", "clock_out_at"], null),
     "Not recorded"
   )
-  const workedHours =
-    readFirstValue(record, ["worked_hours", "worked_duration", "total_worked_hours", "hours_worked"]) ?? "Still calculating"
-  const branch =
-    readFirstValue(record, ["branch_name", "branch", "location_name", "site_name"]) ?? "Assigned branch"
-  const shift =
-    readFirstValue(record, ["shift_name", "schedule_name", "timetable_name"]) ?? "Daily schedule"
-  const lateness =
-    readFirstValue(record, ["late_minutes", "lateness_minutes", "minutes_late"]) ?? "0"
-  const overtime =
-    readFirstValue(record, ["overtime_minutes", "overtime_hours", "extra_time"]) ?? "0"
+  const workedHours = readWithFallback(record, ["worked_hours", "worked_duration", "total_worked_hours", "hours_worked"], effective) ?? "Still calculating"
+  const branch = readWithFallback(record, ["branch_name", "branch", "location_name", "site_name"], effective) ?? "Assigned branch"
+  const shift = readWithFallback(record, ["shift_name", "schedule_name", "timetable_name"], effective) || ""
+  const lateness = readWithFallback(record, ["late_minutes", "lateness_minutes", "minutes_late"], effective) ?? "0"
+  const overtime = readWithFallback(record, ["overtime_minutes", "overtime_hours", "extra_time"], effective) ?? "0"
 
-  const tone = statusTone(status)
   const hiddenKeys = new Set([
     "attendance_status",
     "status",
@@ -357,6 +355,14 @@ function TodayOverview({ record }: { record: AdminRecord | null }) {
     "overtime_minutes",
     "overtime_hours",
     "extra_time",
+    "date",
+    "summary",
+    "punches",
+    "punch_state",
+    "processing_state",
+    "first_punch",
+    "last_punch",
+    "action_flags",
   ])
 
   const extraEntries = Object.entries(record).filter(
@@ -365,97 +371,95 @@ function TodayOverview({ record }: { record: AdminRecord | null }) {
   const compactExtraEntries = extraEntries.slice(0, 6)
 
   return (
-    <div className="mt-6 space-y-4">
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:p-6">
-        <div className="grid gap-4 lg:grid-cols-[1.2fr_0.95fr]">
-          <div className="space-y-4">
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
-                {shift}
-              </span>
-            </div>
-            <div>
-              <h2 className="text-xl font-semibold tracking-tight text-slate-950">Your day at a glance</h2>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-                A simple snapshot of today’s attendance progress, expected schedule, and anything that still needs your attention.
-              </p>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <div className="rounded-xl border border-slate-200 bg-slate-50/90 p-3.5">
-                <div className="flex items-center gap-2 text-slate-500">
-                  <Clock3Icon className="h-4 w-4" />
-                  <span className="text-xs font-semibold uppercase tracking-[0.18em]">Start</span>
-                </div>
-                <p className="mt-2.5 text-base font-semibold text-slate-900">{scheduleStart}</p>
-              </div>
-              <div className="rounded-xl border border-slate-200 bg-slate-50/90 p-3.5">
-                <div className="flex items-center gap-2 text-slate-500">
-                  <TimerResetIcon className="h-4 w-4" />
-                  <span className="text-xs font-semibold uppercase tracking-[0.18em]">End</span>
-                </div>
-                <p className="mt-2.5 text-base font-semibold text-slate-900">{scheduleEnd}</p>
-              </div>
-              <div className="rounded-xl border border-slate-200 bg-slate-50/90 p-3.5">
-                <div className="flex items-center gap-2 text-slate-500">
-                  <AlarmClockCheckIcon className="h-4 w-4" />
-                  <span className="text-xs font-semibold uppercase tracking-[0.18em]">Worked</span>
-                </div>
-                <p className="mt-2.5 text-base font-semibold text-slate-900">{workedHours}</p>
-              </div>
-              <div className="rounded-xl border border-slate-200 bg-slate-50/90 p-3.5">
-                <div className="flex items-center gap-2 text-slate-500">
-                  <MapPinIcon className="h-4 w-4" />
-                  <span className="text-xs font-semibold uppercase tracking-[0.18em]">Branch</span>
-                </div>
-                <p className="mt-2.5 text-base font-semibold text-slate-900">{branch}</p>
-              </div>
+    <div className="space-y-4">
+      {shift && (
+        <div className="inline-flex items-center rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs text-muted-foreground">
+          {shift}
+        </div>
+      )}
+
+      <div>
+        <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Schedule</div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="flex gap-2">
+            <Clock3Icon className="mt-0.5 size-3.5 text-primary shrink-0" />
+            <div className="text-xs">
+              <div className="text-muted-foreground">Start</div>
+              <div className="font-medium text-foreground">{scheduleStart}</div>
             </div>
           </div>
-
-          <div className={`rounded-xl border p-4 ${tone.panel}`}>
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Today&apos;s pulse</p>
-            <div className="mt-3 grid gap-3 md:grid-cols-2">
-              <div className="rounded-xl border border-white/70 bg-white/80 p-3.5">
-                <p className="text-xs uppercase tracking-[0.16em] text-slate-500">First punch</p>
-                <p className="mt-2 break-words text-base font-semibold text-slate-900">{firstPunch}</p>
-              </div>
-              <div className="rounded-xl border border-white/70 bg-white/80 p-3.5">
-                <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Last punch</p>
-                <p className="mt-2 text-base font-semibold text-slate-900">{lastPunch}</p>
-              </div>
-              <div className="rounded-xl border border-white/70 bg-white/80 p-3.5">
-                <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Late by</p>
-                <p className="mt-2 text-base font-semibold text-slate-900">{lateness}</p>
-              </div>
-              <div className="rounded-xl border border-white/70 bg-white/80 p-3.5">
-                <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Overtime</p>
-                <p className="mt-2 text-base font-semibold text-slate-900">{overtime}</p>
-              </div>
+          <div className="flex gap-2">
+            <TimerResetIcon className="mt-0.5 size-3.5 text-primary shrink-0" />
+            <div className="text-xs">
+              <div className="text-muted-foreground">End</div>
+              <div className="font-medium text-foreground">{scheduleEnd}</div>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <AlarmClockCheckIcon className="mt-0.5 size-3.5 text-primary shrink-0" />
+            <div className="text-xs">
+              <div className="text-muted-foreground">Worked</div>
+              <div className="font-medium text-foreground">{workedHours}</div>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <MapPinIcon className="mt-0.5 size-3.5 text-primary shrink-0" />
+            <div className="text-xs">
+              <div className="text-muted-foreground">Branch</div>
+              <div className="font-medium text-foreground">{branch}</div>
             </div>
           </div>
         </div>
       </div>
 
-      {compactExtraEntries.length ? (
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
-              <ShieldCheckIcon className="h-5 w-5" />
-            </div>
-            <div>
-              <h3 className="text-lg font-semibold text-slate-900">Extra details</h3>
-              <p className="text-sm text-slate-600">More attendance fields returned by the system for today.</p>
+      <div>
+        <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Today&apos;s pulse</div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="flex gap-2">
+            <div className="text-xs">
+              <div className="text-muted-foreground">First punch</div>
+              <div className="font-medium text-foreground">{firstPunch}</div>
             </div>
           </div>
-          <div className="mt-4 grid gap-3 lg:grid-cols-3 xl:grid-cols-6">
+          <div className="flex gap-2">
+            <div className="text-xs">
+              <div className="text-muted-foreground">Last punch</div>
+              <div className="font-medium text-foreground">{lastPunch}</div>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <div className="text-xs">
+              <div className="text-muted-foreground">Late by</div>
+              <div className="font-medium text-foreground">{lateness} min</div>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <div className="text-xs">
+              <div className="text-muted-foreground">Overtime</div>
+              <div className="font-medium text-foreground">{overtime} min</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="text-xs text-muted-foreground">Status: <span className="font-medium text-foreground">{status}</span></div>
+
+      {(record as any)?.action_flags && (
+        <div className="text-xs text-muted-foreground">
+          Can check-in: <span className="font-medium text-foreground">{String((record as any).action_flags.can_check_in ?? "-")}</span> • Can check-out: <span className="font-medium text-foreground">{String((record as any).action_flags.can_check_out ?? "-")}</span>
+        </div>
+      )}
+
+      {compactExtraEntries.length ? (
+        <div>
+          <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Extra details</div>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {compactExtraEntries.map(([key, value]) => (
-              <div key={key} className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                  {prettifyLabel(key)}
-                </p>
-                <p className="mt-1.5 truncate text-sm font-medium text-slate-800" title={stringifyValue(value)}>
+              <div key={key} className="flex gap-2 text-xs">
+                <div className="text-muted-foreground min-w-[90px]">{prettifyLabel(key)}</div>
+                <div className="font-medium text-foreground truncate" title={stringifyValue(value)}>
                   {stringifyValue(value)}
-                </p>
+                </div>
               </div>
             ))}
           </div>
@@ -501,6 +505,18 @@ function readNestedRecord(row: AdminRecord, keys: string[]) {
   return null
 }
 
+function readWithFallback(
+  record: AdminRecord | null | undefined,
+  keys: string[],
+  fallbackRecord?: AdminRecord | null | undefined
+) {
+  let val = readFirstValue(record, keys)
+  if (val === null || val === undefined) {
+    val = readFirstValue(fallbackRecord, keys)
+  }
+  return val
+}
+
 function getEmployeeOptionLabel(employee: AdminRecord) {
   const id = readNumberFromRow(employee, ["id", "employee_id", "employeeId"])
   const employeeNo = readStringFromRow(employee, ["employee_no", "employeeNo", "employee_number"])
@@ -537,13 +553,15 @@ function normalizeDateOnly(value: string | null) {
 
 function applyDailySummaryFilters(
   rows: AdminRecord[],
-  filters: Record<string, string>
+  filters: Record<string, string>,
+  employeeSearch: string
 ) {
   const fromDate = normalizeDateOnly(filters.from_date || null)
   const toDate = normalizeDateOnly(filters.to_date || null)
   const employeeId = filters.employee_id.trim()
   const organizationId = filters.organization_id.trim()
   const status = filters.status.trim().toUpperCase()
+  const employeeSearchTerm = employeeSearch.trim().toLowerCase()
 
   return rows.filter((row) => {
     const attendanceDate = normalizeDateOnly(
@@ -587,6 +605,24 @@ function applyDailySummaryFilters(
         .trim()
         .toUpperCase()
       if (rowStatus !== status) {
+        return false
+      }
+    }
+
+    if (employeeSearchTerm) {
+      const nestedEmployee = readNestedRecord(row, ["employee"])
+      const rowEmployeeId = readNumberFromRow(row, ["employee_id", "employeeId", "id"])
+      const searchableEmployeeText = [
+        readStringFromRow(row, ["employee_name", "employeeName", "full_name", "fullName", "display_name", "displayName", "name"]),
+        readStringFromRow(row, ["employee_no", "employeeNo", "employee_number", "employeeNumber", "employee_code", "employeeCode"]),
+        nestedEmployee ? getEmployeeOptionLabel(nestedEmployee) : null,
+        rowEmployeeId !== null ? String(rowEmployeeId) : null,
+      ]
+        .filter((value): value is string => Boolean(value))
+        .join(" ")
+        .toLowerCase()
+
+      if (!searchableEmployeeText.includes(employeeSearchTerm)) {
         return false
       }
     }
@@ -764,6 +800,23 @@ function resolveVisibleColumns(rows: AdminRecord[], section: AttendanceActivityS
           "check_in_time",
           "check_out_time",
         ]
+      : section === "attendance-history"
+      ? [
+          "attendanceDate",
+          "attendanceStatus",
+          "checkInAt",
+          "checkOutAt",
+          "workMinutes",
+          "remarks",
+        ]
+      : section === "schedule-preview"
+      ? [
+          "date",
+          "shift",
+          "time_range",
+          "expected_work",
+          "is_off_day",
+        ]
       : [
           "id",
           "employee_name",
@@ -789,6 +842,12 @@ function resolveVisibleColumns(rows: AdminRecord[], section: AttendanceActivityS
   if (section === "daily-summaries") {
     return preferred
   }
+  if (section === "attendance-history") {
+    return preferred
+  }
+  if (section === "schedule-preview") {
+    return preferred
+  }
   const ordered = preferred.filter((key) => {
     if (!keySet.has(key)) {
       return false
@@ -806,7 +865,7 @@ function resolveVisibleColumns(rows: AdminRecord[], section: AttendanceActivityS
   return [...ordered, ...extras].slice(0, limit)
 }
 
-function resolveDailySummaryCellValue(column: string, row: AdminRecord) {
+function resolveDailySummaryCellValue(column: string, row: AdminRecord): React.ReactNode {
   const nestedEmployee = readNestedRecord(row, ["employee"])
   if (column === "employee_name") {
     const nestedEmployeeFullName =
@@ -891,17 +950,102 @@ function resolveDailySummaryCellValue(column: string, row: AdminRecord) {
       "expectedCheckOutTime",
     ])
   }
-  return row[column]
+  return stringifyValue(row[column])
 }
 
-function resolveTableCellValue(section: AttendanceActivitySectionKey, column: string, row: AdminRecord) {
+function resolveTableCellValue(section: AttendanceActivitySectionKey, column: string, row: AdminRecord): React.ReactNode {
   if (section === "daily-summaries") {
     return resolveDailySummaryCellValue(column, row)
   }
-  return row[column]
+  if (section === "attendance-history") {
+    if (column === "attendanceDate" || column === "attendance_date") {
+      const val = readFirstValue(row, ["attendanceDate", "attendance_date", "date"])
+      if (!val) return "—"
+      return formatDisplayDate(val)
+    }
+    if (column === "attendanceStatus" || column === "attendance_status") {
+      const status = readFirstValue(row, ["attendanceStatus", "attendance_status", "status"]) || "-"
+      const tone = statusTone(status)
+      // color only, no chip/pill
+      const textClass = tone.badge.split(" ").find(c => c.startsWith("text-")) || "text-foreground"
+      return <span className={`text-xs font-medium ${textClass}`}>{status}</span>
+    }
+    if (column === "checkInAt" || column === "check_in_at") {
+      const val = readFirstValue(row, ["checkInAt", "check_in_at", "checkInTime"])
+      if (!val) return "—"
+      try {
+        const d = new Date(val)
+        return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+      } catch {
+        return formatDisplayTime(val) || val
+      }
+    }
+    if (column === "checkOutAt" || column === "check_out_at") {
+      const val = readFirstValue(row, ["checkOutAt", "check_out_at", "checkOutTime"])
+      if (!val) return "—"
+      try {
+        const d = new Date(val)
+        return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+      } catch {
+        return formatDisplayTime(val) || val
+      }
+    }
+    if (column === "workMinutes") {
+      const mins = readFirstValue(row, ["workMinutes", "work_minutes", "workedMinutes"])
+      if (mins == null || mins === "-") return "—"
+      const m = Number(mins)
+      if (!Number.isFinite(m)) return mins
+      const h = Math.floor(m / 60)
+      const mm = m % 60
+      return `${h}h ${mm.toString().padStart(2, "0")}m`
+    }
+    if (column === "remarks") {
+      const r = row.remarks || row.remarksList || row.remarks
+      if (Array.isArray(r)) {
+        const userRemarks = r.filter((x: string) => typeof x === "string" && !x.includes("AFTER_MINUTES") && !x.includes("POLICY"))
+        return userRemarks.length ? userRemarks.join(", ") : "—"
+      }
+      return stringifyValue(r) || "—"
+    }
+    return stringifyValue(row[column]) || "—"
+  }
+  if (section === "schedule-preview") {
+    if (column === "date") {
+      const val = readFirstValue(row, ["date"])
+      return val ? formatDisplayDate(val) : "—"
+    }
+    if (column === "shift") {
+      const shift = row.shift as { name?: string } | undefined
+      if (row.is_off_day) return "Off Day"
+      return shift?.name || "—"
+    }
+    if (column === "time_range") {
+      const shift = row.shift as { start_time?: string; end_time?: string } | undefined
+      if (!shift || row.is_off_day) return "—"
+      return `${shift.start_time || ""} - ${shift.end_time || ""}`
+    }
+    if (column === "expected_work") {
+      const shift = row.shift as { expected_work_minutes?: number } | undefined
+      const mins = shift?.expected_work_minutes || readFirstValue(row, ["expected_work_minutes"])
+      if (!mins) return "—"
+      const m = Number(mins)
+      if (!Number.isFinite(m)) return mins
+      const h = Math.floor(m / 60)
+      const mm = m % 60
+      return `${h}h ${mm.toString().padStart(2, "0")}m`
+    }
+    if (column === "is_off_day") {
+      return row.is_off_day 
+        ? <span className="text-xs text-muted-foreground">Off</span> 
+        : <span className="text-xs">Work</span>
+    }
+    return stringifyValue(row[column]) || "—"
+  }
+  return stringifyValue(row[column])
 }
 
-function asNumber(value: string) {
+function asNumber(value: string | undefined): number | undefined {
+  if (!value) return undefined
   const trimmed = value.trim()
   if (!trimmed) return undefined
   const parsed = Number(trimmed)
@@ -909,27 +1053,6 @@ function asNumber(value: string) {
     throw new Error("Please enter a valid number.")
   }
   return parsed
-}
-
-function buildPunchPayload(values: Record<string, string>) {
-  const latitude = asNumber(values.latitude)
-  const longitude = asNumber(values.longitude)
-  if (latitude === undefined || longitude === undefined) {
-    throw new Error("Latitude and longitude are required.")
-  }
-
-  return {
-    latitude,
-    longitude,
-    geofenceId: asNumber(values.geofenceId),
-    wifiNetworkId: asNumber(values.wifiNetworkId),
-    accuracyMeters: asNumber(values.accuracyMeters),
-    wifiSsid: values.wifiSsid.trim() || undefined,
-    wifiBssid: values.wifiBssid.trim() || undefined,
-    ipAddress: values.ipAddress.trim() || undefined,
-    deviceIdentifier: values.deviceIdentifier.trim() || undefined,
-    overrideReason: values.overrideReason.trim() || undefined,
-  }
 }
 
 function buildRecalculatePayload(values: Record<string, string>) {
@@ -972,38 +1095,49 @@ function TableBlock({
   const columns = React.useMemo(() => resolveVisibleColumns(rows, section), [rows, section])
 
   return (
-    <TableScrollContainer>
-      <table className="w-full min-w-[680px] text-left text-sm md:min-w-[760px]">
-        <thead className="bg-slate-50/90 text-slate-500">
-          <tr>
-            {columns.map((column) => (
-              <th key={column} className="px-4 py-3.5 text-xs font-semibold uppercase tracking-[0.08em] whitespace-nowrap">
-                {prettifyLabel(column)}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody className="bg-white [&_tr:nth-child(odd)]:bg-slate-50/35 [&_tr]:border-t [&_tr]:border-slate-100 [&_tr]:transition-colors [&_tr]:hover:bg-slate-50">
-          {rows.length === 0 ? (
-            <tr>
-              <td colSpan={Math.max(columns.length, 1)} className="px-4 py-10 text-center text-slate-500">
-                No records found yet.
-              </td>
+    <div className="border border-border bg-card">
+      <TableScrollContainer className="!rounded-none !border-0 !bg-transparent !shadow-none !p-0">
+        <table className="w-full min-w-[720px] text-left text-sm md:min-w-[800px]">
+          <thead>
+            <tr className="border-b border-border bg-muted">
+              {columns.map((column) => (
+                <th 
+                  key={column} 
+                  className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[1.2px] whitespace-nowrap text-left text-muted-foreground"
+                >
+                  {prettifyLabel(column)}
+                </th>
+              ))}
             </tr>
-          ) : (
-            rows.map((row, index) => (
-              <tr key={`row-${index}`} className="align-top">
-                {columns.map((column) => (
-                  <td key={column} className="px-4 py-4 text-slate-700 break-words whitespace-normal">
-                    {stringifyValue(resolveTableCellValue(section, column, row))}
-                  </td>
-                ))}
+          </thead>
+          <tbody className="divide-y divide-border text-foreground [&_tr:nth-child(even)]:bg-muted/10">
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={Math.max(columns.length, 1)} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                  No attendance records found.
+                </td>
               </tr>
-            ))
-          )}
-        </tbody>
-      </table>
-    </TableScrollContainer>
+            ) : (
+              rows.map((row, index) => (
+                <tr 
+                  key={`row-${index}`} 
+                  className="align-middle hover:bg-muted/30 transition-colors"
+                >
+                  {columns.map((column) => (
+                    <td 
+                      key={column} 
+                      className="px-4 py-3.5 text-sm break-words whitespace-normal align-middle text-foreground/90"
+                    >
+                      {resolveTableCellValue(section, column, row)}
+                    </td>
+                  ))}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </TableScrollContainer>
+    </div>
   )
 }
 
@@ -1012,12 +1146,12 @@ export function AttendanceActivityView({ section }: { section: string }) {
   const config = React.useMemo(() => SECTION_CONFIG[activeSection], [activeSection])
 
   const [rows, setRows] = React.useState<AdminRecord[]>([])
+  const [dailySummaryRows, setDailySummaryRows] = React.useState<AdminRecord[]>([])
   const [singleRecord, setSingleRecord] = React.useState<AdminRecord | null>(null)
   const [loading, setLoading] = React.useState(false)
   const [message, setMessage] = React.useState<string | null>(null)
   const [error, setError] = React.useState<string | null>(null)
-  const [geofences, setGeofences] = React.useState<AdminRecord[]>([])
-  const [wifiNetworks, setWifiNetworks] = React.useState<AdminRecord[]>([])
+
   const [branches, setBranches] = React.useState<AdminRecord[]>([])
   const [employees, setEmployees] = React.useState<AdminRecord[]>([])
   const [employeeSearch, setEmployeeSearch] = React.useState("")
@@ -1031,6 +1165,10 @@ export function AttendanceActivityView({ section }: { section: string }) {
       status: "",
     }
   })
+  const [historyFilters, setHistoryFilters] = React.useState<Record<string, string>>(() => ({
+    from_date: "",
+    to_date: "",
+  }))
   const filteredEmployeeOptions = React.useMemo(() => {
     const search = employeeSearch.trim().toLowerCase()
     if (!search) {
@@ -1041,18 +1179,6 @@ export function AttendanceActivityView({ section }: { section: string }) {
       getEmployeeOptionLabel(employee).toLowerCase().includes(search)
     )
   }, [employeeSearch, employees])
-  const [punchValues, setPunchValues] = React.useState<Record<string, string>>({
-    geofenceId: "",
-    wifiNetworkId: "",
-    latitude: "",
-    longitude: "",
-    accuracyMeters: "",
-    wifiSsid: "",
-    wifiBssid: "",
-    ipAddress: "",
-    deviceIdentifier: "",
-    overrideReason: "",
-  })
   const [recalculateValues, setRecalculateValues] = React.useState<Record<string, string>>({
     start_date: "",
     end_date: "",
@@ -1070,38 +1196,6 @@ export function AttendanceActivityView({ section }: { section: string }) {
     batch_size: "500",
   })
 
-  React.useEffect(() => {
-    const needsLookups = activeSection === "punch-action"
-    if (!needsLookups) {
-      return
-    }
-    const token = readStoredToken()
-    if (!token) {
-      return
-    }
-
-    let cancelled = false
-    const loadLookups = async () => {
-      try {
-        const [geofencesResult, wifiResult] = await Promise.all([
-          listAttendanceGeofences(token, { page: 1, limit: 100 }),
-          listAttendanceWifiNetworks(token, { page: 1, limit: 100 }),
-        ])
-        if (cancelled) return
-        setGeofences(geofencesResult.rows)
-        setWifiNetworks(wifiResult.rows)
-      } catch {
-        if (cancelled) return
-        setGeofences([])
-        setWifiNetworks([])
-      }
-    }
-    void loadLookups()
-    return () => {
-      cancelled = true
-    }
-  }, [activeSection])
-
   const fetchSectionData = React.useCallback(async () => {
     const token = readStoredToken()
     if (!token) {
@@ -1116,27 +1210,39 @@ export function AttendanceActivityView({ section }: { section: string }) {
     try {
       if (activeSection === "today") {
         const payload = await getMyAttendanceToday(token)
+        setDailySummaryRows([])
         setSingleRecord(payload)
         setRows([])
         return
       }
 
       if (activeSection === "schedule-preview") {
-        const payload = await getMyAttendanceSchedule(token)
-        setRows(Array.isArray(payload) ? payload : [])
+        const payload: any = await getMyAttendanceSchedule(token)
+        const days = Array.isArray(payload) ? payload : (payload?.days || [])
+        setDailySummaryRows([])
+        setRows(days)
         setSingleRecord(null)
         return
       }
 
       if (activeSection === "punch-history") {
         const result = await listMyAttendancePunches(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" })
+        setDailySummaryRows([])
         setRows(result.rows)
         setSingleRecord(null)
         return
       }
 
       if (activeSection === "attendance-history") {
-        const result = await listMyAttendanceHistory(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" })
+        const result = await listMyAttendanceHistory(token, { 
+          page: 1, 
+          limit: 100, 
+          sortBy: "created_at", 
+          sortOrder: "DESC",
+          from_date: historyFilters.from_date || undefined,
+          to_date: historyFilters.to_date || undefined,
+        })
+        setDailySummaryRows([])
         setRows(result.rows)
         setSingleRecord(null)
         return
@@ -1161,13 +1267,15 @@ export function AttendanceActivityView({ section }: { section: string }) {
         const enrichedRows = enrichRowsWithReadableNames(result.rows, branchesResult.rows, employeesResult.rows)
         setBranches(branchesResult.rows)
         setEmployees(employeesResult.rows)
-        setRows(applyDailySummaryFilters(enrichedRows, dailySummaryFilters))
+        setDailySummaryRows(enrichedRows)
+        setRows(applyDailySummaryFilters(enrichedRows, dailySummaryFilters, ""))
         setSingleRecord(null)
         return
       }
 
       if (activeSection === "recalculation-jobs") {
         const result = await listAttendanceProcessingJobs(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" })
+        setDailySummaryRows([])
         setRows(result.rows)
         setSingleRecord(null)
         return
@@ -1175,47 +1283,35 @@ export function AttendanceActivityView({ section }: { section: string }) {
 
       if (activeSection === "unmatched-logs") {
         const result = await listAttendanceUnmatchedLogs(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" })
+        setDailySummaryRows([])
         setRows(result.rows)
         setSingleRecord(null)
         return
       }
 
+      setDailySummaryRows([])
       setRows([])
       setSingleRecord(null)
     } catch (errorObject) {
+      setDailySummaryRows([])
       setRows([])
       setSingleRecord(null)
       setError(formatLoadError(errorObject, `Failed to load ${config.title.toLowerCase()}.`))
     } finally {
       setLoading(false)
     }
-  }, [activeSection, config.title, dailySummaryFilters])
+  }, [activeSection, config.title, dailySummaryFilters, historyFilters])
 
   React.useEffect(() => {
     void fetchSectionData()
   }, [fetchSectionData])
 
-  const submitPunch = async (kind: "check-in" | "check-out") => {
-    const token = readStoredToken()
-    if (!token) {
-      setError("Authentication required. Please log in again.")
+  React.useEffect(() => {
+    if (activeSection !== "daily-summaries") {
       return
     }
-
-    try {
-      const payload = buildPunchPayload(punchValues)
-      if (kind === "check-in") {
-        await createAttendanceMobilePunchCheckIn(token, payload)
-        setMessage("Check-in submitted successfully.")
-      } else {
-        await createAttendanceMobilePunchCheckOut(token, payload)
-        setMessage("Check-out submitted successfully.")
-      }
-      setError(null)
-    } catch (errorObject) {
-      setError(formatLoadError(errorObject, "Could not submit this punch action."))
-    }
-  }
+    setRows(applyDailySummaryFilters(dailySummaryRows, dailySummaryFilters, employeeSearch))
+  }, [activeSection, dailySummaryFilters, dailySummaryRows, employeeSearch])
 
   const runPendingJobs = async () => {
     const token = readStoredToken()
@@ -1266,37 +1362,83 @@ export function AttendanceActivityView({ section }: { section: string }) {
     }
   }
 
+  if (activeSection === 'punch-action') {
+    return (
+      <div className="py-4 text-sm text-muted-foreground">
+        Punch actions are only available in the mobile app.
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
-              {config.groupTitle}
-            </p>
-            <div>
-              <h1 className="text-3xl font-semibold tracking-tight text-slate-900">{config.title}</h1>
-              <p className="mt-2 max-w-3xl text-sm text-slate-600">{config.description}</p>
-            </div>
-          </div>
-          <button
-            className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-300 px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-            type="button"
-            onClick={() => {
-              setMessage(null)
-              void fetchSectionData()
-            }}
-          >
-            <RefreshCwIcon className="mr-2 h-4 w-4" />
-            Refresh
-          </button>
+      <div>
+        <div className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+          {config.groupTitle}
         </div>
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h1 className="text-xl font-semibold tracking-tight text-foreground">{config.title}</h1>
+          </div>
+          <div className="flex items-center gap-1">
+            {activeSection === "attendance-history" && (
+              <Popover>
+                <PopoverTrigger>
+                  <button
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border px-2 text-xs font-medium text-foreground transition hover:bg-muted"
+                    type="button"
+                    aria-label="Filter by date"
+                  >
+                    <Filter className="size-3.5 text-primary" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-72 p-4" align="end">
+                  <div className="space-y-3">
+                    <div className="text-sm font-medium text-foreground">Filter by date range</div>
+                    <div className="grid gap-3">
+                      <label className="grid gap-1 text-xs">
+                        <span className="font-medium text-slate-700">From date</span>
+                        <DatePickerPresets
+                          value={historyFilters.from_date}
+                          onChange={(value) => setHistoryFilters((current) => ({ ...current, from_date: value }))}
+                          placeholder="From date"
+                          className="h-8 text-xs"
+                        />
+                      </label>
+                      <label className="grid gap-1 text-xs">
+                        <span className="font-medium text-slate-700">To date</span>
+                        <DatePickerPresets
+                          value={historyFilters.to_date}
+                          onChange={(value) => setHistoryFilters((current) => ({ ...current, to_date: value }))}
+                          placeholder="To date"
+                          className="h-8 text-xs"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            )}
+            <button
+              className="inline-flex h-8 items-center justify-center rounded-lg border border-border px-2 text-xs font-medium text-foreground transition hover:bg-muted"
+              type="button"
+              onClick={() => {
+                setMessage(null)
+                void fetchSectionData()
+              }}
+            >
+              <RefreshCwIcon className="size-3.5 text-primary" />
+            </button>
+          </div>
+        </div>
+      </div>
 
+      <div>
         {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
         {message ? <p className="mt-4 text-sm text-green-600">{message}</p> : null}
 
         {loading ? (
-          <p className="mt-6 text-sm text-slate-500">
+          <p className="mt-3 text-xs text-muted-foreground">
             {activeSection === "daily-summaries" && rows.length ? "Updating results…" : "Loading…"}
           </p>
         ) : null}
@@ -1320,60 +1462,66 @@ export function AttendanceActivityView({ section }: { section: string }) {
                   />
                 </label>
               </div>
-              <div className="grid gap-4 lg:grid-cols-12">
-                <div className="grid gap-1 sm:grid-cols-2 lg:col-span-4 lg:grid-cols-2">
-                  <span className="text-sm font-medium text-slate-700">From date</span>
-                  <DatePickerPresets
-                    value={dailySummaryFilters.from_date}
-                    onChange={(value) => setDailySummaryFilters((current) => ({ ...current, from_date: value }))}
-                    placeholder="From date"
-                  />
-                  <span className="text-sm font-medium text-slate-700">To date</span>
-                  <DatePickerPresets
-                    value={dailySummaryFilters.to_date}
-                    onChange={(value) => setDailySummaryFilters((current) => ({ ...current, to_date: value }))}
-                    placeholder="To date"
-                  />
-                </div>
-                <label className="grid gap-1 text-sm lg:col-span-4">
-                  <span className="font-medium text-slate-700">Employee</span>
-                  <select
-                    className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
-                    value={dailySummaryFilters.employee_id}
-                    onChange={(event) => setDailySummaryFilters((current) => ({ ...current, employee_id: event.target.value }))}
-                  >
-                    <option value="">All employees</option>
-                    {filteredEmployeeOptions.map((employee, index) => {
-                      const employeeId = readNumberFromRow(employee, ["id", "employee_id", "employeeId"])
-                      if (employeeId === null) return null
-                      return (
-                        <option key={`attendance-employee-${employeeId}-${index}`} value={String(employeeId)}>
-                          {getEmployeeOptionLabel(employee)}
-                        </option>
-                      )
-                    })}
-                  </select>
-                </label>
-                <div className="grid gap-3 sm:grid-cols-2 lg:col-span-4">
+              <div className="flex flex-col gap-4">
+                <div className="grid gap-3 md:grid-cols-2">
                   <label className="grid gap-1 text-sm">
-                  <span className="font-medium text-slate-700">Organization</span>
-                  <select
-                    className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
-                    value={dailySummaryFilters.organization_id}
-                    onChange={(event) => setDailySummaryFilters((current) => ({ ...current, organization_id: event.target.value }))}
-                  >
-                    <option value="">All organizations</option>
-                    {branches.map((branch, index) => {
-                      const branchId = readNumberFromRow(branch, ["id", "branch_id", "branchId"])
-                      if (branchId === null) return null
-                      return (
-                        <option key={`attendance-branch-${branchId}-${index}`} value={String(branchId)}>
-                          {getBranchOptionLabel(branch)}
-                        </option>
-                      )
-                    })}
-                  </select>
+                    <span className="font-medium text-slate-700">From date</span>
+                    <DatePickerPresets
+                      value={dailySummaryFilters.from_date}
+                      onChange={(value) => setDailySummaryFilters((current) => ({ ...current, from_date: value }))}
+                      placeholder="From date"
+                    />
                   </label>
+                  <label className="grid gap-1 text-sm">
+                    <span className="font-medium text-slate-700">To date</span>
+                    <DatePickerPresets
+                      value={dailySummaryFilters.to_date}
+                      onChange={(value) => setDailySummaryFilters((current) => ({ ...current, to_date: value }))}
+                      placeholder="To date"
+                    />
+                  </label>
+                </div>
+                <div className="grid gap-3 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
+                  <label className="grid gap-1 text-sm lg:max-w-md">
+                    <span className="font-medium text-slate-700">Employee</span>
+                    <select
+                      className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
+                      value={dailySummaryFilters.employee_id}
+                      onChange={(event) => setDailySummaryFilters((current) => ({ ...current, employee_id: event.target.value }))}
+                    >
+                      <option value="">All employees</option>
+                      {filteredEmployeeOptions.map((employee, index) => {
+                        const employeeId = readNumberFromRow(employee, ["id", "employee_id", "employeeId"])
+                        if (employeeId === null) return null
+                        return (
+                          <option key={`attendance-employee-${employeeId}-${index}`} value={String(employeeId)}>
+                            {getEmployeeOptionLabel(employee)}
+                          </option>
+                        )
+                      })}
+                    </select>
+                  </label>
+                  <label className="grid gap-1 text-sm">
+                    <span className="font-medium text-slate-700">Organization</span>
+                    <select
+                      className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
+                      value={dailySummaryFilters.organization_id}
+                      onChange={(event) => setDailySummaryFilters((current) => ({ ...current, organization_id: event.target.value }))}
+                    >
+                      <option value="">All organizations</option>
+                      {branches.map((branch, index) => {
+                        const branchId = readNumberFromRow(branch, ["id", "branch_id", "branchId"])
+                        if (branchId === null) return null
+                        return (
+                          <option key={`attendance-branch-${branchId}-${index}`} value={String(branchId)}>
+                            {getBranchOptionLabel(branch)}
+                          </option>
+                        )
+                      })}
+                    </select>
+                  </label>
+                </div>
+                <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
                   <label className="grid gap-1 text-sm">
                     <span className="font-medium text-slate-700">Status</span>
                     <select
@@ -1389,103 +1537,38 @@ export function AttendanceActivityView({ section }: { section: string }) {
                       ))}
                     </select>
                   </label>
+                  <button
+                    className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 md:self-end"
+                    type="button"
+                    onClick={() => {
+                      const today = getTodayDateInputValue()
+                      setEmployeeSearch("")
+                      setDailySummaryFilters({
+                        from_date: today,
+                        to_date: today,
+                        employee_id: "",
+                        organization_id: "",
+                        status: "",
+                      })
+                      setMessage(null)
+                    }}
+                  >
+                    Reset To Today
+                  </button>
                 </div>
               </div>
-              <div className="flex flex-col gap-3 border-t border-slate-200 pt-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col gap-3 border-t border-slate-200 pt-3">
                 <p className="text-xs text-slate-500">
                   Filter results update automatically as you change values.
                 </p>
-                <button
-                  className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 sm:self-start"
-                  type="button"
-                  onClick={() => {
-                    const today = getTodayDateInputValue()
-                    setEmployeeSearch("")
-                    setDailySummaryFilters({
-                      from_date: today,
-                      to_date: today,
-                      employee_id: "",
-                      organization_id: "",
-                      status: "",
-                    })
-                    setMessage(null)
-                  }}
-                >
-                  Reset To Today
-                </button>
               </div>
             </div>
           </div>
         ) : null}
 
-        {!loading && activeSection === "punch-action" ? (
-          <div className="mt-6 grid gap-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <label className="grid gap-1 text-sm">
-                <span className="font-medium text-slate-700">Latitude</span>
-                <input className="rounded-md border border-slate-300 px-3 py-2" value={punchValues.latitude} onChange={(event) => setPunchValues((current) => ({ ...current, latitude: event.target.value }))} />
-              </label>
-              <label className="grid gap-1 text-sm">
-                <span className="font-medium text-slate-700">Longitude</span>
-                <input className="rounded-md border border-slate-300 px-3 py-2" value={punchValues.longitude} onChange={(event) => setPunchValues((current) => ({ ...current, longitude: event.target.value }))} />
-              </label>
-              <label className="grid gap-1 text-sm">
-                <span className="font-medium text-slate-700">Accuracy Meters</span>
-                <input className="rounded-md border border-slate-300 px-3 py-2" value={punchValues.accuracyMeters} onChange={(event) => setPunchValues((current) => ({ ...current, accuracyMeters: event.target.value }))} />
-              </label>
-              <label className="grid gap-1 text-sm">
-                <span className="font-medium text-slate-700">Geofence</span>
-                <select className="rounded-md border border-slate-300 px-3 py-2" value={punchValues.geofenceId} onChange={(event) => setPunchValues((current) => ({ ...current, geofenceId: event.target.value }))}>
-                  <option value="">Select geofence</option>
-                  {geofences.map((item, index) => (
-                    <option key={`geofence-${index}`} value={stringifyValue(item.id)}>
-                      {stringifyValue(item.name ?? item.geofence_name ?? item.id)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="grid gap-1 text-sm">
-                <span className="font-medium text-slate-700">Wi-Fi Network</span>
-                <select className="rounded-md border border-slate-300 px-3 py-2" value={punchValues.wifiNetworkId} onChange={(event) => setPunchValues((current) => ({ ...current, wifiNetworkId: event.target.value }))}>
-                  <option value="">Select Wi-Fi network</option>
-                  {wifiNetworks.map((item, index) => (
-                    <option key={`wifi-${index}`} value={stringifyValue(item.id)}>
-                      {stringifyValue(item.name ?? item.ssid ?? item.id)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="grid gap-1 text-sm">
-                <span className="font-medium text-slate-700">Wi-Fi SSID</span>
-                <input className="rounded-md border border-slate-300 px-3 py-2" value={punchValues.wifiSsid} onChange={(event) => setPunchValues((current) => ({ ...current, wifiSsid: event.target.value }))} />
-              </label>
-              <label className="grid gap-1 text-sm">
-                <span className="font-medium text-slate-700">Wi-Fi BSSID</span>
-                <input className="rounded-md border border-slate-300 px-3 py-2" value={punchValues.wifiBssid} onChange={(event) => setPunchValues((current) => ({ ...current, wifiBssid: event.target.value }))} />
-              </label>
-              <label className="grid gap-1 text-sm">
-                <span className="font-medium text-slate-700">IP Address</span>
-                <input className="rounded-md border border-slate-300 px-3 py-2" value={punchValues.ipAddress} onChange={(event) => setPunchValues((current) => ({ ...current, ipAddress: event.target.value }))} />
-              </label>
-              <label className="grid gap-1 text-sm">
-                <span className="font-medium text-slate-700">Device Identifier</span>
-                <input className="rounded-md border border-slate-300 px-3 py-2" value={punchValues.deviceIdentifier} onChange={(event) => setPunchValues((current) => ({ ...current, deviceIdentifier: event.target.value }))} />
-              </label>
-            </div>
-            <label className="grid gap-1 text-sm">
-              <span className="font-medium text-slate-700">Override Reason</span>
-              <textarea className="min-h-24 rounded-md border border-slate-300 px-3 py-2" value={punchValues.overrideReason} onChange={(event) => setPunchValues((current) => ({ ...current, overrideReason: event.target.value }))} />
-            </label>
-            <div className="flex flex-wrap gap-3">
-              <button className="inline-flex h-11 items-center justify-center rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800" type="button" onClick={() => void submitPunch("check-in")}>
-                Check In
-              </button>
-              <button className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-300 px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50" type="button" onClick={() => void submitPunch("check-out")}>
-                Check Out
-              </button>
-            </div>
-          </div>
-        ) : null}
+        {/* Date filter is now in the popover next to refresh icon for attendance-history */}
+
+        {/* Punch Action is only available in the native mobile app (iOS/Android). No content shown in browser. */}
 
         {!loading && activeSection === "recalculation-jobs" ? (
           <div className="mt-6 space-y-6">
@@ -1540,10 +1623,9 @@ export function AttendanceActivityView({ section }: { section: string }) {
           </div>
         ) : null}
 
-        {(activeSection === "daily-summaries" || !loading) &&
-        activeSection !== "today" &&
-        activeSection !== "punch-action" &&
-        activeSection !== "recalculation-jobs" ? (
+        {((activeSection === "daily-summaries" || !loading) &&
+          activeSection !== "today" &&
+          activeSection !== "recalculation-jobs") ? (
           <div className="mt-6">
             <TableBlock rows={rows} section={activeSection} />
           </div>

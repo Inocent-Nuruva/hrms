@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation"
+import { AttendanceManagementClient } from "@/components/dashboard/attendance-management-client"
 
 export default function AttendanceIndexPage() {
-  redirect("/dashboard/attendance/settings")
+  return <AttendanceManagementClient section="settings" />
 }

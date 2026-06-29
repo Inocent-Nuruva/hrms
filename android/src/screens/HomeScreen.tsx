@@ -138,6 +138,11 @@ export function HomeScreen({ auth, onTabChange }: Props) {
     auth.user?.fullName ||
     [readString(employee, ['first_name']), readString(employee, ['last_name'])].filter(Boolean).join(' ') ||
     'Employee';
+  const employeeFirstName =
+    readString(employee, ['first_name']) ||
+    auth.user?.fullName?.trim().split(/\s+/)[0] ||
+    employeeName.trim().split(/\s+/)[0] ||
+    'Employee';
   const initials = employeeName
     .split(' ')
     .map((part) => part[0])
@@ -192,9 +197,9 @@ export function HomeScreen({ auth, onTabChange }: Props) {
   ];
 
   const quickMenu = [
-    { label: 'My Information', icon: <UserRound size={16} color={COLORS.primary} />, tab: 'profile' as const },
-    { label: 'Attendance', icon: <Fingerprint size={16} color={COLORS.primary} />, tab: 'attendance' as const },
-    { label: 'Leave', icon: <CalendarDays size={16} color={COLORS.primary} />, tab: 'leave' as const },
+    { label: 'My Information', icon: <UserRound size={14} color={COLORS.primary} />, tab: 'profile' as const },
+    { label: 'Attendance', icon: <Fingerprint size={14} color={COLORS.primary} />, tab: 'attendance' as const },
+    { label: 'Leave', icon: <CalendarDays size={14} color={COLORS.primary} />, tab: 'leave' as const },
   ];
 
   const monthSummary = [
@@ -208,7 +213,7 @@ export function HomeScreen({ auth, onTabChange }: Props) {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor }} edges={[]}>
-      <MobileTopBar auth={auth} title={`Hi, ${employeeName}`} subtitle={greeting} variant="dashboard" />
+      <MobileTopBar auth={auth} title={`Hi, ${employeeFirstName}`} subtitle={greeting} variant="dashboard" />
       <ScrollView
         style={{ flex: 1, backgroundColor }}
         contentContainerStyle={styles.scrollContent}
@@ -239,24 +244,29 @@ export function HomeScreen({ auth, onTabChange }: Props) {
           <View style={[styles.sheet, { backgroundColor: sheetBackground, paddingBottom: Math.max(insets.bottom, 4) }]}>
             <View style={styles.sectionHeader}>
               <Text style={[styles.sectionTitle, { color: textColor }]}>Quick Menu</Text>
-              <TouchableScale pressedScale={0.96}>
-                <Text style={[styles.sectionLink, { color: COLORS.accent }]}>View More</Text>
-              </TouchableScale>
             </View>
 
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickMenuRow}>
+            <View style={styles.quickMenuRow}>
               {quickMenu.map((item) => (
                 <TouchableScale
                   key={item.label}
-                  style={[styles.quickChip, { backgroundColor: isDark ? COLORS.surfaceVariantDark : '#e8ebf5' }]}
+                  style={[
+                    styles.quickChip,
+                    {
+                      backgroundColor: isDark ? COLORS.surfaceVariantDark : '#e8ebf5',
+                      flex: 1,
+                    },
+                  ]}
                   onPress={() => onTabChange?.(item.tab)}
                   pressedScale={0.96}
                 >
                   {item.icon}
-                  <Text style={[styles.quickChipText, { color: textColor }]}>{item.label}</Text>
+                  <Text style={[styles.quickChipText, { color: textColor }]} numberOfLines={1}>
+                    {item.label}
+                  </Text>
                 </TouchableScale>
               ))}
-            </ScrollView>
+            </View>
 
             <View style={styles.sectionHeader}>
               <Text style={[styles.sectionTitle, { color: textColor }]}>Check In-Out</Text>
@@ -298,9 +308,6 @@ export function HomeScreen({ auth, onTabChange }: Props) {
               <Text style={[styles.sectionTitle, { color: textColor }]}>
                 Month Summary <Text style={{ color: mutedColor, fontWeight: '600' }}>| {today.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</Text>
               </Text>
-              <TouchableScale pressedScale={0.96} onPress={() => onTabChange?.('leave')}>
-                <Text style={[styles.sectionLink, { color: COLORS.accent }]}>More</Text>
-              </TouchableScale>
             </View>
 
             <View style={styles.summaryRow}>
@@ -310,11 +317,13 @@ export function HomeScreen({ auth, onTabChange }: Props) {
                   style={[
                     styles.summaryCard, 
                     { 
-                      borderColor: item.tone,
-                      backgroundColor: isDark ? '#18181b' : '#ffffff'
+                      borderColor: isDark ? '#27272a' : '#e2e8f0',
+                      backgroundColor: isDark ? '#18181b' : '#ffffff',
+                      shadowOpacity: isDark ? 0.3 : 0.08,
                     }
                   ]}
                 >
+                  <View style={{ width: 28, height: 3, backgroundColor: item.tone, borderRadius: 2, marginBottom: 8 }} />
                   <Text style={[styles.summaryValue, { color: textColor }]}>{item.value}</Text>
                   <Text style={[styles.summaryLabel, { color: mutedColor }]}>{item.label}</Text>
                 </View>
@@ -488,14 +497,14 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 26,
     borderTopRightRadius: 26,
     paddingHorizontal: 18,
-    paddingTop: 16,
+    paddingTop: 12,
     flexGrow: 1,
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   sectionTitle: {
     fontSize: 19,
@@ -507,19 +516,21 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   quickMenuRow: {
-    paddingBottom: 18,
-    gap: 10,
+    flexDirection: 'row',
+    gap: 8,
+    paddingBottom: 8,
   },
   quickChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
+    justifyContent: 'center',
+    gap: 4,
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 8,
   },
   quickChipText: {
-    fontSize: 14,
+    fontSize: 11,
     fontWeight: '700',
   },
   checkCard: {
@@ -527,7 +538,7 @@ const styles = StyleSheet.create({
     alignItems: 'stretch',
     padding: 0,
     overflow: 'hidden',
-    marginBottom: 22,
+    marginBottom: 14,
     borderRadius: 14,
     borderWidth: 1,
   },
@@ -580,25 +591,33 @@ const styles = StyleSheet.create({
   summaryRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    justifyContent: 'space-between',
+    gap: 8,
   },
   summaryCard: {
-    width: '31%',
-    minWidth: 92,
+    width: '30%',
+    minWidth: 0,
     borderRadius: 14,
-    borderWidth: 2,
+    borderWidth: 1,
     paddingHorizontal: 12,
-    paddingVertical: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 4,
+    elevation: 3,
   },
   summaryValue: {
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: '800',
-    letterSpacing: -0.8,
+    letterSpacing: -0.5,
     marginBottom: 4,
   },
   summaryLabel: {
-    fontSize: 13,
-    lineHeight: 16,
+    fontSize: 11,
+    lineHeight: 14,
     fontWeight: '600',
+    textAlign: 'center',
+    opacity: 0.7,
   },
 });

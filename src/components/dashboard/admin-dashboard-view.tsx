@@ -4,6 +4,7 @@ import * as React from "react"
 import { usePathname, useRouter } from "next/navigation"
 
 import { AppSidebar } from "@/components/app-sidebar"
+import { canAccessDashboardRoute } from "@/components/app-sidebar"
 import { DataTable } from "@/components/data-table"
 import { AccountSettingsPanel } from "@/components/dashboard/account-settings-panel"
 import { SiteHeader } from "@/components/site-header"
@@ -35,19 +36,11 @@ import {
   type AdminRecord,
   type AdminResourceCollections,
   type AdminResourceKey,
-  type AdminStats,
   type UsersQueryParams,
 } from "@/lib/admin-api"
 import { authService } from "@/services/authService"
 import { asRecord, isLikelyRefreshToken, readString } from "@/utils/token-utils"
 import { AUTH_STORAGE_KEYS, ROUTES } from "@/utils/constants"
-
-const DEFAULT_STATS: AdminStats = {
-  users: 0,
-  roles: 0,
-  permissions: 0,
-  companies: 0,
-}
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 const LEGACY_TOKEN_STORAGE_KEY = "ess_auth_token"
@@ -59,13 +52,13 @@ const DEFAULT_USERS_QUERY: Required<UsersQueryParams> = {
   search: "",
 }
 const RESOURCE_ROUTE_MAP: Record<AdminResourceKey, string> = {
-  users: "/dashboard/users",
-  roles: "/dashboard/roles",
-  permissions: "/dashboard/permissions",
+  users: "/dashboard/employees/all",
+  roles: "/dashboard/access-control/roles",
+  permissions: "/dashboard/access-control/permissions",
   companies: "/dashboard/companies",
 }
 
-const SELF_SERVICE_HOME_ROUTE = "/dashboard/employees/register"
+const SELF_SERVICE_HOME_ROUTE = "/dashboard"
 const ADMIN_ROLE_KEYS = new Set([
   "admin",
   "administrator",
@@ -79,36 +72,7 @@ const ADMIN_ROLE_KEYS = new Set([
   "root",
 ])
 
-const ADMIN_PORTAL_PERMISSION_KEYS = new Set([
-  "view_company_dashboard",
-  "view_company_data",
-  "update_company_data",
-  "users:read",
-  "roles:read",
-  "permissions:read",
-  "employees:read",
-  "departments:read",
-  "branches:read",
-  "positions:read",
-  "designations:read",
-  "leave_types:read",
-  "leave_requests:read",
-  "leave_balances:read",
-  "leave_policies:read",
-  "leave_workflows:read",
-  "onboarding_requests:read",
-  "offboarding_requests:read",
-  "attendance_settings:read",
-  "attendance_devices:read",
-  "attendance_policies:read",
-  "access_doors:read",
-  "access_schedule_templates:read",
-  "access_organizations:read",
-  "access_groups:read",
-])
-
 const EMPLOYEE_RESTRICTED_ROUTE_PREFIXES = [
-  "/dashboard/attendance",
   "/dashboard/access-control",
   "/dashboard/users",
   "/dashboard/roles",
@@ -127,6 +91,41 @@ const EMPLOYEE_RESTRICTED_ROUTE_PREFIXES = [
   "/dashboard/leave-management/policies",
   "/dashboard/leave-management/types",
   "/dashboard/leave-management/workflows",
+]
+
+const EMPLOYEE_ALLOWED_ATTENDANCE_ROUTES = new Set([
+  "/dashboard/attendance/today",
+  "/dashboard/attendance/punch-history",
+  "/dashboard/attendance/attendance-history",
+  "/dashboard/attendance/schedule-preview",
+])
+
+const EMPLOYEE_RESTRICTED_ATTENDANCE_PREFIXES = [
+  "/dashboard/attendance/settings",
+  "/dashboard/attendance/policies",
+  "/dashboard/attendance/devices",
+  "/dashboard/attendance/checkpoints",
+  "/dashboard/attendance/holiday-groups",
+  "/dashboard/attendance/geofences",
+  "/dashboard/attendance/wifi-networks",
+  "/dashboard/attendance/mobile-punches",
+  "/dashboard/attendance/holidays",
+  "/dashboard/attendance/device-sync-logs",
+  "/dashboard/attendance/daily-summaries",
+  "/dashboard/attendance/recalculation-jobs",
+  "/dashboard/attendance/unmatched-logs",
+  "/dashboard/attendance/shifts",
+  "/dashboard/attendance/shift-breaks",
+  "/dashboard/attendance/shift-assignments",
+  "/dashboard/attendance/shift-schedules",
+  "/dashboard/attendance/shift-rotation-groups",
+  "/dashboard/attendance/shift-rotation-rules",
+  "/dashboard/attendance/timetables",
+  "/dashboard/attendance/timetable-days",
+  "/dashboard/attendance/timetable-holiday-rules",
+  "/dashboard/attendance/timetable-rotations",
+  "/dashboard/attendance/timetable-rotation-rules",
+  "/dashboard/attendance/employee-timetables",
 ]
 
 function decodeBase64Url(input: string) {
@@ -268,10 +267,6 @@ function resolveAdminFlag(root: AdminRecord | null) {
   return candidates.some((value) => value === true || value === 1 || value === "1" || value === "true")
 }
 
-function hasAdminPortalPermissions(permissionLabels: string[]) {
-  return permissionLabels.some((permission) => ADMIN_PORTAL_PERMISSION_KEYS.has(permission))
-}
-
 function collectPermissionLabelsFromUnknown(value: unknown, sink: Set<string>) {
   if (typeof value === "string" && value.trim()) {
     const normalized = value.trim().toLowerCase()
@@ -355,40 +350,6 @@ function resolvePermissionLabels(root: AdminRecord | null) {
   return labels
 }
 
-type AdminChartPoint = { date: string; users: number; otherResources: number }
-
-function buildChartData(collections: AdminResourceCollections): AdminChartPoint[] {
-  const buckets = new Map<string, { users: number; otherResources: number }>()
-
-  const register = (dateValue: unknown, type: "users" | "otherResources") => {
-    if (typeof dateValue !== "string") {
-      return
-    }
-    const date = new Date(dateValue)
-    if (Number.isNaN(date.getTime())) {
-      return
-    }
-
-    const day = date.toISOString().slice(0, 10)
-    const current = buckets.get(day) ?? { users: 0, otherResources: 0 }
-    current[type] += 1
-    buckets.set(day, current)
-  }
-
-  collections.users.forEach((row) => register(row.created_at, "users"))
-  collections.roles.forEach((row) => register(row.created_at, "otherResources"))
-  collections.permissions.forEach((row) => register(row.created_at, "otherResources"))
-  collections.companies.forEach((row) => register(row.created_at, "otherResources"))
-
-  return Array.from(buckets.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([date, value]) => ({
-      date,
-      users: value.users,
-      otherResources: value.otherResources,
-    }))
-}
-
 interface AdminDashboardViewProps {
   activeResource?: AdminResourceKey
   showOverview?: boolean
@@ -422,6 +383,17 @@ export default function AdminDashboardView({
 }: AdminDashboardViewProps) {
   const router = useRouter()
   const pathname = usePathname()
+  const currentPath = pathname ?? ""
+  const inferredActiveResource = React.useMemo(() => {
+    const match = currentPath.match(
+      /^\/dashboard\/(?:(?:access-control\/)?(roles|permissions)|(users|companies))(?:\/|$)/
+    )
+    return ((match?.[1] ?? match?.[2]) as AdminResourceKey | undefined) ?? undefined
+  }, [currentPath])
+  const resolvedActiveResource = activeResource ?? inferredActiveResource
+  const resolvedShowOverview = showOverview || currentPath === "/dashboard"
+  const resolvedShowSettings = showSettings || currentPath === "/dashboard/settings"
+  const resolvedUseApis = useApis || Boolean(resolvedActiveResource)
   const [token, setToken] = React.useState("")
   const [collections, setCollections] = React.useState<AdminResourceCollections>({
     users: [],
@@ -430,10 +402,8 @@ export default function AdminDashboardView({
     companies: [],
   })
   const [rows, setRows] = React.useState<AdminRecord[]>([])
-  const [stats, setStats] = React.useState<AdminStats>(DEFAULT_STATS)
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
-  const [chartData, setChartData] = React.useState<AdminChartPoint[]>([])
   const [currentAdmin, setCurrentAdmin] = React.useState<AdminRecord | null>(null)
   const [overviewRefreshKey, setOverviewRefreshKey] = React.useState(0)
   const [myCompany, setMyCompany] = React.useState<AdminRecord | null>(null)
@@ -560,8 +530,6 @@ export default function AdminDashboardView({
       if (!useApis) {
         setCollections({ users: [], roles: [], permissions: [], companies: [] })
         setRows([])
-        setStats(DEFAULT_STATS)
-        setChartData([])
         setCurrentAdmin(null)
         setMyCompany(null)
         setUsersTotal(null)
@@ -574,8 +542,6 @@ export default function AdminDashboardView({
       if (!accessToken) {
         setCollections({ users: [], roles: [], permissions: [], companies: [] })
         setRows([])
-        setStats(DEFAULT_STATS)
-        setChartData([])
         setCurrentAdmin(null)
         setMyCompany(null)
         setUsersTotal(null)
@@ -603,13 +569,6 @@ export default function AdminDashboardView({
         }
         setCollections(fetchedCollections)
         setRows(activeResource ? fetchedCollections[activeResource] ?? [] : [])
-        setStats({
-          users: usersResult.total ?? usersResult.rows.length,
-          roles: fetchedCollections.roles.length,
-          permissions: fetchedCollections.permissions.length,
-          companies: 0,
-        })
-        setChartData(buildChartData(fetchedCollections))
         setCurrentAdmin(admin)
         setMyCompany(null)
         setUsersTotal(usersResult.total)
@@ -637,8 +596,6 @@ export default function AdminDashboardView({
         setError(message)
         setCollections({ users: [], roles: [], permissions: [], companies: [] })
         setRows([])
-        setStats(DEFAULT_STATS)
-        setChartData([])
         setUsersTotal(null)
         setUsersTotalPages(null)
       } finally {
@@ -659,15 +616,15 @@ export default function AdminDashboardView({
   }, [hydrateTokenFromStorage])
 
   React.useEffect(() => {
-    if (!useApis) {
+    if (!resolvedUseApis) {
       return
     }
     void loadData(token)
-  }, [token, loadData, useApis])
+  }, [token, loadData, resolvedUseApis])
 
   React.useEffect(() => {
-    setRows(activeResource ? collections[activeResource] ?? [] : [])
-  }, [activeResource, collections])
+    setRows(resolvedActiveResource ? collections[resolvedActiveResource] ?? [] : [])
+  }, [resolvedActiveResource, collections])
 
   const navigateToResource = React.useCallback(
     (resource: AdminResourceKey) => {
@@ -679,22 +636,22 @@ export default function AdminDashboardView({
     [router]
   )
 
-  const refreshCurrentResource = async () => {
+  const refreshCurrentResource = React.useCallback(async () => {
     const accessToken = resolveStoredTokens().accessToken
     if (accessToken !== token) {
       setToken(accessToken)
     }
     await loadData(accessToken)
-  }
+  }, [loadData, resolveStoredTokens, token])
 
   const handleHeaderRefresh = React.useCallback(() => {
-    if (showOverview) {
+    if (resolvedShowOverview) {
       setOverviewRefreshKey((k) => k + 1)
     }
-    if (useApis) {
+    if (resolvedUseApis) {
       void refreshCurrentResource()
     }
-  }, [showOverview, useApis, refreshCurrentResource])
+  }, [resolvedShowOverview, resolvedUseApis, refreshCurrentResource])
 
   const handleCreate = async (resource: AdminResourceKey, payload: AdminRecord) => {
     const accessToken = resolveStoredTokens().accessToken
@@ -955,20 +912,34 @@ export default function AdminDashboardView({
       return
     }
 
+    if (currentPath === "/dashboard") {
+      return
+    }
+
+    if (!canAccessDashboardRoute(currentPath, permissionLabels)) {
+      router.replace(SELF_SERVICE_HOME_ROUTE)
+      return
+    }
+
     if (accessMode !== "employee") {
       return
     }
 
-    const currentPath = pathname ?? ""
-    if (currentPath === "/dashboard") {
-      router.replace(SELF_SERVICE_HOME_ROUTE)
-      return
-    }
+    const isAllowedEmployeeAttendanceRoute =
+      EMPLOYEE_ALLOWED_ATTENDANCE_ROUTES.has(currentPath)
+    const isRestrictedEmployeeAttendanceRoute =
+      currentPath === "/dashboard/attendance" ||
+      currentPath === "/dashboard/employees/attendance" ||
+      EMPLOYEE_RESTRICTED_ATTENDANCE_PREFIXES.some((prefix) => currentPath.startsWith(prefix)) ||
+      (currentPath.startsWith("/dashboard/attendance/") && !isAllowedEmployeeAttendanceRoute)
 
-    if (EMPLOYEE_RESTRICTED_ROUTE_PREFIXES.some((prefix) => currentPath.startsWith(prefix))) {
+    if (
+      isRestrictedEmployeeAttendanceRoute ||
+      EMPLOYEE_RESTRICTED_ROUTE_PREFIXES.some((prefix) => currentPath.startsWith(prefix))
+    ) {
       router.replace(SELF_SERVICE_HOME_ROUTE)
     }
-  }, [accessMode, identityReady, pathname, router])
+  }, [accessMode, currentPath, identityReady, permissionLabels, router])
 
   return (
     <SidebarProvider
@@ -986,7 +957,7 @@ export default function AdminDashboardView({
         companyName={companyName}
         accessMode={accessMode}
         permissionLabels={permissionLabels}
-        activeResource={activeResource}
+        activeResource={resolvedActiveResource}
         onSelectResource={navigateToResource}
       />
       <SidebarInset>
@@ -998,13 +969,15 @@ export default function AdminDashboardView({
         />
         <div className="flex flex-1 flex-col">
           <div className="@container/main flex flex-1 flex-col gap-2">
-            <div className="flex flex-col gap-3 py-3 md:gap-4 md:py-4">
-              {showOverview ? <HrAnalyticsDashboard refreshKey={overviewRefreshKey} /> : null}
+            <div className="flex flex-col gap-3 px-3 py-3 md:gap-4 md:px-4 md:py-4">
+              {resolvedShowOverview && accessMode === "admin" ? (
+                <HrAnalyticsDashboard refreshKey={overviewRefreshKey} />
+              ) : null}
               {children}
-              {activeResource && useApis ? (
+              {resolvedActiveResource && resolvedUseApis ? (
                 <DataTable
                   token={token}
-                  activeResource={activeResource}
+                  activeResource={resolvedActiveResource}
                   rows={rows}
                   roles={collections.roles}
                   permissions={collections.permissions}
@@ -1022,7 +995,7 @@ export default function AdminDashboardView({
                   onSyncUserRoles={handleSyncUserRoles}
                 />
               ) : null}
-              {showSettings ? (
+              {resolvedShowSettings ? (
                 <AccountSettingsPanel
                   token={token}
                   loading={loading}

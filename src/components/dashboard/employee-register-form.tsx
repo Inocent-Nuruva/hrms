@@ -20,10 +20,17 @@ import {
   createEmployeeProfile,
   getCurrentAdmin,
   getCurrentEmployee,
+  listAccessControlResources,
+  listAttendanceDevices,
   listBranches,
   listDepartments,
+  listOnboardingWorkflows,
   listPositions,
+  listShiftResources,
+  listTimetableResources,
   type AdminRecord,
+  type CreateEmployeeResponse,
+  type OnboardingAttendanceMode,
 } from "@/lib/admin-api"
 import {
   Tabs,
@@ -76,6 +83,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import { asRecord, isLikelyRefreshToken, readString } from "@/utils/token-utils"
 import { cn } from "@/lib/utils"
+import { buildEmployeeOnboardingInput } from "@/lib/onboarding-provisioning"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 const LEGACY_TOKEN_STORAGE_KEY = "ess_auth_token"
@@ -159,6 +167,55 @@ type BankAccountFormState = {
   branchName: string
   swiftCode: string
   mobileMoneyProvider: string
+}
+
+type OnboardingShiftAssignmentFormState = {
+  shiftId: string
+  effectiveFrom: string
+  effectiveTo: string
+  rotationGroupId: string
+  isPrimary: boolean
+}
+
+type OnboardingTimetableAssignmentFormState = {
+  timetableId: string
+  effectiveFrom: string
+  effectiveTo: string
+}
+
+type OnboardingDeviceAssignmentFormState = {
+  enabled: boolean
+  employeeNo: string
+  accessGroupId: string
+  organizationId: string
+  validEnabled: boolean
+  validBeginTime: string
+  validEndTime: string
+  localUiRight: boolean
+  closeDelayEnabled: boolean
+  maxOpenDoorTime: string
+  openDoorTime: string
+  userVerifyMode: string
+  deviceIds: number[]
+  syncNow: boolean
+  continueOnError: boolean
+}
+
+type OnboardingFormState = {
+  enabled: boolean
+  autoStart: boolean
+  workflowId: string
+  title: string
+  description: string
+  plannedStartDate: string
+  plannedCompletionDate: string
+  submit: boolean
+  roleIds: number[]
+  branchAccessIds: number[]
+  attendanceMode: "" | OnboardingAttendanceMode
+  shiftAssignment: OnboardingShiftAssignmentFormState
+  timetableAssignment: OnboardingTimetableAssignmentFormState
+  deviceAssignment: OnboardingDeviceAssignmentFormState
 }
 
 const EMPTY_FORM: RegisterFormState = {
@@ -303,6 +360,55 @@ const EMPTY_BANK_ACCOUNT: BankAccountFormState = {
   branchName: "",
   swiftCode: "",
   mobileMoneyProvider: "none",
+}
+
+const EMPTY_ONBOARDING_SHIFT_ASSIGNMENT: OnboardingShiftAssignmentFormState = {
+  shiftId: "",
+  effectiveFrom: "",
+  effectiveTo: "",
+  rotationGroupId: "",
+  isPrimary: true,
+}
+
+const EMPTY_ONBOARDING_TIMETABLE_ASSIGNMENT: OnboardingTimetableAssignmentFormState = {
+  timetableId: "",
+  effectiveFrom: "",
+  effectiveTo: "",
+}
+
+const EMPTY_ONBOARDING_DEVICE_ASSIGNMENT: OnboardingDeviceAssignmentFormState = {
+  enabled: false,
+  employeeNo: "",
+  accessGroupId: "",
+  organizationId: "",
+  validEnabled: false,
+  validBeginTime: "",
+  validEndTime: "",
+  localUiRight: false,
+  closeDelayEnabled: false,
+  maxOpenDoorTime: "",
+  openDoorTime: "",
+  userVerifyMode: "",
+  deviceIds: [],
+  syncNow: true,
+  continueOnError: false,
+}
+
+const EMPTY_ONBOARDING_FORM: OnboardingFormState = {
+  enabled: false,
+  autoStart: true,
+  workflowId: "",
+  title: "",
+  description: "",
+  plannedStartDate: "",
+  plannedCompletionDate: "",
+  submit: true,
+  roleIds: [],
+  branchAccessIds: [],
+  attendanceMode: "",
+  shiftAssignment: { ...EMPTY_ONBOARDING_SHIFT_ASSIGNMENT },
+  timetableAssignment: { ...EMPTY_ONBOARDING_TIMETABLE_ASSIGNMENT },
+  deviceAssignment: { ...EMPTY_ONBOARDING_DEVICE_ASSIGNMENT },
 }
 
 const REGISTER_STEP_ORDER = [
@@ -453,6 +559,13 @@ function readRecordId(record: AdminRecord | null) {
     }
   }
   return null
+}
+
+function toggleNumericId(currentValues: number[], id: number, checked: boolean) {
+  if (checked) {
+    return currentValues.includes(id) ? currentValues : [...currentValues, id]
+  }
+  return currentValues.filter((value) => value !== id)
 }
 
 function findRecordByName(records: AdminRecord[], selectedName: string) {
@@ -797,7 +910,7 @@ function canManageOtherEmployees(
   )
 }
 
-const REGISTER_DRAFT_STORAGE_KEY = "hrms.employee.register.draft.v1"
+const REGISTER_DRAFT_STORAGE_KEY = "hrms.employee.register.draft.v2"
 
 function countryNameFromIso(isoCode: string) {
   try {
@@ -859,6 +972,59 @@ function Field({
   )
 }
 
+function MultiSelectChecklist({
+  label,
+  options,
+  selectedIds,
+  onToggle,
+  emptyText,
+  hint,
+}: {
+  label: string
+  options: Array<{ id: number; label: string; description?: string }>
+  selectedIds: number[]
+  onToggle: (id: number, checked: boolean) => void
+  emptyText: string
+  hint?: React.ReactNode
+}) {
+  return (
+    <div className="grid gap-2">
+      <div className="flex items-center justify-between gap-2">
+        <Label>{label}</Label>
+        {selectedIds.length > 0 ? (
+          <span className="text-xs text-muted-foreground">{selectedIds.length} selected</span>
+        ) : null}
+      </div>
+      <div className="max-h-44 overflow-y-auto rounded-md border border-slate-200 bg-white">
+        {options.length === 0 ? (
+          <div className="px-3 py-3 text-sm text-muted-foreground">{emptyText}</div>
+        ) : (
+          <div className="grid gap-0.5 p-2">
+            {options.map((option) => {
+              const checked = selectedIds.includes(option.id)
+              return (
+                <label
+                  key={option.id}
+                  className="flex cursor-pointer items-start gap-2 rounded-md px-2 py-2 text-sm hover:bg-slate-50"
+                >
+                  <Checkbox checked={checked} onCheckedChange={(value) => onToggle(option.id, Boolean(value))} />
+                  <span className="min-w-0">
+                    <span className="block font-medium text-slate-800">{option.label}</span>
+                    {option.description ? (
+                      <span className="block text-xs text-muted-foreground">{option.description}</span>
+                    ) : null}
+                  </span>
+                </label>
+              )
+            })}
+          </div>
+        )}
+      </div>
+      {hint ? <div className="text-xs text-muted-foreground">{hint}</div> : null}
+    </div>
+  )
+}
+
 export function EmployeeRegisterForm() {
   const [currentStep, setCurrentStep] = React.useState<RegisterStep>("details")
   const [tabDirection, setTabDirection] = React.useState<"forward" | "backward">("forward")
@@ -905,9 +1071,22 @@ export function EmployeeRegisterForm() {
   const [branchRecords, setBranchRecords] = React.useState<AdminRecord[]>([])
   const [departmentRecords, setDepartmentRecords] = React.useState<AdminRecord[]>([])
   const [positionRecords, setPositionRecords] = React.useState<AdminRecord[]>([])
+  const [onboardingWorkflows, setOnboardingWorkflows] = React.useState<AdminRecord[]>([])
+  const [shiftRecords, setShiftRecords] = React.useState<AdminRecord[]>([])
+  const [timetableRecords, setTimetableRecords] = React.useState<AdminRecord[]>([])
+  const [accessGroupRecords, setAccessGroupRecords] = React.useState<AdminRecord[]>([])
+  const [accessOrganizationRecords, setAccessOrganizationRecords] = React.useState<AdminRecord[]>([])
+  const [attendanceDeviceRecords, setAttendanceDeviceRecords] = React.useState<AdminRecord[]>([])
+  const [onboarding, setOnboarding] = React.useState<OnboardingFormState>({
+    ...EMPTY_ONBOARDING_FORM,
+    shiftAssignment: { ...EMPTY_ONBOARDING_SHIFT_ASSIGNMENT },
+    timetableAssignment: { ...EMPTY_ONBOARDING_TIMETABLE_ASSIGNMENT },
+    deviceAssignment: { ...EMPTY_ONBOARDING_DEVICE_ASSIGNMENT },
+  })
   const [rolesLoading, setRolesLoading] = React.useState(false)
   const [rolesError, setRolesError] = React.useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = React.useState(false)
+  const [createdEmployeeResult, setCreatedEmployeeResult] = React.useState<CreateEmployeeResponse | null>(null)
   const [initializedFields, setInitializedFields] = React.useState<InitializedRegistrationFields>(
     EMPTY_INITIALIZED_FIELDS
   )
@@ -952,6 +1131,109 @@ export function EmployeeRegisterForm() {
         .filter((name) => name !== "-"),
     [positionRecords]
   )
+  const onboardingWorkflowOptions = React.useMemo(
+    () =>
+      onboardingWorkflows
+        .map((row) => {
+          const id = readRecordId(row)
+          if (id === null) {
+            return null
+          }
+          return {
+            id,
+            label: readString(row, ["name", "title"]),
+          }
+        })
+        .filter((option): option is { id: number; label: string } => option !== null && option.label !== "-"),
+    [onboardingWorkflows]
+  )
+  const shiftOptions = React.useMemo(
+    () =>
+      shiftRecords
+        .map((row) => {
+          const id = readRecordId(row)
+          if (id === null) {
+            return null
+          }
+          return { id, label: readString(row, ["name", "title", "code"]) }
+        })
+        .filter((option): option is { id: number; label: string } => option !== null && option.label !== "-"),
+    [shiftRecords]
+  )
+  const timetableOptions = React.useMemo(
+    () =>
+      timetableRecords
+        .map((row) => {
+          const id = readRecordId(row)
+          if (id === null) {
+            return null
+          }
+          return { id, label: readString(row, ["name", "title", "code"]) }
+        })
+        .filter((option): option is { id: number; label: string } => option !== null && option.label !== "-"),
+    [timetableRecords]
+  )
+  const accessGroupOptions = React.useMemo(
+    () =>
+      accessGroupRecords
+        .map((row) => {
+          const id = readRecordId(row)
+          if (id === null) {
+            return null
+          }
+          return { id, label: readString(row, ["name", "title"]) }
+        })
+        .filter((option): option is { id: number; label: string } => option !== null && option.label !== "-"),
+    [accessGroupRecords]
+  )
+  const accessOrganizationOptions = React.useMemo(
+    () =>
+      accessOrganizationRecords
+        .map((row) => {
+          const id = readRecordId(row)
+          if (id === null) {
+            return null
+          }
+          return { id, label: readString(row, ["name", "title"]) }
+        })
+        .filter((option): option is { id: number; label: string } => option !== null && option.label !== "-"),
+    [accessOrganizationRecords]
+  )
+  const attendanceDeviceOptions = React.useMemo(
+    () =>
+      attendanceDeviceRecords
+        .map((row) => {
+          const id = readRecordId(row)
+          if (id === null) {
+            return null
+          }
+          const primary = readString(row, ["name", "device_name", "title", "serial_no"])
+          const secondary = readString(row, ["serial_no", "device_code", "ip_address"])
+          return {
+            id,
+            label: secondary !== "-" && secondary !== primary ? `${primary} (${secondary})` : primary,
+          }
+        })
+        .filter((option): option is { id: number; label: string } => option !== null && option.label !== "-"),
+    [attendanceDeviceRecords]
+  )
+  const branchAccessOptions = React.useMemo(
+    () =>
+      branchRecords
+        .map((row) => {
+          const id = readRecordId(row)
+          if (id === null) {
+            return null
+          }
+          return { id, label: readString(row, ["name", "title"]) }
+        })
+        .filter((option): option is { id: number; label: string } => option !== null && option.label !== "-"),
+    [branchRecords]
+  )
+  const onboardingRoleOptions = React.useMemo(
+    () => roles.map((role) => ({ id: Number(role.id), label: role.label || role.name })).filter((role) => Number.isFinite(role.id)),
+    [roles]
+  )
   const currentStepIndex = REGISTER_STEP_ORDER.indexOf(currentStep)
   const visibleRegisterSteps: readonly RegisterStep[] = isInviteMode ? ["details"] : REGISTER_STEP_ORDER
   const visibleCurrentStepIndex = visibleRegisterSteps.indexOf(currentStep as (typeof visibleRegisterSteps)[number])
@@ -982,6 +1264,70 @@ export function EmployeeRegisterForm() {
     setForm((previous) => ({
       ...previous,
       [field]: value,
+    }))
+  }
+
+  const updateOnboardingField = <K extends keyof OnboardingFormState>(
+    field: K,
+    value: OnboardingFormState[K]
+  ) => {
+    setOnboarding((previous) => ({
+      ...previous,
+      [field]: value,
+    }))
+  }
+
+  const updateShiftAssignmentField = <K extends keyof OnboardingShiftAssignmentFormState>(
+    field: K,
+    value: OnboardingShiftAssignmentFormState[K]
+  ) => {
+    setOnboarding((previous) => ({
+      ...previous,
+      shiftAssignment: {
+        ...previous.shiftAssignment,
+        [field]: value,
+      },
+    }))
+  }
+
+  const updateTimetableAssignmentField = <K extends keyof OnboardingTimetableAssignmentFormState>(
+    field: K,
+    value: OnboardingTimetableAssignmentFormState[K]
+  ) => {
+    setOnboarding((previous) => ({
+      ...previous,
+      timetableAssignment: {
+        ...previous.timetableAssignment,
+        [field]: value,
+      },
+    }))
+  }
+
+  const updateDeviceAssignmentField = <K extends keyof OnboardingDeviceAssignmentFormState>(
+    field: K,
+    value: OnboardingDeviceAssignmentFormState[K]
+  ) => {
+    setOnboarding((previous) => ({
+      ...previous,
+      deviceAssignment: {
+        ...previous.deviceAssignment,
+        [field]: value,
+      },
+    }))
+  }
+
+  const setAttendanceMode = (mode: "" | OnboardingAttendanceMode) => {
+    setOnboarding((previous) => ({
+      ...previous,
+      attendanceMode: mode,
+      shiftAssignment:
+        mode === "shift"
+          ? previous.shiftAssignment
+          : { ...EMPTY_ONBOARDING_SHIFT_ASSIGNMENT },
+      timetableAssignment:
+        mode === "timetable"
+          ? previous.timetableAssignment
+          : { ...EMPTY_ONBOARDING_TIMETABLE_ASSIGNMENT },
     }))
   }
 
@@ -1366,11 +1712,28 @@ export function EmployeeRegisterForm() {
     setRolesLoading(true)
     setRolesError(null)
     try {
-      const [roleRecordsResult, branchResult, departmentResult, positionResult] = await Promise.allSettled([
+      const [
+        roleRecordsResult,
+        branchResult,
+        departmentResult,
+        positionResult,
+        workflowResult,
+        shiftResult,
+        timetableResult,
+        accessGroupsResult,
+        accessOrganizationsResult,
+        devicesResult,
+      ] = await Promise.allSettled([
         fetchRolesDirect(accessToken),
         listBranches(accessToken, { page: 1, limit: 100 }),
         listDepartments(accessToken, { page: 1, limit: 100 }),
         listPositions(accessToken, { page: 1, limit: 100 }),
+        listOnboardingWorkflows(accessToken, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
+        listShiftResources(accessToken, "shifts", { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
+        listTimetableResources(accessToken, "timetables", { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
+        listAccessControlResources(accessToken, "groups", { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
+        listAccessControlResources(accessToken, "organizations", { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
+        listAttendanceDevices(accessToken, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
       ])
       const roleRecords =
         roleRecordsResult.status === "fulfilled" ? roleRecordsResult.value : ([] as AdminRecord[])
@@ -1378,6 +1741,13 @@ export function EmployeeRegisterForm() {
       const resolvedDepartments =
         departmentResult.status === "fulfilled" ? departmentResult.value.rows : []
       const resolvedPositions = positionResult.status === "fulfilled" ? positionResult.value.rows : []
+      const resolvedWorkflows = workflowResult.status === "fulfilled" ? workflowResult.value.rows : []
+      const resolvedShifts = shiftResult.status === "fulfilled" ? shiftResult.value.rows : []
+      const resolvedTimetables = timetableResult.status === "fulfilled" ? timetableResult.value.rows : []
+      const resolvedAccessGroups = accessGroupsResult.status === "fulfilled" ? accessGroupsResult.value.rows : []
+      const resolvedAccessOrganizations =
+        accessOrganizationsResult.status === "fulfilled" ? accessOrganizationsResult.value.rows : []
+      const resolvedDevices = devicesResult.status === "fulfilled" ? devicesResult.value.rows : []
       const roleOptions = roleRecords
         .map((record) => toRoleOption(record))
         .filter((entry): entry is RoleOption => Boolean(entry))
@@ -1385,6 +1755,12 @@ export function EmployeeRegisterForm() {
       setBranchRecords(resolvedBranches)
       setDepartmentRecords(resolvedDepartments)
       setPositionRecords(resolvedPositions)
+      setOnboardingWorkflows(resolvedWorkflows)
+      setShiftRecords(resolvedShifts)
+      setTimetableRecords(resolvedTimetables)
+      setAccessGroupRecords(resolvedAccessGroups)
+      setAccessOrganizationRecords(resolvedAccessOrganizations)
+      setAttendanceDeviceRecords(resolvedDevices)
       if (roleOptions.length === 0) {
         setRolesError("Roles are unavailable for this account. You can still continue.")
       }
@@ -1514,6 +1890,7 @@ export function EmployeeRegisterForm() {
         relatives?: RelativeFormState[]
         identifications?: IdentificationFormState[]
         bankAccounts?: BankAccountFormState[]
+        onboarding?: OnboardingFormState
       }
       if (parsed.currentStep && REGISTER_STEP_ORDER.includes(parsed.currentStep)) {
         setCurrentStep(parsed.currentStep)
@@ -1538,6 +1915,28 @@ export function EmployeeRegisterForm() {
       if (Array.isArray(parsed.relatives)) setRelatives(parsed.relatives)
       if (Array.isArray(parsed.identifications)) setIdentifications(parsed.identifications)
       if (Array.isArray(parsed.bankAccounts)) setBankAccounts(parsed.bankAccounts)
+      const draftOnboarding = parsed.onboarding
+      if (draftOnboarding) {
+        setOnboarding((previous) => ({
+          ...previous,
+          ...draftOnboarding,
+          shiftAssignment: {
+            ...EMPTY_ONBOARDING_SHIFT_ASSIGNMENT,
+            ...draftOnboarding.shiftAssignment,
+          },
+          timetableAssignment: {
+            ...EMPTY_ONBOARDING_TIMETABLE_ASSIGNMENT,
+            ...draftOnboarding.timetableAssignment,
+          },
+          deviceAssignment: {
+            ...EMPTY_ONBOARDING_DEVICE_ASSIGNMENT,
+            ...draftOnboarding.deviceAssignment,
+            deviceIds: Array.isArray(draftOnboarding.deviceAssignment?.deviceIds)
+              ? draftOnboarding.deviceAssignment.deviceIds
+              : [],
+          },
+        }))
+      }
     } catch {
       // ignore corrupted draft
     }
@@ -1556,9 +1955,10 @@ export function EmployeeRegisterForm() {
       relatives,
       identifications,
       bankAccounts,
+      onboarding,
     }
     window.localStorage.setItem(REGISTER_DRAFT_STORAGE_KEY, JSON.stringify(payload))
-  }, [currentStep, isInviteMode, form, dob, inviteContact, contacts, addresses, relatives, identifications, bankAccounts])
+  }, [currentStep, isInviteMode, form, dob, inviteContact, contacts, addresses, relatives, identifications, bankAccounts, onboarding])
 
   const submitRegistration = async () => {
     if (isSubmitting) {
@@ -1571,8 +1971,8 @@ export function EmployeeRegisterForm() {
       return
     }
 
-    if (!form.firstName.trim() || !form.lastName.trim()) {
-      toast.error("First name and last name are required.")
+    if (!form.employeeNo.trim() || !form.firstName.trim() || !form.lastName.trim()) {
+      toast.error("Employee number, first name, and last name are required.")
       return
     }
     if (isInviteMode && !form.middleName.trim()) {
@@ -1580,7 +1980,7 @@ export function EmployeeRegisterForm() {
       return
     }
 
-    const normalizedEmployeeNo = ""
+    const normalizedEmployeeNo = form.employeeNo.trim()
 
     if (isInviteMode && !form.branch.trim()) {
       toast.error("Branch is required for send invite.")
@@ -1760,9 +2160,27 @@ export function EmployeeRegisterForm() {
       return null
     })()
 
+    const { error: onboardingError, onboarding: onboardingPayload } =
+      buildEmployeeOnboardingInput({
+        enabled: onboarding.enabled,
+        autoStart: onboarding.autoStart,
+        workflowId: onboarding.workflowId,
+        title: onboarding.title,
+        description: onboarding.description,
+        plannedStartDate: onboarding.plannedStartDate,
+        plannedCompletionDate: onboarding.plannedCompletionDate,
+        submit: onboarding.submit,
+        fallbackEmployeeNo: normalizedEmployeeNo,
+        provisioningDraft: onboarding,
+      })
+    if (onboardingError) {
+      toast.error(onboardingError)
+      return
+    }
+
     setIsSubmitting(true)
     try {
-      await createEmployeeProfile(accessToken, {
+      const response = await createEmployeeProfile(accessToken, {
         employee_no: normalizedEmployeeNo,
         employment_status: "onboarding",
         employment_type: "full_time",
@@ -1791,6 +2209,7 @@ export function EmployeeRegisterForm() {
         relatives: normalizedRelatives,
         identifications: normalizedIdentifications,
         bank_accounts: normalizedBankAccounts,
+        onboarding: onboardingPayload,
         metadata: {
           branch_name: form.branch || undefined,
           department_name: form.department || undefined,
@@ -1799,7 +2218,14 @@ export function EmployeeRegisterForm() {
           registration_mode: isInviteMode ? "send_invite" : "full_registration",
         },
       })
-      showSuccessAlert(isInviteMode ? "Employee invite saved successfully." : "Employee saved successfully.")
+      setCreatedEmployeeResult(response)
+      showSuccessAlert(
+        response.onboarding_request
+          ? "Employee created and onboarding started."
+          : isInviteMode
+            ? "Employee invite saved successfully."
+            : "Employee saved successfully."
+      )
       clearForm()
     } catch (errorObject) {
       toast.error(errorObject instanceof Error ? errorObject.message : "Failed to save employee.")
@@ -1841,76 +2267,70 @@ export function EmployeeRegisterForm() {
     setDraftBankAccount({ ...EMPTY_BANK_ACCOUNT })
     setIsBankDialogOpen(false)
     setEditingBankIndex(null)
-      setPendingDelete(null)
-      if (typeof window !== "undefined") {
-        window.localStorage.removeItem(REGISTER_DRAFT_STORAGE_KEY)
-      }
+    setOnboarding({
+      ...EMPTY_ONBOARDING_FORM,
+      shiftAssignment: { ...EMPTY_ONBOARDING_SHIFT_ASSIGNMENT },
+      timetableAssignment: { ...EMPTY_ONBOARDING_TIMETABLE_ASSIGNMENT },
+      deviceAssignment: { ...EMPTY_ONBOARDING_DEVICE_ASSIGNMENT },
+    })
+    setPendingDelete(null)
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(REGISTER_DRAFT_STORAGE_KEY)
+    }
     toast.message("Form reset.")
   }
 
   return (
     <div className="px-4 lg:px-6">
       <Card className="animate-card-entrance overflow-visible">
-        <CardHeader className="border-b">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <CardTitle className="flex items-center gap-2">
-              <UserPlus2Icon className="size-4" />
-              Employee Registration
-            </CardTitle>
-            {isRegisteringOthers ? (
-              <Button
-                type="button"
-                variant={isInviteMode ? "default" : "outline"}
-                onClick={() => {
-                  setIsInviteMode((previous) => !previous)
-                  setCurrentStep("details")
-                }}
-              >
-                <MailIcon />
-                {isInviteMode ? "Back To Full Registration" : "Send Invite"}
-              </Button>
-            ) : null}
-          </div>
-        </CardHeader>
-
-        <CardContent className="space-y-7 px-4 pb-7 pt-6 sm:px-5 lg:px-6">
-          <Tabs
-            value={currentStep}
-            onValueChange={(value) => {
-              if (REGISTER_STEP_ORDER.includes(value as RegisterStep)) {
-                const nextStep = value as RegisterStep
-                const nextIndex = REGISTER_STEP_ORDER.indexOf(nextStep)
-                if (nextIndex !== -1 && nextIndex !== currentStepIndex) {
-                  setTabDirection(nextIndex > currentStepIndex ? "forward" : "backward")
-                }
-                setCurrentStep(nextStep)
+        <Tabs
+          value={currentStep}
+          onValueChange={(value) => {
+            if (REGISTER_STEP_ORDER.includes(value as RegisterStep)) {
+              const nextStep = value as RegisterStep
+              const nextIndex = REGISTER_STEP_ORDER.indexOf(nextStep)
+              if (nextIndex !== -1 && nextIndex !== currentStepIndex) {
+                setTabDirection(nextIndex > currentStepIndex ? "forward" : "backward")
               }
-            }}
-          >
-            <TabsList className="relative !h-auto min-h-9 w-full flex-nowrap items-stretch justify-start gap-0 overflow-x-auto rounded-lg border border-border/70 bg-muted/20 p-0.5 sm:overflow-hidden">
-              <div
-                aria-hidden="true"
-                className="pointer-events-none absolute top-0.5 bottom-0.5 left-0 z-0 rounded-md bg-primary shadow-sm transition-transform duration-500 ease-in-out"
-                style={{
-                  width: `${100 / visibleRegisterSteps.length}%`,
-                  transform: `translateX(${currentVisibleStepIndex * 100}%)`,
-                }}
-              />
+              setCurrentStep(nextStep)
+            }
+          }}
+        >
+          <CardHeader className="border-b">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <CardTitle className="flex items-center gap-2">
+                <UserPlus2Icon className="size-4" />
+                {isRegisteringOthers ? "Employee Registration" : "Self Registration"}
+              </CardTitle>
+              {isRegisteringOthers ? (
+                <Button
+                  type="button"
+                  variant={isInviteMode ? "default" : "outline"}
+                  className="rounded-none"
+                  onClick={() => {
+                    setIsInviteMode((previous) => !previous)
+                    setCurrentStep("details")
+                  }}
+                >
+                  <MailIcon />
+                  {isInviteMode ? "Back To Full Registration" : "Send Invite"}
+                </Button>
+              ) : null}
+            </div>
+            <TabsList className="flex w-full items-center gap-4 border-b border-border/80 bg-transparent p-0 overflow-x-auto sm:overflow-hidden">
               {visibleRegisterSteps.map((step) => (
                 <TabsTrigger
                   key={step}
                   value={step}
-                  className="group relative z-10 h-auto min-w-[9rem] flex-none rounded-md border-r border-border/50 px-4 py-2 text-left text-sm data-active:bg-transparent data-active:text-primary-foreground sm:min-w-0 sm:flex-1 [&:last-child]:border-r-0"
+                  className="border-b-2 px-1 py-2 text-[0.92rem] font-medium whitespace-nowrap transition-colors duration-200 data-active:border-[var(--primary)] data-active:text-[var(--primary)] border-transparent text-slate-600 hover:text-slate-900"
                 >
-                  <span className="flex items-center justify-between gap-2">
-                    <span className="flex min-w-0 items-center gap-2">
-                      <span className="truncate">{REGISTER_STEP_LABELS[step]}</span>
-                    </span>
-                  </span>
+                  {REGISTER_STEP_LABELS[step]}
                 </TabsTrigger>
               ))}
             </TabsList>
+          </CardHeader>
 
+          <CardContent className="space-y-7 px-4 pb-7 pt-6 sm:px-5 lg:px-6">
             <TabsContents className="px-3 pt-6 sm:px-4 lg:px-5 [&_[data-slot=input]]:h-11 [&_[data-slot=input]]:px-4 [&_[data-slot=select-trigger]]:h-11 [&_[data-slot=select-trigger]]:px-4 [&_[data-slot=select-content]]:p-1 [&_[data-slot=select-item]]:px-3 [&_[data-slot=select-item]]:py-2">
               <TabsContent value="details" className={getStepTransitionClass("details")}>
                 <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
@@ -2188,6 +2608,571 @@ export function EmployeeRegisterForm() {
                     </>
                   ) : null}
                 </div>
+
+                {isRegisteringOthers && !isInviteMode ? (
+                  <div className="mt-8 rounded-xl border border-slate-200 bg-slate-50/60 p-4 sm:p-5">
+                    <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="space-y-1">
+                        <h3 className="text-base font-semibold text-slate-900">Optional onboarding</h3>
+                        <p className="text-sm text-muted-foreground">
+                          Configure onboarding workflow and provisioning once during employee registration.
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2">
+                        <div className="space-y-0.5">
+                          <p className="text-sm font-medium text-slate-900">Enable onboarding setup</p>
+                          <p className="text-xs text-muted-foreground">
+                            Include workflow and provisioning with this employee
+                          </p>
+                        </div>
+                        <Switch
+                          checked={onboarding.enabled}
+                          onCheckedChange={(checked) =>
+                            setOnboarding((previous) => ({
+                              ...(checked
+                                ? previous
+                                : {
+                                    ...EMPTY_ONBOARDING_FORM,
+                                    shiftAssignment: { ...EMPTY_ONBOARDING_SHIFT_ASSIGNMENT },
+                                    timetableAssignment: { ...EMPTY_ONBOARDING_TIMETABLE_ASSIGNMENT },
+                                    deviceAssignment: { ...EMPTY_ONBOARDING_DEVICE_ASSIGNMENT },
+                                  }),
+                              enabled: checked,
+                            }))
+                          }
+                        />
+                      </div>
+                    </div>
+
+                    {onboarding.enabled ? (
+                      <div className="mt-5 space-y-6">
+                        <div className="grid gap-4 md:grid-cols-2">
+                          <Field label="Workflow" htmlFor="onboarding-workflow" delayMs={30}>
+                            <Select
+                              value={onboarding.workflowId}
+                              onValueChange={(value) => updateOnboardingField("workflowId", value ?? "")}
+                            >
+                              <SelectTrigger id="onboarding-workflow" className="w-full">
+                                <SelectValue placeholder="Select workflow (optional)" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">No workflow selected</SelectItem>
+                                {onboardingWorkflowOptions.map((option) => (
+                                  <SelectItem key={option.id} value={String(option.id)}>
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </Field>
+
+                          <Field label="Attendance Mode" htmlFor="onboarding-attendance-mode" delayMs={40}>
+                            <Select
+                              value={onboarding.attendanceMode || "none"}
+                              onValueChange={(value) =>
+                                setAttendanceMode(
+                                  value === "shift" || value === "timetable"
+                                    ? value
+                                    : ""
+                                )
+                              }
+                            >
+                              <SelectTrigger id="onboarding-attendance-mode" className="w-full">
+                                <SelectValue placeholder="Select attendance mode" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">No attendance provisioning</SelectItem>
+                                <SelectItem value="shift">Shift</SelectItem>
+                                <SelectItem value="timetable">Timetable</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </Field>
+
+                          <Field label="Onboarding Title" htmlFor="onboarding-title" delayMs={50}>
+                            <Input
+                              id="onboarding-title"
+                              value={onboarding.title}
+                              onChange={(event) => updateOnboardingField("title", event.target.value)}
+                              placeholder="Default title is fine if left blank"
+                            />
+                          </Field>
+
+                          <Field label="Planned Start Date" htmlFor="onboarding-start-date" delayMs={60}>
+                            <Input
+                              id="onboarding-start-date"
+                              type="date"
+                              value={onboarding.plannedStartDate}
+                              onChange={(event) =>
+                                updateOnboardingField("plannedStartDate", event.target.value)
+                              }
+                            />
+                          </Field>
+
+                          <Field label="Planned Completion Date" htmlFor="onboarding-end-date" delayMs={70}>
+                            <Input
+                              id="onboarding-end-date"
+                              type="date"
+                              value={onboarding.plannedCompletionDate}
+                              onChange={(event) =>
+                                updateOnboardingField("plannedCompletionDate", event.target.value)
+                              }
+                            />
+                          </Field>
+
+                          <div className="grid gap-2">
+                            <Label>Start onboarding automatically</Label>
+                            <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2">
+                              <div className="space-y-0.5">
+                                <p className="text-sm font-medium text-slate-900">
+                                  Auto-start onboarding request
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  Creates the onboarding request during employee registration
+                                </p>
+                              </div>
+                              <Switch
+                                checked={onboarding.autoStart}
+                                onCheckedChange={(checked) => updateOnboardingField("autoStart", checked)}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="grid gap-2">
+                            <Label>Submit immediately</Label>
+                            <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2">
+                              <div className="space-y-0.5">
+                                <p className="text-sm font-medium text-slate-900">
+                                  Submit onboarding after creation
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  Turn off to save the onboarding request as a draft
+                                </p>
+                              </div>
+                              <Switch
+                                checked={onboarding.submit}
+                                onCheckedChange={(checked) => updateOnboardingField("submit", checked)}
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="grid gap-2">
+                          <Label htmlFor="onboarding-description">Description</Label>
+                          <textarea
+                            id="onboarding-description"
+                            className="min-h-24 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+                            value={onboarding.description}
+                            onChange={(event) => updateOnboardingField("description", event.target.value)}
+                            placeholder="Add onboarding notes or instructions (optional)"
+                          />
+                        </div>
+
+                        <div className="grid gap-4 lg:grid-cols-2">
+                          <MultiSelectChecklist
+                            label="Company roles"
+                            options={onboardingRoleOptions}
+                            selectedIds={onboarding.roleIds}
+                            onToggle={(id, checked) =>
+                              updateOnboardingField(
+                                "roleIds",
+                                toggleNumericId(onboarding.roleIds, id, checked)
+                              )
+                            }
+                            emptyText="No roles available."
+                            hint="Optional roles to provision automatically when onboarding completes."
+                          />
+
+                          <MultiSelectChecklist
+                            label="Branch access"
+                            options={branchAccessOptions}
+                            selectedIds={onboarding.branchAccessIds}
+                            onToggle={(id, checked) =>
+                              updateOnboardingField(
+                                "branchAccessIds",
+                                toggleNumericId(onboarding.branchAccessIds, id, checked)
+                              )
+                            }
+                            emptyText="No branches available."
+                            hint="Optional branch access assignments to attach during onboarding."
+                          />
+                        </div>
+
+                        {onboarding.attendanceMode === "shift" ? (
+                          <div className="grid gap-4 rounded-xl border border-slate-200 bg-white p-4 md:grid-cols-2">
+                            <div className="md:col-span-2">
+                              <p className="text-sm font-medium text-slate-900">Shift assignment</p>
+                              <p className="text-xs text-muted-foreground">
+                                This section is required when attendance mode is set to shift.
+                              </p>
+                            </div>
+                            <Field label="Shift" htmlFor="provisioning-shift" delayMs={80}>
+                              <Select
+                                value={onboarding.shiftAssignment.shiftId || "none"}
+                                onValueChange={(value) =>
+                                  updateShiftAssignmentField(
+                                    "shiftId",
+                                    value === "none" ? "" : value ?? ""
+                                  )
+                                }
+                              >
+                                <SelectTrigger id="provisioning-shift" className="w-full">
+                                  <SelectValue placeholder="Select shift" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="none">Select shift</SelectItem>
+                                  {shiftOptions.map((option) => (
+                                    <SelectItem key={option.id} value={String(option.id)}>
+                                      {option.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </Field>
+                            <Field label="Effective From" htmlFor="provisioning-shift-from" delayMs={90}>
+                              <Input
+                                id="provisioning-shift-from"
+                                type="date"
+                                value={onboarding.shiftAssignment.effectiveFrom}
+                                onChange={(event) =>
+                                  updateShiftAssignmentField("effectiveFrom", event.target.value)
+                                }
+                              />
+                            </Field>
+                            <Field label="Effective To" htmlFor="provisioning-shift-to" delayMs={100}>
+                              <Input
+                                id="provisioning-shift-to"
+                                type="date"
+                                value={onboarding.shiftAssignment.effectiveTo}
+                                onChange={(event) =>
+                                  updateShiftAssignmentField("effectiveTo", event.target.value)
+                                }
+                              />
+                            </Field>
+                            <Field
+                              label="Rotation Group ID"
+                              htmlFor="provisioning-rotation-group"
+                              delayMs={110}
+                              hint="Use numeric rotation group ID if applicable."
+                              reserveHintSpace
+                            >
+                              <Input
+                                id="provisioning-rotation-group"
+                                inputMode="numeric"
+                                value={onboarding.shiftAssignment.rotationGroupId}
+                                onChange={(event) =>
+                                  updateShiftAssignmentField(
+                                    "rotationGroupId",
+                                    event.target.value.replace(/[^\d]/g, "")
+                                  )
+                                }
+                                placeholder="Optional rotation group ID"
+                              />
+                            </Field>
+                            <div className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2">
+                              <div className="space-y-0.5">
+                                <p className="text-sm font-medium text-slate-900">Primary shift</p>
+                                <p className="text-xs text-muted-foreground">
+                                  Mark this assignment as the primary one for the employee
+                                </p>
+                              </div>
+                              <Switch
+                                checked={onboarding.shiftAssignment.isPrimary}
+                                onCheckedChange={(checked) =>
+                                  updateShiftAssignmentField("isPrimary", checked)
+                                }
+                              />
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {onboarding.attendanceMode === "timetable" ? (
+                          <div className="grid gap-4 rounded-xl border border-slate-200 bg-white p-4 md:grid-cols-2">
+                            <div className="md:col-span-2">
+                              <p className="text-sm font-medium text-slate-900">Timetable assignment</p>
+                              <p className="text-xs text-muted-foreground">
+                                This section is required when attendance mode is set to timetable.
+                              </p>
+                            </div>
+                            <Field label="Timetable" htmlFor="provisioning-timetable" delayMs={80}>
+                              <Select
+                                value={onboarding.timetableAssignment.timetableId || "none"}
+                                onValueChange={(value) =>
+                                  updateTimetableAssignmentField(
+                                    "timetableId",
+                                    value === "none" ? "" : value ?? ""
+                                  )
+                                }
+                              >
+                                <SelectTrigger id="provisioning-timetable" className="w-full">
+                                  <SelectValue placeholder="Select timetable" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="none">Select timetable</SelectItem>
+                                  {timetableOptions.map((option) => (
+                                    <SelectItem key={option.id} value={String(option.id)}>
+                                      {option.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </Field>
+                            <Field label="Effective From" htmlFor="provisioning-timetable-from" delayMs={90}>
+                              <Input
+                                id="provisioning-timetable-from"
+                                type="date"
+                                value={onboarding.timetableAssignment.effectiveFrom}
+                                onChange={(event) =>
+                                  updateTimetableAssignmentField("effectiveFrom", event.target.value)
+                                }
+                              />
+                            </Field>
+                            <Field label="Effective To" htmlFor="provisioning-timetable-to" delayMs={100}>
+                              <Input
+                                id="provisioning-timetable-to"
+                                type="date"
+                                value={onboarding.timetableAssignment.effectiveTo}
+                                onChange={(event) =>
+                                  updateTimetableAssignmentField("effectiveTo", event.target.value)
+                                }
+                              />
+                            </Field>
+                          </div>
+                        ) : null}
+
+                        <div className="rounded-xl border border-slate-200 bg-white p-4">
+                          <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="space-y-1">
+                              <p className="text-sm font-medium text-slate-900">Device and access control setup</p>
+                              <p className="text-xs text-muted-foreground">
+                                Enable only if this employee should get device/access provisioning during onboarding.
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <span className="text-sm text-slate-700">Enable</span>
+                              <Switch
+                                checked={onboarding.deviceAssignment.enabled}
+                                onCheckedChange={(checked) =>
+                                  setOnboarding((previous) => ({
+                                    ...previous,
+                                    deviceAssignment: checked
+                                      ? {
+                                          ...previous.deviceAssignment,
+                                          enabled: true,
+                                        }
+                                      : { ...EMPTY_ONBOARDING_DEVICE_ASSIGNMENT, enabled: false },
+                                  }))
+                                }
+                              />
+                            </div>
+                          </div>
+
+                          {onboarding.deviceAssignment.enabled ? (
+                            <div className="mt-4 grid gap-4 md:grid-cols-2">
+                              <Field label="Access Group" htmlFor="device-access-group" delayMs={110}>
+                                <Select
+                                  value={onboarding.deviceAssignment.accessGroupId || "none"}
+                                  onValueChange={(value) =>
+                                    updateDeviceAssignmentField(
+                                      "accessGroupId",
+                                      value === "none" ? "" : value ?? ""
+                                    )
+                                  }
+                                >
+                                  <SelectTrigger id="device-access-group" className="w-full">
+                                    <SelectValue placeholder="Select access group" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="none">Select access group</SelectItem>
+                                    {accessGroupOptions.map((option) => (
+                                      <SelectItem key={option.id} value={String(option.id)}>
+                                        {option.label}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </Field>
+
+                              <Field label="Organization" htmlFor="device-organization" delayMs={120}>
+                                <Select
+                                  value={onboarding.deviceAssignment.organizationId || "none"}
+                                  onValueChange={(value) =>
+                                    updateDeviceAssignmentField(
+                                      "organizationId",
+                                      value === "none" ? "" : value ?? ""
+                                    )
+                                  }
+                                >
+                                  <SelectTrigger id="device-organization" className="w-full">
+                                    <SelectValue placeholder="Select organization (optional)" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="none">No organization</SelectItem>
+                                    {accessOrganizationOptions.map((option) => (
+                                      <SelectItem key={option.id} value={String(option.id)}>
+                                        {option.label}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </Field>
+
+                              <Field label="Employee No Override" htmlFor="device-employee-no" delayMs={130}>
+                                <Input
+                                  id="device-employee-no"
+                                  value={onboarding.deviceAssignment.employeeNo}
+                                  onChange={(event) =>
+                                    updateDeviceAssignmentField("employeeNo", event.target.value)
+                                  }
+                                  placeholder="Optional override for access device employee number"
+                                />
+                              </Field>
+
+                              <Field label="User Verify Mode" htmlFor="device-user-verify" delayMs={140}>
+                                <Input
+                                  id="device-user-verify"
+                                  value={onboarding.deviceAssignment.userVerifyMode}
+                                  onChange={(event) =>
+                                    updateDeviceAssignmentField("userVerifyMode", event.target.value)
+                                  }
+                                  placeholder="Optional verify mode"
+                                />
+                              </Field>
+
+                              <Field label="Valid Begin Time" htmlFor="device-valid-begin" delayMs={150}>
+                                <Input
+                                  id="device-valid-begin"
+                                  type="datetime-local"
+                                  value={onboarding.deviceAssignment.validBeginTime}
+                                  onChange={(event) =>
+                                    updateDeviceAssignmentField("validBeginTime", event.target.value)
+                                  }
+                                />
+                              </Field>
+
+                              <Field label="Valid End Time" htmlFor="device-valid-end" delayMs={160}>
+                                <Input
+                                  id="device-valid-end"
+                                  type="datetime-local"
+                                  value={onboarding.deviceAssignment.validEndTime}
+                                  onChange={(event) =>
+                                    updateDeviceAssignmentField("validEndTime", event.target.value)
+                                  }
+                                />
+                              </Field>
+
+                              <Field label="Max Open Door Time" htmlFor="device-max-open" delayMs={170}>
+                                <Input
+                                  id="device-max-open"
+                                  inputMode="numeric"
+                                  value={onboarding.deviceAssignment.maxOpenDoorTime}
+                                  onChange={(event) =>
+                                    updateDeviceAssignmentField(
+                                      "maxOpenDoorTime",
+                                      event.target.value.replace(/[^\d]/g, "")
+                                    )
+                                  }
+                                  placeholder="Optional seconds"
+                                />
+                              </Field>
+
+                              <Field label="Open Door Time" htmlFor="device-open-door" delayMs={180}>
+                                <Input
+                                  id="device-open-door"
+                                  inputMode="numeric"
+                                  value={onboarding.deviceAssignment.openDoorTime}
+                                  onChange={(event) =>
+                                    updateDeviceAssignmentField(
+                                      "openDoorTime",
+                                      event.target.value.replace(/[^\d]/g, "")
+                                    )
+                                  }
+                                  placeholder="Optional seconds"
+                                />
+                              </Field>
+
+                              <div className="md:col-span-2">
+                                <MultiSelectChecklist
+                                  label="Devices"
+                                  options={attendanceDeviceOptions}
+                                  selectedIds={onboarding.deviceAssignment.deviceIds}
+                                  onToggle={(id, checked) =>
+                                    updateDeviceAssignmentField(
+                                      "deviceIds",
+                                      toggleNumericId(onboarding.deviceAssignment.deviceIds, id, checked)
+                                    )
+                                  }
+                                  emptyText="No attendance devices available."
+                                  hint="At least one device is required when device setup is enabled."
+                                />
+                              </div>
+
+                              <div className="grid gap-3 md:col-span-2 md:grid-cols-2 xl:grid-cols-4">
+                                <div className="md:col-span-2 xl:col-span-4">
+                                  <p className="text-xs text-muted-foreground">
+                                    Choose only the controls needed for this employee:
+                                    {" "}enable validity dates to enforce an active period,
+                                    {" "}local UI right for device-side controls,
+                                    {" "}close delay for delayed door closing,
+                                    {" "}sync now to push immediately,
+                                    {" "}and continue on error to keep syncing other devices if one fails.
+                                  </p>
+                                </div>
+                                {[
+                                  {
+                                    label: "Validity enabled",
+                                    description: "Uses the begin and end dates as the active access window.",
+                                    checked: onboarding.deviceAssignment.validEnabled,
+                                    field: "validEnabled" as const,
+                                  },
+                                  {
+                                    label: "Local UI right",
+                                    description: "Allows device-side actions if the controller supports them.",
+                                    checked: onboarding.deviceAssignment.localUiRight,
+                                    field: "localUiRight" as const,
+                                  },
+                                  {
+                                    label: "Close delay enabled",
+                                    description: "Keeps the door open briefly before the controller closes it.",
+                                    checked: onboarding.deviceAssignment.closeDelayEnabled,
+                                    field: "closeDelayEnabled" as const,
+                                  },
+                                  {
+                                    label: "Sync now",
+                                    description: "Pushes this setup to the selected devices immediately after save.",
+                                    checked: onboarding.deviceAssignment.syncNow,
+                                    field: "syncNow" as const,
+                                  },
+                                  {
+                                    label: "Continue on error",
+                                    description: "Keeps syncing other devices even if one selected device fails.",
+                                    checked: onboarding.deviceAssignment.continueOnError,
+                                    field: "continueOnError" as const,
+                                  },
+                                ].map((item) => (
+                                  <div
+                                    key={item.field}
+                                    className="flex items-start justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2"
+                                  >
+                                    <div className="space-y-1">
+                                      <span className="block text-sm font-medium text-slate-800">{item.label}</span>
+                                      <span className="block text-xs text-muted-foreground">{item.description}</span>
+                                    </div>
+                                    <Switch
+                                      checked={item.checked}
+                                      onCheckedChange={(checked) =>
+                                        updateDeviceAssignmentField(item.field, checked)
+                                      }
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
               </TabsContent>
 
               <TabsContent value="contacts" className={getStepTransitionClass("contacts")}>
@@ -2567,7 +3552,6 @@ export function EmployeeRegisterForm() {
                 </div>
               </TabsContent>
             </TabsContents>
-          </Tabs>
         </CardContent>
 
         <CardFooter className="flex flex-wrap justify-between gap-3">
@@ -2590,6 +3574,7 @@ export function EmployeeRegisterForm() {
 
             {nextVisibleStep ? (
               <Button
+                className="rounded-none"
                 onClick={() => {
                   setTabDirection("forward")
                   setCurrentStep(nextVisibleStep)
@@ -2599,13 +3584,50 @@ export function EmployeeRegisterForm() {
                 <ChevronRightIcon />
               </Button>
             ) : (
-              <Button onClick={() => void submitRegistration()} disabled={isSubmitting}>
+              <Button className="rounded-none" onClick={() => void submitRegistration()} disabled={isSubmitting}>
                 {isSubmitting ? "Saving..." : isInviteMode ? "Save Invite" : "Save Employee"}
               </Button>
             )}
           </div>
         </CardFooter>
+      </Tabs>
       </Card>
+
+      {createdEmployeeResult?.onboarding_request ? (
+        <Card className="mt-4 border-emerald-200 bg-emerald-50/60">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base text-emerald-800">
+              Employee created and onboarding started
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3 pb-6 md:grid-cols-2 xl:grid-cols-4">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-emerald-700">Onboarding No</p>
+              <p className="text-sm font-semibold text-emerald-900">
+                {createdEmployeeResult.onboarding_request.onboarding_no ?? "-"}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-emerald-700">Status</p>
+              <p className="text-sm font-semibold text-emerald-900">
+                {createdEmployeeResult.onboarding_request.status ?? "-"}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-emerald-700">Title</p>
+              <p className="text-sm font-semibold text-emerald-900">
+                {createdEmployeeResult.onboarding_request.title ?? "-"}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-emerald-700">Progress</p>
+              <p className="text-sm font-semibold text-emerald-900">
+                {createdEmployeeResult.onboarding_request.progress_percentage ?? "0%"}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <AlertDialog
         open={Boolean(pendingDelete)}

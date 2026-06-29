@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation"
 
-import AdminDashboardView from "@/components/dashboard/admin-dashboard-view"
 import { EmployeeSelfServiceLeaveView } from "@/components/dashboard/employee-self-service-view"
 
 const ALLOWED_VIEWS = new Set(["requests", "balances", "holidays", "policies"])
@@ -21,9 +20,5 @@ export default async function DashboardSelfLeaveViewPage({ params }: LeaveViewPa
     redirect("/dashboard/me/leave/requests")
   }
 
-  return (
-    <AdminDashboardView>
-      <EmployeeSelfServiceLeaveView tab={normalized as LeaveView} />
-    </AdminDashboardView>
-  )
+  return <EmployeeSelfServiceLeaveView tab={normalized as LeaveView} />
 }

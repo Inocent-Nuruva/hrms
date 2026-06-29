@@ -1,6 +1,8 @@
 "use client"
 
 import * as React from "react"
+import { Pencil, Plus, RefreshCw, Trash2 } from "lucide-react"
+import { SearchToggleField } from "@/components/common/search-toggle-field"
 import { TableScrollContainer } from "@/components/common/table-scroll-container"
 
 import {
@@ -278,20 +280,41 @@ export function DesignationsView() {
   }
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white/80 px-4 py-5 shadow-sm lg:px-6">
-      <div className="mb-4 flex flex-wrap items-end gap-3">
-        <div className="min-w-[220px] flex-1">
-          <label className="mb-1 block text-sm font-medium text-slate-700">Search</label>
-          <input
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-            placeholder="Search designation"
-            value={query.search}
-            onChange={(event) => {
-              setPage(1)
-              setQuery((previous) => ({ ...previous, search: event.target.value }))
-            }}
-          />
+    <div className="admin-data-surface">
+      <div className="mb-5 flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-[2rem] font-semibold leading-none tracking-[-0.03em] text-slate-900">
+            Position Management
+          </h2>
+          <p className="mt-2 text-sm text-slate-500">Designations</p>
         </div>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-slate-900 text-white transition hover:bg-slate-800 disabled:opacity-60"
+            onClick={() => {
+              setEditingId(null)
+              setForm(emptyForm())
+              setOpenForm(true)
+            }}
+            aria-label="Add designation"
+            title="Add designation"
+          >
+            <Plus className="size-5" />
+          </button>
+          <button
+            type="button"
+            className="inline-flex h-12 w-12 items-center justify-center rounded-xl border border-slate-300 bg-white text-primary transition hover:bg-slate-50 disabled:opacity-60"
+            onClick={() => void fetchDesignations()}
+            disabled={loading}
+            aria-label="Refresh"
+            title="Refresh"
+          >
+            <RefreshCw className={`size-5 text-primary ${loading ? "animate-spin" : ""}`} />
+          </button>
+        </div>
+      </div>
+      <div className="mb-4 flex flex-wrap items-end gap-3">
         <div>
           <label className="mb-1 block text-sm font-medium text-slate-700">Status</label>
           <select
@@ -334,24 +357,22 @@ export function DesignationsView() {
             })}
           </select>
         </div>
-        <button
-          type="button"
-          className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white"
-          onClick={() => {
-            setEditingId(null)
-            setForm(emptyForm())
-            setOpenForm(true)
+        <SearchToggleField
+          className="min-w-[220px]"
+          placeholder="Search designation"
+          value={query.search}
+          onChange={(value) => {
+            setPage(1)
+            setQuery((previous) => ({ ...previous, search: value }))
           }}
-        >
-          Add Designation
-        </button>
+        />
       </div>
 
       {error ? <p className="mb-3 text-sm text-rose-600">{error}</p> : null}
 
       <TableScrollContainer>
-        <table className="w-full min-w-[720px] text-sm">
-          <thead className="bg-slate-50/90">
+        <table className="admin-table-compact min-w-[720px]">
+          <thead>
             <tr>
               <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Name</th>
               <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Code</th>
@@ -363,7 +384,7 @@ export function DesignationsView() {
               <th className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Actions</th>
             </tr>
           </thead>
-          <tbody className="bg-white [&_tr:nth-child(odd)]:bg-slate-50/35 [&_tr]:border-t [&_tr]:border-slate-100 [&_tr]:transition-colors [&_tr]:hover:bg-slate-50">
+          <tbody>
             {rows.map((row, index) => {
               const id = readNumber(row, ["id"])
               return (
@@ -375,26 +396,31 @@ export function DesignationsView() {
                   <td className="px-4 py-4 whitespace-nowrap">{String(readNumber(row, ["grade_level"]) ?? "-")}</td>
                   <td className="px-4 py-4 whitespace-nowrap">{readBoolean(row, ["is_managerial"]) ? "Yes" : "No"}</td>
                   <td className="px-4 py-4 whitespace-nowrap">{readString(row, ["status"])}</td>
-                  <td className="px-4 py-4 text-right">
-                    <div className="inline-flex gap-2">
+                  <td className="text-right">
+                    <div className="table-actions">
                       <button
                         type="button"
-                        className="rounded-md border border-slate-300 px-2 py-1 text-xs"
+                        className="admin-table-icon-button"
                         onClick={() => {
                           fillFormFromRow(row)
                           setEditingId(id)
                           setOpenForm(true)
                         }}
+                        aria-label="Edit designation"
+                        title="Edit designation"
                       >
-                        Edit
+                        <Pencil className="size-4" />
                       </button>
                       <button
                         type="button"
-                        className="rounded-md border border-rose-300 px-2 py-1 text-xs text-rose-700"
+                        className="admin-table-icon-button"
+                        data-variant="danger"
                         disabled={saving}
                         onClick={() => setPendingDelete(row)}
+                        aria-label="Delete designation"
+                        title="Delete designation"
                       >
-                        Delete
+                        <Trash2 className="size-4" />
                       </button>
                     </div>
                   </td>
@@ -403,7 +429,7 @@ export function DesignationsView() {
             })}
             {!loading && rows.length === 0 ? (
               <tr>
-                <td className="px-4 py-10 text-center text-slate-500" colSpan={8}>
+                <td className="py-10 text-center text-slate-500" colSpan={8}>
                   No designations found.
                 </td>
               </tr>

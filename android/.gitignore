@@ -38,6 +38,22 @@ yarn-error.*
 
 example
 
-# generated native folders
-/ios
+# generated native Android folder
 /android
+
+# Android build artifacts (prevent huge uploads to EAS)
+android/build/
+android/.gradle/
+android/app/build/
+*.apk
+*.aab
+
+# iOS build artifacts
+ios/build/
+DerivedData/
+*.xcarchive
+*.ipa
+
+# EAS
+.eas/
+eas-build/

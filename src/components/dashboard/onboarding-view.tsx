@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { HorizontalScrollContainer } from "@/components/common/horizontal-scroll-container"
-import { Ban, CheckCheck, Pencil, Plus, Trash2 } from "lucide-react"
+import { Ban, CheckCheck, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react"
 
 import {
   approveOnboardingRequest,
@@ -16,6 +16,8 @@ import {
   getOnboardingProgress,
   getOnboardingRequest,
   getOnboardingWorkflow,
+  listAccessControlResources,
+  listAttendanceDevices,
   listBranches,
   listDepartments,
   listEmployees,
@@ -23,15 +25,19 @@ import {
   listOnboardingWorkflows,
   listPositions,
   listResource,
+  listShiftResources,
+  listTimetableResources,
   listUsers,
   patchOnboardingWorkflow,
   rejectOnboardingRequest,
   type AdminRecord,
+  type OnboardingProvisioning,
 } from "@/lib/admin-api"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import { showErrorAlert } from "@/lib/error-alert"
 import { showSuccessAlert } from "@/lib/success-alert"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import {
   Select,
@@ -66,6 +72,13 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
+import {
+  buildOnboardingProvisioningPayload,
+  type OnboardingDeviceAssignmentDraft,
+  type OnboardingProvisioningDraft,
+  type OnboardingShiftAssignmentDraft,
+  type OnboardingTimetableAssignmentDraft,
+} from "@/lib/onboarding-provisioning"
 
 type OnboardingTab = "requests" | "workflows"
 
@@ -183,6 +196,47 @@ type RequestAction =
   | "complete"
   | "delete"
 
+const EMPTY_ONBOARDING_SHIFT_ASSIGNMENT: OnboardingShiftAssignmentDraft = {
+  shiftId: "",
+  effectiveFrom: "",
+  effectiveTo: "",
+  rotationGroupId: "",
+  isPrimary: true,
+}
+
+const EMPTY_ONBOARDING_TIMETABLE_ASSIGNMENT: OnboardingTimetableAssignmentDraft = {
+  timetableId: "",
+  effectiveFrom: "",
+  effectiveTo: "",
+}
+
+const EMPTY_ONBOARDING_DEVICE_ASSIGNMENT: OnboardingDeviceAssignmentDraft = {
+  enabled: false,
+  employeeNo: "",
+  accessGroupId: "",
+  organizationId: "",
+  validEnabled: false,
+  validBeginTime: "",
+  validEndTime: "",
+  localUiRight: false,
+  closeDelayEnabled: false,
+  maxOpenDoorTime: "",
+  openDoorTime: "",
+  userVerifyMode: "",
+  deviceIds: [],
+  syncNow: true,
+  continueOnError: false,
+}
+
+const EMPTY_REQUEST_PROVISIONING: OnboardingProvisioningDraft = {
+  roleIds: [],
+  branchAccessIds: [],
+  attendanceMode: "",
+  shiftAssignment: { ...EMPTY_ONBOARDING_SHIFT_ASSIGNMENT },
+  timetableAssignment: { ...EMPTY_ONBOARDING_TIMETABLE_ASSIGNMENT },
+  deviceAssignment: { ...EMPTY_ONBOARDING_DEVICE_ASSIGNMENT },
+}
+
 function parseAllowedActions(row: AdminRecord): Set<RequestAction> {
   const picked = new Set<RequestAction>()
   const normalized = (value: unknown) =>
@@ -236,6 +290,92 @@ function parseAllowedActions(row: AdminRecord): Set<RequestAction> {
   return picked
 }
 
+function toggleNumericId(currentValues: number[], id: number, checked: boolean) {
+  if (checked) {
+    return currentValues.includes(id) ? currentValues : [...currentValues, id]
+  }
+  return currentValues.filter((value) => value !== id)
+}
+
+function readRecordId(row: AdminRecord, keys: string[]) {
+  const value = readNumber(row, keys)
+  return value !== null ? value : null
+}
+
+function buildAttendanceDeviceLabel(row: AdminRecord, resolveBranchLabel: (branchId: number | null) => string) {
+  const deviceName = readString(row, ["device_name", "deviceName", "name", "title"])
+  const deviceCode = readString(row, ["device_code", "deviceCode"])
+  const serial = readString(row, ["device_serial_number", "deviceSerialNumber", "serial_no"])
+  const model = readString(row, ["device_model", "deviceModel", "model"])
+  const vendor = readString(row, ["vendor_name", "vendorName"])
+  const integrationType = readString(row, ["integration_type", "integrationType"])
+  const branchLabel = resolveBranchLabel(readNumber(row, ["branch_id", "branchId"]))
+
+  const title = [deviceName, deviceCode, serial].filter((value) => value !== "-")
+  const detail = [model, vendor, integrationType, branchLabel]
+    .filter((value) => value !== "-")
+    .join(" • ")
+
+  if (title.length === 0) {
+    return detail || `Device #${readNumber(row, ["id", "device_id"]) ?? "?"}`
+  }
+
+  return detail ? `${title.join(" • ")} (${detail})` : title.join(" • ")
+}
+
+function MultiSelectChecklist({
+  label,
+  options,
+  selectedIds,
+  onToggle,
+  emptyText,
+  hint,
+}: {
+  label: string
+  options: Array<{ id: number; label: string; description?: string }>
+  selectedIds: number[]
+  onToggle: (id: number, checked: boolean) => void
+  emptyText: string
+  hint?: React.ReactNode
+}) {
+  return (
+    <div className="grid gap-2">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-medium text-slate-900">{label}</p>
+        {selectedIds.length > 0 ? (
+          <span className="text-xs text-muted-foreground">{selectedIds.length} selected</span>
+        ) : null}
+      </div>
+      <div className="max-h-44 overflow-y-auto rounded-md border border-slate-200 bg-white">
+        {options.length === 0 ? (
+          <div className="px-3 py-3 text-sm text-muted-foreground">{emptyText}</div>
+        ) : (
+          <div className="grid gap-0.5 p-2">
+            {options.map((option) => {
+              const checked = selectedIds.includes(option.id)
+              return (
+                <label
+                  key={option.id}
+                  className="flex cursor-pointer items-start gap-2 rounded-md px-2 py-2 text-sm hover:bg-slate-50"
+                >
+                  <Checkbox checked={checked} onCheckedChange={(value) => onToggle(option.id, Boolean(value))} />
+                  <span className="min-w-0">
+                    <span className="block font-medium text-slate-800">{option.label}</span>
+                    {option.description ? (
+                      <span className="block text-xs text-muted-foreground">{option.description}</span>
+                    ) : null}
+                  </span>
+                </label>
+              )
+            })}
+          </div>
+        )}
+      </div>
+      {hint ? <div className="text-xs text-muted-foreground">{hint}</div> : null}
+    </div>
+  )
+}
+
 export function OnboardingView() {
   const [activeTab, setActiveTab] = React.useState<OnboardingTab>("requests")
   const [loading, setLoading] = React.useState(false)
@@ -248,6 +388,11 @@ export function OnboardingView() {
   const [branches, setBranches] = React.useState<AdminRecord[]>([])
   const [departments, setDepartments] = React.useState<AdminRecord[]>([])
   const [positions, setPositions] = React.useState<AdminRecord[]>([])
+  const [shiftRecords, setShiftRecords] = React.useState<AdminRecord[]>([])
+  const [timetableRecords, setTimetableRecords] = React.useState<AdminRecord[]>([])
+  const [accessGroups, setAccessGroups] = React.useState<AdminRecord[]>([])
+  const [accessOrganizations, setAccessOrganizations] = React.useState<AdminRecord[]>([])
+  const [attendanceDevices, setAttendanceDevices] = React.useState<AdminRecord[]>([])
   const [requests, setRequests] = React.useState<AdminRecord[]>([])
   const [requestSearch, setRequestSearch] = React.useState("")
   const [requestStatusFilter, setRequestStatusFilter] = React.useState("all")
@@ -268,6 +413,13 @@ export function OnboardingView() {
     planned_start_date: "",
     planned_completion_date: "",
     submit: "true",
+  })
+  const [requestProvisioningEnabled, setRequestProvisioningEnabled] = React.useState(false)
+  const [requestProvisioning, setRequestProvisioning] = React.useState<OnboardingProvisioningDraft>({
+    ...EMPTY_REQUEST_PROVISIONING,
+    shiftAssignment: { ...EMPTY_ONBOARDING_SHIFT_ASSIGNMENT },
+    timetableAssignment: { ...EMPTY_ONBOARDING_TIMETABLE_ASSIGNMENT },
+    deviceAssignment: { ...EMPTY_ONBOARDING_DEVICE_ASSIGNMENT },
   })
 
   const [workflowForm, setWorkflowForm] = React.useState({
@@ -354,6 +506,123 @@ export function OnboardingView() {
     Boolean(error) &&
     String(error).toLowerCase().includes("workflow approval levels must be unique")
 
+  const resolveBranchLabel = React.useCallback(
+    (branchId: number | null) =>
+      resolveOptionLabel(branches, branchId, ["id", "branch_id"], ["name", "title"]),
+    [branches]
+  )
+
+  const requestRoleOptions = React.useMemo(
+    () =>
+      roles
+        .map((row) => {
+          const id = readRecordId(row, ["id", "role_id"])
+          if (id === null) return null
+          return {
+            id,
+            label: readString(row, ["display_name", "name", "title"]),
+          }
+        })
+        .filter((option): option is { id: number; label: string } => option !== null && option.label !== "-"),
+    [roles]
+  )
+
+  const requestBranchAccessOptions = React.useMemo(
+    () =>
+      branches
+        .map((row) => {
+          const id = readRecordId(row, ["id", "branch_id"])
+          if (id === null) return null
+          return {
+            id,
+            label: readString(row, ["name", "title"]),
+          }
+        })
+        .filter((option): option is { id: number; label: string } => option !== null && option.label !== "-"),
+    [branches]
+  )
+
+  const requestShiftOptions = React.useMemo(
+    () =>
+      shiftRecords
+        .map((row) => {
+          const id = readRecordId(row, ["id", "shift_id"])
+          if (id === null) return null
+          return {
+            id,
+            label: readString(row, ["name", "title", "code"]),
+          }
+        })
+        .filter((option): option is { id: number; label: string } => option !== null && option.label !== "-"),
+    [shiftRecords]
+  )
+
+  const requestTimetableOptions = React.useMemo(
+    () =>
+      timetableRecords
+        .map((row) => {
+          const id = readRecordId(row, ["id", "timetable_id"])
+          if (id === null) return null
+          return {
+            id,
+            label: readString(row, ["name", "title", "code"]),
+          }
+        })
+        .filter((option): option is { id: number; label: string } => option !== null && option.label !== "-"),
+    [timetableRecords]
+  )
+
+  const requestAccessGroupOptions = React.useMemo(
+    () =>
+      accessGroups
+        .map((row) => {
+          const id = readRecordId(row, ["id", "access_group_id"])
+          if (id === null) return null
+          return {
+            id,
+            label: readString(row, ["name", "title"]),
+          }
+        })
+        .filter((option): option is { id: number; label: string } => option !== null && option.label !== "-"),
+    [accessGroups]
+  )
+
+  const requestAccessOrganizationOptions = React.useMemo(
+    () =>
+      accessOrganizations
+        .map((row) => {
+          const id = readRecordId(row, ["id", "organization_id"])
+          if (id === null) return null
+          return {
+            id,
+            label: readString(row, ["name", "title"]),
+          }
+        })
+        .filter((option): option is { id: number; label: string } => option !== null && option.label !== "-"),
+    [accessOrganizations]
+  )
+
+  const requestAttendanceDeviceOptions = React.useMemo(
+    () =>
+      attendanceDevices
+        .map((row) => {
+          const id = readRecordId(row, ["id", "device_id", "attendance_device_id"])
+          if (id === null) return null
+          return {
+            id,
+            label: buildAttendanceDeviceLabel(row, resolveBranchLabel),
+          }
+        })
+        .filter((option): option is { id: number; label: string } => option !== null && option.label !== "-"),
+    [attendanceDevices, resolveBranchLabel]
+  )
+
+  const resolveProvisioningLabel = React.useCallback(
+    (rows: AdminRecord[], id: number | null, idKeys: string[], labelKeys: string[]) =>
+      resolveOptionLabel(rows, id, idKeys, labelKeys),
+    []
+  )
+
   const reloadAll = React.useCallback(async () => {
     const token = readStoredToken()
     if (!token) {
@@ -366,7 +635,21 @@ export function OnboardingView() {
     setLoading(true)
     setError(null)
     try {
-      const [requestsResult, workflowsResult, employeesResult, usersResult, rolesResult, branchesResult, departmentsResult, positionsResult] = await Promise.all([
+      const [
+        requestsResult,
+        workflowsResult,
+        employeesResult,
+        usersResult,
+        rolesResult,
+        branchesResult,
+        departmentsResult,
+        positionsResult,
+        shiftsResult,
+        timetablesResult,
+        accessGroupsResult,
+        accessOrganizationsResult,
+        devicesResult,
+      ] = await Promise.all([
         listOnboardingRequests(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
         listOnboardingWorkflows(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
         listEmployees(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
@@ -375,6 +658,11 @@ export function OnboardingView() {
         listBranches(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
         listDepartments(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
         listPositions(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
+        listShiftResources(token, "shifts", { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
+        listTimetableResources(token, "timetables", { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
+        listAccessControlResources(token, "groups", { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
+        listAccessControlResources(token, "organizations", { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
+        listAttendanceDevices(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
       ])
 
       setRequests(requestsResult.rows)
@@ -385,6 +673,11 @@ export function OnboardingView() {
       setBranches(branchesResult.rows)
       setDepartments(departmentsResult.rows)
       setPositions(positionsResult.rows)
+      setShiftRecords(shiftsResult.rows)
+      setTimetableRecords(timetablesResult.rows)
+      setAccessGroups(accessGroupsResult.rows)
+      setAccessOrganizations(accessOrganizationsResult.rows)
+      setAttendanceDevices(devicesResult.rows)
     } catch (errorObject) {
       const message = errorObject instanceof Error ? errorObject.message : "Failed to load onboarding data."
       setError(message)
@@ -509,6 +802,95 @@ export function OnboardingView() {
 
   function resolveYesNoLabel(value: unknown) {
     return String(value) === "true" || value === true ? "Yes" : "No"
+  }
+
+  function updateRequestProvisioningField<K extends keyof OnboardingProvisioningDraft>(
+    field: K,
+    value: OnboardingProvisioningDraft[K]
+  ) {
+    setRequestProvisioning((previous) => ({
+      ...previous,
+      [field]: value,
+    }))
+  }
+
+  function updateRequestShiftAssignmentField<K extends keyof OnboardingShiftAssignmentDraft>(
+    field: K,
+    value: OnboardingShiftAssignmentDraft[K]
+  ) {
+    setRequestProvisioning((previous) => ({
+      ...previous,
+      shiftAssignment: {
+        ...previous.shiftAssignment,
+        [field]: value,
+      },
+    }))
+  }
+
+  function updateRequestTimetableAssignmentField<K extends keyof OnboardingTimetableAssignmentDraft>(
+    field: K,
+    value: OnboardingTimetableAssignmentDraft[K]
+  ) {
+    setRequestProvisioning((previous) => ({
+      ...previous,
+      timetableAssignment: {
+        ...previous.timetableAssignment,
+        [field]: value,
+      },
+    }))
+  }
+
+  function updateRequestDeviceAssignmentField<K extends keyof OnboardingDeviceAssignmentDraft>(
+    field: K,
+    value: OnboardingDeviceAssignmentDraft[K]
+  ) {
+    setRequestProvisioning((previous) => ({
+      ...previous,
+      deviceAssignment: {
+        ...previous.deviceAssignment,
+        [field]: value,
+      },
+    }))
+  }
+
+  function setRequestAttendanceMode(mode: OnboardingProvisioningDraft["attendanceMode"]) {
+    setRequestProvisioning((previous) => ({
+      ...previous,
+      attendanceMode: mode,
+      shiftAssignment:
+        mode === "shift"
+          ? previous.shiftAssignment
+          : { ...EMPTY_ONBOARDING_SHIFT_ASSIGNMENT },
+      timetableAssignment:
+        mode === "timetable"
+          ? previous.timetableAssignment
+          : { ...EMPTY_ONBOARDING_TIMETABLE_ASSIGNMENT },
+    }))
+  }
+
+  function extractProvisioning(record: AdminRecord | null): OnboardingProvisioning | null {
+    if (!record) {
+      return null
+    }
+    const directProvisioning = toRecord(record.provisioning)
+    if (directProvisioning) {
+      return directProvisioning as unknown as OnboardingProvisioning
+    }
+
+    const metadata = toRecord(record.metadata)
+    const nestedProvisioning = metadata ? toRecord(metadata.provisioning) : null
+    if (nestedProvisioning) {
+      return nestedProvisioning as unknown as OnboardingProvisioning
+    }
+
+    return null
+  }
+
+  function extractMetadata(record: AdminRecord | null) {
+    if (!record) {
+      return null
+    }
+    return toRecord(record.metadata)
   }
 
   const resolveResponsibleParty = React.useCallback((step: AdminRecord) => {
@@ -848,6 +1230,24 @@ export function OnboardingView() {
     setSaving(true)
     setError(null)
     try {
+      const selectedEmployee =
+        employees.find((row) => readNumber(row, ["id", "employee_id", "user_id"]) === Number(requestForm.employee_id)) ??
+        null
+      const fallbackEmployeeNo = readString(selectedEmployee ?? {}, [
+        "employee_no",
+        "employee_number",
+        "employee_code",
+        "user_no",
+      ])
+      const provisioningResult = requestProvisioningEnabled
+        ? buildOnboardingProvisioningPayload(requestProvisioning, {
+            fallbackEmployeeNo: fallbackEmployeeNo !== "-" ? fallbackEmployeeNo : undefined,
+          })
+        : {}
+      if (provisioningResult.error) {
+        throw new Error(provisioningResult.error)
+      }
+
       await createOnboardingRequest(token, {
         employee_id: Number(requestForm.employee_id),
         workflow_id: requestForm.workflow_id ? Number(requestForm.workflow_id) : undefined,
@@ -856,6 +1256,7 @@ export function OnboardingView() {
         planned_start_date: requestForm.planned_start_date || undefined,
         planned_completion_date: requestForm.planned_completion_date || undefined,
         submit: requestForm.submit === "true",
+        provisioning: provisioningResult.provisioning,
       })
 
       setRequestForm({
@@ -866,6 +1267,13 @@ export function OnboardingView() {
         planned_start_date: "",
         planned_completion_date: "",
         submit: "true",
+      })
+      setRequestProvisioningEnabled(false)
+      setRequestProvisioning({
+        ...EMPTY_REQUEST_PROVISIONING,
+        shiftAssignment: { ...EMPTY_ONBOARDING_SHIFT_ASSIGNMENT },
+        timetableAssignment: { ...EMPTY_ONBOARDING_TIMETABLE_ASSIGNMENT },
+        deviceAssignment: { ...EMPTY_ONBOARDING_DEVICE_ASSIGNMENT },
       })
       showSuccessAlert("Onboarding request created.")
       await reloadAll()
@@ -1028,6 +1436,136 @@ export function OnboardingView() {
     selectedWorkflowSteps,
   ])
 
+  const selectedRequestProvisioningSummary = React.useMemo(() => {
+    const detailProvisioning = extractProvisioning(selectedRequestDetails)
+    const rowProvisioning = extractProvisioning(selectedRequestRow)
+    const provisioning = detailProvisioning ?? rowProvisioning
+    const metadata = extractMetadata(selectedRequestDetails) ?? extractMetadata(selectedRequestRow)
+    if (!provisioning && !metadata) {
+      return null
+    }
+
+    const roleIds = Array.isArray(provisioning?.role_ids)
+      ? provisioning.role_ids.filter((value): value is number => typeof value === "number")
+      : []
+    const branchAccessIds = Array.isArray(provisioning?.branch_access_ids)
+      ? provisioning.branch_access_ids.filter((value): value is number => typeof value === "number")
+      : []
+    const shiftAssignment = provisioning?.shift_assignment
+    const timetableAssignment = provisioning?.timetable_assignment
+    const deviceAssignment = provisioning?.device_assignment
+
+    return {
+      rawProvisioning: provisioning,
+      roleLabels:
+        roleIds.length > 0
+          ? roleIds.map((id) =>
+              resolveProvisioningLabel(roles, id, ["id", "role_id"], ["display_name", "name", "title"])
+            )
+          : [],
+      branchAccessLabels:
+        branchAccessIds.length > 0
+          ? branchAccessIds.map((id) =>
+              resolveProvisioningLabel(branches, id, ["id", "branch_id"], ["name", "title"])
+            )
+          : [],
+      attendanceMode:
+        provisioning?.attendance_mode && String(provisioning.attendance_mode).trim()
+          ? toTitleCaseWords(String(provisioning.attendance_mode))
+          : "-",
+      shiftLabel:
+        shiftAssignment?.shift_id
+          ? resolveProvisioningLabel(
+              shiftRecords,
+              shiftAssignment.shift_id,
+              ["id", "shift_id"],
+              ["name", "title", "code"]
+            )
+          : "-",
+      shiftEffectiveFrom: shiftAssignment?.effective_from || "-",
+      shiftEffectiveTo: shiftAssignment?.effective_to || "-",
+      rotationGroupLabel:
+        shiftAssignment?.rotation_group_id
+          ? resolveProvisioningLabel(
+              shiftRecords,
+              shiftAssignment.rotation_group_id,
+              ["id", "rotation_group_id", "shift_rotation_group_id"],
+              ["name", "title", "code"]
+            )
+          : "-",
+      timetableLabel:
+        timetableAssignment?.timetable_id
+          ? resolveProvisioningLabel(
+              timetableRecords,
+              timetableAssignment.timetable_id,
+              ["id", "timetable_id"],
+              ["name", "title", "code"]
+            )
+          : "-",
+      timetableEffectiveFrom: timetableAssignment?.effective_from || "-",
+      timetableEffectiveTo: timetableAssignment?.effective_to || "-",
+      deviceConfigured: deviceAssignment ? "Configured" : "Not configured",
+      deviceEmployeeNo: deviceAssignment?.employee_no || "-",
+      accessGroupLabel:
+        deviceAssignment?.access_group_id
+          ? resolveProvisioningLabel(
+              accessGroups,
+              deviceAssignment.access_group_id,
+              ["id", "access_group_id"],
+              ["name", "title"]
+            )
+          : "-",
+      organizationLabel:
+        deviceAssignment?.organization_id
+          ? resolveProvisioningLabel(
+              accessOrganizations,
+              deviceAssignment.organization_id,
+              ["id", "organization_id"],
+              ["name", "title"]
+            )
+          : "-",
+      validEnabled: deviceAssignment?.valid_enabled ? "Yes" : "No",
+      validBeginTime: deviceAssignment?.valid_begin_time || "-",
+      validEndTime: deviceAssignment?.valid_end_time || "-",
+      userVerifyMode: deviceAssignment?.user_verify_mode || "-",
+      localUiRight: deviceAssignment?.local_ui_right ? "Yes" : "No",
+      closeDelayEnabled: deviceAssignment?.close_delay_enabled ? "Yes" : "No",
+      maxOpenDoorTime:
+        typeof deviceAssignment?.max_open_door_time === "number"
+          ? String(deviceAssignment.max_open_door_time)
+          : "-",
+      openDoorTime:
+        typeof deviceAssignment?.open_door_time === "number"
+          ? String(deviceAssignment.open_door_time)
+          : "-",
+      syncNow: deviceAssignment?.sync_now ? "Yes" : "No",
+      continueOnError: deviceAssignment?.continue_on_error ? "Yes" : "No",
+      deviceLabels:
+        Array.isArray(deviceAssignment?.device_ids) && deviceAssignment.device_ids.length > 0
+          ? deviceAssignment.device_ids.map((id) =>
+              resolveProvisioningLabel(
+                attendanceDevices,
+                id,
+                ["id", "device_id"],
+                ["device_name", "name", "title", "device_code", "device_serial_number", "serial_no"]
+              )
+            )
+          : [],
+      metadata,
+    }
+  }, [
+    accessGroups,
+    accessOrganizations,
+    attendanceDevices,
+    branches,
+    resolveProvisioningLabel,
+    roles,
+    selectedRequestDetails,
+    selectedRequestRow,
+    shiftRecords,
+    timetableRecords,
+  ])
+
   async function openRequestDetails(row: AdminRecord) {
     const requestId = readNumber(row, ["id", "request_id"])
     if (requestId === null) {
@@ -1101,8 +1639,8 @@ export function OnboardingView() {
         >
           Onboarding Workflows
         </Button>
-        <Button type="button" variant="outline" className="ml-auto" onClick={() => void reloadAll()}>
-          Refresh
+        <Button type="button" variant="outline" size="icon" className="ml-auto" onClick={() => void reloadAll()}>
+          <RefreshCw className="size-4 text-primary" />
         </Button>
       </div>
 
@@ -1110,101 +1648,381 @@ export function OnboardingView() {
 
       {activeTab === "requests" ? (
         <div className="space-y-5">
-          <div className="grid gap-3 rounded-xl border border-border p-4 md:grid-cols-2">
-            <Input
-              value={requestForm.title}
-              onChange={(event) => setRequestForm((prev) => ({ ...prev, title: event.target.value }))}
-              placeholder="Onboarding request title"
-            />
-            <Select
-              value={requestForm.employee_id}
-              onValueChange={(value) => setRequestForm((prev) => ({ ...prev, employee_id: value ?? "" }))}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select employee">
-                  {requestForm.employee_id
-                    ? resolveEmployeeLabel(Number(requestForm.employee_id))
-                    : "Select employee"}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {employees.map((row) => {
-                  const employeeId = readNumber(row, ["id", "employee_id", "user_id"])
-                  if (employeeId === null) {
-                    return null
-                  }
-                  return (
-                    <SelectItem key={employeeId} value={String(employeeId)}>
-                      {resolveEmployeeLabel(employeeId)}
-                    </SelectItem>
-                  )
-                })}
-              </SelectContent>
-            </Select>
-
-            <Select
-              value={requestForm.workflow_id}
-              onValueChange={(value) => setRequestForm((prev) => ({ ...prev, workflow_id: value ?? "" }))}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Attach workflow (optional)">
-                  {requestForm.workflow_id
-                    ? resolveWorkflowLabel(Number(requestForm.workflow_id))
-                    : "Attach workflow (optional)"}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {workflows.map((row) => {
-                  const workflowId = readNumber(row, ["id", "workflow_id"])
-                  if (workflowId === null) {
-                    return null
-                  }
-                  return (
-                    <SelectItem key={workflowId} value={String(workflowId)}>
-                      {readString(row, ["name", "title"])}
-                    </SelectItem>
-                  )
-                })}
-              </SelectContent>
-            </Select>
-
-            <Select
-              value={requestForm.submit}
-              onValueChange={(value) => setRequestForm((prev) => ({ ...prev, submit: value ?? "true" }))}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Submission mode">{resolveBooleanLabel(requestForm.submit)}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="true">Submit immediately</SelectItem>
-                <SelectItem value="false">Save as draft</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Input
-              type="date"
-              value={requestForm.planned_start_date}
-              onChange={(event) =>
-                setRequestForm((prev) => ({ ...prev, planned_start_date: event.target.value }))
-              }
-            />
-            <Input
-              type="date"
-              value={requestForm.planned_completion_date}
-              onChange={(event) =>
-                setRequestForm((prev) => ({ ...prev, planned_completion_date: event.target.value }))
-              }
-            />
-
-            <div className="md:col-span-2">
+          <div className="space-y-4 rounded-xl border border-border p-4">
+            <div className="grid gap-3 md:grid-cols-2">
               <Input
-                value={requestForm.description}
-                onChange={(event) => setRequestForm((prev) => ({ ...prev, description: event.target.value }))}
-                placeholder="Description"
+                value={requestForm.title}
+                onChange={(event) => setRequestForm((prev) => ({ ...prev, title: event.target.value }))}
+                placeholder="Onboarding request title"
               />
+              <Select
+                value={requestForm.employee_id}
+                onValueChange={(value) => setRequestForm((prev) => ({ ...prev, employee_id: value ?? "" }))}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select employee">
+                    {requestForm.employee_id
+                      ? resolveEmployeeLabel(Number(requestForm.employee_id))
+                      : "Select employee"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {employees.map((row) => {
+                    const employeeId = readNumber(row, ["id", "employee_id", "user_id"])
+                    if (employeeId === null) {
+                      return null
+                    }
+                    return (
+                      <SelectItem key={employeeId} value={String(employeeId)}>
+                        {resolveEmployeeLabel(employeeId)}
+                      </SelectItem>
+                    )
+                  })}
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={requestForm.workflow_id}
+                onValueChange={(value) => setRequestForm((prev) => ({ ...prev, workflow_id: value ?? "" }))}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Attach workflow (optional)">
+                    {requestForm.workflow_id
+                      ? resolveWorkflowLabel(Number(requestForm.workflow_id))
+                      : "Attach workflow (optional)"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {workflows.map((row) => {
+                    const workflowId = readNumber(row, ["id", "workflow_id"])
+                    if (workflowId === null) {
+                      return null
+                    }
+                    return (
+                      <SelectItem key={workflowId} value={String(workflowId)}>
+                        {readString(row, ["name", "title"])}
+                      </SelectItem>
+                    )
+                  })}
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={requestForm.submit}
+                onValueChange={(value) => setRequestForm((prev) => ({ ...prev, submit: value ?? "true" }))}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Submission mode">{resolveBooleanLabel(requestForm.submit)}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="true">Submit immediately</SelectItem>
+                  <SelectItem value="false">Save as draft</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Input
+                type="date"
+                value={requestForm.planned_start_date}
+                onChange={(event) =>
+                  setRequestForm((prev) => ({ ...prev, planned_start_date: event.target.value }))
+                }
+              />
+              <Input
+                type="date"
+                value={requestForm.planned_completion_date}
+                onChange={(event) =>
+                  setRequestForm((prev) => ({ ...prev, planned_completion_date: event.target.value }))
+                }
+              />
+
+              <div className="md:col-span-2">
+                <Input
+                  value={requestForm.description}
+                  onChange={(event) => setRequestForm((prev) => ({ ...prev, description: event.target.value }))}
+                  placeholder="Description"
+                />
+              </div>
             </div>
 
-            <div className="md:col-span-2">
+            <div className="space-y-4 rounded-lg border border-slate-200 bg-slate-50/70 p-4">
+              <label className="flex items-start gap-3">
+                <Checkbox
+                  checked={requestProvisioningEnabled}
+                  onCheckedChange={(value) => {
+                    const checked = Boolean(value)
+                    setRequestProvisioningEnabled(checked)
+                    if (!checked) {
+                      setRequestProvisioning({
+                        ...EMPTY_REQUEST_PROVISIONING,
+                        shiftAssignment: { ...EMPTY_ONBOARDING_SHIFT_ASSIGNMENT },
+                        timetableAssignment: { ...EMPTY_ONBOARDING_TIMETABLE_ASSIGNMENT },
+                        deviceAssignment: { ...EMPTY_ONBOARDING_DEVICE_ASSIGNMENT },
+                      })
+                    }
+                  }}
+                />
+                <span className="space-y-1">
+                  <span className="block text-sm font-medium text-slate-900">Include provisioning payload</span>
+                  <span className="block text-xs text-muted-foreground">
+                    Match the richer onboarding setup used during employee registration.
+                  </span>
+                </span>
+              </label>
+
+              {requestProvisioningEnabled ? (
+                <div className="grid gap-4 md:grid-cols-2">
+                  <MultiSelectChecklist
+                    label="Roles"
+                    options={requestRoleOptions}
+                    selectedIds={requestProvisioning.roleIds}
+                    onToggle={(id, checked) =>
+                      updateRequestProvisioningField(
+                        "roleIds",
+                        toggleNumericId(requestProvisioning.roleIds, id, checked)
+                      )
+                    }
+                    emptyText="No roles available."
+                  />
+                  <MultiSelectChecklist
+                    label="Branch Access"
+                    options={requestBranchAccessOptions}
+                    selectedIds={requestProvisioning.branchAccessIds}
+                    onToggle={(id, checked) =>
+                      updateRequestProvisioningField(
+                        "branchAccessIds",
+                        toggleNumericId(requestProvisioning.branchAccessIds, id, checked)
+                      )
+                    }
+                    emptyText="No branches available."
+                  />
+
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium text-slate-900">Attendance Mode</p>
+                    <Select
+                      value={requestProvisioning.attendanceMode || "none"}
+                      onValueChange={(value) =>
+                        setRequestAttendanceMode(value === "none" ? "" : (value as OnboardingProvisioningDraft["attendanceMode"]))
+                      }
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Attendance mode" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No attendance provisioning</SelectItem>
+                        <SelectItem value="shift">Shift</SelectItem>
+                        <SelectItem value="timetable">Timetable</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {requestProvisioning.attendanceMode === "shift" ? (
+                    <>
+                        <Select
+                          value={requestProvisioning.shiftAssignment.shiftId || "none"}
+                          onValueChange={(value) =>
+                            updateRequestShiftAssignmentField("shiftId", (value ?? "none") === "none" ? "" : (value ?? ""))
+                          }
+                        >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select shift" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Select shift</SelectItem>
+                          {requestShiftOptions.map((option) => (
+                            <SelectItem key={option.id} value={String(option.id)}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        type="date"
+                        value={requestProvisioning.shiftAssignment.effectiveFrom}
+                        onChange={(event) => updateRequestShiftAssignmentField("effectiveFrom", event.target.value)}
+                        placeholder="Effective from"
+                      />
+                      <Input
+                        type="date"
+                        value={requestProvisioning.shiftAssignment.effectiveTo}
+                        onChange={(event) => updateRequestShiftAssignmentField("effectiveTo", event.target.value)}
+                        placeholder="Effective to"
+                      />
+                      <Input
+                        value={requestProvisioning.shiftAssignment.rotationGroupId}
+                        onChange={(event) => updateRequestShiftAssignmentField("rotationGroupId", event.target.value)}
+                        placeholder="Rotation group ID (optional)"
+                      />
+                    </>
+                  ) : null}
+
+                  {requestProvisioning.attendanceMode === "timetable" ? (
+                    <>
+                        <Select
+                          value={requestProvisioning.timetableAssignment.timetableId || "none"}
+                          onValueChange={(value) =>
+                            updateRequestTimetableAssignmentField("timetableId", (value ?? "none") === "none" ? "" : (value ?? ""))
+                          }
+                        >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select timetable" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Select timetable</SelectItem>
+                          {requestTimetableOptions.map((option) => (
+                            <SelectItem key={option.id} value={String(option.id)}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        type="date"
+                        value={requestProvisioning.timetableAssignment.effectiveFrom}
+                        onChange={(event) => updateRequestTimetableAssignmentField("effectiveFrom", event.target.value)}
+                        placeholder="Effective from"
+                      />
+                      <Input
+                        type="date"
+                        value={requestProvisioning.timetableAssignment.effectiveTo}
+                        onChange={(event) => updateRequestTimetableAssignmentField("effectiveTo", event.target.value)}
+                        placeholder="Effective to"
+                      />
+                    </>
+                  ) : null}
+
+                  <div className="md:col-span-2 space-y-4 rounded-md border border-slate-200 bg-white p-4">
+                    <label className="flex items-start gap-3">
+                      <Checkbox
+                        checked={requestProvisioning.deviceAssignment.enabled}
+                        onCheckedChange={(value) =>
+                          updateRequestDeviceAssignmentField("enabled", Boolean(value))
+                        }
+                      />
+                      <span className="space-y-1">
+                        <span className="block text-sm font-medium text-slate-900">Enable device provisioning</span>
+                        <span className="block text-xs text-muted-foreground">
+                          Add access-control device setup to the onboarding request.
+                        </span>
+                      </span>
+                    </label>
+
+                    {requestProvisioning.deviceAssignment.enabled ? (
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <Select
+                          value={requestProvisioning.deviceAssignment.accessGroupId || "none"}
+                          onValueChange={(value) =>
+                            updateRequestDeviceAssignmentField("accessGroupId", (value ?? "none") === "none" ? "" : (value ?? ""))
+                          }
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Access group" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">Select access group</SelectItem>
+                            {requestAccessGroupOptions.map((option) => (
+                              <SelectItem key={option.id} value={String(option.id)}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+
+                        <Select
+                          value={requestProvisioning.deviceAssignment.organizationId || "none"}
+                          onValueChange={(value) =>
+                            updateRequestDeviceAssignmentField("organizationId", (value ?? "none") === "none" ? "" : (value ?? ""))
+                          }
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Organization (optional)" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">No organization override</SelectItem>
+                            {requestAccessOrganizationOptions.map((option) => (
+                              <SelectItem key={option.id} value={String(option.id)}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+
+                        <Input
+                          value={requestProvisioning.deviceAssignment.employeeNo}
+                          onChange={(event) => updateRequestDeviceAssignmentField("employeeNo", event.target.value)}
+                          placeholder="Employee No override (optional)"
+                        />
+                        <Input
+                          value={requestProvisioning.deviceAssignment.userVerifyMode}
+                          onChange={(event) => updateRequestDeviceAssignmentField("userVerifyMode", event.target.value)}
+                          placeholder="User verify mode (optional)"
+                        />
+                        <Input
+                          type="datetime-local"
+                          value={requestProvisioning.deviceAssignment.validBeginTime}
+                          onChange={(event) => updateRequestDeviceAssignmentField("validBeginTime", event.target.value)}
+                        />
+                        <Input
+                          type="datetime-local"
+                          value={requestProvisioning.deviceAssignment.validEndTime}
+                          onChange={(event) => updateRequestDeviceAssignmentField("validEndTime", event.target.value)}
+                        />
+                        <Input
+                          value={requestProvisioning.deviceAssignment.maxOpenDoorTime}
+                          onChange={(event) => updateRequestDeviceAssignmentField("maxOpenDoorTime", event.target.value)}
+                          placeholder="Max open door time"
+                        />
+                        <Input
+                          value={requestProvisioning.deviceAssignment.openDoorTime}
+                          onChange={(event) => updateRequestDeviceAssignmentField("openDoorTime", event.target.value)}
+                          placeholder="Open door time"
+                        />
+
+                        <div className="md:col-span-2">
+                          <MultiSelectChecklist
+                            label="Attendance Devices"
+                            options={requestAttendanceDeviceOptions}
+                            selectedIds={requestProvisioning.deviceAssignment.deviceIds}
+                            onToggle={(id, checked) =>
+                              updateRequestDeviceAssignmentField(
+                                "deviceIds",
+                                toggleNumericId(requestProvisioning.deviceAssignment.deviceIds, id, checked)
+                              )
+                            }
+                            emptyText="No attendance devices available."
+                            hint="Choose the devices that should receive this employee during onboarding."
+                          />
+                        </div>
+
+                        <div className="md:col-span-2 grid gap-2 md:grid-cols-2">
+                          {[
+                            ["validEnabled", "Validity enabled"],
+                            ["localUiRight", "Local UI right"],
+                            ["closeDelayEnabled", "Close delay enabled"],
+                            ["syncNow", "Sync now"],
+                            ["continueOnError", "Continue on error"],
+                          ].map(([key, label]) => (
+                            <label key={key} className="flex items-center gap-3 rounded-md border border-slate-200 px-3 py-2">
+                              <Checkbox
+                                checked={Boolean(requestProvisioning.deviceAssignment[key as keyof OnboardingDeviceAssignmentDraft])}
+                                onCheckedChange={(value) =>
+                                  updateRequestDeviceAssignmentField(
+                                    key as keyof OnboardingDeviceAssignmentDraft,
+                                    Boolean(value) as never
+                                  )
+                                }
+                              />
+                              <span className="text-sm text-slate-800">{label}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            <div>
               <Button type="button" onClick={() => void submitRequest()} disabled={saving}>
                 Create Onboarding Request
               </Button>
@@ -1411,6 +2229,251 @@ export function OnboardingView() {
                       </p>
                     </div>
                   </div>
+
+                  <div className="space-y-3 rounded-lg border border-border p-4">
+                    <p className="text-sm font-semibold text-slate-900">Submitted Request</p>
+                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Request Code</p>
+                        <p className="text-sm text-slate-900">
+                          {readString(selectedRequestDetails ?? selectedRequestRow ?? {}, [
+                            "request_no",
+                            "request_code",
+                            "onboarding_no",
+                            "onboarding_code",
+                            "reference_no",
+                          ])}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Workflow</p>
+                        <p className="text-sm text-slate-900">
+                          {resolveWorkflowLabel(
+                            readNumber(selectedRequestDetails ?? selectedRequestRow ?? {}, [
+                              "workflow_id",
+                              "onboarding_workflow_id",
+                            ])
+                          )}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Submission Mode</p>
+                        <p className="text-sm text-slate-900">
+                          {resolveBooleanLabel(
+                            String(selectedRequestDetails?.submit ?? selectedRequestRow?.submit ?? "false")
+                          )}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Title</p>
+                        <p className="text-sm text-slate-900">
+                          {readString(selectedRequestDetails ?? selectedRequestRow ?? {}, ["title", "name"])}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Planned Start</p>
+                        <p className="text-sm text-slate-900">
+                          {toTimestamp(
+                            selectedRequestDetails?.planned_start_date ??
+                              selectedRequestRow?.planned_start_date
+                          )}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Planned Completion</p>
+                        <p className="text-sm text-slate-900">
+                          {toTimestamp(
+                            selectedRequestDetails?.planned_completion_date ??
+                              selectedRequestRow?.planned_completion_date
+                          )}
+                        </p>
+                      </div>
+                      <div className="md:col-span-2 xl:col-span-3">
+                        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Description</p>
+                        <p className="text-sm text-slate-900">
+                          {readString(selectedRequestDetails ?? selectedRequestRow ?? {}, ["description", "notes"])}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {selectedRequestProvisioningSummary ? (
+                    <div className="space-y-3 rounded-lg border border-border p-4">
+                      <p className="text-sm font-semibold text-slate-900">Provisioning Summary</p>
+                      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Roles</p>
+                          <p className="text-sm text-slate-900">
+                            {selectedRequestProvisioningSummary.roleLabels.length > 0
+                              ? selectedRequestProvisioningSummary.roleLabels.join(", ")
+                              : "-"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Branch Access</p>
+                          <p className="text-sm text-slate-900">
+                            {selectedRequestProvisioningSummary.branchAccessLabels.length > 0
+                              ? selectedRequestProvisioningSummary.branchAccessLabels.join(", ")
+                              : "-"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Attendance Mode</p>
+                          <p className="text-sm text-slate-900">
+                            {selectedRequestProvisioningSummary.attendanceMode}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Shift</p>
+                          <p className="text-sm text-slate-900">
+                            {selectedRequestProvisioningSummary.shiftLabel}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Shift Effective From</p>
+                          <p className="text-sm text-slate-900">
+                            {selectedRequestProvisioningSummary.shiftEffectiveFrom}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Shift Effective To</p>
+                          <p className="text-sm text-slate-900">
+                            {selectedRequestProvisioningSummary.shiftEffectiveTo}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Rotation Group</p>
+                          <p className="text-sm text-slate-900">
+                            {selectedRequestProvisioningSummary.rotationGroupLabel}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Timetable</p>
+                          <p className="text-sm text-slate-900">
+                            {selectedRequestProvisioningSummary.timetableLabel}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Timetable Effective From</p>
+                          <p className="text-sm text-slate-900">
+                            {selectedRequestProvisioningSummary.timetableEffectiveFrom}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Timetable Effective To</p>
+                          <p className="text-sm text-slate-900">
+                            {selectedRequestProvisioningSummary.timetableEffectiveTo}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Device Setup</p>
+                          <p className="text-sm text-slate-900">
+                            {selectedRequestProvisioningSummary.deviceConfigured}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Device Employee No</p>
+                          <p className="text-sm text-slate-900">
+                            {selectedRequestProvisioningSummary.deviceEmployeeNo}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Access Group</p>
+                          <p className="text-sm text-slate-900">
+                            {selectedRequestProvisioningSummary.accessGroupLabel}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Organization</p>
+                          <p className="text-sm text-slate-900">
+                            {selectedRequestProvisioningSummary.organizationLabel}
+                          </p>
+                        </div>
+                        <div className="md:col-span-2 xl:col-span-3">
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Devices</p>
+                          <p className="text-sm text-slate-900">
+                            {selectedRequestProvisioningSummary.deviceLabels.length > 0
+                              ? selectedRequestProvisioningSummary.deviceLabels.join(", ")
+                              : "-"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Validity Enabled</p>
+                          <p className="text-sm text-slate-900">
+                            {selectedRequestProvisioningSummary.validEnabled}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Valid Begin Time</p>
+                          <p className="text-sm text-slate-900">
+                            {selectedRequestProvisioningSummary.validBeginTime}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Valid End Time</p>
+                          <p className="text-sm text-slate-900">
+                            {selectedRequestProvisioningSummary.validEndTime}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Verify Mode</p>
+                          <p className="text-sm text-slate-900">
+                            {selectedRequestProvisioningSummary.userVerifyMode}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Local UI Right</p>
+                          <p className="text-sm text-slate-900">
+                            {selectedRequestProvisioningSummary.localUiRight}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Close Delay Enabled</p>
+                          <p className="text-sm text-slate-900">
+                            {selectedRequestProvisioningSummary.closeDelayEnabled}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Max Open Door Time</p>
+                          <p className="text-sm text-slate-900">
+                            {selectedRequestProvisioningSummary.maxOpenDoorTime}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Open Door Time</p>
+                          <p className="text-sm text-slate-900">
+                            {selectedRequestProvisioningSummary.openDoorTime}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Sync Now</p>
+                          <p className="text-sm text-slate-900">
+                            {selectedRequestProvisioningSummary.syncNow}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Continue On Error</p>
+                          <p className="text-sm text-slate-900">
+                            {selectedRequestProvisioningSummary.continueOnError}
+                          </p>
+                        </div>
+                        <div className="md:col-span-2 xl:col-span-3">
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Provisioning Payload</p>
+                          <pre className="mt-1 overflow-x-auto rounded-md bg-slate-50 p-3 text-xs text-slate-700">
+                            {JSON.stringify(selectedRequestProvisioningSummary.rawProvisioning, null, 2)}
+                          </pre>
+                        </div>
+                        {selectedRequestProvisioningSummary.metadata ? (
+                          <div className="md:col-span-2 xl:col-span-3">
+                            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Metadata</p>
+                            <pre className="mt-1 overflow-x-auto rounded-md bg-slate-50 p-3 text-xs text-slate-700">
+                              {JSON.stringify(selectedRequestProvisioningSummary.metadata, null, 2)}
+                            </pre>
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
 
                   <div className="space-y-3 rounded-lg border border-border p-4">
                     <p className="text-sm font-semibold text-slate-900">Workflow Map</p>

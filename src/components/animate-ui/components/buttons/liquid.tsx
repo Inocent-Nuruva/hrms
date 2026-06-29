@@ -11,7 +11,7 @@ export const liquidButtonVariants = cva(
     variants: {
       variant: {
         default:
-          "border-[color:rgb(var(--primary-rgb)/0.28)] bg-white text-[var(--primary)] shadow-[0_10px_22px_rgb(var(--primary-rgb)/0.22)] hover:text-white before:bg-[var(--primary)] dark:border-[color:rgb(var(--primary-rgb)/0.45)] dark:bg-[#f3f6ff] dark:text-[var(--primary)] dark:hover:text-white dark:before:bg-[var(--primary)]",
+          "border-[color:rgb(var(--primary-rgb)/0.4)] bg-[var(--primary)] text-white shadow-[0_10px_22px_rgb(var(--primary-rgb)/0.24)] hover:brightness-95 hover:text-white before:bg-[color:rgb(var(--primary-rgb)/0.9)] dark:border-[color:rgb(var(--primary-rgb)/0.48)] dark:bg-[var(--primary)] dark:text-white dark:hover:brightness-95 dark:before:bg-[color:rgb(var(--primary-rgb)/0.92)]",
         outline:
           "border-[color:rgb(var(--primary-rgb)/0.25)] bg-[#f7f9ff] text-[var(--primary)] hover:bg-[color:rgb(var(--primary-rgb)/0.08)] before:bg-[color:rgb(var(--primary-rgb)/0.15)] dark:border-[color:rgb(var(--primary-rgb)/0.35)] dark:bg-[#1d2454] dark:text-[#eef2ff] dark:hover:bg-[#2a336d]",
         secondary:

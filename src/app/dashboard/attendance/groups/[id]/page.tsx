@@ -1,4 +1,3 @@
-import AdminDashboardView from "@/components/dashboard/admin-dashboard-view"
 import { AccessGroupDetailView } from "@/components/dashboard/access-group-detail-view"
 
 interface GroupDetailPageProps {
@@ -10,9 +9,5 @@ interface GroupDetailPageProps {
 export default async function GroupDetailPage({ params }: GroupDetailPageProps) {
   const { id } = await params
 
-  return (
-    <AdminDashboardView>
-      <AccessGroupDetailView groupId={id} />
-    </AdminDashboardView>
-  )
+  return <AccessGroupDetailView groupId={id} />
 }

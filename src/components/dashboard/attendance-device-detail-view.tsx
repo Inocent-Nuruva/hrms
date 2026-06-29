@@ -42,6 +42,8 @@ import {
   deleteEmployeeDeviceFingerprint,
   disableEmployeeDeviceFingerprint,
   enableEmployeeDeviceFingerprint,
+  getAccessControlAttendanceDeviceSyncStatus,
+  getAttendanceDeviceSyncStatus,
   getAttendanceResourceById,
   listAccessControlResources,
   listAttendanceDeviceAssignmentMatches,
@@ -59,6 +61,7 @@ import {
   syncHikvisionDeviceUsers,
   syncEmployeeDeviceFingerprint,
   syncAttendanceDevice,
+  testAttendanceDeviceConnection,
   updateEmployeeDeviceUser,
   updateEmployeeDevicePassword,
   type AdminRecord,
@@ -255,6 +258,10 @@ function readStoredToken() {
   } catch {
     return ""
   }
+}
+
+function asRecord(value: unknown): AdminRecord | null {
+  return typeof value === "object" && value !== null ? (value as AdminRecord) : null
 }
 
 function readNumberFromRecord(row: AdminRecord, keys: string[]) {
@@ -731,6 +738,9 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
   const [deviceSyncStatus, setDeviceSyncStatus] = React.useState<DeviceSyncStatus>(
     buildInitialDeviceSyncStatus()
   )
+  const [testingConnection, setTestingConnection] = React.useState(false)
+  const [attendanceSyncSnapshot, setAttendanceSyncSnapshot] = React.useState<AdminRecord | null>(null)
+  const [accessSyncSnapshot, setAccessSyncSnapshot] = React.useState<AdminRecord | null>(null)
 
   const fetchDeviceData = React.useCallback(async () => {
     const token = readStoredToken()
@@ -748,7 +758,13 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
       const deviceRecord = await getAttendanceResourceById(token, "devices", deviceId)
       setDevice(deviceRecord)
 
-      const [assignedEmployeesResult, employeesResult, accessGroupsResult] = await Promise.allSettled([
+      const [
+        assignedEmployeesResult,
+        employeesResult,
+        accessGroupsResult,
+        attendanceSyncResult,
+        accessSyncResult,
+      ] = await Promise.allSettled([
         listAttendanceDeviceEmployees(token, deviceId, {
           page: 1,
           limit: 100,
@@ -767,6 +783,8 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
           sortBy: "created_at",
           sortOrder: "DESC",
         }),
+        getAttendanceDeviceSyncStatus(token, deviceId),
+        getAccessControlAttendanceDeviceSyncStatus(token, deviceId),
       ])
 
       if (assignedEmployeesResult.status === "fulfilled") {
@@ -817,6 +835,11 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
       } else {
         setAccessGroups([])
       }
+
+      setAttendanceSyncSnapshot(
+        attendanceSyncResult.status === "fulfilled" ? asRecord(attendanceSyncResult.value) : null
+      )
+      setAccessSyncSnapshot(accessSyncResult.status === "fulfilled" ? asRecord(accessSyncResult.value) : null)
     } catch (errorObject) {
       setError(errorObject instanceof Error ? errorObject.message : "Failed to load device details.")
     } finally {
@@ -1182,6 +1205,26 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
       setError(errorObject instanceof Error ? errorObject.message : "Sync failed.")
     } finally {
       setSyncingId("")
+    }
+  }
+
+  const onTestConnection = async () => {
+    const token = readStoredToken()
+    if (!token) {
+      setError("Authentication required. Please log in again.")
+      return
+    }
+
+    setTestingConnection(true)
+    try {
+      await testAttendanceDeviceConnection(token, deviceId)
+      setMessage("Device connection test completed.")
+      setError(null)
+      await fetchDeviceData()
+    } catch (errorObject) {
+      setError(errorObject instanceof Error ? errorObject.message : "Connection test failed.")
+    } finally {
+      setTestingConnection(false)
     }
   }
 
@@ -1844,6 +1887,16 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
     ["Assigned Employees", String(assignedEmployees.length)],
     ["Last Synced", stringifyValue(device?.last_synced_at)],
   ]
+  const attendanceSyncRows = [
+    ["Attendance Sync Status", stringifyValue(attendanceSyncSnapshot?.status ?? attendanceSyncSnapshot?.sync_status)],
+    ["Attendance Heartbeat", stringifyValue(attendanceSyncSnapshot?.last_heartbeat_at ?? attendanceSyncSnapshot?.heartbeat_at)],
+    ["Attendance Last Error", stringifyValue(attendanceSyncSnapshot?.last_error ?? attendanceSyncSnapshot?.error_message)],
+  ]
+  const accessSyncRows = [
+    ["Access Sync Status", stringifyValue(accessSyncSnapshot?.status ?? accessSyncSnapshot?.sync_status)],
+    ["Access Last Sync", stringifyValue(accessSyncSnapshot?.last_synced_at ?? accessSyncSnapshot?.updated_at)],
+    ["Access Last Error", stringifyValue(accessSyncSnapshot?.last_error ?? accessSyncSnapshot?.error_message)],
+  ]
 
   return (
     <div className="space-y-4">
@@ -1864,16 +1917,26 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
               Device details, sync controls, and assigned employees.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => void fetchDeviceData()}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-slate-300 text-slate-700 hover:bg-slate-50"
-            disabled={loading}
-            aria-label="Refresh"
-            title="Refresh"
-          >
-            <RefreshCwIcon className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void onTestConnection()}
+              className="inline-flex items-center rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              disabled={testingConnection}
+            >
+              {testingConnection ? "Testing..." : "Test Connection"}
+            </button>
+            <button
+              type="button"
+              onClick={() => void fetchDeviceData()}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-slate-300 text-primary hover:bg-slate-50"
+              disabled={loading}
+              aria-label="Refresh"
+              title="Refresh"
+            >
+              <RefreshCwIcon className={`h-4 w-4 text-primary ${loading ? "animate-spin" : ""}`} />
+            </button>
+          </div>
         </div>
         {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
         {message ? <p className="mt-3 text-sm text-green-700">{message}</p> : null}
@@ -1902,13 +1965,40 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
         </div>
 
         {activeTab === "details" ? (
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            {deviceSummaryRows.map(([label, value]) => (
-              <div key={label} className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-                <p className="text-xs font-medium uppercase text-slate-500">{label}</p>
-                <p className="mt-1 text-sm text-slate-900">{value || "-"}</p>
+          <div className="grid gap-4">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              {deviceSummaryRows.map(([label, value]) => (
+                <div key={label} className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+                  <p className="text-xs font-medium uppercase text-slate-500">{label}</p>
+                  <p className="mt-1 text-sm text-slate-900">{value || "-"}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-4">
+                <p className="text-xs font-medium uppercase text-slate-500">Attendance Device Health</p>
+                <div className="mt-3 space-y-2">
+                  {attendanceSyncRows.map(([label, value]) => (
+                    <div key={label} className="flex items-start justify-between gap-3 text-sm">
+                      <span className="text-slate-500">{label}</span>
+                      <span className="text-right text-slate-900">{value || "-"}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
-            ))}
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-4">
+                <p className="text-xs font-medium uppercase text-slate-500">Access Control Health</p>
+                <div className="mt-3 space-y-2">
+                  {accessSyncRows.map(([label, value]) => (
+                    <div key={label} className="flex items-start justify-between gap-3 text-sm">
+                      <span className="text-slate-500">{label}</span>
+                      <span className="text-right text-slate-900">{value || "-"}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
         ) : null}
 

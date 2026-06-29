@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation"
+import { AccessControlManagementClient } from "@/components/dashboard/access-control-management-client"
 
 export default function AccessControlIndexPage() {
-  redirect("/dashboard/roles")
+  return <AccessControlManagementClient section="doors" moduleTitle="Access Control" />
 }

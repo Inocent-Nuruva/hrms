@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation"
+import { LeaveManagementView } from "@/components/dashboard/leave-management-view"
 
 export default function LeaveManagementIndexPage() {
-  redirect("/dashboard/leave-management/types")
+  return <LeaveManagementView activeTab="types" showTabButtons={false} />
 }

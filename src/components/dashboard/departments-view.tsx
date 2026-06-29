@@ -1,6 +1,8 @@
 "use client"
 
 import * as React from "react"
+import { Pencil, Plus, RefreshCw, Trash2 } from "lucide-react"
+import { SearchToggleField } from "@/components/common/search-toggle-field"
 import { TableScrollContainer } from "@/components/common/table-scroll-container"
 
 import {
@@ -277,20 +279,41 @@ export function DepartmentsView() {
   }
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white/80 px-4 py-5 shadow-sm lg:px-6">
-      <div className="mb-4 flex flex-wrap items-end gap-3">
-        <div className="min-w-[220px] flex-1">
-          <label className="mb-1 block text-sm font-medium text-slate-700">Search</label>
-          <input
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-            placeholder="Search department"
-            value={query.search}
-            onChange={(event) => {
-              setPage(1)
-              setQuery((previous) => ({ ...previous, search: event.target.value }))
-            }}
-          />
+    <div className="admin-data-surface">
+      <div className="mb-5 flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-[2rem] font-semibold leading-none tracking-[-0.03em] text-slate-900">
+            Department Management
+          </h2>
+          <p className="mt-2 text-sm text-slate-500">Departments</p>
         </div>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-slate-900 text-white transition hover:bg-slate-800 disabled:opacity-60"
+            onClick={() => {
+              setEditingId(null)
+              setForm(emptyForm())
+              setOpenCreate(true)
+            }}
+            aria-label="Add department"
+            title="Add department"
+          >
+            <Plus className="size-5" />
+          </button>
+          <button
+            type="button"
+            className="inline-flex h-12 w-12 items-center justify-center rounded-xl border border-slate-300 bg-white text-primary transition hover:bg-slate-50 disabled:opacity-60"
+            onClick={() => void fetchDepartments()}
+            disabled={loading}
+            aria-label="Refresh"
+            title="Refresh"
+          >
+            <RefreshCw className={`size-5 text-primary ${loading ? "animate-spin" : ""}`} />
+          </button>
+        </div>
+      </div>
+      <div className="mb-4 flex flex-wrap items-end gap-3">
         <div>
           <label className="mb-1 block text-sm font-medium text-slate-700">Status</label>
           <select
@@ -306,24 +329,22 @@ export function DepartmentsView() {
             <option value="inactive">inactive</option>
           </select>
         </div>
-        <button
-          type="button"
-          className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white"
-          onClick={() => {
-            setEditingId(null)
-            setForm(emptyForm())
-            setOpenCreate(true)
+        <SearchToggleField
+          className="min-w-[220px]"
+          placeholder="Search department"
+          value={query.search}
+          onChange={(value) => {
+            setPage(1)
+            setQuery((previous) => ({ ...previous, search: value }))
           }}
-        >
-          Add Department
-        </button>
+        />
       </div>
 
       {error ? <p className="mb-3 text-sm text-rose-600">{error}</p> : null}
 
       <TableScrollContainer>
-        <table className="w-full min-w-[720px] text-sm">
-          <thead className="bg-slate-50/90">
+        <table className="admin-table-compact min-w-[720px]">
+          <thead>
             <tr>
               <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Name</th>
               <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Code</th>
@@ -333,7 +354,7 @@ export function DepartmentsView() {
               <th className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Actions</th>
             </tr>
           </thead>
-          <tbody className="[&_tr:nth-child(odd)]:bg-slate-50/35 [&_tr]:border-t [&_tr]:border-slate-100 [&_tr:hover]:bg-slate-50/80">
+          <tbody>
             {rows.map((row, index) => {
               const id = readNumber(row, ["id"])
               return (
@@ -343,26 +364,31 @@ export function DepartmentsView() {
                   <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{branchName(readNumber(row, ["branch_id"]))}</td>
                   <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{departmentName(readNumber(row, ["parent_id"]))}</td>
                   <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["status"])}</td>
-                  <td className="px-4 py-4 text-right">
-                    <div className="inline-flex gap-2">
+                  <td className="text-right">
+                    <div className="table-actions">
                       <button
                         type="button"
-                        className="rounded-md border border-slate-300 px-2 py-1 text-xs"
+                        className="admin-table-icon-button"
                         onClick={() => {
                           fillFormFromRow(row)
                           setEditingId(id)
                           setOpenCreate(true)
                         }}
+                        aria-label="Edit department"
+                        title="Edit department"
                       >
-                        Edit
+                        <Pencil className="size-4" />
                       </button>
                       <button
                         type="button"
-                        className="rounded-md border border-rose-300 px-2 py-1 text-xs text-rose-700"
+                        className="admin-table-icon-button"
+                        data-variant="danger"
                         disabled={saving}
                         onClick={() => setPendingDelete(row)}
+                        aria-label="Delete department"
+                        title="Delete department"
                       >
-                        Delete
+                        <Trash2 className="size-4" />
                       </button>
                     </div>
                   </td>
@@ -371,7 +397,7 @@ export function DepartmentsView() {
             })}
             {!loading && rows.length === 0 ? (
               <tr>
-                <td className="px-4 py-10 text-center text-sm text-slate-500" colSpan={6}>
+                <td className="py-10 text-center text-sm text-slate-500" colSpan={6}>
                   No departments found.
                 </td>
               </tr>

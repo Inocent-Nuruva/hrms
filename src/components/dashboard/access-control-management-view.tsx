@@ -307,11 +307,65 @@ function prettifyLabel(value: string): string {
     .replace(/\b\w/g, (char) => char.toUpperCase())
 }
 
+function isIsoDateString(value: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) || /^\d{4}-\d{2}-\d{2}T/.test(value)
+}
+
+function isTimeValue(value: string) {
+  return /^\d{2}:\d{2}(:\d{2})?$/.test(value)
+}
+
+function formatDisplayDate(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return new Intl.DateTimeFormat("en-GB", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      timeZone: "UTC",
+    }).format(date)
+  }
+
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date)
+}
+
+function formatDisplayTime(value: string) {
+  const [hours, minutes] = value.split(":")
+  const hourNumber = Number(hours)
+  const minuteNumber = Number(minutes)
+  if (!Number.isInteger(hourNumber) || !Number.isInteger(minuteNumber)) {
+    return value
+  }
+
+  const date = new Date()
+  date.setHours(hourNumber, minuteNumber, 0, 0)
+  return new Intl.DateTimeFormat("en-GB", {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date)
+}
+
 function stringifyValue(value: unknown): string {
   if (value === null || value === undefined) return "-"
   if (typeof value === "string") {
     const trimmed = value.trim()
     if (!trimmed) return "-"
+    if (isIsoDateString(trimmed)) {
+      return formatDisplayDate(trimmed)
+    }
+    if (isTimeValue(trimmed)) {
+      return formatDisplayTime(trimmed)
+    }
     if (
       !trimmed.includes(" ") &&
       !trimmed.includes("/") &&
@@ -932,7 +986,7 @@ export function AccessControlManagementView({
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            className="inline-flex h-10 w-10 items-center justify-center rounded-md bg-slate-900 text-white"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-md bg-[var(--primary)] text-white transition hover:brightness-95"
             onClick={() => setCreateOpen(true)}
             aria-label={`Create ${title}`}
             title="Create"
@@ -942,12 +996,12 @@ export function AccessControlManagementView({
           <button
             type="button"
             onClick={() => void fetchRows()}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-slate-300 text-slate-700 hover:bg-slate-50"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-slate-300 text-primary hover:bg-slate-50"
             disabled={loading}
             aria-label="Refresh"
             title="Refresh"
           >
-            <RefreshCwIcon className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+            <RefreshCwIcon className={`h-4 w-4 text-primary ${loading ? "animate-spin" : ""}`} />
           </button>
         </div>
       </div>
@@ -1079,7 +1133,7 @@ export function AccessControlManagementView({
             <button
               type="button"
               onClick={() => void onCreate()}
-              className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white"
+              className="rounded-md bg-[var(--primary)] px-3 py-1.5 text-sm text-white transition hover:brightness-95"
             >
               Create
             </button>

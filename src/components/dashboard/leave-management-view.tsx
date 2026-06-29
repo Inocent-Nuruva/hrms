@@ -2,7 +2,8 @@
 
 import * as React from "react"
 import { TableScrollContainer } from "@/components/common/table-scroll-container"
-import { Check, Copy, Pencil, Plus, Trash2 } from "lucide-react"
+import { Check, Copy, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react"
+import { SearchToggleField } from "@/components/common/search-toggle-field"
 
 import {
   adjustLeaveBalance,
@@ -1312,10 +1313,11 @@ export function LeaveManagementView({
         }) : null}
         <button
           type="button"
-          className={`${showTabButtons ? "ml-auto" : ""} rounded-md border border-slate-300 px-3 py-2 text-sm`}
+          className={`${showTabButtons ? "ml-auto" : ""} inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-300 text-sm`}
           onClick={() => void reloadAll()}
+          disabled={loading}
         >
-          {loading ? "Refreshing..." : "Refresh"}
+          <RefreshCw className={`h-4 w-4 text-primary ${loading ? "animate-spin" : ""}`} />
         </button>
       </div>
 
@@ -1336,11 +1338,11 @@ export function LeaveManagementView({
 
           <TableScrollContainer>
             <div className="grid gap-3 border-b border-slate-200 p-3 md:grid-cols-2">
-              <input
-                className="h-10 rounded-md border border-slate-300 px-3 text-sm"
+              <SearchToggleField
+                className="w-full"
                 placeholder="Search requests"
                 value={requestSearch}
-                onChange={(event) => setRequestSearch(event.target.value)}
+                onChange={setRequestSearch}
               />
               <select
                 className="h-10 rounded-md border border-slate-300 px-3 text-sm"

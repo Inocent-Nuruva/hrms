@@ -714,12 +714,12 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
           <button
             type="button"
             onClick={() => void fetchGroupData()}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-slate-300 text-slate-700 hover:bg-slate-50"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-slate-300 text-primary hover:bg-slate-50"
             disabled={loading}
             aria-label="Refresh"
             title="Refresh"
           >
-            <RefreshCwIcon className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+            <RefreshCwIcon className={`h-4 w-4 text-primary ${loading ? "animate-spin" : ""}`} />
           </button>
         </div>
         {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}

@@ -17,29 +17,12 @@ interface SiteHeaderProps {
 export function SiteHeader({
   onRefresh,
   loading,
-  adminName,
-  companyName,
 }: SiteHeaderProps) {
   return (
-    <header className="flex h-(--header-height) shrink-0 items-center gap-1.5 border-b transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height)">
+    <header className="sticky top-0 z-50 flex h-(--header-height) shrink-0 items-center gap-1.5 border-b bg-background transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height)">
       <div className="flex w-full items-center gap-1.5 px-3 lg:px-4">
         <SidebarTrigger className="-ml-1" />
         <Separator orientation="vertical" className="mx-1 h-3.5 data-vertical:self-auto" />
-        <div className="hidden items-center gap-1.5 text-[11px] text-muted-foreground lg:flex">
-          <span>
-            Admin:{" "}
-            <span className="font-medium text-foreground">
-              {adminName ?? "Unknown"}
-            </span>
-          </span>
-          <span>•</span>
-          <span>
-            Company:{" "}
-            <span className="font-medium text-foreground">
-              {companyName ?? "Unknown"}
-            </span>
-          </span>
-        </div>
 
         <div className="ml-auto flex items-center gap-1.5">
           <ThemeTogglerButton
@@ -50,8 +33,7 @@ export function SiteHeader({
           />
           <AccentColorPicker />
           <Button variant="outline" size="sm" onClick={onRefresh} disabled={loading}>
-            <RefreshCwIcon className={loading ? "animate-spin" : ""} />
-            Refresh
+            <RefreshCwIcon className={`text-primary ${loading ? "animate-spin" : ""}`} />
           </Button>
         </div>
       </div>
