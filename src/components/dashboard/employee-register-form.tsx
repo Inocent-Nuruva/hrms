@@ -1091,6 +1091,8 @@ export function EmployeeRegisterForm() {
     EMPTY_INITIALIZED_FIELDS
   )
   const [isRegisteringOthers, setIsRegisteringOthers] = React.useState(false)
+  const [registrationContextResolved, setRegistrationContextResolved] = React.useState(false)
+  const [selfRegistrationStatus, setSelfRegistrationStatus] = React.useState("")
 
   const selectedRoleLabel = React.useMemo(
     () => roles.find((role) => role.id === form.roleId)?.label ?? "",
@@ -1794,12 +1796,15 @@ export function EmployeeRegisterForm() {
     if (!accessToken) {
       setInitializedFields(EMPTY_INITIALIZED_FIELDS)
       setIsInviteMode(false)
+      setSelfRegistrationStatus("")
+      setRegistrationContextResolved(true)
       return
     }
 
     let isActive = true
 
     const hydrateInitializedFields = async () => {
+      setRegistrationContextResolved(false)
       const storedUser = readStoredAuthUser()
       const [currentAdminResult, currentEmployeeResult] = await Promise.allSettled([
         getCurrentAdmin(accessToken),
@@ -1819,6 +1824,10 @@ export function EmployeeRegisterForm() {
         currentAdmin,
         storedUser,
       ]
+      const employeeStatus =
+        readString(currentEmployee, ["employment_status", "status", "employmentStatus"]) ||
+        readString(storedUser, ["employment_status", "status", "employmentStatus"])
+      setSelfRegistrationStatus(employeeStatus.toLowerCase())
       const registeringOthers = canManageOtherEmployees(initializationSources, accessToken)
       setIsRegisteringOthers(registeringOthers)
 
@@ -1835,6 +1844,7 @@ export function EmployeeRegisterForm() {
           position: "",
           roleId: previous.roleId || resolveDefaultRoleId(roles),
         }))
+        setRegistrationContextResolved(true)
         return
       }
 
@@ -1859,6 +1869,7 @@ export function EmployeeRegisterForm() {
         position: nextInitializedFields.position || previous.position,
         roleId: nextRoleId || previous.roleId,
       }))
+      setRegistrationContextResolved(true)
     }
 
     void hydrateInitializedFields()
@@ -2278,6 +2289,38 @@ export function EmployeeRegisterForm() {
       window.localStorage.removeItem(REGISTER_DRAFT_STORAGE_KEY)
     }
     toast.message("Form reset.")
+  }
+
+  if (!registrationContextResolved) {
+    return (
+      <div className="px-4 lg:px-6">
+        <Card className="animate-card-entrance">
+          <CardHeader>
+            <CardTitle>Loading registration</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-slate-500">Checking your registration access...</p>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  if (!isRegisteringOthers && selfRegistrationStatus !== "onboarding") {
+    return (
+      <div className="px-4 lg:px-6">
+        <Card className="animate-card-entrance">
+          <CardHeader>
+            <CardTitle>Self registration unavailable</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-slate-500">
+              This page is available only while your employee status is onboarding.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   return (

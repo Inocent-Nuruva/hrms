@@ -5,7 +5,6 @@ import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 import { XIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
 
 type PopupFrom = "top" | "bottom" | "left" | "right" | "center"
 
@@ -76,7 +75,9 @@ function DialogPopup({
         {showCloseButton ? (
           <DialogPrimitive.Close
             data-slot="dialog-close"
-            render={<Button variant="ghost" className="absolute top-3 right-3" size="icon-sm" />}
+            render={
+              <span className="absolute top-3 right-3 inline-flex size-7 items-center justify-center rounded-[min(var(--radius-md),12px)] bg-transparent text-[var(--primary)] transition hover:bg-[color:rgb(var(--primary-rgb)/0.08)] focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:text-[#eef2ff] dark:hover:bg-[#2a336d]" />
+            }
           >
             <XIcon />
             <span className="sr-only">Close</span>

@@ -1144,6 +1144,8 @@ function TableBlock({
 export function AttendanceActivityView({ section }: { section: string }) {
   const activeSection = React.useMemo(() => resolveSection(section), [section])
   const config = React.useMemo(() => SECTION_CONFIG[activeSection], [activeSection])
+  const lastFetchKeyRef = React.useRef<string | null>(null)
+  const lastFetchAtRef = React.useRef(0)
 
   const [rows, setRows] = React.useState<AdminRecord[]>([])
   const [dailySummaryRows, setDailySummaryRows] = React.useState<AdminRecord[]>([])
@@ -1165,6 +1167,17 @@ export function AttendanceActivityView({ section }: { section: string }) {
       status: "",
     }
   })
+  const [appliedDailySummaryFilters, setAppliedDailySummaryFilters] = React.useState<Record<string, string>>(() => {
+    const today = getTodayDateInputValue()
+    return {
+      from_date: today,
+      to_date: today,
+      employee_id: "",
+      organization_id: "",
+      status: "",
+    }
+  })
+  const [hasAppliedDailySummaryFilters, setHasAppliedDailySummaryFilters] = React.useState(false)
   const [historyFilters, setHistoryFilters] = React.useState<Record<string, string>>(() => ({
     from_date: "",
     to_date: "",
@@ -1196,13 +1209,67 @@ export function AttendanceActivityView({ section }: { section: string }) {
     batch_size: "500",
   })
 
-  const fetchSectionData = React.useCallback(async () => {
+  React.useEffect(() => {
+    if (activeSection !== "daily-summaries") {
+      return
+    }
+
+    const token = readStoredToken()
+    if (!token) {
+      return
+    }
+
+    let isActive = true
+
+    const loadDailySummarySupportData = async () => {
+      try {
+        const [branchesResult, employeesResult] = await Promise.all([
+          listBranches(token, { page: 1, limit: 200, sortBy: "created_at", sortOrder: "DESC" }),
+          listEmployees(token, { page: 1, limit: 200, sortBy: "created_at", sortOrder: "DESC" }),
+        ])
+
+        if (!isActive) {
+          return
+        }
+
+        setBranches(branchesResult.rows)
+        setEmployees(employeesResult.rows)
+      } catch {
+        if (!isActive) {
+          return
+        }
+      }
+    }
+
+    void loadDailySummarySupportData()
+
+    return () => {
+      isActive = false
+    }
+  }, [activeSection])
+
+  const fetchSectionData = React.useCallback(async (force = false) => {
     const token = readStoredToken()
     if (!token) {
       setRows([])
       setSingleRecord(null)
       setError("Authentication required. Please log in again.")
       return
+    }
+
+    const requestKey = JSON.stringify({
+      activeSection,
+      historyFilters,
+      dailySummaryFilters: appliedDailySummaryFilters,
+    })
+
+    if (!force) {
+      const now = Date.now()
+      if (lastFetchKeyRef.current === requestKey && now - lastFetchAtRef.current < 1500) {
+        return
+      }
+      lastFetchKeyRef.current = requestKey
+      lastFetchAtRef.current = now
     }
 
     setLoading(true)
@@ -1249,26 +1316,27 @@ export function AttendanceActivityView({ section }: { section: string }) {
       }
 
       if (activeSection === "daily-summaries") {
-        const [result, branchesResult, employeesResult] = await Promise.all([
-          listAttendanceDailySummaries(token, {
-            page: 1,
-            limit: 100,
-            sortBy: "created_at",
-            sortOrder: "DESC",
-            from_date: dailySummaryFilters.from_date || undefined,
-            to_date: dailySummaryFilters.to_date || undefined,
-            employee_id: dailySummaryFilters.employee_id ? Number(dailySummaryFilters.employee_id) : undefined,
-            organization_id: dailySummaryFilters.organization_id ? Number(dailySummaryFilters.organization_id) : undefined,
-            status: dailySummaryFilters.status || undefined,
-          }),
-          listBranches(token, { page: 1, limit: 200, sortBy: "created_at", sortOrder: "DESC" }),
-          listEmployees(token, { page: 1, limit: 200, sortBy: "created_at", sortOrder: "DESC" }),
-        ])
-        const enrichedRows = enrichRowsWithReadableNames(result.rows, branchesResult.rows, employeesResult.rows)
-        setBranches(branchesResult.rows)
-        setEmployees(employeesResult.rows)
+        if (!hasAppliedDailySummaryFilters) {
+          setDailySummaryRows([])
+          setRows([])
+          setSingleRecord(null)
+          return
+        }
+
+        const result = await listAttendanceDailySummaries(token, {
+          page: 1,
+          limit: 100,
+          sortBy: "created_at",
+          sortOrder: "DESC",
+          from_date: appliedDailySummaryFilters.from_date || undefined,
+          to_date: appliedDailySummaryFilters.to_date || undefined,
+          employee_id: appliedDailySummaryFilters.employee_id ? Number(appliedDailySummaryFilters.employee_id) : undefined,
+          organization_id: appliedDailySummaryFilters.organization_id ? Number(appliedDailySummaryFilters.organization_id) : undefined,
+          status: appliedDailySummaryFilters.status || undefined,
+        })
+        const enrichedRows = enrichRowsWithReadableNames(result.rows, branches, employees)
         setDailySummaryRows(enrichedRows)
-        setRows(applyDailySummaryFilters(enrichedRows, dailySummaryFilters, ""))
+        setRows(applyDailySummaryFilters(enrichedRows, appliedDailySummaryFilters, ""))
         setSingleRecord(null)
         return
       }
@@ -1300,7 +1368,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
     } finally {
       setLoading(false)
     }
-  }, [activeSection, config.title, dailySummaryFilters, historyFilters])
+  }, [activeSection, appliedDailySummaryFilters, branches, config.title, employees, hasAppliedDailySummaryFilters, historyFilters])
 
   React.useEffect(() => {
     void fetchSectionData()
@@ -1310,8 +1378,8 @@ export function AttendanceActivityView({ section }: { section: string }) {
     if (activeSection !== "daily-summaries") {
       return
     }
-    setRows(applyDailySummaryFilters(dailySummaryRows, dailySummaryFilters, employeeSearch))
-  }, [activeSection, dailySummaryFilters, dailySummaryRows, employeeSearch])
+    setRows(applyDailySummaryFilters(dailySummaryRows, appliedDailySummaryFilters, employeeSearch))
+  }, [activeSection, appliedDailySummaryFilters, dailySummaryRows, employeeSearch])
 
   const runPendingJobs = async () => {
     const token = readStoredToken()
@@ -1324,7 +1392,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
       await runPendingAttendanceProcessingJobs(token)
       setMessage("Pending recalculation jobs started successfully.")
       setError(null)
-      await fetchSectionData()
+      await fetchSectionData(true)
     } catch (errorObject) {
       setError(formatLoadError(errorObject, "Could not run pending jobs."))
     }
@@ -1340,7 +1408,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
       await rebuildAttendanceDailySummaries(token, buildRecalculatePayload(recalculateValues))
       setMessage("Attendance summary rebuild started successfully.")
       setError(null)
-      await fetchSectionData()
+      await fetchSectionData(true)
     } catch (errorObject) {
       setError(formatLoadError(errorObject, "Could not start the attendance summary rebuild."))
     }
@@ -1356,7 +1424,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
       await processAttendanceRange(token, buildRangePayload(rangeValues))
       setMessage("Attendance range processing started successfully.")
       setError(null)
-      await fetchSectionData()
+      await fetchSectionData(true)
     } catch (errorObject) {
       setError(formatLoadError(errorObject, "Could not process this attendance range."))
     }
@@ -1424,7 +1492,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
               type="button"
               onClick={() => {
                 setMessage(null)
-                void fetchSectionData()
+                void fetchSectionData(true)
               }}
             >
               <RefreshCwIcon className="size-3.5 text-primary" />
@@ -1537,30 +1605,56 @@ export function AttendanceActivityView({ section }: { section: string }) {
                       ))}
                     </select>
                   </label>
-                  <button
-                    className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 md:self-end"
-                    type="button"
-                    onClick={() => {
-                      const today = getTodayDateInputValue()
-                      setEmployeeSearch("")
-                      setDailySummaryFilters({
-                        from_date: today,
-                        to_date: today,
-                        employee_id: "",
-                        organization_id: "",
-                        status: "",
-                      })
-                      setMessage(null)
-                    }}
-                  >
-                    Reset To Today
-                  </button>
+                  <div className="flex flex-wrap gap-3 md:self-end">
+                    <button
+                      className="inline-flex h-11 items-center justify-center rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                      type="button"
+                      disabled={loading}
+                      onClick={() => {
+                        setHasAppliedDailySummaryFilters(true)
+                        setAppliedDailySummaryFilters({ ...dailySummaryFilters })
+                        setMessage(null)
+                        setError(null)
+                      }}
+                    >
+                      Apply Filters
+                    </button>
+                    <button
+                      className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                      type="button"
+                      onClick={() => {
+                        const today = getTodayDateInputValue()
+                        const resetFilters = {
+                          from_date: today,
+                          to_date: today,
+                          employee_id: "",
+                          organization_id: "",
+                          status: "",
+                        }
+                        setEmployeeSearch("")
+                        setDailySummaryFilters(resetFilters)
+                        setAppliedDailySummaryFilters(resetFilters)
+                        setHasAppliedDailySummaryFilters(false)
+                        setDailySummaryRows([])
+                        setRows([])
+                        setError(null)
+                        setMessage(null)
+                      }}
+                    >
+                      Reset To Today
+                    </button>
+                  </div>
                 </div>
               </div>
               <div className="flex flex-col gap-3 border-t border-slate-200 pt-3">
                 <p className="text-xs text-slate-500">
-                  Filter results update automatically as you change values.
+                  Update the fields you need, then click Apply Filters to refresh results.
                 </p>
+                {!hasAppliedDailySummaryFilters ? (
+                  <p className="text-xs text-slate-500">
+                    Daily summaries are loaded only after you apply filters.
+                  </p>
+                ) : null}
               </div>
             </div>
           </div>

@@ -71,34 +71,6 @@ function decodeJwtPayload(token: string) {
   }
 }
 
-function getEmployeeStatus(): string {
-  if (typeof window === "undefined") return ""
-  const rawUser = window.localStorage.getItem(AUTH_STORAGE_KEYS.user)
-  if (rawUser) {
-    try {
-      const user = JSON.parse(rawUser) as Record<string, unknown>
-      const status = readString(user, ["employment_status", "status", "employmentStatus", "employment_status"])
-      if (status) return status.toLowerCase()
-    } catch {}
-  }
-  const tokensRaw = window.localStorage.getItem(AUTH_STORAGE_KEYS.tokens)
-  if (tokensRaw) {
-    try {
-      const parsed = JSON.parse(tokensRaw) as Record<string, unknown>
-      const accessToken = (typeof parsed.accessToken === "string" && parsed.accessToken.trim()) ||
-        (typeof parsed.access_token === "string" && parsed.access_token.trim()) || ""
-      if (accessToken) {
-        const payload = decodeJwtPayload(accessToken)
-        if (payload) {
-          const status = readString(payload, ["employment_status", "status", "employmentStatus"])
-          if (status) return status.toLowerCase()
-        }
-      }
-    } catch {}
-  }
-  return ""
-}
-
 export default function EmployeesLayout({
   children,
 }: {
@@ -107,7 +79,6 @@ export default function EmployeesLayout({
   const [groups, setGroups] = React.useState(employeeSectionTabGroups)
 
   React.useEffect(() => {
-    const status = getEmployeeStatus()
     const rawUser = typeof window !== "undefined" ? window.localStorage.getItem(AUTH_STORAGE_KEYS.user) : null
     let storedUser: Record<string, unknown> | null = null
     if (rawUser) {
@@ -128,28 +99,15 @@ export default function EmployeesLayout({
 
     let filteredGroups = employeeSectionTabGroups
     if (!isAdmin) {
-      // for normal users, only show registration if status is onboarding
-      if (status === "onboarding") {
-        filteredGroups = [
-          {
-            items: [
-              { title: "Register", url: "/dashboard/employees/register" },
-            ],
-          },
-        ]
-      } else {
-        filteredGroups = [
-          {
-            items: [
-              { title: "All Employees", url: "/dashboard/employees/all" },
-              { title: "Onboarding", url: "/dashboard/employees/onboarding" },
-              { title: "Offboarding", url: "/dashboard/employees/offboarding" },
-            ],
-          },
-        ]
-      }
+      filteredGroups = [
+        {
+          items: [
+            { title: "Register", url: "/dashboard/employees/register" },
+            { title: "Offboarding", url: "/dashboard/employees/offboarding" },
+          ],
+        },
+      ]
     } else {
-      // admins always see all, including registration
       filteredGroups = employeeSectionTabGroups
     }
     setGroups(filteredGroups)
