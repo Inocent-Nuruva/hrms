@@ -2,7 +2,6 @@
 
 import * as React from "react"
 import { SearchToggleField } from "@/components/common/search-toggle-field"
-import { TableScrollContainer } from "@/components/common/table-scroll-container"
 import { useRouter } from "next/navigation"
 
 import {
@@ -14,6 +13,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { ResizableTable } from "@/components/ui/resizable-table"
 import { listEmployees, type AdminRecord, type EmployeesQueryParams } from "@/lib/admin-api"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 
@@ -74,22 +74,7 @@ function asRecordArray(value: unknown): AdminRecord[] {
   return value.filter((entry) => typeof entry === "object" && entry !== null) as AdminRecord[]
 }
 
-function getPrimaryContact(row: AdminRecord) {
-  const contacts = asRecordArray(row.contacts)
-  if (contacts.length === 0) {
-    return { email: "-", phone: "-" }
-  }
 
-  const primary = contacts.find((contact) => contact.is_primary === true) ?? contacts[0]
-  if (!primary) {
-    return { email: "-", phone: "-" }
-  }
-
-  return {
-    email: readString(primary, ["email"]),
-    phone: readString(primary, ["phone_number", "phone"]),
-  }
-}
 
 function employeeDisplayName(row: AdminRecord) {
   const named = readString(row, ["full_name", "fullName", "name"])
@@ -115,9 +100,21 @@ const REQUIRED_PROFILE_ITEMS: Array<{ key: string; label: string }> = [
   { key: "documents", label: "Documents" },
 ]
 
+function employeeProfileHref(employeeNo: string, missingItemKey?: string) {
+  const params = new URLSearchParams()
+  if (missingItemKey) {
+    params.set("missing", missingItemKey)
+  }
+  const query = params.toString()
+  const basePath = `/dashboard/employees/profile/${encodeURIComponent(employeeNo)}`
+  return query ? `${basePath}?${query}` : basePath
+}
+
 function missingProfileItems(row: AdminRecord) {
   return REQUIRED_PROFILE_ITEMS.filter((item) => asRecordArray(row[item.key]).length === 0)
 }
+
+
 
 export function EmployeesListView() {
   const router = useRouter()
@@ -194,16 +191,84 @@ export function EmployeesListView() {
   const canGoPrevious = page > 1 && !loading
   const canGoNext = !loading && (totalPages === null || page < totalPages)
 
-  const openEmployeeDetails = (row: AdminRecord) => {
+  const openEmployeeDetails = (row: AdminRecord, missingItemKey?: string) => {
     const employeeNo = readString(row, ["employee_no", "user_no", "employeeNo"])
     if (employeeNo === "-") {
       return
     }
-    router.push(`/dashboard/employees/profile/${encodeURIComponent(employeeNo)}`)
+    router.push(employeeProfileHref(employeeNo, missingItemKey))
   }
 
+  const handleEmployeeSelect = (employeeId: string) => {
+    const matched = rows.find((r) => {
+      const id = String(r.id ?? r.employee_id ?? r.employee_no ?? "")
+      return id === employeeId
+    })
+    if (matched) {
+      openEmployeeDetails(matched)
+    }
+  }
+
+  // Explicit columns for better control and to wire department/position from API
+  const employeeColumns = [
+    {
+      key: "employee_no",
+      label: "No",
+      defaultWidth: 80,
+      sortable: true,
+      render: (row: AdminRecord) => readString(row, ["employee_no", "user_no"])
+    },
+    {
+      key: "name",
+      label: "Name",
+      defaultWidth: 120,
+      sortable: true,
+      render: (row: AdminRecord) => employeeDisplayName(row)
+    },
+    {
+      key: "department",
+      label: "Dept",
+      defaultWidth: 90,
+      sortable: true,
+      render: (row: AdminRecord) => row.primary_department?.name || "—"
+    },
+    {
+      key: "position",
+      label: "Position",
+      defaultWidth: 100,
+      sortable: true,
+      render: (row: AdminRecord) => row.primary_position?.name || row.position?.name || "—"
+    },
+    {
+      key: "hireDate",
+      label: "Hired",
+      defaultWidth: 70,
+      sortable: true,
+      render: (row: AdminRecord) => {
+        const raw = readString(row, ["hire_date", "hired_at", "joined_at", "join_date", "created_at"])
+        return raw && /^\d{4}-\d{2}-\d{2}/.test(raw) ? raw : "—"
+      }
+    },
+    {
+      key: "status",
+      label: "Status",
+      defaultWidth: 70,
+      sortable: true,
+      render: (row: AdminRecord) => {
+        const s = (readString(row, ["employment_status", "status"]) || "active").toLowerCase()
+        const display = s.charAt(0).toUpperCase() + s.slice(1).replace("-", " ")
+        const isActive = s === "active" || s === "onboarding"
+        return (
+          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-xs rounded ${isActive ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+            {display}
+          </span>
+        )
+      }
+    },
+  ]
+
   return (
-    <div className="rounded-xl border border-slate-200 bg-white/80 px-4 py-5 shadow-sm lg:px-6">
+    <div>
       <div className="mb-4 flex flex-wrap items-end gap-3">
         <div>
           <label className="mb-1 block text-sm font-medium text-slate-700">Status</label>
@@ -237,97 +302,18 @@ export function EmployeesListView() {
         />
       </div>
 
-      <TableScrollContainer>
-        <table className="w-full min-w-[720px] text-sm">
-          <thead className="bg-slate-50/90">
-            <tr>
-              <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Employee No</th>
-              <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Name</th>
-              <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Email</th>
-              <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Phone</th>
-              <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Status</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white [&_tr:nth-child(odd)]:bg-slate-50/35 [&_tr]:border-t [&_tr]:border-slate-100 [&_tr]:transition-colors [&_tr]:hover:bg-slate-50">
-            {rows.map((row, index) => {
-              const primaryContact = getPrimaryContact(row)
-              const employeeNo = readString(row, ["employee_no", "user_no", "employeeNo"])
-              const missingItems = missingProfileItems(row)
-              return (
-                <tr
-                  key={String(row.id ?? row.user_id ?? row.employee_id ?? index)}
-                  className="cursor-pointer hover:bg-slate-50"
-                  onClick={() => openEmployeeDetails(row)}
-                >
-                  <td className="px-4 py-4">
-                    <button
-                      type="button"
-                      className="font-medium text-slate-800 hover:text-slate-950"
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        openEmployeeDetails(row)
-                      }}
-                    >
-                      {employeeNo}
-                    </button>
-                    <button
-                      type="button"
-                      className="mt-1 block text-left text-xs font-semibold text-red-200 hover:text-red-300"
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        setMissingDialog({
-                          employeeNo,
-                          missing: missingItems,
-                        })
-                      }}
-                    >
-                      {missingItems.length} out of {REQUIRED_PROFILE_ITEMS.length} incomplete
-                    </button>
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap">{employeeDisplayName(row)}</td>
-                  <td className="px-4 py-4 whitespace-nowrap">{primaryContact.email}</td>
-                  <td className="px-4 py-4 whitespace-nowrap">{primaryContact.phone}</td>
-                  <td className="px-4 py-4 whitespace-nowrap">{readString(row, ["employment_status", "status"])}</td>
-                </tr>
-              )
-            })}
-            {!loading && rows.length === 0 ? (
-              <tr>
-                <td className="px-4 py-10 text-center text-slate-500" colSpan={5}>
-                  No employees found.
-                </td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
-      </TableScrollContainer>
+      {error ? <p className="mb-3 text-sm text-rose-600">{error}</p> : null}
 
-      <div className="mt-4 flex items-center justify-between gap-3">
-        <p className="text-sm text-slate-600">
-          {loading ? "Loading employees..." : `Page ${page}${totalPages ? ` of ${totalPages}` : ""}`}
-          {typeof total === "number" ? ` • Total ${total}` : ""}
-        </p>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-50"
-            disabled={!canGoPrevious}
-            onClick={() => setPage((value) => Math.max(1, value - 1))}
-          >
-            Previous
-          </button>
-          <button
-            type="button"
-            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-50"
-            disabled={!canGoNext}
-            onClick={() => setPage((value) => value + 1)}
-          >
-            Next
-          </button>
-        </div>
-      </div>
-
-      {error ? <p className="mt-3 text-sm text-rose-600">{error}</p> : null}
+      <ResizableTable
+        title="Employees"
+        data={rows}
+        columns={employeeColumns as any}
+        onRowSelect={(id, row) => {
+          if (row) openEmployeeDetails(row as AdminRecord)
+        }}
+        loading={loading}
+        storageKey="employees"
+      />
 
       <AlertDialog
         open={Boolean(missingDialog)}
@@ -355,7 +341,7 @@ export function EmployeesListView() {
                     type="button"
                     className="text-xs font-medium text-indigo-600 hover:text-indigo-700"
                     onClick={() => {
-                      router.push(`/dashboard/employees/profile/${encodeURIComponent(missingDialog.employeeNo)}`)
+                      router.push(employeeProfileHref(missingDialog.employeeNo, item.key))
                     }}
                   >
                     Open profile

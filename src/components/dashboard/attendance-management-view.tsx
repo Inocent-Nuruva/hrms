@@ -27,7 +27,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { TableScrollContainer } from "@/components/common/table-scroll-container"
+import { ResizableTable } from "@/components/ui/resizable-table"
 
 import {
   createAttendanceResource,
@@ -2261,7 +2261,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
   }
 
   return (
-    <div className="mx-auto w-full max-w-6xl rounded-xl border border-slate-200 bg-white/80 px-5 py-4 shadow-sm dark:border-slate-800 dark:bg-[#101826]/92 lg:px-6">
+    <div className="mx-auto w-full max-w-6xl">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100 md:text-lg">Attendance Management</h2>
@@ -2608,142 +2608,28 @@ export function AttendanceManagementView({ section }: { section: string }) {
         </div>
       ) : null}
 
-      <TableScrollContainer>
-        <table className="min-w-full min-w-[720px] text-sm">
-          <thead className="bg-[var(--table-header-accent-bg)] text-[var(--table-header-accent)] backdrop-blur-sm">
-            <tr>
-              {columns.map((column) => (
-                <th
-                  key={column}
-                  className="px-3 py-3 text-left text-[0.7rem] font-semibold uppercase tracking-[0.08em] whitespace-nowrap"
-                >
-                  {column.replaceAll("_", " ")}
-                </th>
-              ))}
-              {showDeviceContextColumn ? (
-                <th className="px-3 py-3 text-left text-[0.7rem] font-semibold uppercase tracking-[0.08em] whitespace-nowrap">
-                  Related device
-                </th>
-              ) : null}
-              {supportsEditDelete ? (
-                <th className="w-24 px-3 py-3 text-right text-[0.7rem] font-semibold uppercase tracking-[0.08em] whitespace-nowrap">
-                  Actions
-                </th>
-              ) : null}
-            </tr>
-          </thead>
-          <tbody className="bg-white dark:bg-slate-950 [&_tr:nth-child(odd)]:bg-slate-50/35 dark:[&_tr:nth-child(odd)]:bg-slate-900/60 [&_tr]:border-t [&_tr]:border-slate-100 dark:[&_tr]:border-slate-800 [&_tr:hover]:bg-slate-50/80 dark:[&_tr:hover]:bg-slate-900/90">
-            {!loading && !error && filteredRows.length === 0 ? (
-              <tr>
-                <td
-                  className="px-4 py-10 text-sm text-slate-500"
-                  colSpan={Math.max(columns.length + (supportsEditDelete ? 1 : 0) + (showDeviceContextColumn ? 1 : 0), 1)}
-                >
-                  No records found for this section.
-                </td>
-              </tr>
-            ) : null}
-            {filteredRows.map((row, index) => (
-              <tr
-                key={String(row.id ?? index)}
-                className={`cursor-pointer ${
-                  activeSection === "devices" && focusedDeviceFingerprint
-                    ? (() => {
-                        const identity = buildAttendanceDeviceIdentity(row, resolveBranchName)
-                        const isFocusedMatch =
-                          (!focusedDeviceFingerprint.code || identity.code === focusedDeviceFingerprint.code) &&
-                          (!focusedDeviceFingerprint.serial || identity.serial === focusedDeviceFingerprint.serial) &&
-                          (!focusedDeviceFingerprint.model || identity.model === focusedDeviceFingerprint.model) &&
-                          (!focusedDeviceFingerprint.vendor || identity.vendor === focusedDeviceFingerprint.vendor) &&
-                          (!focusedDeviceFingerprint.integrationType ||
-                            identity.integrationType === focusedDeviceFingerprint.integrationType) &&
-                          (!focusedDeviceFingerprint.ipAddress || identity.ipAddress === focusedDeviceFingerprint.ipAddress) &&
-                          (!focusedDeviceFingerprint.branchId || identity.branchId === focusedDeviceFingerprint.branchId)
-                        return isFocusedMatch ? "bg-emerald-50/70 dark:bg-emerald-950/30" : ""
-                      })()
-                    : ""
-                }`}
-                onClick={() => handleRowClick(row)}
-              >
-                {columns.map((column) => (
-                  <td
-                    key={`${String(row.id ?? index)}-${column}`}
-                    className="px-3 py-3 text-[0.95rem] text-slate-700 whitespace-nowrap dark:text-slate-200"
-                  >
-                    {resolveAttendanceCellValue(column, row, lookupMaps)}
-                  </td>
-                ))}
-                {showDeviceContextColumn ? (
-                  <td className="px-3 py-3">
-                    {(() => {
-                      const deviceLink = getAttendanceDeviceLink(row)
-                      if (!deviceLink) {
-                        return <span className="text-slate-400">No linked device</span>
-                      }
-
-                      return (
-                        <Link
-                          href={deviceLink.href}
-                          className="inline-flex flex-col text-slate-900 underline decoration-slate-300 underline-offset-4 hover:text-slate-700 dark:text-slate-100 dark:decoration-slate-600 dark:hover:text-slate-200"
-                          onClick={(event) => event.stopPropagation()}
-                        >
-                          <span className="font-medium">{deviceLink.label}</span>
-                          <span className="text-xs text-slate-500 no-underline dark:text-slate-400">{deviceLink.detail}</span>
-                        </Link>
-                      )
-                    })()}
-                  </td>
-                ) : null}
-                {supportsEditDelete ? (
-                  <td className="px-3 py-3">
-                    <div className="flex justify-end gap-2">
-                      {activeSection === "policies" ? (
-                      <button
-                        type="button"
-                        className="inline-flex h-8 items-center justify-center rounded-md border border-slate-300 px-2 text-xs font-medium text-slate-700 hover:border-[color:rgb(var(--primary-rgb)/0.35)] hover:bg-[color:rgb(var(--primary-rgb)/0.10)] hover:text-[var(--primary)] disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:border-[color:rgb(var(--primary-rgb)/0.45)] dark:hover:bg-[color:rgb(var(--primary-rgb)/0.18)]"
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          void onActivatePolicy(row)
-                        }}
-                        aria-label="Activate policy"
-                        title="Activate policy"
-                          disabled={activatingId === String(row.id ?? "")}
-                        >
-                          Activate
-                        </button>
-                      ) : null}
-                      <button
-                        type="button"
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 text-slate-700 hover:border-[color:rgb(var(--primary-rgb)/0.35)] hover:bg-[color:rgb(var(--primary-rgb)/0.10)] hover:text-[var(--primary)] dark:border-slate-700 dark:text-slate-200 dark:hover:border-[color:rgb(var(--primary-rgb)/0.45)] dark:hover:bg-[color:rgb(var(--primary-rgb)/0.18)]"
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          openEditDialog(row)
-                        }}
-                        aria-label="Edit record"
-                        title="Edit"
-                      >
-                        <PencilIcon className="h-4 w-4" />
-                      </button>
-                      <button
-                        type="button"
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-red-300 text-red-700 hover:bg-red-50"
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          openDeleteDialog(row)
-                        }}
-                        aria-label="Delete record"
-                        title="Delete"
-                      >
-                        <Trash2Icon className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </td>
-                ) : null}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </TableScrollContainer>
+      <ResizableTable
+        title={activeSection.replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()) || "Attendance"}
+        data={filteredRows}
+        columns={[
+          ...columns.map((column: string) => ({
+            key: column,
+            label: column.replaceAll("_", " "),
+            defaultWidth: 75,
+            sortable: true,
+          })),
+          ...(showDeviceContextColumn ? [{ key: "related_device", label: "Device", defaultWidth: 75 }] : []),
+          ...(supportsEditDelete ? [{ key: "actions", label: "Actions", defaultWidth: 55, sortable: false, render: (row: any) => (
+            <div className="flex justify-end gap-1" onClick={e=>e.stopPropagation()}>
+              <button className="admin-table-icon-button" onClick={() => openEditDialog(row)}>Edit</button>
+              <button className="admin-table-icon-button" data-variant="danger" onClick={() => openDeleteDialog(row)}>Del</button>
+            </div>
+          ) }] : []),
+        ]}
+        itemsPerPage={20}
+        loading={loading}
+        storageKey={`attendance-${activeSection}`}
+      />
 
     </div>
   )

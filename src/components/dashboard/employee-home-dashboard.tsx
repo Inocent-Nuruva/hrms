@@ -10,21 +10,48 @@ import {
   MailIcon,
   MapPinIcon,
   UserIcon,
+  Users,
+  MapPin,
+  User,
+  CreditCard,
+  Landmark,
+  Building2,
+  GraduationCap,
+  Briefcase,
+  Award,
+  FileText,
+  CheckCircle,
+  UserCheck,
 } from "lucide-react"
 import { LumaSpin } from "@/components/ui/luma-spin"
 
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import {
   Card,
   CardContent,
 } from "@/components/ui/card"
 import {
+  Dialog,
+  DialogPopup,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/animate-ui/components/base/dialog"
+import {
   getMyDashboard,
   getMyAttendanceToday,
   listMyLeaveBalances,
+  createEmployeeSectionItem,
+  createEmployeeDocument,
+  getCurrentEmployee,
+  patchEmployeeStatus,
   type AdminRecord,
+  type EmployeeProfileSection,
 } from "@/lib/admin-api"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import { asRecord, readString } from "@/utils/token-utils"
@@ -195,6 +222,141 @@ type LeaveBalanceSummary = {
   typeName: string
   available: number | string
   used?: number | string
+}
+
+const REQUIRED_ONBOARDING_ITEMS: Array<{ key: string; label: string; description: string; icon: React.ReactNode }> = [
+  { key: "contacts", label: "Contacts", description: "Add phone, email and primary contact info", icon: <Users className="h-5 w-5" /> },
+  { key: "addresses", label: "Addresses", description: "Your home and work addresses", icon: <MapPin className="h-5 w-5" /> },
+  { key: "relatives", label: "Relatives", description: "Emergency contacts and family members", icon: <User className="h-5 w-5" /> },
+  { key: "identifications", label: "Identifications", description: "ID, passport and official documents", icon: <CreditCard className="h-5 w-5" /> },
+  { key: "bank_accounts", label: "Bank Accounts", description: "Salary and payment account details", icon: <Landmark className="h-5 w-5" /> },
+  { key: "departments", label: "Departments", description: "Your assigned department information", icon: <Building2 className="h-5 w-5" /> },
+  { key: "academic_qualifications", label: "Academic Qualifications", description: "Degrees, diplomas and education records", icon: <GraduationCap className="h-5 w-5" /> },
+  { key: "professional_qualifications", label: "Professional Qualifications", description: "Certifications and professional licenses", icon: <Award className="h-5 w-5" /> },
+  { key: "experience_details", label: "Experience Details", description: "Previous jobs and work history", icon: <Briefcase className="h-5 w-5" /> },
+  { key: "documents", label: "Documents", description: "Supporting files and attachments", icon: <FileText className="h-5 w-5" /> },
+]
+
+const SECTION_KEY_TO_API: Record<string, EmployeeProfileSection | "documents" | null> = {
+  contacts: "contacts",
+  addresses: "addresses",
+  relatives: "relatives",
+  identifications: "identifications",
+  bank_accounts: "bank-accounts",
+  departments: null,
+  academic_qualifications: "academic-qualifications",
+  professional_qualifications: "professional-qualifications",
+  experience_details: "experience-details",
+  documents: "documents",
+}
+
+interface OnboardingFormField {
+  name: string
+  label: string
+  placeholder?: string
+  type?: "text" | "email" | "tel" | "date" | "select"
+  required?: boolean
+  options?: string[]
+  defaultValue?: string
+}
+
+const ONBOARDING_FORM_SCHEMAS: Record<string, OnboardingFormField[]> = {
+  contacts: [
+    { name: "phone_number", label: "Phone Number", placeholder: "+1 (555) 123-4567", type: "tel", required: true },
+    { name: "email", label: "Email Address", placeholder: "you@example.com", type: "email" },
+    { name: "contact_type", label: "Contact Type", type: "select", options: ["personal", "work", "other"], defaultValue: "personal" },
+  ],
+  addresses: [
+    { name: "address_line_1", label: "Address Line 1", placeholder: "123 Main St", required: true },
+    { name: "address_line_2", label: "Address Line 2 (optional)", placeholder: "Apt, Suite, etc." },
+    { name: "city", label: "City", placeholder: "City", required: true },
+    { name: "state", label: "State / Region", placeholder: "State" },
+    { name: "country", label: "Country", placeholder: "Country", required: true },
+    { name: "postal_code", label: "Postal / ZIP Code", placeholder: "12345" },
+  ],
+  relatives: [
+    { name: "full_name", label: "Full Name", placeholder: "Jane Doe", required: true },
+    { name: "relationship", label: "Relationship", placeholder: "Spouse, Parent, etc.", required: true, options: ["Spouse", "Parent", "Child", "Sibling", "Guardian", "Other"] },
+    { name: "phone", label: "Phone Number", placeholder: "+1 (555) 987-6543", type: "tel", required: true },
+    { name: "email", label: "Email (optional)", placeholder: "relative@example.com", type: "email" },
+    { name: "is_emergency_contact", label: "Emergency Contact?", type: "select", options: ["true", "false"], defaultValue: "true" },
+  ],
+  identifications: [
+    { name: "identification_type", label: "ID Type", type: "select", options: ["national_id", "passport", "drivers_license", "other"], defaultValue: "national_id", required: true },
+    { name: "identification_number", label: "ID Number", placeholder: "ID-123456789", required: true },
+    { name: "issued_country", label: "Issued Country", placeholder: "United States" },
+    { name: "expiry_date", label: "Expiry Date (optional)", type: "date" },
+  ],
+  bank_accounts: [
+    { name: "bank_name", label: "Bank Name", placeholder: "First National Bank", required: true },
+    { name: "account_name", label: "Account Holder Name", placeholder: "Your Full Name", required: true },
+    { name: "account_number", label: "Account Number", placeholder: "1234567890", required: true },
+    { name: "branch_name", label: "Branch Name (optional)", placeholder: "Main Branch" },
+    { name: "is_primary", label: "Primary Salary Account?", type: "select", options: ["true", "false"], defaultValue: "true" },
+  ],
+  academic_qualifications: [
+    { name: "institution_name", label: "Institution / School", placeholder: "University of Example", required: true },
+    { name: "degree_or_certificate", label: "Degree / Certificate", placeholder: "Bachelor of Science", required: true },
+    { name: "field_of_study", label: "Field of Study", placeholder: "Computer Science" },
+    { name: "education_level", label: "Level", type: "select", options: ["Certificate", "Diploma", "Bachelor's Degree", "Master's Degree", "Other"], defaultValue: "Bachelor's Degree" },
+    { name: "start_date", label: "Start Date", type: "date" },
+    { name: "end_date", label: "End Date / Graduation", type: "date" },
+  ],
+  professional_qualifications: [
+    { name: "programme_name", label: "Program / Certification Name", placeholder: "AWS Solutions Architect", required: true },
+    { name: "issuing_organization", label: "Issuing Organization", placeholder: "Amazon Web Services", required: true },
+    { name: "issue_date", label: "Issue Date", type: "date" },
+    { name: "expiry_date", label: "Expiry Date (if any)", type: "date" },
+  ],
+  experience_details: [
+    { name: "company_name", label: "Company Name", placeholder: "Acme Corp", required: true },
+    { name: "job_title", label: "Job Title / Role", placeholder: "Software Engineer", required: true },
+    { name: "responsibilities_description", label: "Key Responsibilities", placeholder: "Built and maintained..." },
+    { name: "start_date", label: "Start Date", type: "date", required: true },
+    { name: "end_date", label: "End Date (leave blank if current)", type: "date" },
+  ],
+  documents: [
+    { name: "title", label: "Document Title", placeholder: "Passport Copy", required: true },
+    { name: "type", label: "Type", type: "select", options: ["certificate", "cv", "offer_letter", "contract", "id", "other"], defaultValue: "other" },
+    { name: "notes", label: "Notes (optional)", placeholder: "Scanned copy" },
+  ],
+  departments: [], // special cased - not user editable via section
+}
+
+function getApiSectionForKey(key: string): EmployeeProfileSection | "documents" | null {
+  return SECTION_KEY_TO_API[key] ?? null
+}
+
+function getFormSchema(key: string): OnboardingFormField[] {
+  return ONBOARDING_FORM_SCHEMAS[key] || []
+}
+
+function getInitialFormValues(key: string): Record<string, string> {
+  const schema = getFormSchema(key)
+  const init: Record<string, string> = {}
+  schema.forEach((f) => {
+    init[f.name] = f.defaultValue ?? ""
+  })
+  return init
+}
+
+function buildPayload(key: string, values: Record<string, string>): AdminRecord {
+  const schema = getFormSchema(key)
+  const payload: AdminRecord = {}
+  schema.forEach((f) => {
+    let v = (values[f.name] ?? "").trim()
+    if (f.type === "select" && (f.options?.includes("true") || f.options?.includes("false"))) {
+      payload[f.name] = v === "true"
+    } else if (v) {
+      payload[f.name] = v
+    }
+  })
+  // sensible defaults
+  if (key === "contacts" && !payload.contact_type) payload.contact_type = "personal"
+  if (key === "addresses" && !payload.address_type) payload.address_type = "home"
+  if (key === "identifications" && !payload.identification_type) payload.identification_type = "national_id"
+  if (key === "bank_accounts" && payload.is_primary === undefined) payload.is_primary = true
+  return payload
 }
 
 function isEmployeeDashboardData(value: unknown): value is EmployeeDashboardData {
@@ -425,6 +587,8 @@ export function EmployeeDashboardView({
       </Card>
     )
   }
+
+
 
   const fullName = `${dashboardData.user.first_name} ${dashboardData.user.last_name}`.trim()
   const preferredName = dashboardData.employee.preferred_name?.trim() || dashboardData.user.first_name
@@ -777,6 +941,13 @@ export function EmployeeHomeDashboard() {
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [isAdmin, setIsAdmin] = React.useState(true)
+  const [showOnboardingDialog, setShowOnboardingDialog] = React.useState(false)
+  const [completedOnboardingItems, setCompletedOnboardingItems] = React.useState<string[]>([])
+  const [accessToken, setAccessToken] = React.useState<string>("")
+  const [fillingItemKey, setFillingItemKey] = React.useState<string | null>(null)
+  const [formValues, setFormValues] = React.useState<Record<string, string>>({})
+  const [formError, setFormError] = React.useState<string | null>(null)
+  const [isSaving, setIsSaving] = React.useState(false)
 
   React.useEffect(() => {
     const adminIdentity = isAdminIdentity()
@@ -785,6 +956,14 @@ export function EmployeeHomeDashboard() {
     if (adminIdentity || typeof window === "undefined") {
       setLoading(false)
       return
+    }
+
+    // Show onboarding pending dialog on entry for onboarding users
+    if (dashboardData?.employee?.employment_status === "onboarding") {
+      const dismissedKey = `onboarding_dialog_dismissed_${dashboardData.user?.id || "current"}`
+      if (!sessionStorage.getItem(dismissedKey)) {
+        setShowOnboardingDialog(true)
+      }
     }
 
     const rawTokens = window.localStorage.getItem(AUTH_STORAGE_KEYS.tokens)
@@ -811,6 +990,8 @@ export function EmployeeHomeDashboard() {
       return
     }
 
+    setAccessToken(accessToken)
+
     let cancelled = false
     setLoading(true)
     setError(null)
@@ -832,6 +1013,11 @@ export function EmployeeHomeDashboard() {
 
         if (!validDash) {
           setError("Your dashboard payload is incomplete right now. Please refresh and try again.")
+        } else if (validDash.employee.employment_status === "onboarding") {
+          const dismissedKey = `onboarding_dialog_dismissed_${validDash.user?.id || "current"}`
+          if (!sessionStorage.getItem(dismissedKey)) {
+            setShowOnboardingDialog(true)
+          }
         }
       } catch (err: unknown) {
         if (!cancelled) {
@@ -878,12 +1064,325 @@ export function EmployeeHomeDashboard() {
     return null
   }
 
+  const pendingItems = REQUIRED_ONBOARDING_ITEMS.filter((item) => {
+    const emp = dashboardData.employee as any
+    const arr = emp?.[item.key]
+    const hasData = Array.isArray(arr) && arr.length > 0
+    return !hasData && !completedOnboardingItems.includes(item.key)
+  })
+
+  const currentFillingItem = fillingItemKey
+    ? REQUIRED_ONBOARDING_ITEMS.find((i) => i.key === fillingItemKey) || null
+    : null
+  const currentFormSchema = fillingItemKey ? getFormSchema(fillingItemKey) : []
+
+  const handleCloseOnboardingDialog = () => {
+    const dismissedKey = `onboarding_dialog_dismissed_${dashboardData.user?.id || "current"}`
+    sessionStorage.setItem(dismissedKey, "true")
+    setShowOnboardingDialog(false)
+    // reset any in-progress form state
+    setFillingItemKey(null)
+    setFormValues({})
+    setFormError(null)
+  }
+
+  const startFilling = (key: string) => {
+    const schema = getFormSchema(key)
+    const init = getInitialFormValues(key)
+
+    // Prefill known good values from loaded profile for nicer UX
+    if (dashboardData) {
+      const u = dashboardData.user
+      const e = dashboardData.employee as any
+      if (key === "contacts") {
+        if (!init.email && u?.email) init.email = u.email
+        if (!init.phone_number && u?.phone) init.phone_number = u.phone || ""
+      }
+      if ((key === "contacts" || key === "relatives") && u) {
+        // nothing extra
+      }
+      if (key === "academic_qualifications" || key === "experience_details") {
+        // nothing pre-known
+      }
+    }
+
+    setFillingItemKey(key)
+    setFormValues(init)
+    setFormError(null)
+  }
+
+  const cancelFilling = () => {
+    setFillingItemKey(null)
+    setFormValues({})
+    setFormError(null)
+  }
+
+  const updateFormValue = (name: string, value: string) => {
+    setFormValues((prev) => ({ ...prev, [name]: value }))
+  }
+
+  const handleSaveFilling = async () => {
+    if (!fillingItemKey || !dashboardData || !accessToken) return
+
+    const empId = (dashboardData.employee as any)?.id
+    if (empId == null) {
+      setFormError("Unable to identify your employee profile. Please refresh and try again.")
+      return
+    }
+
+    const apiSection = getApiSectionForKey(fillingItemKey)
+    const payload = buildPayload(fillingItemKey, formValues)
+
+    // For departments or empty schema we just optimistically complete
+    const isNoApi = !apiSection || getFormSchema(fillingItemKey).length === 0
+
+    setIsSaving(true)
+    setFormError(null)
+
+    try {
+      if (!isNoApi) {
+        if (apiSection === "documents") {
+          await createEmployeeDocument(accessToken, empId, payload)
+        } else {
+          await createEmployeeSectionItem(accessToken, empId, apiSection as EmployeeProfileSection, payload)
+        }
+      }
+
+      // Mark locally complete + optimistically inject data presence for UI
+      setCompletedOnboardingItems((prev) => (prev.includes(fillingItemKey) ? prev : [...prev, fillingItemKey]))
+
+      setDashboardData((prev) => {
+        if (!prev) return prev
+        const emp = prev.employee as any
+        return {
+          ...prev,
+          employee: {
+            ...emp,
+            [fillingItemKey]: emp?.[fillingItemKey]?.length ? emp[fillingItemKey] : [{ ...payload, _onboard: true }],
+          },
+        }
+      })
+
+      const remainingAfter = pendingItems.filter((p) => p.key !== fillingItemKey).length
+
+      // Clear form UI
+      setFillingItemKey(null)
+      setFormValues({})
+      setFormError(null)
+
+      // Background refresh to pull authoritative arrays from server (non-blocking)
+      if (remainingAfter > 0) {
+        getMyDashboard(accessToken).then((fresh) => {
+          if (isEmployeeDashboardData(fresh)) {
+            setDashboardData(fresh)
+          }
+        }).catch(() => {})
+      }
+
+      // If this was the last pending, optionally activate + close
+      if (remainingAfter <= 0) {
+        try {
+          await patchEmployeeStatus(accessToken, empId, { employment_status: "active" as any })
+        } catch {
+          // non-fatal; backend may auto-handle or admin may do later
+        }
+        handleCloseOnboardingDialog()
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to save this section. Please check the details and try again."
+      setFormError(msg)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
   return (
-    <EmployeeDashboardView
-      dashboardData={dashboardData}
-      attendanceToday={attendanceToday}
-      leaveBalances={leaveBalances}
-    />
+    <>
+      <EmployeeDashboardView
+        dashboardData={dashboardData}
+        attendanceToday={attendanceToday}
+        leaveBalances={leaveBalances}
+      />
+
+      <Dialog open={showOnboardingDialog} onOpenChange={(open) => { if (!open) handleCloseOnboardingDialog() }}>
+        <DialogPopup
+          from="center"
+          showCloseButton={false}
+          className="max-w-[96vw] sm:max-w-4xl lg:max-w-5xl w-full p-0 overflow-hidden rounded-2xl border-0 shadow-2xl bg-transparent max-h-[88vh] flex flex-col"
+        >
+          <div className="bg-gradient-to-br from-blue-50 via-white to-indigo-50 dark:from-slate-900 dark:via-slate-950 dark:to-slate-900 rounded-2xl flex flex-col h-full">
+            <DialogHeader className="p-3 sm:p-4 pb-1.5 shrink-0">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-2.5">
+                <div className="rounded-xl bg-blue-600/90 p-1.5 sm:p-2 text-white shrink-0 backdrop-blur-sm border border-blue-400/30">
+                  <UserCheck className="h-5 w-5 sm:h-6 sm:w-6" />
+                </div>
+                <div className="min-w-0">
+                  <DialogTitle className="text-lg sm:text-xl font-semibold tracking-tight text-slate-900 dark:text-white">
+                    Complete Your Onboarding
+                  </DialogTitle>
+                  <DialogDescription className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">
+                    Provide the required details below.
+                  </DialogDescription>
+                </div>
+              </div>
+
+              <div className="mt-2">
+                <div className="flex items-center justify-between text-[10px] mb-1">
+                  <span className="font-medium text-slate-700 dark:text-slate-300">Progress</span>
+                  <span className="text-muted-foreground">{REQUIRED_ONBOARDING_ITEMS.length - pendingItems.length} / {REQUIRED_ONBOARDING_ITEMS.length}</span>
+                </div>
+                <div className="h-1 w-full rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
+                  <div 
+                    className="h-1 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 transition-all" 
+                    style={{ width: `${((REQUIRED_ONBOARDING_ITEMS.length - pendingItems.length) / REQUIRED_ONBOARDING_ITEMS.length) * 100}%` }} 
+                  />
+                </div>
+              </div>
+            </DialogHeader>
+
+            <div className="flex-1 overflow-y-auto min-h-0 px-3 sm:px-4 py-1.5 sm:py-2">
+              {pendingItems.length === 0 && !fillingItemKey ? (
+                <div className="text-center py-4">
+                  <CheckCircle className="h-8 w-8 mx-auto text-emerald-600 mb-2" />
+                  <p className="text-sm font-medium">All done! Your profile is complete.</p>
+                  <p className="text-[10px] text-slate-600 dark:text-slate-400 mt-0.5">Account will be fully activated shortly.</p>
+                </div>
+              ) : fillingItemKey && currentFillingItem ? (
+                // Beautiful inline fill form
+                <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 p-2 sm:p-3 backdrop-blur">
+                  <div className="mb-2 flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={cancelFilling}
+                      className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-2 py-0.5 text-[10px] font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                    >
+                      ← Back
+                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <div className="rounded-md bg-blue-100 dark:bg-blue-950 p-1 text-blue-600 dark:text-blue-400">
+                        {currentFillingItem.icon}
+                      </div>
+                      <div>
+                        <div className="font-semibold text-sm tracking-tight text-slate-900 dark:text-white">{currentFillingItem.label}</div>
+                        <div className="text-[10px] text-slate-500 dark:text-slate-400 leading-none">{currentFillingItem.description}</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {formError && (
+                    <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300">
+                      {formError}
+                    </div>
+                  )}
+
+                  {currentFormSchema.length === 0 ? (
+                    <div className="rounded-md bg-slate-50 dark:bg-slate-800/60 p-2 text-[10px] text-slate-600 dark:text-slate-300">
+                      Managed by HR. Click <span className="font-medium">Mark complete</span>.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-2 gap-y-2">
+                      {currentFormSchema.map((field) => {
+                        const val = formValues[field.name] ?? ""
+                        const isBoolSelect = field.type === "select" && field.options?.some((o) => o === "true" || o === "false")
+                        return (
+                          <div key={field.name} className={field.name === "responsibilities_description" || field.name.includes("notes") ? "sm:col-span-2" : ""}>
+                            <Label className="text-[10px] font-semibold uppercase tracking-[0.5px] text-slate-600 dark:text-slate-400">
+                              {field.label}{field.required ? " *" : ""}
+                            </Label>
+                            {field.type === "select" && field.options ? (
+                              <select
+                                value={val || (field.defaultValue ?? "")}
+                                onChange={(e) => updateFormValue(field.name, e.target.value)}
+                                className="mt-0.5 h-8 w-full rounded-md border border-slate-300 bg-white px-2 text-xs shadow-sm focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+                              >
+                                {field.options.map((opt) => (
+                                  <option key={opt} value={opt}>{opt === "true" ? "Yes" : opt === "false" ? "No" : opt}</option>
+                                ))}
+                              </select>
+                            ) : (
+                              <Input
+                                type={field.type === "date" ? "date" : field.type || "text"}
+                                value={val}
+                                placeholder={field.placeholder}
+                                onChange={(e) => updateFormValue(field.name, e.target.value)}
+                                className="mt-0.5 h-8 rounded-md border-slate-300 bg-white text-xs focus-visible:ring-blue-400 dark:border-slate-700 dark:bg-slate-950"
+                                required={!!field.required}
+                              />
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  <div className="mt-3 flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5 sm:gap-2">
+                    <Button
+                      onClick={handleSaveFilling}
+                      disabled={isSaving || (currentFormSchema.length > 0 && currentFormSchema.some(f => f.required && !(formValues[f.name] || "").trim()))}
+                      className="flex-1 bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border border-slate-200/70 dark:border-slate-700 text-slate-900 dark:text-white hover:bg-blue-600 hover:text-white hover:border-blue-600 shadow-sm h-8 rounded-lg transition-all text-xs"
+                    >
+                      {isSaving ? "Saving..." : "Save & mark complete"}
+                    </Button>
+                    <Button variant="outline" onClick={cancelFilling} disabled={isSaving} className="h-8 rounded-lg border-slate-300 dark:border-slate-700 sm:w-auto text-xs">
+                      Cancel
+                    </Button>
+                  </div>
+
+                  <p className="mt-1.5 text-[9px] text-center text-slate-500 dark:text-slate-500">
+                    Securely stored for access &amp; payroll setup.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-1.5 sm:gap-2">
+                  {REQUIRED_ONBOARDING_ITEMS.map((item) => {
+                    const isPending = pendingItems.some(p => p.key === item.key)
+                    if (!isPending) return null
+                    return (
+                      <div 
+                        key={item.key}
+                        className="group border border-slate-200 dark:border-slate-800 rounded-xl p-2 bg-white/80 dark:bg-slate-900/80 backdrop-blur flex flex-col hover:border-blue-300 dark:hover:border-blue-800 transition-all hover:shadow-sm"
+                      >
+                        <div className="flex items-start gap-1.5">
+                          <div className="rounded-md bg-blue-100 dark:bg-blue-950 p-1 text-blue-600 dark:text-blue-400 group-hover:scale-105 transition shrink-0">
+                            {item.icon}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-semibold text-xs text-slate-900 dark:text-white tracking-tight leading-tight">{item.label}</div>
+                            <p className="text-[10px] text-slate-600 dark:text-slate-400 mt-0 leading-tight line-clamp-2">{item.description}</p>
+                          </div>
+                        </div>
+
+                        <div className="mt-auto pt-1">
+                          <Button 
+                            size="sm" 
+                            className="w-full bg-white/70 dark:bg-slate-800/70 backdrop-blur-md border border-slate-200/70 dark:border-slate-700 text-slate-800 dark:text-slate-100 hover:bg-blue-600 hover:text-white hover:border-blue-600 shadow-sm transition-all text-[10px] h-6 px-1.5" 
+                            onClick={() => startFilling(item.key)}
+                          >
+                            Fill out now
+                          </Button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            <DialogFooter className="border-t border-slate-200 dark:border-slate-800 px-3 sm:px-4 py-1 sm:py-1.5 bg-white/60 dark:bg-slate-950/60 flex flex-col-reverse sm:flex-row sm:justify-end gap-1 shrink-0">
+              <Button variant="ghost" onClick={handleCloseOnboardingDialog} className="text-[11px] h-6 px-2">
+                {fillingItemKey ? "Remind later" : "Remind later"}
+              </Button>
+              <Button 
+                onClick={handleCloseOnboardingDialog} 
+                className="text-[11px] h-6 px-3 bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border border-slate-200/70 dark:border-slate-700 text-slate-900 dark:text-white hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-all"
+              >
+                {fillingItemKey ? "Close" : "Continue to dashboard"}
+              </Button>
+            </DialogFooter>
+          </div>
+        </DialogPopup>
+      </Dialog>
+    </>
   )
 }
 

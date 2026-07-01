@@ -3,7 +3,7 @@
 import * as React from "react"
 import { Pencil, Plus, RefreshCw, Trash2 } from "lucide-react"
 import { SearchToggleField } from "@/components/common/search-toggle-field"
-import { TableScrollContainer } from "@/components/common/table-scroll-container"
+import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 
 import {
   createDepartment,
@@ -278,8 +278,53 @@ export function DepartmentsView() {
     }
   }
 
+  const departmentColumns: Column<AdminRecord>[] = [
+    { key: "name", label: "Name", defaultWidth: 120, sortable: true, render: (r) => readString(r, ["name"]) },
+    { key: "code", label: "Code", defaultWidth: 60, sortable: true, render: (r) => readString(r, ["code"]) },
+    { key: "branch", label: "Branch", defaultWidth: 80, render: (r) => branchName(readNumber(r, ["branch_id"])) },
+    { key: "parent", label: "Parent", defaultWidth: 80, render: (r) => departmentName(readNumber(r, ["parent_id"])) },
+    { key: "status", label: "Status", defaultWidth: 60, sortable: true, render: (r) => readString(r, ["status"]) },
+    {
+      key: "actions",
+      label: "Actions",
+      defaultWidth: 60,
+      sortable: false,
+      render: (row) => {
+        const id = readNumber(row, ["id"])
+        return (
+          <div className="flex justify-end gap-1 pr-1" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              className="admin-table-icon-button"
+              onClick={() => {
+                fillFormFromRow(row)
+                setEditingId(id)
+                setOpenCreate(true)
+              }}
+              aria-label="Edit department"
+              title="Edit department"
+            >
+              <Pencil className="size-4" />
+            </button>
+            <button
+              type="button"
+              className="admin-table-icon-button"
+              data-variant="danger"
+              disabled={saving}
+              onClick={() => setPendingDelete(row)}
+              aria-label="Delete department"
+              title="Delete department"
+            >
+              <Trash2 className="size-4" />
+            </button>
+          </div>
+        )
+      },
+    },
+  ]
+
   return (
-    <div className="admin-data-surface">
+    <div>
       <div className="mb-5 flex items-start justify-between gap-3">
         <div>
           <h2 className="text-[2rem] font-semibold leading-none tracking-[-0.03em] text-slate-900">
@@ -342,94 +387,14 @@ export function DepartmentsView() {
 
       {error ? <p className="mb-3 text-sm text-rose-600">{error}</p> : null}
 
-      <TableScrollContainer>
-        <table className="admin-table-compact min-w-[720px]">
-          <thead>
-            <tr>
-              <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Name</th>
-              <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Code</th>
-              <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Branch</th>
-              <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Parent</th>
-              <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Status</th>
-              <th className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, index) => {
-              const id = readNumber(row, ["id"])
-              return (
-                <tr key={String(id ?? index)}>
-                  <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["name"])}</td>
-                  <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["code"])}</td>
-                  <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{branchName(readNumber(row, ["branch_id"]))}</td>
-                  <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{departmentName(readNumber(row, ["parent_id"]))}</td>
-                  <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["status"])}</td>
-                  <td className="text-right">
-                    <div className="table-actions">
-                      <button
-                        type="button"
-                        className="admin-table-icon-button"
-                        onClick={() => {
-                          fillFormFromRow(row)
-                          setEditingId(id)
-                          setOpenCreate(true)
-                        }}
-                        aria-label="Edit department"
-                        title="Edit department"
-                      >
-                        <Pencil className="size-4" />
-                      </button>
-                      <button
-                        type="button"
-                        className="admin-table-icon-button"
-                        data-variant="danger"
-                        disabled={saving}
-                        onClick={() => setPendingDelete(row)}
-                        aria-label="Delete department"
-                        title="Delete department"
-                      >
-                        <Trash2 className="size-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              )
-            })}
-            {!loading && rows.length === 0 ? (
-              <tr>
-                <td className="py-10 text-center text-sm text-slate-500" colSpan={6}>
-                  No departments found.
-                </td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
-      </TableScrollContainer>
-
-      <div className="mt-4 flex items-center justify-between gap-3">
-        <p className="text-sm text-slate-600">
-          {loading ? "Loading departments..." : `Page ${page}${totalPages ? ` of ${totalPages}` : ""}`}
-          {typeof total === "number" ? ` • Total ${total}` : ""}
-        </p>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-50"
-            disabled={!canGoPrevious}
-            onClick={() => setPage((value) => Math.max(1, value - 1))}
-          >
-            Previous
-          </button>
-          <button
-            type="button"
-            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-50"
-            disabled={!canGoNext}
-            onClick={() => setPage((value) => value + 1)}
-          >
-            Next
-          </button>
-        </div>
-      </div>
+      <ResizableTable
+        title="Department"
+        data={rows}
+        columns={departmentColumns}
+        itemsPerPage={20}
+        loading={loading}
+        storageKey="departments"
+      />
 
       {openCreate ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">

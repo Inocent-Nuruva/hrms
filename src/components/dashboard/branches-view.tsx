@@ -3,7 +3,7 @@
 import * as React from "react"
 import { KeyRound, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react"
 import { SearchToggleField } from "@/components/common/search-toggle-field"
-import { TableScrollContainer } from "@/components/common/table-scroll-container"
+import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 import { countries as countryCodes } from "country-flag-icons"
 
 import {
@@ -280,6 +280,14 @@ export function BranchesView() {
   const canGoPrevious = page > 1 && !loading
   const canGoNext = !loading && (totalPages === null || page < totalPages)
 
+  const queueAccessUser = React.useCallback((id: number) => {
+    setAccessUserIds((previous) => (previous.includes(id) ? previous : [...previous, id]))
+    setAccessUserId(null)
+    setAccessUserQuery("")
+    setAccessPickerOpen(true)
+    setAccessError(null)
+  }, [])
+
   function fillFormFromRow(row: AdminRecord) {
     setForm({
       name: readString(row, ["name"]),
@@ -450,8 +458,105 @@ export function BranchesView() {
       .slice(0, 8)
   }, [accessUserQuery, selectableUsers])
 
+  const accessColumns: Column<AdminRecord>[] = [
+    {
+      key: "user",
+      label: "User",
+      defaultWidth: 260,
+      render: (row) => accessUserName(row, companyUsers),
+    },
+    {
+      key: "user_id",
+      label: "User ID",
+      defaultWidth: 90,
+      render: (row) => String(accessRowUserId(row) ?? "-"),
+    },
+    {
+      key: "actions",
+      label: "Actions",
+      defaultWidth: 90,
+      sortable: false,
+      render: (row) => {
+        const userId = accessRowUserId(row)
+        return (
+          <div className="flex justify-end gap-1 pr-1" onClick={(event) => event.stopPropagation()}>
+            <button
+              type="button"
+              className="admin-table-icon-button"
+              data-variant="danger"
+              disabled={saving || userId === null}
+              onClick={() => {
+                if (userId !== null) {
+                  void revokeAccess(userId)
+                }
+              }}
+              aria-label="Revoke branch access"
+              title="Revoke branch access"
+            >
+              <Trash2 className="size-4" />
+            </button>
+          </div>
+        )
+      },
+    },
+  ]
+
+  const branchColumns: Column<AdminRecord>[] = [
+    { key: "name", label: "Name", defaultWidth: 110, sortable: true, render: (r) => readString(r, ["name"]) },
+    { key: "code", label: "Code", defaultWidth: 55, sortable: true, render: (r) => readString(r, ["code"]) },
+    { key: "country", label: "Country", defaultWidth: 65, sortable: true, render: (r) => readString(r, ["country"]) },
+    { key: "city", label: "City", defaultWidth: 65, sortable: true, render: (r) => readString(r, ["city"]) },
+    { key: "status", label: "Status", defaultWidth: 55, sortable: true, render: (r) => readString(r, ["status"]) },
+    {
+      key: "actions",
+      label: "Actions",
+      defaultWidth: 70,
+      sortable: false,
+      render: (row) => {
+        const id = readNumber(row, ["id"])
+        return (
+          <div className="flex justify-end gap-1 pr-1" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              className="admin-table-icon-button"
+              onClick={() => {
+                fillFormFromRow(row)
+                setEditingId(id)
+                setOpenForm(true)
+              }}
+              aria-label="Edit branch"
+              title="Edit branch"
+            >
+              <Pencil className="size-4" />
+            </button>
+            <button
+              type="button"
+              className="admin-table-icon-button"
+              onClick={() => void openBranchAccess(row)}
+              aria-label="Branch access"
+              title="Branch access"
+            >
+              <KeyRound className="size-4" />
+            </button>
+            <button
+              type="button"
+              className="admin-table-icon-button"
+              data-variant="danger"
+              disabled={saving}
+              onClick={() => setPendingDelete(row)}
+              aria-label="Delete branch"
+              title="Delete branch"
+            >
+              <Trash2 className="size-4" />
+            </button>
+          </div>
+        )
+      },
+    },
+  ]
+
   return (
-    <div className="admin-data-surface">
+    <div>
       <div className="mb-5 flex items-start justify-between gap-3">
         <div>
           <h2 className="text-[2rem] font-semibold leading-none tracking-[-0.03em] text-slate-900">
@@ -514,103 +619,14 @@ export function BranchesView() {
 
       {error ? <p className="mb-3 text-sm text-rose-600">{error}</p> : null}
 
-      <TableScrollContainer>
-        <table className="admin-table-compact min-w-[720px]">
-          <thead>
-            <tr>
-              <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Name</th>
-              <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Code</th>
-              <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Country</th>
-              <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">City</th>
-              <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Status</th>
-              <th className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, index) => {
-              const id = readNumber(row, ["id"])
-              return (
-                <tr key={String(id ?? index)}>
-                  <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["name"])}</td>
-                  <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["code"])}</td>
-                  <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["country"])}</td>
-                  <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["city"])}</td>
-                  <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["status"])}</td>
-                  <td className="text-right">
-                    <div className="table-actions">
-                      <button
-                        type="button"
-                        className="admin-table-icon-button"
-                        onClick={() => {
-                          fillFormFromRow(row)
-                          setEditingId(id)
-                          setOpenForm(true)
-                        }}
-                        aria-label="Edit branch"
-                        title="Edit branch"
-                      >
-                        <Pencil className="size-4" />
-                      </button>
-                      <button
-                        type="button"
-                        className="admin-table-icon-button"
-                        onClick={() => void openBranchAccess(row)}
-                        aria-label="Branch access"
-                        title="Branch access"
-                      >
-                        <KeyRound className="size-4" />
-                      </button>
-                      <button
-                        type="button"
-                        className="admin-table-icon-button"
-                        data-variant="danger"
-                        disabled={saving}
-                        onClick={() => setPendingDelete(row)}
-                        aria-label="Delete branch"
-                        title="Delete branch"
-                      >
-                        <Trash2 className="size-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              )
-            })}
-            {!loading && rows.length === 0 ? (
-              <tr>
-                <td className="py-6 text-center text-slate-500" colSpan={6}>
-                  No branches found.
-                </td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
-      </TableScrollContainer>
-
-      <div className="mt-4 flex items-center justify-between gap-3">
-        <p className="text-sm text-slate-600">
-          {loading ? "Loading branches..." : `Page ${page}${totalPages ? ` of ${totalPages}` : ""}`}
-          {typeof total === "number" ? ` • Total ${total}` : ""}
-        </p>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-50"
-            disabled={!canGoPrevious}
-            onClick={() => setPage((value) => Math.max(1, value - 1))}
-          >
-            Previous
-          </button>
-          <button
-            type="button"
-            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-50"
-            disabled={!canGoNext}
-            onClick={() => setPage((value) => value + 1)}
-          >
-            Next
-          </button>
-        </div>
-      </div>
+      <ResizableTable
+        title="Branch"
+        data={rows}
+        columns={branchColumns}
+        itemsPerPage={20}
+        loading={loading}
+        storageKey="branches"
+      />
 
       {openForm ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
@@ -760,12 +776,9 @@ export function BranchesView() {
                             className="block w-full rounded-md px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100"
                             onMouseDown={(event) => {
                               event.preventDefault()
-                              setAccessUserIds((previous) => (previous.includes(id) ? previous : [...previous, id]))
-                              setAccessUserId(null)
-                              setAccessUserQuery("")
-                              setAccessPickerOpen(true)
-                              setAccessError(null)
+                              queueAccessUser(id)
                             }}
+                            onClick={() => queueAccessUser(id)}
                           >
                             {label}
                           </button>
@@ -785,45 +798,13 @@ export function BranchesView() {
             </div>
             {accessError ? <p className="mt-2 text-sm text-rose-600">{accessError}</p> : null}
 
-            <TableScrollContainer className="mt-4">
-              <table className="w-full min-w-[720px] text-sm">
-                <thead className="bg-slate-50/90">
-                  <tr>
-                    <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">User ID</th>
-                    <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Name</th>
-                    <th className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="[&_tr:nth-child(odd)]:bg-slate-50/35 [&_tr]:border-t [&_tr]:border-slate-100 [&_tr:hover]:bg-slate-50/80">
-                  {accessRows.map((row, index) => {
-                    const userId = accessRowUserId(row)
-                    return (
-                      <tr key={String(userId ?? index)}>
-                        <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{userId ?? "-"}</td>
-                        <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{accessUserName(row, companyUsers)}</td>
-                        <td className="px-4 py-4 text-right">
-                          <button
-                            type="button"
-                            className="rounded-md border border-rose-300 px-2 py-1 text-xs text-rose-700"
-                            disabled={userId === null || saving}
-                            onClick={() => userId !== null && void revokeAccess(userId)}
-                          >
-                            Revoke
-                          </button>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                  {accessRows.length === 0 ? (
-                    <tr>
-                      <td className="px-4 py-10 text-center text-sm text-slate-500" colSpan={3}>
-                        No access assignments found.
-                      </td>
-                    </tr>
-                  ) : null}
-                </tbody>
-              </table>
-            </TableScrollContainer>
+            <ResizableTable
+              title="Access"
+              data={accessRows}
+              columns={accessColumns}
+              itemsPerPage={10}
+              storageKey="branch-access"
+            />
 
             <div className="mt-4 flex justify-end gap-2">
               <button

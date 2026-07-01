@@ -25,7 +25,7 @@ import {
   DialogPopup,
   DialogTitle,
 } from "@/components/animate-ui/components/base/dialog"
-import { TableScrollContainer } from "@/components/common/table-scroll-container"
+import { ResizableTable } from "@/components/ui/resizable-table"
 import {
   AlertDialog,
   AlertDialogContent,
@@ -2033,98 +2033,28 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
               />
             </div>
 
-            <TableScrollContainer>
-              <table className="w-full min-w-[720px] text-sm">
-                <thead className="bg-slate-50/90">
-                  <tr>
-                    {["employee_no", "employee_name", "status", "created_at"].map((column) => (
-                      <th
-                        key={column}
-                        className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap"
-                      >
-                        {prettifyLabel(column)}
-                      </th>
-                    ))}
-                    <th className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="[&_tr:nth-child(odd)]:bg-slate-50/35 [&_tr]:border-t [&_tr]:border-slate-100 [&_tr:hover]:bg-slate-50/80">
-                  {!loading && filteredAssignedEmployees.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="px-4 py-10 text-sm text-slate-500">
-                        {employeeSearch.trim()
-                          ? "No assigned employees matched your search."
-                          : "No employees assigned to this device yet."}
-                      </td>
-                    </tr>
-                  ) : null}
-                  {filteredAssignedEmployees.map((employee, index) => {
-                    const employeeId =
-                      readNumberFromRecord(employee, ["resolved_employee_id", "id", "employee_id"]) ??
-                      `employee-${index}`
-                    const employeeRowKey = [
-                      String(employeeId),
-                      readStringFromRecord(employee, [
-                        "resolved_employee_no",
-                        "employee_no",
-                        "employee_number",
-                        "user_no",
-                      ]) ?? "no-number",
-                      readStringFromRecord(employee, ["assigned_at", "created_at", "updated_at"]) ?? `row-${index}`,
-                      String(index),
-                    ].join(":")
-
-                    return (
-                      <tr key={employeeRowKey}>
-                        <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">
-                          {stringifyValue(
-                            employee.resolved_employee_no ??
-                              employee.employee_no ??
-                              employee.employee_number ??
-                              employee.user_no
-                          )}
-                        </td>
-                        <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">
-                          {stringifyValue(employee.employee_name)}
-                        </td>
-                        <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">
-                          {stringifyValue(employee.status)}
-                        </td>
-                        <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">
-                          {stringifyValue(
-                            employee.assigned_at ?? employee.created_at ?? employee.updated_at
-                          )}
-                        </td>
-                        <td className="px-4 py-4">
-                          <div className="flex justify-end gap-2">
-                            <button
-                              type="button"
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-sky-300 text-sky-700 hover:bg-sky-50"
-                              onClick={() => requestManageCredentials(employee)}
-                              aria-label="Manage credentials"
-                              title="Manage credentials"
-                            >
-                              <FingerprintIcon className="h-4 w-4" />
-                            </button>
-                            <button
-                              type="button"
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-red-300 text-red-700 hover:bg-red-50 disabled:opacity-50"
-                              onClick={() => requestRemoveEmployee(employee)}
-                              aria-label="Remove employee"
-                              title="Remove employee"
-                            >
-                              <Trash2Icon className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </TableScrollContainer>
+            <ResizableTable
+              title="Assigned Employees"
+              data={filteredAssignedEmployees}
+              columns={[
+                { key: "employee_no", label: "No", defaultWidth: 70 },
+                { key: "employee_name", label: "Name", defaultWidth: 100 },
+                { key: "status", label: "Status", defaultWidth: 60 },
+                { key: "created_at", label: "Assigned", defaultWidth: 70 },
+                { key: "actions", label: "Act", defaultWidth: 55, sortable: false, render: (emp: any) => (
+                  <div className="flex justify-end gap-2" onClick={e => e.stopPropagation()}>
+                    <button className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-sky-300 text-sky-700 hover:bg-sky-50" onClick={() => requestManageCredentials(emp)}>
+                      <FingerprintIcon className="h-4 w-4" />
+                    </button>
+                    <button className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-red-300 text-red-700 hover:bg-red-50" onClick={() => requestRemoveEmployee(emp)}>
+                      <Trash2Icon className="h-4 w-4" />
+                    </button>
+                  </div>
+                ) },
+              ]}
+              itemsPerPage={10}
+              storageKey="attendance-device-employees"
+            />
           </div>
         ) : null}
 

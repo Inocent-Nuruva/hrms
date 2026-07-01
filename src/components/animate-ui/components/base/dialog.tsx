@@ -76,7 +76,10 @@ function DialogPopup({
           <DialogPrimitive.Close
             data-slot="dialog-close"
             render={
-              <span className="absolute top-3 right-3 inline-flex size-7 items-center justify-center rounded-[min(var(--radius-md),12px)] bg-transparent text-[var(--primary)] transition hover:bg-[color:rgb(var(--primary-rgb)/0.08)] focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:text-[#eef2ff] dark:hover:bg-[#2a336d]" />
+              <button
+                type="button"
+                className="absolute top-3 right-3 inline-flex size-7 items-center justify-center rounded-[min(var(--radius-md),12px)] bg-transparent text-[var(--primary)] transition hover:bg-[color:rgb(var(--primary-rgb)/0.08)] focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:text-[#eef2ff] dark:hover:bg-[#2a336d]"
+              />
             }
           >
             <XIcon />

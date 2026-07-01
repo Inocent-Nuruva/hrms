@@ -27,6 +27,7 @@ import { Bell } from "@/components/animate-ui/icons/bell"
 import { Settings } from "@/components/animate-ui/icons/settings"
 import { Search } from "@/components/animate-ui/icons/search"
 import { MessageCircleQuestion } from "@/components/animate-ui/icons/message-circle-question"
+import { Kanban } from "@/components/animate-ui/icons/kanban"
 import type { AdminResourceKey } from "@/lib/admin-api"
 
 const IUsers = <UsersRound size={48} animation="path-loop" />
@@ -36,6 +37,7 @@ const IPayroll = <ChartBar size={48} animation="path-loop" />
 const IRegistration = <Key size={48} animation="path-loop" />
 const IOffboarding = <CircleX size={48} animation="path-loop" />
 const IAttendance = <ChartColumn size={48} animation="path-loop" />
+const IDepartments = <Kanban size={48} animation="default" />
 const IHolidays = <Bell size={48} animation="path-loop" />
 const ISettings = <Settings size={48} animation="path-loop" />
 const IHelp = <MessageCircleQuestion size={48} animation="path-loop" />
@@ -82,7 +84,7 @@ const adminData: SidebarData = {
     {
       title: "Departments",
       url: "/dashboard/departments",
-      icon: IUsers,
+      icon: IDepartments,
     },
     {
       title: "Employees",

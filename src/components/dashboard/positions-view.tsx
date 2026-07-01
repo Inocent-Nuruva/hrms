@@ -3,7 +3,7 @@
 import * as React from "react"
 import { Pencil, Plus, RefreshCw, Trash2 } from "lucide-react"
 import { SearchToggleField } from "@/components/common/search-toggle-field"
-import { TableScrollContainer } from "@/components/common/table-scroll-container"
+import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 
 import {
   createPosition,
@@ -306,8 +306,56 @@ export function PositionsView() {
     }
   }
 
+  const positionColumns: Column<AdminRecord>[] = [
+    { key: "name", label: "Name", defaultWidth: 100, sortable: true, render: (r) => readString(r, ["name"]) },
+    { key: "code", label: "Code", defaultWidth: 50, sortable: true, render: (r) => readString(r, ["code"]) },
+    { key: "department", label: "Dept", defaultWidth: 75, render: (r) => labelById(departments, readNumber(r, ["department_id"])) },
+    { key: "designation", label: "Desig", defaultWidth: 70, render: (r) => labelById(designations, readNumber(r, ["designation_id"])) },
+    { key: "level", label: "Lvl", defaultWidth: 40, sortable: true, render: (r) => String(readNumber(r, ["level"]) ?? "-") },
+    { key: "headcount", label: "HC", defaultWidth: 45, sortable: true, render: (r) => String(readNumber(r, ["headcount"]) ?? "-") },
+    { key: "manager", label: "Mgr", defaultWidth: 40, render: (r) => (readBoolean(r, ["is_manager"]) ? "Y" : "N") },
+    { key: "status", label: "Status", defaultWidth: 50, sortable: true, render: (r) => readString(r, ["status"]) },
+    {
+      key: "actions",
+      label: "Act",
+      defaultWidth: 55,
+      sortable: false,
+      render: (row) => {
+        const id = readNumber(row, ["id"])
+        return (
+          <div className="flex justify-end gap-1 pr-1" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              className="admin-table-icon-button"
+              onClick={() => {
+                fillFormFromRow(row)
+                setEditingId(id)
+                setOpenForm(true)
+              }}
+              aria-label="Edit position"
+              title="Edit position"
+            >
+              <Pencil className="size-4" />
+            </button>
+            <button
+              type="button"
+              className="admin-table-icon-button"
+              data-variant="danger"
+              disabled={saving}
+              onClick={() => setPendingDelete(row)}
+              aria-label="Delete position"
+              title="Delete position"
+            >
+              <Trash2 className="size-4" />
+            </button>
+          </div>
+        )
+      },
+    },
+  ]
+
   return (
-    <div className="admin-data-surface">
+    <div>
       <div className="mb-5 flex items-start justify-between gap-3">
         <div>
           <h2 className="text-[2rem] font-semibold leading-none tracking-[-0.03em] text-slate-900">
@@ -397,100 +445,14 @@ export function PositionsView() {
 
       {error ? <p className="mb-3 text-sm text-rose-600">{error}</p> : null}
 
-      <TableScrollContainer>
-        <table className="admin-table-compact min-w-[720px]">
-          <thead>
-            <tr>
-              <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Name</th>
-              <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Code</th>
-              <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Department</th>
-              <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Designation</th>
-              <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Level</th>
-              <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Headcount</th>
-              <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Manager</th>
-              <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Status</th>
-              <th className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, index) => {
-              const id = readNumber(row, ["id"])
-              return (
-                <tr key={String(id ?? index)}>
-                  <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["name"])}</td>
-                  <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["code"])}</td>
-                  <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{labelById(departments, readNumber(row, ["department_id"]))}</td>
-                  <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{labelById(designations, readNumber(row, ["designation_id"]))}</td>
-                  <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{String(readNumber(row, ["level"]) ?? "-")}</td>
-                  <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{String(readNumber(row, ["headcount"]) ?? "-")}</td>
-                  <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readBoolean(row, ["is_manager"]) ? "Yes" : "No"}</td>
-                  <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["status"])}</td>
-                  <td className="text-right">
-                    <div className="table-actions">
-                      <button
-                        type="button"
-                        className="admin-table-icon-button"
-                        onClick={() => {
-                          fillFormFromRow(row)
-                          setEditingId(id)
-                          setOpenForm(true)
-                        }}
-                        aria-label="Edit position"
-                        title="Edit position"
-                      >
-                        <Pencil className="size-4" />
-                      </button>
-                      <button
-                        type="button"
-                        className="admin-table-icon-button"
-                        data-variant="danger"
-                        disabled={saving}
-                        onClick={() => setPendingDelete(row)}
-                        aria-label="Delete position"
-                        title="Delete position"
-                      >
-                        <Trash2 className="size-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              )
-            })}
-            {!loading && rows.length === 0 ? (
-              <tr>
-                <td className="py-10 text-center text-sm text-slate-500" colSpan={9}>
-                  No positions found.
-                </td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
-      </TableScrollContainer>
-
-      <div className="mt-4 flex items-center justify-between gap-3">
-        <p className="text-sm text-slate-600">
-          {loading ? "Loading positions..." : `Page ${page}${totalPages ? ` of ${totalPages}` : ""}`}
-          {typeof total === "number" ? ` • Total ${total}` : ""}
-        </p>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-50"
-            disabled={!canGoPrevious}
-            onClick={() => setPage((value) => Math.max(1, value - 1))}
-          >
-            Previous
-          </button>
-          <button
-            type="button"
-            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-50"
-            disabled={!canGoNext}
-            onClick={() => setPage((value) => value + 1)}
-          >
-            Next
-          </button>
-        </div>
-      </div>
+      <ResizableTable
+        title="Position"
+        data={rows}
+        columns={positionColumns}
+        itemsPerPage={20}
+        loading={loading}
+        storageKey="positions"
+      />
 
       {openForm ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/35 p-4 backdrop-blur-sm">

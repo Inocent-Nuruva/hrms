@@ -4,14 +4,18 @@ import * as React from "react"
 import { HorizontalScrollContainer } from "@/components/common/horizontal-scroll-container"
 import { Ban, CheckCheck, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react"
 
+import { cn } from "@/lib/utils"
+
 import {
   approveOnboardingRequest,
   cancelOnboardingRequest,
   completeOnboardingRequest,
   createOnboardingRequest,
   createOnboardingWorkflow,
+  createOnboardingWorkflowStep,
   deleteOnboardingRequest,
   deleteOnboardingWorkflow,
+  deleteOnboardingWorkflowStep,
   getOnboardingAuditLogs,
   getOnboardingProgress,
   getOnboardingRequest,
@@ -19,16 +23,15 @@ import {
   listAccessControlResources,
   listAttendanceDevices,
   listBranches,
-  listDepartments,
   listEmployees,
   listOnboardingRequests,
   listOnboardingWorkflows,
-  listPositions,
   listResource,
   listShiftResources,
   listTimetableResources,
   listUsers,
   patchOnboardingWorkflow,
+  patchOnboardingWorkflowStep,
   rejectOnboardingRequest,
   type AdminRecord,
   type OnboardingProvisioning,
@@ -132,29 +135,6 @@ function readNumber(row: AdminRecord, keys: string[]) {
   return null
 }
 
-function rowMatchesRelation(
-  row: AdminRecord,
-  relationKeys: string[],
-  selectedId: number | null
-) {
-  if (selectedId === null) {
-    return true
-  }
-
-  let hasRelationKey = false
-  for (const key of relationKeys) {
-    if (Object.prototype.hasOwnProperty.call(row, key)) {
-      hasRelationKey = true
-      const relationId = readNumber(row, [key])
-      if (relationId === selectedId) {
-        return true
-      }
-    }
-  }
-
-  return !hasRelationKey
-}
-
 function toTitleCaseWords(value: string) {
   return value
     .trim()
@@ -195,6 +175,38 @@ type RequestAction =
   | "cancel"
   | "complete"
   | "delete"
+
+type OnboardingWorkflowStepDraft = {
+  id?: number
+  is_required: boolean
+  name: string
+  description: string
+  step_type: string
+  assigned_role_id?: number
+  assigned_user_id?: number
+  due_days: number
+}
+
+function normalizeWorkflowStep(row: AdminRecord): OnboardingWorkflowStepDraft {
+  const stepId = readNumber(row, ["id", "step_id", "workflow_step_id"])
+  const name = readString(row, ["name", "step_name", "title", "task_title"])
+  const description = readString(row, ["description"])
+  const stepType = readString(row, ["step_type", "task_type"])
+  const assignedRoleId = readNumber(row, ["assigned_role_id", "role_id"])
+  const assignedUserId = readNumber(row, ["assigned_user_id", "company_user_id", "user_id"])
+  const dueDays = readNumber(row, ["due_days", "expected_duration_days"])
+
+  return {
+    ...(stepId !== null && stepId > 0 ? { id: stepId } : {}),
+    is_required: String(row.is_required ?? true) === "true" || row.is_required === true,
+    name: name === "-" ? "" : name,
+    description: description === "-" ? "" : description,
+    step_type: stepType === "-" ? "task" : stepType,
+    due_days: dueDays !== null && dueDays > 0 ? dueDays : 1,
+    ...(assignedRoleId !== null && assignedRoleId > 0 ? { assigned_role_id: assignedRoleId } : {}),
+    ...(assignedUserId !== null && assignedUserId > 0 ? { assigned_user_id: assignedUserId } : {}),
+  }
+}
 
 const EMPTY_ONBOARDING_SHIFT_ASSIGNMENT: OnboardingShiftAssignmentDraft = {
   shiftId: "",
@@ -386,8 +398,6 @@ export function OnboardingView() {
   const [users, setUsers] = React.useState<AdminRecord[]>([])
   const [roles, setRoles] = React.useState<AdminRecord[]>([])
   const [branches, setBranches] = React.useState<AdminRecord[]>([])
-  const [departments, setDepartments] = React.useState<AdminRecord[]>([])
-  const [positions, setPositions] = React.useState<AdminRecord[]>([])
   const [shiftRecords, setShiftRecords] = React.useState<AdminRecord[]>([])
   const [timetableRecords, setTimetableRecords] = React.useState<AdminRecord[]>([])
   const [accessGroups, setAccessGroups] = React.useState<AdminRecord[]>([])
@@ -428,83 +438,20 @@ export function OnboardingView() {
     status: "active",
     is_default: "false",
     step_name: "",
-    task_title: "",
-    task_description: "",
-    task_type: "general",
-    action_type: "recommend",
-    approver_type: "role",
-    approval_level: "1",
-    expected_duration_days: "1",
+    step_description: "",
+    step_type: "task",
+    due_days: "1",
     is_required: "true",
-    assigned_branch_id: "",
-    assigned_department_id: "",
-    company_user_id: "",
-    role_id: "",
-    position_id: "",
+    assigned_user_id: "",
+    assigned_role_id: "",
   })
-  const [workflowSteps, setWorkflowSteps] = React.useState<AdminRecord[]>([])
+  const [workflowSteps, setWorkflowSteps] = React.useState<OnboardingWorkflowStepDraft[]>([])
+  const [persistedWorkflowStepIds, setPersistedWorkflowStepIds] = React.useState<number[]>([])
   const [stepDialogOpen, setStepDialogOpen] = React.useState(false)
   const [editingStepIndex, setEditingStepIndex] = React.useState<number | null>(null)
   const [workflowSheetOpen, setWorkflowSheetOpen] = React.useState(false)
   const [editingWorkflowId, setEditingWorkflowId] = React.useState<number | null>(null)
-
-  const selectedBranchId = workflowForm.assigned_branch_id ? Number(workflowForm.assigned_branch_id) : null
-  const selectedDepartmentId = workflowForm.assigned_department_id
-    ? Number(workflowForm.assigned_department_id)
-    : null
-  const selectedRoleId = workflowForm.role_id ? Number(workflowForm.role_id) : null
-  const selectedPositionId = workflowForm.position_id ? Number(workflowForm.position_id) : null
-
-  const filteredDepartments = React.useMemo(
-    () =>
-      departments.filter((row) =>
-        rowMatchesRelation(
-          row,
-          ["branch_id", "assigned_branch_id", "parent_branch_id"],
-          selectedBranchId
-        )
-      ),
-    [departments, selectedBranchId]
-  )
-
-  const filteredRoles = React.useMemo(
-    () =>
-      roles.filter((row) =>
-        rowMatchesRelation(
-          row,
-          ["department_id", "assigned_department_id", "branch_department_id"],
-          selectedDepartmentId
-        )
-      ),
-    [roles, selectedDepartmentId]
-  )
-
-  const filteredPositions = React.useMemo(
-    () =>
-      positions.filter((row) =>
-        rowMatchesRelation(
-          row,
-          ["role_id", "assigned_role_id", "position_role_id"],
-          selectedRoleId
-        )
-      ),
-    [positions, selectedRoleId]
-  )
-
-  const filteredUsers = React.useMemo(
-    () =>
-      users.filter((row) =>
-        rowMatchesRelation(
-          row,
-          ["position_id", "assigned_position_id", "user_position_id"],
-          selectedPositionId
-        )
-      ),
-    [users, selectedPositionId]
-  )
-  const hasLevelUniquenessError =
-    Boolean(error) &&
-    String(error).toLowerCase().includes("workflow approval levels must be unique")
+  const [requestSheetOpen, setRequestSheetOpen] = React.useState(false)
 
   const resolveBranchLabel = React.useCallback(
     (branchId: number | null) =>
@@ -642,8 +589,6 @@ export function OnboardingView() {
         usersResult,
         rolesResult,
         branchesResult,
-        departmentsResult,
-        positionsResult,
         shiftsResult,
         timetablesResult,
         accessGroupsResult,
@@ -656,8 +601,6 @@ export function OnboardingView() {
         listUsers(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
         listResource("roles", token),
         listBranches(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
-        listDepartments(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
-        listPositions(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
         listShiftResources(token, "shifts", { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
         listTimetableResources(token, "timetables", { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
         listAccessControlResources(token, "groups", { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
@@ -671,8 +614,6 @@ export function OnboardingView() {
       setUsers(usersResult.rows)
       setRoles(rolesResult)
       setBranches(branchesResult.rows)
-      setDepartments(departmentsResult.rows)
-      setPositions(positionsResult.rows)
       setShiftRecords(shiftsResult.rows)
       setTimetableRecords(timetablesResult.rows)
       setAccessGroups(accessGroupsResult.rows)
@@ -899,9 +840,17 @@ export function OnboardingView() {
       return explicitPerson
     }
 
-    const approverType = String(step.approver_type ?? "").toLowerCase().trim()
+    const assignees: string[] = []
 
-    const companyUserId = readNumber(step, ["company_user_id", "user_id", "assigned_user_id"])
+    const roleId = readNumber(step, ["assigned_role_id", "role_id"])
+    if (roleId !== null) {
+      const roleLabel = resolveOptionLabel(roles, roleId, ["id", "role_id"], ["display_name", "name", "title"])
+      if (roleLabel !== "-") {
+        assignees.push(`Role: ${roleLabel}`)
+      }
+    }
+
+    const companyUserId = readNumber(step, ["assigned_user_id", "company_user_id", "user_id"])
     if (companyUserId !== null) {
       const personLabel = resolveOptionLabel(users, companyUserId, ["id", "user_id", "company_user_id"], [
         "full_name",
@@ -909,76 +858,23 @@ export function OnboardingView() {
         "email",
       ])
       if (personLabel !== "-") {
-        return personLabel
+        assignees.push(`User: ${personLabel}`)
       }
     }
 
-    const roleId = readNumber(step, ["role_id", "assigned_role_id"])
-    if (roleId !== null) {
-      const roleLabel = resolveOptionLabel(roles, roleId, ["id", "role_id"], ["display_name", "name", "title"])
-      if (roleLabel !== "-") {
-        return `Role: ${roleLabel}`
-      }
-    }
-
-    const positionId = readNumber(step, ["position_id", "assigned_position_id"])
-    if (positionId !== null) {
-      const positionLabel = resolveOptionLabel(
-        positions,
-        positionId,
-        ["id", "position_id"],
-        ["name", "title"]
-      )
-      if (positionLabel !== "-") {
-        return `Position: ${positionLabel}`
-      }
-    }
-
-    const branchId = readNumber(step, ["assigned_branch_id", "branch_id"])
-    const departmentId = readNumber(step, ["assigned_department_id", "department_id"])
-    const branchLabel =
-      branchId !== null
-        ? resolveOptionLabel(branches, branchId, ["id", "branch_id"], ["name", "title"])
-        : "-"
-    const departmentLabel =
-      departmentId !== null
-        ? resolveOptionLabel(
-            departments,
-            departmentId,
-            ["id", "department_id"],
-            ["name", "title"]
-          )
-        : "-"
-
-    if (departmentLabel !== "-") {
-      return `Department: ${departmentLabel}`
-    }
-    if (branchLabel !== "-") {
-      return `Branch: ${branchLabel}`
-    }
-    if (approverType) {
-      return toTitleCaseWords(approverType)
-    }
-    return "-"
-  }, [branches, departments, positions, roles, users])
+    return assignees.join(" • ") || "-"
+  }, [roles, users])
 
   function resetWorkflowStepForm() {
     setWorkflowForm((prev) => ({
       ...prev,
       step_name: "",
-      task_title: "",
-      task_description: "",
-      task_type: "general",
-      action_type: "recommend",
-      approver_type: "role",
-      approval_level: "1",
-      expected_duration_days: "1",
+      step_description: "",
+      step_type: "task",
+      due_days: "1",
       is_required: "true",
-      assigned_branch_id: "",
-      assigned_department_id: "",
-      company_user_id: "",
-      role_id: "",
-      position_id: "",
+      assigned_user_id: "",
+      assigned_role_id: "",
     }))
   }
 
@@ -989,22 +885,35 @@ export function OnboardingView() {
       status: "active",
       is_default: "false",
       step_name: "",
-      task_title: "",
-      task_description: "",
-      task_type: "general",
-      action_type: "recommend",
-      approver_type: "role",
-      approval_level: "1",
-      expected_duration_days: "1",
+      step_description: "",
+      step_type: "task",
+      due_days: "1",
       is_required: "true",
-      assigned_branch_id: "",
-      assigned_department_id: "",
-      company_user_id: "",
-      role_id: "",
-      position_id: "",
+      assigned_user_id: "",
+      assigned_role_id: "",
     })
     setWorkflowSteps([])
+    setPersistedWorkflowStepIds([])
     setEditingStepIndex(null)
+  }
+
+  function resetRequestForm() {
+    setRequestForm({
+      employee_id: "",
+      workflow_id: "",
+      title: "",
+      description: "",
+      planned_start_date: "",
+      planned_completion_date: "",
+      submit: "true",
+    })
+    setRequestProvisioningEnabled(false)
+    setRequestProvisioning({
+      ...EMPTY_REQUEST_PROVISIONING,
+      shiftAssignment: { ...EMPTY_ONBOARDING_SHIFT_ASSIGNMENT },
+      timetableAssignment: { ...EMPTY_ONBOARDING_TIMETABLE_ASSIGNMENT },
+      deviceAssignment: { ...EMPTY_ONBOARDING_DEVICE_ASSIGNMENT },
+    })
   }
 
   function buildStepFromWorkflowForm() {
@@ -1012,37 +921,38 @@ export function OnboardingView() {
       return { error: "Step name is required.", step: null as AdminRecord | null }
     }
 
-    const approvalLevel = Number(workflowForm.approval_level)
-    const expectedDurationDays = Number(workflowForm.expected_duration_days)
-    if (!Number.isFinite(approvalLevel) || approvalLevel < 1) {
-      return { error: "Approval level must be 1 or greater.", step: null as AdminRecord | null }
-    }
-    if (!Number.isFinite(expectedDurationDays) || expectedDurationDays < 1) {
-      return { error: "Expected duration (days) must be 1 or greater.", step: null as AdminRecord | null }
+    if (!workflowForm.step_description.trim()) {
+      return { error: "Step description is required.", step: null as AdminRecord | null }
     }
 
-    const stepPayload: AdminRecord = {
-      task_type: workflowForm.task_type || "general",
+    const dueDays = Number(workflowForm.due_days)
+    if (!Number.isFinite(dueDays) || dueDays < 1) {
+      return { error: "Due days must be 1 or greater.", step: null as AdminRecord | null }
+    }
+
+    const assignedRoleId = Number(workflowForm.assigned_role_id)
+    const assignedUserId = Number(workflowForm.assigned_user_id)
+    const hasAssignedRole = Number.isFinite(assignedRoleId) && assignedRoleId > 0
+    const hasAssignedUser = Number.isFinite(assignedUserId) && assignedUserId > 0
+
+    if (!hasAssignedRole && !hasAssignedUser) {
+      return { error: "Select at least a role or a user for this step.", step: null as AdminRecord | null }
+    }
+
+    const stepPayload: OnboardingWorkflowStepDraft = {
       is_required: workflowForm.is_required === "true",
-      approval_level: approvalLevel,
-      step_name: workflowForm.step_name.trim(),
-      task_title: workflowForm.task_title.trim() || workflowForm.step_name.trim(),
-      task_description: workflowForm.task_description.trim(),
-      approver_type: workflowForm.approver_type || "role",
-      action_type: workflowForm.action_type || "recommend",
-      expected_duration_days: expectedDurationDays,
+      name: workflowForm.step_name.trim(),
+      description: workflowForm.step_description.trim(),
+      step_type: workflowForm.step_type.trim() || "task",
+      due_days: dueDays,
     }
 
-    const assignedBranchId = Number(workflowForm.assigned_branch_id)
-    const assignedDepartmentId = Number(workflowForm.assigned_department_id)
-    const companyUserId = Number(workflowForm.company_user_id)
-    const roleId = Number(workflowForm.role_id)
-    const positionId = Number(workflowForm.position_id)
-    if (Number.isFinite(assignedBranchId) && assignedBranchId > 0) stepPayload.assigned_branch_id = assignedBranchId
-    if (Number.isFinite(assignedDepartmentId) && assignedDepartmentId > 0) stepPayload.assigned_department_id = assignedDepartmentId
-    if (Number.isFinite(companyUserId) && companyUserId > 0) stepPayload.company_user_id = companyUserId
-    if (Number.isFinite(roleId) && roleId > 0) stepPayload.role_id = roleId
-    if (Number.isFinite(positionId) && positionId > 0) stepPayload.position_id = positionId
+    if (hasAssignedRole) {
+      stepPayload.assigned_role_id = assignedRoleId
+    }
+    if (hasAssignedUser) {
+      stepPayload.assigned_user_id = assignedUserId
+    }
 
     return { error: null, step: stepPayload }
   }
@@ -1053,11 +963,21 @@ export function OnboardingView() {
       showErrorAlert(stepError ?? "Invalid step.")
       return
     }
+
     if (editingStepIndex !== null) {
-      setWorkflowSteps((prev) => prev.map((entry, idx) => (idx === editingStepIndex ? step : entry)))
+      setWorkflowSteps((prev) =>
+        prev.map((entry, idx) =>
+          idx === editingStepIndex
+            ? ({
+                ...step,
+                ...(entry.id ? { id: entry.id } : {}),
+              } as OnboardingWorkflowStepDraft)
+            : entry
+        )
+      )
       showSuccessAlert("Workflow step updated.")
     } else {
-      setWorkflowSteps((prev) => [...prev, step])
+      setWorkflowSteps((prev) => [...prev, step as OnboardingWorkflowStepDraft])
       showSuccessAlert("Workflow step added.")
     }
     setEditingStepIndex(null)
@@ -1076,26 +996,17 @@ export function OnboardingView() {
     showSuccessAlert("Workflow step removed.")
   }
 
-  function editWorkflowStep(step: AdminRecord, index: number) {
+  function editWorkflowStep(step: OnboardingWorkflowStepDraft, index: number) {
     setEditingStepIndex(index)
     setWorkflowForm((prev) => ({
       ...prev,
-      step_name: String(step.step_name ?? ""),
-      task_title: String(step.task_title ?? ""),
-      task_description: String(step.task_description ?? ""),
-      task_type: String(step.task_type ?? "general"),
-      action_type: String(step.action_type ?? "recommend"),
-      approver_type: String(step.approver_type ?? "role"),
-      approval_level: String(step.approval_level ?? "1"),
-      expected_duration_days: String(step.expected_duration_days ?? "1"),
+      step_name: String(step.name ?? ""),
+      step_description: String(step.description ?? ""),
+      step_type: String(step.step_type ?? "task"),
+      due_days: String(step.due_days ?? "1"),
       is_required: String(step.is_required ?? true) === "true" ? "true" : "false",
-      assigned_branch_id:
-        typeof step.assigned_branch_id === "number" ? String(step.assigned_branch_id) : "",
-      assigned_department_id:
-        typeof step.assigned_department_id === "number" ? String(step.assigned_department_id) : "",
-      company_user_id: typeof step.company_user_id === "number" ? String(step.company_user_id) : "",
-      role_id: typeof step.role_id === "number" ? String(step.role_id) : "",
-      position_id: typeof step.position_id === "number" ? String(step.position_id) : "",
+      assigned_user_id: typeof step.assigned_user_id === "number" ? String(step.assigned_user_id) : "",
+      assigned_role_id: typeof step.assigned_role_id === "number" ? String(step.assigned_role_id) : "",
     }))
     setStepDialogOpen(true)
   }
@@ -1114,6 +1025,9 @@ export function OnboardingView() {
     setError(null)
     try {
       const workflow = await getOnboardingWorkflow(token, workflowId)
+      const normalizedSteps = toRecordList(
+        workflow?.steps ?? workflow?.workflow_steps ?? workflow?.tasks ?? workflow?.activities
+      ).map((step) => normalizeWorkflowStep(step))
       setWorkflowForm((prev) => ({
         ...prev,
         name: String(workflow?.name ?? workflow?.title ?? ""),
@@ -1121,12 +1035,12 @@ export function OnboardingView() {
         status: String(workflow?.status ?? "active"),
         is_default: String(Boolean(workflow?.is_default ?? workflow?.default ?? false)),
       }))
-      const stepsPayload = Array.isArray(workflow?.steps)
-        ? (workflow.steps as AdminRecord[])
-        : Array.isArray(workflow?.workflow_steps)
-          ? (workflow.workflow_steps as AdminRecord[])
-          : []
-      setWorkflowSteps(stepsPayload)
+      setWorkflowSteps(normalizedSteps)
+      setPersistedWorkflowStepIds(
+        normalizedSteps
+          .map((step) => step.id)
+          .filter((stepId): stepId is number => typeof stepId === "number" && stepId > 0)
+      )
       setEditingWorkflowId(workflowId)
       setWorkflowSheetOpen(true)
     } catch (errorObject) {
@@ -1151,7 +1065,22 @@ export function OnboardingView() {
     setSaving(true)
     setError(null)
     try {
-      await deleteOnboardingWorkflow(token, workflowId)
+      try {
+        await deleteOnboardingWorkflow(token, workflowId)
+      } catch {
+        const workflow = await getOnboardingWorkflow(token, workflowId)
+        const stepIds = toRecordList(
+          workflow?.steps ?? workflow?.workflow_steps ?? workflow?.tasks ?? workflow?.activities
+        )
+          .map((step) => readNumber(step, ["id", "step_id", "workflow_step_id"]))
+          .filter((stepId): stepId is number => typeof stepId === "number" && stepId > 0)
+
+        for (const stepId of stepIds) {
+          await deleteOnboardingWorkflowStep(token, workflowId, stepId)
+        }
+
+        await deleteOnboardingWorkflow(token, workflowId)
+      }
       showSuccessAlert("Workflow deleted successfully.")
       await reloadAll()
     } catch (errorObject) {
@@ -1199,6 +1128,35 @@ export function OnboardingView() {
           status: workflowForm.status,
           is_default: workflowForm.is_default === "true",
         })
+
+        const remainingStepIds = new Set(persistedWorkflowStepIds)
+        for (const step of workflowSteps) {
+          const stepPayload = {
+            is_required: step.is_required,
+            name: step.name.trim(),
+            description: step.description.trim(),
+            step_type: step.step_type.trim() || "task",
+            due_days: step.due_days,
+            ...(typeof step.assigned_role_id === "number" && step.assigned_role_id > 0
+              ? { assigned_role_id: step.assigned_role_id }
+              : {}),
+            ...(typeof step.assigned_user_id === "number" && step.assigned_user_id > 0
+              ? { assigned_user_id: step.assigned_user_id }
+              : {}),
+          }
+
+          if (typeof step.id === "number" && step.id > 0) {
+            await patchOnboardingWorkflowStep(token, editingWorkflowId, step.id, stepPayload)
+            remainingStepIds.delete(step.id)
+          } else {
+            await createOnboardingWorkflowStep(token, editingWorkflowId, stepPayload)
+          }
+        }
+
+        for (const stepId of remainingStepIds) {
+          await deleteOnboardingWorkflowStep(token, editingWorkflowId, stepId)
+        }
+
         showSuccessAlert("Onboarding workflow updated.")
       }
 
@@ -1259,22 +1217,8 @@ export function OnboardingView() {
         provisioning: provisioningResult.provisioning,
       })
 
-      setRequestForm({
-        employee_id: "",
-        workflow_id: "",
-        title: "",
-        description: "",
-        planned_start_date: "",
-        planned_completion_date: "",
-        submit: "true",
-      })
-      setRequestProvisioningEnabled(false)
-      setRequestProvisioning({
-        ...EMPTY_REQUEST_PROVISIONING,
-        shiftAssignment: { ...EMPTY_ONBOARDING_SHIFT_ASSIGNMENT },
-        timetableAssignment: { ...EMPTY_ONBOARDING_TIMETABLE_ASSIGNMENT },
-        deviceAssignment: { ...EMPTY_ONBOARDING_DEVICE_ASSIGNMENT },
-      })
+      resetRequestForm()
+      setRequestSheetOpen(false)
       showSuccessAlert("Onboarding request created.")
       await reloadAll()
     } catch (errorObject) {
@@ -1624,409 +1568,57 @@ export function OnboardingView() {
 
   return (
     <div className="space-y-5 px-4 pb-6 pt-4 lg:px-6">
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          type="button"
-          variant={activeTab === "requests" ? "default" : "outline"}
-          onClick={() => setActiveTab("requests")}
-        >
-          Onboarding Requests
-        </Button>
-        <Button
-          type="button"
-          variant={activeTab === "workflows" ? "default" : "outline"}
-          onClick={() => setActiveTab("workflows")}
-        >
-          Onboarding Workflows
-        </Button>
-        <Button type="button" variant="outline" size="icon" className="ml-auto" onClick={() => void reloadAll()}>
-          <RefreshCw className="size-4 text-primary" />
-        </Button>
+      <div className="glass-scrollbar overflow-x-auto">
+        <div className="inline-flex min-w-full items-center gap-4 border-b border-border/80">
+          <button
+            type="button"
+            onClick={() => setActiveTab("requests")}
+            className={cn(
+              "border-b-2 px-1 py-2 text-[0.92rem] font-medium whitespace-nowrap transition-colors duration-200",
+              activeTab === "requests"
+                ? "border-[var(--primary)] text-[var(--primary)]"
+                : "border-transparent text-slate-600 hover:text-slate-900"
+            )}
+          >
+            Requests
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("workflows")}
+            className={cn(
+              "border-b-2 px-1 py-2 text-[0.92rem] font-medium whitespace-nowrap transition-colors duration-200",
+              activeTab === "workflows"
+                ? "border-[var(--primary)] text-[var(--primary)]"
+                : "border-transparent text-slate-600 hover:text-slate-900"
+            )}
+          >
+            Workflows
+          </button>
+          <button
+            type="button"
+            className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-md border border-border text-sm"
+            onClick={() => void reloadAll()}
+          >
+            <RefreshCw className="size-4 text-primary" />
+          </button>
+        </div>
       </div>
 
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
       {activeTab === "requests" ? (
         <div className="space-y-5">
-          <div className="space-y-4 rounded-xl border border-border p-4">
-            <div className="grid gap-3 md:grid-cols-2">
-              <Input
-                value={requestForm.title}
-                onChange={(event) => setRequestForm((prev) => ({ ...prev, title: event.target.value }))}
-                placeholder="Onboarding request title"
-              />
-              <Select
-                value={requestForm.employee_id}
-                onValueChange={(value) => setRequestForm((prev) => ({ ...prev, employee_id: value ?? "" }))}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select employee">
-                    {requestForm.employee_id
-                      ? resolveEmployeeLabel(Number(requestForm.employee_id))
-                      : "Select employee"}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {employees.map((row) => {
-                    const employeeId = readNumber(row, ["id", "employee_id", "user_id"])
-                    if (employeeId === null) {
-                      return null
-                    }
-                    return (
-                      <SelectItem key={employeeId} value={String(employeeId)}>
-                        {resolveEmployeeLabel(employeeId)}
-                      </SelectItem>
-                    )
-                  })}
-                </SelectContent>
-              </Select>
-
-              <Select
-                value={requestForm.workflow_id}
-                onValueChange={(value) => setRequestForm((prev) => ({ ...prev, workflow_id: value ?? "" }))}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Attach workflow (optional)">
-                    {requestForm.workflow_id
-                      ? resolveWorkflowLabel(Number(requestForm.workflow_id))
-                      : "Attach workflow (optional)"}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {workflows.map((row) => {
-                    const workflowId = readNumber(row, ["id", "workflow_id"])
-                    if (workflowId === null) {
-                      return null
-                    }
-                    return (
-                      <SelectItem key={workflowId} value={String(workflowId)}>
-                        {readString(row, ["name", "title"])}
-                      </SelectItem>
-                    )
-                  })}
-                </SelectContent>
-              </Select>
-
-              <Select
-                value={requestForm.submit}
-                onValueChange={(value) => setRequestForm((prev) => ({ ...prev, submit: value ?? "true" }))}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Submission mode">{resolveBooleanLabel(requestForm.submit)}</SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="true">Submit immediately</SelectItem>
-                  <SelectItem value="false">Save as draft</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <Input
-                type="date"
-                value={requestForm.planned_start_date}
-                onChange={(event) =>
-                  setRequestForm((prev) => ({ ...prev, planned_start_date: event.target.value }))
-                }
-              />
-              <Input
-                type="date"
-                value={requestForm.planned_completion_date}
-                onChange={(event) =>
-                  setRequestForm((prev) => ({ ...prev, planned_completion_date: event.target.value }))
-                }
-              />
-
-              <div className="md:col-span-2">
-                <Input
-                  value={requestForm.description}
-                  onChange={(event) => setRequestForm((prev) => ({ ...prev, description: event.target.value }))}
-                  placeholder="Description"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-4 rounded-lg border border-slate-200 bg-slate-50/70 p-4">
-              <label className="flex items-start gap-3">
-                <Checkbox
-                  checked={requestProvisioningEnabled}
-                  onCheckedChange={(value) => {
-                    const checked = Boolean(value)
-                    setRequestProvisioningEnabled(checked)
-                    if (!checked) {
-                      setRequestProvisioning({
-                        ...EMPTY_REQUEST_PROVISIONING,
-                        shiftAssignment: { ...EMPTY_ONBOARDING_SHIFT_ASSIGNMENT },
-                        timetableAssignment: { ...EMPTY_ONBOARDING_TIMETABLE_ASSIGNMENT },
-                        deviceAssignment: { ...EMPTY_ONBOARDING_DEVICE_ASSIGNMENT },
-                      })
-                    }
-                  }}
-                />
-                <span className="space-y-1">
-                  <span className="block text-sm font-medium text-slate-900">Include provisioning payload</span>
-                  <span className="block text-xs text-muted-foreground">
-                    Match the richer onboarding setup used during employee registration.
-                  </span>
-                </span>
-              </label>
-
-              {requestProvisioningEnabled ? (
-                <div className="grid gap-4 md:grid-cols-2">
-                  <MultiSelectChecklist
-                    label="Roles"
-                    options={requestRoleOptions}
-                    selectedIds={requestProvisioning.roleIds}
-                    onToggle={(id, checked) =>
-                      updateRequestProvisioningField(
-                        "roleIds",
-                        toggleNumericId(requestProvisioning.roleIds, id, checked)
-                      )
-                    }
-                    emptyText="No roles available."
-                  />
-                  <MultiSelectChecklist
-                    label="Branch Access"
-                    options={requestBranchAccessOptions}
-                    selectedIds={requestProvisioning.branchAccessIds}
-                    onToggle={(id, checked) =>
-                      updateRequestProvisioningField(
-                        "branchAccessIds",
-                        toggleNumericId(requestProvisioning.branchAccessIds, id, checked)
-                      )
-                    }
-                    emptyText="No branches available."
-                  />
-
-                  <div className="space-y-2">
-                    <p className="text-sm font-medium text-slate-900">Attendance Mode</p>
-                    <Select
-                      value={requestProvisioning.attendanceMode || "none"}
-                      onValueChange={(value) =>
-                        setRequestAttendanceMode(value === "none" ? "" : (value as OnboardingProvisioningDraft["attendanceMode"]))
-                      }
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Attendance mode" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">No attendance provisioning</SelectItem>
-                        <SelectItem value="shift">Shift</SelectItem>
-                        <SelectItem value="timetable">Timetable</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {requestProvisioning.attendanceMode === "shift" ? (
-                    <>
-                        <Select
-                          value={requestProvisioning.shiftAssignment.shiftId || "none"}
-                          onValueChange={(value) =>
-                            updateRequestShiftAssignmentField("shiftId", (value ?? "none") === "none" ? "" : (value ?? ""))
-                          }
-                        >
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Select shift" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">Select shift</SelectItem>
-                          {requestShiftOptions.map((option) => (
-                            <SelectItem key={option.id} value={String(option.id)}>
-                              {option.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Input
-                        type="date"
-                        value={requestProvisioning.shiftAssignment.effectiveFrom}
-                        onChange={(event) => updateRequestShiftAssignmentField("effectiveFrom", event.target.value)}
-                        placeholder="Effective from"
-                      />
-                      <Input
-                        type="date"
-                        value={requestProvisioning.shiftAssignment.effectiveTo}
-                        onChange={(event) => updateRequestShiftAssignmentField("effectiveTo", event.target.value)}
-                        placeholder="Effective to"
-                      />
-                      <Input
-                        value={requestProvisioning.shiftAssignment.rotationGroupId}
-                        onChange={(event) => updateRequestShiftAssignmentField("rotationGroupId", event.target.value)}
-                        placeholder="Rotation group ID (optional)"
-                      />
-                    </>
-                  ) : null}
-
-                  {requestProvisioning.attendanceMode === "timetable" ? (
-                    <>
-                        <Select
-                          value={requestProvisioning.timetableAssignment.timetableId || "none"}
-                          onValueChange={(value) =>
-                            updateRequestTimetableAssignmentField("timetableId", (value ?? "none") === "none" ? "" : (value ?? ""))
-                          }
-                        >
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Select timetable" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">Select timetable</SelectItem>
-                          {requestTimetableOptions.map((option) => (
-                            <SelectItem key={option.id} value={String(option.id)}>
-                              {option.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Input
-                        type="date"
-                        value={requestProvisioning.timetableAssignment.effectiveFrom}
-                        onChange={(event) => updateRequestTimetableAssignmentField("effectiveFrom", event.target.value)}
-                        placeholder="Effective from"
-                      />
-                      <Input
-                        type="date"
-                        value={requestProvisioning.timetableAssignment.effectiveTo}
-                        onChange={(event) => updateRequestTimetableAssignmentField("effectiveTo", event.target.value)}
-                        placeholder="Effective to"
-                      />
-                    </>
-                  ) : null}
-
-                  <div className="md:col-span-2 space-y-4 rounded-md border border-slate-200 bg-white p-4">
-                    <label className="flex items-start gap-3">
-                      <Checkbox
-                        checked={requestProvisioning.deviceAssignment.enabled}
-                        onCheckedChange={(value) =>
-                          updateRequestDeviceAssignmentField("enabled", Boolean(value))
-                        }
-                      />
-                      <span className="space-y-1">
-                        <span className="block text-sm font-medium text-slate-900">Enable device provisioning</span>
-                        <span className="block text-xs text-muted-foreground">
-                          Add access-control device setup to the onboarding request.
-                        </span>
-                      </span>
-                    </label>
-
-                    {requestProvisioning.deviceAssignment.enabled ? (
-                      <div className="grid gap-3 md:grid-cols-2">
-                        <Select
-                          value={requestProvisioning.deviceAssignment.accessGroupId || "none"}
-                          onValueChange={(value) =>
-                            updateRequestDeviceAssignmentField("accessGroupId", (value ?? "none") === "none" ? "" : (value ?? ""))
-                          }
-                        >
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Access group" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">Select access group</SelectItem>
-                            {requestAccessGroupOptions.map((option) => (
-                              <SelectItem key={option.id} value={String(option.id)}>
-                                {option.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-
-                        <Select
-                          value={requestProvisioning.deviceAssignment.organizationId || "none"}
-                          onValueChange={(value) =>
-                            updateRequestDeviceAssignmentField("organizationId", (value ?? "none") === "none" ? "" : (value ?? ""))
-                          }
-                        >
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Organization (optional)" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">No organization override</SelectItem>
-                            {requestAccessOrganizationOptions.map((option) => (
-                              <SelectItem key={option.id} value={String(option.id)}>
-                                {option.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-
-                        <Input
-                          value={requestProvisioning.deviceAssignment.employeeNo}
-                          onChange={(event) => updateRequestDeviceAssignmentField("employeeNo", event.target.value)}
-                          placeholder="Employee No override (optional)"
-                        />
-                        <Input
-                          value={requestProvisioning.deviceAssignment.userVerifyMode}
-                          onChange={(event) => updateRequestDeviceAssignmentField("userVerifyMode", event.target.value)}
-                          placeholder="User verify mode (optional)"
-                        />
-                        <Input
-                          type="datetime-local"
-                          value={requestProvisioning.deviceAssignment.validBeginTime}
-                          onChange={(event) => updateRequestDeviceAssignmentField("validBeginTime", event.target.value)}
-                        />
-                        <Input
-                          type="datetime-local"
-                          value={requestProvisioning.deviceAssignment.validEndTime}
-                          onChange={(event) => updateRequestDeviceAssignmentField("validEndTime", event.target.value)}
-                        />
-                        <Input
-                          value={requestProvisioning.deviceAssignment.maxOpenDoorTime}
-                          onChange={(event) => updateRequestDeviceAssignmentField("maxOpenDoorTime", event.target.value)}
-                          placeholder="Max open door time"
-                        />
-                        <Input
-                          value={requestProvisioning.deviceAssignment.openDoorTime}
-                          onChange={(event) => updateRequestDeviceAssignmentField("openDoorTime", event.target.value)}
-                          placeholder="Open door time"
-                        />
-
-                        <div className="md:col-span-2">
-                          <MultiSelectChecklist
-                            label="Attendance Devices"
-                            options={requestAttendanceDeviceOptions}
-                            selectedIds={requestProvisioning.deviceAssignment.deviceIds}
-                            onToggle={(id, checked) =>
-                              updateRequestDeviceAssignmentField(
-                                "deviceIds",
-                                toggleNumericId(requestProvisioning.deviceAssignment.deviceIds, id, checked)
-                              )
-                            }
-                            emptyText="No attendance devices available."
-                            hint="Choose the devices that should receive this employee during onboarding."
-                          />
-                        </div>
-
-                        <div className="md:col-span-2 grid gap-2 md:grid-cols-2">
-                          {[
-                            ["validEnabled", "Validity enabled"],
-                            ["localUiRight", "Local UI right"],
-                            ["closeDelayEnabled", "Close delay enabled"],
-                            ["syncNow", "Sync now"],
-                            ["continueOnError", "Continue on error"],
-                          ].map(([key, label]) => (
-                            <label key={key} className="flex items-center gap-3 rounded-md border border-slate-200 px-3 py-2">
-                              <Checkbox
-                                checked={Boolean(requestProvisioning.deviceAssignment[key as keyof OnboardingDeviceAssignmentDraft])}
-                                onCheckedChange={(value) =>
-                                  updateRequestDeviceAssignmentField(
-                                    key as keyof OnboardingDeviceAssignmentDraft,
-                                    Boolean(value) as never
-                                  )
-                                }
-                              />
-                              <span className="text-sm text-slate-800">{label}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-              ) : null}
-            </div>
-
-            <div>
-              <Button type="button" onClick={() => void submitRequest()} disabled={saving}>
-                Create Onboarding Request
-              </Button>
-            </div>
+          <div className="flex justify-end">
+            <Button
+              type="button"
+              onClick={() => {
+                resetRequestForm()
+                setRequestSheetOpen(true)
+              }}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Create Onboarding Request
+            </Button>
           </div>
 
           <div className="grid gap-3 rounded-xl border border-border p-4 md:grid-cols-2">
@@ -2185,6 +1777,401 @@ export function OnboardingView() {
               ) : null}
             </TableBody>
           </Table>
+
+          <Sheet open={requestSheetOpen} onOpenChange={setRequestSheetOpen}>
+            <SheetContent side="right" className="w-full overflow-y-auto data-[side=right]:w-full sm:data-[side=right]:w-1/2 data-[side=right]:sm:max-w-none">
+              <SheetHeader>
+                <SheetTitle>Create Onboarding Request</SheetTitle>
+                <SheetDescription>
+                  Select an employee, optionally attach a workflow, set dates, and optionally include provisioning details.
+                </SheetDescription>
+              </SheetHeader>
+
+              <div className="space-y-5 px-4 pb-4">
+                <div className="grid gap-3 md:grid-cols-2">
+                  <Input
+                    value={requestForm.title}
+                    onChange={(event) => setRequestForm((prev) => ({ ...prev, title: event.target.value }))}
+                    placeholder="Onboarding request title"
+                  />
+                  <Select
+                    value={requestForm.employee_id}
+                    onValueChange={(value) => setRequestForm((prev) => ({ ...prev, employee_id: value ?? "" }))}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select employee">
+                        {requestForm.employee_id
+                          ? resolveEmployeeLabel(Number(requestForm.employee_id))
+                          : "Select employee"}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {employees.map((row) => {
+                        const employeeId = readNumber(row, ["id", "employee_id", "user_id"])
+                        if (employeeId === null) {
+                          return null
+                        }
+                        return (
+                          <SelectItem key={employeeId} value={String(employeeId)}>
+                            {resolveEmployeeLabel(employeeId)}
+                          </SelectItem>
+                        )
+                      })}
+                    </SelectContent>
+                  </Select>
+
+                  <Select
+                    value={requestForm.workflow_id}
+                    onValueChange={(value) => setRequestForm((prev) => ({ ...prev, workflow_id: value ?? "" }))}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Attach workflow (optional)">
+                        {requestForm.workflow_id
+                          ? resolveWorkflowLabel(Number(requestForm.workflow_id))
+                          : "Attach workflow (optional)"}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {workflows.map((row) => {
+                        const workflowId = readNumber(row, ["id", "workflow_id"])
+                        if (workflowId === null) {
+                          return null
+                        }
+                        return (
+                          <SelectItem key={workflowId} value={String(workflowId)}>
+                            {readString(row, ["name", "title"])}
+                          </SelectItem>
+                        )
+                      })}
+                    </SelectContent>
+                  </Select>
+
+                  <Select
+                    value={requestForm.submit}
+                    onValueChange={(value) => setRequestForm((prev) => ({ ...prev, submit: value ?? "true" }))}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Submission mode">{resolveBooleanLabel(requestForm.submit)}</SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="true">Submit immediately</SelectItem>
+                      <SelectItem value="false">Save as draft</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  <Input
+                    type="date"
+                    value={requestForm.planned_start_date}
+                    onChange={(event) =>
+                      setRequestForm((prev) => ({ ...prev, planned_start_date: event.target.value }))
+                    }
+                  />
+                  <Input
+                    type="date"
+                    value={requestForm.planned_completion_date}
+                    onChange={(event) =>
+                      setRequestForm((prev) => ({ ...prev, planned_completion_date: event.target.value }))
+                    }
+                  />
+
+                  <div className="md:col-span-2">
+                    <Input
+                      value={requestForm.description}
+                      onChange={(event) => setRequestForm((prev) => ({ ...prev, description: event.target.value }))}
+                      placeholder="Description"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-4 rounded-lg border border-slate-200 bg-slate-50/70 p-4">
+                  <label className="flex items-start gap-3">
+                    <Checkbox
+                      checked={requestProvisioningEnabled}
+                      onCheckedChange={(value) => {
+                        const checked = Boolean(value)
+                        setRequestProvisioningEnabled(checked)
+                        if (!checked) {
+                          setRequestProvisioning({
+                            ...EMPTY_REQUEST_PROVISIONING,
+                            shiftAssignment: { ...EMPTY_ONBOARDING_SHIFT_ASSIGNMENT },
+                            timetableAssignment: { ...EMPTY_ONBOARDING_TIMETABLE_ASSIGNMENT },
+                            deviceAssignment: { ...EMPTY_ONBOARDING_DEVICE_ASSIGNMENT },
+                          })
+                        }
+                      }}
+                    />
+                    <span className="space-y-1">
+                      <span className="block text-sm font-medium text-slate-900">Include provisioning payload</span>
+                      <span className="block text-xs text-muted-foreground">
+                        Match the richer onboarding setup used during employee registration.
+                      </span>
+                    </span>
+                  </label>
+
+                  {requestProvisioningEnabled ? (
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <MultiSelectChecklist
+                        label="Roles"
+                        options={requestRoleOptions}
+                        selectedIds={requestProvisioning.roleIds}
+                        onToggle={(id, checked) =>
+                          updateRequestProvisioningField(
+                            "roleIds",
+                            toggleNumericId(requestProvisioning.roleIds, id, checked)
+                          )
+                        }
+                        emptyText="No roles available."
+                      />
+                      <MultiSelectChecklist
+                        label="Branch Access"
+                        options={requestBranchAccessOptions}
+                        selectedIds={requestProvisioning.branchAccessIds}
+                        onToggle={(id, checked) =>
+                          updateRequestProvisioningField(
+                            "branchAccessIds",
+                            toggleNumericId(requestProvisioning.branchAccessIds, id, checked)
+                          )
+                        }
+                        emptyText="No branches available."
+                      />
+
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium text-slate-900">Attendance Mode</p>
+                        <Select
+                          value={requestProvisioning.attendanceMode || "none"}
+                          onValueChange={(value) =>
+                            setRequestAttendanceMode(value === "none" ? "" : (value as OnboardingProvisioningDraft["attendanceMode"]))
+                          }
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Attendance mode" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">No attendance provisioning</SelectItem>
+                            <SelectItem value="shift">Shift</SelectItem>
+                            <SelectItem value="timetable">Timetable</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {requestProvisioning.attendanceMode === "shift" ? (
+                        <>
+                            <Select
+                              value={requestProvisioning.shiftAssignment.shiftId || "none"}
+                              onValueChange={(value) =>
+                                updateRequestShiftAssignmentField("shiftId", (value ?? "none") === "none" ? "" : (value ?? ""))
+                              }
+                            >
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Select shift" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">Select shift</SelectItem>
+                              {requestShiftOptions.map((option) => (
+                                <SelectItem key={option.id} value={String(option.id)}>
+                                  {option.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Input
+                            type="date"
+                            value={requestProvisioning.shiftAssignment.effectiveFrom}
+                            onChange={(event) => updateRequestShiftAssignmentField("effectiveFrom", event.target.value)}
+                            placeholder="Effective from"
+                          />
+                          <Input
+                            type="date"
+                            value={requestProvisioning.shiftAssignment.effectiveTo}
+                            onChange={(event) => updateRequestShiftAssignmentField("effectiveTo", event.target.value)}
+                            placeholder="Effective to"
+                          />
+                          <Input
+                            value={requestProvisioning.shiftAssignment.rotationGroupId}
+                            onChange={(event) => updateRequestShiftAssignmentField("rotationGroupId", event.target.value)}
+                            placeholder="Rotation group ID (optional)"
+                          />
+                        </>
+                      ) : null}
+
+                      {requestProvisioning.attendanceMode === "timetable" ? (
+                        <>
+                            <Select
+                              value={requestProvisioning.timetableAssignment.timetableId || "none"}
+                              onValueChange={(value) =>
+                                updateRequestTimetableAssignmentField("timetableId", (value ?? "none") === "none" ? "" : (value ?? ""))
+                              }
+                            >
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Select timetable" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">Select timetable</SelectItem>
+                              {requestTimetableOptions.map((option) => (
+                                <SelectItem key={option.id} value={String(option.id)}>
+                                  {option.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Input
+                            type="date"
+                            value={requestProvisioning.timetableAssignment.effectiveFrom}
+                            onChange={(event) => updateRequestTimetableAssignmentField("effectiveFrom", event.target.value)}
+                            placeholder="Effective from"
+                          />
+                          <Input
+                            type="date"
+                            value={requestProvisioning.timetableAssignment.effectiveTo}
+                            onChange={(event) => updateRequestTimetableAssignmentField("effectiveTo", event.target.value)}
+                            placeholder="Effective to"
+                          />
+                        </>
+                      ) : null}
+
+                      <div className="md:col-span-2 space-y-4 rounded-md border border-slate-200 bg-white p-4">
+                        <label className="flex items-start gap-3">
+                          <Checkbox
+                            checked={requestProvisioning.deviceAssignment.enabled}
+                            onCheckedChange={(value) =>
+                              updateRequestDeviceAssignmentField("enabled", Boolean(value))
+                            }
+                          />
+                          <span className="space-y-1">
+                            <span className="block text-sm font-medium text-slate-900">Enable device provisioning</span>
+                            <span className="block text-xs text-muted-foreground">
+                              Add access-control device setup to the onboarding request.
+                            </span>
+                          </span>
+                        </label>
+
+                        {requestProvisioning.deviceAssignment.enabled ? (
+                          <div className="grid gap-3 md:grid-cols-2">
+                            <Select
+                              value={requestProvisioning.deviceAssignment.accessGroupId || "none"}
+                              onValueChange={(value) =>
+                                updateRequestDeviceAssignmentField("accessGroupId", (value ?? "none") === "none" ? "" : (value ?? ""))
+                              }
+                            >
+                              <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Access group" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">Select access group</SelectItem>
+                                {requestAccessGroupOptions.map((option) => (
+                                  <SelectItem key={option.id} value={String(option.id)}>
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+
+                            <Select
+                              value={requestProvisioning.deviceAssignment.organizationId || "none"}
+                              onValueChange={(value) =>
+                                updateRequestDeviceAssignmentField("organizationId", (value ?? "none") === "none" ? "" : (value ?? ""))
+                              }
+                            >
+                              <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Organization (optional)" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">No organization override</SelectItem>
+                                {requestAccessOrganizationOptions.map((option) => (
+                                  <SelectItem key={option.id} value={String(option.id)}>
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+
+                            <Input
+                              value={requestProvisioning.deviceAssignment.employeeNo}
+                              onChange={(event) => updateRequestDeviceAssignmentField("employeeNo", event.target.value)}
+                              placeholder="Employee No override (optional)"
+                            />
+                            <Input
+                              value={requestProvisioning.deviceAssignment.userVerifyMode}
+                              onChange={(event) => updateRequestDeviceAssignmentField("userVerifyMode", event.target.value)}
+                              placeholder="User verify mode (optional)"
+                            />
+                            <Input
+                              type="datetime-local"
+                              value={requestProvisioning.deviceAssignment.validBeginTime}
+                              onChange={(event) => updateRequestDeviceAssignmentField("validBeginTime", event.target.value)}
+                            />
+                            <Input
+                              type="datetime-local"
+                              value={requestProvisioning.deviceAssignment.validEndTime}
+                              onChange={(event) => updateRequestDeviceAssignmentField("validEndTime", event.target.value)}
+                            />
+                            <Input
+                              value={requestProvisioning.deviceAssignment.maxOpenDoorTime}
+                              onChange={(event) => updateRequestDeviceAssignmentField("maxOpenDoorTime", event.target.value)}
+                              placeholder="Max open door time"
+                            />
+                            <Input
+                              value={requestProvisioning.deviceAssignment.openDoorTime}
+                              onChange={(event) => updateRequestDeviceAssignmentField("openDoorTime", event.target.value)}
+                              placeholder="Open door time"
+                            />
+
+                            <div className="md:col-span-2">
+                              <MultiSelectChecklist
+                                label="Attendance Devices"
+                                options={requestAttendanceDeviceOptions}
+                                selectedIds={requestProvisioning.deviceAssignment.deviceIds}
+                                onToggle={(id, checked) =>
+                                  updateRequestDeviceAssignmentField(
+                                    "deviceIds",
+                                    toggleNumericId(requestProvisioning.deviceAssignment.deviceIds, id, checked)
+                                  )
+                                }
+                                emptyText="No attendance devices available."
+                                hint="Choose the devices that should receive this employee during onboarding."
+                              />
+                            </div>
+
+                            <div className="md:col-span-2 grid gap-2 md:grid-cols-2">
+                              {[
+                                ["validEnabled", "Validity enabled"],
+                                ["localUiRight", "Local UI right"],
+                                ["closeDelayEnabled", "Close delay enabled"],
+                                ["syncNow", "Sync now"],
+                                ["continueOnError", "Continue on error"],
+                              ].map(([key, label]) => (
+                                <label key={key} className="flex items-center gap-3 rounded-md border border-slate-200 px-3 py-2">
+                                  <Checkbox
+                                    checked={Boolean(requestProvisioning.deviceAssignment[key as keyof OnboardingDeviceAssignmentDraft])}
+                                    onCheckedChange={(value) =>
+                                      updateRequestDeviceAssignmentField(
+                                        key as keyof OnboardingDeviceAssignmentDraft,
+                                        Boolean(value) as never
+                                      )
+                                    }
+                                  />
+                                  <span className="text-sm text-slate-800">{label}</span>
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <Button type="button" onClick={() => void submitRequest()} disabled={saving}>
+                    Create Onboarding Request
+                  </Button>
+                  <Button type="button" variant="outline" onClick={() => setRequestSheetOpen(false)}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            </SheetContent>
+          </Sheet>
 
           <Dialog open={requestDetailsOpen} onOpenChange={setRequestDetailsOpen}>
             <DialogPopup from="bottom" className="max-h-[85vh] overflow-y-auto sm:max-w-4xl">
@@ -2657,7 +2644,7 @@ export function OnboardingView() {
           </Table>
 
           <Sheet open={workflowSheetOpen} onOpenChange={setWorkflowSheetOpen}>
-            <SheetContent side="right" className="w-full overflow-y-auto data-[side=right]:w-1/2 sm:max-w-none">
+            <SheetContent side="right" className="w-full overflow-y-auto data-[side=right]:w-full sm:data-[side=right]:w-1/2 data-[side=right]:sm:max-w-none">
               <SheetHeader>
                 <SheetTitle>{editingWorkflowId === null ? "Create Workflow" : "Edit Workflow"}</SheetTitle>
                 <SheetDescription>
@@ -2724,20 +2711,11 @@ export function OnboardingView() {
                         <TableHeader>
                           <TableRow>
                             <TableHead>Step Name</TableHead>
-                            <TableHead>Task Type</TableHead>
-                            <TableHead>Action</TableHead>
-                            <TableHead>Approver</TableHead>
+                            <TableHead>Description</TableHead>
+                            <TableHead>Step Type</TableHead>
                             <TableHead>Required</TableHead>
-                            <TableHead
-                              className={hasLevelUniquenessError ? "bg-destructive/10 text-destructive" : ""}
-                            >
-                              Level
-                            </TableHead>
-                            <TableHead>Duration</TableHead>
-                            <TableHead>Branch</TableHead>
-                            <TableHead>Department</TableHead>
+                            <TableHead>Due Days</TableHead>
                             <TableHead>Role</TableHead>
-                            <TableHead>Position</TableHead>
                             <TableHead>User</TableHead>
                             <TableHead className="sticky right-0 z-10 bg-muted text-right">Actions</TableHead>
                           </TableRow>
@@ -2745,55 +2723,23 @@ export function OnboardingView() {
                         <TableBody>
                           {workflowSteps.map((step, index) => (
                             <TableRow key={`step-${index}`}>
-                              <TableCell className="font-medium">{String(step.step_name ?? `Step ${index + 1}`)}</TableCell>
-                              <TableCell>{toTitleCaseWords(String(step.task_type ?? "general"))}</TableCell>
-                              <TableCell>{toTitleCaseWords(String(step.action_type ?? "recommend"))}</TableCell>
-                              <TableCell>{toTitleCaseWords(String(step.approver_type ?? "role"))}</TableCell>
+                              <TableCell className="font-medium">{step.name || `Step ${index + 1}`}</TableCell>
+                              <TableCell>{step.description || "-"}</TableCell>
+                              <TableCell>{toTitleCaseWords(step.step_type || "task")}</TableCell>
                               <TableCell>{resolveYesNoLabel(step.is_required)}</TableCell>
-                              <TableCell
-                                className={hasLevelUniquenessError ? "bg-destructive/10 font-medium text-destructive" : ""}
-                              >
-                                {String(step.approval_level ?? "-")}
-                              </TableCell>
-                              <TableCell>
-                                {step.expected_duration_days ? `${String(step.expected_duration_days)} day(s)` : "-"}
-                              </TableCell>
-                              <TableCell>
-                                {resolveOptionLabel(
-                                  branches,
-                                  readNumber(step, ["assigned_branch_id"]),
-                                  ["id", "branch_id"],
-                                  ["name", "title"]
-                                )}
-                              </TableCell>
-                              <TableCell>
-                                {resolveOptionLabel(
-                                  departments,
-                                  readNumber(step, ["assigned_department_id"]),
-                                  ["id", "department_id"],
-                                  ["name", "title"]
-                                )}
-                              </TableCell>
+                              <TableCell>{step.due_days ? `${String(step.due_days)} day(s)` : "-"}</TableCell>
                               <TableCell>
                                 {resolveOptionLabel(
                                   roles,
-                                  readNumber(step, ["role_id"]),
+                                  step.assigned_role_id ?? null,
                                   ["id", "role_id"],
                                   ["name", "title"]
                                 )}
                               </TableCell>
                               <TableCell>
                                 {resolveOptionLabel(
-                                  positions,
-                                  readNumber(step, ["position_id"]),
-                                  ["id", "position_id"],
-                                  ["name", "title"]
-                                )}
-                              </TableCell>
-                              <TableCell>
-                                {resolveOptionLabel(
                                   users,
-                                  readNumber(step, ["company_user_id", "user_id", "id"]),
+                                  step.assigned_user_id ?? null,
                                   ["id", "user_id", "company_user_id"],
                                   ["full_name", "name", "email"]
                                 )}
@@ -2866,85 +2812,32 @@ export function OnboardingView() {
                   className="h-11"
                 />
                 <Input
-                  value={workflowForm.task_title}
-                  onChange={(event) => setWorkflowForm((prev) => ({ ...prev, task_title: event.target.value }))}
-                  placeholder="Task title (optional)"
-                  className="h-11"
-                />
-                <Input
-                  value={workflowForm.task_description}
+                  value={workflowForm.step_description}
                   onChange={(event) =>
-                    setWorkflowForm((prev) => ({ ...prev, task_description: event.target.value }))
+                    setWorkflowForm((prev) => ({ ...prev, step_description: event.target.value }))
                   }
-                  placeholder="Task description (optional)"
+                  placeholder="Step description"
                   className="h-11"
                 />
                 <div className="grid gap-1">
                   <Select
-                    value={workflowForm.task_type}
+                    value={workflowForm.step_type}
                     onValueChange={(value) =>
-                      setWorkflowForm((prev) => ({ ...prev, task_type: value ?? "general" }))
+                      setWorkflowForm((prev) => ({ ...prev, step_type: value ?? "task" }))
                     }
                   >
                     <SelectTrigger className="h-11 w-full">
-                      <SelectValue placeholder="Task type">
-                        {toTitleCaseWords(workflowForm.task_type || "general")}
+                      <SelectValue placeholder="Step type">
+                        {toTitleCaseWords(workflowForm.step_type || "task")}
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="general">General</SelectItem>
-                      <SelectItem value="hr">HR</SelectItem>
-                      <SelectItem value="it">IT</SelectItem>
-                      <SelectItem value="department">Department</SelectItem>
-                      <SelectItem value="manager">Manager</SelectItem>
+                      <SelectItem value="task">Task</SelectItem>
+                      <SelectItem value="sign_off">Sign Off</SelectItem>
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    Choose the category that best describes this step responsibility.
-                  </p>
-                </div>
-                <div className="grid gap-1">
-                  <Select
-                    value={workflowForm.action_type}
-                    onValueChange={(value) =>
-                      setWorkflowForm((prev) => ({ ...prev, action_type: value ?? "recommend" }))
-                    }
-                  >
-                    <SelectTrigger className="h-11 w-full">
-                      <SelectValue placeholder="Action type">
-                        {toTitleCaseWords(workflowForm.action_type || "recommend")}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="recommend">Recommend</SelectItem>
-                      <SelectItem value="verify">Verify</SelectItem>
-                      <SelectItem value="approve">Approve</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">
-                    Select what outcome this step records in the workflow chain.
-                  </p>
-                </div>
-                <div className="grid gap-1">
-                  <Select
-                    value={workflowForm.approver_type}
-                    onValueChange={(value) =>
-                      setWorkflowForm((prev) => ({ ...prev, approver_type: value ?? "role" }))
-                    }
-                  >
-                    <SelectTrigger className="h-11 w-full">
-                      <SelectValue placeholder="Approver type">
-                        {toTitleCaseWords(workflowForm.approver_type || "role")}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="role">Role</SelectItem>
-                      <SelectItem value="position">Position</SelectItem>
-                      <SelectItem value="company_user">Company user</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">
-                    Choose whether this step is owned by a role, position, or specific user.
+                    Step type is limited to the values accepted by the onboarding workflow API.
                   </p>
                 </div>
                 <div className="grid gap-1">
@@ -2970,134 +2863,36 @@ export function OnboardingView() {
                   <Input
                     type="number"
                     min={1}
-                    value={workflowForm.approval_level}
+                    value={workflowForm.due_days}
                     onChange={(event) =>
-                      setWorkflowForm((prev) => ({ ...prev, approval_level: event.target.value }))
+                      setWorkflowForm((prev) => ({ ...prev, due_days: event.target.value }))
                     }
-                    placeholder="Approval level"
+                    placeholder="Due days"
                     className="h-11"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Approval level order starts at 1 (first reviewer), then 2, 3, and so on.
+                    Number of days expected to complete this step. Minimum is 1 day.
                   </p>
                 </div>
-                <div className="grid gap-1">
-                  <Input
-                    type="number"
-                    min={1}
-                    value={workflowForm.expected_duration_days}
-                    onChange={(event) =>
-                      setWorkflowForm((prev) => ({ ...prev, expected_duration_days: event.target.value }))
-                    }
-                    placeholder="Expected duration days"
-                    className="h-11"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Number of days expected to complete this step (minimum is 1 day).
-                  </p>
-                </div>
-                <Select
-                  value={workflowForm.assigned_branch_id}
-                  onValueChange={(value) =>
-                    setWorkflowForm((prev) => ({
-                      ...prev,
-                      assigned_branch_id: value ?? "",
-                      assigned_department_id: "",
-                      role_id: "",
-                      position_id: "",
-                      company_user_id: "",
-                    }))
-                  }
-                >
-                  <SelectTrigger className="h-11 w-full">
-                    <SelectValue placeholder="Assigned branch (optional)">
-                      {workflowForm.assigned_branch_id
-                        ? resolveOptionLabel(
-                            branches,
-                            Number(workflowForm.assigned_branch_id),
-                            ["id", "branch_id"],
-                            ["name", "title"]
-                          )
-                        : "Assigned branch (optional)"}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {branches.map((row) => {
-                      const branchId = readNumber(row, ["id", "branch_id"])
-                      if (branchId === null) return null
-                      return (
-                        <SelectItem key={branchId} value={String(branchId)}>
-                          {resolveOptionLabel(branches, branchId, ["id", "branch_id"], ["name", "title"])}
-                        </SelectItem>
-                      )
-                    })}
-                  </SelectContent>
-                </Select>
-                <Select
-                  value={workflowForm.assigned_department_id}
-                  onValueChange={(value) =>
-                    setWorkflowForm((prev) => ({
-                      ...prev,
-                      assigned_department_id: value ?? "",
-                      role_id: "",
-                      position_id: "",
-                      company_user_id: "",
-                    }))
-                  }
-                >
-                  <SelectTrigger className="h-11 w-full">
-                    <SelectValue placeholder="Assigned department (optional)">
-                      {workflowForm.assigned_department_id
-                        ? resolveOptionLabel(
-                            departments,
-                            Number(workflowForm.assigned_department_id),
-                            ["id", "department_id"],
-                            ["name", "title"]
-                          )
-                        : "Assigned department (optional)"}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {filteredDepartments.map((row) => {
-                      const departmentId = readNumber(row, ["id", "department_id"])
-                      if (departmentId === null) return null
-                      return (
-                        <SelectItem key={departmentId} value={String(departmentId)}>
-                          {resolveOptionLabel(
-                            departments,
-                            departmentId,
-                            ["id", "department_id"],
-                            ["name", "title"]
-                          )}
-                        </SelectItem>
-                      )
-                    })}
-                  </SelectContent>
-                </Select>
                 <div className="grid gap-1">
                   <Select
-                    value={workflowForm.role_id}
+                    value={workflowForm.assigned_role_id}
                     onValueChange={(value) =>
-                      setWorkflowForm((prev) => ({
-                        ...prev,
-                        role_id: value ?? "",
-                        position_id: "",
-                        company_user_id: "",
-                      }))
+                      setWorkflowForm((prev) => ({ ...prev, assigned_role_id: value ?? "" }))
                     }
                   >
                     <SelectTrigger className="h-11 w-full">
-                      <SelectValue placeholder="Role (optional)">
-                        {workflowForm.role_id
-                          ? resolveOptionLabel(roles, Number(workflowForm.role_id), ["id", "role_id"], [
+                      <SelectValue placeholder="Assigned role (optional)">
+                        {workflowForm.assigned_role_id
+                          ? resolveOptionLabel(roles, Number(workflowForm.assigned_role_id), ["id", "role_id"], [
                               "name",
                               "title",
                             ])
-                          : "Role (optional)"}
+                          : "Assigned role (optional)"}
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                      {filteredRoles.map((row) => {
+                      {roles.map((row) => {
                         const roleId = readNumber(row, ["id", "role_id"])
                         if (roleId === null) return null
                         return (
@@ -3109,83 +2904,49 @@ export function OnboardingView() {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    Choose the role responsible for this step.
+                    Assign a role if this step should be owned by a role-based queue.
                   </p>
                 </div>
-                <Select
-                  value={workflowForm.position_id}
-                  onValueChange={(value) =>
-                    setWorkflowForm((prev) => ({
-                      ...prev,
-                      position_id: value ?? "",
-                      company_user_id: "",
-                    }))
-                  }
-                >
-                  <SelectTrigger className="h-11 w-full">
-                    <SelectValue placeholder="Position (optional)">
-                      {workflowForm.position_id
-                        ? resolveOptionLabel(
-                            positions,
-                            Number(workflowForm.position_id),
-                            ["id", "position_id"],
-                            ["name", "title"]
-                          )
-                        : "Position (optional)"}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {filteredPositions.map((row) => {
-                      const positionId = readNumber(row, ["id", "position_id"])
-                      if (positionId === null) return null
-                      return (
-                        <SelectItem key={positionId} value={String(positionId)}>
-                          {resolveOptionLabel(
-                            positions,
-                            positionId,
-                            ["id", "position_id"],
-                            ["name", "title"]
-                          )}
-                        </SelectItem>
-                      )
-                    })}
-                  </SelectContent>
-                </Select>
-                <Select
-                  value={workflowForm.company_user_id}
-                  onValueChange={(value) =>
-                    setWorkflowForm((prev) => ({ ...prev, company_user_id: value ?? "" }))
-                  }
-                >
-                  <SelectTrigger className="h-11 w-full">
-                    <SelectValue placeholder="Approver user (optional)">
-                      {workflowForm.company_user_id
-                        ? resolveOptionLabel(
-                            users,
-                            Number(workflowForm.company_user_id),
-                            ["id", "company_user_id", "user_id"],
-                            ["full_name", "name", "email"]
-                          )
-                        : "Approver user (optional)"}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {filteredUsers.map((row) => {
-                      const userId = readNumber(row, ["id", "company_user_id", "user_id"])
-                      if (userId === null) return null
-                      return (
-                        <SelectItem key={userId} value={String(userId)}>
-                          {resolveOptionLabel(
-                            users,
-                            userId,
-                            ["id", "company_user_id", "user_id"],
-                            ["full_name", "name", "email"]
-                          )}
-                        </SelectItem>
-                      )
-                    })}
-                  </SelectContent>
-                </Select>
+                <div className="grid gap-1">
+                  <Select
+                    value={workflowForm.assigned_user_id}
+                    onValueChange={(value) =>
+                      setWorkflowForm((prev) => ({ ...prev, assigned_user_id: value ?? "" }))
+                    }
+                  >
+                    <SelectTrigger className="h-11 w-full">
+                      <SelectValue placeholder="Assigned user (optional)">
+                        {workflowForm.assigned_user_id
+                          ? resolveOptionLabel(
+                              users,
+                              Number(workflowForm.assigned_user_id),
+                              ["id", "company_user_id", "user_id"],
+                              ["full_name", "name", "email"]
+                            )
+                          : "Assigned user (optional)"}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {users.map((row) => {
+                        const userId = readNumber(row, ["id", "company_user_id", "user_id"])
+                        if (userId === null) return null
+                        return (
+                          <SelectItem key={userId} value={String(userId)}>
+                            {resolveOptionLabel(
+                              users,
+                              userId,
+                              ["id", "company_user_id", "user_id"],
+                              ["full_name", "name", "email"]
+                            )}
+                          </SelectItem>
+                        )
+                      })}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Assign a user if this step should go directly to a specific person. You can choose a role, a user, or both, but not neither.
+                  </p>
+                </div>
               </div>
               <DialogFooter>
                 <Button

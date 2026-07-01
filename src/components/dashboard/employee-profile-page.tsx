@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { EyeIcon, EyeOffIcon, PencilIcon, PlusIcon, Trash2Icon, UploadIcon } from "lucide-react"
+import { EyeIcon, EyeOffIcon, PencilIcon, PlusIcon, SearchIcon, Trash2Icon, UploadIcon } from "lucide-react"
 import { getCountryCallingCode } from "libphonenumber-js"
 import { countries as countryCodes } from "country-flag-icons"
 import * as FlagIcons from "country-flag-icons/react/3x2"
@@ -16,7 +16,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Accordion, AccordionPanel, AccordionItem, AccordionTrigger } from "@/components/animate-ui/components/base/accordion"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 import {
@@ -34,6 +33,7 @@ import {
   type EmployeeStatusPayload,
   type EmployeeProfileSection,
 } from "@/lib/admin-api"
+import { cn } from "@/lib/utils"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
@@ -321,6 +321,37 @@ function sectionTitleToApiSection(title: string): EmployeeProfileSection | null 
   if (normalized === "professional qualifications") return "professional-qualifications"
   if (normalized === "experience details") return "experience-details"
   return null
+}
+
+function sectionTitleToRouteKey(title: string) {
+  return title.toLowerCase().replaceAll(" ", "_")
+}
+
+function routeKeyToSectionTitle(routeKey: string | null | undefined) {
+  if (!routeKey) {
+    return null
+  }
+
+  const normalized = routeKey.trim().toLowerCase()
+  if (!normalized) {
+    return null
+  }
+
+  return (
+    {
+      contacts: "Contacts",
+      documents: "Documents",
+      addresses: "Addresses",
+      relatives: "Relatives",
+      identifications: "Identifications",
+      bank_accounts: "Bank Accounts",
+      departments: "Departments",
+      academic_qualifications: "Academic Qualifications",
+      professional_qualifications: "Professional Qualifications",
+      experience_details: "Experience Details",
+      company_user: "Company User",
+    }[normalized] ?? null
+  )
 }
 
 type SectionEntry = { key: string; label: string; value: string; kind: "text" | "boolean" }
@@ -796,7 +827,11 @@ function renderEntryInput({
     return <PhoneWithCountryCodeInput value={value} onChange={onChange} />
   }
 
-  if (entry.key === "file_url") {
+  if (
+    entry.key === "file_url" ||
+    entry.key === "academic_certificate_document_url" ||
+    entry.key === "professional_certificate_document_url"
+  ) {
     return <DocumentFileInput value={value} onChange={onChange} />
   }
 
@@ -905,7 +940,7 @@ function sectionSchema(sectionTitle: string): SectionEntry[] {
       { key: "issuing_organization", label: "Issuing Organization", value: "", kind: "text" },
       { key: "issue_date", label: "Issue Date", value: "", kind: "text" },
       { key: "expiry_date", label: "Expiry Date", value: "", kind: "text" },
-      { key: "professional_certificate_document_url", label: "Professional Certificate URL", value: "", kind: "text" },
+      { key: "professional_certificate_document_url", label: "Professional Certificate Attachment", value: "", kind: "text" },
     ]
   }
   if (name === "experience details") {
@@ -977,17 +1012,20 @@ function editableEntries(record: AdminRecord, sectionTitle: string) {
   return entries
 }
 
-function SectionAccordion({
+function Section({
   title,
   items,
   employeeId,
   onMutated,
+  requestedRouteKey,
 }: {
   title: string
   items: AdminRecord[]
   employeeId: number | null
   onMutated: () => Promise<void>
+  requestedRouteKey?: string | null
 }) {
+  const sectionRef = React.useRef<HTMLDivElement | null>(null)
   const [editingRecord, setEditingRecord] = React.useState<{ item: AdminRecord; index: number } | null>(null)
   const [deletingRecord, setDeletingRecord] = React.useState<{ item: AdminRecord; index: number } | null>(null)
   const [addingRecord, setAddingRecord] = React.useState(false)
@@ -998,6 +1036,8 @@ function SectionAccordion({
   const token = readStoredToken()
   const apiSection = sectionTitleToApiSection(title)
   const isDocumentsSection = title.toLowerCase() === "documents"
+  const routeKey = sectionTitleToRouteKey(title)
+  const isHighlighted = requestedRouteKey === routeKey
   const supportsMutations = Boolean((apiSection || isDocumentsSection) && employeeId)
   const supportsAdd = supportsMutations
   const supportsDelete = supportsMutations
@@ -1027,135 +1067,154 @@ function SectionAccordion({
     setAddForm(initial)
   }, [addingRecord, templateEntries])
 
+  React.useEffect(() => {
+    if (!isHighlighted || !sectionRef.current) {
+      return
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      sectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
+      sectionRef.current?.focus({ preventScroll: true })
+    })
+
+    return () => window.cancelAnimationFrame(frameId)
+  }, [isHighlighted, items.length])
+
   return (
     <>
-      <Accordion
-        multiple={false}
-        className="rounded-xl border border-slate-200/80 bg-white/70 shadow-sm backdrop-blur-sm dark:border-slate-700/70 dark:bg-slate-900/40"
+      <div
+        id={`employee-profile-section-${routeKey}`}
+        ref={sectionRef}
+        tabIndex={-1}
+        aria-label={`${title} section`}
+        className={cn(
+          "scroll-mt-24 rounded-xl px-3 py-3 outline-none transition-all duration-500 lg:px-4",
+          isHighlighted && "ring-2 ring-amber-400 ring-offset-2 ring-offset-background bg-amber-50/80 shadow-sm"
+        )}
       >
-        <AccordionItem value={title} className="rounded-none border-0 bg-transparent shadow-none">
-          <AccordionTrigger showArrow={true}>
-            <div className="flex items-center gap-2">
-              <span>{title}</span>
-              {items.length === 0 ? (
-                <span className="rounded-md bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-700 dark:bg-rose-500/15 dark:text-rose-300">Not provided</span>
-              ) : (
-                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-200">{items.length}</span>
-              )}
-            </div>
-          </AccordionTrigger>
-          <AccordionPanel keepRendered={true} className="border-t-0">
-            {supportsMutations ? (
-              <div className="mb-3 flex justify-end">
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-                  onClick={() => setAddingRecord(true)}
-                >
-                  <PlusIcon className="size-3.5" />
-                  Add
-                </button>
-              </div>
-            ) : null}
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-base font-semibold">{title}</span>
             {items.length === 0 ? (
-              <p className="py-2 text-sm text-slate-500 dark:text-slate-400">No data available.</p>
+              <span className="rounded-md bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-700 dark:bg-rose-500/15 dark:text-rose-300">Not provided</span>
             ) : (
-              <div className="space-y-2">
-                {items.map((item, index) => (
-                  <div key={`${title}-${index}`} className="rounded-lg p-3 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                    <div className="mb-3 flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-base font-semibold text-slate-900 break-words dark:text-slate-100">{recordPreview(item)}</p>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        {supportsEdit ? (
-                          <button
-                          type="button"
-                          aria-label={`Edit ${title} record ${index + 1}`}
-                          className="rounded-md p-1.5 text-emerald-600 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-500/15"
-                          onClick={() => setEditingRecord({ item, index })}
-                        >
-                          <PencilIcon className="size-4" />
-                        </button>
-                        ) : null}
-                        {supportsDelete ? (
-                          <button
-                          type="button"
-                          aria-label={`Delete ${title} record ${index + 1}`}
-                          className="rounded-md p-1.5 text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-500/15"
-                          onClick={() => setDeletingRecord({ item, index })}
-                        >
-                          <Trash2Icon className="size-4" />
-                        </button>
-                        ) : null}
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      {renderRecordFields(item, title)
-                        .filter((entry) => entry.value.trim() !== "" && entry.value !== "-" && entry.value !== "Available")
-                        .map((entry) => (
-                          <div key={`${title}-${index}-${entry.label}`} className="min-w-0 rounded-md bg-slate-50/80 p-2.5 dark:bg-slate-800/40">
-                            <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                              {entry.label}
-                            </p>
-                            {entry.label.toLowerCase().includes("country") ? (
-                              <span className="inline-flex items-center gap-2 text-sm text-slate-800 break-words dark:text-slate-100">
-                                {(() => {
-                                  const option = findCountryOption(entry.value)
-                                  if (!option) {
-                                    return null
-                                  }
-                                  const Flag = (FlagIcons as Record<string, React.ComponentType<{ title?: string; className?: string }>>)[option.code]
-                                  return Flag ? <Flag className="h-4 w-6 rounded-sm border border-slate-200 dark:border-slate-600" /> : null
-                                })()}
-                                <span>{entry.value}</span>
-                              </span>
-                            ) : (
-                              <p className="text-sm text-slate-800 break-words dark:text-slate-100">{entry.value}</p>
-                            )}
-                          </div>
-                        ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-200">{items.length}</span>
             )}
-          </AccordionPanel>
-        </AccordionItem>
-      </Accordion>
+            {isHighlighted ? (
+              <span className="rounded-full bg-amber-200 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-900">
+                Needs attention
+              </span>
+            ) : null}
+          </div>
+          {supportsAdd ? (
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+              onClick={() => setAddingRecord(true)}
+            >
+              <PlusIcon className="size-3.5" /> Add
+            </button>
+          ) : null}
+        </div>
+        {items.length === 0 ? (
+          <p className="py-2 text-sm text-muted-foreground">No data available.</p>
+        ) : (
+          <div className="space-y-3">
+            {items.map((item, index) => (
+              <div key={`${title}-${index}`} className="border-b border-border pb-3 last:border-b-0 last:pb-0">
+                <div className="mb-2 flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="break-words text-sm font-semibold text-foreground">{recordPreview(item)}</p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {supportsEdit ? (
+                      <button
+                        type="button"
+                        aria-label={`Edit ${title} record ${index + 1}`}
+                        className="p-1 text-muted-foreground hover:text-foreground"
+                        onClick={() => setEditingRecord({ item, index })}
+                      >
+                        <PencilIcon className="size-4" />
+                      </button>
+                    ) : null}
+                    {supportsDelete ? (
+                      <button
+                        type="button"
+                        aria-label={`Delete ${title} record ${index + 1}`}
+                        className="p-1 text-muted-foreground hover:text-foreground"
+                        onClick={() => setDeletingRecord({ item, index })}
+                      >
+                        <Trash2Icon className="size-4" />
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-1 text-sm sm:grid-cols-2">
+                  {renderRecordFields(item, title)
+                    .filter((entry) => entry.value.trim() !== "" && entry.value !== "-" && entry.value !== "Available")
+                    .map((entry) => (
+                      <div key={`${title}-${index}-${entry.label}`} className="min-w-0">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          {entry.label}
+                        </p>
+                        {entry.label.toLowerCase().includes("country") ? (
+                          <span className="inline-flex items-center gap-1 break-words text-foreground">
+                            {(() => {
+                              const option = findCountryOption(entry.value)
+                              if (!option) {
+                                return null
+                              }
+                              const Flag = (FlagIcons as Record<string, React.ComponentType<{ title?: string; className?: string }>>)[option.code]
+                              return Flag ? <Flag className="h-3 w-4 rounded-sm border border-border" /> : null
+                            })()}
+                            <span>{entry.value}</span>
+                          </span>
+                        ) : (
+                          <p className="break-words text-foreground">{entry.value}</p>
+                        )}
+                      </div>
+                    ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       <AlertDialog
         open={Boolean(editingRecord)}
         onOpenChange={(open) => {
           if (!open) {
             setEditingRecord(null)
+            setMutationError(null)
           }
         }}
       >
         <AlertDialogContent className="max-h-[80vh] max-w-2xl overflow-auto">
           <AlertDialogHeader>
-            <AlertDialogTitle>
-              Edit {title} Record {editingRecord ? `#${editingRecord.index + 1}` : ""}
-            </AlertDialogTitle>
+            <AlertDialogTitle>Edit {title} Record</AlertDialogTitle>
             <AlertDialogDescription>
-              Edit form preview. Once you share the API contract, I will wire submit/update behavior.
+              Update the selected {title.toLowerCase()} information for this employee.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <div className="grid gap-3 lg:grid-cols-2">
-            {(editingRecord ? editableEntries(editingRecord.item, title) : []).map((entry) => (
-              <label key={`edit-${title}-${entry.key}`} className="grid gap-1">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{entry.label}</span>
-                {renderEntryInput({
-                  entry,
-                  value: editForm[entry.key] ?? entry.value,
-                  onChange: (nextValue) => setEditForm((prev) => ({ ...prev, [entry.key]: nextValue })),
-                })}
-              </label>
-            ))}
+          <div className="grid gap-3 sm:grid-cols-2">
+            {editingRecord
+              ? editableEntries(editingRecord.item, title).map((entry) => (
+                  <div key={entry.key} className={entry.key === "responsibilities_description" || entry.key === "notes" ? "sm:col-span-2" : ""}>
+                    {renderEntryInput({
+                      entry,
+                      value: editForm[entry.key] ?? entry.value,
+                      onChange: (value) => {
+                        setEditForm((current) => ({ ...current, [entry.key]: value }))
+                      },
+                    })}
+                  </div>
+                ))
+              : null}
           </div>
           {mutationError ? <p className="text-sm text-rose-600">{mutationError}</p> : null}
           <AlertDialogFooter>
-            <AlertDialogCancel>Close</AlertDialogCancel>
+            <AlertDialogCancel disabled={submitting}>Close</AlertDialogCancel>
             <button
               type="button"
               disabled={submitting || !editingRecord || !supportsEdit}
@@ -1330,7 +1389,13 @@ function SectionAccordion({
   )
 }
 
-export function EmployeeProfilePage({ employeeNo }: { employeeNo: string }) {
+export function EmployeeProfilePage({
+  employeeNo,
+  requestedMissingItem,
+}: {
+  employeeNo: string
+  requestedMissingItem?: string | null
+}) {
   const router = useRouter()
   const [employee, setEmployee] = React.useState<AdminRecord | null>(null)
   const [loading, setLoading] = React.useState(true)
@@ -1353,7 +1418,20 @@ export function EmployeeProfilePage({ employeeNo }: { employeeNo: string }) {
     exit_reason: "",
     notes: "",
   })
+  const [profileSearchOpen, setProfileSearchOpen] = React.useState(false)
+  const [profileSearch, setProfileSearch] = React.useState("")
+  const [profileSearchResults, setProfileSearchResults] = React.useState<AdminRecord[]>([])
+  const [profileSearchLoading, setProfileSearchLoading] = React.useState(false)
+  const [profileSearchError, setProfileSearchError] = React.useState<string | null>(null)
   const isExitedStatus = statusForm.employment_status === "exited"
+  const requestedSectionTitle = React.useMemo(
+    () => routeKeyToSectionTitle(requestedMissingItem),
+    [requestedMissingItem]
+  )
+  const requestedRouteKey = React.useMemo(
+    () => (requestedSectionTitle ? sectionTitleToRouteKey(requestedSectionTitle) : null),
+    [requestedSectionTitle]
+  )
 
   const fetchEmployee = React.useCallback(async () => {
       const token = readStoredToken()
@@ -1393,6 +1471,76 @@ export function EmployeeProfilePage({ employeeNo }: { employeeNo: string }) {
     void fetchEmployee()
   }, [fetchEmployee])
 
+  React.useEffect(() => {
+    if (!profileSearchOpen) {
+      setProfileSearch("")
+      setProfileSearchResults([])
+      setProfileSearchLoading(false)
+      setProfileSearchError(null)
+      return
+    }
+
+    const trimmedSearch = profileSearch.trim()
+    if (trimmedSearch.length < 2) {
+      setProfileSearchResults([])
+      setProfileSearchLoading(false)
+      setProfileSearchError(null)
+      return
+    }
+
+    const token = readStoredToken()
+    if (!token) {
+      setProfileSearchError("Authentication required. Please log in again.")
+      setProfileSearchResults([])
+      setProfileSearchLoading(false)
+      return
+    }
+
+    let cancelled = false
+    setProfileSearchLoading(true)
+    setProfileSearchError(null)
+
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        const result = await listEmployees(token, {
+          page: 1,
+          limit: 8,
+          sortBy: "created_at",
+          sortOrder: "DESC",
+          search: trimmedSearch,
+        })
+        if (cancelled) {
+          return
+        }
+        setProfileSearchResults(result.rows)
+      } catch (errorObject) {
+        if (cancelled) {
+          return
+        }
+        setProfileSearchResults([])
+        setProfileSearchError(errorObject instanceof Error ? errorObject.message : "Failed to search employees.")
+      } finally {
+        if (!cancelled) {
+          setProfileSearchLoading(false)
+        }
+      }
+    }, 250)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timeoutId)
+    }
+  }, [profileSearch, profileSearchOpen])
+
+  function openEmployeeProfile(row: AdminRecord) {
+    const nextEmployeeNo = readString(row, ["employee_no", "user_no", "employeeNo"])
+    if (nextEmployeeNo === "-") {
+      return
+    }
+    setProfileSearchOpen(false)
+    router.push(`/dashboard/employees/profile/${encodeURIComponent(nextEmployeeNo)}`)
+  }
+
   if (loading) {
     return <div className="rounded-xl border border-slate-200 bg-white/80 p-6 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300">Loading employee profile...</div>
   }
@@ -1414,15 +1562,74 @@ export function EmployeeProfilePage({ employeeNo }: { employeeNo: string }) {
 
   return (
     <div className="space-y-4 px-4 pb-4 lg:px-6">
-      <div className="sticky top-3 z-30 rounded-xl border border-slate-200 bg-white/95 px-4 py-3 shadow-sm backdrop-blur lg:px-6 dark:border-slate-700 dark:bg-slate-900/90">
+      <div className="sticky top-3 z-30 border-b border-border bg-background/95 px-4 py-3 backdrop-blur lg:px-6">
         <div className="flex items-center justify-between gap-4">
-          <div>
-            <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">{employeeDisplayNameFromLinkedUser(employee)}</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-xl font-semibold text-foreground">{employeeDisplayNameFromLinkedUser(employee)}</h2>
+            <Popover open={profileSearchOpen} onOpenChange={setProfileSearchOpen}>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="Search employee profiles"
+                  title="Search employee profiles"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 transition-colors hover:border-slate-300 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:text-white"
+                >
+                  <SearchIcon className="size-4" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="start" className="w-[340px] p-3">
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">Find Another Employee</p>
+                    <p className="text-xs text-muted-foreground">Search by name, employee number, email, or phone.</p>
+                  </div>
+                  <div className="flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 dark:border-slate-700 dark:bg-slate-950">
+                    <SearchIcon className="size-4 shrink-0 text-slate-400" />
+                    <input
+                      type="text"
+                      value={profileSearch}
+                      onChange={(event) => setProfileSearch(event.target.value)}
+                      placeholder="Search employee profile"
+                      className="h-10 w-full border-0 bg-transparent p-0 text-sm text-foreground outline-none placeholder:text-slate-400"
+                    />
+                  </div>
+                  {profileSearchError ? <p className="text-xs text-rose-600">{profileSearchError}</p> : null}
+                  {profileSearchLoading ? <p className="text-xs text-muted-foreground">Searching employees...</p> : null}
+                  {!profileSearchLoading && !profileSearchError && profileSearch.trim().length > 0 && profileSearch.trim().length < 2 ? (
+                    <p className="text-xs text-muted-foreground">Type at least 2 characters to search.</p>
+                  ) : null}
+                  {!profileSearchLoading && !profileSearchError && profileSearch.trim().length >= 2 && profileSearchResults.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">No employees matched your search.</p>
+                  ) : null}
+                  {profileSearchResults.length > 0 ? (
+                    <div className="max-h-72 space-y-1 overflow-y-auto">
+                      {profileSearchResults.map((row, index) => {
+                        const nextEmployeeNo = readString(row, ["employee_no", "user_no", "employeeNo"])
+                        return (
+                          <button
+                            key={`${nextEmployeeNo}-${index}`}
+                            type="button"
+                            className="flex w-full items-start justify-between rounded-md px-3 py-2 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-800"
+                            onClick={() => openEmployeeProfile(row)}
+                          >
+                            <span className="min-w-0">
+                              <span className="block truncate text-sm font-medium text-foreground">{employeeDisplayNameFromLinkedUser(row)}</span>
+                              <span className="block truncate text-xs text-muted-foreground">{readString(row, ["email", "work_email", "personal_email"])}</span>
+                            </span>
+                            <span className="shrink-0 pl-3 text-xs text-muted-foreground">{nextEmployeeNo}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
-          <div className="flex items-center gap-1 rounded-lg bg-transparent p-0.5">
+          <div className="flex items-center gap-2">
             <button
               type="button"
-              className="rounded-md px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 dark:hover:text-white"
+              className="px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
               onClick={() => {
                 const companyUser = resolveCompanyUserRecord(employee)
                 setFirstName(readString(companyUser ?? employee, ["first_name", "firstName"]) === "-" ? "" : readString(companyUser ?? employee, ["first_name", "firstName"]))
@@ -1439,7 +1646,7 @@ export function EmployeeProfilePage({ employeeNo }: { employeeNo: string }) {
             </button>
             <button
               type="button"
-              className="rounded-md px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 dark:hover:text-white"
+              className="px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
               onClick={() => {
                 setStatusForm(readEmployeeStatusForm(employee))
                 setStatusError(null)
@@ -1448,18 +1655,11 @@ export function EmployeeProfilePage({ employeeNo }: { employeeNo: string }) {
             >
               Update Status
             </button>
-            <button
-              type="button"
-              className="rounded-md px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 dark:hover:text-white"
-              onClick={() => router.push("/dashboard/employees/all")}
-            >
-              Back to All Employees
-            </button>
           </div>
         </div>
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white/80 px-4 py-4 shadow-sm lg:px-6 dark:border-slate-700 dark:bg-slate-900/60">
+      <div className="px-4 py-4">
         <div className="grid gap-x-8 md:grid-cols-2">
           <div>
             <SummaryRow label="Employee No" value={readString(employee, ["employee_no", "user_no"])} />
@@ -1478,18 +1678,18 @@ export function EmployeeProfilePage({ employeeNo }: { employeeNo: string }) {
         </div>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2">
-        <SectionAccordion title="Contacts" items={asRecordArray(employee.contacts)} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} />
-        <SectionAccordion title="Documents" items={asRecordArray(employee.documents)} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} />
-        <SectionAccordion title="Addresses" items={asRecordArray(employee.addresses)} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} />
-        <SectionAccordion title="Relatives" items={asRecordArray(employee.relatives)} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} />
-        <SectionAccordion title="Identifications" items={asRecordArray(employee.identifications)} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} />
-        <SectionAccordion title="Bank Accounts" items={asRecordArray(employee.bank_accounts)} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} />
-        <SectionAccordion title="Departments" items={asRecordArray(employee.departments)} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} />
-        <SectionAccordion title="Academic Qualifications" items={asRecordArray(employee.academic_qualifications)} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} />
-        <SectionAccordion title="Professional Qualifications" items={asRecordArray(employee.professional_qualifications)} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} />
-        <SectionAccordion title="Experience Details" items={asRecordArray(employee.experience_details)} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} />
-        <SectionAccordion title="Company User" items={employee.company_user ? [asRecord(employee.company_user) ?? {}] : []} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} />
+      <div className="divide-y divide-border">
+        <Section title="Contacts" items={asRecordArray(employee.contacts)} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} requestedRouteKey={requestedRouteKey} />
+        <Section title="Documents" items={asRecordArray(employee.documents)} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} requestedRouteKey={requestedRouteKey} />
+        <Section title="Addresses" items={asRecordArray(employee.addresses)} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} requestedRouteKey={requestedRouteKey} />
+        <Section title="Relatives" items={asRecordArray(employee.relatives)} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} requestedRouteKey={requestedRouteKey} />
+        <Section title="Identifications" items={asRecordArray(employee.identifications)} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} requestedRouteKey={requestedRouteKey} />
+        <Section title="Bank Accounts" items={asRecordArray(employee.bank_accounts)} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} requestedRouteKey={requestedRouteKey} />
+        <Section title="Departments" items={asRecordArray(employee.departments)} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} requestedRouteKey={requestedRouteKey} />
+        <Section title="Academic Qualifications" items={asRecordArray(employee.academic_qualifications)} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} requestedRouteKey={requestedRouteKey} />
+        <Section title="Professional Qualifications" items={asRecordArray(employee.professional_qualifications)} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} requestedRouteKey={requestedRouteKey} />
+        <Section title="Experience Details" items={asRecordArray(employee.experience_details)} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} requestedRouteKey={requestedRouteKey} />
+        <Section title="Company User" items={employee.company_user ? [asRecord(employee.company_user) ?? {}] : []} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} requestedRouteKey={requestedRouteKey} />
       </div>
 
       <AlertDialog open={statusDialogOpen} onOpenChange={setStatusDialogOpen}>

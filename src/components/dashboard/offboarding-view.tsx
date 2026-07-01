@@ -2,7 +2,10 @@
 
 import * as React from "react"
 import { TableScrollContainer } from "@/components/common/table-scroll-container"
+import { ResizableTable } from "@/components/ui/resizable-table"
 import { Plus, RefreshCw } from "lucide-react"
+
+import { cn } from "@/lib/utils"
 
 import {
   addOffboardingDocument,
@@ -48,6 +51,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
+import { Button } from "@/components/ui/button"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
@@ -485,13 +489,44 @@ export function OffboardingView() {
   }
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white/80 px-4 py-5 shadow-sm lg:px-6">
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <button type="button" className={tab === "requests" ? "rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white" : "rounded-md border border-slate-300 px-3 py-2 text-sm"} onClick={() => setTab("requests")}>Requests</button>
-        <button type="button" className={tab === "workflows" ? "rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white" : "rounded-md border border-slate-300 px-3 py-2 text-sm"} onClick={() => setTab("workflows")}>Workflows</button>
-        <button type="button" className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-300 text-sm" onClick={() => void reloadAll()} disabled={loading}>
-          <RefreshCw className={`h-4 w-4 text-primary ${loading ? "animate-spin" : ""}`} />
-        </button>
+    <div>
+      <div className="mb-4">
+        <div className="glass-scrollbar overflow-x-auto">
+          <div className="inline-flex min-w-full items-center gap-4 border-b border-border/80">
+            <button
+              type="button"
+              onClick={() => setTab("requests")}
+              className={cn(
+                "border-b-2 px-1 py-2 text-[0.92rem] font-medium whitespace-nowrap transition-colors duration-200",
+                tab === "requests"
+                  ? "border-[var(--primary)] text-[var(--primary)]"
+                  : "border-transparent text-slate-600 hover:text-slate-900"
+              )}
+            >
+              Requests
+            </button>
+            <button
+              type="button"
+              onClick={() => setTab("workflows")}
+              className={cn(
+                "border-b-2 px-1 py-2 text-[0.92rem] font-medium whitespace-nowrap transition-colors duration-200",
+                tab === "workflows"
+                  ? "border-[var(--primary)] text-[var(--primary)]"
+                  : "border-transparent text-slate-600 hover:text-slate-900"
+              )}
+            >
+              Workflows
+            </button>
+            <button
+              type="button"
+              className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-md border border-border text-sm"
+              onClick={() => void reloadAll()}
+              disabled={loading}
+            >
+              <RefreshCw className={`h-4 w-4 text-primary ${loading ? "animate-spin" : ""}`} />
+            </button>
+          </div>
+        </div>
       </div>
 
       {error ? <p className="mb-3 text-sm text-rose-600">{error}</p> : null}
@@ -499,17 +534,16 @@ export function OffboardingView() {
       {tab === "requests" ? (
         <div className="space-y-4">
           <div className="flex justify-end">
-            <button
+            <Button
               type="button"
-              className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white"
               onClick={() => setRequestSheetOpen(true)}
             >
-              <Plus className="h-4 w-4" />
+              <Plus className="mr-2 h-4 w-4" />
               Create Offboarding
-            </button>
+            </Button>
           </div>
 
-          <div className="grid gap-3 rounded-md border border-slate-200 p-3 md:grid-cols-3">
+          <div className="grid gap-3 rounded-xl border border-border p-4 md:grid-cols-3">
             <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={taskForm.request_id} onChange={(event) => { const v = event.target.value; setTaskForm((prev) => ({ ...prev, request_id: v })); setClearanceForm((prev) => ({ ...prev, request_id: v })); setDocumentForm((prev) => ({ ...prev, request_id: v })) }}>
               <option value="">Select request</option>
               {requests.map((row, index) => {
@@ -519,68 +553,46 @@ export function OffboardingView() {
               })}
             </select>
             <input className="h-10 rounded-md border border-slate-300 px-3 text-sm" placeholder="Task title" value={taskForm.title} onChange={(event) => setTaskForm((prev) => ({ ...prev, title: event.target.value }))} />
-            <button
+            <Button
               type="button"
-              className="rounded-md border border-slate-900 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+              variant="outline"
               onClick={() => void submitTaskForm()}
               disabled={saving}
               title="Add task"
             >
               Add Task
-            </button>
+            </Button>
             <input className="h-10 rounded-md border border-slate-300 px-3 text-sm" placeholder="Document title" value={documentForm.title} onChange={(event) => setDocumentForm((prev) => ({ ...prev, title: event.target.value }))} />
             <input className="h-10 rounded-md border border-slate-300 px-3 text-sm" placeholder="File path" value={documentForm.file_path} onChange={(event) => setDocumentForm((prev) => ({ ...prev, file_path: event.target.value, file_name: event.target.value, original_file_name: event.target.value }))} />
-            <button
+            <Button
               type="button"
-              className="rounded-md border border-slate-900 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+              variant="outline"
               onClick={() => void submitDocumentForm()}
               disabled={saving}
               title="Add document"
             >
               Add Document
-            </button>
+            </Button>
             <div className="md:col-span-3">
-              <button
+              <Button
                 type="button"
-                className="rounded-md border border-slate-900 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                variant="outline"
                 onClick={() => setClearanceDialogOpen(true)}
                 disabled={saving}
                 title="Add clearance"
               >
                 Add Clearance
-              </button>
+              </Button>
             </div>
           </div>
 
-          <TableScrollContainer>
-            <table className="w-full min-w-[720px] text-sm">
-              <thead className="bg-slate-50/90"><tr><th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Title</th><th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Employee</th><th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Type</th><th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Status</th><th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Last Working</th><th className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Actions</th></tr></thead>
-              <tbody className="[&_tr:nth-child(odd)]:bg-slate-50/35 [&_tr]:border-t [&_tr]:border-slate-100 [&_tr:hover]:bg-slate-50/80">
-                {requests.map((row, index) => {
-                  const id = readNumber(row, ["id"])
-                  return (
-                    <tr key={`off-row-${id ?? index}`}>
-                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["title"])}</td>
-                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["employee_name", "employee_full_name", "employee_id"])}</td>
-                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["offboarding_type"])}</td>
-                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["status"])}</td>
-                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["last_working_date"])}</td>
-                      <td className="px-4 py-4 text-right">
-                        <div className="inline-flex gap-2">
-                          <button type="button" className="rounded-md border border-slate-300 px-2 py-1 text-xs" onClick={() => void openRequestDetails(row)}>View</button>
-                          <button type="button" className="rounded-md border border-blue-300 px-2 py-1 text-xs text-blue-700" onClick={() => void runRequestAction(row, "submit")}>Submit</button>
-                          <button type="button" className="rounded-md border border-emerald-300 px-2 py-1 text-xs text-emerald-700" onClick={() => void runRequestAction(row, "approve")}>Approve</button>
-                          <button type="button" className="rounded-md border border-amber-300 px-2 py-1 text-xs text-amber-700" onClick={() => void runRequestAction(row, "reject")}>Reject</button>
-                          <button type="button" className="rounded-md border border-rose-300 px-2 py-1 text-xs text-rose-700" onClick={() => void runRequestAction(row, "cancel")}>Cancel</button>
-                          <button type="button" className="rounded-md border border-slate-300 px-2 py-1 text-xs" onClick={() => void runRequestAction(row, "complete")}>Complete</button>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </TableScrollContainer>
+          <ResizableTable
+            title="Offboarding"
+            data={requests}
+            itemsPerPage={15}
+            loading={loading}
+            storageKey="offboarding-requests"
+          />
         </div>
       ) : null}
 
@@ -648,10 +660,9 @@ export function OffboardingView() {
             />
           </div>
           <SheetFooter>
-            <button type="button" className="rounded-md border border-slate-300 px-4 py-2 text-sm" onClick={() => setRequestSheetOpen(false)}>Cancel</button>
-            <button
+            <Button type="button" variant="outline" onClick={() => setRequestSheetOpen(false)}>Cancel</Button>
+            <Button
               type="button"
-              className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white"
               disabled={saving}
               onClick={async () => {
                 const created = await submitRequestForm()
@@ -661,7 +672,7 @@ export function OffboardingView() {
               }}
             >
               {saving ? "Saving..." : "Create Offboarding"}
-            </button>
+            </Button>
           </SheetFooter>
         </SheetContent>
       </Sheet>
@@ -669,10 +680,16 @@ export function OffboardingView() {
       {tab === "workflows" ? (
         <div className="space-y-4">
           <div className="flex justify-end">
-            <button type="button" className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white" onClick={() => setWorkflowSheetOpen(true)}><Plus className="h-4 w-4" />Create Workflow</button>
+            <Button
+              type="button"
+              onClick={() => setWorkflowSheetOpen(true)}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Create Workflow
+            </Button>
           </div>
 
-          <div className="grid gap-3 rounded-md border border-slate-200 p-3 md:grid-cols-4">
+          <div className="grid gap-3 rounded-xl border border-border p-4 md:grid-cols-4">
             <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={selectedWorkflowId} onChange={(event) => setSelectedWorkflowId(event.target.value)}>
               <option value="">Select workflow for steps</option>
               {workflows.map((row, index) => {
@@ -683,39 +700,23 @@ export function OffboardingView() {
             </select>
             <input className="h-10 rounded-md border border-slate-300 px-3 text-sm" placeholder="Step name" value={stepForm.step_name} onChange={(event) => setStepForm((prev) => ({ ...prev, step_name: event.target.value }))} />
             <input className="h-10 rounded-md border border-slate-300 px-3 text-sm" placeholder="Task title" value={stepForm.task_title} onChange={(event) => setStepForm((prev) => ({ ...prev, task_title: event.target.value }))} />
-            <button type="button" className="rounded-md border border-slate-900 px-3 py-2 text-sm" onClick={() => void submitWorkflowStepForm()} disabled={saving}>Add Step</button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void submitWorkflowStepForm()}
+              disabled={saving}
+            >
+              Add Step
+            </Button>
           </div>
 
-          <TableScrollContainer>
-            <table className="w-full min-w-[720px] text-sm">
-              <thead className="bg-slate-50/90"><tr><th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Workflow</th><th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Status</th><th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Default</th><th className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Actions</th></tr></thead>
-              <tbody className="[&_tr:nth-child(odd)]:bg-slate-50/35 [&_tr]:border-t [&_tr]:border-slate-100 [&_tr:hover]:bg-slate-50/80">
-                {workflows.map((row, index) => {
-                  const id = readNumber(row, ["id", "workflow_id"])
-                  return (
-                    <tr key={`off-wf-row-${id ?? index}`}>
-                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["name", "title"])}</td>
-                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["status"])}</td>
-                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{String(Boolean(row.is_default))}</td>
-                      <td className="px-4 py-4 text-right">
-                        <button type="button" className="rounded-md border border-rose-300 px-2 py-1 text-xs text-rose-700" onClick={async () => {
-                          const token = readStoredToken()
-                          if (!token || id === null) return
-                          try {
-                            await deleteOffboardingWorkflow(token, id)
-                            showSuccessAlert("Workflow deleted.")
-                            await reloadAll()
-                          } catch (errorObject) {
-                            showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to delete workflow.")
-                          }
-                        }}>Delete</button>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </TableScrollContainer>
+          <ResizableTable
+            title="Workflow"
+            data={workflows}
+            itemsPerPage={15}
+            loading={loading}
+            storageKey="offboarding-workflows"
+          />
         </div>
       ) : null}
 
@@ -738,8 +739,8 @@ export function OffboardingView() {
             />
           </div>
           <SheetFooter>
-            <button type="button" className="rounded-md border border-slate-300 px-4 py-2 text-sm" onClick={() => setWorkflowSheetOpen(false)}>Cancel</button>
-            <button type="button" className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white" disabled={saving} onClick={() => void submitWorkflowForm()}>{saving ? "Saving..." : "Create Workflow"}</button>
+            <Button type="button" variant="outline" onClick={() => setWorkflowSheetOpen(false)}>Cancel</Button>
+            <Button type="button" disabled={saving} onClick={() => void submitWorkflowForm()}>{saving ? "Saving..." : "Create Workflow"}</Button>
           </SheetFooter>
         </SheetContent>
       </Sheet>
@@ -757,7 +758,7 @@ export function OffboardingView() {
             <div className="rounded-md border border-slate-200 p-3 text-sm">Audit logs: {requestAuditLogs.length}</div>
           </div>
           <DialogFooter>
-            <button type="button" className="rounded-md border border-slate-300 px-4 py-2 text-sm" onClick={() => setRequestDetailsOpen(false)}>Close</button>
+            <Button type="button" variant="outline" onClick={() => setRequestDetailsOpen(false)}>Close</Button>
           </DialogFooter>
         </DialogPopup>
       </Dialog>
@@ -792,10 +793,9 @@ export function OffboardingView() {
             />
           </div>
           <DialogFooter>
-            <button type="button" className="rounded-md border border-slate-300 px-4 py-2 text-sm" onClick={() => setClearanceDialogOpen(false)}>Cancel</button>
-            <button
+            <Button type="button" variant="outline" onClick={() => setClearanceDialogOpen(false)}>Cancel</Button>
+            <Button
               type="button"
-              className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white"
               disabled={saving}
               onClick={async () => {
                 await submitClearanceForm()
@@ -803,7 +803,7 @@ export function OffboardingView() {
               }}
             >
               Add Clearance
-            </button>
+            </Button>
           </DialogFooter>
         </DialogPopup>
       </Dialog>

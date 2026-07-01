@@ -11,7 +11,7 @@ import {
   DialogPopup,
   DialogTitle,
 } from "@/components/animate-ui/components/base/dialog"
-import { TableScrollContainer } from "@/components/common/table-scroll-container"
+import { ResizableTable } from "@/components/ui/resizable-table"
 import {
   createAccessControlResource,
   deleteAccessControlResourceById,
@@ -1009,87 +1009,19 @@ export function AccessControlManagementView({
       {error ? <p className="mb-3 text-sm text-red-600">{error}</p> : null}
       {message ? <p className="mb-3 text-sm text-green-700">{message}</p> : null}
 
-      <TableScrollContainer>
-        <table className="w-full min-w-[720px] text-sm">
-          <thead className="bg-slate-50/90">
-            <tr>
-              {columns.map((column) => (
-                <th
-                  key={column}
-                  className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap"
-                >
-                  {prettifyLabel(column)}
-                </th>
-              ))}
-              <th className="w-24 px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody className="[&_tr:nth-child(odd)]:bg-slate-50/35 [&_tr]:border-t [&_tr]:border-slate-100 [&_tr:hover]:bg-slate-50/80">
-            {!loading && !error && rows.length === 0 ? (
-              <tr>
-                <td className="px-4 py-10 text-sm text-slate-500" colSpan={Math.max(columns.length + 1, 1)}>
-                  No records found for this section.
-                </td>
-              </tr>
-            ) : null}
-            {rows.map((row, index) => {
-              const rowId = resolveRowId(row, index)
-              return (
-                <tr
-                  key={String(rowId)}
-                  className={activeSection === "groups" ? "cursor-pointer hover:bg-slate-50" : undefined}
-                  onClick={
-                    activeSection === "groups"
-                      ? () => {
-                          router.push(`/dashboard/attendance/groups/${rowId}`)
-                        }
-                      : undefined
-                  }
-                >
-                  {columns.map((column) => (
-                    <td
-                      key={`${String(rowId)}-${column}`}
-                      className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap"
-                    >
-                      {resolveDisplayValue(row, column)}
-                    </td>
-                  ))}
-                  <td className="px-4 py-4">
-                    <div className="flex justify-end gap-2">
-                      <button
-                        type="button"
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 text-slate-700 hover:bg-slate-50"
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          openEditDialog(row, index)
-                        }}
-                        aria-label="Edit record"
-                        title="Edit"
-                      >
-                        <PencilIcon className="h-4 w-4" />
-                      </button>
-                      <button
-                        type="button"
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-red-300 text-red-700 hover:bg-red-50"
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          openDeleteDialog(row, index)
-                        }}
-                        aria-label="Delete record"
-                        title="Delete"
-                      >
-                        <Trash2Icon className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </TableScrollContainer>
+      <ResizableTable
+        title={title}
+        data={rows || []}
+        columns={columns.map((c: string) => ({
+          key: c,
+          label: prettifyLabel ? prettifyLabel(c) : c.replace(/_/g,' ').slice(0,12),
+          defaultWidth: 65,
+          sortable: true,
+        }))}
+        itemsPerPage={20}
+        loading={loading}
+        storageKey={`access-${activeSection}`}
+      />
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogPopup className="sm:max-w-2xl">

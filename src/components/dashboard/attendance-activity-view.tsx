@@ -13,7 +13,7 @@ import {
   TimerResetIcon,
 } from "lucide-react"
 
-import { TableScrollContainer } from "@/components/common/table-scroll-container"
+import { ResizableTable } from "@/components/ui/resizable-table"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 import {
   Popover,
@@ -1095,48 +1095,14 @@ function TableBlock({
   const columns = React.useMemo(() => resolveVisibleColumns(rows, section), [rows, section])
 
   return (
-    <div className="border border-border bg-card">
-      <TableScrollContainer className="!rounded-none !border-0 !bg-transparent !shadow-none !p-0">
-        <table className="w-full min-w-[720px] text-left text-sm md:min-w-[800px]">
-          <thead>
-            <tr className="border-b border-border bg-muted">
-              {columns.map((column) => (
-                <th 
-                  key={column} 
-                  className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[1.2px] whitespace-nowrap text-left text-muted-foreground"
-                >
-                  {prettifyLabel(column)}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border text-foreground [&_tr:nth-child(even)]:bg-muted/10">
-            {rows.length === 0 ? (
-              <tr>
-                <td colSpan={Math.max(columns.length, 1)} className="px-4 py-10 text-center text-sm text-muted-foreground">
-                  No attendance records found.
-                </td>
-              </tr>
-            ) : (
-              rows.map((row, index) => (
-                <tr 
-                  key={`row-${index}`} 
-                  className="align-middle hover:bg-muted/30 transition-colors"
-                >
-                  {columns.map((column) => (
-                    <td 
-                      key={column} 
-                      className="px-4 py-3.5 text-sm break-words whitespace-normal align-middle text-foreground/90"
-                    >
-                      {resolveTableCellValue(section, column, row)}
-                    </td>
-                  ))}
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </TableScrollContainer>
+    <div>
+      <ResizableTable
+        title="Attendance Activity"
+        data={rows}
+        columns={columns.map((c: string) => ({ key: c, label: c, defaultWidth: 75 }))}
+        itemsPerPage={20}
+        storageKey="attendance-activity"
+      />
     </div>
   )
 }

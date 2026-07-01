@@ -1,8 +1,9 @@
 "use client"
 
 import * as React from "react"
-import { TableScrollContainer } from "@/components/common/table-scroll-container"
-import { Check, Copy, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react"
+
+import { ResizableTable, type Column } from "@/components/ui/resizable-table"
+import { Check, Copy, Download, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react"
 import { SearchToggleField } from "@/components/common/search-toggle-field"
 
 import {
@@ -43,7 +44,9 @@ import {
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import { Switch } from "@/components/ui/switch"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
+import ExampleProgress from "@/components/ui/progress-1"
 import { showErrorAlert } from "@/lib/error-alert"
+import { showSuccessAlert } from "@/lib/success-alert"
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -95,6 +98,24 @@ type WorkflowStepPayload = {
   assigned_department_id?: number
   is_required: boolean
 }
+
+type HolidayImportCountryCode = "TZ" | "KE" | "UG"
+
+type ImportableHoliday = {
+  countryCode: HolidayImportCountryCode
+  countryName: string
+  name: string
+  localName: string
+  holidayDate: string
+  isRecurring: boolean
+  type: string
+}
+
+const HOLIDAY_IMPORT_COUNTRIES: Array<{ code: HolidayImportCountryCode; label: string }> = [
+  { code: "TZ", label: "Tanzania" },
+  { code: "KE", label: "Kenya" },
+  { code: "UG", label: "Uganda" },
+]
 
 function readStoredToken() {
   if (typeof window === "undefined") {
@@ -161,6 +182,26 @@ function readBoolean(row: AdminRecord, keys: string[]) {
     }
   }
   return false
+}
+
+function normalizeHolidayValue(value: string) {
+  return value.trim().toLowerCase().replace(/\s+/g, " ")
+}
+
+function readHolidayDate(row: AdminRecord) {
+  const raw = readString(row, ["holiday_date", "date", "from_date", "start_date"])
+  return raw === "-" ? "" : raw.split("T")[0]?.split(" ")[0] ?? raw
+}
+
+function holidayMatchKey(name: string, date: string) {
+  return `${normalizeHolidayValue(name)}::${date.trim()}`
+}
+
+function progressPercent(completed: number, total: number) {
+  if (total <= 0) {
+    return 0
+  }
+  return Math.round((completed / total) * 100)
 }
 
 function buildWorkflowStepPayload(form: {
@@ -283,6 +324,8 @@ export function LeaveManagementView({
   const [requestDialogOpen, setRequestDialogOpen] = React.useState(false)
   const [balanceDialogOpen, setBalanceDialogOpen] = React.useState(false)
   const [holidayDialogOpen, setHolidayDialogOpen] = React.useState(false)
+  const [holidayImportDialogOpen, setHolidayImportDialogOpen] = React.useState(false)
+  const [holidayRemoveDialogOpen, setHolidayRemoveDialogOpen] = React.useState(false)
   const [policySheetOpen, setPolicySheetOpen] = React.useState(false)
   const [editingPolicyId, setEditingPolicyId] = React.useState<number | null>(null)
   const [policyPreviewOpen, setPolicyPreviewOpen] = React.useState(false)
@@ -295,6 +338,28 @@ export function LeaveManagementView({
   const [cancelReason, setCancelReason] = React.useState("Cancelled by admin")
   const [selectedWorkflowId, setSelectedWorkflowId] = React.useState("")
   const [copiedLeaveId, setCopiedLeaveId] = React.useState("")
+  const [holidayImportCountry, setHolidayImportCountry] = React.useState<HolidayImportCountryCode>("TZ")
+  const [holidayImportYear, setHolidayImportYear] = React.useState(String(new Date().getFullYear()))
+  const [holidayImportCatalog, setHolidayImportCatalog] = React.useState<ImportableHoliday[]>([])
+  const [holidayImportLoading, setHolidayImportLoading] = React.useState(false)
+  const [holidayImportBusy, setHolidayImportBusy] = React.useState(false)
+  const [holidayImportError, setHolidayImportError] = React.useState<string | null>(null)
+  const [holidayImportProgress, setHolidayImportProgress] = React.useState<{
+    completed: number
+    total: number
+    label: string
+  } | null>(null)
+  const [holidayRemoveCountry, setHolidayRemoveCountry] = React.useState<HolidayImportCountryCode>("TZ")
+  const [holidayRemoveYear, setHolidayRemoveYear] = React.useState(String(new Date().getFullYear()))
+  const [holidayRemoveCatalog, setHolidayRemoveCatalog] = React.useState<ImportableHoliday[]>([])
+  const [holidayRemoveLoading, setHolidayRemoveLoading] = React.useState(false)
+  const [holidayRemoveBusy, setHolidayRemoveBusy] = React.useState(false)
+  const [holidayRemoveError, setHolidayRemoveError] = React.useState<string | null>(null)
+  const [holidayRemoveProgress, setHolidayRemoveProgress] = React.useState<{
+    completed: number
+    total: number
+    label: string
+  } | null>(null)
 
   const [typeForm, setTypeForm] = React.useState({
     name: "",
@@ -436,6 +501,93 @@ export function LeaveManagementView({
     setTab(activeTab)
   }, [activeTab])
 
+  const fetchHolidayCatalog = React.useCallback(async (country: HolidayImportCountryCode, yearValue: string) => {
+    const year = Number(yearValue)
+    if (!Number.isInteger(year) || year < 1970 || year > 2100) {
+      throw new Error("Enter a valid year between 1970 and 2100.")
+    }
+
+    const response = await fetch(`/api/holiday-catalog?country=${country}&year=${year}`, {
+      method: "GET",
+      cache: "no-store",
+    })
+    const payload = await response.json() as { error?: string; holidays?: ImportableHoliday[] }
+    if (!response.ok) {
+      throw new Error(payload.error ?? "Failed to load country holidays.")
+    }
+    return Array.isArray(payload.holidays) ? payload.holidays : []
+  }, [])
+
+  const loadHolidayImportCatalog = React.useCallback(async () => {
+    setHolidayImportLoading(true)
+    setHolidayImportError(null)
+    try {
+      const holidays = await fetchHolidayCatalog(holidayImportCountry, holidayImportYear)
+      setHolidayImportCatalog(holidays)
+    } catch (errorObject) {
+      const message = errorObject instanceof Error ? errorObject.message : "Failed to load country holidays."
+      setHolidayImportCatalog([])
+      setHolidayImportError(message)
+    } finally {
+      setHolidayImportLoading(false)
+    }
+  }, [fetchHolidayCatalog, holidayImportCountry, holidayImportYear])
+
+  const loadHolidayRemoveCatalog = React.useCallback(async () => {
+    setHolidayRemoveLoading(true)
+    setHolidayRemoveError(null)
+    try {
+      const holidays = await fetchHolidayCatalog(holidayRemoveCountry, holidayRemoveYear)
+      setHolidayRemoveCatalog(holidays)
+    } catch (errorObject) {
+      const message = errorObject instanceof Error ? errorObject.message : "Failed to load country holidays."
+      setHolidayRemoveCatalog([])
+      setHolidayRemoveError(message)
+    } finally {
+      setHolidayRemoveLoading(false)
+    }
+  }, [fetchHolidayCatalog, holidayRemoveCountry, holidayRemoveYear])
+
+  React.useEffect(() => {
+    if (!holidayImportDialogOpen) {
+      if (!holidayImportBusy) {
+        setHolidayImportProgress(null)
+      }
+      return
+    }
+    void loadHolidayImportCatalog()
+  }, [holidayImportBusy, holidayImportDialogOpen, loadHolidayImportCatalog])
+
+  React.useEffect(() => {
+    if (!holidayRemoveDialogOpen) {
+      if (!holidayRemoveBusy) {
+        setHolidayRemoveProgress(null)
+      }
+      return
+    }
+    void loadHolidayRemoveCatalog()
+  }, [holidayRemoveBusy, holidayRemoveDialogOpen, loadHolidayRemoveCatalog])
+
+  const existingHolidayKeys = React.useMemo(() => {
+    return new Set(
+      holidays.map((row) => holidayMatchKey(readString(row, ["name"]), readHolidayDate(row)))
+    )
+  }, [holidays])
+
+  const selectedHolidayMatches = React.useMemo(() => {
+    return holidayImportCatalog.filter((entry) => existingHolidayKeys.has(holidayMatchKey(entry.name, entry.holidayDate)))
+  }, [existingHolidayKeys, holidayImportCatalog])
+
+  const selectedHolidayMissing = React.useMemo(() => {
+    return holidayImportCatalog.filter((entry) => !existingHolidayKeys.has(holidayMatchKey(entry.name, entry.holidayDate)))
+  }, [existingHolidayKeys, holidayImportCatalog])
+
+  const removableCountryHolidays = React.useMemo(() => {
+    return holidays.filter((row) =>
+      holidayRemoveCatalog.some((entry) => holidayMatchKey(entry.name, entry.holidayDate) === holidayMatchKey(readString(row, ["name"]), readHolidayDate(row)))
+    )
+  }, [holidayRemoveCatalog, holidays])
+
   const employeeLabel = (employeeId: number | null) => {
     if (employeeId === null) {
       return "-"
@@ -503,6 +655,136 @@ export function LeaveManagementView({
     const dateRange = `${readString(row, ["start_date"])} ${readString(row, ["end_date"])}`.toLowerCase()
     return employee.includes(query) || leaveType.includes(query) || reason.includes(query) || dateRange.includes(query)
   })
+
+  async function importCountryHolidays() {
+    const token = readStoredToken()
+    if (!token) {
+      const message = "Authentication required. Please log in again."
+      setError(message)
+      showErrorAlert(message)
+      return
+    }
+
+    if (selectedHolidayMissing.length === 0) {
+      showSuccessAlert("All selected country holidays are already in the list.")
+      return
+    }
+
+    setHolidayImportBusy(true)
+    setError(null)
+    try {
+      const total = selectedHolidayMissing.length
+      setHolidayImportProgress({
+        completed: 0,
+        total,
+        label: `Importing holidays for ${HOLIDAY_IMPORT_COUNTRIES.find((entry) => entry.code === holidayImportCountry)?.label ?? holidayImportCountry}`,
+      })
+
+      let completed = 0
+      for (const entry of selectedHolidayMissing) {
+        await createLeaveHoliday(token, {
+          name: entry.name.trim(),
+          holiday_date: entry.holidayDate,
+          is_recurring: entry.isRecurring,
+        })
+        completed += 1
+        setHolidayImportProgress({
+          completed,
+          total,
+          label: `Importing holidays for ${HOLIDAY_IMPORT_COUNTRIES.find((country) => country.code === holidayImportCountry)?.label ?? holidayImportCountry}`,
+        })
+      }
+      await reloadAll()
+      setHolidayImportProgress({
+        completed: total,
+        total,
+        label: `Imported holidays for ${HOLIDAY_IMPORT_COUNTRIES.find((entry) => entry.code === holidayImportCountry)?.label ?? holidayImportCountry}`,
+      })
+      showSuccessAlert(
+        `${selectedHolidayMissing.length} holiday${selectedHolidayMissing.length === 1 ? "" : "ies"} imported for ${HOLIDAY_IMPORT_COUNTRIES.find((entry) => entry.code === holidayImportCountry)?.label ?? holidayImportCountry}.`
+      )
+      setHolidayImportDialogOpen(false)
+    } catch (errorObject) {
+      const message = errorObject instanceof Error ? errorObject.message : "Failed to import country holidays."
+      setError(message)
+      showErrorAlert(message)
+    } finally {
+      setHolidayImportBusy(false)
+      window.setTimeout(() => {
+        setHolidayImportProgress((current) => {
+          if (!current || current.completed < current.total) {
+            return current
+          }
+          return null
+        })
+      }, 1800)
+    }
+  }
+
+  async function removeCountryHolidays() {
+    const token = readStoredToken()
+    if (!token) {
+      const message = "Authentication required. Please log in again."
+      setError(message)
+      showErrorAlert(message)
+      return
+    }
+
+    if (removableCountryHolidays.length === 0) {
+      showSuccessAlert("No imported country holidays matched the current list.")
+      return
+    }
+
+    setHolidayRemoveBusy(true)
+    setError(null)
+    try {
+      const total = removableCountryHolidays.length
+      setHolidayRemoveProgress({
+        completed: 0,
+        total,
+        label: `Removing holidays for ${HOLIDAY_IMPORT_COUNTRIES.find((entry) => entry.code === holidayRemoveCountry)?.label ?? holidayRemoveCountry}`,
+      })
+
+      let completed = 0
+      for (const row of removableCountryHolidays) {
+        const id = readNumber(row, ["id"])
+        if (id === null) {
+          continue
+        }
+        await deleteLeaveHoliday(token, id)
+        completed += 1
+        setHolidayRemoveProgress({
+          completed,
+          total,
+          label: `Removing holidays for ${HOLIDAY_IMPORT_COUNTRIES.find((entry) => entry.code === holidayRemoveCountry)?.label ?? holidayRemoveCountry}`,
+        })
+      }
+      await reloadAll()
+      setHolidayRemoveProgress({
+        completed: total,
+        total,
+        label: `Removed holidays for ${HOLIDAY_IMPORT_COUNTRIES.find((entry) => entry.code === holidayRemoveCountry)?.label ?? holidayRemoveCountry}`,
+      })
+      showSuccessAlert(
+        `${removableCountryHolidays.length} holiday${removableCountryHolidays.length === 1 ? "" : "ies"} removed for ${HOLIDAY_IMPORT_COUNTRIES.find((entry) => entry.code === holidayRemoveCountry)?.label ?? holidayRemoveCountry}.`
+      )
+      setHolidayRemoveDialogOpen(false)
+    } catch (errorObject) {
+      const message = errorObject instanceof Error ? errorObject.message : "Failed to remove country holidays."
+      setError(message)
+      showErrorAlert(message)
+    } finally {
+      setHolidayRemoveBusy(false)
+      window.setTimeout(() => {
+        setHolidayRemoveProgress((current) => {
+          if (!current || current.completed < current.total) {
+            return current
+          }
+          return null
+        })
+      }, 1800)
+    }
+  }
 
   async function submitTypeForm() {
     const token = readStoredToken()
@@ -1282,7 +1564,7 @@ export function LeaveManagementView({
   }
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white/80 px-4 py-5 shadow-sm lg:px-6">
+    <div>
       <div className="mb-4 flex flex-wrap items-center gap-2">
         {showTabButtons ? ["types", "requests", "balances", "holidays", "policies", "workflows"].map((entry) => {
           const key = entry as LeaveTab
@@ -1336,73 +1618,61 @@ export function LeaveManagementView({
             </button>
           </div>
 
-          <TableScrollContainer>
-            <div className="grid gap-3 border-b border-slate-200 p-3 md:grid-cols-2">
-              <SearchToggleField
-                className="w-full"
-                placeholder="Search requests"
-                value={requestSearch}
-                onChange={setRequestSearch}
-              />
-              <select
-                className="h-10 rounded-md border border-slate-300 px-3 text-sm"
-                value={requestStatusFilter}
-                onChange={(event) => setRequestStatusFilter(event.target.value)}
-              >
-                <option value="all">All statuses</option>
-                <option value="draft">draft</option>
-                <option value="submitted">submitted</option>
-                <option value="in_review">in_review</option>
-                <option value="approved">approved</option>
-                <option value="rejected">rejected</option>
-                <option value="cancelled">cancelled</option>
-                <option value="completed">completed</option>
-              </select>
-            </div>
-            <table className="w-full min-w-[720px] text-sm">
-              <thead className="bg-slate-50/90">
-                <tr>
-                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Name</th>
-                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Code</th>
-                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Status</th>
-                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Paid</th>
-                  <th className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="[&_tr:nth-child(odd)]:bg-slate-50/35 [&_tr]:border-t [&_tr]:border-slate-100 [&_tr:hover]:bg-slate-50/80">
-                {types.map((row, index) => {
-                  const id = readNumber(row, ["id"])
-                  const isActive = readString(row, ["status"]) === "active"
+          <div className="grid gap-3 border-b border-slate-200 p-3 md:grid-cols-2 mb-2">
+            <SearchToggleField
+              className="w-full"
+              placeholder="Search leave types"
+              value={requestSearch}
+              onChange={setRequestSearch}
+            />
+            <select
+              className="h-10 rounded-md border border-slate-300 px-3 text-sm"
+              value={requestStatusFilter}
+              onChange={(event) => setRequestStatusFilter(event.target.value)}
+            >
+              <option value="all">All statuses</option>
+              <option value="draft">draft</option>
+              <option value="submitted">submitted</option>
+              <option value="in_review">in_review</option>
+              <option value="approved">approved</option>
+              <option value="rejected">rejected</option>
+              <option value="cancelled">cancelled</option>
+              <option value="completed">completed</option>
+            </select>
+          </div>
+          <ResizableTable
+            title="Leave Types"
+            data={types}
+            columns={[
+              { key: "name", label: "Name", defaultWidth: 110, sortable: true, render: (r) => readString(r, ["name"]) },
+              { key: "code", label: "Code", defaultWidth: 55, sortable: true, render: (r) => readString(r, ["code"]) },
+              { key: "status", label: "Status", defaultWidth: 55, sortable: true, render: (r) => {
+                  const isActive = readString(r, ["status"]) === "active";
+                  return <span className={isActive ? "inline-flex rounded-full bg-emerald-500 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-white" : "inline-flex rounded-full bg-rose-500 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-white"}>{isActive ? "Active" : "Inactive"}</span>;
+                } },
+              { key: "is_paid", label: "Paid", defaultWidth: 45, render: (r) => readBoolean(r, ["is_paid"]) ? "Y" : "N" },
+              { key: "actions", label: "Actions", defaultWidth: 80, sortable: false, render: (row) => {
+                  const isActive = readString(row, ["status"]) === "active";
                   return (
-                    <tr key={String(id ?? index)}>
-                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["name"])}</td>
-                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["code"])}</td>
-                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">
-                        <span className={isActive ? "inline-flex rounded-full bg-emerald-500 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white" : "inline-flex rounded-full bg-rose-500 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white"}>
-                          {isActive ? "Active" : "Inactive"}
-                        </span>
-                      </td>
-                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readBoolean(row, ["is_paid"]) ? "Yes" : "No"}</td>
-                      <td className="px-4 py-4 text-right">
-                        <div className="inline-flex items-center gap-3">
-                          <Switch checked={isActive} onCheckedChange={() => void toggleTypeStatus(row)} aria-label="Toggle Status" />
-                          <button
-                            type="button"
-                            className="group rounded-md border border-rose-200 p-2 text-rose-600 transition-all duration-300 hover:-translate-y-0.5 hover:scale-110 hover:bg-rose-50 hover:shadow-sm active:scale-95"
-                            onClick={() => setPendingTypeDelete(row)}
-                            aria-label="Delete leave type"
-                            title="Delete leave type"
-                          >
-                            <Trash2 className="h-4 w-4 transition-transform duration-300 group-hover:rotate-12 group-hover:scale-110" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </TableScrollContainer>
+                    <div className="flex justify-end items-center gap-3" onClick={e => e.stopPropagation()}>
+                      <Switch checked={isActive} onCheckedChange={() => void toggleTypeStatus(row)} aria-label="Toggle Status" />
+                      <button
+                        type="button"
+                        className="group rounded-md border border-rose-200 p-2 text-rose-600 transition-all duration-300 hover:-translate-y-0.5 hover:scale-110 hover:bg-rose-50 hover:shadow-sm active:scale-95"
+                        onClick={() => setPendingTypeDelete(row)}
+                        aria-label="Delete leave type"
+                        title="Delete leave type"
+                      >
+                        <Trash2 className="h-4 w-4 transition-transform duration-300 group-hover:rotate-12 group-hover:scale-110" />
+                      </button>
+                    </div>
+                  );
+                } },
+            ]}
+            itemsPerPage={20}
+            loading={loading}
+            storageKey="leave-types"
+          />
         </div>
       ) : null}
 
@@ -1418,94 +1688,46 @@ export function LeaveManagementView({
             </button>
           </div>
 
-          <TableScrollContainer>
-            <table className="w-full min-w-[720px] text-sm">
-              <thead className="bg-slate-50/90">
-                <tr>
-                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Leave ID</th>
-                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Employee</th>
-                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Leave Type</th>
-                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Start</th>
-                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">End</th>
-                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Status</th>
-                  <th className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="[&_tr:nth-child(odd)]:bg-slate-50/35 [&_tr]:border-t [&_tr]:border-slate-100 [&_tr:hover]:bg-slate-50/80">
-                {filteredRequests.map((row, index) => {
-                  const id = readNumber(row, ["id"])
-                  const status = readString(row, ["status"]).toLowerCase()
-                  const isTerminal = status === "rejected" || status === "cancelled" || status === "completed"
-                  const showReviewActions = !isTerminal && status !== "approved"
-                  const showCancelAction = !isTerminal
+          <ResizableTable
+            title="Leave Requests"
+            data={filteredRequests}
+            columns={[
+              { key: "leave_id", label: "ID", defaultWidth: 70, render: (r) => leaveRequestLabel(r) },
+              { key: "employee", label: "Employee", defaultWidth: 90, render: (r) => employeeLabel(readNumber(r, ["employee_id"])) },
+              { key: "leave_type", label: "Type", defaultWidth: 75, render: (r) => readString(r, ["leave_type_name", "leave_type", "leave_type_id"]) },
+              { key: "start_date", label: "Start", defaultWidth: 65, render: (r) => readString(r, ["start_date"]) },
+              { key: "end_date", label: "End", defaultWidth: 65, render: (r) => readString(r, ["end_date"]) },
+              { key: "status", label: "Status", defaultWidth: 55, render: (r) => readString(r, ["status"]) },
+              { key: "actions", label: "Actions", defaultWidth: 90, sortable: false, render: (row) => {
+                  const status = readString(row, ["status"]).toLowerCase();
+                  const isTerminal = status === "rejected" || status === "cancelled" || status === "completed";
+                  const showReview = !isTerminal && status !== "approved";
+                  const showCancel = !isTerminal;
                   return (
-                    <tr key={String(id ?? index)}>
-                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">
-                        <div className="inline-flex items-center gap-2">
-                          <span>{leaveRequestLabel(row)}</span>
-                          {leaveRequestLabel(row) !== "-" ? (
-                            <button
-                              type="button"
-                              className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-blue-200 bg-blue-50 text-blue-600 transition hover:bg-blue-100 hover:text-blue-700"
-                              aria-label="Copy leave ID"
-                              title="Copy leave ID"
-                              onClick={async () => {
-                                const value = leaveRequestLabel(row)
-                                try {
-                                  await navigator.clipboard.writeText(value)
-                                  setCopiedLeaveId(value)
-                                  window.setTimeout(() => setCopiedLeaveId(""), 1200)
-                                } catch {
-                                  showErrorAlert("Clipboard access was denied.")
-                                }
-                              }}
-                            >
-                              {copiedLeaveId === leaveRequestLabel(row) ? (
-                                <Check className="h-3.5 w-3.5" />
-                              ) : (
-                                <Copy className="h-3.5 w-3.5" />
-                              )}
-                            </button>
-                          ) : null}
-                        </div>
-                      </td>
-                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{employeeLabel(readNumber(row, ["employee_id"]))}</td>
-                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["leave_type_name", "leave_type", "leave_type_id"])}</td>
-                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["start_date"])}</td>
-                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["end_date"])}</td>
-                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["status"])}</td>
-                      <td className="px-4 py-4 text-right">
-                        {isTerminal ? (
-                          <span className="text-xs text-slate-500">No actions</span>
-                        ) : (
-                          <div className="inline-flex gap-2">
-                            {showReviewActions ? (
-                              <>
-                                <button type="button" className="rounded-md border border-emerald-300 px-2 py-1 text-xs text-emerald-700" onClick={() => void approveRequest(row, true)}>Approve</button>
-                                <button type="button" className="rounded-md border border-amber-300 px-2 py-1 text-xs text-amber-700" onClick={() => void approveRequest(row, false)}>Reject</button>
-                              </>
-                            ) : null}
-                            {showCancelAction ? (
-                              <button
-                                type="button"
-                                className="rounded-md border border-rose-300 px-2 py-1 text-xs text-rose-700"
-                                onClick={() => {
-                                  setPendingRequestCancel(row)
-                                  setCancelReason("Cancelled by admin")
-                                }}
-                              >
-                                Cancel
-                              </button>
-                            ) : null}
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </TableScrollContainer>
+                    <div className="flex justify-end gap-1" onClick={e=>e.stopPropagation()}>
+                      {isTerminal ? (
+                        <span className="text-xs text-slate-500">No actions</span>
+                      ) : (
+                        <>
+                          {showReview && (
+                            <>
+                              <button type="button" className="rounded-md border border-emerald-300 px-2 py-1 text-xs text-emerald-700" onClick={() => void approveRequest(row, true)}>Approve</button>
+                              <button type="button" className="rounded-md border border-amber-300 px-2 py-1 text-xs text-amber-700" onClick={() => void approveRequest(row, false)}>Reject</button>
+                            </>
+                          )}
+                          {showCancel && (
+                            <button type="button" className="rounded-md border border-rose-300 px-2 py-1 text-xs text-rose-700" onClick={() => { setPendingRequestCancel(row); setCancelReason("Cancelled by admin"); }}>Cancel</button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  );
+                } },
+            ]}
+            itemsPerPage={15}
+            loading={loading}
+            storageKey="leave-requests"
+          />
         </div>
       ) : null}
 
@@ -1681,6 +1903,177 @@ export function LeaveManagementView({
         </DialogPopup>
       </Dialog>
 
+      <Dialog open={holidayImportDialogOpen} onOpenChange={setHolidayImportDialogOpen}>
+        <DialogPopup from="bottom" className="sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Import Country Holidays</DialogTitle>
+            <DialogDescription>Select a country and year, review what is missing, then import those holidays.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="space-y-1">
+                <span className="block text-sm font-medium text-slate-700">Country</span>
+                <select
+                  className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"
+                  value={holidayImportCountry}
+                  onChange={(event) => setHolidayImportCountry(event.target.value as HolidayImportCountryCode)}
+                  disabled={holidayImportBusy}
+                >
+                  {HOLIDAY_IMPORT_COUNTRIES.map((entry) => (
+                    <option key={`import-country-${entry.code}`} value={entry.code}>{entry.label}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="space-y-1">
+                <span className="block text-sm font-medium text-slate-700">Year</span>
+                <input
+                  type="number"
+                  min={1970}
+                  max={2100}
+                  className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"
+                  value={holidayImportYear}
+                  onChange={(event) => setHolidayImportYear(event.target.value)}
+                  disabled={holidayImportBusy}
+                />
+              </label>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-slate-600">
+              <span>
+                {holidayImportLoading
+                  ? "Loading official holidays..."
+                  : `${holidayImportCatalog.length} official holiday${holidayImportCatalog.length === 1 ? "" : "s"} available for ${HOLIDAY_IMPORT_COUNTRIES.find((entry) => entry.code === holidayImportCountry)?.label ?? holidayImportCountry} ${holidayImportYear}.`}
+              </span>
+              {!holidayImportLoading && holidayImportCatalog.length > 0 ? (
+                <>
+                  <span>{selectedHolidayMissing.length} ready to import</span>
+                  <span>{selectedHolidayMatches.length} already in this list</span>
+                </>
+              ) : null}
+            </div>
+            {holidayImportError ? <p className="text-sm text-rose-600">{holidayImportError}</p> : null}
+            {holidayImportProgress ? (
+              <div className="rounded-lg border border-slate-200 bg-white p-3">
+                <ExampleProgress
+                  label={holidayImportProgress.label}
+                  value={progressPercent(holidayImportProgress.completed, holidayImportProgress.total)}
+                  helperText={`${holidayImportProgress.completed} of ${holidayImportProgress.total} holidays processed`}
+                />
+              </div>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <button
+              type="button"
+              className="rounded-md border border-slate-300 px-4 py-2 text-sm"
+              onClick={() => setHolidayImportDialogOpen(false)}
+              disabled={holidayImportBusy}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700"
+              onClick={() => void loadHolidayImportCatalog()}
+              disabled={holidayImportLoading || holidayImportBusy}
+            >
+              {holidayImportLoading ? "Refreshing..." : "Refresh List"}
+            </button>
+            <button
+              type="button"
+              className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={() => void importCountryHolidays()}
+              disabled={holidayImportLoading || holidayImportBusy || selectedHolidayMissing.length === 0}
+            >
+              {holidayImportBusy ? "Importing..." : "Import Holidays"}
+            </button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
+
+      <Dialog open={holidayRemoveDialogOpen} onOpenChange={setHolidayRemoveDialogOpen}>
+        <DialogPopup from="bottom" className="sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Remove Country Holidays</DialogTitle>
+            <DialogDescription>Select a country and year to remove holidays that match a previously imported country set.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="space-y-1">
+                <span className="block text-sm font-medium text-slate-700">Country</span>
+                <select
+                  className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"
+                  value={holidayRemoveCountry}
+                  onChange={(event) => setHolidayRemoveCountry(event.target.value as HolidayImportCountryCode)}
+                  disabled={holidayRemoveBusy}
+                >
+                  {HOLIDAY_IMPORT_COUNTRIES.map((entry) => (
+                    <option key={`remove-country-${entry.code}`} value={entry.code}>{entry.label}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="space-y-1">
+                <span className="block text-sm font-medium text-slate-700">Year</span>
+                <input
+                  type="number"
+                  min={1970}
+                  max={2100}
+                  className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"
+                  value={holidayRemoveYear}
+                  onChange={(event) => setHolidayRemoveYear(event.target.value)}
+                  disabled={holidayRemoveBusy}
+                />
+              </label>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-slate-600">
+              <span>
+                {holidayRemoveLoading
+                  ? "Loading country holidays..."
+                  : `${removableCountryHolidays.length} holiday${removableCountryHolidays.length === 1 ? "" : "s"} currently match ${HOLIDAY_IMPORT_COUNTRIES.find((entry) => entry.code === holidayRemoveCountry)?.label ?? holidayRemoveCountry} ${holidayRemoveYear}.`}
+              </span>
+              {!holidayRemoveLoading && holidayRemoveCatalog.length > 0 ? (
+                <span>{holidayRemoveCatalog.length} official holidays checked against your list</span>
+              ) : null}
+            </div>
+            {holidayRemoveError ? <p className="text-sm text-rose-600">{holidayRemoveError}</p> : null}
+            {holidayRemoveProgress ? (
+              <div className="rounded-lg border border-slate-200 bg-white p-3">
+                <ExampleProgress
+                  label={holidayRemoveProgress.label}
+                  value={progressPercent(holidayRemoveProgress.completed, holidayRemoveProgress.total)}
+                  helperText={`${holidayRemoveProgress.completed} of ${holidayRemoveProgress.total} holidays removed`}
+                />
+              </div>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <button
+              type="button"
+              className="rounded-md border border-slate-300 px-4 py-2 text-sm"
+              onClick={() => setHolidayRemoveDialogOpen(false)}
+              disabled={holidayRemoveBusy}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700"
+              onClick={() => void loadHolidayRemoveCatalog()}
+              disabled={holidayRemoveLoading || holidayRemoveBusy}
+            >
+              {holidayRemoveLoading ? "Refreshing..." : "Refresh List"}
+            </button>
+            <button
+              type="button"
+              className="rounded-md bg-rose-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={() => void removeCountryHolidays()}
+              disabled={holidayRemoveLoading || holidayRemoveBusy || removableCountryHolidays.length === 0}
+            >
+              {holidayRemoveBusy ? "Removing..." : "Remove Country Holidays"}
+            </button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
+
       {tab === "balances" ? (
         <div className="space-y-4">
           <div className="flex justify-end">
@@ -1694,94 +2087,81 @@ export function LeaveManagementView({
             </button>
           </div>
 
-          <TableScrollContainer>
-            <table className="w-full min-w-[720px] text-sm">
-              <thead className="bg-slate-50/90">
-                <tr>
-                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Employee</th>
-                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Type</th>
-                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Fiscal Year</th>
-                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Allocated</th>
-                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Used</th>
-                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Remaining</th>
-                </tr>
-              </thead>
-              <tbody className="[&_tr:nth-child(odd)]:bg-slate-50/35 [&_tr]:border-t [&_tr]:border-slate-100 [&_tr:hover]:bg-slate-50/80">
-                {balances.map((row, index) => {
-                  const id = readNumber(row, ["id"])
-                  return (
-                    <tr key={String(id ?? index)}>
-                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{employeeLabel(readNumber(row, ["employee_id"]))}</td>
-                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["leave_type_name", "leave_type", "leave_type_id"])}</td>
-                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["fiscal_year"])}</td>
-                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{String(readNumber(row, ["allocated_days"]) ?? "-")}</td>
-                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{String(readNumber(row, ["used_days"]) ?? "-")}</td>
-                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{String(readNumber(row, ["remaining_days"]) ?? "-")}</td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </TableScrollContainer>
+          <ResizableTable
+            title="Leave Balances"
+            data={balances}
+            columns={[
+              { key: "employee", label: "Employee", defaultWidth: 100, render: (r) => employeeLabel(readNumber(r, ["employee_id"])) },
+              { key: "type", label: "Type", defaultWidth: 75, render: (r) => readString(r, ["leave_type_name"]) },
+              { key: "fiscal_year", label: "FY", defaultWidth: 55, render: (r) => readString(r, ["fiscal_year"]) },
+              { key: "allocated_days", label: "Alloc", defaultWidth: 55, render: (r) => readString(r, ["allocated_days", "allocated"]) },
+              { key: "used_days", label: "Used", defaultWidth: 45, render: (r) => readString(r, ["used_days", "used"]) },
+              { key: "remaining", label: "Rem", defaultWidth: 45, render: (r) => readString(r, ["remaining_days", "remaining"]) },
+              { key: "actions", label: "Act", defaultWidth: 50, sortable: false, render: (row) => (
+                <div className="flex justify-end" onClick={e=>e.stopPropagation()}>
+                  <button type="button" className="admin-table-icon-button" onClick={() => { setSelectedBalance(row); setBalanceDialogOpen(true); }}>
+                    <Pencil className="size-4" />
+                  </button>
+                </div>
+              ) },
+            ]}
+            itemsPerPage={20}
+            loading={loading}
+            storageKey="leave-balances"
+          />
         </div>
       ) : null}
 
       {tab === "holidays" ? (
         <div className="space-y-4">
-          <div className="flex justify-end">
-            <button
-              type="button"
-              className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white"
-              onClick={() => setHolidayDialogOpen(true)}
-            >
-              <Plus className="h-4 w-4" />
-              Add Holiday
-            </button>
+          <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700"
+                onClick={() => setHolidayImportDialogOpen(true)}
+              >
+                <Download className="h-4 w-4" />
+                Import Holidays
+              </button>
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 rounded-md border border-rose-200 bg-white px-3 py-2 text-sm font-medium text-rose-700"
+                onClick={() => setHolidayRemoveDialogOpen(true)}
+              >
+                <Trash2 className="h-4 w-4" />
+                Remove Country Holidays
+              </button>
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white"
+                onClick={() => setHolidayDialogOpen(true)}
+              >
+                <Plus className="h-4 w-4" />
+                Add Holiday
+              </button>
+            </div>
           </div>
 
-          <TableScrollContainer>
-            <table className="w-full min-w-[720px] text-sm">
-              <thead className="bg-slate-50/90">
-                <tr>
-                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Name</th>
-                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Date</th>
-                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Recurring</th>
-                  <th className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="[&_tr:nth-child(odd)]:bg-slate-50/35 [&_tr]:border-t [&_tr]:border-slate-100 [&_tr:hover]:bg-slate-50/80">
-                {holidays.map((row, index) => {
-                  const id = readNumber(row, ["id"])
-                  return (
-                    <tr key={String(id ?? index)}>
-                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["name"])}</td>
-                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["holiday_date"])}</td>
-                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">
-                        <Switch
-                          checked={readBoolean(row, ["is_recurring"])}
-                          onCheckedChange={() => void toggleHolidayRecurring(row)}
-                          aria-label="Toggle recurring holiday"
-                        />
-                      </td>
-                      <td className="px-4 py-4 text-right">
-                        <div className="inline-flex items-center gap-2">
-                          <button
-                            type="button"
-                            className="rounded-md border border-rose-200 p-2 text-rose-600 transition-transform duration-200 hover:scale-110 hover:bg-rose-50 active:scale-95"
-                            onClick={() => setPendingHolidayDelete(row)}
-                            aria-label="Delete holiday"
-                            title="Delete holiday"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </TableScrollContainer>
+          <ResizableTable
+            title="Holidays"
+            data={holidays}
+            columns={[
+              { key: "name", label: "Name", defaultWidth: 110, sortable: true, render: (r) => readString(r, ["name"]) },
+              { key: "holiday_date", label: "Date", defaultWidth: 70, sortable: true, render: (r) => readString(r, ["holiday_date"]) },
+              { key: "is_recurring", label: "Recur", defaultWidth: 50, render: (r) => <Switch checked={readBoolean(r, ["is_recurring"])} onCheckedChange={() => void toggleHolidayRecurring(r)} aria-label="Toggle recurring" /> },
+              { key: "actions", label: "Act", defaultWidth: 45, sortable: false, render: (row) => (
+                <div className="flex justify-end" onClick={e=>e.stopPropagation()}>
+                  <button type="button" className="rounded-md border border-rose-200 p-2 text-rose-600" onClick={() => setPendingHolidayDelete(row)}>
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              ) },
+            ]}
+            itemsPerPage={20}
+            loading={loading}
+            storageKey="leave-holidays"
+          />
         </div>
       ) : null}
 
@@ -1798,60 +2178,7 @@ export function LeaveManagementView({
             </button>
           </div>
 
-          <TableScrollContainer>
-            <table className="w-full min-w-[720px] text-sm">
-              <thead className="bg-slate-50/90">
-                <tr>
-                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Name</th>
-                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Status</th>
-                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Accrual</th>
-                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Department</th>
-                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Position</th>
-                  <th className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="[&_tr:nth-child(odd)]:bg-slate-50/35 [&_tr]:border-t [&_tr]:border-slate-100 [&_tr:hover]:bg-slate-50/80">
-                {policies.map((row, index) => {
-                  const id = readNumber(row, ["id", "policy_id"])
-                  return (
-                    <tr
-                      key={`policy-${id ?? index}`}
-                      className="cursor-pointer transition hover:bg-slate-50"
-                      onClick={() => openPolicyPreview(row)}
-                    >
-                      <td className="px-4 py-4 text-sm font-medium text-slate-900 whitespace-nowrap">{readString(row, ["name", "title"])}</td>
-                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["status"])}</td>
-                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["accrual_method"])}</td>
-                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{optionLabel(departments, readNumber(row, ["applicable_department_id"]), ["name", "title"])}</td>
-                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{optionLabel(positions, readNumber(row, ["applicable_position_id"]), ["name", "title"])}</td>
-                      <td className="px-4 py-4 text-right">
-                        <div className="inline-flex items-center gap-3">
-                          <Switch
-                            checked={readString(row, ["status"]).toLowerCase() === "active"}
-                            onCheckedChange={() => void togglePolicyStatus(row)}
-                            onClick={(event) => event.stopPropagation()}
-                            aria-label="Toggle policy status"
-                          />
-                          <button
-                            type="button"
-                            className="group rounded-md border border-rose-200 p-2 text-rose-600 transition-all duration-300 hover:-translate-y-0.5 hover:scale-110 hover:bg-rose-50 hover:shadow-sm active:scale-95"
-                            onClick={(event) => {
-                              event.stopPropagation()
-                              setPendingPolicyDelete(row)
-                            }}
-                            aria-label="Delete policy"
-                            title="Delete policy"
-                          >
-                            <Trash2 className="h-4 w-4 transition-transform duration-300 group-hover:rotate-12 group-hover:scale-110" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </TableScrollContainer>
+          <ResizableTable title="Leave Policies" data={policies} itemsPerPage={15} loading={loading} storageKey="leave-policies" />
 
           <Sheet open={policySheetOpen} onOpenChange={setPolicySheetOpen}>
             <SheetContent side="right" className="w-full overflow-y-auto data-[side=right]:w-full sm:data-[side=right]:w-1/2 data-[side=right]:sm:max-w-none">
@@ -1999,50 +2326,9 @@ export function LeaveManagementView({
             </button>
           </div>
 
-          <TableScrollContainer>
-            <table className="w-full min-w-[720px] text-sm">
-              <thead className="bg-slate-50/90">
-                <tr>
-                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Workflow</th>
-                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Leave Type</th>
-                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Status</th>
-                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Default</th>
-                  <th className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="[&_tr:nth-child(odd)]:bg-slate-50/35 [&_tr]:border-t [&_tr]:border-slate-100 [&_tr:hover]:bg-slate-50/80">
-                {workflows.map((row, index) => {
-                  const id = readNumber(row, ["id", "workflow_id"])
-                  return (
-                    <tr key={`workflow-${id ?? index}`}>
-                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["name", "title"])}</td>
-                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["leave_type_name", "leave_type", "leave_type_id"])}</td>
-                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readString(row, ["status"])}</td>
-                      <td className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{readBoolean(row, ["is_default"]) ? "Yes" : "No"}</td>
-                      <td className="px-4 py-4 text-right">
-                        <div className="inline-flex items-center gap-2">
-                          <Switch
-                            checked={readString(row, ["status"]).toLowerCase() === "active"}
-                            onCheckedChange={() => void toggleWorkflowStatus(row)}
-                            aria-label="Toggle workflow status"
-                          />
-                          <button
-                            type="button"
-                            className="rounded-md border border-slate-300 p-2 text-slate-700 hover:bg-slate-100"
-                            onClick={() => void openEditWorkflowSheet(row)}
-                            aria-label="Edit workflow"
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </button>
-                          <button type="button" className="rounded-md border border-rose-300 px-2 py-1 text-xs text-rose-700" onClick={() => setPendingWorkflowDelete(row)}>Delete</button>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </TableScrollContainer>
+          <ResizableTable title="Leave Policies" data={policies} itemsPerPage={15} loading={loading} storageKey="leave-policies" />
+          <ResizableTable title="Leave Workflows" data={workflows} itemsPerPage={15} loading={loading} storageKey="leave-workflows" />
+
           <Sheet open={workflowSheetOpen} onOpenChange={setWorkflowSheetOpen}>
             <SheetContent side="right" className="w-full overflow-y-auto data-[side=right]:w-1/2 sm:max-w-none">
               <SheetHeader>

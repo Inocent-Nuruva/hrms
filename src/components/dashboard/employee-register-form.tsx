@@ -411,6 +411,15 @@ const EMPTY_ONBOARDING_FORM: OnboardingFormState = {
   deviceAssignment: { ...EMPTY_ONBOARDING_DEVICE_ASSIGNMENT },
 }
 
+function createEmptyOnboardingForm(): OnboardingFormState {
+  return {
+    ...EMPTY_ONBOARDING_FORM,
+    shiftAssignment: { ...EMPTY_ONBOARDING_SHIFT_ASSIGNMENT },
+    timetableAssignment: { ...EMPTY_ONBOARDING_TIMETABLE_ASSIGNMENT },
+    deviceAssignment: { ...EMPTY_ONBOARDING_DEVICE_ASSIGNMENT },
+  }
+}
+
 const REGISTER_STEP_ORDER = [
   "details",
   "contacts",
@@ -469,11 +478,98 @@ function joinPhoneWithCountryCode(countryCode: string, phoneNumber: string) {
   return `${countryCode}${phone}`
 }
 
+function toAdminRecordArray(value: unknown): AdminRecord[] {
+  const record = asRecord(value)
+  if (record) {
+    return [record as AdminRecord]
+  }
+
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value
+    .map((entry) => asRecord(entry))
+    .filter((entry): entry is AdminRecord => entry !== null)
+}
+
 function getDialCodeForCountry(isoCode: string) {
   if (isoCode in COUNTRY_DIAL_BY_ISO) {
     return COUNTRY_DIAL_BY_ISO[isoCode as keyof typeof COUNTRY_DIAL_BY_ISO]
   }
   return COUNTRY_DIAL_BY_ISO.TZ
+}
+
+function resolveCountryIsoFromPhoneNumber(phoneNumber: string): CountryIso {
+  const normalizedPhone = phoneNumber.trim()
+  const match = (Object.entries(COUNTRY_DIAL_BY_ISO) as Array<[CountryIso, string]>).find(([, dialCode]) =>
+    normalizedPhone.startsWith(dialCode)
+  )
+  return match?.[0] ?? "TZ"
+}
+
+function normalizePhoneNumberForContact(phoneNumber: string, countryIso: CountryIso): string {
+  const normalizedPhone = phoneNumber.trim()
+  if (!normalizedPhone) {
+    return ""
+  }
+
+  if (!normalizedPhone.startsWith("+")) {
+    return normalizedPhone.replace(/\D+/g, "")
+  }
+
+  const dialCode = getDialCodeForCountry(countryIso)
+  if (normalizedPhone.startsWith(dialCode)) {
+    return normalizedPhone.slice(dialCode.length).replace(/\D+/g, "")
+  }
+
+  return normalizedPhone.replace(/^\+\d{1,4}/, "").replace(/\D+/g, "")
+}
+
+function resolveInitialPrimaryContact(
+  sources: Array<AdminRecord | null>
+): ContactFormState | null {
+  for (const source of sources) {
+    if (!source) {
+      continue
+    }
+
+    const sourceContacts = [
+      ...toAdminRecordArray(source.contacts),
+      ...toAdminRecordArray(source.contact),
+      ...toAdminRecordArray(source.primary_contact ? [source.primary_contact] : []),
+    ]
+    const primaryContact =
+      sourceContacts.find((contact) => contact.is_primary === true || String(contact.is_primary ?? "") === "true") ??
+      sourceContacts[0] ??
+      null
+    const email = (
+      readString(primaryContact, ["email", "email_address"]) ??
+      readString(source, ["email", "work_email", "email_address"]) ??
+      ""
+    ).toLowerCase()
+    const rawPhone =
+      readString(primaryContact, ["phone_number", "phone", "mobile_number", "mobile"]) ??
+      readString(source, ["phone_number", "phone", "mobile_number", "mobile"]) ??
+      ""
+
+    if (!email && !rawPhone) {
+      continue
+    }
+
+    const countryIso = resolveCountryIsoFromPhoneNumber(rawPhone)
+    return {
+      contactType: readString(primaryContact, ["contact_type", "type"]) ?? "work",
+      isPrimary: true,
+      countryIso,
+      phoneNumber: normalizePhoneNumberForContact(rawPhone, countryIso),
+      email,
+      notes:
+        readString(primaryContact, ["notes", "note"]) ?? "Prefilled from your primary employee contact.",
+    }
+  }
+
+  return null
 }
 
 type RoleOption = {
@@ -1077,12 +1173,7 @@ export function EmployeeRegisterForm() {
   const [accessGroupRecords, setAccessGroupRecords] = React.useState<AdminRecord[]>([])
   const [accessOrganizationRecords, setAccessOrganizationRecords] = React.useState<AdminRecord[]>([])
   const [attendanceDeviceRecords, setAttendanceDeviceRecords] = React.useState<AdminRecord[]>([])
-  const [onboarding, setOnboarding] = React.useState<OnboardingFormState>({
-    ...EMPTY_ONBOARDING_FORM,
-    shiftAssignment: { ...EMPTY_ONBOARDING_SHIFT_ASSIGNMENT },
-    timetableAssignment: { ...EMPTY_ONBOARDING_TIMETABLE_ASSIGNMENT },
-    deviceAssignment: { ...EMPTY_ONBOARDING_DEVICE_ASSIGNMENT },
-  })
+  const [onboarding, setOnboarding] = React.useState<OnboardingFormState>(createEmptyOnboardingForm)
   const [rolesLoading, setRolesLoading] = React.useState(false)
   const [rolesError, setRolesError] = React.useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = React.useState(false)
@@ -1277,6 +1368,20 @@ export function EmployeeRegisterForm() {
       ...previous,
       [field]: value,
     }))
+  }
+
+  const updateInviteWorkflowAssignment = (value: string) => {
+    setOnboarding((previous) => {
+      if (!value || value === "none") {
+        return createEmptyOnboardingForm()
+      }
+
+      return {
+        ...previous,
+        enabled: true,
+        workflowId: value,
+      }
+    })
   }
 
   const updateShiftAssignmentField = <K extends keyof OnboardingShiftAssignmentFormState>(
@@ -1852,6 +1957,7 @@ export function EmployeeRegisterForm() {
 
       const nextInitializedFields = resolveInitializedRegistrationFields(initializationSources)
       const nextRoleId = roles.length > 0 ? resolveInitializedRoleId(roles, initializationSources) : ""
+      const initialPrimaryContact = resolveInitialPrimaryContact(initializationSources)
 
       setInitializedFields({
         ...nextInitializedFields,
@@ -1869,6 +1975,9 @@ export function EmployeeRegisterForm() {
         position: nextInitializedFields.position || previous.position,
         roleId: nextRoleId || previous.roleId,
       }))
+      if (initialPrimaryContact) {
+        setContacts((previous) => (previous.length > 0 ? previous : [initialPrimaryContact]))
+      }
       setRegistrationContextResolved(true)
     }
 
@@ -1982,8 +2091,8 @@ export function EmployeeRegisterForm() {
       return
     }
 
-    if (!form.employeeNo.trim() || !form.firstName.trim() || !form.lastName.trim()) {
-      toast.error("Employee number, first name, and last name are required.")
+    if (!form.firstName.trim() || !form.lastName.trim()) {
+      toast.error("First name and last name are required.")
       return
     }
     if (isInviteMode && !form.middleName.trim()) {
@@ -2192,7 +2301,7 @@ export function EmployeeRegisterForm() {
     setIsSubmitting(true)
     try {
       const response = await createEmployeeProfile(accessToken, {
-        employee_no: normalizedEmployeeNo,
+        employee_no: normalizedEmployeeNo || undefined,
         employment_status: "onboarding",
         employment_type: "full_time",
         primary_branch_id: selectedBranchId ?? undefined,
@@ -2278,12 +2387,7 @@ export function EmployeeRegisterForm() {
     setDraftBankAccount({ ...EMPTY_BANK_ACCOUNT })
     setIsBankDialogOpen(false)
     setEditingBankIndex(null)
-    setOnboarding({
-      ...EMPTY_ONBOARDING_FORM,
-      shiftAssignment: { ...EMPTY_ONBOARDING_SHIFT_ASSIGNMENT },
-      timetableAssignment: { ...EMPTY_ONBOARDING_TIMETABLE_ASSIGNMENT },
-      deviceAssignment: { ...EMPTY_ONBOARDING_DEVICE_ASSIGNMENT },
-    })
+    setOnboarding(createEmptyOnboardingForm())
     setPendingDelete(null)
     if (typeof window !== "undefined") {
       window.localStorage.removeItem(REGISTER_DRAFT_STORAGE_KEY)
@@ -2382,7 +2486,7 @@ export function EmployeeRegisterForm() {
                       id="employeeNo"
                       value={form.employeeNo}
                       onChange={(event) => updateField("employeeNo", event.target.value)}
-                      placeholder="Enter employee number"
+                      placeholder="Enter employee number (optional)"
                       disabled={lockedFields.employeeNo}
                     />
                   </Field>
@@ -2482,6 +2586,31 @@ export function EmployeeRegisterForm() {
 
                   {isInviteMode ? (
                     <>
+                      <Field
+                        label="Workflow Assignment"
+                        htmlFor="invite-workflow"
+                        delayMs={260}
+                        hint="Optional onboarding workflow to start from this invite."
+                        reserveHintSpace
+                      >
+                        <Select
+                          value={onboarding.enabled ? onboarding.workflowId || "none" : "none"}
+                          onValueChange={(value) => updateInviteWorkflowAssignment(value ?? "none")}
+                        >
+                          <SelectTrigger id="invite-workflow" className="w-full">
+                            <SelectValue placeholder="Select workflow assignment" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">No workflow assigned</SelectItem>
+                            {onboardingWorkflowOptions.map((option) => (
+                              <SelectItem key={option.id} value={String(option.id)}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </Field>
+
                       <Field label="Phone Country" htmlFor="invite-country" delayMs={260}>
                         <Select
                           value={inviteContact.countryIso}
@@ -2674,12 +2803,7 @@ export function EmployeeRegisterForm() {
                             setOnboarding((previous) => ({
                               ...(checked
                                 ? previous
-                                : {
-                                    ...EMPTY_ONBOARDING_FORM,
-                                    shiftAssignment: { ...EMPTY_ONBOARDING_SHIFT_ASSIGNMENT },
-                                    timetableAssignment: { ...EMPTY_ONBOARDING_TIMETABLE_ASSIGNMENT },
-                                    deviceAssignment: { ...EMPTY_ONBOARDING_DEVICE_ASSIGNMENT },
-                                  }),
+                                : createEmptyOnboardingForm()),
                               enabled: checked,
                             }))
                           }
