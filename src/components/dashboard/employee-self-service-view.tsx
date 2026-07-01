@@ -9,12 +9,15 @@ import {
   Loader2,
   MailIcon,
   MapPinIcon,
-
+  PencilIcon,
   PhoneIcon,
   UserIcon,
   UsersIcon,
 } from "lucide-react"
+
 import { LumaSpin } from "@/components/ui/luma-spin"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Badge } from "@/components/ui/badge"
 
 import {
   getMyAttendanceAssignments,
@@ -786,18 +789,18 @@ function useSelfEmployeeData() {
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex min-w-0 flex-col gap-1 py-2 text-sm sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-      <span className="text-slate-500">{label}</span>
-      <span className="min-w-0 break-words font-medium text-slate-900 sm:text-right dark:text-slate-100">{value}</span>
+    <div className="flex items-start justify-between gap-4 py-2.5 text-[13px]">
+      <span className="shrink-0 text-muted-foreground">{label}</span>
+      <span className="min-w-0 text-right font-medium leading-tight text-foreground">{value}</span>
     </div>
   )
 }
 
 function EmptyStateRow({ text }: { text: string }) {
-  return <p className="text-sm text-slate-500 dark:text-slate-400">{text}</p>
+  return <p className="text-sm text-muted-foreground">{text}</p>
 }
 
-function WaveInfoRows({
+function CleanInfoRows({
   rows,
 }: {
   rows: Array<{
@@ -806,15 +809,150 @@ function WaveInfoRows({
   }>
 }) {
   return (
-    <div className="space-y-1">
+    <div className="divide-y divide-border/70 text-sm">
       {rows.map((row, index) => (
-        <div key={`${row.label}-${index}`} className="space-y-1">
-          <InfoRow label={row.label} value={row.value} />
-          {index < rows.length - 1 ? <div className="profile-wave-separator" aria-hidden="true" /> : null}
-        </div>
+        <InfoRow key={`${row.label}-${index}`} label={row.label} value={row.value} />
       ))}
     </div>
   )
+}
+
+// === Highlight Card Design (ported) ===
+function SVGSprites() {
+  return (
+    <svg width="0" height="0" display="none" aria-hidden="true">
+      <symbol id="circles-corner" viewBox="0 0 316 316">
+        <g fill="none" stroke="currentcolor" strokeLinecap="round" strokeWidth="5">
+          <path d="M 323.074 256.963 C 312.956 263.991 295.834 280.024 295.479 292.107 C 294.971 309.41 311.806 311.371 322.384 317.098" />
+          <path d="M 322.384 225.723 C 303.276 230.431 291.393 236.843 273.403 256.963 C 252.542 280.29 261.674 308.503 261.674 315.536" />
+          <path d="M 320.316 193.268 C 285.716 194.491 258.866 221.733 245.117 244.813 C 225.414 277.888 238.218 316.923 236.839 320.568" />
+          <path d="M 321.006 147.971 C 301.136 149.81 258.571 170.234 231.318 197.955 C 189.23 240.768 190.427 315.532 187.856 321.35" />
+          <path d="M 323.764 101.113 C 285.498 101.275 236.306 121.433 195.446 163.591 C 144.032 216.636 154.999 289.235 145.772 320.568" />
+          <path d="M 320.316 48 C 307.75 49.984 222.602 48.394 158.881 119.856 C 96.203 190.147 104.486 309.571 103 321.35" />
+        </g>
+      </symbol>
+      <symbol id="circles-top" viewBox="0 0 648 648">
+        <g fill="none" stroke="currentcolor" strokeLinecap="round">
+          <path strokeWidth="10" d="M 453.754 -21.507 C 426.967 6.445 420.959 57.037 331.465 60.601 C 234.771 64.452 225.579 0.318 214.418 -28.495" />
+          <path strokeWidth="10" d="M 156.767 -33.735 C 167.249 11.104 188.994 80.565 217.912 111.263 C 239.879 134.581 286.462 149.302 307.007 147.95" />
+          <path strokeWidth="10" d="M 307.007 128.398 C 331.812 142.719 401.333 127.174 443.273 102.193 C 482.243 78.981 545.369 8.9 555.079 -28.829" />
+          <path strokeWidth="10" d="M 68.545 -23.06 C 69.207 -20.985 69.087 78.639 108.725 135.914 C 148.883 193.94 180.333 225.897 241.496 225.01" />
+          <path strokeWidth="13" d="M 289.538 242.287 C 349.575 238.65 410.797 237.601 509.657 175.902 C 594.584 122.899 644.472 14.236 663.391 -28.494" />
+        </g>
+      </symbol>
+      <symbol id="curves" viewBox="0 0 648 648">
+        <g fill="none" stroke="currentcolor" strokeWidth="20">
+          <path d="M 371.646 -16.266 C 328.554 21.003 255.465 49.043 214.417 88.552 C 204.914 97.698 201.122 117.816 203.936 130.48 C 204.954 135.063 223.705 151.184 228.393 151.444 C 247.225 152.49 268.217 141.879 286.044 135.721 C 300.864 130.601 356.726 98.89 368.152 88.552 C 384.788 73.5 419.727 21.192 443.272 20.42 C 466.201 19.668 488.552 28.981 486.946 51.866 C 484.611 85.14 405.888 122.024 397.85 125.239 C 379.675 132.509 315.118 176.349 300.019 181.142 C 278.43 187.996 171.305 238.027 191.707 270.238" />
+        </g>
+      </symbol>
+      <symbol id="grass-bottom" viewBox="0 0 316 316">
+        <g fill="none" stroke="currentcolor" strokeLinecap="round" strokeWidth="13">
+          <path d="M -6.788 282.052 C -4.546 287.782 -3.008 293.841 -0.062 299.243 C 2.784 304.461 7.448 315.401 11.897 320.919" />
+          <path d="M 13.392 285.042 C 18.647 299.491 19.377 303.987 26.846 316.434" />
+          <path d="M 10.403 255.892 C 18.126 268.1 26.574 279.879 33.573 292.516 C 35.596 296.17 35.483 300.719 37.31 304.475 C 40.002 310.008 43.788 314.939 47.027 320.171" />
+          <path d="M 47.774 287.284 C 52.002 297.502 56.227 307.722 60.481 317.929" />
+        </g>
+      </symbol>
+      <symbol id="grass-left" viewBox="0 0 316 316">
+        <g fill="none" stroke="currentcolor" strokeLinecap="round" strokeWidth="13">
+          <path d="M 38.058 7.993 C 28.089 11.316 0.838 21.446 -9.778 21.446" />
+          <path d="M 54.502 25.931 C 36.784 32.374 9.564 33.659 -9.031 34.9" />
+        </g>
+      </symbol>
+      <symbol id="grass-top-down" viewBox="0 0 316 316">
+        <g fill="none" stroke="currentcolor" strokeWidth="5">
+          <path d="M 254.465 58.472 C 253.758 57.413 249.41 50.048 249.41 50.048" />
+          <path d="M 219.08 33.198 C 218.119 31.756 213.59 25.615 213.183 25.615" />
+        </g>
+      </symbol>
+      {/* Icons */}
+      <symbol id="people" viewBox="0 0 16 16">
+        <circle cx="8" cy="4" r="3" fill="currentcolor" />
+        <path fill="currentcolor" d="M 2 14 Q 2 9 8 9 Q 14 9 14 14" />
+      </symbol>
+      <symbol id="link" viewBox="0 0 16 16">
+        <path fill="none" stroke="currentcolor" strokeWidth="2" d="M 6 10 L 10 6 M 3 13 L 6 10 M 10 6 L 13 3" />
+      </symbol>
+      <symbol id="ribbon" viewBox="0 0 16 16">
+        <path fill="currentcolor" d="M8 1 L10 3 L8 5 L6 3 Z" />
+      </symbol>
+      <symbol id="coil" viewBox="0 0 16 16">
+        <path fill="none" stroke="currentcolor" strokeWidth="1.5" d="M3 3 Q 8 1 13 3 Q 8 5 3 7 Q 8 9 13 11" />
+      </symbol>
+      <symbol id="star" viewBox="0 0 16 16">
+        <path fill="currentcolor" d="M8 1 L9.5 5.5 L14 6 L10.5 9.5 L11.5 14 L8 11.5 L4.5 14 L5.5 9.5 L2 6 L6.5 5.5 Z" />
+      </symbol>
+      <symbol id="check-circle" viewBox="0 0 16 16">
+        <circle cx="8" cy="8" r="7" fill="none" stroke="currentcolor" strokeWidth="1.5" />
+        <path fill="none" stroke="currentcolor" strokeWidth="1.5" d="M5 8 L7 10 L11 6" />
+      </symbol>
+      <symbol id="star-8" viewBox="0 0 16 16">
+        <path fill="currentcolor" d="M8 1 L9 5 L13 5 L10 8 L11 12 L8 9 L5 12 L6 8 L3 5 L7 5 Z" />
+      </symbol>
+    </svg>
+  );
+}
+
+function Background({ name }: { name?: string }) {
+  const href = `#${name}`;
+  return (
+    <svg className="card__bg" width="648" height="648" aria-hidden="true">
+      <use href={href} />
+    </svg>
+  );
+}
+
+function HighlightCard({ background, icon, title, description, color = "#000", rating = 1, completion = 0 }: {
+  background?: string;
+  icon?: string;
+  title?: string;
+  description?: string;
+  color?: string;
+  rating?: number;
+  completion?: number;
+}) {
+  const ratingFormatted = rating.toFixed(1);
+  const completionFormatted = Math.round(completion * 100) + "%";
+  const cardStyle = { backgroundColor: color, color: "#fff" } as React.CSSProperties;
+  const catStyle = { color: "white" } as React.CSSProperties;
+
+  return (
+    <div className="card" style={cardStyle}>
+      <Background name={background} />
+      <div className="card__header">
+        <div className="card__label">My Info</div>
+        <div className="card__category">
+          <Icon name="star-8" />
+          <span className="card__category-icon" style={catStyle}>
+            <Icon name={icon} />
+          </span>
+        </div>
+      </div>
+      <div className="card__content">
+        <h2 className="card__title">{title}</h2>
+        <p className="card__description">{description}</p>
+        <div className="card__stats">
+          <div className="card__rating">
+            <Icon name="star" />
+            {ratingFormatted}
+          </div>
+          <div className="card__completion">
+            <Icon name="check-circle" />
+            {completionFormatted}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Icon({ name }: { name?: string }) {
+  const href = `#${name}`;
+  return (
+    <svg className="icon" width="16" height="16" aria-hidden="true">
+      <use href={href} />
+    </svg>
+  );
 }
 
 function readArray(value: unknown) {
@@ -838,6 +976,108 @@ function formatDateTime(value: unknown) {
   }).format(parsed)
 }
 
+
+
+function resolveDisplayName(currentUser: AdminRecord | null, employee: AdminRecord | null) {
+  const fromUser = [readString(currentUser, ["first_name"], ""), readString(currentUser, ["last_name"], "")]
+    .filter(Boolean)
+    .join(" ")
+  const fromEmployee = [readString(employee, ["first_name"], ""), readString(employee, ["last_name"], "")]
+    .filter(Boolean)
+    .join(" ")
+  return fromUser || fromEmployee || "You"
+}
+
+function resolveEmployeeNumber(currentUser: AdminRecord | null, employee: AdminRecord | null) {
+  return (
+    readString(currentUser, ["user_no", "employee_no", "employeeNo"], "") ||
+    readString(employee, ["employee_no", "employee_number", "employee_code", "user_no"], "") ||
+    readNestedEmployeeNumber(currentUser) ||
+    "-"
+  )
+}
+
+function resolveProfilePhotoUrl(currentUser: AdminRecord | null, employee: AdminRecord | null) {
+  return (
+    readString(employee, ["profile_photo_url"], "") ||
+    readString(asRecord(employee?.company_user), ["profile_photo_url"], "") ||
+    readString(asRecord(asRecord(employee?.company_user)?.user), ["profile_photo_url"], "") ||
+    readString(currentUser, ["profile_photo_url"], "")
+  )
+}
+
+function resolveManagerDisplay(employee: AdminRecord | null) {
+  const manager = asRecord(employee?.manager)
+  const managerCompanyUser = asRecord(manager?.company_user)
+  const managerUser = asRecord(managerCompanyUser?.user)
+  return {
+    name:
+      [readString(manager, ["first_name"], ""), readString(manager, ["last_name"], "")]
+        .filter(Boolean)
+        .join(" ") ||
+      [readString(managerUser, ["first_name"], ""), readString(managerUser, ["last_name"], "")]
+        .filter(Boolean)
+        .join(" ") ||
+      readString(manager, ["name"], "-"),
+    employeeNo: readString(manager, ["employee_no"], "") || readString(managerUser, ["user_no"], "-"),
+  }
+}
+
+function resolveEmploymentStatusTone(status: string) {
+  const normalized = status.trim().toLowerCase()
+  if (!normalized || normalized === "-") {
+    return "outline" as const
+  }
+  if (["active", "confirmed", "employed"].includes(normalized)) {
+    return "default" as const
+  }
+  if (["probation", "pending", "on_leave", "on leave"].includes(normalized)) {
+    return "secondary" as const
+  }
+  if (["inactive", "terminated", "resigned", "exited"].includes(normalized)) {
+    return "destructive" as const
+  }
+  return "outline" as const
+}
+
+function SectionEditButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon"
+      className="size-7 text-muted-foreground transition hover:bg-muted hover:text-primary"
+      aria-label={`Edit ${label}`}
+      onClick={onClick}
+    >
+      <PencilIcon className="size-3.5" />
+    </Button>
+  )
+}
+
+function SectionHeading({ title, onEdit }: { title: string; onEdit?: () => void }) {
+  return (
+    <div className="flex items-center justify-between gap-2 pb-1">
+      <h3 className="text-base font-semibold tracking-tight text-foreground">{title}</h3>
+      {onEdit ? <SectionEditButton label={title} onClick={onEdit} /> : null}
+    </div>
+  )
+}
+
+function SummarySectionCard({
+  children,
+  className,
+}: {
+  children: React.ReactNode
+  className?: string
+}) {
+  return (
+    <div className={cn("rounded-xl border bg-card p-4 shadow-sm md:p-5", className)}>
+      {children}
+    </div>
+  )
+}
+
 function SelfServiceStatCard({
   label,
   value,
@@ -848,10 +1088,10 @@ function SelfServiceStatCard({
   hint?: string
 }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-slate-50/90 p-3.5">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{label}</p>
-      <p className="mt-2 text-base font-semibold text-slate-900">{value}</p>
-      {hint ? <p className="mt-1 text-xs text-slate-500">{hint}</p> : null}
+    <div className="rounded-xl border bg-card p-4 shadow-sm">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{label}</p>
+      <p className="mt-1.5 text-[17px] font-semibold tracking-[-0.01em] text-foreground">{value}</p>
+      {hint ? <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p> : null}
     </div>
   )
 }
@@ -866,7 +1106,7 @@ function RequestStatusList({
   rows: AdminRecord[]
 }) {
   return (
-    <Card className="summary-wave-card">
+    <Card>
       <CardHeader className="pb-2">
         <CardTitle className="text-base">{title}</CardTitle>
       </CardHeader>
@@ -895,30 +1135,7 @@ function RequestStatusList({
   )
 }
 
-type WaveSeparatorVariant = "subtle" | "layered"
 
-function WaveSeparator({
-  variant = "subtle",
-  inverted = false,
-  className,
-}: {
-  variant?: WaveSeparatorVariant
-  inverted?: boolean
-  className?: string
-}) {
-  return (
-    <div
-      className={`profile-section-wave ${className ?? ""}`.trim()}
-      data-variant={variant}
-      data-inverted={inverted ? "true" : "false"}
-      aria-hidden="true"
-    >
-      <div className="profile-section-wave__layer profile-section-wave__layer--one" />
-      <div className="profile-section-wave__layer profile-section-wave__layer--two" />
-      <div className="profile-section-wave__glow" />
-    </div>
-  )
-}
 
 type EditableUserField =
   | "first_name"
@@ -964,6 +1181,208 @@ function formatApiErrorLines(errorObject: unknown, fallback: string) {
     return [errorObject.message]
   }
   return [fallback]
+}
+
+type ProfileSummaryTabProps = {
+  currentUser: AdminRecord | null
+  employee: AdminRecord | null
+  attendanceTodayRecord: AdminRecord | null
+  dashboardActions: AdminRecord | null
+  dashboardLeave: AdminRecord | null
+  employmentStatus: AdminRecord | null
+  scheduleDays: AdminRecord[]
+  correctionRequests: AdminRecord[]
+  profileUpdateRequests: AdminRecord[]
+  selfServiceNotes: string[]
+  openSectionEditor: (key: string, title: string, fields: EditableUserField[]) => void
+}
+
+function ProfileSummaryTab({
+  currentUser,
+  employee,
+  attendanceTodayRecord,
+  dashboardActions,
+  dashboardLeave,
+  employmentStatus,
+  scheduleDays,
+  correctionRequests,
+  profileUpdateRequests,
+  selfServiceNotes,
+  openSectionEditor,
+}: ProfileSummaryTabProps) {
+  const displayName = resolveDisplayName(currentUser, employee)
+  const employeeNumber = resolveEmployeeNumber(currentUser, employee)
+  const profilePhotoUrl = resolveProfilePhotoUrl(currentUser, employee)
+  const initials = displayName
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("")
+  const employmentStatusLabel = readString(employee, ["employment_status", "status"], "Active")
+  const positionLabel =
+    readString(asRecord(employee?.primary_position), ["name", "position_name"], "") ||
+    readString(asRecord(employee?.position), ["name", "position_name"], "") ||
+    "Position"
+  const departmentLabel =
+    resolveDepartmentNameFromEmployee(employee) ||
+    readString(asRecord(employee?.primary_department), ["name", "department_name"], "") ||
+    readString(employee, ["department_name", "department"], "") ||
+    "Department"
+  const branchLabel =
+    resolveBranchNameFromEmployee(employee) ||
+    readString(asRecord(employee?.branch), ["name", "branch_name"], "") ||
+    readString(employee, ["branch_name", "branch"], "-")
+  const manager = resolveManagerDisplay(employee)
+  const pendingCorrections = correctionRequests.filter(
+    (row) => readString(row, ["status"], "").toLowerCase() !== "cancelled"
+  ).length
+  const pendingProfileUpdates = profileUpdateRequests.filter(
+    (row) => readString(row, ["status"], "").toLowerCase() !== "cancelled"
+  ).length
+  const punchState = formatPunchState(readString(attendanceTodayRecord, ["punch_state", "status"], ""))
+  const processingState = formatProcessingState(readString(attendanceTodayRecord, ["processing_state"], ""))
+
+  // Prepare highlight cards using the provided design
+  const email = readString(currentUser, ["email"], "-");
+  const phone = readString(employee, ["phone", "phone_number"], "") || readString(currentUser, ["phone", "phone_number"], "-");
+  const empId = readString(employee, ["id", "employee_id", "employeeId"], "-");
+
+  const highlightCards = [
+    {
+      color: "hsl(225, 58%, 53%)",
+      background: "circles-corner",
+      icon: "people",
+      title: "Contact",
+      description: `${email} • ${phone} • ID ${empId}`,
+      rating: 4.8,
+      completion: 0.92
+    },
+    {
+      color: "hsl(158, 43%, 33%)",
+      background: "grass-left",
+      icon: "link",
+      title: "Organization",
+      description: `${branchLabel} • ${departmentLabel} • ${positionLabel}`,
+      rating: 4.3,
+      completion: 0.75
+    },
+    {
+      color: "hsl(32, 62%, 47%)",
+      background: "curves",
+      icon: "ribbon",
+      title: "Reporting",
+      description: `Reports to ${manager.name || "-"} • ${manager.employeeNo || ""}`,
+      rating: 4.1,
+      completion: 0.65
+    },
+    {
+      color: "hsl(262, 44%, 53%)",
+      background: "grass-bottom",
+      icon: "coil",
+      title: "Employment",
+      description: `${employmentStatusLabel} • ${formatEmploymentType(employee?.employment_type)} • Hired ${formatDate(employee?.hire_date)}`,
+      rating: 4.6,
+      completion: 0.88
+    }
+  ];
+
+  return (
+    <div className="space-y-6">
+      <SVGSprites />
+
+      {/* Clean Profile Header */}
+      <div className="rounded-2xl border bg-card p-5 md:p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+          <Avatar className="size-16 ring-2 ring-border md:size-20">
+            {profilePhotoUrl ? <AvatarImage src={profilePhotoUrl} alt={displayName} /> : null}
+            <AvatarFallback className="bg-primary/10 text-xl font-semibold text-primary">
+              {initials || "ME"}
+            </AvatarFallback>
+          </Avatar>
+
+          <div className="min-w-0 flex-1 space-y-2">
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="text-2xl font-semibold tracking-tight text-foreground">{displayName}</h1>
+              <Badge variant={resolveEmploymentStatusTone(employmentStatusLabel)} className="text-xs">
+                {employmentStatusLabel}
+              </Badge>
+            </div>
+
+            <div className="text-sm text-muted-foreground">
+              <span className="font-medium text-foreground">{employeeNumber}</span>
+              <span className="mx-1.5 text-border">•</span>
+              {positionLabel}
+              <span className="mx-1.5 text-border">•</span>
+              {departmentLabel}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
+              <div className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-muted-foreground">
+                <CalendarIcon className="size-3.5" />
+                <span>Hired {formatDate(employee?.hire_date)}</span>
+              </div>
+              <div className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-muted-foreground">
+                <BriefcaseIcon className="size-3.5" />
+                <span>{formatEmploymentType(employee?.employment_type)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Key Stats — clean and scannable */}
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <SelfServiceStatCard label="Today's Status" value={punchState} hint={processingState || undefined} />
+        <SelfServiceStatCard
+          label="Check In"
+          value={formatUnknownValue(dashboardActions?.can_check_in)}
+          hint={formatDate(attendanceTodayRecord?.date)}
+        />
+        <SelfServiceStatCard
+          label="Check Out"
+          value={formatUnknownValue(dashboardActions?.can_check_out)}
+          hint={
+            readString(attendanceTodayRecord, ["first_punch", "first_punch_at"], "") || undefined
+          }
+        />
+        <SelfServiceStatCard
+          label="Leave Balances"
+          value={String(readArray(dashboardLeave?.balances).length)}
+          hint={`${readArray(dashboardLeave?.pending_requests).length} pending · ${pendingCorrections} corrections`}
+        />
+      </div>
+
+      {/* Cards using the exact requested design - all uniformly reduced size */}
+      <div className="card-grid">
+        {highlightCards.map((c, i) => (
+          <HighlightCard
+            key={i}
+            background={c.background}
+            icon={c.icon}
+            title={c.title}
+            description={c.description}
+            color={c.color}
+            rating={c.rating}
+            completion={c.completion}
+          />
+        ))}
+      </div>
+
+      {selfServiceNotes.length > 0 ? (
+        <SummarySectionCard>
+          <SectionHeading title="Notes" />
+          <div className="space-y-2 text-sm text-muted-foreground">
+            {selfServiceNotes.map((note, index) => (
+              <p key={`${note}-${index}`} className="leading-relaxed">
+                {note}
+              </p>
+            ))}
+          </div>
+        </SummarySectionCard>
+      ) : null}
+    </div>
+  )
 }
 
 
@@ -1221,294 +1640,19 @@ export function EmployeeSelfServiceProfileView() {
       {!loading && !error && (currentUser || employee) ? (
         <div key={activeTab} className="grid gap-4 animate-in slide-in-from-right-2 fade-in-0 duration-300">
           {activeTab === "summary" ? (
-            <div className="space-y-4">
-              {/* Top identity header - no card */}
-              <div>
-                <div className="text-lg font-semibold tracking-tight text-foreground">
-                  {([readString(currentUser, ["first_name"], ""), readString(currentUser, ["last_name"], "")].filter(Boolean).join(" ") ||
-                    [readString(employee, ["first_name"], ""), readString(employee, ["last_name"], "")].filter(Boolean).join(" ") ||
-                    "You")}
-                </div>
-                <div className="text-xs text-muted-foreground mt-0.5">
-                  {readString(currentUser, ["user_no", "employee_no", "employeeNo"], "") ||
-                    readString(employee, ["employee_no", "employee_number", "employee_code", "user_no"], "") ||
-                    readNestedEmployeeNumber(currentUser) ||
-                    "-"}
-                  {" · "}
-                  {readString(asRecord(employee?.primary_position), ["name", "position_name"], "") ||
-                    readString(asRecord(employee?.position), ["name", "position_name"], "") ||
-                    "Position"}{" · "}
-                  {resolveDepartmentNameFromEmployee(employee) ||
-                    readString(asRecord(employee?.primary_department), ["name", "department_name"], "") ||
-                    readString(employee, ["department_name", "department"], "") ||
-                    "Department"}
-                </div>
-                <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                  <span>Hired <span className="font-medium text-foreground">{formatDate(employee?.hire_date)}</span></span>
-                  <span>Status <span className="font-medium text-foreground">{readString(employee, ["employment_status", "status"], "-")}</span></span>
-                </div>
-              </div>
-
-              {/* light separator line after header */}
-              <div className="border-t border-border/60" />
-
-              {/* Identity */}
-              <div>
-                <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Identity</div>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  <div className="flex gap-2.5">
-                    <UserIcon className="mt-0.5 size-3.5 text-primary shrink-0" />
-                    <div className="text-xs">
-                      <div className="text-muted-foreground">Employee ID</div>
-                      <div className="font-medium text-foreground">{readString(employee, ["id", "employee_id", "employeeId"], "-")}</div>
-                    </div>
-                  </div>
-                  <div className="flex gap-2.5">
-                    <UserIcon className="mt-0.5 size-3.5 text-primary shrink-0" />
-                    <div className="text-xs">
-                      <div className="text-muted-foreground">Employee No</div>
-                      <div className="font-medium text-foreground">
-                        {readString(currentUser, ["user_no", "employee_no", "employeeNo"], "") ||
-                          readString(employee, ["employee_no", "employee_number", "employee_code", "user_no"], "") ||
-                          readNestedEmployeeNumber(currentUser) ||
-                          "-"}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex gap-2.5">
-                    <UserIcon className="mt-0.5 size-3.5 text-primary shrink-0" />
-                    <div className="text-xs">
-                      <div className="text-muted-foreground">Full Name</div>
-                      <div className="font-medium text-foreground">
-                        {[readString(currentUser, ["first_name"], ""), readString(currentUser, ["last_name"], "")].filter(Boolean).join(" ") ||
-                          [readString(employee, ["first_name"], ""), readString(employee, ["last_name"], "")].filter(Boolean).join(" ") ||
-                          "-"}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="border-t border-border/50" />
-
-              {/* Contact & Employment */}
-              <div>
-                <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Contact &amp; Employment</div>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  <div className="flex gap-2.5">
-                    <MailIcon className="mt-0.5 size-3.5 text-primary shrink-0" />
-                    <div className="text-xs">
-                      <div className="text-muted-foreground">Email</div>
-                      <div className="font-medium text-foreground">{readString(currentUser, ["email"], "-")}</div>
-                    </div>
-                  </div>
-                  <div className="flex gap-2.5">
-                    <PhoneIcon className="mt-0.5 size-3.5 text-primary shrink-0" />
-                    <div className="text-xs">
-                      <div className="text-muted-foreground">Phone</div>
-                      <div className="font-medium text-foreground">
-                        {readString(employee, ["phone", "phone_number"], "") || readString(currentUser, ["phone", "phone_number"], "-")}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex gap-2.5">
-                    <BriefcaseIcon className="mt-0.5 size-3.5 text-primary shrink-0" />
-                    <div className="text-xs">
-                      <div className="text-muted-foreground">Employment Type</div>
-                      <div className="font-medium text-foreground">{formatEmploymentType(employee?.employment_type)}</div>
-                    </div>
-                  </div>
-                  <div className="flex gap-2.5">
-                    <CalendarIcon className="mt-0.5 size-3.5 text-primary shrink-0" />
-                    <div className="text-xs">
-                      <div className="text-muted-foreground">Hire Date</div>
-                      <div className="font-medium text-foreground">{formatDate(employee?.hire_date)}</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="border-t border-border/50" />
-
-              {/* Organization */}
-              <div>
-                <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Organization</div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="flex gap-2.5">
-                    <Building2Icon className="mt-0.5 size-3.5 text-primary shrink-0" />
-                    <div className="text-xs">
-                      <div className="text-muted-foreground">Branch</div>
-                      <div className="font-medium text-foreground">
-                        {resolveBranchNameFromEmployee(employee) ||
-                          readString(asRecord(employee?.branch), ["name", "branch_name"], "") ||
-                          readString(employee, ["branch_name", "branch"], "-")}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex gap-2.5">
-                    <Building2Icon className="mt-0.5 size-3.5 text-primary shrink-0" />
-                    <div className="text-xs">
-                      <div className="text-muted-foreground">Department</div>
-                      <div className="font-medium text-foreground">
-                        {resolveDepartmentNameFromEmployee(employee) ||
-                          readString(asRecord(employee?.department), ["name", "department_name"], "") ||
-                          readString(employee, ["department_name", "department"], "-")}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="border-t border-border/50" />
-
-              {/* Role & Reporting */}
-              <div>
-                <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Role &amp; Reporting</div>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  <div className="flex gap-2.5">
-                    <BriefcaseIcon className="mt-0.5 size-3.5 text-primary shrink-0" />
-                    <div className="text-xs">
-                      <div className="text-muted-foreground">Position</div>
-                      <div className="font-medium text-foreground">
-                        {readString(asRecord(employee?.primary_position), ["name", "position_name"], "") ||
-                          readString(asRecord(employee?.position), ["name", "position_name"], "") ||
-                          readString(employee, ["position_name", "position", "designation_name"], "-")}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex gap-2.5">
-                    <BriefcaseIcon className="mt-0.5 size-3.5 text-primary shrink-0" />
-                    <div className="text-xs">
-                      <div className="text-muted-foreground">Designation</div>
-                      <div className="font-medium text-foreground">
-                        {readString(asRecord(employee?.primary_designation), ["name", "designation_name"], "") ||
-                          readString(asRecord(employee?.designation), ["name", "designation_name"], "") ||
-                          readString(employee, ["designation_name", "designation"], "-")}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex gap-2.5">
-                    <UsersIcon className="mt-0.5 size-3.5 text-primary shrink-0" />
-                    <div className="text-xs">
-                      <div className="text-muted-foreground">Reports To</div>
-                      <div className="font-medium text-foreground">
-                        {(() => {
-                          const manager = asRecord(employee?.manager)
-                          const managerCompanyUser = asRecord(manager?.company_user)
-                          const managerUser = asRecord(managerCompanyUser?.user)
-                          return (
-                            [readString(manager, ["first_name"], ""), readString(manager, ["last_name"], "")]
-                              .filter(Boolean)
-                              .join(" ") ||
-                            [readString(managerUser, ["first_name"], ""), readString(managerUser, ["last_name"], "")]
-                              .filter(Boolean)
-                              .join(" ") ||
-                            readString(manager, ["name"], "-")
-                          )
-                        })()}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex gap-2.5">
-                    <UserIcon className="mt-0.5 size-3.5 text-primary shrink-0" />
-                    <div className="text-xs">
-                      <div className="text-muted-foreground">Manager No</div>
-                      <div className="font-medium text-foreground">
-                        {(() => {
-                          const manager = asRecord(employee?.manager)
-                          const managerCompanyUser = asRecord(manager?.company_user)
-                          const managerUser = asRecord(managerCompanyUser?.user)
-                          return readString(manager, ["employee_no"], "") || readString(managerUser, ["user_no"], "-")
-                        })()}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="border-t border-border/50" />
-
-              {/* Snapshots */}
-              <div>
-                <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Attendance</div>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 text-xs">
-                  <div className="flex gap-2 py-0.5">
-                    <ClockIcon className="mt-0.5 size-3.5 text-primary shrink-0" />
-                    <div>
-                      <div className="text-muted-foreground">Punch State</div>
-                      <div className="font-medium text-foreground">{formatPunchState(readString(attendanceTodayRecord, ["punch_state", "status"], ""))}</div>
-                      {readString(attendanceTodayRecord, ["processing_state"], "") && (
-                        <div className="text-[10px] text-muted-foreground">{formatProcessingState(readString(attendanceTodayRecord, ["processing_state"], ""))}</div>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex gap-2 py-0.5">
-                    <div>
-                      <div className="text-muted-foreground">Allowed to check in</div>
-                      <div className="font-medium text-foreground">{formatUnknownValue(dashboardActions?.can_check_in)}</div>
-                    </div>
-                  </div>
-                  <div className="flex gap-2 py-0.5">
-                    <div>
-                      <div className="text-muted-foreground">Allowed to check out</div>
-                      <div className="font-medium text-foreground">{formatUnknownValue(dashboardActions?.can_check_out)}</div>
-                    </div>
-                  </div>
-                  <div className="flex gap-2 py-0.5">
-                    <CalendarIcon className="mt-0.5 size-3.5 text-primary shrink-0" />
-                    <div>
-                      <div className="text-muted-foreground">Upcoming Schedule</div>
-                      <div className="font-medium text-foreground">{String(scheduleDays.length)} days</div>
-                      <div className="text-[10px] text-muted-foreground">preview available</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="border-t border-border/50" />
-
-              <div>
-                <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Self-Service</div>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 text-xs">
-                  <div className="flex gap-2 py-0.5">
-                    <div>
-                      <div className="text-muted-foreground">Employment</div>
-                      <div className="font-medium text-foreground">{readString(employmentStatus, ["employment_status", "status"], "-")}</div>
-                    </div>
-                  </div>
-                  <div className="flex gap-2 py-0.5">
-                    <div>
-                      <div className="text-muted-foreground">Leave Balances</div>
-                      <div className="font-medium text-foreground">{String(readArray(dashboardLeave?.balances).length)}</div>
-                      <div className="text-[10px] text-muted-foreground">{readArray(dashboardLeave?.pending_requests).length} pending</div>
-                    </div>
-                  </div>
-                  <div className="flex gap-2 py-0.5">
-                    <div>
-                      <div className="text-muted-foreground">Pending Corrections</div>
-                      <div className="font-medium text-foreground">{String(correctionRequests.filter((row) => readString(row, ["status"], "").toLowerCase() !== "cancelled").length)}</div>
-                    </div>
-                  </div>
-                  <div className="flex gap-2 py-0.5">
-                    <div>
-                      <div className="text-muted-foreground">Profile Updates</div>
-                      <div className="font-medium text-foreground">{String(profileUpdateRequests.filter((row) => readString(row, ["status"], "").toLowerCase() !== "cancelled").length)}</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {selfServiceNotes.length > 0 ? (
-                <div>
-                  <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Notes</div>
-                  <div className="text-xs text-muted-foreground space-y-0.5 pl-1">
-                    {selfServiceNotes.map((note, i) => (
-                      <p key={i}>{note}</p>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-            </div>
+            <ProfileSummaryTab
+              currentUser={currentUser}
+              employee={employee}
+              attendanceTodayRecord={attendanceTodayRecord}
+              dashboardActions={dashboardActions}
+              dashboardLeave={dashboardLeave}
+              employmentStatus={employmentStatus}
+              scheduleDays={scheduleDays}
+              correctionRequests={correctionRequests}
+              profileUpdateRequests={profileUpdateRequests}
+              selfServiceNotes={selfServiceNotes}
+              openSectionEditor={openSectionEditor}
+            />
           ) : null}
 
           {activeTab === "assignments" && employee ? (
@@ -2364,14 +2508,14 @@ export function EmployeeOrganizationView() {
 }
 
 export function EmployeePromotionView() {
-  const { loading, error, employee } = useSelfEmployeeData()
+  const { loading, error } = useSelfEmployeeData()
 
   return (
     <div className="grid gap-4 px-4 lg:px-6">
       <Card>
         <CardHeader>
-          <CardTitle>Promotion Context</CardTitle>
-          <CardDescription>Track your current level and promotion-related context.</CardDescription>
+          <CardTitle>Promotion</CardTitle>
+          <CardDescription>Promotion updates will appear here when they are available.</CardDescription>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -2381,23 +2525,16 @@ export function EmployeePromotionView() {
             </div>
           ) : null}
           {!loading && error ? <p className="text-sm text-red-600">{error}</p> : null}
-          {!loading && !error && employee ? (
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <InfoRow label="Current Position" value={readString(asRecord(employee.position), ["name", "position_name"])} />
-                <InfoRow label="Current Designation" value={readString(asRecord(employee.designation), ["name", "designation_name"])} />
-                <InfoRow label="Department" value={readString(asRecord(employee.department), ["name", "department_name"])} />
-              </div>
-              <div>
-                <InfoRow label="Employment Status" value={readString(employee, ["employment_status", "status"])} />
-                <InfoRow label="Last Updated" value={formatDate(employee["updated_at"])} />
-                <InfoRow label="Joined Date" value={formatDate(employee["hire_date"] ?? employee["joining_date"])} />
+          {!loading && !error ? (
+            <div className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50/70 px-6 py-10 text-center">
+              <div className="max-w-md space-y-2">
+                <h3 className="text-lg font-semibold text-foreground">No promotion updates right now</h3>
+                <p className="text-sm text-muted-foreground">
+                  You do not have any active promotion records at the moment. HR or your manager will update this page when something changes.
+                </p>
               </div>
             </div>
           ) : null}
-          <p className="mt-4 text-sm text-slate-600 dark:text-slate-300">
-            Promotion approvals and final decisions are managed by HR/admin workflows. You can view your current context here and follow up through your manager or HR.
-          </p>
         </CardContent>
       </Card>
     </div>
@@ -2536,7 +2673,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
       const [typesResult, balancesResult, holidaysResult, policiesResult] = await Promise.allSettled([
         listLeaveTypes(token, { page: 1, limit: 100 }),
         listMyLeaveBalances(token, { page: 1, limit: 100 }),
-        listAttendanceHolidays(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
+        listAttendanceHolidays(token, { page: 1, limit: 365 }),
         listLeavePolicies(token, { page: 1, limit: 100 }),
       ])
 
@@ -2808,32 +2945,54 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
 
   if (activeTab === "holidays") {
     const showHolidaysError = holidaysError && holidaysError !== SELF_SERVICE_UNAVAILABLE_MESSAGE
+    const sortedHolidays = [...holidays].sort((left, right) => {
+      const leftDate = readString(left, ["holiday_date", "from_date", "start_date", "date"], "")
+      const rightDate = readString(right, ["holiday_date", "from_date", "start_date", "date"], "")
+      return leftDate.localeCompare(rightDate)
+    })
     tabContent = (
       <section className="space-y-4 px-4 py-2 lg:px-6">
-        <h2 className="text-2xl font-semibold tracking-tight text-foreground">Holiday Calendar</h2>
+        <div className="space-y-1">
+          <h2 className="text-2xl font-semibold tracking-tight text-foreground">Holiday Calendar</h2>
+          <p className="text-sm text-muted-foreground">Company holidays pulled from the attendance holiday calendar.</p>
+        </div>
         {loading ? (
           <div className="flex flex-col items-center justify-center gap-2 py-4">
             <LumaSpin />
             <p className="text-sm text-muted-foreground">Loading holidays...</p>
           </div>
         ) : null}
-        {!loading && holidays.length === 0 ? <p className="text-sm text-slate-500">No holidays found.</p> : null}
-        <div className="space-y-2">
-          {holidays.map((row, index) => {
+        {!loading && sortedHolidays.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/70 px-5 py-8 text-sm text-slate-500">
+            No holidays were returned by `/api/attendance/holidays`.
+          </div>
+        ) : null}
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {sortedHolidays.map((row, index) => {
             const holidayStart =
               readString(row, ["holiday_date", "from_date", "start_date", "date"], "") || "-"
             const holidayEnd = readString(row, ["to_date", "end_date"], "")
-            const holidayType = readString(row, ["type"], "")
+            const holidayType = readString(row, ["type", "holiday_type", "category"], "")
+            const holidayBranch = readString(asRecord(row.branch), ["name", "branch_name"], "")
+            const holidayDescription = readString(row, ["description", "notes", "remarks"], "")
             const dateLabel =
               holidayEnd && holidayEnd !== holidayStart
                 ? `${formatDate(holidayStart)} - ${formatDate(holidayEnd)}`
                 : formatDate(holidayStart)
 
             return (
-              <div key={String(row.id ?? index)} className="rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800">
-                <p className="font-medium">{readString(row, ["name", "title"], "Holiday")}</p>
-                <p className="text-slate-600 dark:text-slate-300">Date: {dateLabel}</p>
-                {holidayType ? <p className="text-slate-600 dark:text-slate-300">Type: {holidayType}</p> : null}
+              <div key={String(row.id ?? index)} className="rounded-2xl border border-slate-200 bg-white p-4 text-sm shadow-sm dark:border-slate-800">
+                <div className="flex items-start justify-between gap-3">
+                  <p className="font-medium text-foreground">{readString(row, ["name", "title"], "Holiday")}</p>
+                  {holidayType ? (
+                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium uppercase tracking-wide text-slate-600">
+                      {holidayType}
+                    </span>
+                  ) : null}
+                </div>
+                <p className="mt-2 text-slate-600 dark:text-slate-300">{dateLabel}</p>
+                {holidayBranch ? <p className="mt-1 text-xs text-slate-500">Branch: {holidayBranch}</p> : null}
+                {holidayDescription ? <p className="mt-2 text-xs text-slate-500">{holidayDescription}</p> : null}
               </div>
             )
           })}

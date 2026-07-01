@@ -3,13 +3,12 @@
 import * as React from "react"
 import {
   AlarmClockCheckIcon,
-  CalendarDaysIcon,
   Clock3Icon,
   Filter,
   MapPinIcon,
+  PlusIcon,
   RefreshCwIcon,
   SearchIcon,
-  ShieldCheckIcon,
   TimerResetIcon,
 } from "lucide-react"
 
@@ -21,10 +20,13 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import {
+  cancelMyAttendanceCorrectionRequest,
+  createMyAttendanceCorrectionRequest,
   createMyAttendanceCheckIn,
   createMyAttendanceCheckOut,
   getMyAttendanceSchedule,
   getMyAttendanceToday,
+  listMyAttendanceCorrectionRequests,
   rebuildAttendanceDailySummaries,
   listAttendanceDailySummaries,
   listAttendanceProcessingJobs,
@@ -35,9 +37,18 @@ import {
   listMyAttendancePunches,
   processAttendanceRange,
   runPendingAttendanceProcessingJobs,
+  submitMyAttendanceCorrectionRequest,
   type AdminRecord,
 } from "@/lib/admin-api"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
+import {
+  Dialog,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogPopup,
+  DialogTitle,
+} from "@/components/animate-ui/components/base/dialog"
 
 type AttendanceActivitySectionKey =
   | "daily-summaries"
@@ -231,6 +242,103 @@ function formatOptionalValue(value: unknown, fallback: string) {
   return formatted === "-" ? fallback : formatted
 }
 
+function asRecordValue(value: unknown): AdminRecord | null {
+  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+    return value as AdminRecord
+  }
+  if (typeof value === "string" && value.trim().startsWith("{")) {
+    try {
+      const parsed = JSON.parse(value)
+      return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+        ? (parsed as AdminRecord)
+        : null
+    } catch {
+      return null
+    }
+  }
+  return null
+}
+
+function formatBooleanLabel(value: unknown) {
+  if (typeof value === "boolean") {
+    return value ? "Yes" : "No"
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase()
+    if (normalized === "true") return "Yes"
+    if (normalized === "false") return "No"
+  }
+  return stringifyValue(value)
+}
+
+function extractAttendanceFlags(record: AdminRecord | null) {
+  if (!record) {
+    return []
+  }
+
+  const sources = [
+    asRecordValue(record.flags),
+    asRecordValue(record.action_flags),
+    asRecordValue(asRecordValue(record.summary)?.flags),
+    asRecordValue(asRecordValue(record.summary)?.action_flags),
+  ].filter((value): value is AdminRecord => Boolean(value))
+
+  const preferredOrder = [
+    "hasApprovedLeave",
+    "leaveStatus",
+    "hasApprovedBusinessTrip",
+    "isHoliday",
+    "isOffDay",
+    "isWeekend",
+    "can_check_in",
+    "can_check_out",
+  ]
+
+  const seen = new Set<string>()
+  const entries: Array<{ key: string; label: string; value: string }> = []
+
+  preferredOrder.forEach((key) => {
+    for (const source of sources) {
+      if (!(key in source) || seen.has(key)) {
+        continue
+      }
+      entries.push({
+        key,
+        label: prettifyLabel(key),
+        value: formatBooleanLabel(source[key]),
+      })
+      seen.add(key)
+    }
+  })
+
+  sources.forEach((source) => {
+    Object.entries(source).forEach(([key, value]) => {
+      if (seen.has(key) || value === null || value === undefined || stringifyValue(value) === "-") {
+        return
+      }
+      entries.push({
+        key,
+        label: prettifyLabel(key),
+        value: formatBooleanLabel(value),
+      })
+      seen.add(key)
+    })
+  })
+
+  return entries
+}
+
+function toIsoDateTime(dateValue: string, timeValue: string) {
+  if (!dateValue.trim() || !timeValue.trim()) {
+    return undefined
+  }
+  const timestamp = new Date(`${dateValue}T${timeValue}`)
+  if (Number.isNaN(timestamp.getTime())) {
+    throw new Error("Please provide a valid correction date and time.")
+  }
+  return timestamp.toISOString()
+}
+
 function readFirstValue(record: AdminRecord | null | undefined, keys: string[]) {
   if (!record) return null
   for (const key of keys) {
@@ -316,6 +424,7 @@ function TodayOverview({ record }: { record: AdminRecord | null }) {
   const shift = readWithFallback(record, ["shift_name", "schedule_name", "timetable_name"], effective) || ""
   const lateness = readWithFallback(record, ["late_minutes", "lateness_minutes", "minutes_late"], effective) ?? "0"
   const overtime = readWithFallback(record, ["overtime_minutes", "overtime_hours", "extra_time"], effective) ?? "0"
+  const attendanceFlags = extractAttendanceFlags(record)
 
   const hiddenKeys = new Set([
     "attendance_status",
@@ -363,6 +472,7 @@ function TodayOverview({ record }: { record: AdminRecord | null }) {
     "first_punch",
     "last_punch",
     "action_flags",
+    "flags",
   ])
 
   const extraEntries = Object.entries(record).filter(
@@ -444,11 +554,19 @@ function TodayOverview({ record }: { record: AdminRecord | null }) {
 
       <div className="text-xs text-muted-foreground">Status: <span className="font-medium text-foreground">{status}</span></div>
 
-      {(record as any)?.action_flags && (
-        <div className="text-xs text-muted-foreground">
-          Can check-in: <span className="font-medium text-foreground">{String((record as any).action_flags.can_check_in ?? "-")}</span> • Can check-out: <span className="font-medium text-foreground">{String((record as any).action_flags.can_check_out ?? "-")}</span>
+      {attendanceFlags.length ? (
+        <div>
+          <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Attendance checks</div>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            {attendanceFlags.map((entry) => (
+              <div key={entry.key} className="rounded-xl border border-border/70 bg-muted/30 px-3 py-2 text-xs">
+                <div className="text-muted-foreground">{entry.label}</div>
+                <div className="font-medium text-foreground">{entry.value}</div>
+              </div>
+            ))}
+          </div>
         </div>
-      )}
+      ) : null}
 
       {compactExtraEntries.length ? (
         <div>
@@ -1148,6 +1266,17 @@ export function AttendanceActivityView({ section }: { section: string }) {
     from_date: "",
     to_date: "",
   }))
+  const [correctionRequests, setCorrectionRequests] = React.useState<AdminRecord[]>([])
+  const [correctionDialogOpen, setCorrectionDialogOpen] = React.useState(false)
+  const [correctionBusy, setCorrectionBusy] = React.useState(false)
+  const [correctionForm, setCorrectionForm] = React.useState({
+    attendance_date: getTodayDateInputValue(),
+    request_type: "check_in",
+    requested_check_in_at: "",
+    requested_check_out_at: "",
+    requested_status: "PRESENT",
+    reason: "",
+  })
   const filteredEmployeeOptions = React.useMemo(() => {
     const search = employeeSearch.trim().toLowerCase()
     if (!search) {
@@ -1246,15 +1375,18 @@ export function AttendanceActivityView({ section }: { section: string }) {
         setDailySummaryRows([])
         setSingleRecord(payload)
         setRows([])
+        setCorrectionRequests([])
         return
       }
 
       if (activeSection === "schedule-preview") {
-        const payload: any = await getMyAttendanceSchedule(token)
-        const days = Array.isArray(payload) ? payload : (payload?.days || [])
+        const payload: unknown = await getMyAttendanceSchedule(token)
+        const daysRecord = asRecordValue(payload)
+        const days = Array.isArray(payload) ? payload : (Array.isArray(daysRecord?.days) ? daysRecord.days : [])
         setDailySummaryRows([])
         setRows(days)
         setSingleRecord(null)
+        setCorrectionRequests([])
         return
       }
 
@@ -1263,20 +1395,28 @@ export function AttendanceActivityView({ section }: { section: string }) {
         setDailySummaryRows([])
         setRows(result.rows)
         setSingleRecord(null)
+        setCorrectionRequests([])
         return
       }
 
       if (activeSection === "attendance-history") {
-        const result = await listMyAttendanceHistory(token, { 
-          page: 1, 
-          limit: 100, 
-          sortBy: "created_at", 
+        const result = await listMyAttendanceHistory(token, {
+          page: 1,
+          limit: 100,
+          sortBy: "created_at",
           sortOrder: "DESC",
           from_date: historyFilters.from_date || undefined,
           to_date: historyFilters.to_date || undefined,
         })
+        const correctionsResult = await listMyAttendanceCorrectionRequests(token, {
+          page: 1,
+          limit: 20,
+          date_from: historyFilters.from_date || undefined,
+          date_to: historyFilters.to_date || undefined,
+        }).catch(() => ({ rows: [] }))
         setDailySummaryRows([])
         setRows(result.rows)
+        setCorrectionRequests(correctionsResult.rows)
         setSingleRecord(null)
         return
       }
@@ -1304,6 +1444,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
         setDailySummaryRows(enrichedRows)
         setRows(applyDailySummaryFilters(enrichedRows, appliedDailySummaryFilters, ""))
         setSingleRecord(null)
+        setCorrectionRequests([])
         return
       }
 
@@ -1312,6 +1453,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
         setDailySummaryRows([])
         setRows(result.rows)
         setSingleRecord(null)
+        setCorrectionRequests([])
         return
       }
 
@@ -1320,16 +1462,19 @@ export function AttendanceActivityView({ section }: { section: string }) {
         setDailySummaryRows([])
         setRows(result.rows)
         setSingleRecord(null)
+        setCorrectionRequests([])
         return
       }
 
       setDailySummaryRows([])
       setRows([])
       setSingleRecord(null)
+      setCorrectionRequests([])
     } catch (errorObject) {
       setDailySummaryRows([])
       setRows([])
       setSingleRecord(null)
+      setCorrectionRequests([])
       setError(formatLoadError(errorObject, `Failed to load ${config.title.toLowerCase()}.`))
     } finally {
       setLoading(false)
@@ -1396,6 +1541,89 @@ export function AttendanceActivityView({ section }: { section: string }) {
     }
   }
 
+  const submitCorrectionRequest = async () => {
+    const token = readStoredToken()
+    if (!token) {
+      setError("Authentication required. Please log in again.")
+      return
+    }
+
+    if (!correctionForm.attendance_date.trim() || !correctionForm.reason.trim()) {
+      setError("Attendance date and reason are required.")
+      return
+    }
+
+    setCorrectionBusy(true)
+    setError(null)
+    setMessage(null)
+
+    try {
+      await createMyAttendanceCorrectionRequest(token, {
+        attendance_date: correctionForm.attendance_date,
+        request_type: correctionForm.request_type,
+        requested_check_in_at: toIsoDateTime(
+          correctionForm.attendance_date,
+          correctionForm.requested_check_in_at
+        ),
+        requested_check_out_at: toIsoDateTime(
+          correctionForm.attendance_date,
+          correctionForm.requested_check_out_at
+        ),
+        requested_status: correctionForm.requested_status,
+        reason: correctionForm.reason.trim(),
+      })
+      setMessage("Attendance correction request created.")
+      setCorrectionDialogOpen(false)
+      setCorrectionForm({
+        attendance_date: getTodayDateInputValue(),
+        request_type: "check_in",
+        requested_check_in_at: "",
+        requested_check_out_at: "",
+        requested_status: "PRESENT",
+        reason: "",
+      })
+      await fetchSectionData(true)
+    } catch (errorObject) {
+      setError(formatLoadError(errorObject, "Could not create the attendance correction request."))
+    } finally {
+      setCorrectionBusy(false)
+    }
+  }
+
+  const updateCorrectionRequestStatus = async (id: string | number, action: "submit" | "cancel") => {
+    const token = readStoredToken()
+    if (!token) {
+      setError("Authentication required. Please log in again.")
+      return
+    }
+
+    setCorrectionBusy(true)
+    setError(null)
+    setMessage(null)
+
+    try {
+      if (action === "submit") {
+        await submitMyAttendanceCorrectionRequest(token, id)
+        setMessage("Attendance correction request submitted.")
+      } else {
+        await cancelMyAttendanceCorrectionRequest(token, id)
+        setMessage("Attendance correction request cancelled.")
+      }
+      await fetchSectionData(true)
+    } catch (errorObject) {
+      setError(
+        formatLoadError(
+          errorObject,
+          action === "submit"
+            ? "Could not submit the attendance correction request."
+            : "Could not cancel the attendance correction request."
+        )
+      )
+    } finally {
+      setCorrectionBusy(false)
+    }
+  }
+
   if (activeSection === 'punch-action') {
     return (
       <div className="py-4 text-sm text-muted-foreground">
@@ -1415,6 +1643,16 @@ export function AttendanceActivityView({ section }: { section: string }) {
             <h1 className="text-xl font-semibold tracking-tight text-foreground">{config.title}</h1>
           </div>
           <div className="flex items-center gap-1">
+            {activeSection === "attendance-history" && (
+              <button
+                className="inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-border px-2.5 text-xs font-medium text-foreground transition hover:bg-muted"
+                type="button"
+                onClick={() => setCorrectionDialogOpen(true)}
+              >
+                <PlusIcon className="size-3.5 text-primary" />
+                Request correction
+              </button>
+            )}
             {activeSection === "attendance-history" && (
               <Popover>
                 <PopoverTrigger>
@@ -1690,7 +1928,164 @@ export function AttendanceActivityView({ section }: { section: string }) {
             <TableBlock rows={rows} section={activeSection} />
           </div>
         ) : null}
+
+        {!loading && activeSection === "attendance-history" ? (
+          <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+            <div className="flex flex-col gap-1">
+              <h2 className="text-base font-semibold text-slate-900">Correction Requests</h2>
+              <p className="text-xs text-slate-500">Create, submit, and track attendance corrections for missing or incorrect records.</p>
+            </div>
+            <div className="mt-4 space-y-3">
+              {correctionRequests.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-slate-300 bg-white/80 px-4 py-5 text-sm text-slate-500">
+                  No attendance correction requests have been created yet.
+                </div>
+              ) : (
+                correctionRequests.map((row, index) => {
+                  const id = readFirstValue(row, ["id"]) ?? `${index}`
+                  const status = (readFirstValue(row, ["status"]) ?? "draft").toLowerCase()
+                  const tone = statusTone(status)
+                  const canSubmit = status === "draft"
+                  const canCancel = ["draft", "submitted"].includes(status)
+                  return (
+                    <div key={String(id)} className="rounded-xl border border-slate-200 bg-white p-4">
+                      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                        <div className="space-y-1 text-sm">
+                          <div className="font-medium text-slate-900">
+                            {prettifyLabel(readFirstValue(row, ["request_type"]) ?? "attendance correction")}
+                          </div>
+                          <div className="text-slate-500">
+                            {formatOptionalValue(readFirstValue(row, ["attendance_date"]), "Date not provided")}
+                          </div>
+                          <div className="text-slate-600">
+                            {formatOptionalValue(readFirstValue(row, ["reason"]), "No reason provided")}
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-medium uppercase tracking-wide ${tone.badge}`}>
+                            {status}
+                          </span>
+                          {canSubmit ? (
+                            <button
+                              className="inline-flex h-8 items-center justify-center rounded-lg border border-slate-300 px-3 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                              type="button"
+                              disabled={correctionBusy}
+                              onClick={() => void updateCorrectionRequestStatus(id, "submit")}
+                            >
+                              Submit
+                            </button>
+                          ) : null}
+                          {canCancel ? (
+                            <button
+                              className="inline-flex h-8 items-center justify-center rounded-lg border border-rose-200 px-3 text-xs font-medium text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+                              type="button"
+                              disabled={correctionBusy}
+                              onClick={() => void updateCorrectionRequestStatus(id, "cancel")}
+                            >
+                              Cancel
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          </div>
+        ) : null}
       </div>
+
+      <Dialog open={correctionDialogOpen} onOpenChange={setCorrectionDialogOpen}>
+        <DialogPopup className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Request attendance correction</DialogTitle>
+            <DialogDescription>Create a correction request for an incorrect or missing attendance record.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className="grid gap-1.5 text-sm">
+                <span className="font-medium text-slate-700">Attendance date</span>
+                <input
+                  className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
+                  type="date"
+                  value={correctionForm.attendance_date}
+                  onChange={(event) => setCorrectionForm((current) => ({ ...current, attendance_date: event.target.value }))}
+                />
+              </label>
+              <label className="grid gap-1.5 text-sm">
+                <span className="font-medium text-slate-700">Request type</span>
+                <select
+                  className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
+                  value={correctionForm.request_type}
+                  onChange={(event) => setCorrectionForm((current) => ({ ...current, request_type: event.target.value }))}
+                >
+                  <option value="check_in">Check in</option>
+                  <option value="check_out">Check out</option>
+                </select>
+              </label>
+              <label className="grid gap-1.5 text-sm">
+                <span className="font-medium text-slate-700">Requested check-in time</span>
+                <input
+                  className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
+                  type="time"
+                  value={correctionForm.requested_check_in_at}
+                  onChange={(event) => setCorrectionForm((current) => ({ ...current, requested_check_in_at: event.target.value }))}
+                />
+              </label>
+              <label className="grid gap-1.5 text-sm">
+                <span className="font-medium text-slate-700">Requested check-out time</span>
+                <input
+                  className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
+                  type="time"
+                  value={correctionForm.requested_check_out_at}
+                  onChange={(event) => setCorrectionForm((current) => ({ ...current, requested_check_out_at: event.target.value }))}
+                />
+              </label>
+            </div>
+            <label className="grid gap-1.5 text-sm">
+              <span className="font-medium text-slate-700">Requested status</span>
+              <select
+                className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
+                value={correctionForm.requested_status}
+                onChange={(event) => setCorrectionForm((current) => ({ ...current, requested_status: event.target.value }))}
+              >
+                {DAILY_SUMMARY_STATUS_OPTIONS.map((status) => (
+                  <option key={status} value={status}>
+                    {prettifyLabel(status)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="grid gap-1.5 text-sm">
+              <span className="font-medium text-slate-700">Reason</span>
+              <textarea
+                className="min-h-28 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+                value={correctionForm.reason}
+                onChange={(event) => setCorrectionForm((current) => ({ ...current, reason: event.target.value }))}
+                placeholder="Explain what should be corrected."
+              />
+            </label>
+          </div>
+          <DialogFooter>
+            <button
+              className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-300 px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              type="button"
+              onClick={() => setCorrectionDialogOpen(false)}
+            >
+              Close
+            </button>
+            <button
+              className="inline-flex h-10 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+              type="button"
+              disabled={correctionBusy}
+              onClick={() => void submitCorrectionRequest()}
+            >
+              Create request
+            </button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
     </div>
   )
 }

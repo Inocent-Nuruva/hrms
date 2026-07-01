@@ -20,10 +20,8 @@ import { UsersRound } from "@/components/animate-ui/icons/users-round"
 import { Route } from "@/components/animate-ui/icons/route"
 import { Sparkles } from "@/components/animate-ui/icons/sparkles"
 import { ChartBar } from "@/components/animate-ui/icons/chart-bar"
-import { Key } from "@/components/animate-ui/icons/key"
 import { CircleX } from "@/components/animate-ui/icons/circle-x"
 import { ChartColumn } from "@/components/animate-ui/icons/chart-column"
-import { Bell } from "@/components/animate-ui/icons/bell"
 import { Settings } from "@/components/animate-ui/icons/settings"
 import { Search } from "@/components/animate-ui/icons/search"
 import { MessageCircleQuestion } from "@/components/animate-ui/icons/message-circle-question"
@@ -34,11 +32,9 @@ const IUsers = <UsersRound size={48} animation="path-loop" />
 const ILeave = <Route size={48} animation="path-loop" />
 const IPromotion = <Sparkles size={48} animation="path-loop" />
 const IPayroll = <ChartBar size={48} animation="path-loop" />
-const IRegistration = <Key size={48} animation="path-loop" />
 const IOffboarding = <CircleX size={48} animation="path-loop" />
 const IAttendance = <ChartColumn size={48} animation="path-loop" />
 const IDepartments = <Kanban size={48} animation="default" />
-const IHolidays = <Bell size={48} animation="path-loop" />
 const ISettings = <Settings size={48} animation="path-loop" />
 const IHelp = <MessageCircleQuestion size={48} animation="path-loop" />
 const ISearch = <Search size={48} animation="path-loop" />
@@ -89,7 +85,7 @@ const adminData: SidebarData = {
     {
       title: "Employees",
       url: "/dashboard/employees",
-      matchUrls: ["/dashboard/employees/all", "/dashboard/employees/register", "/dashboard/employees/offboarding", "/dashboard/employees/onboarding"],
+      matchUrls: ["/dashboard/employees/all", "/dashboard/employees/offboarding", "/dashboard/employees/onboarding"],
       icon: IUsers,
     },
     {
@@ -146,7 +142,6 @@ const adminData: SidebarData = {
 const adminSearchIndex = [
   { title: "Dashboard", url: "/dashboard", section: "General", keywords: ["home", "overview"] },
   { title: "Employees / All Employees", url: "/dashboard/employees/all", section: "Employees", keywords: ["employee", "directory", "staff"] },
-  { title: "Employees / Register", url: "/dashboard/employees/register", section: "Employees", keywords: ["employee", "onboard"] },
   { title: "Employees / Offboarding", url: "/dashboard/employees/offboarding", section: "Employees", keywords: ["employee", "exit"] },
   { title: "Employees / Onboarding", url: "/dashboard/employees/onboarding", section: "Employees", keywords: ["employee", "workflow", "request", "approve"] },
   { title: "Attendance / Attendance Setup / Settings", url: "/dashboard/attendance/settings", section: "Attendance Setup", keywords: ["attendance", "settings"] },
@@ -230,19 +225,9 @@ const employeeData: SidebarData = {
       url: "/dashboard/operations/promotion",
     },
     {
-      title: "Office Holidays",
-      icon: IHolidays,
-      url: "/dashboard/me/leave/holidays",
-    },
-    {
       title: "Offboarding",
       icon: IOffboarding,
       url: "/dashboard/employees/offboarding",
-    },
-    {
-      title: "Registration",
-      icon: IRegistration,
-      url: "/dashboard/employees/register",
     },
   ],
   navSecondary: [
@@ -266,7 +251,6 @@ const employeeData: SidebarData = {
 
 const employeeSearchIndex = [
   { title: "Dashboard", url: "/dashboard", section: "General", keywords: ["home", "overview"] },
-  { title: "Registration", url: "/dashboard/employees/register", section: "Employees", keywords: ["employee", "register", "onboard"] },
   { title: "My Info", url: "/dashboard/me/profile", section: "Employees", keywords: ["profile", "my info", "account"] },
   { title: "My Attendance / Overview", url: "/dashboard/attendance/today", section: "Employees", keywords: ["attendance", "timesheet"] },
   { title: "My Attendance / Today", url: "/dashboard/attendance/today", section: "Employee Attendance", keywords: ["attendance", "today", "state"] },
@@ -275,7 +259,6 @@ const employeeSearchIndex = [
   { title: "My Attendance / Schedule Preview", url: "/dashboard/attendance/schedule-preview", section: "Employee Attendance", keywords: ["attendance", "schedule preview"] },
   { title: "My Leave", url: "/dashboard/me/leave/balances", section: "Leave", keywords: ["leave", "balance", "quota"] },
   { title: "My Payroll", url: "/dashboard/operations/payroll", section: "Operations", keywords: ["salary", "payments", "payroll"] },
-  { title: "Office Holidays", url: "/dashboard/me/leave/holidays", section: "Leave", keywords: ["leave", "holiday", "calendar", "office"] },
   { title: "My Promotion", url: "/dashboard/operations/promotion", section: "Operations", keywords: ["career", "upgrade"] },
   { title: "Offboarding", url: "/dashboard/employees/offboarding", section: "Employees", keywords: ["employee", "exit"] },
   { title: "Settings", url: "/dashboard/settings", section: "General", keywords: ["preferences", "account"] },
@@ -307,7 +290,6 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, string[]> = {
   "/dashboard/attendance/schedule-preview": [],
   "/dashboard/employees": ["employees:read", "employees:create", "offboarding_requests:read", "offboarding_workflows:read", "onboarding_requests:read", "onboarding_workflows:read"],
   "/dashboard/employees/all": ["employees:read"],
-  "/dashboard/employees/register": [],
   "/dashboard/employees/offboarding": [],
   "/dashboard/employees/onboarding": ["onboarding_requests:read", "onboarding_workflows:read"],
   "/dashboard/attendance": [

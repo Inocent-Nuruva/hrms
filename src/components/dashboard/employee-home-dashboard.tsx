@@ -48,7 +48,6 @@ import {
   listMyLeaveBalances,
   createEmployeeSectionItem,
   createEmployeeDocument,
-  getCurrentEmployee,
   patchEmployeeStatus,
   type AdminRecord,
   type EmployeeProfileSection,
@@ -260,6 +259,31 @@ interface OnboardingFormField {
   defaultValue?: string
 }
 
+type PublicCountryStateRecord = {
+  name: string
+  iso2?: string
+  iso3?: string
+  states: Array<{
+    name: string
+    state_code?: string
+  }>
+}
+
+type PublicCountryStateResponse = {
+  error: boolean
+  msg: string
+  data?: PublicCountryStateRecord[]
+}
+
+type PublicStateCitiesResponse = {
+  error: boolean
+  msg: string
+  data?: string[]
+}
+
+const PUBLIC_COUNTRY_STATES_URL = "/api/public-locations?type=country-states"
+const PUBLIC_STATE_CITIES_URL = "/api/public-locations?type=cities"
+
 const ONBOARDING_FORM_SCHEMAS: Record<string, OnboardingFormField[]> = {
   contacts: [
     { name: "phone_number", label: "Phone Number", placeholder: "+1 (555) 123-4567", type: "tel", required: true },
@@ -267,19 +291,24 @@ const ONBOARDING_FORM_SCHEMAS: Record<string, OnboardingFormField[]> = {
     { name: "contact_type", label: "Contact Type", type: "select", options: ["personal", "work", "other"], defaultValue: "personal" },
   ],
   addresses: [
+    { name: "address_type", label: "Address Type", type: "select", options: ["home", "work", "other"], defaultValue: "home" },
+    { name: "is_primary", label: "Primary Address?", type: "select", options: ["true", "false"], defaultValue: "false" },
     { name: "address_line_1", label: "Address Line 1", placeholder: "123 Main St", required: true },
     { name: "address_line_2", label: "Address Line 2 (optional)", placeholder: "Apt, Suite, etc." },
-    { name: "city", label: "City", placeholder: "City", required: true },
-    { name: "state", label: "State / Region", placeholder: "State" },
     { name: "country", label: "Country", placeholder: "Country", required: true },
+    { name: "state", label: "State / Region", placeholder: "State" },
+    { name: "city", label: "City", placeholder: "City", required: true },
     { name: "postal_code", label: "Postal / ZIP Code", placeholder: "12345" },
   ],
   relatives: [
     { name: "full_name", label: "Full Name", placeholder: "Jane Doe", required: true },
-    { name: "relationship", label: "Relationship", placeholder: "Spouse, Parent, etc.", required: true, options: ["Spouse", "Parent", "Child", "Sibling", "Guardian", "Other"] },
+    { name: "relationship", label: "Relationship", placeholder: "Spouse, Parent, etc.", type: "select", required: true, options: ["Spouse", "Parent", "Child", "Sibling", "Guardian", "Other"], defaultValue: "Other" },
     { name: "phone", label: "Phone Number", placeholder: "+1 (555) 987-6543", type: "tel", required: true },
     { name: "email", label: "Email (optional)", placeholder: "relative@example.com", type: "email" },
+    { name: "address", label: "Address (optional)", placeholder: "123 Main St" },
+    { name: "occupation", label: "Occupation (optional)", placeholder: "Teacher" },
     { name: "is_emergency_contact", label: "Emergency Contact?", type: "select", options: ["true", "false"], defaultValue: "true" },
+    { name: "is_primary", label: "Primary Relative?", type: "select", options: ["true", "false"], defaultValue: "false" },
   ],
   identifications: [
     { name: "identification_type", label: "ID Type", type: "select", options: ["national_id", "passport", "drivers_license", "other"], defaultValue: "national_id", required: true },
@@ -344,7 +373,7 @@ function buildPayload(key: string, values: Record<string, string>): AdminRecord 
   const schema = getFormSchema(key)
   const payload: AdminRecord = {}
   schema.forEach((f) => {
-    let v = (values[f.name] ?? "").trim()
+    const v = (values[f.name] ?? "").trim()
     if (f.type === "select" && (f.options?.includes("true") || f.options?.includes("false"))) {
       payload[f.name] = v === "true"
     } else if (v) {
@@ -948,6 +977,11 @@ export function EmployeeHomeDashboard() {
   const [formValues, setFormValues] = React.useState<Record<string, string>>({})
   const [formError, setFormError] = React.useState<string | null>(null)
   const [isSaving, setIsSaving] = React.useState(false)
+  const [publicCountryStates, setPublicCountryStates] = React.useState<PublicCountryStateRecord[]>([])
+  const [publicLocationLoading, setPublicLocationLoading] = React.useState(false)
+  const [publicLocationError, setPublicLocationError] = React.useState<string | null>(null)
+  const [publicCityOptions, setPublicCityOptions] = React.useState<string[]>([])
+  const [publicCitiesLoading, setPublicCitiesLoading] = React.useState(false)
 
   React.useEffect(() => {
     const adminIdentity = isAdminIdentity()
@@ -956,14 +990,6 @@ export function EmployeeHomeDashboard() {
     if (adminIdentity || typeof window === "undefined") {
       setLoading(false)
       return
-    }
-
-    // Show onboarding pending dialog on entry for onboarding users
-    if (dashboardData?.employee?.employment_status === "onboarding") {
-      const dismissedKey = `onboarding_dialog_dismissed_${dashboardData.user?.id || "current"}`
-      if (!sessionStorage.getItem(dismissedKey)) {
-        setShowOnboardingDialog(true)
-      }
     }
 
     const rawTokens = window.localStorage.getItem(AUTH_STORAGE_KEYS.tokens)
@@ -1035,6 +1061,126 @@ export function EmployeeHomeDashboard() {
     }
   }, [])
 
+  React.useEffect(() => {
+    const shouldPreload = (fillingItemKey === "addresses" || showOnboardingDialog) && publicCountryStates.length === 0 && !publicLocationLoading
+    if (!shouldPreload) {
+      return
+    }
+
+    let cancelled = false
+    setPublicLocationLoading(true)
+    setPublicLocationError(null)
+
+    const loadPublicLocations = async () => {
+      try {
+        const response = await fetch(PUBLIC_COUNTRY_STATES_URL, { cache: "no-store" })
+        if (!response.ok) {
+          throw new Error(`Failed to load address dataset (${response.status})`)
+        }
+
+        const payload: any = await response.json()
+        if (!Array.isArray(payload?.data)) {
+          throw new Error(payload?.error || payload?.msg || "Failed to load address dataset.")
+        }
+
+        if (!cancelled) {
+          setPublicCountryStates(payload.data)
+        }
+      } catch (errorObject) {
+        if (!cancelled) {
+          setPublicLocationError(
+            errorObject instanceof Error ? errorObject.message : "Failed to load address dataset."
+          )
+        }
+      } finally {
+        if (!cancelled) {
+          setPublicLocationLoading(false)
+        }
+      }
+    }
+
+    void loadPublicLocations()
+
+    return () => {
+      cancelled = true
+    }
+  }, [fillingItemKey, showOnboardingDialog])
+
+  const selectedAddressCountry = React.useMemo(() => {
+    if (fillingItemKey !== "addresses") {
+      return null
+    }
+
+    const normalizedCountry = (formValues.country ?? "").trim().toLowerCase()
+    if (!normalizedCountry) {
+      return null
+    }
+
+    return publicCountryStates.find((entry) => entry.name.trim().toLowerCase() === normalizedCountry) ?? null
+  }, [fillingItemKey, formValues.country, publicCountryStates])
+
+  const addressStateOptions = React.useMemo(() => selectedAddressCountry?.states ?? [], [selectedAddressCountry])
+
+  React.useEffect(() => {
+    if (fillingItemKey !== "addresses") {
+      setPublicCityOptions([])
+      setPublicCitiesLoading(false)
+      return
+    }
+
+    const country = (formValues.country ?? "").trim()
+    const state = (formValues.state ?? "").trim()
+    if (!country || !state) {
+      setPublicCityOptions([])
+      setPublicCitiesLoading(false)
+      return
+    }
+
+    let cancelled = false
+    setPublicCitiesLoading(true)
+
+    const params = new URLSearchParams({ country, state })
+    const sep = PUBLIC_STATE_CITIES_URL.includes("?") ? "&" : "?"
+    const url = `${PUBLIC_STATE_CITIES_URL}${sep}${params.toString()}`
+
+    const loadCities = async () => {
+      try {
+        const response = await fetch(url, {
+          cache: "no-store",
+        })
+        if (!response.ok) {
+          throw new Error(`Failed to load cities (${response.status})`)
+        }
+
+        const payload = (await response.json()) as PublicStateCitiesResponse
+        if (!Array.isArray(payload.data)) {
+          if (!cancelled) {
+            setPublicCityOptions([])
+          }
+          return
+        }
+
+        if (!cancelled) {
+          setPublicCityOptions(payload.data)
+        }
+      } catch {
+        if (!cancelled) {
+          setPublicCityOptions([])
+        }
+      } finally {
+        if (!cancelled) {
+          setPublicCitiesLoading(false)
+        }
+      }
+    }
+
+    void loadCities()
+
+    return () => {
+      cancelled = true
+    }
+  }, [fillingItemKey, formValues.country, formValues.state])
+
   if (isAdmin) {
     return null
   }
@@ -1065,7 +1211,7 @@ export function EmployeeHomeDashboard() {
   }
 
   const pendingItems = REQUIRED_ONBOARDING_ITEMS.filter((item) => {
-    const emp = dashboardData.employee as any
+    const emp = dashboardData.employee as Record<string, unknown>
     const arr = emp?.[item.key]
     const hasData = Array.isArray(arr) && arr.length > 0
     return !hasData && !completedOnboardingItems.includes(item.key)
@@ -1075,6 +1221,16 @@ export function EmployeeHomeDashboard() {
     ? REQUIRED_ONBOARDING_ITEMS.find((i) => i.key === fillingItemKey) || null
     : null
   const currentFormSchema = fillingItemKey ? getFormSchema(fillingItemKey) : []
+
+  const missingRequiredFields = currentFormSchema.length > 0
+    ? currentFormSchema
+        .filter((f) => f.required)
+        .filter((f) => {
+          const v = formValues[f.name] ?? ""
+          return !String(v).trim()
+        })
+        .map((f) => f.label)
+    : []
 
   const handleCloseOnboardingDialog = () => {
     const dismissedKey = `onboarding_dialog_dismissed_${dashboardData.user?.id || "current"}`
@@ -1087,13 +1243,11 @@ export function EmployeeHomeDashboard() {
   }
 
   const startFilling = (key: string) => {
-    const schema = getFormSchema(key)
     const init = getInitialFormValues(key)
 
     // Prefill known good values from loaded profile for nicer UX
     if (dashboardData) {
       const u = dashboardData.user
-      const e = dashboardData.employee as any
       if (key === "contacts") {
         if (!init.email && u?.email) init.email = u.email
         if (!init.phone_number && u?.phone) init.phone_number = u.phone || ""
@@ -1118,13 +1272,27 @@ export function EmployeeHomeDashboard() {
   }
 
   const updateFormValue = (name: string, value: string) => {
-    setFormValues((prev) => ({ ...prev, [name]: value }))
+    setFormValues((prev) => {
+      const nextValues = { ...prev, [name]: value }
+
+      if (fillingItemKey === "addresses") {
+        if (name === "country" && prev.country !== value) {
+          nextValues.state = ""
+          nextValues.city = ""
+        }
+        if (name === "state" && prev.state !== value) {
+          nextValues.city = ""
+        }
+      }
+
+      return nextValues
+    })
   }
 
   const handleSaveFilling = async () => {
     if (!fillingItemKey || !dashboardData || !accessToken) return
 
-    const empId = (dashboardData.employee as any)?.id
+    const empId = dashboardData.employee.id
     if (empId == null) {
       setFormError("Unable to identify your employee profile. Please refresh and try again.")
       return
@@ -1153,12 +1321,16 @@ export function EmployeeHomeDashboard() {
 
       setDashboardData((prev) => {
         if (!prev) return prev
-        const emp = prev.employee as any
+        const emp = prev.employee as Record<string, unknown>
+        const existingSectionItems = emp[fillingItemKey]
         return {
           ...prev,
           employee: {
             ...emp,
-            [fillingItemKey]: emp?.[fillingItemKey]?.length ? emp[fillingItemKey] : [{ ...payload, _onboard: true }],
+            [fillingItemKey]:
+              Array.isArray(existingSectionItems) && existingSectionItems.length > 0
+                ? existingSectionItems
+                : [{ ...payload, _onboard: true }],
           },
         }
       })
@@ -1182,7 +1354,7 @@ export function EmployeeHomeDashboard() {
       // If this was the last pending, optionally activate + close
       if (remainingAfter <= 0) {
         try {
-          await patchEmployeeStatus(accessToken, empId, { employment_status: "active" as any })
+          await patchEmployeeStatus(accessToken, empId, { employment_status: "active" })
         } catch {
           // non-fatal; backend may auto-handle or admin may do later
         }
@@ -1196,8 +1368,29 @@ export function EmployeeHomeDashboard() {
     }
   }
 
+  const isStillOnboarding = !isAdmin && dashboardData?.employee?.employment_status === "onboarding"
+
   return (
     <>
+      {isStillOnboarding && (
+        <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50/70 dark:bg-blue-950/30 dark:border-blue-900 px-4 py-2.5 flex items-center justify-between gap-3">
+          <div className="text-sm text-blue-800 dark:text-blue-200">
+            Your employee profile is still in onboarding.
+          </div>
+          <Button
+            size="sm"
+            onClick={() => {
+              // allow re-opening the modal
+              const dismissedKey = `onboarding_dialog_dismissed_${dashboardData.user?.id || "current"}`
+              try { sessionStorage.removeItem(dismissedKey) } catch {}
+              setShowOnboardingDialog(true)
+            }}
+          >
+            Finish onboarding
+          </Button>
+        </div>
+      )}
+
       <EmployeeDashboardView
         dashboardData={dashboardData}
         attendanceToday={attendanceToday}
@@ -1208,92 +1401,163 @@ export function EmployeeHomeDashboard() {
         <DialogPopup
           from="center"
           showCloseButton={false}
-          className="max-w-[96vw] sm:max-w-4xl lg:max-w-5xl w-full p-0 overflow-hidden rounded-2xl border-0 shadow-2xl bg-transparent max-h-[88vh] flex flex-col"
+          className="max-w-[96vw] sm:max-w-3xl lg:max-w-4xl w-full p-0 overflow-hidden rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xl bg-white dark:bg-slate-950 max-h-[90vh] flex flex-col"
         >
-          <div className="bg-gradient-to-br from-blue-50 via-white to-indigo-50 dark:from-slate-900 dark:via-slate-950 dark:to-slate-900 rounded-2xl flex flex-col h-full">
-            <DialogHeader className="p-3 sm:p-4 pb-1.5 shrink-0">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-2.5">
-                <div className="rounded-xl bg-blue-600/90 p-1.5 sm:p-2 text-white shrink-0 backdrop-blur-sm border border-blue-400/30">
-                  <UserCheck className="h-5 w-5 sm:h-6 sm:w-6" />
+            <DialogHeader className="px-5 sm:px-6 pt-5 pb-3 shrink-0 border-b border-slate-200 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white">
+                  <UserCheck className="h-5 w-5" />
                 </div>
-                <div className="min-w-0">
-                  <DialogTitle className="text-lg sm:text-xl font-semibold tracking-tight text-slate-900 dark:text-white">
-                    Complete Your Onboarding
+                <div className="min-w-0 flex-1">
+                  <DialogTitle className="text-xl font-semibold tracking-tight text-slate-900 dark:text-white">
+                    Complete your onboarding
                   </DialogTitle>
-                  <DialogDescription className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">
-                    Provide the required details below.
+                  <DialogDescription className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">
+                    Fill the missing sections to activate your account.
                   </DialogDescription>
                 </div>
               </div>
 
-              <div className="mt-2">
-                <div className="flex items-center justify-between text-[10px] mb-1">
+              <div className="mt-4">
+                <div className="flex items-center justify-between text-xs mb-1.5">
                   <span className="font-medium text-slate-700 dark:text-slate-300">Progress</span>
-                  <span className="text-muted-foreground">{REQUIRED_ONBOARDING_ITEMS.length - pendingItems.length} / {REQUIRED_ONBOARDING_ITEMS.length}</span>
+                  <span className="font-mono text-slate-500 dark:text-slate-400">{REQUIRED_ONBOARDING_ITEMS.length - pendingItems.length} / {REQUIRED_ONBOARDING_ITEMS.length}</span>
                 </div>
-                <div className="h-1 w-full rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
+                <div className="h-2 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
                   <div 
-                    className="h-1 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 transition-all" 
+                    className="h-2 rounded-full bg-blue-600 transition-all duration-300" 
                     style={{ width: `${((REQUIRED_ONBOARDING_ITEMS.length - pendingItems.length) / REQUIRED_ONBOARDING_ITEMS.length) * 100}%` }} 
                   />
                 </div>
               </div>
             </DialogHeader>
 
-            <div className="flex-1 overflow-y-auto min-h-0 px-3 sm:px-4 py-1.5 sm:py-2">
+            <div className="flex-1 overflow-y-auto min-h-0 px-5 sm:px-6 py-4">
               {pendingItems.length === 0 && !fillingItemKey ? (
-                <div className="text-center py-4">
-                  <CheckCircle className="h-8 w-8 mx-auto text-emerald-600 mb-2" />
-                  <p className="text-sm font-medium">All done! Your profile is complete.</p>
-                  <p className="text-[10px] text-slate-600 dark:text-slate-400 mt-0.5">Account will be fully activated shortly.</p>
+                <div className="text-center py-8">
+                  <CheckCircle className="h-10 w-10 mx-auto text-emerald-600 mb-3" />
+                  <p className="text-base font-semibold">All done! Your profile is complete.</p>
+                  <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">Your account will be activated shortly.</p>
                 </div>
               ) : fillingItemKey && currentFillingItem ? (
-                // Beautiful inline fill form
-                <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 p-2 sm:p-3 backdrop-blur">
-                  <div className="mb-2 flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={cancelFilling}
-                      className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-2 py-0.5 text-[10px] font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-                    >
-                      ← Back
-                    </button>
-                    <div className="flex items-center gap-1.5">
-                      <div className="rounded-md bg-blue-100 dark:bg-blue-950 p-1 text-blue-600 dark:text-blue-400">
+                <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 sm:p-5">
+                  <div className="mb-4 flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-2.5 pl-1">
+                      <div className="rounded-lg bg-blue-100 dark:bg-blue-950 p-1.5 text-blue-600 dark:text-blue-400">
                         {currentFillingItem.icon}
                       </div>
                       <div>
-                        <div className="font-semibold text-sm tracking-tight text-slate-900 dark:text-white">{currentFillingItem.label}</div>
-                        <div className="text-[10px] text-slate-500 dark:text-slate-400 leading-none">{currentFillingItem.description}</div>
+                        <div className="font-semibold text-base text-slate-900 dark:text-white">{currentFillingItem.label}</div>
+                        <div className="text-sm text-slate-500 dark:text-slate-400">{currentFillingItem.description}</div>
                       </div>
                     </div>
+                    <button
+                      type="button"
+                      onClick={cancelFilling}
+                      className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                    >
+                      ← Back to checklist
+                    </button>
                   </div>
 
                   {formError && (
-                    <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300">
+                    <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300">
                       {formError}
                     </div>
                   )}
 
                   {currentFormSchema.length === 0 ? (
-                    <div className="rounded-md bg-slate-50 dark:bg-slate-800/60 p-2 text-[10px] text-slate-600 dark:text-slate-300">
-                      Managed by HR. Click <span className="font-medium">Mark complete</span>.
+                    <div className="rounded-lg bg-slate-50 dark:bg-slate-800/60 p-3 text-sm text-slate-600 dark:text-slate-300">
+                      This section is managed by HR. Click <span className="font-medium">Mark complete</span> to finish.
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-2 gap-y-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {currentFormSchema.map((field) => {
                         const val = formValues[field.name] ?? ""
-                        const isBoolSelect = field.type === "select" && field.options?.some((o) => o === "true" || o === "false")
+                        const isAddressLookupField =
+                          fillingItemKey === "addresses" &&
+                          (field.name === "country" || field.name === "state" || field.name === "city")
                         return (
                           <div key={field.name} className={field.name === "responsibilities_description" || field.name.includes("notes") ? "sm:col-span-2" : ""}>
-                            <Label className="text-[10px] font-semibold uppercase tracking-[0.5px] text-slate-600 dark:text-slate-400">
+                            <Label className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5 block">
                               {field.label}{field.required ? " *" : ""}
                             </Label>
-                            {field.type === "select" && field.options ? (
+                            {isAddressLookupField ? (
+                              <>
+                                <input
+                                  list={
+                                    field.name === "country"
+                                      ? "onboarding-address-country-options"
+                                      : field.name === "state"
+                                        ? "onboarding-address-state-options"
+                                        : "onboarding-address-city-options"
+                                  }
+                                  type="text"
+                                  value={val}
+                                  placeholder={
+                                    field.name === "country"
+                                      ? publicLocationLoading
+                                        ? "Loading countries..."
+                                        : field.placeholder
+                                      : field.name === "state"
+                                        ? !formValues.country
+                                          ? "Select country first"
+                                          : addressStateOptions.length > 0
+                                            ? "Search state / region"
+                                            : field.placeholder
+                                        : !formValues.state
+                                          ? "Select state first"
+                                          : publicCitiesLoading
+                                            ? "Loading cities..."
+                                            : publicCityOptions.length > 0
+                                              ? "Search city"
+                                              : field.placeholder
+                                  }
+                                  onChange={(e) => updateFormValue(field.name, e.target.value)}
+                                  className="mt-1 h-9 w-full rounded-md border border-slate-300 bg-white px-3 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+                                  required={!!field.required}
+                                />
+                                {/* Visible clickable suggestions for better discoverability when picking country -> state -> city */}
+                                {field.name === "state" && addressStateOptions.length > 0 && (
+                                  <div className="mt-1 flex flex-wrap gap-1">
+                                    {addressStateOptions.slice(0, 6).map((s, idx) => (
+                                      <button
+                                        key={s.state_code ?? idx}
+                                        type="button"
+                                        onClick={() => updateFormValue("state", s.name)}
+                                        className="text-[10px] px-1.5 py-0.5 rounded border border-slate-200 bg-slate-50 hover:bg-blue-50 dark:bg-slate-800 dark:border-slate-700 dark:hover:bg-blue-950"
+                                      >
+                                        {s.name}
+                                      </button>
+                                    ))}
+                                    {addressStateOptions.length > 6 && (
+                                      <span className="text-[10px] text-slate-400 self-center">+{addressStateOptions.length - 6} more (type to filter)</span>
+                                    )}
+                                  </div>
+                                )}
+                                {field.name === "city" && publicCityOptions.length > 0 && (
+                                  <div className="mt-1 flex flex-wrap gap-1">
+                                    {publicCityOptions.slice(0, 8).map((c, idx) => (
+                                      <button
+                                        key={idx}
+                                        type="button"
+                                        onClick={() => updateFormValue("city", c)}
+                                        className="text-[10px] px-1.5 py-0.5 rounded border border-slate-200 bg-slate-50 hover:bg-blue-50 dark:bg-slate-800 dark:border-slate-700 dark:hover:bg-blue-950"
+                                      >
+                                        {c}
+                                      </button>
+                                    ))}
+                                    {publicCityOptions.length > 8 && (
+                                      <span className="text-[10px] text-slate-400 self-center">+{publicCityOptions.length - 8} more (type to filter)</span>
+                                    )}
+                                  </div>
+                                )}
+                              </>
+                            ) : field.type === "select" && field.options ? (
                               <select
                                 value={val || (field.defaultValue ?? "")}
                                 onChange={(e) => updateFormValue(field.name, e.target.value)}
-                                className="mt-0.5 h-8 w-full rounded-md border border-slate-300 bg-white px-2 text-xs shadow-sm focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+                                className="mt-1 h-9 w-full rounded-md border border-slate-300 bg-white px-3 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
                               >
                                 {field.options.map((opt) => (
                                   <option key={opt} value={opt}>{opt === "true" ? "Yes" : opt === "false" ? "No" : opt}</option>
@@ -1305,7 +1569,7 @@ export function EmployeeHomeDashboard() {
                                 value={val}
                                 placeholder={field.placeholder}
                                 onChange={(e) => updateFormValue(field.name, e.target.value)}
-                                className="mt-0.5 h-8 rounded-md border-slate-300 bg-white text-xs focus-visible:ring-blue-400 dark:border-slate-700 dark:bg-slate-950"
+                                className="mt-1 h-9 rounded-md border-slate-300 bg-white text-sm focus-visible:ring-blue-400 dark:border-slate-700 dark:bg-slate-950"
                                 required={!!field.required}
                               />
                             )}
@@ -1315,47 +1579,86 @@ export function EmployeeHomeDashboard() {
                     </div>
                   )}
 
-                  <div className="mt-3 flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5 sm:gap-2">
+                  {fillingItemKey === "addresses" && (
+                    <>
+                      <datalist id="onboarding-address-country-options">
+                        {publicCountryStates.map((entry) => (
+                          <option key={entry.iso2 ?? entry.name} value={entry.name} />
+                        ))}
+                      </datalist>
+                      <datalist id="onboarding-address-state-options">
+                        {addressStateOptions.map((entry) => (
+                          <option key={entry.state_code ?? entry.name} value={entry.name} />
+                        ))}
+                      </datalist>
+                      <datalist id="onboarding-address-city-options">
+                        {publicCityOptions.map((entry) => (
+                          <option key={entry} value={entry} />
+                        ))}
+                      </datalist>
+                    </>
+                  )}
+
+                  {fillingItemKey === "addresses" ? (
+                    <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+                      Pick country (via typing or suggestions), then click a state suggestion below the field, then a city. ZIP/Postal code is free text.
+                    </p>
+                  ) : null}
+
+                  {fillingItemKey === "addresses" && publicLocationError ? (
+                    <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                      Address suggestions temporarily unavailable — enter values manually.
+                    </p>
+                  ) : null}
+
+                  {missingRequiredFields.length > 0 && (
+                    <div className="mb-2 text-xs text-amber-700 dark:text-amber-400">
+                      Please fill required fields: {missingRequiredFields.join(", ")}
+                    </div>
+                  )}
+
+                  <div className="mt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                     <Button
                       onClick={handleSaveFilling}
-                      disabled={isSaving || (currentFormSchema.length > 0 && currentFormSchema.some(f => f.required && !(formValues[f.name] || "").trim()))}
-                      className="flex-1 bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border border-slate-200/70 dark:border-slate-700 text-slate-900 dark:text-white hover:bg-blue-600 hover:text-white hover:border-blue-600 shadow-sm h-8 rounded-lg transition-all text-xs"
+                      disabled={isSaving || missingRequiredFields.length > 0}
+                      className="flex-1 h-9 rounded-lg text-sm"
                     >
                       {isSaving ? "Saving..." : "Save & mark complete"}
                     </Button>
-                    <Button variant="outline" onClick={cancelFilling} disabled={isSaving} className="h-8 rounded-lg border-slate-300 dark:border-slate-700 sm:w-auto text-xs">
+                    <Button variant="outline" onClick={cancelFilling} disabled={isSaving} className="h-9 rounded-lg text-sm sm:w-auto">
                       Cancel
                     </Button>
                   </div>
 
-                  <p className="mt-1.5 text-[9px] text-center text-slate-500 dark:text-slate-500">
-                    Securely stored for access &amp; payroll setup.
+                  <p className="mt-3 text-center text-[11px] text-slate-500 dark:text-slate-500">
+                    Data is stored securely for HR, payroll and compliance.
                   </p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-1.5 sm:gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                   {REQUIRED_ONBOARDING_ITEMS.map((item) => {
                     const isPending = pendingItems.some(p => p.key === item.key)
                     if (!isPending) return null
                     return (
                       <div 
                         key={item.key}
-                        className="group border border-slate-200 dark:border-slate-800 rounded-xl p-2 bg-white/80 dark:bg-slate-900/80 backdrop-blur flex flex-col hover:border-blue-300 dark:hover:border-blue-800 transition-all hover:shadow-sm"
+                        className="group flex flex-col rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 hover:border-blue-200 dark:hover:border-blue-900/70 hover:shadow-sm transition-all"
                       >
-                        <div className="flex items-start gap-1.5">
-                          <div className="rounded-md bg-blue-100 dark:bg-blue-950 p-1 text-blue-600 dark:text-blue-400 group-hover:scale-105 transition shrink-0">
+                        <div className="flex items-start gap-3">
+                          <div className="mt-0.5 rounded-xl bg-blue-100 p-2 text-blue-600 dark:bg-blue-950 dark:text-blue-400 group-hover:scale-[1.02] transition shrink-0">
                             {item.icon}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <div className="font-semibold text-xs text-slate-900 dark:text-white tracking-tight leading-tight">{item.label}</div>
-                            <p className="text-[10px] text-slate-600 dark:text-slate-400 mt-0 leading-tight line-clamp-2">{item.description}</p>
+                            <div className="font-semibold text-sm text-slate-900 dark:text-white tracking-tight">{item.label}</div>
+                            <p className="mt-1 text-sm text-slate-600 dark:text-slate-400 leading-snug line-clamp-2">{item.description}</p>
                           </div>
                         </div>
 
-                        <div className="mt-auto pt-1">
+                        <div className="mt-auto pt-3">
                           <Button 
                             size="sm" 
-                            className="w-full bg-white/70 dark:bg-slate-800/70 backdrop-blur-md border border-slate-200/70 dark:border-slate-700 text-slate-800 dark:text-slate-100 hover:bg-blue-600 hover:text-white hover:border-blue-600 shadow-sm transition-all text-[10px] h-6 px-1.5" 
+                            className="w-full h-9 text-sm transition-all group-hover:bg-blue-600 group-hover:text-white group-hover:border-blue-600" 
+                            variant="outline"
                             onClick={() => startFilling(item.key)}
                           >
                             Fill out now
@@ -1368,18 +1671,21 @@ export function EmployeeHomeDashboard() {
               )}
             </div>
 
-            <DialogFooter className="border-t border-slate-200 dark:border-slate-800 px-3 sm:px-4 py-1 sm:py-1.5 bg-white/60 dark:bg-slate-950/60 flex flex-col-reverse sm:flex-row sm:justify-end gap-1 shrink-0">
-              <Button variant="ghost" onClick={handleCloseOnboardingDialog} className="text-[11px] h-6 px-2">
-                {fillingItemKey ? "Remind later" : "Remind later"}
+            <DialogFooter className="border-t border-slate-200 dark:border-slate-800 px-5 sm:px-6 py-3 bg-slate-50/80 dark:bg-slate-950/80 flex flex-col-reverse sm:flex-row sm:justify-end gap-2 shrink-0">
+              <Button 
+                variant="ghost" 
+                onClick={handleCloseOnboardingDialog} 
+                className="h-9 px-4 text-sm text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
+              >
+                Remind me later
               </Button>
               <Button 
                 onClick={handleCloseOnboardingDialog} 
-                className="text-[11px] h-6 px-3 bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border border-slate-200/70 dark:border-slate-700 text-slate-900 dark:text-white hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-all"
+                className="h-9 px-5 text-sm"
               >
                 {fillingItemKey ? "Close" : "Continue to dashboard"}
               </Button>
             </DialogFooter>
-          </div>
         </DialogPopup>
       </Dialog>
     </>

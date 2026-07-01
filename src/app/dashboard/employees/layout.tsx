@@ -102,7 +102,6 @@ export default function EmployeesLayout({
       filteredGroups = [
         {
           items: [
-            { title: "Register", url: "/dashboard/employees/register" },
             { title: "Offboarding", url: "/dashboard/employees/offboarding" },
           ],
         },

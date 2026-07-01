@@ -574,6 +574,55 @@ table.min-w-full > tbody > tr > td {
   border-color: rgba(100, 116, 139, 0.45);
 }
 
+.summary-hero-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 1rem;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, white 96%, transparent) 0%,
+    color-mix(in srgb, white 90%, rgba(var(--primary-rgb), 0.05)) 100%
+  );
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 10px 28px rgba(15, 23, 42, 0.05);
+}
+
+.summary-hero-card::after {
+  content: "";
+  position: absolute;
+  top: -45%;
+  right: -8%;
+  width: 280px;
+  height: 280px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(var(--primary-rgb), 0.09) 0%, transparent 72%);
+  pointer-events: none;
+}
+
+.dark .summary-hero-card {
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, rgb(15 23 42) 88%, transparent) 0%,
+    color-mix(in srgb, rgb(15 23 42) 72%, rgba(var(--primary-rgb), 0.1)) 100%
+  );
+  border-color: rgba(100, 116, 139, 0.35);
+}
+
+.summary-stat-card {
+  transition:
+    transform 0.25s ease,
+    box-shadow 0.25s ease,
+    border-color 0.25s ease;
+}
+
+.summary-stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.07);
+  border-color: rgba(var(--primary-rgb), 0.2);
+}
+
 .assignment-detail-card {
   border-radius: 0.625rem;
   border: 1px solid rgba(148, 163, 184, 0.22);
@@ -778,6 +827,165 @@ table.min-w-full > tbody > tr > td {
 
 .dark .fixed.inset-0.z-50 .text-slate-900 {
   color: #f8fafc !important;
+}
+
+/* === Highlight Card Design (from user spec) === */
+.icon {
+	display: block;
+	width: 1em;
+	height: auto;
+}
+
+.card {
+	aspect-ratio: 1 / 1;
+	border-radius: 1.25em;
+	font-weight: 300;
+	display: flex;
+	flex-direction: column;
+	justify-content: space-between;
+	overflow: hidden;
+	padding: 1.25em;
+	width: 100%;
+	max-width: 100%;
+	position: relative;
+}
+
+.card,
+.card__header,
+.card__content {
+	position: relative;
+}
+
+.card__header,
+.card__content {
+	color: white;
+}
+
+.card__header {
+	gap: 0.75em;
+	display: flex;
+	justify-content: space-between;
+}
+
+.card__content {
+	flex-direction: column;
+	display: flex;
+}
+
+.card__bg {
+	color: currentColor;
+	display: block;
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: auto;
+}
+
+.card__label {
+	font-size: 1.25em;
+}
+
+.card__category {
+	flex-shrink: 0;
+	position: relative;
+	height: 3.755em;
+	width: 3.755em;
+}
+
+.card__category-icon {
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	width: 30%;
+	transform: translate(-50%, -50%);
+}
+
+.card .icon {
+	width: 100%;
+}
+
+.card__title,
+.card__description {
+	--clamp-title: 1;
+	--clamp-desc: 2;
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.card__title {
+	font-family: "Kaisei Tokumin", serif;
+	font-weight: 400;
+	font-size: 2em;
+	-webkit-line-clamp: var(--clamp-title);
+	line-clamp: var(--clamp-title);
+	margin: 0 0 0.25em;
+}
+
+.card__description {
+	font-size: 1.25em;
+	-webkit-line-clamp: var(--clamp-desc);
+	line-clamp: var(--clamp-desc);
+	line-height: 1.2;
+	margin-bottom: 1.6em;
+	opacity: 0.9;
+}
+
+.card__stats,
+.card__rating,
+.card__completion {
+	display: flex;
+	align-items: center;
+}
+
+.card__stats {
+	gap: 1em;
+}
+
+.card__rating,
+.card__completion {
+	font-weight: 400;
+	gap: 0.5em;
+}
+
+.card-grid {
+	display: grid;
+	gap: 0.5em;
+	padding: 0.75em;
+	max-width: 54em;
+}
+
+/* Base: make cards a bit more compact */
+.card-grid .card {
+	font-size: 0.85em;
+}
+
+/* Tablet */
+@media (min-width: 600px) {
+	.card-grid {
+		grid-template-columns: repeat(2, 1fr);
+	}
+	.card-grid .card {
+		font-size: 0.7em;
+	}
+}
+
+/* Desktop */
+@media (min-width: 1024px) {
+	/* All cards reduced to the small size - uniform and narrower */
+	.card-grid .card {
+		font-size: 0.5em;
+		aspect-ratio: 1 / 1;
+		max-width: 11em;
+	}
+
+	.card-grid {
+		grid-template-columns: repeat(4, 1fr);
+		max-width: 48em;
+		gap: 0.35em;
+	}
 }
 
 .dark .fixed.inset-0.z-50 .text-slate-700,

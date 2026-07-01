@@ -1,12 +1,10 @@
 import { redirect } from "next/navigation"
 
 import { EmployeesListView } from "@/components/dashboard/employees-list-view"
-import { EmployeeRegisterForm } from "@/components/dashboard/employee-register-form"
 import { OnboardingView } from "@/components/dashboard/onboarding-view"
 import { OffboardingView } from "@/components/dashboard/offboarding-view"
 const ALLOWED_VIEWS = new Set([
   "all",
-  "register",
   "offboarding",
   "onboarding",
   "attendance",
@@ -36,8 +34,9 @@ export default async function EmployeesViewPage({
     redirect("/dashboard/employees")
   }
 
+  // register route repurposed to offboarding only (register tab/contents removed)
   if (normalized === "register") {
-    return <EmployeeRegisterForm />
+    return <OffboardingView />
   }
 
   if (normalized === "all") {

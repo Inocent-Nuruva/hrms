@@ -12,7 +12,6 @@ export const employeeSectionTabGroups: DashboardSectionTabGroup[] = [
   {
     items: [
       { title: "All Employees", url: "/dashboard/employees/all" },
-      { title: "Register", url: "/dashboard/employees/register" },
       { title: "Offboarding", url: "/dashboard/employees/offboarding" },
       { title: "Onboarding", url: "/dashboard/employees/onboarding" },
     ],
