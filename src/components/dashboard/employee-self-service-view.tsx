@@ -817,144 +817,6 @@ function CleanInfoRows({
   )
 }
 
-// === Highlight Card Design (ported) ===
-function SVGSprites() {
-  return (
-    <svg width="0" height="0" display="none" aria-hidden="true">
-      <symbol id="circles-corner" viewBox="0 0 316 316">
-        <g fill="none" stroke="currentcolor" strokeLinecap="round" strokeWidth="5">
-          <path d="M 323.074 256.963 C 312.956 263.991 295.834 280.024 295.479 292.107 C 294.971 309.41 311.806 311.371 322.384 317.098" />
-          <path d="M 322.384 225.723 C 303.276 230.431 291.393 236.843 273.403 256.963 C 252.542 280.29 261.674 308.503 261.674 315.536" />
-          <path d="M 320.316 193.268 C 285.716 194.491 258.866 221.733 245.117 244.813 C 225.414 277.888 238.218 316.923 236.839 320.568" />
-          <path d="M 321.006 147.971 C 301.136 149.81 258.571 170.234 231.318 197.955 C 189.23 240.768 190.427 315.532 187.856 321.35" />
-          <path d="M 323.764 101.113 C 285.498 101.275 236.306 121.433 195.446 163.591 C 144.032 216.636 154.999 289.235 145.772 320.568" />
-          <path d="M 320.316 48 C 307.75 49.984 222.602 48.394 158.881 119.856 C 96.203 190.147 104.486 309.571 103 321.35" />
-        </g>
-      </symbol>
-      <symbol id="circles-top" viewBox="0 0 648 648">
-        <g fill="none" stroke="currentcolor" strokeLinecap="round">
-          <path strokeWidth="10" d="M 453.754 -21.507 C 426.967 6.445 420.959 57.037 331.465 60.601 C 234.771 64.452 225.579 0.318 214.418 -28.495" />
-          <path strokeWidth="10" d="M 156.767 -33.735 C 167.249 11.104 188.994 80.565 217.912 111.263 C 239.879 134.581 286.462 149.302 307.007 147.95" />
-          <path strokeWidth="10" d="M 307.007 128.398 C 331.812 142.719 401.333 127.174 443.273 102.193 C 482.243 78.981 545.369 8.9 555.079 -28.829" />
-          <path strokeWidth="10" d="M 68.545 -23.06 C 69.207 -20.985 69.087 78.639 108.725 135.914 C 148.883 193.94 180.333 225.897 241.496 225.01" />
-          <path strokeWidth="13" d="M 289.538 242.287 C 349.575 238.65 410.797 237.601 509.657 175.902 C 594.584 122.899 644.472 14.236 663.391 -28.494" />
-        </g>
-      </symbol>
-      <symbol id="curves" viewBox="0 0 648 648">
-        <g fill="none" stroke="currentcolor" strokeWidth="20">
-          <path d="M 371.646 -16.266 C 328.554 21.003 255.465 49.043 214.417 88.552 C 204.914 97.698 201.122 117.816 203.936 130.48 C 204.954 135.063 223.705 151.184 228.393 151.444 C 247.225 152.49 268.217 141.879 286.044 135.721 C 300.864 130.601 356.726 98.89 368.152 88.552 C 384.788 73.5 419.727 21.192 443.272 20.42 C 466.201 19.668 488.552 28.981 486.946 51.866 C 484.611 85.14 405.888 122.024 397.85 125.239 C 379.675 132.509 315.118 176.349 300.019 181.142 C 278.43 187.996 171.305 238.027 191.707 270.238" />
-        </g>
-      </symbol>
-      <symbol id="grass-bottom" viewBox="0 0 316 316">
-        <g fill="none" stroke="currentcolor" strokeLinecap="round" strokeWidth="13">
-          <path d="M -6.788 282.052 C -4.546 287.782 -3.008 293.841 -0.062 299.243 C 2.784 304.461 7.448 315.401 11.897 320.919" />
-          <path d="M 13.392 285.042 C 18.647 299.491 19.377 303.987 26.846 316.434" />
-          <path d="M 10.403 255.892 C 18.126 268.1 26.574 279.879 33.573 292.516 C 35.596 296.17 35.483 300.719 37.31 304.475 C 40.002 310.008 43.788 314.939 47.027 320.171" />
-          <path d="M 47.774 287.284 C 52.002 297.502 56.227 307.722 60.481 317.929" />
-        </g>
-      </symbol>
-      <symbol id="grass-left" viewBox="0 0 316 316">
-        <g fill="none" stroke="currentcolor" strokeLinecap="round" strokeWidth="13">
-          <path d="M 38.058 7.993 C 28.089 11.316 0.838 21.446 -9.778 21.446" />
-          <path d="M 54.502 25.931 C 36.784 32.374 9.564 33.659 -9.031 34.9" />
-        </g>
-      </symbol>
-      <symbol id="grass-top-down" viewBox="0 0 316 316">
-        <g fill="none" stroke="currentcolor" strokeWidth="5">
-          <path d="M 254.465 58.472 C 253.758 57.413 249.41 50.048 249.41 50.048" />
-          <path d="M 219.08 33.198 C 218.119 31.756 213.59 25.615 213.183 25.615" />
-        </g>
-      </symbol>
-      {/* Icons */}
-      <symbol id="people" viewBox="0 0 16 16">
-        <circle cx="8" cy="4" r="3" fill="currentcolor" />
-        <path fill="currentcolor" d="M 2 14 Q 2 9 8 9 Q 14 9 14 14" />
-      </symbol>
-      <symbol id="link" viewBox="0 0 16 16">
-        <path fill="none" stroke="currentcolor" strokeWidth="2" d="M 6 10 L 10 6 M 3 13 L 6 10 M 10 6 L 13 3" />
-      </symbol>
-      <symbol id="ribbon" viewBox="0 0 16 16">
-        <path fill="currentcolor" d="M8 1 L10 3 L8 5 L6 3 Z" />
-      </symbol>
-      <symbol id="coil" viewBox="0 0 16 16">
-        <path fill="none" stroke="currentcolor" strokeWidth="1.5" d="M3 3 Q 8 1 13 3 Q 8 5 3 7 Q 8 9 13 11" />
-      </symbol>
-      <symbol id="star" viewBox="0 0 16 16">
-        <path fill="currentcolor" d="M8 1 L9.5 5.5 L14 6 L10.5 9.5 L11.5 14 L8 11.5 L4.5 14 L5.5 9.5 L2 6 L6.5 5.5 Z" />
-      </symbol>
-      <symbol id="check-circle" viewBox="0 0 16 16">
-        <circle cx="8" cy="8" r="7" fill="none" stroke="currentcolor" strokeWidth="1.5" />
-        <path fill="none" stroke="currentcolor" strokeWidth="1.5" d="M5 8 L7 10 L11 6" />
-      </symbol>
-      <symbol id="star-8" viewBox="0 0 16 16">
-        <path fill="currentcolor" d="M8 1 L9 5 L13 5 L10 8 L11 12 L8 9 L5 12 L6 8 L3 5 L7 5 Z" />
-      </symbol>
-    </svg>
-  );
-}
-
-function Background({ name }: { name?: string }) {
-  const href = `#${name}`;
-  return (
-    <svg className="card__bg" width="648" height="648" aria-hidden="true">
-      <use href={href} />
-    </svg>
-  );
-}
-
-function HighlightCard({ background, icon, title, description, color = "#000", rating = 1, completion = 0 }: {
-  background?: string;
-  icon?: string;
-  title?: string;
-  description?: string;
-  color?: string;
-  rating?: number;
-  completion?: number;
-}) {
-  const ratingFormatted = rating.toFixed(1);
-  const completionFormatted = Math.round(completion * 100) + "%";
-  const cardStyle = { backgroundColor: color, color: "#fff" } as React.CSSProperties;
-  const catStyle = { color: "white" } as React.CSSProperties;
-
-  return (
-    <div className="card" style={cardStyle}>
-      <Background name={background} />
-      <div className="card__header">
-        <div className="card__label">My Info</div>
-        <div className="card__category">
-          <Icon name="star-8" />
-          <span className="card__category-icon" style={catStyle}>
-            <Icon name={icon} />
-          </span>
-        </div>
-      </div>
-      <div className="card__content">
-        <h2 className="card__title">{title}</h2>
-        <p className="card__description">{description}</p>
-        <div className="card__stats">
-          <div className="card__rating">
-            <Icon name="star" />
-            {ratingFormatted}
-          </div>
-          <div className="card__completion">
-            <Icon name="check-circle" />
-            {completionFormatted}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Icon({ name }: { name?: string }) {
-  const href = `#${name}`;
-  return (
-    <svg className="icon" width="16" height="16" aria-hidden="true">
-      <use href={href} />
-    </svg>
-  );
-}
-
 function readArray(value: unknown) {
   return Array.isArray(value) ? value : []
 }
@@ -1243,55 +1105,69 @@ function ProfileSummaryTab({
   const punchState = formatPunchState(readString(attendanceTodayRecord, ["punch_state", "status"], ""))
   const processingState = formatProcessingState(readString(attendanceTodayRecord, ["processing_state"], ""))
 
-  // Prepare highlight cards using the provided design
   const email = readString(currentUser, ["email"], "-");
   const phone = readString(employee, ["phone", "phone_number"], "") || readString(currentUser, ["phone", "phone_number"], "-");
   const empId = readString(employee, ["id", "employee_id", "employeeId"], "-");
 
-  const highlightCards = [
+  // Project's own design, reference style only (colored cards with header + icon, title, clear items list, bottom stats)
+  const infoCards = [
     {
-      color: "hsl(225, 58%, 53%)",
-      background: "circles-corner",
-      icon: "people",
+      color: "#1e40af", // deep blue - project friendly
+      icon: UserIcon,
+      label: "Personal",
       title: "Contact",
-      description: `${email} • ${phone} • ID ${empId}`,
-      rating: 4.8,
-      completion: 0.92
+      items: [
+        `Email: ${email}`,
+        `Phone: ${phone}`,
+        `Employee ID: ${empId}`,
+      ],
+      stat1: "Email",
+      stat2: "Phone",
     },
     {
-      color: "hsl(158, 43%, 33%)",
-      background: "grass-left",
-      icon: "link",
+      color: "#047857", // emerald
+      icon: Building2Icon,
+      label: "Work",
       title: "Organization",
-      description: `${branchLabel} • ${departmentLabel} • ${positionLabel}`,
-      rating: 4.3,
-      completion: 0.75
+      items: [
+        `Branch: ${branchLabel}`,
+        `Department: ${departmentLabel}`,
+        `Position: ${positionLabel}`,
+      ],
+      stat1: "Branch",
+      stat2: "Dept",
     },
     {
-      color: "hsl(32, 62%, 47%)",
-      background: "curves",
-      icon: "ribbon",
+      color: "#b45309", // amber
+      icon: UsersIcon,
+      label: "Team",
       title: "Reporting",
-      description: `Reports to ${manager.name || "-"} • ${manager.employeeNo || ""}`,
-      rating: 4.1,
-      completion: 0.65
+      items: [
+        `Reports To: ${manager.name || "-"}`,
+        `Manager No: ${manager.employeeNo || "-"}`,
+        `Full Name: ${displayName}`,
+      ],
+      stat1: "Manager",
+      stat2: "Reports",
     },
     {
-      color: "hsl(262, 44%, 53%)",
-      background: "grass-bottom",
-      icon: "coil",
+      color: "#6d28d9", // violet
+      icon: BriefcaseIcon,
+      label: "Status",
       title: "Employment",
-      description: `${employmentStatusLabel} • ${formatEmploymentType(employee?.employment_type)} • Hired ${formatDate(employee?.hire_date)}`,
-      rating: 4.6,
-      completion: 0.88
-    }
+      items: [
+        `Status: ${employmentStatusLabel}`,
+        `Type: ${formatEmploymentType(employee?.employment_type)}`,
+        `Hired: ${formatDate(employee?.hire_date)}`,
+      ],
+      stat1: "Active",
+      stat2: "Full-time",
+    },
   ];
 
   return (
     <div className="space-y-6">
-      <SVGSprites />
-
-      {/* Clean Profile Header */}
+      {/* Clean Profile Header - project's own design */}
       <div className="rounded-2xl border bg-card p-5 md:p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
           <Avatar className="size-16 ring-2 ring-border md:size-20">
@@ -1331,7 +1207,7 @@ function ProfileSummaryTab({
         </div>
       </div>
 
-      {/* Key Stats — clean and scannable */}
+      {/* Key Stats — clean and scannable (project's design) */}
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <SelfServiceStatCard label="Today's Status" value={punchState} hint={processingState || undefined} />
         <SelfServiceStatCard
@@ -1353,20 +1229,44 @@ function ProfileSummaryTab({
         />
       </div>
 
-      {/* Cards using the exact requested design - all uniformly reduced size */}
-      <div className="card-grid">
-        {highlightCards.map((c, i) => (
-          <HighlightCard
-            key={i}
-            background={c.background}
-            icon={c.icon}
-            title={c.title}
-            description={c.description}
-            color={c.color}
-            rating={c.rating}
-            completion={c.completion}
-          />
-        ))}
+      {/* My Info cards - project's own Tailwind design (reference only for layout/colored cards + header/icon/title/items/stats) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {infoCards.map((card, index) => {
+          const IconComp = card.icon;
+          return (
+            <div
+              key={index}
+              className="rounded-2xl p-4 text-white flex flex-col min-h-[180px]"
+              style={{ backgroundColor: card.color }}
+            >
+              {/* Header inspired by reference */}
+              <div className="flex items-start justify-between">
+                <div className="text-xs font-medium uppercase tracking-[0.5px] opacity-80">{card.label}</div>
+                <IconComp className="size-5 opacity-90" />
+              </div>
+
+              {/* Title */}
+              <div className="mt-2 text-lg font-semibold tracking-tight">{card.title}</div>
+
+              {/* Items - all visible, project's readable style */}
+              <div className="mt-3 flex-1 space-y-1 text-sm leading-snug opacity-95">
+                {card.items.map((item, i) => (
+                  <div key={i}>{item}</div>
+                ))}
+              </div>
+
+              {/* Bottom stats row (reference style) */}
+              <div className="mt-4 flex items-center gap-4 text-xs opacity-80 border-t border-white/20 pt-3">
+                <div className="flex items-center gap-1">
+                  <span className="font-medium">•</span> {card.stat1}
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="font-medium">•</span> {card.stat2}
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {selfServiceNotes.length > 0 ? (
