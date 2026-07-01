@@ -1932,7 +1932,7 @@ export function EmployeeRegisterForm() {
       const employeeStatus =
         readString(currentEmployee, ["employment_status", "status", "employmentStatus"]) ||
         readString(storedUser, ["employment_status", "status", "employmentStatus"])
-      setSelfRegistrationStatus(employeeStatus.toLowerCase())
+      setSelfRegistrationStatus((employeeStatus ?? "").toLowerCase())
       const registeringOthers = canManageOtherEmployees(initializationSources, accessToken)
       setIsRegisteringOthers(registeringOthers)
 

@@ -260,6 +260,33 @@ function AnimatedMetricValue({ value }: { value: string | number }) {
   return <>{displayValue}</>
 }
 
+// Reusable doodle components (for admin dashboard header styling, matching employee dashboards)
+function DoodleSprites() {
+  return (
+    <svg width="0" height="0" className="hidden" aria-hidden="true">
+      <symbol id="doodle-circles" viewBox="0 0 316 316">
+        <g fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="5" opacity="0.3">
+          <path d="M 323.074 256.963 C 312.956 263.991 295.834 280.024 295.479 292.107 C 294.971 309.41 311.806 311.371 322.384 317.098" />
+          <path d="M 322.384 225.723 C 303.276 230.431 291.393 236.843 273.403 256.963 C 252.542 280.29 261.674 308.503 261.674 315.536" />
+          <path d="M 320.316 193.268 C 285.716 194.491 258.866 221.733 245.117 244.813 C 225.414 277.888 238.218 316.923 236.839 320.568" />
+        </g>
+      </symbol>
+    </svg>
+  )
+}
+
+function Doodle({ name = "doodle-circles" }: { name?: string }) {
+  const doodleType = name.replace('doodle-', '');
+  return (
+    <svg 
+      className={`absolute inset-0 w-full h-full pointer-events-none doodle doodle-${doodleType}`} 
+      aria-hidden="true"
+    >
+      <use href={`#${name}`} />
+    </svg>
+  );
+}
+
 export default function HrAnalyticsDashboard({ refreshKey = 0 }: HrAnalyticsDashboardProps) {
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
@@ -536,41 +563,49 @@ export default function HrAnalyticsDashboard({ refreshKey = 0 }: HrAnalyticsDash
 
   return (
     <div className="px-4 pb-10 pt-3 lg:px-6">
+      <DoodleSprites />
       <section className="border-b border-slate-200 pb-5">
         <div className="flex flex-col gap-5">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-            <div className="space-y-2">
-              <div>
-                <h1 className="text-2xl font-normal tracking-[-0.04em] text-slate-700 sm:text-[2.85rem]">
-                  Workforce Analytics
-                </h1>
+          {/* Admin dashboard top uses same primary + doodle header treatment, without altering item arrangement */}
+          <div 
+            className="relative overflow-hidden rounded-2xl p-5 md:p-6 text-white transition-all"
+            style={{ backgroundColor: 'var(--primary)' }}
+          >
+            <Doodle name="doodle-circles" />
+            <div className="relative z-10 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+              <div className="space-y-2">
+                <div>
+                  <h1 className="text-2xl font-normal tracking-[-0.04em] text-white sm:text-[2.85rem]">
+                    Workforce Analytics
+                  </h1>
+                </div>
               </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-3 xl:justify-end">
-              <div className="grid min-w-[260px] gap-2 sm:grid-cols-2">
-                <DatePickerPresets value={fromDate} onChange={setFromDate} placeholder="From date" />
-                <DatePickerPresets value={toDate} onChange={setToDate} placeholder="To date" />
-              </div>
-              <button
-                type="button"
-                onClick={() => fetchAll()}
-                disabled={loading}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 bg-white text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
-              >
-                <RefreshCwIcon className={`h-4 w-4 text-primary ${loading ? "animate-spin" : ""}`} />
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setFromDate(formatInputDate(shiftDays(new Date(), -30)))
-                  setToDate(formatInputDate(new Date()))
-                }}
-                className="inline-flex items-center rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-              >
-                Reset dates
-              </button>
-              <div className="text-xs text-slate-500">
-                {lastUpdated ? `Updated ${lastUpdated}` : "Waiting for latest sync"}
+              <div className="flex flex-wrap items-center gap-3 xl:justify-end">
+                <div className="grid min-w-[260px] gap-2 sm:grid-cols-2">
+                  <DatePickerPresets value={fromDate} onChange={setFromDate} placeholder="From date" />
+                  <DatePickerPresets value={toDate} onChange={setToDate} placeholder="To date" />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => fetchAll()}
+                  disabled={loading}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/30 bg-white/10 text-sm font-medium text-white transition hover:bg-white/20 disabled:opacity-60"
+                >
+                  <RefreshCwIcon className={`h-4 w-4 text-white/90 ${loading ? "animate-spin" : ""}`} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFromDate(formatInputDate(shiftDays(new Date(), -30)))
+                    setToDate(formatInputDate(new Date()))
+                  }}
+                  className="inline-flex items-center rounded-full border border-white/30 bg-white/10 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/20"
+                >
+                  Reset dates
+                </button>
+                <div className="text-xs text-white/70">
+                  {lastUpdated ? `Updated ${lastUpdated}` : "Waiting for latest sync"}
+                </div>
               </div>
             </div>
           </div>

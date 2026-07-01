@@ -28,7 +28,7 @@ export interface Column<T = any> {
   render?: (item: T) => React.ReactNode;
 }
 
-function isMeaningfulTableValue(value: React.ReactNode) {
+function isMeaningfulTableValue(value: React.ReactNode): boolean {
   if (value == null || value === false) {
     return false;
   }

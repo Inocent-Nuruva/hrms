@@ -1567,15 +1567,13 @@ export function EmployeeProfilePage({
           <div className="flex items-center gap-2">
             <h2 className="text-xl font-semibold text-foreground">{employeeDisplayNameFromLinkedUser(employee)}</h2>
             <Popover open={profileSearchOpen} onOpenChange={setProfileSearchOpen}>
-              <PopoverTrigger asChild>
-                <button
-                  type="button"
-                  aria-label="Search employee profiles"
-                  title="Search employee profiles"
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 transition-colors hover:border-slate-300 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:text-white"
-                >
-                  <SearchIcon className="size-4" />
-                </button>
+              <PopoverTrigger
+                type="button"
+                aria-label="Search employee profiles"
+                title="Search employee profiles"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 transition-colors hover:border-slate-300 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:text-white"
+              >
+                <SearchIcon className="size-4" />
               </PopoverTrigger>
               <PopoverContent align="start" className="w-[340px] p-3">
                 <div className="space-y-3">

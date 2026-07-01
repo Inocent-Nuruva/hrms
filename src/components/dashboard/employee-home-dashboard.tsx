@@ -172,6 +172,7 @@ type DashboardEmployee = {
   primary_position?: DashboardPosition | null
   manager?: DashboardManager | null
   metadata?: Record<string, unknown> | null
+  [key: string]: unknown
 }
 
 type DashboardUser = {
@@ -572,24 +573,68 @@ function QuickActionCard({
   return (
     <Link
       href={href}
-      className="group flex items-center gap-2.5 rounded-xl border border-border bg-card p-3 transition-all duration-400 ease-out hover:border-primary/50 hover:bg-accent/30 no-underline hover:no-underline"
+      className="group flex items-center gap-2.5 rounded-xl border border-white/20 bg-white/10 p-3 transition-all duration-400 ease-out hover:bg-white/20 hover:border-white/40 hover:shadow-sm no-underline hover:no-underline text-white"
       style={{ 
         opacity: mounted ? 1 : 0, 
         transform: mounted ? 'translateY(0)' : 'translateY(6px)',
         transitionDelay: `${delay}ms`
       }}
     >
-      <div className="shrink-0 text-primary">
+      <div className="shrink-0 text-white/90">
         {icon}
       </div>
       <div className="min-w-0 flex-1">
-        <h3 className="text-sm font-semibold leading-tight text-foreground no-underline">{title}</h3>
+        <h3 className="text-sm font-semibold leading-tight text-white no-underline">{title}</h3>
       </div>
       <div className="transition-transform group-hover:-translate-y-px">
-        <span className="text-xs font-medium text-primary">Open →</span>
+        <span className="text-xs font-medium text-white/80">Open →</span>
       </div>
     </Link>
   )
+}
+
+// Reusable doodle components (same as profile summary)
+function DoodleSprites() {
+  return (
+    <svg width="0" height="0" className="hidden" aria-hidden="true">
+      <symbol id="doodle-circles" viewBox="0 0 316 316">
+        <g fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="5" opacity="0.3">
+          <path d="M 323.074 256.963 C 312.956 263.991 295.834 280.024 295.479 292.107 C 294.971 309.41 311.806 311.371 322.384 317.098" />
+          <path d="M 322.384 225.723 C 303.276 230.431 291.393 236.843 273.403 256.963 C 252.542 280.29 261.674 308.503 261.674 315.536" />
+          <path d="M 320.316 193.268 C 285.716 194.491 258.866 221.733 245.117 244.813 C 225.414 277.888 238.218 316.923 236.839 320.568" />
+        </g>
+      </symbol>
+      <symbol id="doodle-curves" viewBox="0 0 316 316">
+        <g fill="none" stroke="currentColor" strokeWidth="4" opacity="0.25">
+          <path d="M 50 50 Q 150 20 250 80 Q 100 150 200 250" />
+          <path d="M 30 100 Q 120 70 220 140 Q 80 200 180 280" />
+        </g>
+      </symbol>
+      <symbol id="doodle-grass" viewBox="0 0 316 316">
+        <g fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="3" opacity="0.2">
+          <path d="M 20 300 Q 40 200 30 100" />
+          <path d="M 60 300 Q 80 180 70 80" />
+          <path d="M 100 300 Q 120 220 110 120" />
+          <path d="M 150 300 Q 170 190 160 90" />
+          <path d="M 200 300 Q 220 210 210 110" />
+          <path d="M 250 300 Q 270 200 260 100" />
+          <path d="M 290 300 Q 310 220 300 120" />
+        </g>
+      </symbol>
+    </svg>
+  )
+}
+
+function Doodle({ name = "doodle-circles" }: { name?: string }) {
+  const doodleType = name.replace('doodle-', '');
+  return (
+    <svg 
+      className={`absolute inset-0 w-full h-full pointer-events-none doodle doodle-${doodleType}`} 
+      aria-hidden="true"
+    >
+      <use href={`#${name}`} />
+    </svg>
+  );
 }
 
 export function EmployeeDashboardView({
@@ -638,9 +683,12 @@ export function EmployeeDashboardView({
 
   const att = getAttendanceStatus(attendanceToday)
   const leaveSummaries = extractLeaveSummaries(leaveBalances)
+  const palePrimary = 'color-mix(in srgb, var(--primary) 18%, white)';
 
   return (
     <div className="space-y-4">
+      <DoodleSprites />
+
       {/* Greeting + quick context */}
       <div 
         className="flex flex-col gap-1 transition-all duration-500 ease-out"
@@ -679,72 +727,73 @@ export function EmployeeDashboardView({
         </h1>
       </div>
 
-      {/* Quick actions - useful and clear */}
+      {/* Quick actions - useful and clear - styled with same design */}
       <div 
-        className="rounded-3xl border border-border bg-card/90 p-5 transition-all duration-500 ease-out"
+        className="relative overflow-hidden rounded-2xl p-5 md:p-6 text-white transition-all duration-500 ease-out"
         style={{ 
+          backgroundColor: 'var(--primary)',
           opacity: mounted ? 1 : 0, 
           transform: mounted ? 'translateY(0)' : 'translateY(8px)',
           transitionDelay: '280ms'
         }}
       >
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3">
-            <Avatar className="size-12">
-              {dashboardData.employee.profile_photo_url ? (
-                <AvatarImage src={dashboardData.employee.profile_photo_url} alt={fullName} />
-              ) : null}
-              <AvatarFallback className="text-lg">{initialsFor(fullName)}</AvatarFallback>
-            </Avatar>
-            <div className="min-w-0">
-              <div className="text-lg font-semibold tracking-tight text-foreground">{preferredName}</div>
-              <div className="text-xs text-muted-foreground">{dashboardData.employee.employee_no}</div>
-              <div className="mt-0.5 text-xs text-muted-foreground">
-                {dashboardData.employee.primary_position?.name ?? "Position"} · {dashboardData.employee.primary_department?.name ?? "Department"}
+        <Doodle name="doodle-circles" />
+        <div className="relative z-10">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <Avatar className="size-12 ring-2 ring-white/30">
+                {dashboardData.employee.profile_photo_url ? (
+                  <AvatarImage src={dashboardData.employee.profile_photo_url} alt={fullName} />
+                ) : null}
+                <AvatarFallback className="text-lg bg-white/20 text-white">{initialsFor(fullName)}</AvatarFallback>
+              </Avatar>
+              <div className="min-w-0">
+                <div className="text-lg font-semibold tracking-tight text-white">{preferredName}</div>
+                <div className="text-xs text-white/70">{dashboardData.employee.employee_no}</div>
+                <div className="mt-0.5 text-xs text-white/70">
+                  {dashboardData.employee.primary_position?.name ?? "Position"} · {dashboardData.employee.primary_department?.name ?? "Department"}
+                </div>
               </div>
             </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-            <div className="rounded-lg border border-border bg-muted/60 px-2.5 py-1">
-              <span className="text-muted-foreground">Hired</span> <span className="font-medium text-foreground">{formatDate(dashboardData.employee.hire_date)}</span>
+            <div className="flex flex-wrap items-center gap-2 text-xs text-white">
+              Hired <span className="font-medium text-white">{formatDate(dashboardData.employee.hire_date)}</span>
+              <span className="text-white/40">·</span>
+              Tenure <span className="font-medium text-white">{tenure}</span>
+              <Link href={profileHref} className="no-underline hover:no-underline ml-1">
+                <Button size="sm" variant="outline" className="h-8 px-3 border-white/30 bg-white/10 text-white hover:bg-white/25 hover:text-white focus-visible:text-white">View full profile</Button>
+              </Link>
             </div>
-            <div className="rounded-lg border border-border bg-muted/60 px-2.5 py-1">
-              <span className="text-muted-foreground">Tenure</span> <span className="font-medium text-foreground">{tenure}</span>
-            </div>
-            <Link href={profileHref} className="no-underline hover:no-underline">
-              <Button size="sm" variant="outline" className="h-8">View full profile</Button>
-            </Link>
           </div>
-        </div>
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          <QuickActionCard
-            href={attendanceHref}
-            title="Attendance"
-            icon={<ClockIcon className="size-4 text-primary" />}
-            delay={320}
-            mounted={mounted}
-          />
-          <QuickActionCard
-            href={leaveRequestHref}
-            title="Request leave"
-            icon={<CalendarClockIcon className="size-4 text-primary" />}
-            delay={380}
-            mounted={mounted}
-          />
-          <QuickActionCard
-            href={leaveBalancesHref}
-            title="Leave balances"
-            icon={<CalendarIcon className="size-4 text-primary" />}
-            delay={440}
-            mounted={mounted}
-          />
-          <QuickActionCard
-            href={holidaysHref}
-            title="Office holidays"
-            icon={<CalendarIcon className="size-4 text-primary" />}
-            delay={500}
-            mounted={mounted}
-          />
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <QuickActionCard
+              href={attendanceHref}
+              title="Attendance"
+              icon={<ClockIcon className="size-4" />}
+              delay={320}
+              mounted={mounted}
+            />
+            <QuickActionCard
+              href={leaveRequestHref}
+              title="Request leave"
+              icon={<CalendarClockIcon className="size-4" />}
+              delay={380}
+              mounted={mounted}
+            />
+            <QuickActionCard
+              href={leaveBalancesHref}
+              title="Leave balances"
+              icon={<CalendarIcon className="size-4" />}
+              delay={440}
+              mounted={mounted}
+            />
+            <QuickActionCard
+              href={holidaysHref}
+              title="Office holidays"
+              icon={<CalendarIcon className="size-4" />}
+              delay={500}
+              mounted={mounted}
+            />
+          </div>
         </div>
       </div>
 
@@ -762,72 +811,77 @@ export function EmployeeDashboardView({
         {/* Left: My details + Manager */}
         <div className="lg:col-span-7 space-y-3">
           <div 
-            className="transition-all duration-500 ease-out"
+            className="relative overflow-hidden rounded-2xl p-4 transition-all duration-500 ease-out"
             style={{ 
+              backgroundColor: palePrimary, 
+              color: 'var(--primary)',
               opacity: mounted ? 1 : 0, 
               transform: mounted ? 'translateY(0)' : 'translateY(6px)',
               transitionDelay: '480ms'
             }}
           >
-            <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Employment details</div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div 
-                className="flex gap-2.5 transition-all duration-400 ease-out"
-                style={{ 
-                  opacity: mounted ? 1 : 0, 
-                  transform: mounted ? 'translateY(0)' : 'translateY(4px)',
-                  transitionDelay: '520ms'
-                }}
-              >
-                <UserIcon className="mt-0.5 size-3.5 text-primary shrink-0" />
-                <div className="text-xs">
-                  <div className="text-muted-foreground">Employee number</div>
-                  <div className="font-medium text-foreground">{dashboardData.employee.employee_no}</div>
+            <Doodle name="doodle-curves" />
+            <div className="relative z-10">
+              <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Employment details</div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div 
+                  className="flex gap-2.5 transition-all duration-400 ease-out"
+                  style={{ 
+                    opacity: mounted ? 1 : 0, 
+                    transform: mounted ? 'translateY(0)' : 'translateY(4px)',
+                    transitionDelay: '520ms'
+                  }}
+                >
+                  <UserIcon className="mt-0.5 size-3.5 shrink-0" />
+                  <div className="text-xs">
+                    <div className="text-muted-foreground">Employee number</div>
+                    <div className="font-medium text-foreground">{dashboardData.employee.employee_no}</div>
+                  </div>
                 </div>
-              </div>
-              <div 
-                className="flex gap-2.5 transition-all duration-400 ease-out"
-                style={{ 
-                  opacity: mounted ? 1 : 0, 
-                  transform: mounted ? 'translateY(0)' : 'translateY(4px)',
-                  transitionDelay: '560ms'
-                }}
-              >
-                <BriefcaseIcon />
-                <div className="text-xs">
-                  <div className="text-muted-foreground">Position</div>
-                  <div className="font-medium text-foreground">{dashboardData.employee.primary_position?.name ?? "—"}</div>
+                <div 
+                  className="flex gap-2.5 transition-all duration-400 ease-out"
+                  style={{ 
+                    opacity: mounted ? 1 : 0, 
+                    transform: mounted ? 'translateY(0)' : 'translateY(4px)',
+                    transitionDelay: '560ms'
+                  }}
+                >
+                  <BriefcaseIcon />
+                  <div className="text-xs">
+                    <div className="text-muted-foreground">Position</div>
+                    <div className="font-medium text-foreground">{dashboardData.employee.primary_position?.name ?? "—"}</div>
+                  </div>
                 </div>
-              </div>
-              <div 
-                className="flex gap-2.5 transition-all duration-400 ease-out"
-                style={{ 
-                  opacity: mounted ? 1 : 0, 
-                  transform: mounted ? 'translateY(0)' : 'translateY(4px)',
-                  transitionDelay: '600ms'
-                }}
-              >
-                <Building2Icon className="mt-0.5 size-3.5 text-primary shrink-0" />
-                <div className="text-xs">
-                  <div className="text-muted-foreground">Department</div>
-                  <div className="font-medium text-foreground">{dashboardData.employee.primary_department?.name ?? "—"}</div>
+                <div 
+                  className="flex gap-2.5 transition-all duration-400 ease-out"
+                  style={{ 
+                    opacity: mounted ? 1 : 0, 
+                    transform: mounted ? 'translateY(0)' : 'translateY(4px)',
+                    transitionDelay: '600ms'
+                  }}
+                >
+                  <Building2Icon className="mt-0.5 size-3.5 shrink-0" />
+                  <div className="text-xs">
+                    <div className="text-muted-foreground">Department</div>
+                    <div className="font-medium text-foreground">{dashboardData.employee.primary_department?.name ?? "—"}</div>
+                  </div>
                 </div>
-              </div>
-              <div 
-                className="flex gap-2.5 transition-all duration-400 ease-out"
-                style={{ 
-                  opacity: mounted ? 1 : 0, 
-                  transform: mounted ? 'translateY(0)' : 'translateY(4px)',
-                  transitionDelay: '640ms'
-                }}
-              >
-                <MapPinIcon className="mt-0.5 size-3.5 text-primary shrink-0" />
-                <div className="text-xs">
-                  <div className="text-muted-foreground">Location</div>
-                  <div className="font-medium text-foreground">
-                    {[dashboardData.employee.primary_branch?.name, dashboardData.employee.primary_branch?.city]
-                      .filter(Boolean)
-                      .join(" · ") || "—"}
+                <div 
+                  className="flex gap-2.5 transition-all duration-400 ease-out"
+                  style={{ 
+                    opacity: mounted ? 1 : 0, 
+                    transform: mounted ? 'translateY(0)' : 'translateY(4px)',
+                    transitionDelay: '640ms'
+                  }}
+                >
+                  <MapPinIcon className="mt-0.5 size-3.5 shrink-0" />
+                  <div className="text-xs">
+                    <div className="text-muted-foreground">Location</div>
+                    <div className="font-medium text-foreground">
+                      {[dashboardData.employee.primary_branch?.name, dashboardData.employee.primary_branch?.city]
+                        .filter(Boolean)
+                        .join(" · ") || "—"}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -842,33 +896,38 @@ export function EmployeeDashboardView({
             }}
           />
 
-          {/* Reporting line - no card */}
+          {/* Reporting line */}
           <div 
-            className="transition-all duration-500 ease-out"
+            className="relative overflow-hidden rounded-2xl p-4 transition-all duration-500 ease-out"
             style={{ 
+              backgroundColor: palePrimary, 
+              color: 'var(--primary)',
               opacity: mounted ? 1 : 0, 
               transform: mounted ? 'translateY(0)' : 'translateY(6px)',
               transitionDelay: '700ms'
             }}
           >
-            <div className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Reporting line</div>
-            <div className="text-xs">
-              <div className="font-medium text-foreground">{managerName}</div>
-              {dashboardData.employee.manager?.employee_no && (
-                <div className="text-muted-foreground mt-0.5">{dashboardData.employee.manager.employee_no}</div>
-              )}
-              <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-muted-foreground">
-                {managerUser?.email && (
-                  <span className="inline-flex items-center gap-1">
-                    <MailIcon className="size-3 text-primary" /> {managerUser.email}
-                  </span>
+            <Doodle name="doodle-grass" />
+            <div className="relative z-10">
+              <div className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Reporting line</div>
+              <div className="text-xs">
+                <div className="font-medium text-foreground">{managerName}</div>
+                {dashboardData.employee.manager?.employee_no && (
+                  <div className="text-muted-foreground mt-0.5">{dashboardData.employee.manager.employee_no}</div>
                 )}
-                {managerUser?.phone && (
-                  <span>{managerUser.phone}</span>
-                )}
+                <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-muted-foreground">
+                  {managerUser?.email && (
+                    <span className="inline-flex items-center gap-1">
+                      <MailIcon className="size-3" /> {managerUser.email}
+                    </span>
+                  )}
+                  {managerUser?.phone && (
+                    <span>{managerUser.phone}</span>
+                  )}
+                </div>
               </div>
+              <p className="mt-2 text-xs text-muted-foreground">Contact your manager for leave approvals and team questions.</p>
             </div>
-            <p className="mt-2 text-xs text-muted-foreground">Contact your manager for leave approvals and team questions.</p>
           </div>
         </div>
 
@@ -892,14 +951,17 @@ export function EmployeeDashboardView({
           >
             <div className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Today’s attendance</div>
             <div className="text-xs text-muted-foreground mb-1.5">Current punch state and times.</div>
-            <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 px-3 py-2">
-              <div>
-                <div className="text-xs font-semibold text-foreground">{att.label}</div>
-                <div className="text-[10px] text-muted-foreground mt-0.5">{att.hint}</div>
+            <div className="relative overflow-hidden rounded-lg border border-white/20 p-3" style={{ backgroundColor: palePrimary, color: 'var(--primary)' }}>
+              <Doodle name="doodle-circles" />
+              <div className="relative z-10 flex items-center justify-between">
+                <div>
+                  <div className="text-xs font-semibold text-foreground">{att.label}</div>
+                  <div className="text-[10px] text-muted-foreground mt-0.5">{att.hint}</div>
+                </div>
+                <Link href={attendanceHref} className="no-underline hover:no-underline">
+                  <Button size="sm" variant="outline" className="h-8 border-white/30 text-foreground hover:bg-white/10">Open attendance</Button>
+                </Link>
               </div>
-              <Link href={attendanceHref} className="no-underline hover:no-underline">
-                <Button size="sm" variant="secondary" className="h-8">Open attendance</Button>
-              </Link>
             </div>
           </div>
 
@@ -920,35 +982,40 @@ export function EmployeeDashboardView({
               transitionDelay: '620ms'
             }}
           >
-            <div className="flex items-center justify-between mb-1">
-              <div>
-                <div className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Leave balances</div>
-                <div className="text-xs text-muted-foreground">Available days for your main leave types.</div>
-              </div>
-              <Link href={leaveBalancesHref} className="text-xs text-primary no-underline hover:no-underline">View all</Link>
-            </div>
-
-            {leaveSummaries.length > 0 ? (
-              <div className="space-y-1 mt-1">
-                {leaveSummaries.map((item, idx) => (
-                  <div key={idx} className="flex items-center justify-between rounded-lg border border-border px-2.5 py-1.5 text-xs">
-                    <span className="font-medium text-foreground">{item.typeName}</span>
-                    <span className="tabular-nums text-foreground">
-                      {item.available} {item.used != null ? <span className="text-muted-foreground text-[10px]">({item.used} used)</span> : null}
-                    </span>
+            <div className="relative overflow-hidden rounded-2xl p-4" style={{ backgroundColor: palePrimary, color: 'var(--primary)' }}>
+              <Doodle name="doodle-grass" />
+              <div className="relative z-10">
+                <div className="flex items-center justify-between mb-1">
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Leave balances</div>
+                    <div className="text-xs text-muted-foreground">Available days for your main leave types.</div>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <div className="rounded-lg border border-border bg-muted/40 p-2.5 text-xs text-muted-foreground mt-1.5">
-                No leave balance information available yet.
-              </div>
-            )}
+                  <Link href={leaveBalancesHref} className="text-xs no-underline hover:no-underline">View all</Link>
+                </div>
 
-            <div className="mt-2">
-              <Link href={leaveRequestHref} className="no-underline hover:no-underline">
-                <Button size="sm" variant="outline" className="h-8 w-full">Request time off</Button>
-              </Link>
+                {leaveSummaries.length > 0 ? (
+                  <div className="space-y-1 mt-1">
+                    {leaveSummaries.map((item, idx) => (
+                      <div key={idx} className="flex items-center justify-between rounded-lg border border-white/20 px-2.5 py-1.5 text-xs">
+                        <span className="font-medium text-foreground">{item.typeName}</span>
+                        <span className="tabular-nums text-foreground">
+                          {item.available} {item.used != null ? <span className="text-muted-foreground text-[10px]">({item.used} used)</span> : null}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-white/20 bg-white/10 p-2.5 text-xs text-muted-foreground mt-1.5">
+                    No leave balance information available yet.
+                  </div>
+                )}
+
+                <div className="mt-2">
+                  <Link href={leaveRequestHref} className="no-underline hover:no-underline">
+                    <Button size="sm" variant="outline" className="h-8 w-full border-white/30 hover:bg-white/10">Request time off</Button>
+                  </Link>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1321,17 +1388,18 @@ export function EmployeeHomeDashboard() {
 
       setDashboardData((prev) => {
         if (!prev) return prev
-        const emp = prev.employee as Record<string, unknown>
+        const emp = prev.employee
+        const employeeRecord = emp as Record<string, unknown>
         const existingSectionItems = emp[fillingItemKey]
         return {
           ...prev,
           employee: {
-            ...emp,
+            ...employeeRecord,
             [fillingItemKey]:
               Array.isArray(existingSectionItems) && existingSectionItems.length > 0
                 ? existingSectionItems
                 : [{ ...payload, _onboard: true }],
-          },
+          } as DashboardEmployee,
         }
       })
 

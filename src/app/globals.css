@@ -850,6 +850,48 @@ table.min-w-full > tbody > tr > td {
   color: #9ca3af !important;
 }
 
+/* Subtle animations for decorative doodles in profile cards */
+.doodle {
+  animation: doodle-breathe 28s ease-in-out infinite alternate;
+  transform-origin: center;
+  will-change: transform;
+}
+
+.doodle-circles {
+  animation-duration: 32s;
+}
+
+.doodle-curves {
+  animation-duration: 24s;
+  animation-direction: alternate-reverse;
+}
+
+.doodle-grass {
+  animation: doodle-sway 7s ease-in-out infinite alternate;
+  transform-origin: bottom center;
+}
+
+@keyframes doodle-breathe {
+  0% {
+    transform: translate(0, 0) scale(1) rotate(0deg);
+  }
+  50% {
+    transform: translate(2px, -1.5px) scale(1.015) rotate(0.4deg);
+  }
+  100% {
+    transform: translate(-1px, 1px) scale(0.99) rotate(-0.3deg);
+  }
+}
+
+@keyframes doodle-sway {
+  from {
+    transform: rotate(-0.7deg);
+  }
+  to {
+    transform: rotate(0.7deg);
+  }
+}
+
 .dark .fixed.inset-0.z-50 table.min-w-full > thead.bg-slate-50 {
   background-color: rgba(48, 49, 148, 0.22) !important;
 }

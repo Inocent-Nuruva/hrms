@@ -817,6 +817,50 @@ function CleanInfoRows({
   )
 }
 
+// Doodles / decorative backgrounds (from reference, for visual interest on stat and info cards)
+function DoodleSprites() {
+  return (
+    <svg width="0" height="0" className="hidden" aria-hidden="true">
+      <symbol id="doodle-circles" viewBox="0 0 316 316">
+        <g fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="5" opacity="0.3">
+          <path d="M 323.074 256.963 C 312.956 263.991 295.834 280.024 295.479 292.107 C 294.971 309.41 311.806 311.371 322.384 317.098" />
+          <path d="M 322.384 225.723 C 303.276 230.431 291.393 236.843 273.403 256.963 C 252.542 280.29 261.674 308.503 261.674 315.536" />
+          <path d="M 320.316 193.268 C 285.716 194.491 258.866 221.733 245.117 244.813 C 225.414 277.888 238.218 316.923 236.839 320.568" />
+        </g>
+      </symbol>
+      <symbol id="doodle-curves" viewBox="0 0 316 316">
+        <g fill="none" stroke="currentColor" strokeWidth="4" opacity="0.25">
+          <path d="M 50 50 Q 150 20 250 80 Q 100 150 200 250" />
+          <path d="M 30 100 Q 120 70 220 140 Q 80 200 180 280" />
+        </g>
+      </symbol>
+      <symbol id="doodle-grass" viewBox="0 0 316 316">
+        <g fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="3" opacity="0.2">
+          <path d="M 20 300 Q 40 200 30 100" />
+          <path d="M 60 300 Q 80 180 70 80" />
+          <path d="M 100 300 Q 120 220 110 120" />
+          <path d="M 150 300 Q 170 190 160 90" />
+          <path d="M 200 300 Q 220 210 210 110" />
+          <path d="M 250 300 Q 270 200 260 100" />
+          <path d="M 290 300 Q 310 220 300 120" />
+        </g>
+      </symbol>
+    </svg>
+  );
+}
+
+function Doodle({ name = "doodle-circles" }: { name?: string }) {
+  const doodleType = name.replace('doodle-', '');
+  return (
+    <svg 
+      className={`absolute inset-0 w-full h-full pointer-events-none doodle doodle-${doodleType}`} 
+      aria-hidden="true"
+    >
+      <use href={`#${name}`} />
+    </svg>
+  );
+}
+
 function readArray(value: unknown) {
   return Array.isArray(value) ? value : []
 }
@@ -940,23 +984,7 @@ function SummarySectionCard({
   )
 }
 
-function SelfServiceStatCard({
-  label,
-  value,
-  hint,
-}: {
-  label: string
-  value: string
-  hint?: string
-}) {
-  return (
-    <div className="rounded-xl border bg-card p-4 shadow-sm">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{label}</p>
-      <p className="mt-1.5 text-[17px] font-semibold tracking-[-0.01em] text-foreground">{value}</p>
-      {hint ? <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p> : null}
-    </div>
-  )
-}
+
 
 function RequestStatusList({
   title,
@@ -1055,7 +1083,6 @@ type ProfileSummaryTabProps = {
   scheduleDays: AdminRecord[]
   correctionRequests: AdminRecord[]
   profileUpdateRequests: AdminRecord[]
-  selfServiceNotes: string[]
   openSectionEditor: (key: string, title: string, fields: EditableUserField[]) => void
 }
 
@@ -1069,7 +1096,6 @@ function ProfileSummaryTab({
   scheduleDays,
   correctionRequests,
   profileUpdateRequests,
-  selfServiceNotes,
   openSectionEditor,
 }: ProfileSummaryTabProps) {
   const displayName = resolveDisplayName(currentUser, employee)
@@ -1109,10 +1135,9 @@ function ProfileSummaryTab({
   const phone = readString(employee, ["phone", "phone_number"], "") || readString(currentUser, ["phone", "phone_number"], "-");
   const empId = readString(employee, ["id", "employee_id", "employeeId"], "-");
 
-  // Project's own design, reference style only (colored cards with header + icon, title, clear items list, bottom stats)
+  // Project's own design, reference style only. Uniform system color via var(--primary) + doodles
   const infoCards = [
     {
-      color: "#1e40af", // deep blue - project friendly
       icon: UserIcon,
       label: "Personal",
       title: "Contact",
@@ -1125,7 +1150,6 @@ function ProfileSummaryTab({
       stat2: "Phone",
     },
     {
-      color: "#047857", // emerald
       icon: Building2Icon,
       label: "Work",
       title: "Organization",
@@ -1138,7 +1162,6 @@ function ProfileSummaryTab({
       stat2: "Dept",
     },
     {
-      color: "#b45309", // amber
       icon: UsersIcon,
       label: "Team",
       title: "Reporting",
@@ -1151,7 +1174,6 @@ function ProfileSummaryTab({
       stat2: "Reports",
     },
     {
-      color: "#6d28d9", // violet
       icon: BriefcaseIcon,
       label: "Status",
       title: "Employment",
@@ -1165,122 +1187,154 @@ function ProfileSummaryTab({
     },
   ];
 
+  const checkInValue = formatUnknownValue(dashboardActions?.can_check_in);
+  const checkInHint = formatDate(attendanceTodayRecord?.date);
+  const checkOutValue = formatUnknownValue(dashboardActions?.can_check_out);
+  const checkOutHint = readString(attendanceTodayRecord, ["first_punch", "first_punch_at"], "") || undefined;
+  const leaveValue = String(readArray(dashboardLeave?.balances).length);
+  const leaveHint = `${readArray(dashboardLeave?.pending_requests).length} pending · ${pendingCorrections} corrections`;
+  const palePrimary = 'color-mix(in srgb, var(--primary) 18%, white)';
+
   return (
     <div className="space-y-6">
-      {/* Clean Profile Header - project's own design */}
-      <div className="rounded-2xl border bg-card p-5 md:p-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-          <Avatar className="size-16 ring-2 ring-border md:size-20">
+      <DoodleSprites />
+
+      {/* Profile Header */}
+      <div 
+        className="relative overflow-hidden rounded-2xl p-5 md:p-6 text-white"
+        style={{ backgroundColor: 'var(--primary)' }}
+      >
+        <Doodle name="doodle-circles" />
+        <div className="relative z-10 flex flex-col sm:flex-row sm:items-start gap-4">
+          <Avatar className="size-16 ring-2 ring-white/30 md:size-20">
             {profilePhotoUrl ? <AvatarImage src={profilePhotoUrl} alt={displayName} /> : null}
-            <AvatarFallback className="bg-primary/10 text-xl font-semibold text-primary">
+            <AvatarFallback className="bg-white/20 text-xl font-semibold text-white">
               {initials || "ME"}
             </AvatarFallback>
           </Avatar>
 
-          <div className="min-w-0 flex-1 space-y-2">
+          <div className="min-w-0 flex-1 space-y-1.5">
             <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-2xl font-semibold tracking-tight text-foreground">{displayName}</h1>
-              <Badge variant={resolveEmploymentStatusTone(employmentStatusLabel)} className="text-xs">
+              <h1 className="text-2xl font-semibold tracking-tight text-white">{displayName}</h1>
+              <Badge className="text-xs bg-white/20 text-white hover:bg-white/30 border-white/30">
                 {employmentStatusLabel}
               </Badge>
             </div>
 
-            <div className="text-sm text-muted-foreground">
-              <span className="font-medium text-foreground">{employeeNumber}</span>
-              <span className="mx-1.5 text-border">•</span>
+            <div className="text-sm text-white/80">
+              <span className="font-medium text-white">{employeeNumber}</span>
+              <span className="mx-1.5 text-white/50">•</span>
               {positionLabel}
-              <span className="mx-1.5 text-border">•</span>
+              <span className="mx-1.5 text-white/50">•</span>
               {departmentLabel}
             </div>
 
-            <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
-              <div className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-muted-foreground">
-                <CalendarIcon className="size-3.5" />
-                <span>Hired {formatDate(employee?.hire_date)}</span>
-              </div>
-              <div className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-muted-foreground">
-                <BriefcaseIcon className="size-3.5" />
-                <span>{formatEmploymentType(employee?.employment_type)}</span>
-              </div>
+            <div className="flex flex-wrap items-center gap-2 text-xs text-white/90">
+              <CalendarIcon className="size-3" />
+              Hired <span className="font-medium text-white">{formatDate(employee?.hire_date)}</span>
+              <span className="text-white/40">·</span>
+              <BriefcaseIcon className="size-3" />
+              <span className="font-medium text-white">{formatEmploymentType(employee?.employment_type)}</span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Key Stats — clean and scannable (project's design) */}
+      {/* Status items on individual cards with pale system color + doodles */}
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <SelfServiceStatCard label="Today's Status" value={punchState} hint={processingState || undefined} />
-        <SelfServiceStatCard
-          label="Check In"
-          value={formatUnknownValue(dashboardActions?.can_check_in)}
-          hint={formatDate(attendanceTodayRecord?.date)}
-        />
-        <SelfServiceStatCard
-          label="Check Out"
-          value={formatUnknownValue(dashboardActions?.can_check_out)}
-          hint={
-            readString(attendanceTodayRecord, ["first_punch", "first_punch_at"], "") || undefined
-          }
-        />
-        <SelfServiceStatCard
-          label="Leave Balances"
-          value={String(readArray(dashboardLeave?.balances).length)}
-          hint={`${readArray(dashboardLeave?.pending_requests).length} pending · ${pendingCorrections} corrections`}
-        />
+        {/* Today's Status */}
+        <div 
+          className="relative overflow-hidden rounded-2xl p-4 text-foreground" 
+          style={{ backgroundColor: palePrimary, color: 'var(--primary)' }}
+        >
+          <Doodle name="doodle-circles" />
+          <div className="relative z-10">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Today's Status</p>
+            <p className="mt-1.5 text-[17px] font-semibold tracking-[-0.01em] text-foreground">{punchState}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">{processingState}</p>
+          </div>
+        </div>
+
+        {/* Check In */}
+        <div 
+          className="relative overflow-hidden rounded-2xl p-4 text-foreground" 
+          style={{ backgroundColor: palePrimary, color: 'var(--primary)' }}
+        >
+          <Doodle name="doodle-curves" />
+          <div className="relative z-10">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Check In</p>
+            <p className="mt-1.5 text-[17px] font-semibold tracking-[-0.01em] text-foreground">{checkInValue}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">{checkInHint}</p>
+          </div>
+        </div>
+
+        {/* Check Out */}
+        <div 
+          className="relative overflow-hidden rounded-2xl p-4 text-foreground" 
+          style={{ backgroundColor: palePrimary, color: 'var(--primary)' }}
+        >
+          <Doodle name="doodle-grass" />
+          <div className="relative z-10">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Check Out</p>
+            <p className="mt-1.5 text-[17px] font-semibold tracking-[-0.01em] text-foreground">{checkOutValue}</p>
+          </div>
+        </div>
+
+        {/* Leave Balances */}
+        <div 
+          className="relative overflow-hidden rounded-2xl p-4 text-foreground" 
+          style={{ backgroundColor: palePrimary, color: 'var(--primary)' }}
+        >
+          <Doodle name="doodle-circles" />
+          <div className="relative z-10">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Leave Balances</p>
+            <p className="mt-1.5 text-[17px] font-semibold tracking-[-0.01em] text-foreground">{leaveValue}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">{leaveHint}</p>
+          </div>
+        </div>
       </div>
 
-      {/* My Info cards - project's own Tailwind design (reference only for layout/colored cards + header/icon/title/items/stats) */}
+      {/* My Info cards - pale system color */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {infoCards.map((card, index) => {
           const IconComp = card.icon;
           return (
             <div
               key={index}
-              className="rounded-2xl p-4 text-white flex flex-col min-h-[180px]"
-              style={{ backgroundColor: card.color }}
+              className="relative overflow-hidden rounded-2xl p-4 text-foreground flex flex-col min-h-[180px]"
+              style={{ backgroundColor: palePrimary, color: 'var(--primary)' }}
             >
-              {/* Header inspired by reference */}
-              <div className="flex items-start justify-between">
-                <div className="text-xs font-medium uppercase tracking-[0.5px] opacity-80">{card.label}</div>
-                <IconComp className="size-5 opacity-90" />
-              </div>
-
-              {/* Title */}
-              <div className="mt-2 text-lg font-semibold tracking-tight">{card.title}</div>
-
-              {/* Items - all visible, project's readable style */}
-              <div className="mt-3 flex-1 space-y-1 text-sm leading-snug opacity-95">
-                {card.items.map((item, i) => (
-                  <div key={i}>{item}</div>
-                ))}
-              </div>
-
-              {/* Bottom stats row (reference style) */}
-              <div className="mt-4 flex items-center gap-4 text-xs opacity-80 border-t border-white/20 pt-3">
-                <div className="flex items-center gap-1">
-                  <span className="font-medium">•</span> {card.stat1}
+              <div className="relative z-10">
+                {/* Header inspired by reference */}
+                <div className="flex items-start justify-between">
+                  <div className="text-xs font-medium uppercase tracking-[0.5px] text-muted-foreground">{card.label}</div>
+                  <IconComp className="size-5 text-primary opacity-90" />
                 </div>
-                <div className="flex items-center gap-1">
-                  <span className="font-medium">•</span> {card.stat2}
+
+                {/* Title */}
+                <div className="mt-2 text-lg font-semibold tracking-tight text-foreground">{card.title}</div>
+
+                {/* Items - all visible, project's readable style */}
+                <div className="mt-3 flex-1 space-y-1 text-sm leading-snug text-foreground opacity-95">
+                  {card.items.map((item, i) => (
+                    <div key={i}>{item}</div>
+                  ))}
+                </div>
+
+                {/* Bottom stats row (reference style) */}
+                <div className="mt-4 flex items-center gap-4 text-xs text-muted-foreground border-t border-border/20 pt-3">
+                  <div className="flex items-center gap-1">
+                    <span className="font-medium">•</span> {card.stat1}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="font-medium">•</span> {card.stat2}
+                  </div>
                 </div>
               </div>
             </div>
           );
         })}
       </div>
-
-      {selfServiceNotes.length > 0 ? (
-        <SummarySectionCard>
-          <SectionHeading title="Notes" />
-          <div className="space-y-2 text-sm text-muted-foreground">
-            {selfServiceNotes.map((note, index) => (
-              <p key={`${note}-${index}`} className="leading-relaxed">
-                {note}
-              </p>
-            ))}
-          </div>
-        </SummarySectionCard>
-      ) : null}
     </div>
   )
 }
@@ -1309,7 +1363,6 @@ export function EmployeeSelfServiceProfileView() {
   const [teamAttendance, setTeamAttendance] = React.useState<AdminRecord[]>([])
   const [correctionRequests, setCorrectionRequests] = React.useState<AdminRecord[]>([])
   const [profileUpdateRequests, setProfileUpdateRequests] = React.useState<AdminRecord[]>([])
-  const [selfServiceNotes, setSelfServiceNotes] = React.useState<string[]>([])
   const [sectionValues, setSectionValues] = React.useState<Record<EditableUserField, string>>({
     first_name: "",
     last_name: "",
@@ -1405,7 +1458,6 @@ export function EmployeeSelfServiceProfileView() {
       setTeamAttendance([])
       setCorrectionRequests([])
       setProfileUpdateRequests([])
-      setSelfServiceNotes([])
       return
     }
 
@@ -1424,7 +1476,6 @@ export function EmployeeSelfServiceProfileView() {
         return
       }
 
-      const notes: string[] = []
       const [
         dashboardResult,
         statusResult,
@@ -1445,24 +1496,13 @@ export function EmployeeSelfServiceProfileView() {
         setCorrectionRequests(correctionsResult.value.rows)
       } else {
         setCorrectionRequests([])
-        const message = correctionsResult.reason instanceof Error ? correctionsResult.reason.message : ""
-        if (message) {
-          notes.push(`Correction requests: ${message}`)
-        }
       }
 
       if (profileUpdatesResult.status === "fulfilled") {
         setProfileUpdateRequests(profileUpdatesResult.value.rows)
       } else {
         setProfileUpdateRequests([])
-        const message =
-          profileUpdatesResult.reason instanceof Error ? profileUpdatesResult.reason.message : ""
-        if (message) {
-          notes.push(`Profile update requests: ${message}`)
-        }
       }
-
-      setSelfServiceNotes(notes)
     })
 
     return () => {
@@ -1550,7 +1590,6 @@ export function EmployeeSelfServiceProfileView() {
               scheduleDays={scheduleDays}
               correctionRequests={correctionRequests}
               profileUpdateRequests={profileUpdateRequests}
-              selfServiceNotes={selfServiceNotes}
               openSectionEditor={openSectionEditor}
             />
           ) : null}

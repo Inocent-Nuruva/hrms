@@ -74,6 +74,18 @@ function asRecordArray(value: unknown): AdminRecord[] {
   return value.filter((entry) => typeof entry === "object" && entry !== null) as AdminRecord[]
 }
 
+function asRecord(value: unknown): AdminRecord | null {
+  return typeof value === "object" && value !== null ? (value as AdminRecord) : null
+}
+
+function readNestedName(value: unknown) {
+  const record = asRecord(value)
+  if (!record) {
+    return "—"
+  }
+  return readString(record, ["name"])
+}
+
 
 
 function employeeDisplayName(row: AdminRecord) {
@@ -230,14 +242,20 @@ export function EmployeesListView() {
       label: "Dept",
       defaultWidth: 90,
       sortable: true,
-      render: (row: AdminRecord) => row.primary_department?.name || "—"
+      render: (row: AdminRecord) => readNestedName(row.primary_department)
     },
     {
       key: "position",
       label: "Position",
       defaultWidth: 100,
       sortable: true,
-      render: (row: AdminRecord) => row.primary_position?.name || row.position?.name || "—"
+      render: (row: AdminRecord) => {
+        const primaryPositionName = readNestedName(row.primary_position)
+        if (primaryPositionName !== "—") {
+          return primaryPositionName
+        }
+        return readNestedName(row.position)
+      }
     },
     {
       key: "hireDate",

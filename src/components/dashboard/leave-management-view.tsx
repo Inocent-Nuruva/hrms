@@ -2099,7 +2099,7 @@ export function LeaveManagementView({
               { key: "remaining", label: "Rem", defaultWidth: 45, render: (r) => readString(r, ["remaining_days", "remaining"]) },
               { key: "actions", label: "Act", defaultWidth: 50, sortable: false, render: (row) => (
                 <div className="flex justify-end" onClick={e=>e.stopPropagation()}>
-                  <button type="button" className="admin-table-icon-button" onClick={() => { setSelectedBalance(row); setBalanceDialogOpen(true); }}>
+                  <button type="button" className="admin-table-icon-button" onClick={() => { void row; setBalanceDialogOpen(true); }}>
                     <Pencil className="size-4" />
                   </button>
                 </div>
