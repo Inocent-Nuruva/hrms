@@ -526,8 +526,13 @@ function computeTenure(hireDate?: string | null): string {
 function extractLeaveSummaries(balances: AdminRecord[] | undefined): LeaveBalanceSummary[] {
   if (!Array.isArray(balances) || balances.length === 0) return []
   return balances.slice(0, 4).map((b) => {
+    const leaveTypeRecord = asRecord(b.leave_type)
+    const policyRecord = asRecord(b.policy)
     const typeName =
-      readString(b, ["leave_type_name", "leave_type", "name", "type_name", "policy_name"]) || "Leave"
+      readString(b, ["leave_type_name", "name", "type_name", "policy_name"]) ||
+      readString(leaveTypeRecord, ["name", "leave_type_name", "type_name", "code"]) ||
+      readString(policyRecord, ["name", "policy_name"]) ||
+      "Leave"
     const available = b.available ?? b.balance ?? b.remaining ?? b.current_balance ?? "—"
     const used = b.used ?? b.taken ?? undefined
     return {

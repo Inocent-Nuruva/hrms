@@ -4,6 +4,8 @@ import * as React from "react"
 import { Pencil, Plus, RefreshCw, Trash2 } from "lucide-react"
 import { SearchToggleField } from "@/components/common/search-toggle-field"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
+import { Textarea } from "@/components/ui/textarea"
+import { useDebouncedValue } from "@/hooks/use-debounced-value"
 
 import {
   createPosition,
@@ -158,8 +160,19 @@ export function PositionsView() {
   const [form, setForm] = React.useState<PositionForm>(emptyForm())
   const [editingId, setEditingId] = React.useState<number | null>(null)
   const [pendingDelete, setPendingDelete] = React.useState<AdminRecord | null>(null)
+  const debouncedSearch = useDebouncedValue(query.search, 350)
 
-  const fetchPositions = React.useCallback(async () => {
+  const normalizedQuery = React.useMemo(
+    () => ({
+      ...query,
+      search: debouncedSearch,
+      status: query.status || undefined,
+      department_id: query.department_id > 0 ? query.department_id : undefined,
+    }),
+    [debouncedSearch, query]
+  )
+
+  const fetchPositions = React.useCallback(async (signal?: AbortSignal) => {
     const token = readStoredToken()
     if (!token) {
       setError("Authentication required. Please log in again.")
@@ -170,27 +183,39 @@ export function PositionsView() {
     setLoading(true)
     setError(null)
     try {
-      const result = await listPositions(token, {
-        ...query,
-        page,
-        status: query.status || undefined,
-        department_id: query.department_id > 0 ? query.department_id : undefined,
-      })
+      const result = await listPositions(
+        token,
+        {
+          ...normalizedQuery,
+          page,
+        },
+        {
+          signal,
+          cacheTtlMs: 20_000,
+        }
+      )
       setRows(result.rows)
       setTotalPages(result.totalPages)
       setTotal(result.total)
     } catch (errorObject) {
+      if (signal?.aborted) {
+        return
+      }
       setRows([])
       setTotalPages(null)
       setTotal(null)
       setError(errorObject instanceof Error ? errorObject.message : "Failed to load positions.")
     } finally {
-      setLoading(false)
+      if (!signal?.aborted) {
+        setLoading(false)
+      }
     }
-  }, [page, query])
+  }, [normalizedQuery, page])
 
   React.useEffect(() => {
-    void fetchPositions()
+    const controller = new AbortController()
+    void fetchPositions(controller.signal)
+    return () => controller.abort()
   }, [fetchPositions])
 
   React.useEffect(() => {
@@ -200,9 +225,9 @@ export function PositionsView() {
     }
 
     void Promise.all([
-      listBranches(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
-      listDepartments(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
-      listDesignations(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
+      listBranches(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }, { cacheTtlMs: 60_000 }),
+      listDepartments(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }, { cacheTtlMs: 60_000 }),
+      listDesignations(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }, { cacheTtlMs: 60_000 }),
     ])
       .then(([branchResult, departmentResult, designationResult]) => {
         setBranches(branchResult.rows)
@@ -571,7 +596,7 @@ export function PositionsView() {
               </label>
               <label className="grid gap-1 md:col-span-2">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Description</span>
-                <textarea className="min-h-20 rounded-md border border-slate-300 px-3 py-2 text-sm" value={form.description} onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))} />
+                <Textarea className="min-h-20 rounded-md border border-slate-300 px-3 py-2 text-sm" value={form.description} onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))} />
               </label>
             </div>
             <div className="mt-4 flex justify-end gap-2">

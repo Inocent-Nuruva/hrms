@@ -3,6 +3,7 @@
 import * as React from "react"
 
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
+import { Textarea } from "@/components/ui/textarea"
 import { Check, Copy, Download, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react"
 import { SearchToggleField } from "@/components/common/search-toggle-field"
 
@@ -83,6 +84,7 @@ import {
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 
 type LeaveTab = "types" | "requests" | "balances" | "holidays" | "policies" | "workflows"
+type LeaveLookupKey = "types" | "employees" | "departments" | "positions" | "branches" | "roles"
 type LeaveManagementViewProps = {
   activeTab?: LeaveTab
   showTabButtons?: boolean
@@ -116,6 +118,15 @@ const HOLIDAY_IMPORT_COUNTRIES: Array<{ code: HolidayImportCountryCode; label: s
   { code: "KE", label: "Kenya" },
   { code: "UG", label: "Uganda" },
 ]
+
+const TAB_LOOKUP_REQUIREMENTS: Record<LeaveTab, LeaveLookupKey[]> = {
+  types: [],
+  requests: [],
+  balances: [],
+  holidays: [],
+  policies: [],
+  workflows: [],
+}
 
 function readStoredToken() {
   if (typeof window === "undefined") {
@@ -360,6 +371,22 @@ export function LeaveManagementView({
     total: number
     label: string
   } | null>(null)
+  const [loadedTabs, setLoadedTabs] = React.useState<Record<LeaveTab, boolean>>({
+    types: false,
+    requests: false,
+    balances: false,
+    holidays: false,
+    policies: false,
+    workflows: false,
+  })
+  const [loadedLookups, setLoadedLookups] = React.useState<Record<LeaveLookupKey, boolean>>({
+    types: false,
+    employees: false,
+    departments: false,
+    positions: false,
+    branches: false,
+    roles: false,
+  })
 
   const [typeForm, setTypeForm] = React.useState({
     name: "",
@@ -430,7 +457,104 @@ export function LeaveManagementView({
     is_required: "true",
   })
 
-  const reloadAll = React.useCallback(async () => {
+  const loadLookups = React.useCallback(async (token: string, lookupKeys: LeaveLookupKey[], force = false) => {
+    const missingKeys = force ? lookupKeys : lookupKeys.filter((key) => !loadedLookups[key])
+    if (missingKeys.length === 0) {
+      return
+    }
+
+    const results = await Promise.all(
+      missingKeys.map(async (key) => {
+        switch (key) {
+          case "types":
+            return { key, result: await listLeaveTypes(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }) }
+          case "employees":
+            return { key, result: await listEmployees(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }) }
+          case "departments":
+            return { key, result: await listDepartments(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }) }
+          case "positions":
+            return { key, result: await listPositions(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }) }
+          case "branches":
+            return { key, result: await listBranches(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }) }
+          case "roles":
+            return {
+              key,
+              result: await listResource("roles", token).then((rows) => ({
+                rows,
+                page: 1,
+                limit: 100,
+                total: rows.length,
+                totalPages: 1,
+              })),
+            }
+        }
+      })
+    )
+
+    results.forEach((entry) => {
+      if (!entry) {
+        return
+      }
+      switch (entry.key) {
+        case "types":
+          setTypes(entry.result.rows)
+          break
+        case "employees":
+          setEmployees(entry.result.rows)
+          break
+        case "departments":
+          setDepartments(entry.result.rows)
+          break
+        case "positions":
+          setPositions(entry.result.rows)
+          break
+        case "branches":
+          setBranches(entry.result.rows)
+          break
+        case "roles":
+          setRoles(entry.result.rows)
+          break
+      }
+    })
+
+    setLoadedLookups((current) => {
+      const next = { ...current }
+      missingKeys.forEach((key) => {
+        next[key] = true
+      })
+      return next
+    })
+  }, [loadedLookups])
+
+  const ensureLookups = React.useCallback(async (lookupKeys: LeaveLookupKey[], force = false) => {
+    const token = readStoredToken()
+    if (!token) {
+      const message = "Authentication required. Please log in again."
+      setError(message)
+      showErrorAlert(message)
+      return false
+    }
+
+    if (lookupKeys.length === 0) {
+      return true
+    }
+
+    setLoading(true)
+    setError(null)
+    try {
+      await loadLookups(token, lookupKeys, force)
+      return true
+    } catch (errorObject) {
+      const message = errorObject instanceof Error ? errorObject.message : "Failed to load form data."
+      setError(message)
+      showErrorAlert(message)
+      return false
+    } finally {
+      setLoading(false)
+    }
+  }, [loadLookups])
+
+  const reloadAll = React.useCallback(async (targetTab: LeaveTab = tab, force = false) => {
     const token = readStoredToken()
     if (!token) {
       const message = "Authentication required. Please log in again."
@@ -442,48 +566,45 @@ export function LeaveManagementView({
     setLoading(true)
     setError(null)
     try {
-      const [
-        typesResult,
-        requestsResult,
-        balancesResult,
-        holidaysResult,
-        employeesResult,
-        policiesResult,
-        workflowsResult,
-        departmentsResult,
-        positionsResult,
-        branchesResult,
-        rolesResult,
-      ] = await Promise.all([
-        listLeaveTypes(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
-        listLeaveRequests(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
-        listLeaveBalances(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
-        listLeaveHolidays(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
-        listEmployees(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
-        listLeavePolicies(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
-        listLeaveWorkflows(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
-        listDepartments(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
-        listPositions(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
-        listBranches(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
-        listResource("roles", token).then((rows) => ({
-          rows,
-          page: 1,
-          limit: 100,
-          total: rows.length,
-          totalPages: 1,
-        })),
-      ])
-      setTypes(typesResult.rows)
-      setRequests(requestsResult.rows)
-      setBalances(balancesResult.rows)
-      setHolidays(holidaysResult.rows)
-      setEmployees(employeesResult.rows)
-      setPolicies(policiesResult.rows)
-      setWorkflows(workflowsResult.rows)
-      setDepartments(departmentsResult.rows)
-      setPositions(positionsResult.rows)
-      setBranches(branchesResult.rows)
-      setRoles(rolesResult.rows)
+      await loadLookups(token, TAB_LOOKUP_REQUIREMENTS[targetTab], force)
+
+      switch (targetTab) {
+        case "types": {
+          const result = await listLeaveTypes(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" })
+          setTypes(result.rows)
+          break
+        }
+        case "requests": {
+          const result = await listLeaveRequests(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" })
+          setRequests(result.rows)
+          break
+        }
+        case "balances": {
+          const result = await listLeaveBalances(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" })
+          setBalances(result.rows)
+          break
+        }
+        case "holidays": {
+          const result = await listLeaveHolidays(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" })
+          setHolidays(result.rows)
+          break
+        }
+        case "policies": {
+          const result = await listLeavePolicies(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" })
+          setPolicies(result.rows)
+          break
+        }
+        case "workflows": {
+          const result = await listLeaveWorkflows(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" })
+          setWorkflows(result.rows)
+          break
+        }
+      }
+
+      setLoadedTabs((current) => ({
+        ...current,
+        [targetTab]: true,
+      }))
     } catch (errorObject) {
       const message = errorObject instanceof Error ? errorObject.message : "Failed to load leave management data."
       setError(message)
@@ -491,11 +612,14 @@ export function LeaveManagementView({
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [loadLookups, tab])
 
   React.useEffect(() => {
-    void reloadAll()
-  }, [reloadAll])
+    if (loadedTabs[tab]) {
+      return
+    }
+    void reloadAll(tab)
+  }, [loadedTabs, reloadAll, tab])
 
   React.useEffect(() => {
     setTab(activeTab)
@@ -605,6 +729,15 @@ export function LeaveManagementView({
       .join(" ")
   }
 
+  const employeeLabelFromRow = (row: AdminRecord) => {
+    const inlineEmployeeName =
+      readString(row, ["employee_name", "employeeName", "full_name", "fullName", "name"])
+    if (inlineEmployeeName !== "-") {
+      return inlineEmployeeName
+    }
+    return employeeLabel(readNumber(row, ["employee_id"]))
+  }
+
   const optionLabel = (rows: AdminRecord[], id: number | null, nameKeys: string[] = ["name", "title"]) => {
     if (id === null) {
       return "-"
@@ -694,7 +827,7 @@ export function LeaveManagementView({
           label: `Importing holidays for ${HOLIDAY_IMPORT_COUNTRIES.find((country) => country.code === holidayImportCountry)?.label ?? holidayImportCountry}`,
         })
       }
-      await reloadAll()
+      await reloadAll(tab, true)
       setHolidayImportProgress({
         completed: total,
         total,
@@ -759,7 +892,7 @@ export function LeaveManagementView({
           label: `Removing holidays for ${HOLIDAY_IMPORT_COUNTRIES.find((entry) => entry.code === holidayRemoveCountry)?.label ?? holidayRemoveCountry}`,
         })
       }
-      await reloadAll()
+      await reloadAll(tab, true)
       setHolidayRemoveProgress({
         completed: total,
         total,
@@ -815,7 +948,7 @@ export function LeaveManagementView({
         requires_attachment: "false",
       })
       setTypeDialogOpen(false)
-      await reloadAll()
+      await reloadAll(tab, true)
     } catch (errorObject) {
       const message = errorObject instanceof Error ? errorObject.message : "Failed to create leave type."
       setError(message)
@@ -885,7 +1018,7 @@ export function LeaveManagementView({
         submit: "true",
       })
       setRequestDialogOpen(false)
-      await reloadAll()
+      await reloadAll(tab, true)
     } catch (errorObject) {
       const message = errorObject instanceof Error ? errorObject.message : "Failed to create leave request."
       setError(message)
@@ -893,6 +1026,14 @@ export function LeaveManagementView({
     } finally {
       setSaving(false)
     }
+  }
+
+  async function openRequestDialog() {
+    const loaded = await ensureLookups(["types", "employees"])
+    if (!loaded) {
+      return
+    }
+    setRequestDialogOpen(true)
   }
 
   async function submitBalanceAdjustment() {
@@ -916,7 +1057,7 @@ export function LeaveManagementView({
         expired_days: Number(balanceForm.expired_days),
       })
       setBalanceDialogOpen(false)
-      await reloadAll()
+      await reloadAll(tab, true)
     } catch (errorObject) {
       const message = errorObject instanceof Error ? errorObject.message : "Failed to adjust leave balance."
       setError(message)
@@ -924,6 +1065,14 @@ export function LeaveManagementView({
     } finally {
       setSaving(false)
     }
+  }
+
+  async function openBalanceDialog() {
+    const loaded = await ensureLookups(["types", "employees"])
+    if (!loaded) {
+      return
+    }
+    setBalanceDialogOpen(true)
   }
 
   async function submitHolidayForm() {
@@ -945,7 +1094,7 @@ export function LeaveManagementView({
       })
       setHolidayForm({ name: "", holiday_date: "", is_recurring: "false" })
       setHolidayDialogOpen(false)
-      await reloadAll()
+      await reloadAll(tab, true)
     } catch (errorObject) {
       const message = errorObject instanceof Error ? errorObject.message : "Failed to create holiday."
       setError(message)
@@ -1000,7 +1149,7 @@ export function LeaveManagementView({
       }))
       setEditingPolicyId(null)
       setPolicySheetOpen(false)
-      await reloadAll()
+      await reloadAll(tab, true)
     } catch (errorObject) {
       const message = errorObject instanceof Error
         ? errorObject.message
@@ -1024,7 +1173,7 @@ export function LeaveManagementView({
     setSaving(true)
     try {
       await patchLeavePolicy(token, id, { status: nextStatus })
-      await reloadAll()
+      await reloadAll(tab, true)
     } catch (errorObject) {
       const message = errorObject instanceof Error ? errorObject.message : "Failed to update policy status."
       setError(message)
@@ -1043,7 +1192,7 @@ export function LeaveManagementView({
     setSaving(true)
     try {
       await deleteLeavePolicy(token, id)
-      await reloadAll()
+      await reloadAll(tab, true)
     } catch (errorObject) {
       const message = errorObject instanceof Error ? errorObject.message : "Failed to delete policy."
       setError(message)
@@ -1108,24 +1257,30 @@ export function LeaveManagementView({
   }
 
   function openCreatePolicySheet() {
-    setEditingPolicyId(null)
-    setPolicyForm({
-      name: "",
-      description: "",
-      accrual_method: "yearly",
-      accrual_rate: "0",
-      allow_negative_balance: "false",
-      status: "active",
-      applicable_department_id: "",
-      applicable_position_id: "",
-      max_consecutive_days: "1",
-      min_service_months: "0",
-      leave_type_id: "",
-      annual_quota_days: "0",
-      max_per_request_days: "0",
-      requires_approval: "true",
-    })
-    setPolicySheetOpen(true)
+    void (async () => {
+      const loaded = await ensureLookups(["types", "departments", "positions"])
+      if (!loaded) {
+        return
+      }
+      setEditingPolicyId(null)
+      setPolicyForm({
+        name: "",
+        description: "",
+        accrual_method: "yearly",
+        accrual_rate: "0",
+        allow_negative_balance: "false",
+        status: "active",
+        applicable_department_id: "",
+        applicable_position_id: "",
+        max_consecutive_days: "1",
+        min_service_months: "0",
+        leave_type_id: "",
+        annual_quota_days: "0",
+        max_per_request_days: "0",
+        requires_approval: "true",
+      })
+      setPolicySheetOpen(true)
+    })()
   }
 
   async function submitWorkflowForm() {
@@ -1181,7 +1336,7 @@ export function LeaveManagementView({
       setSelectedWorkflowId("")
       setWorkflowSteps([])
       setWorkflowSheetOpen(false)
-      await reloadAll()
+      await reloadAll(tab, true)
     } catch (errorObject) {
       const message = errorObject instanceof Error ? errorObject.message : "Failed to create leave workflow."
       setError(message)
@@ -1192,19 +1347,29 @@ export function LeaveManagementView({
   }
 
   function openCreateWorkflowSheet() {
-    setEditingWorkflowId(null)
-    setSelectedWorkflowId("")
-    setWorkflowSteps([])
-    setWorkflowForm({
-      name: "",
-      leave_type_id: "",
-      status: "active",
-      is_default: "false",
-    })
-    setWorkflowSheetOpen(true)
+    void (async () => {
+      const loaded = await ensureLookups(["types"])
+      if (!loaded) {
+        return
+      }
+      setEditingWorkflowId(null)
+      setSelectedWorkflowId("")
+      setWorkflowSteps([])
+      setWorkflowForm({
+        name: "",
+        leave_type_id: "",
+        status: "active",
+        is_default: "false",
+      })
+      setWorkflowSheetOpen(true)
+    })()
   }
 
   async function openEditWorkflowSheet(row: AdminRecord) {
+    const loaded = await ensureLookups(["types"])
+    if (!loaded) {
+      return
+    }
     const workflowId = readNumber(row, ["id", "workflow_id"])
     if (workflowId === null) {
       return
@@ -1321,7 +1486,7 @@ export function LeaveManagementView({
       setEditingWorkflowStepId(null)
       setStepDialogOpen(false)
       await loadWorkflowSteps(workflowId)
-      await reloadAll()
+      await reloadAll(tab, true)
     } catch (errorObject) {
       const message = errorObject instanceof Error ? errorObject.message : "Failed to create workflow step."
       setError(message)
@@ -1332,39 +1497,51 @@ export function LeaveManagementView({
   }
 
   function openCreateStepDialog() {
-    setEditingWorkflowStepId(null)
-    setWorkflowStepForm({
-      approval_level: String((workflowSteps.length || 0) + 1),
-      approver_type: "role",
-      action_type: "recommend",
-      role_id: "",
-      position_id: "",
-      company_user_id: "",
-      assigned_branch_id: "",
-      assigned_department_id: "",
-      is_required: "true",
-    })
-    setStepDialogOpen(true)
+    void (async () => {
+      const loaded = await ensureLookups(["employees", "departments", "positions", "branches", "roles"])
+      if (!loaded) {
+        return
+      }
+      setEditingWorkflowStepId(null)
+      setWorkflowStepForm({
+        approval_level: String((workflowSteps.length || 0) + 1),
+        approver_type: "role",
+        action_type: "recommend",
+        role_id: "",
+        position_id: "",
+        company_user_id: "",
+        assigned_branch_id: "",
+        assigned_department_id: "",
+        is_required: "true",
+      })
+      setStepDialogOpen(true)
+    })()
   }
 
   function openEditStepDialog(row: AdminRecord) {
-    const stepId = readNumber(row, ["id", "step_id"])
-    if (stepId === null) {
-      return
-    }
-    setEditingWorkflowStepId(stepId)
-    setWorkflowStepForm({
-      approval_level: String(readNumber(row, ["approval_level"]) ?? 1),
-      approver_type: readString(row, ["approver_type"]) === "-" ? "role" : String(row.approver_type ?? "role"),
-      action_type: readString(row, ["action_type"]) === "-" ? "recommend" : String(row.action_type ?? "recommend"),
-      role_id: String(readNumber(row, ["role_id"]) ?? ""),
-      position_id: String(readNumber(row, ["position_id"]) ?? ""),
-      company_user_id: String(readNumber(row, ["company_user_id"]) ?? ""),
-      assigned_branch_id: String(readNumber(row, ["assigned_branch_id"]) ?? ""),
-      assigned_department_id: String(readNumber(row, ["assigned_department_id"]) ?? ""),
-      is_required: readBoolean(row, ["is_required"]) ? "true" : "false",
-    })
-    setStepDialogOpen(true)
+    void (async () => {
+      const loaded = await ensureLookups(["employees", "departments", "positions", "branches", "roles"])
+      if (!loaded) {
+        return
+      }
+      const stepId = readNumber(row, ["id", "step_id"])
+      if (stepId === null) {
+        return
+      }
+      setEditingWorkflowStepId(stepId)
+      setWorkflowStepForm({
+        approval_level: String(readNumber(row, ["approval_level"]) ?? 1),
+        approver_type: readString(row, ["approver_type"]) === "-" ? "role" : String(row.approver_type ?? "role"),
+        action_type: readString(row, ["action_type"]) === "-" ? "recommend" : String(row.action_type ?? "recommend"),
+        role_id: String(readNumber(row, ["role_id"]) ?? ""),
+        position_id: String(readNumber(row, ["position_id"]) ?? ""),
+        company_user_id: String(readNumber(row, ["company_user_id"]) ?? ""),
+        assigned_branch_id: String(readNumber(row, ["assigned_branch_id"]) ?? ""),
+        assigned_department_id: String(readNumber(row, ["assigned_department_id"]) ?? ""),
+        is_required: readBoolean(row, ["is_required"]) ? "true" : "false",
+      })
+      setStepDialogOpen(true)
+    })()
   }
 
   async function toggleWorkflowStatus(row: AdminRecord) {
@@ -1377,7 +1554,7 @@ export function LeaveManagementView({
     setSaving(true)
     try {
       await patchLeaveWorkflow(token, id, { status: nextStatus })
-      await reloadAll()
+      await reloadAll(tab, true)
     } catch (errorObject) {
       const message = errorObject instanceof Error ? errorObject.message : "Failed to update workflow status."
       setError(message)
@@ -1400,7 +1577,7 @@ export function LeaveManagementView({
         setSelectedWorkflowId("")
         setWorkflowSteps([])
       }
-      await reloadAll()
+      await reloadAll(tab, true)
     } catch (errorObject) {
       const message = errorObject instanceof Error ? errorObject.message : "Failed to delete workflow."
       setError(message)
@@ -1450,7 +1627,7 @@ export function LeaveManagementView({
     setSaving(true)
     try {
       await patchLeaveType(token, id, { status: nextStatus })
-      await reloadAll()
+      await reloadAll(tab, true)
     } catch (errorObject) {
       const message = errorObject instanceof Error ? errorObject.message : "Failed to update leave type status."
       setError(message)
@@ -1469,7 +1646,7 @@ export function LeaveManagementView({
     setSaving(true)
     try {
       await deleteLeaveType(token, id)
-      await reloadAll()
+      await reloadAll(tab, true)
     } catch (errorObject) {
       const message = errorObject instanceof Error ? errorObject.message : "Failed to delete leave type."
       setError(message)
@@ -1491,7 +1668,7 @@ export function LeaveManagementView({
         approve,
         comments: approve ? "Approved from dashboard" : "Rejected from dashboard",
       })
-      await reloadAll()
+      await reloadAll(tab, true)
     } catch (errorObject) {
       const message = errorObject instanceof Error ? errorObject.message : "Failed to update leave request."
       setError(message)
@@ -1513,7 +1690,7 @@ export function LeaveManagementView({
     setSaving(true)
     try {
       await cancelLeaveRequest(token, id, reason.trim())
-      await reloadAll()
+      await reloadAll(tab, true)
     } catch (errorObject) {
       const message = errorObject instanceof Error ? errorObject.message : "Failed to cancel leave request."
       setError(message)
@@ -1534,7 +1711,7 @@ export function LeaveManagementView({
       await patchLeaveHoliday(token, id, {
         is_recurring: !readBoolean(row, ["is_recurring"]),
       })
-      await reloadAll()
+      await reloadAll(tab, true)
     } catch (errorObject) {
       const message = errorObject instanceof Error ? errorObject.message : "Failed to update holiday."
       setError(message)
@@ -1553,7 +1730,7 @@ export function LeaveManagementView({
     setSaving(true)
     try {
       await deleteLeaveHoliday(token, id)
-      await reloadAll()
+      await reloadAll(tab, true)
     } catch (errorObject) {
       const message = errorObject instanceof Error ? errorObject.message : "Failed to delete holiday."
       setError(message)
@@ -1596,7 +1773,7 @@ export function LeaveManagementView({
         <button
           type="button"
           className={`${showTabButtons ? "ml-auto" : ""} inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-300 text-sm`}
-          onClick={() => void reloadAll()}
+          onClick={() => void reloadAll(tab, true)}
           disabled={loading}
         >
           <RefreshCw className={`h-4 w-4 text-primary ${loading ? "animate-spin" : ""}`} />
@@ -1682,7 +1859,7 @@ export function LeaveManagementView({
             <button
               type="button"
               className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white"
-              onClick={() => setRequestDialogOpen(true)}
+              onClick={() => void openRequestDialog()}
             >
               Create Leave Request
             </button>
@@ -1693,7 +1870,7 @@ export function LeaveManagementView({
             data={filteredRequests}
             columns={[
               { key: "leave_id", label: "ID", defaultWidth: 70, render: (r) => leaveRequestLabel(r) },
-              { key: "employee", label: "Employee", defaultWidth: 90, render: (r) => employeeLabel(readNumber(r, ["employee_id"])) },
+              { key: "employee", label: "Employee", defaultWidth: 90, render: (r) => employeeLabelFromRow(r) },
               { key: "leave_type", label: "Type", defaultWidth: 75, render: (r) => readString(r, ["leave_type_name", "leave_type", "leave_type_id"]) },
               { key: "start_date", label: "Start", defaultWidth: 65, render: (r) => readString(r, ["start_date"]) },
               { key: "end_date", label: "End", defaultWidth: 65, render: (r) => readString(r, ["end_date"]) },
@@ -1779,7 +1956,13 @@ export function LeaveManagementView({
               <DatePickerPresets value={requestForm.end_date} onChange={(value) => setRequestForm((prev) => ({ ...prev, end_date: value }))} placeholder="End date" />
             </div>
             <div />
-            <textarea className="min-h-24 rounded-md border border-slate-300 px-3 py-2 text-sm md:col-span-3" placeholder="Reason" value={requestForm.reason} onChange={(event) => setRequestForm((prev) => ({ ...prev, reason: event.target.value }))} />
+            <Textarea
+              containerClassName="md:col-span-3"
+              className="min-h-24 rounded-md border border-slate-300 px-3 py-2 text-sm"
+              placeholder="Reason"
+              value={requestForm.reason}
+              onChange={(event) => setRequestForm((prev) => ({ ...prev, reason: event.target.value }))}
+            />
           </div>
           <DialogFooter>
             <button type="button" className="rounded-md border border-slate-300 px-4 py-2 text-sm" onClick={() => setRequestDialogOpen(false)}>
@@ -1814,7 +1997,13 @@ export function LeaveManagementView({
               <option value="true">Attachment Required</option>
             </select>
             <div />
-            <textarea className="min-h-24 rounded-md border border-slate-300 px-3 py-2 text-sm md:col-span-3" placeholder="Description" value={typeForm.description} onChange={(event) => setTypeForm((prev) => ({ ...prev, description: event.target.value }))} />
+            <Textarea
+              containerClassName="md:col-span-3"
+              className="min-h-24 rounded-md border border-slate-300 px-3 py-2 text-sm"
+              placeholder="Description"
+              value={typeForm.description}
+              onChange={(event) => setTypeForm((prev) => ({ ...prev, description: event.target.value }))}
+            />
           </div>
           <DialogFooter>
             <button type="button" className="rounded-md border border-slate-300 px-4 py-2 text-sm" onClick={() => setTypeDialogOpen(false)}>
@@ -2080,7 +2269,7 @@ export function LeaveManagementView({
             <button
               type="button"
               className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white"
-              onClick={() => setBalanceDialogOpen(true)}
+              onClick={() => void openBalanceDialog()}
             >
               <Plus className="h-4 w-4" />
               Adjust Leave Balance
@@ -2091,7 +2280,7 @@ export function LeaveManagementView({
             title="Leave Balances"
             data={balances}
             columns={[
-              { key: "employee", label: "Employee", defaultWidth: 100, render: (r) => employeeLabel(readNumber(r, ["employee_id"])) },
+              { key: "employee", label: "Employee", defaultWidth: 100, render: (r) => employeeLabelFromRow(r) },
               { key: "type", label: "Type", defaultWidth: 75, render: (r) => readString(r, ["leave_type_name"]) },
               { key: "fiscal_year", label: "FY", defaultWidth: 55, render: (r) => readString(r, ["fiscal_year"]) },
               { key: "allocated_days", label: "Alloc", defaultWidth: 55, render: (r) => readString(r, ["allocated_days", "allocated"]) },
@@ -2249,7 +2438,13 @@ export function LeaveManagementView({
                   <option value="true">Requires approval</option>
                   <option value="false">No approval</option>
                 </select>
-                <textarea className="min-h-24 rounded-md border border-slate-300 px-3 py-2 text-sm md:col-span-2" placeholder="Description" value={policyForm.description} onChange={(event) => setPolicyForm((prev) => ({ ...prev, description: event.target.value }))} />
+                <Textarea
+                  containerClassName="md:col-span-2"
+                  className="min-h-24 rounded-md border border-slate-300 px-3 py-2 text-sm"
+                  placeholder="Description"
+                  value={policyForm.description}
+                  onChange={(event) => setPolicyForm((prev) => ({ ...prev, description: event.target.value }))}
+                />
               </div>
               <SheetFooter className="mt-4">
                 <button
@@ -2668,7 +2863,7 @@ export function LeaveManagementView({
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
               Reason
             </label>
-            <textarea
+            <Textarea
               className="min-h-20 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
               value={cancelReason}
               onChange={(event) => setCancelReason(event.target.value)}

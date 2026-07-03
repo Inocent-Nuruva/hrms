@@ -3,6 +3,7 @@
 import * as React from "react"
 import { TableScrollContainer } from "@/components/common/table-scroll-container"
 import { ResizableTable } from "@/components/ui/resizable-table"
+import { Textarea } from "@/components/ui/textarea"
 import { Plus, RefreshCw } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -113,6 +114,7 @@ function readNumber(row: AdminRecord, keys: string[]) {
 }
 
 type Tab = "requests" | "workflows"
+type OffboardingLookupKey = "employees" | "branches" | "departments" | "workflows"
 
 export function OffboardingView() {
   const [tab, setTab] = React.useState<Tab>("requests")
@@ -126,6 +128,16 @@ export function OffboardingView() {
 
   const [requests, setRequests] = React.useState<AdminRecord[]>([])
   const [workflows, setWorkflows] = React.useState<AdminRecord[]>([])
+  const [loadedTabs, setLoadedTabs] = React.useState<Record<Tab, boolean>>({
+    requests: false,
+    workflows: false,
+  })
+  const [loadedLookups, setLoadedLookups] = React.useState<Record<OffboardingLookupKey, boolean>>({
+    employees: false,
+    branches: false,
+    departments: false,
+    workflows: false,
+  })
 
   const [workflowSheetOpen, setWorkflowSheetOpen] = React.useState(false)
   const [requestSheetOpen, setRequestSheetOpen] = React.useState(false)
@@ -227,7 +239,79 @@ export function OffboardingView() {
     return id === null ? "Unnamed request" : `Request #${id}`
   }
 
-  const reloadAll = React.useCallback(async () => {
+  const loadLookups = React.useCallback(async (token: string, lookupKeys: OffboardingLookupKey[], force = false) => {
+    const missingKeys = force ? lookupKeys : lookupKeys.filter((key) => !loadedLookups[key])
+    if (missingKeys.length === 0) {
+      return
+    }
+
+    const results = await Promise.all(
+      missingKeys.map(async (key) => {
+        switch (key) {
+          case "employees":
+            return { key, result: await listEmployees(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }) }
+          case "branches":
+            return { key, result: await listBranches(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }) }
+          case "departments":
+            return { key, result: await listDepartments(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }) }
+          case "workflows":
+            return { key, result: await listOffboardingWorkflows(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }) }
+        }
+      })
+    )
+
+    results.forEach((entry) => {
+      if (!entry) return
+      switch (entry.key) {
+        case "employees":
+          setEmployees(entry.result.rows)
+          break
+        case "branches":
+          setBranches(entry.result.rows)
+          break
+        case "departments":
+          setDepartments(entry.result.rows)
+          break
+        case "workflows":
+          setWorkflows(entry.result.rows)
+          break
+      }
+    })
+
+    setLoadedLookups((current) => {
+      const next = { ...current }
+      missingKeys.forEach((key) => {
+        next[key] = true
+      })
+      return next
+    })
+  }, [loadedLookups])
+
+  const ensureLookups = React.useCallback(async (lookupKeys: OffboardingLookupKey[], force = false) => {
+    const token = readStoredToken()
+    if (!token) {
+      const msg = "Authentication required. Please log in again."
+      setError(msg)
+      showErrorAlert(msg)
+      return false
+    }
+
+    setLoading(true)
+    setError(null)
+    try {
+      await loadLookups(token, lookupKeys, force)
+      return true
+    } catch (errorObject) {
+      const msg = errorObject instanceof Error ? errorObject.message : "Failed to load offboarding form data."
+      setError(msg)
+      showErrorAlert(msg)
+      return false
+    } finally {
+      setLoading(false)
+    }
+  }, [loadLookups])
+
+  const reloadAll = React.useCallback(async (targetTab: Tab = tab, force = false) => {
     const token = readStoredToken()
     if (!token) {
       const msg = "Authentication required. Please log in again."
@@ -238,24 +322,15 @@ export function OffboardingView() {
     setLoading(true)
     setError(null)
     try {
-      const [
-        employeesResult,
-        branchesResult,
-        departmentsResult,
-        requestsResult,
-        workflowsResult,
-      ] = await Promise.all([
-        listEmployees(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
-        listBranches(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
-        listDepartments(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
-        listOffboardingRequests(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
-        listOffboardingWorkflows(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
-      ])
-      setEmployees(employeesResult.rows)
-      setBranches(branchesResult.rows)
-      setDepartments(departmentsResult.rows)
-      setRequests(requestsResult.rows)
-      setWorkflows(workflowsResult.rows)
+      if (targetTab === "requests") {
+        const requestsResult = await listOffboardingRequests(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" })
+        setRequests(requestsResult.rows)
+      } else {
+        const workflowsResult = await listOffboardingWorkflows(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" })
+        setWorkflows(workflowsResult.rows)
+        setLoadedLookups((current) => ({ ...current, workflows: true }))
+      }
+      setLoadedTabs((current) => ({ ...current, [targetTab]: true }))
     } catch (errorObject) {
       const msg = errorObject instanceof Error ? errorObject.message : "Failed to load offboarding data."
       setError(msg)
@@ -263,11 +338,24 @@ export function OffboardingView() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [tab])
 
   React.useEffect(() => {
-    void reloadAll()
-  }, [reloadAll])
+    if (loadedTabs[tab]) return
+    void reloadAll(tab)
+  }, [loadedTabs, reloadAll, tab])
+
+  async function openRequestSheet() {
+    const loaded = await ensureLookups(["employees", "branches", "departments", "workflows"])
+    if (!loaded) return
+    setRequestSheetOpen(true)
+  }
+
+  async function openWorkflowSheet() {
+    const loaded = await ensureLookups(["workflows"])
+    if (!loaded) return
+    setWorkflowSheetOpen(true)
+  }
 
   async function submitRequestForm() {
     const token = readStoredToken()
@@ -293,7 +381,7 @@ export function OffboardingView() {
         metadata: {},
       })
       showSuccessAlert("Offboarding request created.")
-      await reloadAll()
+      await reloadAll(tab, true)
       return true
     } catch (errorObject) {
       showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to create offboarding request.")
@@ -340,7 +428,7 @@ export function OffboardingView() {
       if (action === "cancel") await cancelOffboardingRequest(token, id, { reason: "Cancelled by admin" })
       if (action === "complete") await completeOffboardingRequest(token, id)
       showSuccessAlert(`Request ${action}d successfully.`)
-      await reloadAll()
+      await reloadAll(tab, true)
     } catch (errorObject) {
       showErrorAlert(errorObject instanceof Error ? errorObject.message : "Action failed.")
     } finally {
@@ -362,7 +450,7 @@ export function OffboardingView() {
       })
       setWorkflowSheetOpen(false)
       showSuccessAlert("Workflow created.")
-      await reloadAll()
+      await reloadAll(tab, true)
     } catch (errorObject) {
       showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to create workflow.")
     } finally {
@@ -392,7 +480,7 @@ export function OffboardingView() {
         expected_duration_days: Number(stepForm.expected_duration_days),
       })
       showSuccessAlert("Workflow step added.")
-      await reloadAll()
+      await reloadAll(tab, true)
     } catch (errorObject) {
       showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to add workflow step.")
     } finally {
@@ -520,7 +608,7 @@ export function OffboardingView() {
             <button
               type="button"
               className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-md border border-border text-sm"
-              onClick={() => void reloadAll()}
+              onClick={() => void reloadAll(tab, true)}
               disabled={loading}
             >
               <RefreshCw className={`h-4 w-4 text-primary ${loading ? "animate-spin" : ""}`} />
@@ -536,7 +624,7 @@ export function OffboardingView() {
           <div className="flex justify-end">
             <Button
               type="button"
-              onClick={() => setRequestSheetOpen(true)}
+              onClick={() => void openRequestSheet()}
             >
               <Plus className="mr-2 h-4 w-4" />
               Create Offboarding
@@ -644,15 +732,17 @@ export function OffboardingView() {
             </select>
             <DatePickerPresets value={requestForm.notice_date} onChange={(value) => setRequestForm((prev) => ({ ...prev, notice_date: value }))} placeholder="Notice date" />
             <DatePickerPresets value={requestForm.last_working_date} onChange={(value) => setRequestForm((prev) => ({ ...prev, last_working_date: value }))} placeholder="Last working date" />
-            <textarea
-              className="min-h-20 resize-none overflow-hidden rounded-md border border-slate-300 px-3 py-2 text-sm md:col-span-2"
+            <Textarea
+              containerClassName="md:col-span-2"
+              className="min-h-20 resize-none overflow-hidden rounded-md border border-slate-300 px-3 py-2 text-sm"
               placeholder="Reason"
               value={requestForm.reason}
               onInput={autoResizeTextarea}
               onChange={(event) => setRequestForm((prev) => ({ ...prev, reason: event.target.value }))}
             />
-            <textarea
-              className="min-h-20 resize-none overflow-hidden rounded-md border border-slate-300 px-3 py-2 text-sm md:col-span-2"
+            <Textarea
+              containerClassName="md:col-span-2"
+              className="min-h-20 resize-none overflow-hidden rounded-md border border-slate-300 px-3 py-2 text-sm"
               placeholder="Description"
               value={requestForm.description}
               onInput={autoResizeTextarea}
@@ -682,7 +772,7 @@ export function OffboardingView() {
           <div className="flex justify-end">
             <Button
               type="button"
-              onClick={() => setWorkflowSheetOpen(true)}
+              onClick={() => void openWorkflowSheet()}
             >
               <Plus className="mr-2 h-4 w-4" />
               Create Workflow
@@ -730,8 +820,9 @@ export function OffboardingView() {
             <input className="h-10 rounded-md border border-slate-300 px-3 text-sm" placeholder="Workflow name" value={workflowForm.name} onChange={(event) => setWorkflowForm((prev) => ({ ...prev, name: event.target.value }))} />
             <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={workflowForm.status} onChange={(event) => setWorkflowForm((prev) => ({ ...prev, status: event.target.value }))}><option value="active">active</option><option value="inactive">inactive</option></select>
             <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={workflowForm.is_default} onChange={(event) => setWorkflowForm((prev) => ({ ...prev, is_default: event.target.value }))}><option value="false">Not default</option><option value="true">Default</option></select>
-            <textarea
-              className="min-h-20 resize-none overflow-hidden rounded-md border border-slate-300 px-3 py-2 text-sm md:col-span-2"
+            <Textarea
+              containerClassName="md:col-span-2"
+              className="min-h-20 resize-none overflow-hidden rounded-md border border-slate-300 px-3 py-2 text-sm"
               placeholder="Description"
               value={workflowForm.description}
               onInput={autoResizeTextarea}
@@ -784,7 +875,7 @@ export function OffboardingView() {
               <option value="cleared">cleared</option>
               <option value="not_cleared">not_cleared</option>
             </select>
-            <textarea
+            <Textarea
               className="min-h-20 resize-none overflow-hidden rounded-md border border-slate-300 px-3 py-2 text-sm"
               placeholder="Clearance remarks"
               value={clearanceForm.remarks}

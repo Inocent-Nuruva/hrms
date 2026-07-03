@@ -15,11 +15,15 @@ import {
 } from "@/components/ui/alert-dialog"
 import { ResizableTable } from "@/components/ui/resizable-table"
 import { listEmployees, type AdminRecord, type EmployeesQueryParams } from "@/lib/admin-api"
+import { useDebouncedValue } from "@/hooks/use-debounced-value"
+import { useRenderDiagnostics } from "@/hooks/use-render-diagnostics"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 const EMPLOYEE_STATUS_REFRESH_KEY = "hrms.employees.status.updatedAt"
 const EMPLOYEE_STATUS_REFRESH_EVENT = "hrms:employee-status-updated"
+const EMPLOYEE_LIST_CACHE_PREFIX = "hrms.employees.list"
+const EMPLOYEE_LIST_CACHE_TTL_MS = 60_000
 const DEFAULT_QUERY: Required<Omit<EmployeesQueryParams, "employment_status">> & {
   employment_status: "" | NonNullable<EmployeesQueryParams["employment_status"]>
 } = {
@@ -33,6 +37,15 @@ const DEFAULT_QUERY: Required<Omit<EmployeesQueryParams, "employment_status">> &
   department_id: 0,
   position_id: 0,
 }
+
+type EmployeeListSnapshot = {
+  rows: AdminRecord[]
+  totalPages: number | null
+  total: number | null
+  cachedAt: number
+}
+
+const employeeListSnapshotCache = new Map<string, EmployeeListSnapshot>()
 
 function readStoredToken() {
   if (typeof window === "undefined") {
@@ -126,6 +139,48 @@ function missingProfileItems(row: AdminRecord) {
   return REQUIRED_PROFILE_ITEMS.filter((item) => asRecordArray(row[item.key]).length === 0)
 }
 
+function readSnapshot(cacheKey: string) {
+  const inMemory = employeeListSnapshotCache.get(cacheKey)
+  if (inMemory && Date.now() - inMemory.cachedAt < EMPLOYEE_LIST_CACHE_TTL_MS) {
+    return inMemory
+  }
+
+  if (typeof window === "undefined") {
+    return null
+  }
+
+  try {
+    const raw = window.sessionStorage.getItem(`${EMPLOYEE_LIST_CACHE_PREFIX}:${cacheKey}`)
+    if (!raw) {
+      return null
+    }
+    const parsed = JSON.parse(raw) as EmployeeListSnapshot
+    if (Date.now() - parsed.cachedAt > EMPLOYEE_LIST_CACHE_TTL_MS) {
+      window.sessionStorage.removeItem(`${EMPLOYEE_LIST_CACHE_PREFIX}:${cacheKey}`)
+      return null
+    }
+    employeeListSnapshotCache.set(cacheKey, parsed)
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+function writeSnapshot(cacheKey: string, snapshot: EmployeeListSnapshot) {
+  employeeListSnapshotCache.set(cacheKey, snapshot)
+
+  if (typeof window === "undefined") {
+    return
+  }
+
+  try {
+    window.sessionStorage.setItem(
+      `${EMPLOYEE_LIST_CACHE_PREFIX}:${cacheKey}`,
+      JSON.stringify(snapshot)
+    )
+  } catch {}
+}
+
 
 
 export function EmployeesListView() {
@@ -138,8 +193,44 @@ export function EmployeesListView() {
   const [totalPages, setTotalPages] = React.useState<number | null>(null)
   const [total, setTotal] = React.useState<number | null>(null)
   const [missingDialog, setMissingDialog] = React.useState<{ employeeNo: string; missing: Array<{ key: string; label: string }> } | null>(null)
+  const debouncedSearch = useDebouncedValue(query.search, 350)
+  const lastFetchAtRef = React.useRef(0)
 
-  const fetchEmployees = React.useCallback(async () => {
+  useRenderDiagnostics("EmployeesListView", {
+    page,
+    search: query.search,
+    rows: rows.length,
+    loading,
+  })
+
+  const normalizedQuery = React.useMemo(
+    () => ({
+      ...query,
+      search: debouncedSearch,
+      employment_status: query.employment_status || undefined,
+      branch_id: query.branch_id > 0 ? query.branch_id : undefined,
+      department_id: query.department_id > 0 ? query.department_id : undefined,
+      position_id: query.position_id > 0 ? query.position_id : undefined,
+    }),
+    [debouncedSearch, query]
+  )
+  const queryCacheKey = React.useMemo(
+    () => JSON.stringify({ ...normalizedQuery, page }),
+    [normalizedQuery, page]
+  )
+
+  React.useLayoutEffect(() => {
+    const snapshot = readSnapshot(queryCacheKey)
+    if (!snapshot) {
+      return
+    }
+
+    setRows(snapshot.rows)
+    setTotalPages(snapshot.totalPages)
+    setTotal(snapshot.total)
+  }, [queryCacheKey])
+
+  const fetchEmployees = React.useCallback(async (signal?: AbortSignal) => {
     const token = readStoredToken()
     if (!token) {
       setError("Authentication required. Please log in again.")
@@ -150,29 +241,43 @@ export function EmployeesListView() {
     setLoading(true)
     setError(null)
     try {
-      const result = await listEmployees(token, {
-        ...query,
-        page,
-        employment_status: query.employment_status || undefined,
-        branch_id: query.branch_id > 0 ? query.branch_id : undefined,
-        department_id: query.department_id > 0 ? query.department_id : undefined,
-        position_id: query.position_id > 0 ? query.position_id : undefined,
+      const result = await listEmployees(
+        token,
+        {
+          ...normalizedQuery,
+          page,
+        },
+        {
+          signal,
+          cacheTtlMs: 20_000,
+        }
+      )
+      lastFetchAtRef.current = Date.now()
+      writeSnapshot(queryCacheKey, {
+        rows: result.rows,
+        totalPages: result.totalPages,
+        total: result.total,
+        cachedAt: Date.now(),
       })
       setRows(result.rows)
       setTotalPages(result.totalPages)
       setTotal(result.total)
     } catch (errorObject) {
-      setRows([])
-      setTotalPages(null)
-      setTotal(null)
+      if (signal?.aborted) {
+        return
+      }
       setError(errorObject instanceof Error ? errorObject.message : "Failed to load employees.")
     } finally {
-      setLoading(false)
+      if (!signal?.aborted) {
+        setLoading(false)
+      }
     }
-  }, [page, query])
+  }, [normalizedQuery, page, queryCacheKey])
 
   React.useEffect(() => {
-    void fetchEmployees()
+    const controller = new AbortController()
+    void fetchEmployees(controller.signal)
+    return () => controller.abort()
   }, [fetchEmployees])
 
   React.useEffect(() => {
@@ -181,6 +286,9 @@ export function EmployeesListView() {
     }
 
     const onFocus = () => {
+      if (Date.now() - lastFetchAtRef.current < 15_000) {
+        return
+      }
       void fetchEmployees()
     }
 
@@ -221,8 +329,7 @@ export function EmployeesListView() {
     }
   }
 
-  // Explicit columns for better control and to wire department/position from API
-  const employeeColumns = [
+  const employeeColumns = React.useMemo(() => [
     {
       key: "employee_no",
       label: "No",
@@ -283,7 +390,7 @@ export function EmployeesListView() {
         )
       }
     },
-  ]
+  ], [])
 
   return (
     <div>
@@ -331,6 +438,7 @@ export function EmployeesListView() {
         }}
         loading={loading}
         storageKey="employees"
+        enableAnimations={false}
       />
 
       <AlertDialog

@@ -84,6 +84,17 @@ import {
 } from "@/lib/onboarding-provisioning"
 
 type OnboardingTab = "requests" | "workflows"
+type OnboardingLookupKey =
+  | "employees"
+  | "workflows"
+  | "users"
+  | "roles"
+  | "branches"
+  | "shifts"
+  | "timetables"
+  | "accessGroups"
+  | "accessOrganizations"
+  | "attendanceDevices"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 function readStoredToken() {
@@ -407,6 +418,22 @@ export function OnboardingView() {
   const [requestSearch, setRequestSearch] = React.useState("")
   const [requestStatusFilter, setRequestStatusFilter] = React.useState("all")
   const [workflows, setWorkflows] = React.useState<AdminRecord[]>([])
+  const [loadedTabs, setLoadedTabs] = React.useState<Record<OnboardingTab, boolean>>({
+    requests: false,
+    workflows: false,
+  })
+  const [loadedLookups, setLoadedLookups] = React.useState<Record<OnboardingLookupKey, boolean>>({
+    employees: false,
+    workflows: false,
+    users: false,
+    roles: false,
+    branches: false,
+    shifts: false,
+    timetables: false,
+    accessGroups: false,
+    accessOrganizations: false,
+    attendanceDevices: false,
+  })
   const [requestDetailsOpen, setRequestDetailsOpen] = React.useState(false)
   const [requestDetailsLoading, setRequestDetailsLoading] = React.useState(false)
   const [selectedRequestRow, setSelectedRequestRow] = React.useState<AdminRecord | null>(null)
@@ -570,7 +597,109 @@ export function OnboardingView() {
     []
   )
 
-  const reloadAll = React.useCallback(async () => {
+  const loadLookups = React.useCallback(async (token: string, lookupKeys: OnboardingLookupKey[], force = false) => {
+    const missingKeys = force ? lookupKeys : lookupKeys.filter((key) => !loadedLookups[key])
+    if (missingKeys.length === 0) {
+      return
+    }
+
+    const results = await Promise.all(
+      missingKeys.map(async (key) => {
+        switch (key) {
+          case "employees":
+            return { key, result: await listEmployees(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }) }
+          case "workflows":
+            return { key, result: await listOnboardingWorkflows(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }) }
+          case "users":
+            return { key, result: await listUsers(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }) }
+          case "roles":
+            return { key, result: await listResource("roles", token) }
+          case "branches":
+            return { key, result: await listBranches(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }) }
+          case "shifts":
+            return { key, result: await listShiftResources(token, "shifts", { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }) }
+          case "timetables":
+            return { key, result: await listTimetableResources(token, "timetables", { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }) }
+          case "accessGroups":
+            return { key, result: await listAccessControlResources(token, "groups", { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }) }
+          case "accessOrganizations":
+            return { key, result: await listAccessControlResources(token, "organizations", { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }) }
+          case "attendanceDevices":
+            return { key, result: await listAttendanceDevices(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }) }
+        }
+      })
+    )
+
+    results.forEach((entry) => {
+      if (!entry) return
+      switch (entry.key) {
+        case "employees":
+          setEmployees(entry.result.rows)
+          break
+        case "workflows":
+          setWorkflows(entry.result.rows)
+          break
+        case "users":
+          setUsers(entry.result.rows)
+          break
+        case "roles":
+          setRoles(entry.result)
+          break
+        case "branches":
+          setBranches(entry.result.rows)
+          break
+        case "shifts":
+          setShiftRecords(entry.result.rows)
+          break
+        case "timetables":
+          setTimetableRecords(entry.result.rows)
+          break
+        case "accessGroups":
+          setAccessGroups(entry.result.rows)
+          break
+        case "accessOrganizations":
+          setAccessOrganizations(entry.result.rows)
+          break
+        case "attendanceDevices":
+          setAttendanceDevices(entry.result.rows)
+          break
+      }
+    })
+
+    setLoadedLookups((current) => {
+      const next = { ...current }
+      missingKeys.forEach((key) => {
+        next[key] = true
+      })
+      return next
+    })
+  }, [loadedLookups])
+
+  const ensureLookups = React.useCallback(async (lookupKeys: OnboardingLookupKey[], force = false) => {
+    const token = readStoredToken()
+    if (!token) {
+      const message = "Authentication required. Please log in again."
+      setError(message)
+      showErrorAlert(message)
+      return false
+    }
+
+    setLoading(true)
+    setError(null)
+    try {
+      await loadLookups(token, lookupKeys, force)
+      return true
+    } catch (errorObject) {
+      const message = errorObject instanceof Error ? errorObject.message : "Failed to load onboarding form data."
+      setError(message)
+      showErrorAlert(message)
+      return false
+    } finally {
+      setLoading(false)
+    }
+  }, [loadLookups])
+
+  const reloadAll = React.useCallback(async (targetTab: OnboardingTab = activeTab, force = false) => {
     const token = readStoredToken()
     if (!token) {
       const message = "Authentication required. Please log in again."
@@ -582,43 +711,15 @@ export function OnboardingView() {
     setLoading(true)
     setError(null)
     try {
-      const [
-        requestsResult,
-        workflowsResult,
-        employeesResult,
-        usersResult,
-        rolesResult,
-        branchesResult,
-        shiftsResult,
-        timetablesResult,
-        accessGroupsResult,
-        accessOrganizationsResult,
-        devicesResult,
-      ] = await Promise.all([
-        listOnboardingRequests(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
-        listOnboardingWorkflows(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
-        listEmployees(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
-        listUsers(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
-        listResource("roles", token),
-        listBranches(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
-        listShiftResources(token, "shifts", { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
-        listTimetableResources(token, "timetables", { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
-        listAccessControlResources(token, "groups", { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
-        listAccessControlResources(token, "organizations", { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
-        listAttendanceDevices(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
-      ])
-
-      setRequests(requestsResult.rows)
-      setWorkflows(workflowsResult.rows)
-      setEmployees(employeesResult.rows)
-      setUsers(usersResult.rows)
-      setRoles(rolesResult)
-      setBranches(branchesResult.rows)
-      setShiftRecords(shiftsResult.rows)
-      setTimetableRecords(timetablesResult.rows)
-      setAccessGroups(accessGroupsResult.rows)
-      setAccessOrganizations(accessOrganizationsResult.rows)
-      setAttendanceDevices(devicesResult.rows)
+      if (targetTab === "requests") {
+        const requestsResult = await listOnboardingRequests(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" })
+        setRequests(requestsResult.rows)
+      } else {
+        const workflowsResult = await listOnboardingWorkflows(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" })
+        setWorkflows(workflowsResult.rows)
+        setLoadedLookups((current) => ({ ...current, workflows: true }))
+      }
+      setLoadedTabs((current) => ({ ...current, [targetTab]: true }))
     } catch (errorObject) {
       const message = errorObject instanceof Error ? errorObject.message : "Failed to load onboarding data."
       setError(message)
@@ -626,11 +727,14 @@ export function OnboardingView() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [activeTab])
 
   React.useEffect(() => {
-    void reloadAll()
-  }, [reloadAll])
+    if (loadedTabs[activeTab]) {
+      return
+    }
+    void reloadAll(activeTab)
+  }, [activeTab, loadedTabs, reloadAll])
 
   function resolveEmployeeLabel(employeeId: number | null) {
     if (employeeId === null) {
@@ -693,6 +797,15 @@ export function OnboardingView() {
     return map
   }, [employees])
 
+  const requestRowEmployeeLabel = React.useCallback((row: AdminRecord) => {
+    const inlineLabel = readString(row, ["employee_name", "employeeName", "full_name", "fullName", "name"])
+    if (inlineLabel !== "-") {
+      return inlineLabel
+    }
+    const employeeId = readNumber(row, ["employee_id"])
+    return employeeLabelById.get(employeeId ?? -1) ?? (employeeId === null ? "-" : `#${employeeId}`)
+  }, [employeeLabelById])
+
   const filteredRequests = React.useMemo(() => {
     const searchValue = requestSearch.trim().toLowerCase()
     return requests.filter((row) => {
@@ -714,7 +827,7 @@ export function OnboardingView() {
         row.title,
         row.name,
         row.status,
-        employeeLabelById.get(readNumber(row, ["employee_id"]) ?? -1) ?? "-",
+        requestRowEmployeeLabel(row),
       ]
       return rowValues.some((value) =>
         String(value ?? "")
@@ -722,7 +835,7 @@ export function OnboardingView() {
           .includes(searchValue)
       )
     })
-  }, [requests, requestSearch, requestStatusFilter, employeeLabelById])
+  }, [requests, requestSearch, requestStatusFilter, requestRowEmployeeLabel])
 
   function resolveOptionLabel(
     rows: AdminRecord[],
@@ -916,6 +1029,31 @@ export function OnboardingView() {
     })
   }
 
+  async function openRequestSheet() {
+    const loaded = await ensureLookups(["employees", "workflows"])
+    if (!loaded) {
+      return
+    }
+    resetRequestForm()
+    setRequestSheetOpen(true)
+  }
+
+  async function enableRequestProvisioning() {
+    const loaded = await ensureLookups([
+      "roles",
+      "branches",
+      "shifts",
+      "timetables",
+      "accessGroups",
+      "accessOrganizations",
+      "attendanceDevices",
+    ])
+    if (!loaded) {
+      return
+    }
+    setRequestProvisioningEnabled(true)
+  }
+
   function buildStepFromWorkflowForm() {
     if (!workflowForm.step_name.trim()) {
       return { error: "Step name is required.", step: null as AdminRecord | null }
@@ -986,9 +1124,15 @@ export function OnboardingView() {
   }
 
   function openCreateStepDialog() {
-    setEditingStepIndex(null)
-    resetWorkflowStepForm()
-    setStepDialogOpen(true)
+    void (async () => {
+      const loaded = await ensureLookups(["roles", "users"])
+      if (!loaded) {
+        return
+      }
+      setEditingStepIndex(null)
+      resetWorkflowStepForm()
+      setStepDialogOpen(true)
+    })()
   }
 
   function removeWorkflowStep(index: number) {
@@ -997,18 +1141,24 @@ export function OnboardingView() {
   }
 
   function editWorkflowStep(step: OnboardingWorkflowStepDraft, index: number) {
-    setEditingStepIndex(index)
-    setWorkflowForm((prev) => ({
-      ...prev,
-      step_name: String(step.name ?? ""),
-      step_description: String(step.description ?? ""),
-      step_type: String(step.step_type ?? "task"),
-      due_days: String(step.due_days ?? "1"),
-      is_required: String(step.is_required ?? true) === "true" ? "true" : "false",
-      assigned_user_id: typeof step.assigned_user_id === "number" ? String(step.assigned_user_id) : "",
-      assigned_role_id: typeof step.assigned_role_id === "number" ? String(step.assigned_role_id) : "",
-    }))
-    setStepDialogOpen(true)
+    void (async () => {
+      const loaded = await ensureLookups(["roles", "users"])
+      if (!loaded) {
+        return
+      }
+      setEditingStepIndex(index)
+      setWorkflowForm((prev) => ({
+        ...prev,
+        step_name: String(step.name ?? ""),
+        step_description: String(step.description ?? ""),
+        step_type: String(step.step_type ?? "task"),
+        due_days: String(step.due_days ?? "1"),
+        is_required: String(step.is_required ?? true) === "true" ? "true" : "false",
+        assigned_user_id: typeof step.assigned_user_id === "number" ? String(step.assigned_user_id) : "",
+        assigned_role_id: typeof step.assigned_role_id === "number" ? String(step.assigned_role_id) : "",
+      }))
+      setStepDialogOpen(true)
+    })()
   }
 
   async function openEditWorkflowSheet(workflowId: number | null) {
@@ -1018,6 +1168,11 @@ export function OnboardingView() {
     const token = readStoredToken()
     if (!token) {
       showErrorAlert("Authentication required. Please log in again.")
+      return
+    }
+
+    const lookupsLoaded = await ensureLookups(["roles", "users"])
+    if (!lookupsLoaded) {
       return
     }
 
@@ -1052,6 +1207,12 @@ export function OnboardingView() {
     }
   }
 
+  async function openCreateWorkflowSheet() {
+    resetWorkflowForm()
+    setEditingWorkflowId(null)
+    setWorkflowSheetOpen(true)
+  }
+
   async function removeWorkflow(workflowId: number | null) {
     if (workflowId === null) {
       return
@@ -1082,7 +1243,7 @@ export function OnboardingView() {
         await deleteOnboardingWorkflow(token, workflowId)
       }
       showSuccessAlert("Workflow deleted successfully.")
-      await reloadAll()
+      await reloadAll(activeTab, true)
     } catch (errorObject) {
       const message = errorObject instanceof Error ? errorObject.message : "Failed to delete workflow."
       setError(message)
@@ -1163,7 +1324,7 @@ export function OnboardingView() {
       resetWorkflowForm()
       setWorkflowSheetOpen(false)
       setEditingWorkflowId(null)
-      await reloadAll()
+      await reloadAll(activeTab, true)
     } catch (errorObject) {
       const message = errorObject instanceof Error ? errorObject.message : "Failed to create workflow."
       setError(message)
@@ -1220,7 +1381,7 @@ export function OnboardingView() {
       resetRequestForm()
       setRequestSheetOpen(false)
       showSuccessAlert("Onboarding request created.")
-      await reloadAll()
+      await reloadAll(activeTab, true)
     } catch (errorObject) {
       const message = errorObject instanceof Error ? errorObject.message : "Failed to create onboarding request."
       setError(message)
@@ -1269,7 +1430,7 @@ export function OnboardingView() {
             : `Onboarding request ${action}d successfully.`
         )
       }
-      await reloadAll()
+      await reloadAll(activeTab, true)
     } catch (errorObject) {
       const message = errorObject instanceof Error ? errorObject.message : `Failed to ${action} request.`
       setError(message)
@@ -1597,7 +1758,7 @@ export function OnboardingView() {
           <button
             type="button"
             className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-md border border-border text-sm"
-            onClick={() => void reloadAll()}
+            onClick={() => void reloadAll(activeTab, true)}
           >
             <RefreshCw className="size-4 text-primary" />
           </button>
@@ -1612,8 +1773,7 @@ export function OnboardingView() {
             <Button
               type="button"
               onClick={() => {
-                resetRequestForm()
-                setRequestSheetOpen(true)
+                void openRequestSheet()
               }}
             >
               <Plus className="mr-2 h-4 w-4" />
@@ -1697,7 +1857,7 @@ export function OnboardingView() {
                     onClick={() => void openRequestDetails(row)}
                   >
                     <TableCell>{requestId ?? "-"}</TableCell>
-                    <TableCell>{resolveEmployeeLabel(employeeId)}</TableCell>
+                    <TableCell>{requestRowEmployeeLabel(row)}</TableCell>
                     <TableCell>{readString(row, ["title", "name"])}</TableCell>
                     <TableCell>
                       <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${statusBadgeClass}`}>
@@ -1889,7 +2049,11 @@ export function OnboardingView() {
                       checked={requestProvisioningEnabled}
                       onCheckedChange={(value) => {
                         const checked = Boolean(value)
-                        setRequestProvisioningEnabled(checked)
+                        if (checked) {
+                          void enableRequestProvisioning()
+                          return
+                        }
+                        setRequestProvisioningEnabled(false)
                         if (!checked) {
                           setRequestProvisioning({
                             ...EMPTY_REQUEST_PROVISIONING,
@@ -2575,9 +2739,7 @@ export function OnboardingView() {
             <Button
               type="button"
               onClick={() => {
-                resetWorkflowForm()
-                setEditingWorkflowId(null)
-                setWorkflowSheetOpen(true)
+                void openCreateWorkflowSheet()
               }}
             >
               <Plus className="mr-2 h-4 w-4" />

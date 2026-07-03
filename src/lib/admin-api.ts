@@ -9,6 +9,34 @@ interface AdminRequestOptions {
   method?: HttpMethod
   token?: string
   body?: unknown
+  signal?: AbortSignal
+  cacheTtlMs?: number
+  dedupe?: boolean
+}
+
+type CachedAdminResponse = {
+  expiresAt: number
+  value: unknown
+}
+
+const adminResponseCache = new Map<string, CachedAdminResponse>()
+const inflightAdminRequests = new Map<string, Promise<unknown>>()
+
+function getAdminRequestKey(path: string, method: HttpMethod, token?: string, body?: unknown) {
+  return JSON.stringify({
+    method,
+    path: buildUrl(path),
+    token: token ?? "",
+    body: body ?? null,
+  })
+}
+
+function createAbortError() {
+  return new DOMException("The operation was aborted.", "AbortError")
+}
+
+function invalidateAdminGetCache() {
+  adminResponseCache.clear()
 }
 
 export interface AdminStats {
@@ -1387,39 +1415,102 @@ function extractMessage(payload: unknown, status: number) {
 }
 
 async function adminRequest<T>(path: string, options: AdminRequestOptions = {}): Promise<T> {
-  const { method = "GET", token, body } = options
+  const {
+    method = "GET",
+    token,
+    body,
+    signal,
+    cacheTtlMs = 0,
+    dedupe = true,
+  } = options
+  const requestKey = getAdminRequestKey(path, method, token, body)
+  const canReuseGetRequest = method === "GET" && body === undefined
 
-  const response = await fetch(buildUrl(path), {
-    method,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-    cache: "no-store",
-  })
+  if (signal?.aborted) {
+    throw createAbortError()
+  }
 
-  const text = await response.text()
-  let payload: unknown = null
-  if (text) {
-    try {
-      payload = JSON.parse(text) as unknown
-    } catch {
-      payload = { message: text }
+  if (method !== "GET") {
+    invalidateAdminGetCache()
+  }
+
+  if (canReuseGetRequest && cacheTtlMs > 0) {
+    const cached = adminResponseCache.get(requestKey)
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.value as T
+    }
+    if (cached) {
+      adminResponseCache.delete(requestKey)
     }
   }
 
-  if (!response.ok) {
-    const error = new Error(extractMessage(payload, response.status)) as Error & {
-      status?: number
-      payload?: unknown
+  if (canReuseGetRequest && dedupe && !signal) {
+    const inflight = inflightAdminRequests.get(requestKey)
+    if (inflight) {
+      if (process.env.NODE_ENV === "development") {
+        console.debug(`[admin-api] duplicate GET deduped for ${path}`)
+      }
+      return inflight as Promise<T>
     }
-    error.status = response.status
-    error.payload = payload
-    throw error
   }
 
-  return payload as T
+  const requestPromise = (async () => {
+    const response = await fetch(buildUrl(path), {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+      cache: "no-store",
+      signal,
+    })
+
+    const text = await response.text()
+    let payload: unknown = null
+    if (text) {
+      try {
+        payload = JSON.parse(text) as unknown
+      } catch {
+        payload = { message: text }
+      }
+    }
+
+    if (!response.ok) {
+      const error = new Error(extractMessage(payload, response.status)) as Error & {
+        status?: number
+        payload?: unknown
+      }
+      error.status = response.status
+      error.payload = payload
+      throw error
+    }
+
+    if (canReuseGetRequest && cacheTtlMs > 0) {
+      adminResponseCache.set(requestKey, {
+        expiresAt: Date.now() + cacheTtlMs,
+        value: payload,
+      })
+    }
+
+    return payload as T
+  })()
+
+  if (canReuseGetRequest && dedupe && !signal) {
+    inflightAdminRequests.set(requestKey, requestPromise)
+  }
+
+  try {
+    return await requestPromise
+  } finally {
+    inflightAdminRequests.delete(requestKey)
+  }
+}
+
+export interface ListRequestOptions {
+  signal?: AbortSignal
+  cacheTtlMs?: number
+  dedupe?: boolean
 }
 
 export async function listResource(resource: AdminResourceKey, token: string) {
@@ -1440,12 +1531,18 @@ export async function listAllResources(token: string): Promise<AdminResourceColl
 
 export async function listUsers(
   token: string,
-  params: UsersQueryParams = {}
+  params: UsersQueryParams = {},
+  options: ListRequestOptions = {}
 ): Promise<PaginatedUsersResult> {
   const fallbackPage = params.page && params.page > 0 ? params.page : 1
   const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20
   const query = buildUsersQuery(params)
-  const payload = await adminRequest<unknown>(`/api/users${query}`, { token })
+  const payload = await adminRequest<unknown>(`/api/users${query}`, {
+    token,
+    signal: options.signal,
+    cacheTtlMs: options.cacheTtlMs,
+    dedupe: options.dedupe,
+  })
   const rows = normalizeList(payload)
   const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit)
   return { rows, ...pagination }
@@ -1453,12 +1550,18 @@ export async function listUsers(
 
 export async function listEmployees(
   token: string,
-  params: EmployeesQueryParams = {}
+  params: EmployeesQueryParams = {},
+  options: ListRequestOptions = {}
 ): Promise<PaginatedUsersResult> {
   const fallbackPage = params.page && params.page > 0 ? params.page : 1
   const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20
   const query = buildEmployeesQuery(params)
-  const payload = await adminRequest<unknown>(`/api/employees${query}`, { token })
+  const payload = await adminRequest<unknown>(`/api/employees${query}`, {
+    token,
+    signal: options.signal,
+    cacheTtlMs: options.cacheTtlMs,
+    dedupe: options.dedupe,
+  })
   const rows = normalizeList(payload)
   const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit)
   return { rows, ...pagination }
@@ -1466,12 +1569,18 @@ export async function listEmployees(
 
 export async function listDepartments(
   token: string,
-  params: DepartmentsQueryParams = {}
+  params: DepartmentsQueryParams = {},
+  options: ListRequestOptions = {}
 ): Promise<PaginatedUsersResult> {
   const fallbackPage = params.page && params.page > 0 ? params.page : 1
   const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20
   const query = buildDepartmentsQuery(params)
-  const payload = await adminRequest<unknown>(`/api/departments${query}`, { token })
+  const payload = await adminRequest<unknown>(`/api/departments${query}`, {
+    token,
+    signal: options.signal,
+    cacheTtlMs: options.cacheTtlMs,
+    dedupe: options.dedupe,
+  })
   const rows = normalizeList(payload)
   const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit)
   return { rows, ...pagination }
@@ -1479,12 +1588,18 @@ export async function listDepartments(
 
 export async function listBranches(
   token: string,
-  params: BranchesQueryParams = {}
+  params: BranchesQueryParams = {},
+  options: ListRequestOptions = {}
 ): Promise<PaginatedUsersResult> {
   const fallbackPage = params.page && params.page > 0 ? params.page : 1
   const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20
   const query = buildBranchesQuery(params)
-  const payload = await adminRequest<unknown>(`/api/branches${query}`, { token })
+  const payload = await adminRequest<unknown>(`/api/branches${query}`, {
+    token,
+    signal: options.signal,
+    cacheTtlMs: options.cacheTtlMs,
+    dedupe: options.dedupe,
+  })
   const rows = normalizeList(payload)
   const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit)
   return { rows, ...pagination }
@@ -1492,12 +1607,18 @@ export async function listBranches(
 
 export async function listPositions(
   token: string,
-  params: PositionsQueryParams = {}
+  params: PositionsQueryParams = {},
+  options: ListRequestOptions = {}
 ): Promise<PaginatedUsersResult> {
   const fallbackPage = params.page && params.page > 0 ? params.page : 1
   const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20
   const query = buildPositionsQuery(params)
-  const payload = await adminRequest<unknown>(`/api/positions${query}`, { token })
+  const payload = await adminRequest<unknown>(`/api/positions${query}`, {
+    token,
+    signal: options.signal,
+    cacheTtlMs: options.cacheTtlMs,
+    dedupe: options.dedupe,
+  })
   const rows = normalizeList(payload)
   const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit)
   return { rows, ...pagination }
@@ -1505,12 +1626,18 @@ export async function listPositions(
 
 export async function listDesignations(
   token: string,
-  params: DesignationsQueryParams = {}
+  params: DesignationsQueryParams = {},
+  options: ListRequestOptions = {}
 ): Promise<PaginatedUsersResult> {
   const fallbackPage = params.page && params.page > 0 ? params.page : 1
   const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20
   const query = buildDesignationsQuery(params)
-  const payload = await adminRequest<unknown>(`/api/designations${query}`, { token })
+  const payload = await adminRequest<unknown>(`/api/designations${query}`, {
+    token,
+    signal: options.signal,
+    cacheTtlMs: options.cacheTtlMs,
+    dedupe: options.dedupe,
+  })
   const rows = normalizeList(payload)
   const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit)
   return { rows, ...pagination }
@@ -3704,7 +3831,19 @@ export async function listMyProfileUpdateRequests(
 ): Promise<PaginatedUsersResult> {
   const fallbackPage = params.page && params.page > 0 ? params.page : 1
   const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20
-  const query = buildSelfServiceRequestQuery(params)
+  const searchParams = new URLSearchParams()
+  searchParams.set("page", String(fallbackPage))
+  searchParams.set("limit", String(fallbackLimit))
+  if (params.status && params.status.trim()) {
+    searchParams.set("status", params.status.trim())
+  }
+  if (params.date_from && params.date_from.trim()) {
+    searchParams.set("date_from", params.date_from.trim())
+  }
+  if (params.date_to && params.date_to.trim()) {
+    searchParams.set("date_to", params.date_to.trim())
+  }
+  const query = `?${searchParams.toString()}`
   const payload = await adminRequest<unknown>(`/api/me/profile-update-requests${query}`, { token })
   const rows = normalizeList(payload)
   const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit)
@@ -3732,6 +3871,70 @@ export async function submitMyProfileUpdateRequest(token: string, id: string | n
   return adminRequest<unknown>(`/api/me/profile-update-requests/${id}/submit`, {
     method: "POST",
     token,
+  })
+}
+
+export async function listHrProfileUpdateApprovalRequests(
+  token: string,
+  params: SelfServiceRequestQueryParams & { employee_id?: number } = {}
+): Promise<PaginatedUsersResult> {
+  const fallbackPage = params.page && params.page > 0 ? params.page : 1
+  const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20
+  const query = new URLSearchParams()
+
+  query.set("page", String(fallbackPage))
+  query.set("limit", String(fallbackLimit))
+
+  if (params.employee_id !== undefined) {
+    query.set("employee_id", String(params.employee_id))
+  }
+  if (params.status) {
+    query.set("status", params.status)
+  }
+  if (params.date_from) {
+    query.set("from_date", params.date_from)
+  }
+  if (params.date_to) {
+    query.set("to_date", params.date_to)
+  }
+
+  const payload = await adminRequest<unknown>(
+    `/api/hr/self-service/approvals/profile-updates?${query.toString()}`,
+    { token }
+  )
+  const rows = normalizeList(payload)
+  const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit)
+  return { rows, ...pagination }
+}
+
+export async function getHrProfileUpdateApprovalRequest(token: string, id: string | number) {
+  const payload = await adminRequest<unknown>(`/api/hr/self-service/approvals/profile-updates/${id}`, {
+    token,
+  })
+  return normalizeSingle(payload)
+}
+
+export async function approveHrProfileUpdateRequest(
+  token: string,
+  id: string | number,
+  data: AdminRecord
+) {
+  return adminRequest<unknown>(`/api/hr/self-service/approvals/profile-updates/${id}/approve`, {
+    method: "POST",
+    token,
+    body: data,
+  })
+}
+
+export async function rejectHrProfileUpdateRequest(
+  token: string,
+  id: string | number,
+  data: AdminRecord
+) {
+  return adminRequest<unknown>(`/api/hr/self-service/approvals/profile-updates/${id}/reject`, {
+    method: "POST",
+    token,
+    body: data,
   })
 }
 

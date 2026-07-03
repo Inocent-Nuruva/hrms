@@ -14,6 +14,7 @@ import {
 
 import { ResizableTable } from "@/components/ui/resizable-table"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
+import { Textarea } from "@/components/ui/textarea"
 import {
   Popover,
   PopoverContent,
@@ -59,6 +60,7 @@ type AttendanceActivitySectionKey =
   | "punch-history"
   | "attendance-history"
   | "schedule-preview"
+  | "corrections"
 
 type SectionConfig = {
   title: string
@@ -118,6 +120,11 @@ const SECTION_CONFIG: Record<AttendanceActivitySectionKey, SectionConfig> = {
     groupTitle: "My Attendance",
     description: "",
   },
+  "corrections": {
+    title: "Correction Requests",
+    groupTitle: "My Attendance",
+    description: "",
+  },
 }
 
 function readStoredToken() {
@@ -147,6 +154,50 @@ function resolveSection(section: string): AttendanceActivitySectionKey {
   return (
     Object.keys(SECTION_CONFIG).includes(section) ? section : "daily-summaries"
   ) as AttendanceActivitySectionKey
+}
+
+// Doodles / decorative backgrounds (matching the design used on holidays, requests, balances, promotion, payroll)
+function DoodleSprites() {
+  return (
+    <svg width="0" height="0" className="hidden" aria-hidden="true">
+      <symbol id="doodle-circles" viewBox="0 0 316 316">
+        <g fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="5" opacity="0.3">
+          <path d="M 323.074 256.963 C 312.956 263.991 295.834 280.024 295.479 292.107 C 294.971 309.41 311.806 311.371 322.384 317.098" />
+          <path d="M 322.384 225.723 C 303.276 230.431 291.393 236.843 273.403 256.963 C 252.542 280.29 261.674 308.503 261.674 315.536" />
+          <path d="M 320.316 193.268 C 285.716 194.491 258.866 221.733 245.117 244.813 C 225.414 277.888 238.218 316.923 236.839 320.568" />
+        </g>
+      </symbol>
+      <symbol id="doodle-curves" viewBox="0 0 316 316">
+        <g fill="none" stroke="currentColor" strokeWidth="4" opacity="0.25">
+          <path d="M 50 50 Q 150 20 250 80 Q 100 150 200 250" />
+          <path d="M 30 100 Q 120 70 220 140 Q 80 200 180 280" />
+        </g>
+      </symbol>
+      <symbol id="doodle-grass" viewBox="0 0 316 316">
+        <g fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="3" opacity="0.2">
+          <path d="M 20 300 Q 40 200 30 100" />
+          <path d="M 60 300 Q 80 180 70 80" />
+          <path d="M 100 300 Q 120 220 110 120" />
+          <path d="M 150 300 Q 170 190 160 90" />
+          <path d="M 200 300 Q 220 210 210 110" />
+          <path d="M 250 300 Q 270 200 260 100" />
+          <path d="M 290 300 Q 310 220 300 120" />
+        </g>
+      </symbol>
+    </svg>
+  );
+}
+
+function Doodle({ name = "doodle-circles" }: { name?: string }) {
+  const doodleType = name.replace('doodle-', '');
+  return (
+    <svg 
+      className={`absolute inset-0 w-full h-full pointer-events-none doodle doodle-${doodleType}`} 
+      aria-hidden="true"
+    >
+      <use href={`#${name}`} />
+    </svg>
+  );
 }
 
 function getTodayDateInputValue() {
@@ -240,6 +291,23 @@ function stringifyValue(value: unknown): string {
 function formatOptionalValue(value: unknown, fallback: string) {
   const formatted = stringifyValue(value)
   return formatted === "-" ? fallback : formatted
+}
+
+function formatMinutesLabel(value: unknown) {
+  if (value === null || value === undefined || value === "") {
+    return "—"
+  }
+  const minutes = Number(value)
+  if (!Number.isFinite(minutes)) {
+    return stringifyValue(value)
+  }
+  const hours = Math.floor(minutes / 60)
+  const remainingMinutes = minutes % 60
+  return `${hours}h ${remainingMinutes.toString().padStart(2, "0")}m`
+}
+
+function isOffDayValue(value: unknown) {
+  return value === true || value === "true"
 }
 
 function asRecordValue(value: unknown): AdminRecord | null {
@@ -488,101 +556,77 @@ function TodayOverview({ record }: { record: AdminRecord | null }) {
         </div>
       )}
 
-      <div>
-        <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Schedule</div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="flex gap-2">
-            <Clock3Icon className="mt-0.5 size-3.5 text-primary shrink-0" />
-            <div className="text-xs">
-              <div className="text-muted-foreground">Start</div>
-              <div className="font-medium text-foreground">{scheduleStart}</div>
+      {/* Schedule - using our card design (bright primary + doodle, white text) */}
+      <div className="relative overflow-hidden rounded-2xl p-4 text-white" style={{ backgroundColor: 'var(--primary)' }}>
+        <Doodle name="doodle-circles" />
+        <div className="relative z-10">
+          <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-white/70">Schedule</div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="flex gap-2">
+              <Clock3Icon className="mt-0.5 size-3.5 shrink-0 text-white/70" />
+              <div className="text-xs">
+                <div className="text-white/70">Start</div>
+                <div className="font-medium text-white">{scheduleStart}</div>
+              </div>
             </div>
-          </div>
-          <div className="flex gap-2">
-            <TimerResetIcon className="mt-0.5 size-3.5 text-primary shrink-0" />
-            <div className="text-xs">
-              <div className="text-muted-foreground">End</div>
-              <div className="font-medium text-foreground">{scheduleEnd}</div>
+            <div className="flex gap-2">
+              <TimerResetIcon className="mt-0.5 size-3.5 shrink-0 text-white/70" />
+              <div className="text-xs">
+                <div className="text-white/70">End</div>
+                <div className="font-medium text-white">{scheduleEnd}</div>
+              </div>
             </div>
-          </div>
-          <div className="flex gap-2">
-            <AlarmClockCheckIcon className="mt-0.5 size-3.5 text-primary shrink-0" />
-            <div className="text-xs">
-              <div className="text-muted-foreground">Worked</div>
-              <div className="font-medium text-foreground">{workedHours}</div>
+            <div className="flex gap-2">
+              <AlarmClockCheckIcon className="mt-0.5 size-3.5 shrink-0 text-white/70" />
+              <div className="text-xs">
+                <div className="text-white/70">Worked</div>
+                <div className="font-medium text-white">{workedHours}</div>
+              </div>
             </div>
-          </div>
-          <div className="flex gap-2">
-            <MapPinIcon className="mt-0.5 size-3.5 text-primary shrink-0" />
-            <div className="text-xs">
-              <div className="text-muted-foreground">Branch</div>
-              <div className="font-medium text-foreground">{branch}</div>
+            <div className="flex gap-2">
+              <MapPinIcon className="mt-0.5 size-3.5 shrink-0 text-white/70" />
+              <div className="text-xs">
+                <div className="text-white/70">Branch</div>
+                <div className="font-medium text-white">{branch}</div>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      <div>
-        <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Today&apos;s pulse</div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="flex gap-2">
-            <div className="text-xs">
-              <div className="text-muted-foreground">First punch</div>
-              <div className="font-medium text-foreground">{firstPunch}</div>
+      {/* Today's pulse - using our card design */}
+      <div className="relative overflow-hidden rounded-2xl p-4 text-white" style={{ backgroundColor: 'var(--primary)' }}>
+        <Doodle name="doodle-circles" />
+        <div className="relative z-10">
+          <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-white/70">Today&apos;s pulse</div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="flex gap-2">
+              <div className="text-xs">
+                <div className="text-white/70">First punch</div>
+                <div className="font-medium text-white">{firstPunch}</div>
+              </div>
             </div>
-          </div>
-          <div className="flex gap-2">
-            <div className="text-xs">
-              <div className="text-muted-foreground">Last punch</div>
-              <div className="font-medium text-foreground">{lastPunch}</div>
+            <div className="flex gap-2">
+              <div className="text-xs">
+                <div className="text-white/70">Last punch</div>
+                <div className="font-medium text-white">{lastPunch}</div>
+              </div>
             </div>
-          </div>
-          <div className="flex gap-2">
-            <div className="text-xs">
-              <div className="text-muted-foreground">Late by</div>
-              <div className="font-medium text-foreground">{lateness} min</div>
+            <div className="flex gap-2">
+              <div className="text-xs">
+                <div className="text-white/70">Lateness</div>
+                <div className="font-medium text-white">{lateness} min</div>
+              </div>
             </div>
-          </div>
-          <div className="flex gap-2">
-            <div className="text-xs">
-              <div className="text-muted-foreground">Overtime</div>
-              <div className="font-medium text-foreground">{overtime} min</div>
+            <div className="flex gap-2">
+              <div className="text-xs">
+                <div className="text-white/70">Overtime</div>
+                <div className="font-medium text-white">{overtime} min</div>
+              </div>
             </div>
           </div>
         </div>
       </div>
-
-      <div className="text-xs text-muted-foreground">Status: <span className="font-medium text-foreground">{status}</span></div>
-
-      {attendanceFlags.length ? (
-        <div>
-          <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Attendance checks</div>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            {attendanceFlags.map((entry) => (
-              <div key={entry.key} className="rounded-xl border border-border/70 bg-muted/30 px-3 py-2 text-xs">
-                <div className="text-muted-foreground">{entry.label}</div>
-                <div className="font-medium text-foreground">{entry.value}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
-
-      {compactExtraEntries.length ? (
-        <div>
-          <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Extra details</div>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {compactExtraEntries.map(([key, value]) => (
-              <div key={key} className="flex gap-2 text-xs">
-                <div className="text-muted-foreground min-w-[90px]">{prettifyLabel(key)}</div>
-                <div className="font-medium text-foreground truncate" title={stringifyValue(value)}>
-                  {stringifyValue(value)}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
     </div>
   )
 }
@@ -1408,16 +1452,22 @@ export function AttendanceActivityView({ section }: { section: string }) {
           from_date: historyFilters.from_date || undefined,
           to_date: historyFilters.to_date || undefined,
         })
+        setDailySummaryRows([])
+        setRows(result.rows)
+        setCorrectionRequests([])
+        setSingleRecord(null)
+        return
+      }
+
+      if (activeSection === "corrections") {
         const correctionsResult = await listMyAttendanceCorrectionRequests(token, {
           page: 1,
           limit: 20,
-          date_from: historyFilters.from_date || undefined,
-          date_to: historyFilters.to_date || undefined,
         }).catch(() => ({ rows: [] }))
         setDailySummaryRows([])
-        setRows(result.rows)
-        setCorrectionRequests(correctionsResult.rows)
+        setRows([])
         setSingleRecord(null)
+        setCorrectionRequests(correctionsResult.rows)
         return
       }
 
@@ -1634,16 +1684,19 @@ export function AttendanceActivityView({ section }: { section: string }) {
 
   return (
     <div className="space-y-4">
+      <DoodleSprites />
       <div>
         <div className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
           {config.groupTitle}
         </div>
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>
-            <h1 className="text-xl font-semibold tracking-tight text-foreground">{config.title}</h1>
+            {config.groupTitle !== "My Attendance" && (
+              <h1 className="text-xl font-semibold tracking-tight text-foreground">{config.title}</h1>
+            )}
           </div>
           <div className="flex items-center gap-1">
-            {activeSection === "attendance-history" && (
+            {activeSection === "corrections" && (
               <button
                 className="inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-border px-2.5 text-xs font-medium text-foreground transition hover:bg-muted"
                 type="button"
@@ -1655,14 +1708,11 @@ export function AttendanceActivityView({ section }: { section: string }) {
             )}
             {activeSection === "attendance-history" && (
               <Popover>
-                <PopoverTrigger>
-                  <button
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border px-2 text-xs font-medium text-foreground transition hover:bg-muted"
-                    type="button"
-                    aria-label="Filter by date"
-                  >
-                    <Filter className="size-3.5 text-primary" />
-                  </button>
+                <PopoverTrigger
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border px-2 text-xs font-medium text-foreground transition hover:bg-muted"
+                  aria-label="Filter by date"
+                >
+                  <Filter className="size-3.5 text-primary" />
                 </PopoverTrigger>
                 <PopoverContent className="w-72 p-4" align="end">
                   <div className="space-y-3">
@@ -1716,6 +1766,136 @@ export function AttendanceActivityView({ section }: { section: string }) {
         ) : null}
 
         {!loading && activeSection === "today" ? <TodayOverview record={singleRecord} /> : null}
+
+        {!loading && activeSection === "punch-history" ? (
+          <div className="space-y-3">
+            {rows.map((row, index) => (
+              <div key={String(row.id ?? index)} className="relative overflow-hidden rounded-2xl p-4 text-white" style={{ backgroundColor: 'var(--primary)' }}>
+                <Doodle name="doodle-circles" />
+                <div className="relative z-10">
+                  <p className="font-medium">{readStringFromRow(row, ["punch_time", "time", "punch_at", "created_at"]) || "Punch Event"}</p>
+                  <p className="text-white/80">Type: {readStringFromRow(row, ["punch_type", "type", "direction", "in_out"]) || "—"}</p>
+                  <p className="text-white/80">Time: {formatOptionalValue(readFirstValue(row, ["punch_time", "time"]), "—")}</p>
+                  {readStringFromRow(row, ["device_name", "location", "branch_name"]) && (
+                    <p className="text-white/60 text-xs">Location: {readStringFromRow(row, ["device_name", "location", "branch_name"])}</p>
+                  )}
+                </div>
+              </div>
+            ))}
+            {rows.length === 0 && <p className="text-sm text-muted-foreground">No punch history found.</p>}
+          </div>
+        ) : null}
+
+        {!loading && activeSection === "attendance-history" ? (
+          <div className="space-y-3">
+            {rows.map((row, index) => (
+              <div key={String(row.id ?? index)} className="relative overflow-hidden rounded-2xl p-4 text-white" style={{ backgroundColor: 'var(--primary)' }}>
+                <Doodle name="doodle-circles" />
+                <div className="relative z-10">
+                  <p className="font-medium">{readStringFromRow(row, ["attendance_date", "date", "attendanceDate"]) || "Attendance Record"}</p>
+                  <p className="text-white/80">Status: {readStringFromRow(row, ["attendance_status", "status", "attendanceStatus"]) || "—"}</p>
+                  <p className="text-white/80">Check In: {formatOptionalValue(readFirstValue(row, ["check_in_at", "checkInAt", "first_punch"]), "—")}</p>
+                  <p className="text-white/80">Check Out: {formatOptionalValue(readFirstValue(row, ["check_out_at", "checkOutAt", "last_punch"]), "—")}</p>
+                  {readStringFromRow(row, ["work_minutes", "worked_minutes", "workMinutes"]) && (
+                    <p className="text-white/60 text-xs">Worked: {readStringFromRow(row, ["work_minutes", "worked_minutes", "workMinutes"])} min</p>
+                  )}
+                  {readStringFromRow(row, ["remarks"]) && <p className="text-white/60 text-xs">Remarks: {readStringFromRow(row, ["remarks"])}</p>}
+                </div>
+              </div>
+            ))}
+            {rows.length === 0 && <p className="text-sm text-muted-foreground">No attendance history found.</p>}
+          </div>
+        ) : null}
+
+        {!loading && activeSection === "schedule-preview" ? (
+          <div className="space-y-3">
+            {rows.map((row, index) => {
+              const shift = readNestedRecord(row, ["shift"])
+              const timetable = readNestedRecord(row, ["timetable"])
+              const isOffDay = isOffDayValue(row.is_off_day)
+              const timeRange = !shift || isOffDay
+                ? "—"
+                : `${formatOptionalValue(readWithFallback(shift, ["start_time"], row), "—")} - ${formatOptionalValue(readWithFallback(shift, ["end_time"], row), "—")}`
+              const expectedWork = isOffDay
+                ? "—"
+                : formatMinutesLabel(readWithFallback(shift, ["expected_work_minutes"], row))
+
+              return (
+                <div key={String(row.id ?? row.date ?? index)} className="relative overflow-hidden rounded-2xl p-4 text-white" style={{ backgroundColor: 'var(--primary)' }}>
+                  <Doodle name="doodle-circles" />
+                  <div className="relative z-10">
+                    <p className="font-medium">{formatOptionalValue(readFirstValue(row, ["date", "attendance_date"]), "—") || "Day"}</p>
+                    <p className="text-white/80">Shift: {isOffDay ? "Off Day" : readStringFromRow(shift ?? row, ["name", "shift_name", "code", "schedule_name"]) || "—"}</p>
+                    <p className="text-white/80">Time: {timeRange}</p>
+                    <p className="text-white/80">Expected Work: {expectedWork}</p>
+                    {timetable ? (
+                      <p className="text-white/60 text-xs">Timetable: {readStringFromRow(timetable, ["name", "code"]) || "—"}</p>
+                    ) : null}
+                  </div>
+                </div>
+              )
+            })}
+            {rows.length === 0 && <p className="text-sm text-muted-foreground">No schedule preview found.</p>}
+          </div>
+        ) : null}
+
+        {!loading && activeSection === "corrections" ? (
+          <div className="space-y-3">
+            {correctionRequests.map((row, index) => {
+              const id = readFirstValue(row, ["id"]) ?? `${index}`
+              const status = (readFirstValue(row, ["status"]) ?? "draft").toLowerCase()
+              const tone = statusTone(status)
+              const canSubmit = status === "draft"
+              const canCancel = ["draft", "submitted"].includes(status)
+              return (
+                <div key={String(id)} className="relative overflow-hidden rounded-2xl p-4 text-white" style={{ backgroundColor: 'var(--primary)' }}>
+                  <Doodle name="doodle-circles" />
+                  <div className="relative z-10">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                      <div className="space-y-1 text-sm">
+                        <div className="font-medium">
+                          {prettifyLabel(readFirstValue(row, ["request_type"]) ?? "attendance correction")}
+                        </div>
+                        <div className="text-white/80">
+                          {formatOptionalValue(readFirstValue(row, ["attendance_date"]), "Date not provided")}
+                        </div>
+                        <div className="text-white/80">
+                          {formatOptionalValue(readFirstValue(row, ["reason"]), "No reason provided")}
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-medium uppercase tracking-wide ${tone.badge}`}>
+                          {status}
+                        </span>
+                        {canSubmit ? (
+                          <button
+                            className="inline-flex h-8 items-center justify-center rounded-lg border border-white/30 px-3 text-xs font-medium text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                            type="button"
+                            disabled={correctionBusy}
+                            onClick={() => void updateCorrectionRequestStatus(id, "submit")}
+                          >
+                            Submit
+                          </button>
+                        ) : null}
+                        {canCancel ? (
+                          <button
+                            className="inline-flex h-8 items-center justify-center rounded-lg border border-white/30 px-3 text-xs font-medium text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                            type="button"
+                            disabled={correctionBusy}
+                            onClick={() => void updateCorrectionRequestStatus(id, "cancel")}
+                          >
+                            Cancel
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+            {correctionRequests.length === 0 && <p className="text-sm text-muted-foreground">No correction requests found.</p>}
+          </div>
+        ) : null}
 
         {activeSection === "daily-summaries" ? (
           <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
@@ -1923,77 +2103,16 @@ export function AttendanceActivityView({ section }: { section: string }) {
 
         {((activeSection === "daily-summaries" || !loading) &&
           activeSection !== "today" &&
+          activeSection !== "punch-history" &&
+          activeSection !== "attendance-history" &&
+          activeSection !== "schedule-preview" &&
           activeSection !== "recalculation-jobs") ? (
           <div className="mt-6">
             <TableBlock rows={rows} section={activeSection} />
           </div>
         ) : null}
 
-        {!loading && activeSection === "attendance-history" ? (
-          <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-            <div className="flex flex-col gap-1">
-              <h2 className="text-base font-semibold text-slate-900">Correction Requests</h2>
-              <p className="text-xs text-slate-500">Create, submit, and track attendance corrections for missing or incorrect records.</p>
-            </div>
-            <div className="mt-4 space-y-3">
-              {correctionRequests.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-slate-300 bg-white/80 px-4 py-5 text-sm text-slate-500">
-                  No attendance correction requests have been created yet.
-                </div>
-              ) : (
-                correctionRequests.map((row, index) => {
-                  const id = readFirstValue(row, ["id"]) ?? `${index}`
-                  const status = (readFirstValue(row, ["status"]) ?? "draft").toLowerCase()
-                  const tone = statusTone(status)
-                  const canSubmit = status === "draft"
-                  const canCancel = ["draft", "submitted"].includes(status)
-                  return (
-                    <div key={String(id)} className="rounded-xl border border-slate-200 bg-white p-4">
-                      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                        <div className="space-y-1 text-sm">
-                          <div className="font-medium text-slate-900">
-                            {prettifyLabel(readFirstValue(row, ["request_type"]) ?? "attendance correction")}
-                          </div>
-                          <div className="text-slate-500">
-                            {formatOptionalValue(readFirstValue(row, ["attendance_date"]), "Date not provided")}
-                          </div>
-                          <div className="text-slate-600">
-                            {formatOptionalValue(readFirstValue(row, ["reason"]), "No reason provided")}
-                          </div>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-medium uppercase tracking-wide ${tone.badge}`}>
-                            {status}
-                          </span>
-                          {canSubmit ? (
-                            <button
-                              className="inline-flex h-8 items-center justify-center rounded-lg border border-slate-300 px-3 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                              type="button"
-                              disabled={correctionBusy}
-                              onClick={() => void updateCorrectionRequestStatus(id, "submit")}
-                            >
-                              Submit
-                            </button>
-                          ) : null}
-                          {canCancel ? (
-                            <button
-                              className="inline-flex h-8 items-center justify-center rounded-lg border border-rose-200 px-3 text-xs font-medium text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
-                              type="button"
-                              disabled={correctionBusy}
-                              onClick={() => void updateCorrectionRequestStatus(id, "cancel")}
-                            >
-                              Cancel
-                            </button>
-                          ) : null}
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })
-              )}
-            </div>
-          </div>
-        ) : null}
+
       </div>
 
       <Dialog open={correctionDialogOpen} onOpenChange={setCorrectionDialogOpen}>
@@ -2059,7 +2178,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
             </label>
             <label className="grid gap-1.5 text-sm">
               <span className="font-medium text-slate-700">Reason</span>
-              <textarea
+              <Textarea
                 className="min-h-28 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
                 value={correctionForm.reason}
                 onChange={(event) => setCorrectionForm((current) => ({ ...current, reason: event.target.value }))}

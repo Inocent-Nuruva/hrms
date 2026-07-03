@@ -4,7 +4,9 @@ import * as React from "react"
 import { KeyRound, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react"
 import { SearchToggleField } from "@/components/common/search-toggle-field"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
+import { Textarea } from "@/components/ui/textarea"
 import { countries as countryCodes } from "country-flag-icons"
+import { useDebouncedValue } from "@/hooks/use-debounced-value"
 
 import {
   createBranch,
@@ -225,6 +227,7 @@ export function BranchesView() {
   const [accessUserQuery, setAccessUserQuery] = React.useState("")
   const [accessPickerOpen, setAccessPickerOpen] = React.useState(false)
   const [pendingDelete, setPendingDelete] = React.useState<AdminRecord | null>(null)
+  const debouncedSearch = useDebouncedValue(query.search, 350)
 
   const cityOptions = React.useMemo(() => {
     const selectedCountry = form.country.trim().toLowerCase()
@@ -244,7 +247,16 @@ export function BranchesView() {
     return Array.from(new Set([...knownCities, ...existingBranchCities]))
   }, [form.country, rows])
 
-  const fetchBranches = React.useCallback(async () => {
+  const normalizedQuery = React.useMemo(
+    () => ({
+      ...query,
+      search: debouncedSearch,
+      status: query.status || undefined,
+    }),
+    [debouncedSearch, query]
+  )
+
+  const fetchBranches = React.useCallback(async (signal?: AbortSignal) => {
     const token = readStoredToken()
     if (!token) {
       setError("Authentication required. Please log in again.")
@@ -255,26 +267,39 @@ export function BranchesView() {
     setLoading(true)
     setError(null)
     try {
-      const result = await listBranches(token, {
-        ...query,
-        page,
-        status: query.status || undefined,
-      })
+      const result = await listBranches(
+        token,
+        {
+          ...normalizedQuery,
+          page,
+        },
+        {
+          signal,
+          cacheTtlMs: 20_000,
+        }
+      )
       setRows(result.rows)
       setTotalPages(result.totalPages)
       setTotal(result.total)
     } catch (errorObject) {
+      if (signal?.aborted) {
+        return
+      }
       setRows([])
       setTotalPages(null)
       setTotal(null)
       setError(errorObject instanceof Error ? errorObject.message : "Failed to load branches.")
     } finally {
-      setLoading(false)
+      if (!signal?.aborted) {
+        setLoading(false)
+      }
     }
-  }, [page, query])
+  }, [normalizedQuery, page])
 
   React.useEffect(() => {
-    void fetchBranches()
+    const controller = new AbortController()
+    void fetchBranches(controller.signal)
+    return () => controller.abort()
   }, [fetchBranches])
 
   const canGoPrevious = page > 1 && !loading
@@ -679,7 +704,7 @@ export function BranchesView() {
               </label>
               <label className="grid gap-1 md:col-span-2">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Address</span>
-                <textarea className="min-h-20 rounded-md border border-slate-300 px-3 py-2 text-sm" value={form.address} onChange={(event) => setForm((prev) => ({ ...prev, address: event.target.value }))} />
+                <Textarea className="min-h-20 rounded-md border border-slate-300 px-3 py-2 text-sm" value={form.address} onChange={(event) => setForm((prev) => ({ ...prev, address: event.target.value }))} />
               </label>
               <label className="grid gap-1">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Status</span>

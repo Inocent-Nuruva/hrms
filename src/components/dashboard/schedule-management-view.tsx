@@ -23,6 +23,7 @@ import {
 import { TableScrollContainer } from "@/components/common/table-scroll-container"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Textarea } from "@/components/ui/textarea"
 import {
   createShiftResource,
   createTimetableResource,
@@ -1577,7 +1578,7 @@ function FormField({
 
   if (field.type === "textarea") {
     return (
-      <textarea
+      <Textarea
         className="min-h-24 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
         placeholder={field.placeholder}
         value={value}

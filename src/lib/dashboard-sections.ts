@@ -12,8 +12,10 @@ export const employeeSectionTabGroups: DashboardSectionTabGroup[] = [
   {
     items: [
       { title: "All Employees", url: "/dashboard/employees/all" },
-      { title: "Offboarding", url: "/dashboard/employees/offboarding" },
+      { title: "Registration", url: "/dashboard/employees/registration" },
+      { title: "Invite", url: "/dashboard/employees/invite" },
       { title: "Onboarding", url: "/dashboard/employees/onboarding" },
+      { title: "Offboarding", url: "/dashboard/employees/offboarding" },
     ],
   },
 ]
@@ -70,6 +72,18 @@ export const employeeAttendanceSectionTabGroups: DashboardSectionTabGroup[] = [
       { title: "Punch History", url: "/dashboard/attendance/punch-history" },
       { title: "Attendance History", url: "/dashboard/attendance/attendance-history" },
       { title: "Schedule Preview", url: "/dashboard/attendance/schedule-preview" },
+      { title: "Correction Requests", url: "/dashboard/attendance/corrections" },
+    ],
+  },
+]
+
+export const selfLeaveSectionTabGroups: DashboardSectionTabGroup[] = [
+  {
+    items: [
+      { title: "Requests", url: "/dashboard/me/leave/requests" },
+      { title: "Balances", url: "/dashboard/me/leave/balances" },
+      { title: "Holidays", url: "/dashboard/me/leave/holidays" },
+      { title: "Policies", url: "/dashboard/me/leave/policies" },
     ],
   },
 ]

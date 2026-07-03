@@ -1,4 +1,10 @@
 import { redirect } from "next/navigation"
+import { EmployeeInviteView } from "@/components/dashboard/employee-invite-view"
+import HrAnalyticsDashboard from "@/components/dashboard/hr-analytics-dashboard"
+import {
+  EmployeePromotionView,
+  EmployeePayrollView,
+} from "@/components/dashboard/employee-self-service-view"
 
 const ALLOWED_VIEWS = new Set([
   "promotion",
@@ -21,6 +27,24 @@ export default async function OperationsViewPage({
 
   if (!ALLOWED_VIEWS.has(normalized)) {
     redirect("/dashboard/operations/promotion")
+  }
+
+  if (normalized === "promotion") {
+    // For "My Promotion" (employee) and operations promotion we show the self-service promotion view for now
+    return <EmployeePromotionView />
+  }
+
+  if (normalized === "payroll") {
+    // My Payroll - bright background, under development with animated icons
+    return <EmployeePayrollView />
+  }
+
+  if (normalized === "recruitment") {
+    return <EmployeeInviteView />
+  }
+
+  if (normalized === "reports") {
+    return <HrAnalyticsDashboard />
   }
 
   return null

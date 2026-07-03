@@ -1,10 +1,14 @@
 import { redirect } from "next/navigation"
 
 import { EmployeesListView } from "@/components/dashboard/employees-list-view"
+import { EmployeeInviteView } from "@/components/dashboard/employee-invite-view"
+import { EmployeeRegistrationView } from "@/components/dashboard/employee-registration-view"
 import { OnboardingView } from "@/components/dashboard/onboarding-view"
 import { OffboardingView } from "@/components/dashboard/offboarding-view"
 const ALLOWED_VIEWS = new Set([
   "all",
+  "registration",
+  "invite",
   "offboarding",
   "onboarding",
   "attendance",
@@ -41,6 +45,14 @@ export default async function EmployeesViewPage({
 
   if (normalized === "all") {
     return <EmployeesListView />
+  }
+
+  if (normalized === "registration") {
+    return <EmployeeRegistrationView />
+  }
+
+  if (normalized === "invite") {
+    return <EmployeeInviteView />
   }
 
   if (normalized === "onboarding") {

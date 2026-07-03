@@ -2,11 +2,12 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { motion, useReducedMotion, AnimatePresence } from "framer-motion";
-import { useTheme } from "next-themes";
 import { Download, ChevronDown } from "lucide-react";
 import { Resizable } from "react-resizable";
 import "react-resizable/css/styles.css";
 import React from "react";
+import { useTheme } from "@/components/theme-provider";
+import { useRenderDiagnostics } from "@/hooks/use-render-diagnostics";
 
 export interface Employee {
   id: string;
@@ -71,159 +72,6 @@ interface ResizableTableProps<T = any> {
   storageKey?: string;
 }
 
-const defaultEmployees: Employee[] = [
-  {
-    id: "1",
-    name: "Sarah Chen",
-    email: "sarah.chen@company.com",
-    department: "Engineering",
-    position: "Senior Software Engineer",
-    salary: 125000,
-    hireDate: "2022-03-15",
-    status: "active"
-  },
-  {
-    id: "2",
-    name: "Michael Rodriguez",
-    email: "michael.rodriguez@company.com",
-    department: "Marketing",
-    position: "Marketing Manager",
-    salary: 95000,
-    hireDate: "2021-08-22",
-    status: "active"
-  },
-  {
-    id: "3",
-    name: "Emily Watson",
-    email: "emily.watson@company.com",
-    department: "Design",
-    position: "UX Designer",
-    salary: 88000,
-    hireDate: "2023-01-10",
-    status: "active"
-  },
-  {
-    id: "4",
-    name: "David Kim",
-    email: "david.kim@company.com",
-    department: "Engineering",
-    position: "Tech Lead",
-    salary: 145000,
-    hireDate: "2020-11-05",
-    status: "active"
-  },
-  {
-    id: "5",
-    name: "Lisa Anderson",
-    email: "lisa.anderson@company.com",
-    department: "HR",
-    position: "HR Director",
-    salary: 110000,
-    hireDate: "2019-06-12",
-    status: "on-leave"
-  },
-  {
-    id: "6",
-    name: "James Mitchell",
-    email: "james.mitchell@company.com",
-    department: "Sales",
-    position: "Sales Director",
-    salary: 130000,
-    hireDate: "2021-02-28",
-    status: "active"
-  },
-  {
-    id: "7",
-    name: "Jennifer Lee",
-    email: "jennifer.lee@company.com",
-    department: "Finance",
-    position: "Financial Analyst",
-    salary: 75000,
-    hireDate: "2023-04-18",
-    status: "active"
-  },
-  {
-    id: "8",
-    name: "Robert Chang",
-    email: "robert.chang@company.com",
-    department: "Engineering",
-    position: "DevOps Engineer",
-    salary: 105000,
-    hireDate: "2022-09-14",
-    status: "active"
-  },
-  {
-    id: "9",
-    name: "Amanda Pierce",
-    email: "amanda.pierce@company.com",
-    department: "Marketing",
-    position: "Content Manager",
-    salary: 72000,
-    hireDate: "2023-07-03",
-    status: "inactive"
-  },
-  {
-    id: "10",
-    name: "Christopher Hayes",
-    email: "chris.hayes@company.com",
-    department: "Operations",
-    position: "Operations Manager",
-    salary: 98000,
-    hireDate: "2021-12-01",
-    status: "active"
-  },
-  {
-    id: "11",
-    name: "Victoria Moore",
-    email: "victoria.moore@company.com",
-    department: "Design",
-    position: "Product Designer",
-    salary: 92000,
-    hireDate: "2022-05-20",
-    status: "active"
-  },
-  {
-    id: "12",
-    name: "Nicholas Brown",
-    email: "nicholas.brown@company.com",
-    department: "Engineering",
-    position: "Frontend Developer",
-    salary: 85000,
-    hireDate: "2023-03-08",
-    status: "active"
-  },
-  {
-    id: "13",
-    name: "Rebecca Sullivan",
-    email: "rebecca.sullivan@company.com",
-    department: "Sales",
-    position: "Account Executive",
-    salary: 78000,
-    hireDate: "2022-11-15",
-    status: "active"
-  },
-  {
-    id: "14",
-    name: "Thomas Wright",
-    email: "thomas.wright@company.com",
-    department: "Finance",
-    position: "Senior Financial Analyst",
-    salary: 95000,
-    hireDate: "2021-04-30",
-    status: "active"
-  },
-  {
-    id: "15",
-    name: "Maria Garcia",
-    email: "maria.garcia@company.com",
-    department: "HR",
-    position: "HR Specialist",
-    salary: 68000,
-    hireDate: "2023-08-12",
-    status: "active"
-  }
-];
-
 type SortOrder = "asc" | "desc";
 
 export function ResizableTable<T = any>({
@@ -254,8 +102,14 @@ export function ResizableTable<T = any>({
   const [containerWidth, setContainerWidth] = useState(0);
 
   const shouldReduceMotion = useReducedMotion();
-  const { theme } = useTheme();
-  const isDark = theme === "dark";
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === "dark";
+
+  useRenderDiagnostics("ResizableTable", {
+    title,
+    rows: Array.isArray(data) ? data.length : Array.isArray(employees) ? employees.length : 0,
+    loading,
+  });
 
   // Normalize data
   // IMPORTANT: Always respect explicitly passed data (even empty array) so real pages
@@ -305,6 +159,10 @@ export function ResizableTable<T = any>({
       return tableColumns;
     }
 
+    if (columns && columns.length > 0) {
+      return tableColumns;
+    }
+
     return tableColumns.filter((col) => {
       if (col.key === "actions") {
         return true;
@@ -315,12 +173,16 @@ export function ResizableTable<T = any>({
         return isMeaningfulTableValue(value);
       });
     });
-  }, [tableColumns, tableData]);
+  }, [columns, tableColumns, tableData]);
 
   // Column keys for widths (optional checkbox + data columns)
-  const allColumnKeys = showCheckboxes
-    ? ["checkbox", ...visibleTableColumns.map((c) => c.key)]
-    : visibleTableColumns.map((c) => c.key);
+  const allColumnKeys = useMemo(
+    () =>
+      showCheckboxes
+        ? ["checkbox", ...visibleTableColumns.map((c) => c.key)]
+        : visibleTableColumns.map((c) => c.key),
+    [showCheckboxes, visibleTableColumns]
+  );
 
   // Column widths state - initialize from columns
   const effectiveStorageKey = storageKey || (title ? `resizable-table:${title.toLowerCase().replace(/\s+/g, '-')}` : 'resizable-table:default');
@@ -498,6 +360,13 @@ export function ResizableTable<T = any>({
   }, [sortedData, currentPage]);
 
   const totalPages = Math.ceil(sortedData.length / ITEMS_PER_PAGE);
+  const loadingSkeletonRows = useMemo(
+    () =>
+      Array.from({
+        length: Math.min(ITEMS_PER_PAGE, 6),
+      }),
+    [ITEMS_PER_PAGE]
+  );
 
   const getStatusColor = (status: string) => {
     const normalized = String(status || "").toLowerCase().replace(/\s+/g, "-");
@@ -882,8 +751,23 @@ export function ResizableTable<T = any>({
                 })}
 
                 {loading && tableData.length === 0 ? (
-                  <div className="py-3 px-2 text-xs text-muted-foreground/70 border-b border-border">
-                    Loading...
+                  <div className="border-b border-border">
+                    {loadingSkeletonRows.map((_, index) => (
+                      <div
+                        key={`skeleton-row-${index}`}
+                        className="flex w-full border-b border-border/60 px-1.5 py-2 last:border-b-0"
+                      >
+                        {allColumnKeys.map((columnKey) => (
+                          <div
+                            key={`${columnKey}-${index}`}
+                            className="flex-shrink-0 px-1.5"
+                            style={{ width: columnKey === "checkbox" ? getColumnWidth("checkbox") || 36 : getColumnWidth(columnKey) }}
+                          >
+                            <div className="h-4 animate-pulse rounded bg-muted/70" />
+                          </div>
+                        ))}
+                      </div>
+                    ))}
                   </div>
                 ) : paginatedData.length === 0 ? (
                   <div className="py-4 text-center text-xs text-muted-foreground border-b border-border">

@@ -26,6 +26,7 @@ const ALLOWED_VIEWS = new Set([
   "punch-history",
   "attendance-history",
   "schedule-preview",
+  "corrections",
   "shifts",
   "shift-breaks",
   "shift-assignments",
@@ -38,6 +39,14 @@ const ALLOWED_VIEWS = new Set([
   "timetable-rotations",
   "timetable-rotation-rules",
   "employee-timetables",
+])
+
+const MY_ATTENDANCE_VIEWS = new Set([
+  "today",
+  "punch-history",
+  "attendance-history",
+  "schedule-preview",
+  "corrections",
 ])
 
 const ACCESS_CONTROL_ATTENDANCE_VIEWS = new Set([
@@ -71,16 +80,19 @@ const ACTIVITY_ATTENDANCE_VIEWS = new Set([
   "punch-history",
   "attendance-history",
   "schedule-preview",
+  "corrections",
 ])
 
 interface AttendanceViewPageProps {
   params: Promise<{
     view: string
   }>
+  searchParams?: Promise<{ tab?: string }>
 }
 
-export default async function AttendanceViewPage({ params }: AttendanceViewPageProps) {
+export default async function AttendanceViewPage({ params, searchParams }: AttendanceViewPageProps) {
   const { view } = await params
+  const sp = await searchParams || {}
   const normalized = view?.toLowerCase()
 
   if (ACCESS_CONTROL_ATTENDANCE_VIEWS.has(normalized)) {
@@ -96,7 +108,8 @@ export default async function AttendanceViewPage({ params }: AttendanceViewPageP
   }
 
   if (ACTIVITY_ATTENDANCE_VIEWS.has(normalized)) {
-    return <AttendanceActivityClient section={normalized} />
+    const tab = sp.tab || normalized;
+    return <AttendanceActivityClient section={tab} />
   }
 
   return <AttendanceManagementClient section={normalized} />

@@ -28,6 +28,7 @@ import {
   assignRoleToUser,
   changeCurrentUserPassword,
   getCurrentAdmin,
+  listEmployees,
   listResource,
   listUsers,
   patchResource,
@@ -50,6 +51,12 @@ const DEFAULT_USERS_QUERY: Required<UsersQueryParams> = {
   sortBy: "created_at",
   sortOrder: "DESC",
   search: "",
+}
+const DEFAULT_EMPLOYEE_PREFETCH_QUERY = {
+  page: 1,
+  limit: 20,
+  sortBy: "created_at",
+  sortOrder: "DESC" as const,
 }
 const RESOURCE_ROUTE_MAP: Record<AdminResourceKey, string> = {
   users: "/dashboard/employees/all",
@@ -98,6 +105,7 @@ const EMPLOYEE_ALLOWED_ATTENDANCE_ROUTES = new Set([
   "/dashboard/attendance/punch-history",
   "/dashboard/attendance/attendance-history",
   "/dashboard/attendance/schedule-preview",
+  "/dashboard/attendance/corrections",
 ])
 
 const EMPLOYEE_RESTRICTED_ATTENDANCE_PREFIXES = [
@@ -906,6 +914,30 @@ export default function AdminDashboardView({
 
   const identityIsAdmin = roleLabels.some((role) => ADMIN_ROLE_KEYS.has(role))
   const accessMode = identityIsAdmin ? "admin" : "employee"
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") {
+      return
+    }
+
+    if (accessMode !== "admin" || !token) {
+      return
+    }
+
+    const prefetchEmployees = () => {
+      void listEmployees(token, DEFAULT_EMPLOYEE_PREFETCH_QUERY, {
+        cacheTtlMs: 20_000,
+      }).catch(() => undefined)
+    }
+
+    if (typeof window.requestIdleCallback === "function") {
+      const idleId = window.requestIdleCallback(prefetchEmployees, { timeout: 2500 })
+      return () => window.cancelIdleCallback(idleId)
+    }
+
+    const timeoutId = globalThis.setTimeout(prefetchEmployees, 600)
+    return () => globalThis.clearTimeout(timeoutId)
+  }, [accessMode, token])
 
   React.useEffect(() => {
     if (!identityReady) {

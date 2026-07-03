@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
+import { Textarea } from "@/components/ui/textarea"
 import {
   createEmployeeDocument,
   createEmployeeSectionItem,
@@ -630,7 +631,7 @@ function DocumentFileInput({
           <p><span className="font-semibold">Size:</span> {typeof fileMeta.file_size === "number" ? formatFileSize(fileMeta.file_size) : "-"}</p>
         </div>
       ) : value.trim() ? (
-        <textarea
+        <Textarea
           value={value}
           onChange={(event) => onChange(event.target.value)}
           className="min-h-20 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
@@ -841,7 +842,7 @@ function renderEntryInput({
 
   if (entry.key === "responsibilities_description" || entry.key === "notes") {
     return (
-      <textarea
+      <Textarea
         value={value}
         onChange={(event) => onChange(event.target.value)}
         className="min-h-20 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
@@ -1753,7 +1754,7 @@ export function EmployeeProfilePage({
             </label>
             <label className="grid gap-1 md:col-span-2">
               <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Notes</span>
-              <textarea
+              <Textarea
                 value={statusForm.notes}
                 onChange={(event) => setStatusForm((prev) => ({ ...prev, notes: event.target.value }))}
                 className="min-h-24 rounded-md border border-slate-300 px-3 py-2 text-sm"

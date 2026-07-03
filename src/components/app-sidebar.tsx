@@ -15,7 +15,6 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar"
-import { CommandIcon } from "lucide-react"
 import { UsersRound } from "@/components/animate-ui/icons/users-round"
 import { Route } from "@/components/animate-ui/icons/route"
 import { Sparkles } from "@/components/animate-ui/icons/sparkles"
@@ -34,6 +33,7 @@ const IPromotion = <Sparkles size={48} animation="path-loop" />
 const IPayroll = <ChartBar size={48} animation="path-loop" />
 const IOffboarding = <CircleX size={48} animation="path-loop" />
 const IAttendance = <ChartColumn size={48} animation="path-loop" />
+const ICorrections = <CircleX size={48} animation="path-loop" />
 const IDepartments = <Kanban size={48} animation="default" />
 const ISettings = <Settings size={48} animation="path-loop" />
 const IHelp = <MessageCircleQuestion size={48} animation="path-loop" />
@@ -202,6 +202,7 @@ const employeeData: SidebarData = {
         "/dashboard/attendance/punch-history",
         "/dashboard/attendance/attendance-history",
         "/dashboard/attendance/schedule-preview",
+        "/dashboard/attendance/corrections",
       ],
     },
     {
@@ -257,6 +258,7 @@ const employeeSearchIndex = [
   { title: "My Attendance / Punch History", url: "/dashboard/attendance/punch-history", section: "Employee Attendance", keywords: ["attendance", "punch history"] },
   { title: "My Attendance / Attendance History", url: "/dashboard/attendance/attendance-history", section: "Employee Attendance", keywords: ["attendance", "history"] },
   { title: "My Attendance / Schedule Preview", url: "/dashboard/attendance/schedule-preview", section: "Employee Attendance", keywords: ["attendance", "schedule preview"] },
+  { title: "My Attendance / Correction Requests", url: "/dashboard/attendance/corrections", section: "Employee Attendance", keywords: ["attendance", "correction", "request"] },
   { title: "My Leave", url: "/dashboard/me/leave/balances", section: "Leave", keywords: ["leave", "balance", "quota"] },
   { title: "My Payroll", url: "/dashboard/operations/payroll", section: "Operations", keywords: ["salary", "payments", "payroll"] },
   { title: "My Promotion", url: "/dashboard/operations/promotion", section: "Operations", keywords: ["career", "upgrade"] },
@@ -288,6 +290,7 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, string[]> = {
   "/dashboard/attendance/punch-history": [],
   "/dashboard/attendance/attendance-history": [],
   "/dashboard/attendance/schedule-preview": [],
+  "/dashboard/attendance/corrections": [],
   "/dashboard/employees": ["employees:read", "employees:create", "offboarding_requests:read", "offboarding_workflows:read", "onboarding_requests:read", "onboarding_workflows:read"],
   "/dashboard/employees/all": ["employees:read"],
   "/dashboard/employees/offboarding": [],
@@ -453,12 +456,11 @@ export function AppSidebar({
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
-              className="data-[slot=sidebar-menu-button]:h-auto data-[slot=sidebar-menu-button]:cursor-default data-[slot=sidebar-menu-button]:items-start data-[slot=sidebar-menu-button]:rounded-xl data-[slot=sidebar-menu-button]:p-2.5!"
+              className="data-[slot=sidebar-menu-button]:h-auto data-[slot=sidebar-menu-button]:cursor-default data-[slot=sidebar-menu-button]:items-center data-[slot=sidebar-menu-button]:rounded-xl data-[slot=sidebar-menu-button]:p-2!"
               render={<div />}
               aria-disabled="true"
             >
-              <CommandIcon className="mt-0.5 size-5! shrink-0" />
-              <span className="overflow-visible text-sm font-semibold leading-snug whitespace-normal text-clip">
+              <span className="overflow-visible text-xs font-semibold leading-tight whitespace-normal text-clip">
                 {companyName ?? (accessMode === "employee" ? "HRMS Portal" : "HRMS Admin")}
               </span>
             </SidebarMenuButton>

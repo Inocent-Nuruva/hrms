@@ -28,6 +28,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { ResizableTable } from "@/components/ui/resizable-table"
+import { Textarea } from "@/components/ui/textarea"
 
 import {
   createAttendanceResource,
@@ -1428,7 +1429,7 @@ function FieldInput({
 
   if (field.type === "json") {
     return (
-      <textarea
+      <Textarea
         className={`min-h-16 w-full rounded-md border p-2 font-mono text-xs ${
           disabled
             ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400"
@@ -1454,7 +1455,7 @@ function FieldInput({
 
   if (field.key === "allowedIpCidrs") {
     return (
-      <textarea
+      <Textarea
         className={`min-h-24 w-full rounded-md border p-3 font-mono text-sm leading-6 ${
           disabled
             ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400"
@@ -1471,7 +1472,7 @@ function FieldInput({
 
   if (field.key === "polygonCoordinates") {
     return (
-      <textarea
+      <Textarea
         className={`min-h-24 w-full rounded-md border p-3 font-mono text-sm leading-6 ${
           disabled
             ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400"

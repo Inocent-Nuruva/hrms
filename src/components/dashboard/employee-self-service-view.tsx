@@ -15,9 +15,14 @@ import {
   UsersIcon,
 } from "lucide-react"
 
+import { ChartBar } from "@/components/animate-ui/icons/chart-bar"
+import { Settings } from "@/components/animate-ui/icons/settings"
+import { Sparkles } from "@/components/animate-ui/icons/sparkles"
+
 import { LumaSpin } from "@/components/ui/luma-spin"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
+import { Textarea } from "@/components/ui/textarea"
 
 import {
   getMyAttendanceAssignments,
@@ -37,9 +42,10 @@ import {
   listLeavePolicies,
   listMyLeaveRequests,
   listLeaveTypes,
+  createMyProfileUpdateRequest,
   listMyProfileUpdateRequests,
   listMyTeamAttendance,
-  updateUserById,
+  submitMyProfileUpdateRequest,
   cancelMyLeaveRequest,
   submitMyLeaveRequest,
   type AdminRecord,
@@ -65,7 +71,7 @@ import {
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 
 type SelfLeaveTab = "requests" | "balances" | "holidays" | "policies"
-type SelfProfileTab = "summary" | "assignments" | "personal" | "records"
+type SelfProfileTab = "summary" | "assignments" | "personal" | "records" | "updates"
 
 type EmployeeSelfServiceLeaveViewProps = {
   tab: SelfLeaveTab
@@ -152,6 +158,35 @@ function formatDate(value: unknown) {
   return parsed.toLocaleDateString()
 }
 
+function formatTimeValue(value: unknown) {
+  if (typeof value !== "string" || !value.trim()) {
+    return "-"
+  }
+  const [hours, minutes] = value.split(":")
+  const parsedHours = Number(hours)
+  const parsedMinutes = Number(minutes)
+  if (!Number.isFinite(parsedHours) || !Number.isFinite(parsedMinutes)) {
+    return value
+  }
+
+  const date = new Date()
+  date.setHours(parsedHours, parsedMinutes, 0, 0)
+  return new Intl.DateTimeFormat("en-GB", {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date)
+}
+
+function formatMinutesDuration(value: unknown) {
+  const minutes = readNumberish(value)
+  if (minutes === null) {
+    return "-"
+  }
+  const hours = Math.floor(minutes / 60)
+  const remainingMinutes = minutes % 60
+  return `${hours}h ${remainingMinutes.toString().padStart(2, "0")}m`
+}
+
 function formatUnknownValue(value: unknown) {
   if (value === null || value === undefined) {
     return "-"
@@ -166,6 +201,80 @@ function formatUnknownValue(value: unknown) {
     return value.trim() || "-"
   }
   return "-"
+}
+
+function formatDayValue(value: unknown) {
+  const numeric = readNumberish(value)
+  if (numeric === null) {
+    return "-"
+  }
+  return Number.isInteger(numeric) ? String(numeric) : numeric.toFixed(1)
+}
+
+function resolveLeaveStatusMeta(value: unknown) {
+  const raw = typeof value === "string" ? value.trim() : ""
+  const normalized = raw.toLowerCase()
+
+  if (normalized === "draft") {
+    return {
+      label: "Draft",
+      badgeClassName: "border-white/30 bg-white/15 text-white",
+      helperText: "Saved as draft",
+    }
+  }
+
+  if (["pending", "submitted", "in_review", "under_review"].includes(normalized)) {
+    return {
+      label: raw || "Pending",
+      badgeClassName: "border-emerald-200/40 bg-emerald-300/20 text-white",
+      helperText: "Submitted",
+    }
+  }
+
+  if (normalized === "approved") {
+    return {
+      label: "Approved",
+      badgeClassName: "border-sky-200/40 bg-sky-300/20 text-white",
+      helperText: "Submitted",
+    }
+  }
+
+  if (normalized === "rejected") {
+    return {
+      label: "Rejected",
+      badgeClassName: "border-rose-200/40 bg-rose-300/20 text-white",
+      helperText: "Submitted",
+    }
+  }
+
+  if (normalized === "cancelled") {
+    return {
+      label: "Cancelled",
+      badgeClassName: "border-slate-200/40 bg-slate-200/20 text-white",
+      helperText: "No longer active",
+    }
+  }
+
+  return {
+    label: raw || "Pending",
+    badgeClassName: "border-white/30 bg-white/15 text-white",
+    helperText: raw ? "Submitted" : "",
+  }
+}
+
+function readLeaveTotalsValue(totals: Record<string, number> | undefined, keys: string[]) {
+  if (!totals) {
+    return null
+  }
+
+  for (const key of keys) {
+    const value = totals[key]
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value
+    }
+  }
+
+  return null
 }
 
 function formatEmploymentType(value: unknown) {
@@ -849,16 +958,27 @@ function DoodleSprites() {
   );
 }
 
-function Doodle({ name = "doodle-circles" }: { name?: string }) {
-  const doodleType = name.replace('doodle-', '');
+function Doodle({
+  name = "doodle-circles",
+  className,
+}: {
+  name?: string
+  className?: string
+}) {
+  const doodleType = name.replace("doodle-", "")
   return (
-    <svg 
-      className={`absolute inset-0 w-full h-full pointer-events-none doodle doodle-${doodleType}`} 
+    <svg
+      className={cn(
+        "pointer-events-none doodle",
+        `doodle-${doodleType}`,
+        "absolute inset-0 h-full w-full",
+        className
+      )}
       aria-hidden="true"
     >
       <use href={`#${name}`} />
     </svg>
-  );
+  )
 }
 
 function readArray(value: unknown) {
@@ -1073,6 +1193,282 @@ function formatApiErrorLines(errorObject: unknown, fallback: string) {
   return [fallback]
 }
 
+const DOODLE_VARIANTS = ["doodle-circles", "doodle-curves", "doodle-grass"] as const
+const PALE_PRIMARY = "color-mix(in srgb, var(--primary) 18%, white)"
+
+function pickDoodle(index: number) {
+  return DOODLE_VARIANTS[index % DOODLE_VARIANTS.length]
+}
+
+function SummaryPrimaryCard({
+  children,
+  doodle = "doodle-circles",
+  className = "",
+}: {
+  children: React.ReactNode
+  doodle?: (typeof DOODLE_VARIANTS)[number]
+  className?: string
+}) {
+  return (
+    <div
+      className={cn("relative overflow-hidden rounded-2xl border border-white/15 bg-primary p-4 text-primary-foreground", className)}
+    >
+      <Doodle name={doodle} className="text-white/30" />
+      <div className="relative z-10">{children}</div>
+    </div>
+  )
+}
+
+function AssignmentField({ label, value, inverse = false }: { label: string; value: string; inverse?: boolean }) {
+  return (
+    <div>
+      <p className={cn("text-[10px] font-semibold uppercase tracking-[0.16em]", inverse ? "text-white/70" : "text-muted-foreground")}>
+        {label}
+      </p>
+      <p className={cn("mt-0.5 text-sm font-medium", inverse ? "text-white" : "text-foreground")}>{value}</p>
+    </div>
+  )
+}
+
+function AssignmentStatCard({
+  label,
+  value,
+  doodle = "doodle-circles",
+}: {
+  label: string
+  value: string
+  doodle?: (typeof DOODLE_VARIANTS)[number]
+}) {
+  return (
+    <div className="relative overflow-hidden rounded-2xl px-1 py-1">
+      <Doodle name={doodle} className="text-primary/14" />
+      <div className="relative z-10">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{label}</p>
+        <p className="mt-1.5 text-[24px] font-semibold tracking-[-0.02em] text-primary">{value}</p>
+      </div>
+    </div>
+  )
+}
+
+function EmptyAssignmentCard({ message, doodle = "doodle-curves" }: { message: string; doodle?: (typeof DOODLE_VARIANTS)[number] }) {
+  return (
+    <div className="relative overflow-hidden rounded-2xl px-5 py-3.5">
+      <Doodle name={doodle} className="text-primary/14" />
+      <p className="relative z-10 text-sm text-muted-foreground">{message}</p>
+    </div>
+  )
+}
+
+function AssignmentBadge({ children, inverse = false }: { children: React.ReactNode; inverse?: boolean }) {
+  return (
+    <span
+      className={cn(
+        "rounded-full px-2.5 py-1 text-[10px] font-medium uppercase tracking-wide",
+        inverse
+          ? "border border-white/20 bg-white/10 text-white"
+          : "border border-primary/20 bg-primary/10 text-primary",
+      )}
+    >
+      {children}
+    </span>
+  )
+}
+
+function SelfServiceSectionCard({
+  title,
+  children,
+  doodle = "doodle-circles",
+}: {
+  title: string
+  children: React.ReactNode
+  doodle?: (typeof DOODLE_VARIANTS)[number]
+}) {
+  return (
+    <SummaryPrimaryCard doodle={doodle}>
+      <div className="space-y-3">
+        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-white/75">{title}</div>
+        {children}
+      </div>
+    </SummaryPrimaryCard>
+  )
+}
+
+function AssignmentSection({
+  title,
+  icon: Icon,
+  children,
+}: {
+  title: string
+  icon?: React.ComponentType<{ className?: string }>
+  children: React.ReactNode
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        {Icon ? <Icon className="size-4 text-primary" /> : null}
+        <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-muted-foreground">{title}</h3>
+      </div>
+      {children}
+    </div>
+  )
+}
+
+type ProfileAssignmentsTabProps = {
+  employee: AdminRecord
+  assignmentSummaryRows: Array<{ label: string; value: string }>
+  scheduleDays: AdminRecord[]
+}
+
+function ProfileAssignmentsTab({ employee, assignmentSummaryRows, scheduleDays }: ProfileAssignmentsTabProps) {
+  const departments = Array.isArray(employee.departments) ? employee.departments : []
+  const positionAssignments = Array.isArray(employee.position_assignments) ? employee.position_assignments : []
+  const designationAssignments = Array.isArray(employee.designation_assignments) ? employee.designation_assignments : []
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-4 md:grid-cols-2">
+        <AssignmentSection title="Department" icon={Building2Icon}>
+          {departments.length ? (
+            <div className="space-y-2">
+              {departments.map((entry, index) => {
+                const record = asRecord(entry)
+                const department = asRecord(record?.department)
+                const branch = asRecord(department?.branch)
+                const departmentName = readString(department, ["name", "department_name"], "Department")
+                return (
+                  <SummaryPrimaryCard key={`department-${index}`} doodle={pickDoodle(index)}>
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="text-base font-semibold tracking-tight text-white">{departmentName}</p>
+                      {formatUnknownValue(record?.is_primary) === "Yes" ? (
+                        <AssignmentBadge inverse>Primary</AssignmentBadge>
+                      ) : null}
+                    </div>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                      <AssignmentField label="Code" value={readString(department, ["code"], "-")} inverse />
+                      <AssignmentField label="Branch" value={readString(branch, ["name", "branch_name"], "-")} inverse />
+                      <AssignmentField label="Status" value={readString(department, ["status"], "-")} inverse />
+                    </div>
+                  </SummaryPrimaryCard>
+                )
+              })}
+            </div>
+          ) : (
+            <EmptyAssignmentCard message="No department assigned." />
+          )}
+        </AssignmentSection>
+
+        <AssignmentSection title="Position" icon={BriefcaseIcon}>
+          {positionAssignments.length ? (
+            <div className="space-y-2">
+              {positionAssignments.map((entry, index) => {
+                const record = asRecord(entry)
+                const position = asRecord(record?.position)
+                const designation = asRecord(record?.designation)
+                const positionName = readString(position, ["name", "position_name"], "Position")
+                return (
+                  <SummaryPrimaryCard key={`position-assignment-${index}`} doodle={pickDoodle(index + 1)}>
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="text-base font-semibold tracking-tight text-white">{positionName}</p>
+                      <AssignmentBadge inverse>{readString(record, ["status"], "active")}</AssignmentBadge>
+                    </div>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                      <AssignmentField label="Designation" value={readString(designation, ["name", "designation_name"], "-")} inverse />
+                      <AssignmentField label="Assignment Type" value={readString(record, ["assignment_type"], "-")} inverse />
+                      <AssignmentField label="Primary" value={formatUnknownValue(record?.is_primary)} inverse />
+                      <AssignmentField label="Start Date" value={formatDate(record?.start_date)} inverse />
+                      <AssignmentField label="End Date" value={formatDate(record?.end_date)} inverse />
+                      <AssignmentField label="Notes" value={readString(record, ["notes"], "-")} inverse />
+                    </div>
+                  </SummaryPrimaryCard>
+                )
+              })}
+            </div>
+          ) : (
+            <EmptyAssignmentCard message="No position assigned." doodle="doodle-grass" />
+          )}
+        </AssignmentSection>
+      </div>
+
+      <AssignmentSection title="Designation" icon={BriefcaseIcon}>
+        {designationAssignments.length ? (
+          <div className="space-y-2">
+            {designationAssignments.map((entry, index) => {
+              const record = asRecord(entry)
+              const designation = asRecord(record?.designation)
+              const designationName = readString(designation, ["name", "designation_name"], "Designation")
+              return (
+                <SummaryPrimaryCard key={`designation-assignment-${index}`} doodle={pickDoodle(index + 2)}>
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="text-base font-semibold tracking-tight text-white">{designationName}</p>
+                    {formatUnknownValue(record?.is_current) === "Yes" ? (
+                      <AssignmentBadge inverse>Current</AssignmentBadge>
+                    ) : null}
+                  </div>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    <AssignmentField label="Code" value={readString(designation, ["code"], "-")} inverse />
+                    <AssignmentField label="Start Date" value={formatDate(record?.start_date)} inverse />
+                    <AssignmentField label="End Date" value={formatDate(record?.end_date)} inverse />
+                    <AssignmentField label="Remarks" value={readString(record, ["remarks"], "-")} inverse />
+                  </div>
+                </SummaryPrimaryCard>
+              )
+            })}
+          </div>
+        ) : (
+          <EmptyAssignmentCard message="No designation assigned." doodle="doodle-circles" />
+        )}
+      </AssignmentSection>
+
+      <AssignmentSection title="Attendance Assignment Summary" icon={ClockIcon}>
+        {assignmentSummaryRows.length ? (
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {assignmentSummaryRows.map((row, index) => (
+              <AssignmentStatCard key={row.label} label={row.label} value={row.value} doodle={pickDoodle(index)} />
+            ))}
+          </div>
+        ) : (
+          <EmptyAssignmentCard message="No attendance assignment summary is available yet." doodle="doodle-grass" />
+        )}
+      </AssignmentSection>
+
+      <AssignmentSection title="Upcoming Schedule Preview" icon={CalendarIcon}>
+        {scheduleDays.length ? (
+          <div className="space-y-2">
+            {scheduleDays.slice(0, 5).map((day, index) => {
+              const shift = asRecord(day.shift)
+              const timetable = asRecord(day.timetable)
+              const isOffDay = day.is_off_day === true || day.is_off_day === "true"
+              const shiftName = isOffDay ? "Off Day" : readString(shift, ["name", "code"], "-")
+              const timeRange = !shift || isOffDay
+                ? "—"
+                : `${formatTimeValue(shift.start_time)} to ${formatTimeValue(shift.end_time)}`
+              const expectedWork = isOffDay ? "—" : formatMinutesDuration(shift?.expected_work_minutes)
+
+              return (
+                <SummaryPrimaryCard key={String(day.date ?? index)} doodle={pickDoodle(index + 3)}>
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="text-base font-semibold tracking-tight text-white">{formatDate(day.date)}</p>
+                    {isOffDay ? <AssignmentBadge inverse>Off Day</AssignmentBadge> : null}
+                  </div>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    <AssignmentField label="Shift" value={shiftName} inverse />
+                    <AssignmentField label="Time" value={timeRange} inverse />
+                    <AssignmentField label="Source" value={readString(day, ["source"], "-")} inverse />
+                    <AssignmentField label="Timetable" value={readString(timetable, ["name", "code"], "-")} inverse />
+                    <AssignmentField label="Expected Work" value={expectedWork} inverse />
+                  </div>
+                </SummaryPrimaryCard>
+              )
+            })}
+          </div>
+        ) : (
+          <EmptyAssignmentCard message="No schedule preview has been published yet." doodle="doodle-curves" />
+        )}
+      </AssignmentSection>
+    </div>
+  )
+}
+
 type ProfileSummaryTabProps = {
   currentUser: AdminRecord | null
   employee: AdminRecord | null
@@ -1148,6 +1544,8 @@ function ProfileSummaryTab({
       ],
       stat1: "Email",
       stat2: "Phone",
+      onEdit: () => openSectionEditor("contact-details", "Contact Details", ["first_name", "last_name", "email", "phone"]),
+      editLabel: "Edit Profile",
     },
     {
       icon: Building2Icon,
@@ -1192,51 +1590,59 @@ function ProfileSummaryTab({
   const checkOutValue = formatUnknownValue(dashboardActions?.can_check_out);
   const checkOutHint = readString(attendanceTodayRecord, ["first_punch", "first_punch_at"], "") || undefined;
   const leaveValue = String(readArray(dashboardLeave?.balances).length);
-  const leaveHint = `${readArray(dashboardLeave?.pending_requests).length} pending · ${pendingCorrections} corrections`;
-  const palePrimary = 'color-mix(in srgb, var(--primary) 18%, white)';
-
+  const leaveHint = `${readArray(dashboardLeave?.pending_requests).length} pending · ${pendingCorrections} corrections · ${pendingProfileUpdates} profile updates`;
   return (
     <div className="space-y-6">
-      <DoodleSprites />
-
       {/* Profile Header */}
       <div 
         className="relative overflow-hidden rounded-2xl p-5 md:p-6 text-white"
         style={{ backgroundColor: 'var(--primary)' }}
       >
         <Doodle name="doodle-circles" />
-        <div className="relative z-10 flex flex-col sm:flex-row sm:items-start gap-4">
-          <Avatar className="size-16 ring-2 ring-white/30 md:size-20">
-            {profilePhotoUrl ? <AvatarImage src={profilePhotoUrl} alt={displayName} /> : null}
-            <AvatarFallback className="bg-white/20 text-xl font-semibold text-white">
-              {initials || "ME"}
-            </AvatarFallback>
-          </Avatar>
+        <div className="relative z-10 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+            <Avatar className="size-16 ring-2 ring-white/30 md:size-20">
+              {profilePhotoUrl ? <AvatarImage src={profilePhotoUrl} alt={displayName} /> : null}
+              <AvatarFallback className="bg-white/20 text-xl font-semibold text-white">
+                {initials || "ME"}
+              </AvatarFallback>
+            </Avatar>
 
-          <div className="min-w-0 flex-1 space-y-1.5">
-            <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-2xl font-semibold tracking-tight text-white">{displayName}</h1>
-              <Badge className="text-xs bg-white/20 text-white hover:bg-white/30 border-white/30">
-                {employmentStatusLabel}
-              </Badge>
-            </div>
+            <div className="min-w-0 flex-1 space-y-1.5">
+              <div className="flex flex-wrap items-center gap-3">
+                <h1 className="text-2xl font-semibold tracking-tight text-white">{displayName}</h1>
+                <Badge className="text-xs bg-white/20 text-white hover:bg-white/30 border-white/30">
+                  {employmentStatusLabel}
+                </Badge>
+              </div>
 
-            <div className="text-sm text-white/80">
-              <span className="font-medium text-white">{employeeNumber}</span>
-              <span className="mx-1.5 text-white/50">•</span>
-              {positionLabel}
-              <span className="mx-1.5 text-white/50">•</span>
-              {departmentLabel}
-            </div>
+              <div className="text-sm text-white/80">
+                <span className="font-medium text-white">{employeeNumber}</span>
+                <span className="mx-1.5 text-white/50">•</span>
+                {positionLabel}
+                <span className="mx-1.5 text-white/50">•</span>
+                {departmentLabel}
+              </div>
 
-            <div className="flex flex-wrap items-center gap-2 text-xs text-white/90">
-              <CalendarIcon className="size-3" />
-              Hired <span className="font-medium text-white">{formatDate(employee?.hire_date)}</span>
-              <span className="text-white/40">·</span>
-              <BriefcaseIcon className="size-3" />
-              <span className="font-medium text-white">{formatEmploymentType(employee?.employment_type)}</span>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-white/90">
+                <CalendarIcon className="size-3" />
+                Hired <span className="font-medium text-white">{formatDate(employee?.hire_date)}</span>
+                <span className="text-white/40">·</span>
+                <BriefcaseIcon className="size-3" />
+                <span className="font-medium text-white">{formatEmploymentType(employee?.employment_type)}</span>
+              </div>
             </div>
           </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="self-start border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+            onClick={() => openSectionEditor("personal-details", "Personal Details", ["first_name", "last_name", "email", "phone"])}
+          >
+            <PencilIcon className="mr-1 size-3.5" />
+            Edit Profile
+          </Button>
         </div>
       </div>
 
@@ -1245,11 +1651,11 @@ function ProfileSummaryTab({
         {/* Today's Status */}
         <div 
           className="relative overflow-hidden rounded-2xl p-4 text-foreground" 
-          style={{ backgroundColor: palePrimary, color: 'var(--primary)' }}
+          style={{ backgroundColor: PALE_PRIMARY, color: 'var(--primary)' }}
         >
           <Doodle name="doodle-circles" />
           <div className="relative z-10">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Today's Status</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Today&apos;s Status</p>
             <p className="mt-1.5 text-[17px] font-semibold tracking-[-0.01em] text-foreground">{punchState}</p>
             <p className="mt-0.5 text-xs text-muted-foreground">{processingState}</p>
           </div>
@@ -1258,7 +1664,7 @@ function ProfileSummaryTab({
         {/* Check In */}
         <div 
           className="relative overflow-hidden rounded-2xl p-4 text-foreground" 
-          style={{ backgroundColor: palePrimary, color: 'var(--primary)' }}
+          style={{ backgroundColor: PALE_PRIMARY, color: 'var(--primary)' }}
         >
           <Doodle name="doodle-curves" />
           <div className="relative z-10">
@@ -1271,7 +1677,7 @@ function ProfileSummaryTab({
         {/* Check Out */}
         <div 
           className="relative overflow-hidden rounded-2xl p-4 text-foreground" 
-          style={{ backgroundColor: palePrimary, color: 'var(--primary)' }}
+          style={{ backgroundColor: PALE_PRIMARY, color: 'var(--primary)' }}
         >
           <Doodle name="doodle-grass" />
           <div className="relative z-10">
@@ -1283,7 +1689,7 @@ function ProfileSummaryTab({
         {/* Leave Balances */}
         <div 
           className="relative overflow-hidden rounded-2xl p-4 text-foreground" 
-          style={{ backgroundColor: palePrimary, color: 'var(--primary)' }}
+          style={{ backgroundColor: PALE_PRIMARY, color: 'var(--primary)' }}
         >
           <Doodle name="doodle-circles" />
           <div className="relative z-10">
@@ -1302,13 +1708,28 @@ function ProfileSummaryTab({
             <div
               key={index}
               className="relative overflow-hidden rounded-2xl p-4 text-foreground flex flex-col min-h-[180px]"
-              style={{ backgroundColor: palePrimary, color: 'var(--primary)' }}
+              style={{ backgroundColor: PALE_PRIMARY, color: 'var(--primary)' }}
             >
+              <Doodle name={index % 2 === 0 ? "doodle-circles" : "doodle-curves"} />
               <div className="relative z-10">
                 {/* Header inspired by reference */}
                 <div className="flex items-start justify-between">
                   <div className="text-xs font-medium uppercase tracking-[0.5px] text-muted-foreground">{card.label}</div>
-                  <IconComp className="size-5 text-primary opacity-90" />
+                  <div className="flex items-center gap-2">
+                    {card.onEdit ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs text-primary hover:bg-primary/10 hover:text-primary"
+                        onClick={card.onEdit}
+                      >
+                        <PencilIcon className="mr-1 size-3.5" />
+                        {card.editLabel ?? "Edit"}
+                      </Button>
+                    ) : null}
+                    <IconComp className="size-5 text-primary opacity-90" />
+                  </div>
                 </div>
 
                 {/* Title */}
@@ -1329,6 +1750,15 @@ function ProfileSummaryTab({
                   <div className="flex items-center gap-1">
                     <span className="font-medium">•</span> {card.stat2}
                   </div>
+                  {card.label === "Personal" ? (
+                    <button
+                      type="button"
+                      className="ml-auto font-medium text-primary underline-offset-4 hover:underline"
+                      onClick={() => openSectionEditor("password", "Password", ["password"])}
+                    >
+                      Change Password
+                    </button>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -1341,7 +1771,7 @@ function ProfileSummaryTab({
 
 
 export function EmployeeSelfServiceProfileView() {
-  const { loading, error, token, currentUser, employee, refresh } = useSelfEmployeeData()
+  const { loading, error, token, currentUser, employee } = useSelfEmployeeData()
   const searchParams = useSearchParams()
   const pathname = usePathname()
   const activeTab = (searchParams?.get("tab") as SelfProfileTab) || "summary"
@@ -1351,6 +1781,7 @@ export function EmployeeSelfServiceProfileView() {
     { key: "assignments", label: "Assignments" },
     { key: "personal", label: "Personal" },
     { key: "records", label: "Records" },
+    { key: "updates", label: "Update Requests" },
   ]
   const [sectionEditor, setSectionEditor] = React.useState<SectionEditorState | null>(null)
   const [sectionSaving, setSectionSaving] = React.useState(false)
@@ -1373,16 +1804,24 @@ export function EmployeeSelfServiceProfileView() {
     status: "",
     profile_photo_url: "",
   })
-  const loggedInUserId = React.useMemo(() => resolveLoggedInUserId(currentUser, token), [currentUser, token])
-
   const baseEditorValues = React.useMemo(
     () => ({
-      first_name: readString(currentUser, ["first_name", "firstName"], ""),
-      last_name: readString(currentUser, ["last_name", "lastName"], ""),
-      phone: readString(currentUser, ["phone", "phone_number"], ""),
-      email: readString(currentUser, ["email"], ""),
+      first_name:
+        readString(currentUser, ["first_name", "firstName"], "") ||
+        readString(employee, ["first_name", "firstName"], ""),
+      last_name:
+        readString(currentUser, ["last_name", "lastName"], "") ||
+        readString(employee, ["last_name", "lastName"], ""),
+      phone:
+        readString(currentUser, ["phone", "phone_number"], "") ||
+        readString(employee, ["phone", "phone_number"], ""),
+      email:
+        readString(currentUser, ["email"], "") ||
+        readString(employee, ["email"], ""),
       password: "",
-      user_no: readString(currentUser, ["user_no", "employee_no"], ""),
+      user_no:
+        readString(currentUser, ["user_no", "employee_no"], "") ||
+        readString(employee, ["user_no", "employee_no", "employeeId"], ""),
       status: readString(currentUser, ["status"], "") || readString(employee, ["employment_status"], ""),
       profile_photo_url: "",
     }),
@@ -1409,25 +1848,21 @@ export function EmployeeSelfServiceProfileView() {
       setSectionErrorLines([])
       return
     }
-    if (loggedInUserId === null) {
-      setSectionError("Unable to resolve user id for section update.")
-      setSectionErrorLines([])
-      return
-    }
-    const payload: AdminRecord = {}
+    const requestedChanges: AdminRecord = {}
     for (const field of sectionEditor.fields) {
       const nextValue = sectionValues[field].trim()
       if (field === "password") {
         if (nextValue) {
-          payload.password = nextValue
+          requestedChanges.password = nextValue
         }
         continue
       }
       if (nextValue) {
-        payload[field] = nextValue
+        const apiField = field === "phone" ? "phone_number" : field
+        requestedChanges[apiField] = nextValue
       }
     }
-    if (!Object.keys(payload).length) {
+    if (!Object.keys(requestedChanges).length) {
       setSectionError("Nothing to update for this section.")
       setSectionErrorLines([])
       return
@@ -1436,18 +1871,32 @@ export function EmployeeSelfServiceProfileView() {
     setSectionError(null)
     setSectionErrorLines([])
     try {
-      await updateUserById(loggedInUserId, token, payload)
-      setMessage(`${sectionEditor.title} updated successfully.`)
+      const requestPayload: AdminRecord = {
+        requested_changes: requestedChanges,
+        reason: `Requested changes to ${sectionEditor.title.toLowerCase()}.`,
+      }
+
+      const createdRequest = asRecord(await createMyProfileUpdateRequest(token, requestPayload))
+      const requestId = readNumber(createdRequest, ["id", "request_id"])
+      if (requestId !== null) {
+        await submitMyProfileUpdateRequest(token, requestId)
+      }
+
+      setMessage(`${sectionEditor.title} update submitted for HR approval.`)
       setSectionEditor(null)
-      await refresh()
+      const profileUpdatesResult = await listMyProfileUpdateRequests(token, {
+        page: 1,
+        limit: 5,
+      })
+      setProfileUpdateRequests(profileUpdatesResult.rows)
     } catch (errorObject) {
-      const lines = formatApiErrorLines(errorObject, "Failed to update profile section.")
-      setSectionError(lines[0] ?? "Failed to update profile section.")
+      const lines = formatApiErrorLines(errorObject, "Failed to submit profile update request.")
+      setSectionError(lines[0] ?? "Failed to submit profile update request.")
       setSectionErrorLines(lines)
     } finally {
       setSectionSaving(false)
     }
-  }, [loggedInUserId, refresh, sectionEditor, sectionValues, token])
+  }, [sectionEditor, sectionValues, token])
 
   React.useEffect(() => {
     if (!token) {
@@ -1470,7 +1919,7 @@ export function EmployeeSelfServiceProfileView() {
       getMyAttendanceAssignments(token),
       listMyTeamAttendance(token, { page: 1, limit: 5 }),
       listMyAttendanceCorrectionRequests(token, { page: 1, limit: 5, sortBy: "created_at", sortOrder: "DESC" }),
-      listMyProfileUpdateRequests(token, { page: 1, limit: 5, sortBy: "created_at", sortOrder: "DESC" }),
+      listMyProfileUpdateRequests(token, { page: 1, limit: 5 }),
     ]).then((results) => {
       if (cancelled) {
         return
@@ -1548,6 +1997,7 @@ export function EmployeeSelfServiceProfileView() {
 
   return (
     <div className="grid gap-4">
+      <DoodleSprites />
       <div className="glass-scrollbar overflow-x-auto">
         <div className="inline-flex min-w-full items-center gap-4 border-b border-border/80">
           {tabs.map((tab) => {
@@ -1595,312 +2045,57 @@ export function EmployeeSelfServiceProfileView() {
           ) : null}
 
           {activeTab === "assignments" && employee ? (
-            <div className="space-y-5">
-              {/* Department Assignments */}
-              <div>
-                <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Department Assignments</div>
-                {Array.isArray(employee.departments) && employee.departments.length ? (
-                  employee.departments.map((entry, index) => {
-                    const record = asRecord(entry)
-                    const department = asRecord(record?.department)
-                    const branch = asRecord(department?.branch)
-                    return (
-                      <div key={`department-${index}`} className={index > 0 ? "mt-3 pt-3 border-t border-border/50" : ""}>
-                        <div className="grid gap-3 sm:grid-cols-2 text-xs">
-                          <div className="flex gap-2.5">
-                            <Building2Icon className="mt-0.5 size-3.5 text-primary shrink-0" />
-                            <div>
-                              <div className="text-muted-foreground">Department</div>
-                              <div className="font-medium text-foreground">{readString(department, ["name", "department_name"], "-")}</div>
-                            </div>
-                          </div>
-                          <div className="flex gap-2.5">
-                            <div>
-                              <div className="text-muted-foreground">Code</div>
-                              <div className="font-medium text-foreground">{readString(department, ["code"], "-")}</div>
-                            </div>
-                          </div>
-                          <div className="flex gap-2.5">
-                            <MapPinIcon className="mt-0.5 size-3.5 text-primary shrink-0" />
-                            <div>
-                              <div className="text-muted-foreground">Branch</div>
-                              <div className="font-medium text-foreground">{readString(branch, ["name", "branch_name"], "-")}</div>
-                            </div>
-                          </div>
-                          <div className="flex gap-2.5">
-                            <div>
-                              <div className="text-muted-foreground">Primary</div>
-                              <div className="font-medium text-foreground">{formatUnknownValue(record?.is_primary)}</div>
-                            </div>
-                          </div>
-                          <div className="flex gap-2.5">
-                            <div>
-                              <div className="text-muted-foreground">Status</div>
-                              <div className="font-medium text-foreground">{readString(department, ["status"], "-")}</div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  })
-                ) : (
-                  <div className="text-xs text-muted-foreground">No department assignments available.</div>
-                )}
-              </div>
-
-              <div className="border-t border-border/50" />
-
-              {/* Position Assignments */}
-              <div>
-                <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Position Assignments</div>
-                {Array.isArray(employee.position_assignments) && employee.position_assignments.length ? (
-                  employee.position_assignments.map((entry, index) => {
-                    const record = asRecord(entry)
-                    const position = asRecord(record?.position)
-                    const designation = asRecord(record?.designation)
-                    return (
-                      <div key={`position-assignment-${index}`} className={index > 0 ? "mt-3 pt-3 border-t border-border/50" : ""}>
-                        <div className="grid gap-3 sm:grid-cols-2 text-xs">
-                          <div className="flex gap-2.5">
-                            <BriefcaseIcon className="mt-0.5 size-3.5 text-primary shrink-0" />
-                            <div>
-                              <div className="text-muted-foreground">Position</div>
-                              <div className="font-medium text-foreground">{readString(position, ["name", "position_name"], "-")}</div>
-                            </div>
-                          </div>
-                          <div className="flex gap-2.5">
-                            <div>
-                              <div className="text-muted-foreground">Designation</div>
-                              <div className="font-medium text-foreground">{readString(designation, ["name", "designation_name"], "-")}</div>
-                            </div>
-                          </div>
-                          <div className="flex gap-2.5">
-                            <div>
-                              <div className="text-muted-foreground">Assignment Type</div>
-                              <div className="font-medium text-foreground">{readString(record, ["assignment_type"], "-")}</div>
-                            </div>
-                          </div>
-                          <div className="flex gap-2.5">
-                            <div>
-                              <div className="text-muted-foreground">Status</div>
-                              <div className="font-medium text-foreground">{readString(record, ["status"], "-")}</div>
-                            </div>
-                          </div>
-                          <div className="flex gap-2.5">
-                            <CalendarIcon className="mt-0.5 size-3.5 text-primary shrink-0" />
-                            <div>
-                              <div className="text-muted-foreground">Start Date</div>
-                              <div className="font-medium text-foreground">{formatDate(record?.start_date)}</div>
-                            </div>
-                          </div>
-                          <div className="flex gap-2.5">
-                            <div>
-                              <div className="text-muted-foreground">End Date</div>
-                              <div className="font-medium text-foreground">{formatDate(record?.end_date)}</div>
-                            </div>
-                          </div>
-                          <div className="flex gap-2.5">
-                            <div>
-                              <div className="text-muted-foreground">Primary</div>
-                              <div className="font-medium text-foreground">{formatUnknownValue(record?.is_primary)}</div>
-                            </div>
-                          </div>
-                          <div className="flex gap-2.5">
-                            <div>
-                              <div className="text-muted-foreground">Notes</div>
-                              <div className="font-medium text-foreground">{readString(record, ["notes"], "-")}</div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  })
-                ) : (
-                  <div className="text-xs text-muted-foreground">No position assignments available.</div>
-                )}
-              </div>
-
-              <div className="border-t border-border/50" />
-
-              {/* Designation Assignments */}
-              <div>
-                <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Designation Assignments</div>
-                {Array.isArray(employee.designation_assignments) && employee.designation_assignments.length ? (
-                  employee.designation_assignments.map((entry, index) => {
-                    const record = asRecord(entry)
-                    const designation = asRecord(record?.designation)
-                    return (
-                      <div key={`designation-assignment-${index}`} className={index > 0 ? "mt-3 pt-3 border-t border-border/50" : ""}>
-                        <div className="grid gap-3 sm:grid-cols-2 text-xs">
-                          <div className="flex gap-2.5">
-                            <BriefcaseIcon className="mt-0.5 size-3.5 text-primary shrink-0" />
-                            <div>
-                              <div className="text-muted-foreground">Designation</div>
-                              <div className="font-medium text-foreground">{readString(designation, ["name", "designation_name"], "-")}</div>
-                            </div>
-                          </div>
-                          <div className="flex gap-2.5">
-                            <div>
-                              <div className="text-muted-foreground">Code</div>
-                              <div className="font-medium text-foreground">{readString(designation, ["code"], "-")}</div>
-                            </div>
-                          </div>
-                          <div className="flex gap-2.5">
-                            <div>
-                              <div className="text-muted-foreground">Current</div>
-                              <div className="font-medium text-foreground">{formatUnknownValue(record?.is_current)}</div>
-                            </div>
-                          </div>
-                          <div className="flex gap-2.5">
-                            <CalendarIcon className="mt-0.5 size-3.5 text-primary shrink-0" />
-                            <div>
-                              <div className="text-muted-foreground">Start Date</div>
-                              <div className="font-medium text-foreground">{formatDate(record?.start_date)}</div>
-                            </div>
-                          </div>
-                          <div className="flex gap-2.5">
-                            <div>
-                              <div className="text-muted-foreground">End Date</div>
-                              <div className="font-medium text-foreground">{formatDate(record?.end_date)}</div>
-                            </div>
-                          </div>
-                          <div className="flex gap-2.5">
-                            <div>
-                              <div className="text-muted-foreground">Remarks</div>
-                              <div className="font-medium text-foreground">{readString(record, ["remarks"], "-")}</div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  })
-                ) : (
-                  <div className="text-xs text-muted-foreground">No designation assignments available.</div>
-                )}
-              </div>
-
-              <div className="border-t border-border/50" />
-
-              {/* Attendance Assignment Summary */}
-              <div>
-                <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Attendance Assignment Summary</div>
-                {assignmentSummaryRows.length ? (
-                  <div className="grid gap-3 sm:grid-cols-2 text-xs">
-                    {assignmentSummaryRows.map((row, idx) => (
-                      <div key={idx} className="flex gap-2.5">
-                        <div>
-                          <div className="text-muted-foreground">{row.label}</div>
-                          <div className="font-medium text-foreground">{row.value}</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-xs text-muted-foreground">No attendance assignment summary is available yet.</div>
-                )}
-              </div>
-
-              <div className="border-t border-border/50" />
-
-              {/* Upcoming Schedule Preview */}
-              <div>
-                <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Upcoming Schedule Preview</div>
-                {scheduleDays.length ? (
-                  <div className="space-y-3 text-xs">
-                    {scheduleDays.slice(0, 5).map((day, index) => {
-                      const shift = asRecord(day.shift)
-                      const timetable = asRecord(day.timetable)
-                      return (
-                        <div key={String(day.date ?? index)} className={index > 0 ? "pt-3 border-t border-border/50" : ""}>
-                          <div className="grid gap-3 sm:grid-cols-2">
-                            <div className="flex gap-2.5">
-                              <CalendarIcon className="mt-0.5 size-3.5 text-primary shrink-0" />
-                              <div>
-                                <div className="text-muted-foreground">Date</div>
-                                <div className="font-medium text-foreground">{formatDate(day.date)}</div>
-                              </div>
-                            </div>
-                            <div className="flex gap-2.5">
-                              <div>
-                                <div className="text-muted-foreground">Source</div>
-                                <div className="font-medium text-foreground">{readString(day, ["source"], "-")}</div>
-                              </div>
-                            </div>
-                            <div className="flex gap-2.5">
-                              <div>
-                                <div className="text-muted-foreground">Shift</div>
-                                <div className="font-medium text-foreground">{readString(shift, ["name", "code"], "-")}</div>
-                              </div>
-                            </div>
-                            <div className="flex gap-2.5">
-                              <div>
-                                <div className="text-muted-foreground">Time</div>
-                                <div className="font-medium text-foreground">{`${readString(shift, ["start_time"], "-")} to ${readString(shift, ["end_time"], "-")}`}</div>
-                              </div>
-                            </div>
-                            <div className="flex gap-2.5">
-                              <div>
-                                <div className="text-muted-foreground">Timetable</div>
-                                <div className="font-medium text-foreground">{readString(timetable, ["name", "code"], "-")}</div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                ) : (
-                  <div className="text-xs text-muted-foreground">No schedule preview has been published yet.</div>
-                )}
-              </div>
-            </div>
+            <ProfileAssignmentsTab
+              employee={employee}
+              assignmentSummaryRows={assignmentSummaryRows}
+              scheduleDays={scheduleDays}
+            />
           ) : null}
 
               {activeTab === "personal" && employee ? (
                 <div className="space-y-5">
                   {/* Contacts */}
-                  <div>
-                    <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Contacts</div>
+                  <SelfServiceSectionCard title="Contacts" doodle="doodle-circles">
                     {Array.isArray(employee.contacts) && employee.contacts.length ? (
                       employee.contacts.map((entry, index) => {
                         const record = asRecord(entry)
                         return (
-                          <div key={`contact-${index}`} className={index > 0 ? "mt-3 pt-3 border-t border-border/50" : ""}>
+                          <div key={`contact-${index}`} className={index > 0 ? "mt-3 border-t border-white/15 pt-3" : ""}>
                             <div className="grid gap-3 sm:grid-cols-2 text-xs">
                               <div className="flex gap-2.5">
                                 <div>
-                                  <div className="text-muted-foreground">Type</div>
-                                  <div className="font-medium text-foreground">{readString(record, ["contact_type"], "-")}</div>
+                                  <div className="text-white/70">Type</div>
+                                  <div className="font-medium text-white">{readString(record, ["contact_type"], "-")}</div>
                                 </div>
                               </div>
                               <div className="flex gap-2.5">
                                 <div>
-                                  <div className="text-muted-foreground">Phone</div>
-                                  <div className="font-medium text-foreground">{readString(record, ["phone_number", "phone"], "-")}</div>
+                                  <div className="text-white/70">Phone</div>
+                                  <div className="font-medium text-white">{readString(record, ["phone_number", "phone"], "-")}</div>
                                 </div>
                               </div>
                               <div className="flex gap-2.5">
                                 <div>
-                                  <div className="text-muted-foreground">Email</div>
-                                  <div className="font-medium text-foreground">{readString(record, ["email"], "-")}</div>
+                                  <div className="text-white/70">Email</div>
+                                  <div className="font-medium text-white">{readString(record, ["email"], "-")}</div>
                                 </div>
                               </div>
                               <div className="flex gap-2.5">
                                 <div>
-                                  <div className="text-muted-foreground">Primary</div>
-                                  <div className="font-medium text-foreground">{formatUnknownValue(record?.is_primary)}</div>
+                                  <div className="text-white/70">Primary</div>
+                                  <div className="font-medium text-white">{formatUnknownValue(record?.is_primary)}</div>
                                 </div>
                               </div>
                               <div className="flex gap-2.5">
                                 <div>
-                                  <div className="text-muted-foreground">Verified</div>
-                                  <div className="font-medium text-foreground">{formatUnknownValue(record?.is_verified)}</div>
+                                  <div className="text-white/70">Verified</div>
+                                  <div className="font-medium text-white">{formatUnknownValue(record?.is_verified)}</div>
                                 </div>
                               </div>
                               <div className="flex gap-2.5">
                                 <div>
-                                  <div className="text-muted-foreground">Notes</div>
-                                  <div className="font-medium text-foreground">{readString(record, ["notes"], "-")}</div>
+                                  <div className="text-white/70">Notes</div>
+                                  <div className="font-medium text-white">{readString(record, ["notes"], "-")}</div>
                                 </div>
                               </div>
                             </div>
@@ -1908,43 +2103,40 @@ export function EmployeeSelfServiceProfileView() {
                         )
                       })
                     ) : (
-                      <div className="text-xs text-muted-foreground">No contacts available.</div>
+                      <div className="text-xs text-white/80">No contacts available.</div>
                     )}
-                  </div>
-
-                  <div className="border-t border-border/50" />
+                  </SelfServiceSectionCard>
 
                   {/* Addresses */}
-                  <div>
-                    <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Addresses</div>
+                  <SelfServiceSectionCard title="Addresses" doodle="doodle-curves">
                     {Array.isArray(employee.addresses) && employee.addresses.length ? (
                       employee.addresses.map((entry, index) => {
                         const record = asRecord(entry)
                         return (
-                          <div key={`address-${index}`} className={index > 0 ? "mt-3 pt-3 border-t border-border/50" : ""}>
+                          <div key={`address-${index}`} className={index > 0 ? "mt-3 border-t border-white/15 pt-3" : ""}>
                             <div className="grid gap-3 sm:grid-cols-2 text-xs">
                               <div className="flex gap-2.5">
                                 <div>
-                                  <div className="text-muted-foreground">Type</div>
-                                  <div className="font-medium text-foreground">{readString(record, ["address_type", "type"], "-")}</div>
+                                  <div className="text-white/70">Type</div>
+                                  <div className="font-medium text-white">{readString(record, ["address_type", "type"], "-")}</div>
                                 </div>
                               </div>
                               <div className="flex gap-2.5">
                                 <div>
-                                  <div className="text-muted-foreground">Address</div>
-                                  <div className="font-medium text-foreground">{readString(record, ["address_line", "address"], "-")}</div>
+                                  <div className="text-white/70">Address</div>
+                                  <div className="font-medium text-white">{readString(record, ["address_line", "address"], "-")}</div>
                                 </div>
                               </div>
                               <div className="flex gap-2.5">
                                 <div>
-                                  <div className="text-muted-foreground">City</div>
-                                  <div className="font-medium text-foreground">{readString(record, ["city"], "-")}</div>
+                                  <div className="text-white/70">City</div>
+                                  <div className="font-medium text-white">{readString(record, ["city"], "-")}</div>
                                 </div>
                               </div>
                               <div className="flex gap-2.5">
                                 <div>
-                                  <div className="text-muted-foreground">Country</div>
-                                  <div className="font-medium text-foreground">{readString(record, ["country"], "-")}</div>
+                                  <div className="text-white/70">Country</div>
+                                  <div className="font-medium text-white">{readString(record, ["country"], "-")}</div>
                                 </div>
                               </div>
                             </div>
@@ -1952,37 +2144,34 @@ export function EmployeeSelfServiceProfileView() {
                         )
                       })
                     ) : (
-                      <div className="text-xs text-muted-foreground">No addresses available.</div>
+                      <div className="text-xs text-white/80">No addresses available.</div>
                     )}
-                  </div>
-
-                  <div className="border-t border-border/50" />
+                  </SelfServiceSectionCard>
 
                   {/* Relatives */}
-                  <div>
-                    <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Relatives</div>
+                  <SelfServiceSectionCard title="Relatives" doodle="doodle-grass">
                     {Array.isArray(employee.relatives) && employee.relatives.length ? (
                       employee.relatives.map((entry, index) => {
                         const record = asRecord(entry)
                         return (
-                          <div key={`relative-${index}`} className={index > 0 ? "mt-3 pt-3 border-t border-border/50" : ""}>
+                          <div key={`relative-${index}`} className={index > 0 ? "mt-3 border-t border-white/15 pt-3" : ""}>
                             <div className="grid gap-3 sm:grid-cols-2 text-xs">
                               <div className="flex gap-2.5">
                                 <div>
-                                  <div className="text-muted-foreground">Name</div>
-                                  <div className="font-medium text-foreground">{readString(record, ["name", "full_name"], "-")}</div>
+                                  <div className="text-white/70">Name</div>
+                                  <div className="font-medium text-white">{readString(record, ["name", "full_name"], "-")}</div>
                                 </div>
                               </div>
                               <div className="flex gap-2.5">
                                 <div>
-                                  <div className="text-muted-foreground">Relationship</div>
-                                  <div className="font-medium text-foreground">{readString(record, ["relationship"], "-")}</div>
+                                  <div className="text-white/70">Relationship</div>
+                                  <div className="font-medium text-white">{readString(record, ["relationship"], "-")}</div>
                                 </div>
                               </div>
                               <div className="flex gap-2.5">
                                 <div>
-                                  <div className="text-muted-foreground">Phone</div>
-                                  <div className="font-medium text-foreground">{readString(record, ["phone_number", "phone"], "-")}</div>
+                                  <div className="text-white/70">Phone</div>
+                                  <div className="font-medium text-white">{readString(record, ["phone_number", "phone"], "-")}</div>
                                 </div>
                               </div>
                             </div>
@@ -1990,19 +2179,18 @@ export function EmployeeSelfServiceProfileView() {
                         )
                       })
                     ) : (
-                      <div className="text-xs text-muted-foreground">No relatives available.</div>
+                      <div className="text-xs text-white/80">No relatives available.</div>
                     )}
-                  </div>
+                  </SelfServiceSectionCard>
                 </div>
               ) : null}
 
               {activeTab === "records" ? (
                 <div className="space-y-5">
                   {/* Attendance Correction Requests */}
-                  <div>
-                    <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Attendance Correction Requests</div>
+                  <SelfServiceSectionCard title="Attendance Correction Requests" doodle="doodle-circles">
                     {correctionRequests.length === 0 ? (
-                      <div className="text-xs text-muted-foreground">No attendance correction requests found.</div>
+                      <div className="text-xs text-white/80">No attendance correction requests found.</div>
                     ) : (
                       correctionRequests.map((row, index) => {
                         const titleText =
@@ -2011,27 +2199,24 @@ export function EmployeeSelfServiceProfileView() {
                         const createdAt =
                           formatDateTime(row.created_at) !== "-" ? formatDateTime(row.created_at) : formatDate(row.date)
                         return (
-                          <div key={String(row.id ?? index)} className={index > 0 ? "mt-3 pt-3 border-t border-border/50" : ""}>
+                          <div key={String(row.id ?? index)} className={index > 0 ? "mt-3 border-t border-white/15 pt-3" : ""}>
                             <div className="flex items-start justify-between gap-3 text-xs">
-                              <p className="font-medium text-foreground">{titleText}</p>
-                              <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                              <p className="font-medium text-white">{titleText}</p>
+                              <span className="rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-white">
                                 {readString(row, ["status"], "draft")}
                               </span>
                             </div>
-                            <p className="mt-0.5 text-[10px] text-muted-foreground">{createdAt}</p>
+                            <p className="mt-0.5 text-[10px] text-white/70">{createdAt}</p>
                           </div>
                         )
                       })
                     )}
-                  </div>
-
-                  <div className="border-t border-border/50" />
+                  </SelfServiceSectionCard>
 
                   {/* Profile Update Requests */}
-                  <div>
-                    <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Profile Update Requests</div>
+                  <SelfServiceSectionCard title="Profile Update Requests" doodle="doodle-curves">
                     {profileUpdateRequests.length === 0 ? (
-                      <div className="text-xs text-muted-foreground">No profile update requests found.</div>
+                      <div className="text-xs text-white/80">No profile update requests found.</div>
                     ) : (
                       profileUpdateRequests.map((row, index) => {
                         const titleText =
@@ -2040,27 +2225,24 @@ export function EmployeeSelfServiceProfileView() {
                         const createdAt =
                           formatDateTime(row.created_at) !== "-" ? formatDateTime(row.created_at) : formatDate(row.date)
                         return (
-                          <div key={String(row.id ?? index)} className={index > 0 ? "mt-3 pt-3 border-t border-border/50" : ""}>
+                          <div key={String(row.id ?? index)} className={index > 0 ? "mt-3 border-t border-white/15 pt-3" : ""}>
                             <div className="flex items-start justify-between gap-3 text-xs">
-                              <p className="font-medium text-foreground">{titleText}</p>
-                              <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                              <p className="font-medium text-white">{titleText}</p>
+                              <span className="rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-white">
                                 {readString(row, ["status"], "draft")}
                               </span>
                             </div>
-                            <p className="mt-0.5 text-[10px] text-muted-foreground">{createdAt}</p>
+                            <p className="mt-0.5 text-[10px] text-white/70">{createdAt}</p>
                           </div>
                         )
                       })
                     )}
-                  </div>
-
-                  <div className="border-t border-border/50" />
+                  </SelfServiceSectionCard>
 
                   {/* Direct Reports Today */}
-                  <div>
-                    <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Direct Reports Today</div>
+                  <SelfServiceSectionCard title="Direct Reports Today" doodle="doodle-grass">
                     {teamAttendance.length === 0 ? (
-                      <div className="text-xs text-muted-foreground">No team attendance rows were returned for your account.</div>
+                      <div className="text-xs text-white/80">No team attendance rows were returned for your account.</div>
                     ) : (
                       teamAttendance.map((row, index) => {
                         const nestedEmployee = asRecord(row.employee)
@@ -2072,36 +2254,80 @@ export function EmployeeSelfServiceProfileView() {
                             .join(" ") ||
                           "Direct report"
                         return (
-                          <div key={String(row.id ?? index)} className={index > 0 ? "mt-2 pt-2 border-t border-border/50" : ""}>
+                          <div key={String(row.id ?? index)} className={index > 0 ? "mt-2 border-t border-white/15 pt-2" : ""}>
                             <div className="grid gap-3 sm:grid-cols-2 text-xs">
                               <div className="flex gap-2.5">
                                 <div>
-                                  <div className="text-muted-foreground">Employee</div>
-                                  <div className="font-medium text-foreground">{employeeLabel}</div>
+                                  <div className="text-white/70">Employee</div>
+                                  <div className="font-medium text-white">{employeeLabel}</div>
                                 </div>
                               </div>
                               <div className="flex gap-2.5">
                                 <div>
-                                  <div className="text-muted-foreground">Date</div>
-                                  <div className="font-medium text-foreground">{formatDate(row.date ?? row.attendance_date)}</div>
+                                  <div className="text-white/70">Date</div>
+                                  <div className="font-medium text-white">{formatDate(row.date ?? row.attendance_date)}</div>
                                 </div>
                               </div>
                               <div className="flex gap-2.5">
                                 <div>
-                                  <div className="text-muted-foreground">Status</div>
-                                  <div className="font-medium text-foreground">{readString(row, ["status", "attendance_status"], "-")}</div>
+                                  <div className="text-white/70">Status</div>
+                                  <div className="font-medium text-white">{readString(row, ["status", "attendance_status"], "-")}</div>
                                 </div>
                               </div>
                               <div className="flex gap-2.5">
                                 <div>
-                                  <div className="text-muted-foreground">Check In</div>
-                                  <div className="font-medium text-foreground">{formatUnknownValue(row.check_in_at ?? row.first_punch_at)}</div>
+                                  <div className="text-white/70">Check In</div>
+                                  <div className="font-medium text-white">{formatUnknownValue(row.check_in_at ?? row.first_punch_at)}</div>
                                 </div>
                               </div>
                             </div>
                           </div>
                         )
                       })
+                    )}
+                  </SelfServiceSectionCard>
+                </div>
+              ) : null}
+
+              {activeTab === "updates" ? (
+                <div className="space-y-5">
+                  <div>
+                    <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                      Profile Update Requests
+                    </div>
+                    {profileUpdateRequests.length === 0 ? (
+                      <div className="text-xs text-muted-foreground">No profile update requests found.</div>
+                    ) : (
+                      <div className="space-y-3">
+                      {profileUpdateRequests.map((row, index) => {
+                        const titleText =
+                          readString(row, ["title", "request_no", "reference_no", "reference"], "") ||
+                          readString(row, ["reason", "request_type", "change_type"], "Profile update")
+                        const createdAt =
+                          formatDateTime(row.created_at) !== "-" ? formatDateTime(row.created_at) : formatDate(row.date)
+                        const statusLabel = readString(row, ["status"], "draft")
+                        return (
+                          <div
+                            key={String(row.id ?? index)}
+                            className="relative overflow-hidden rounded-2xl border border-white/15 bg-primary p-4 text-primary-foreground"
+                          >
+                            <Doodle name={pickDoodle(index)} className="text-white/20" />
+                            <div className="relative z-10 flex items-start justify-between gap-3">
+                              <div className="space-y-2">
+                                <p className="text-base font-semibold tracking-tight text-white">{titleText}</p>
+                                <p className="text-xs text-white/70">{createdAt}</p>
+                                {readString(row, ["reason"], "") ? (
+                                  <p className="text-sm text-white/85">{readString(row, ["reason"], "")}</p>
+                                ) : null}
+                              </div>
+                              <span className="rounded-full border border-white/20 bg-white/10 px-2.5 py-1 text-[10px] font-medium uppercase tracking-wide text-white">
+                                {statusLabel}
+                              </span>
+                            </div>
+                          </div>
+                        )
+                      })}
+                      </div>
                     )}
                   </div>
                 </div>
@@ -2110,36 +2336,35 @@ export function EmployeeSelfServiceProfileView() {
               {activeTab === "records" && employee ? (
                 <div className="space-y-5">
                   {/* Identifications */}
-                  <div>
-                    <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Identifications</div>
+                  <SelfServiceSectionCard title="Identifications" doodle="doodle-circles">
                     {Array.isArray(employee.identifications) && employee.identifications.length ? (
                       employee.identifications.map((entry, index) => {
                         const record = asRecord(entry)
                         return (
-                          <div key={`identification-${index}`} className={index > 0 ? "mt-3 pt-3 border-t border-border/50" : ""}>
+                          <div key={`identification-${index}`} className={index > 0 ? "mt-3 border-t border-white/15 pt-3" : ""}>
                             <div className="grid gap-3 sm:grid-cols-2 text-xs">
                               <div className="flex gap-2.5">
                                 <div>
-                                  <div className="text-muted-foreground">Type</div>
-                                  <div className="font-medium text-foreground">{readString(record, ["identification_type", "type"], "-")}</div>
+                                  <div className="text-white/70">Type</div>
+                                  <div className="font-medium text-white">{readString(record, ["identification_type", "type"], "-")}</div>
                                 </div>
                               </div>
                               <div className="flex gap-2.5">
                                 <div>
-                                  <div className="text-muted-foreground">Number</div>
-                                  <div className="font-medium text-foreground">{readString(record, ["number", "id_number"], "-")}</div>
+                                  <div className="text-white/70">Number</div>
+                                  <div className="font-medium text-white">{readString(record, ["number", "id_number"], "-")}</div>
                                 </div>
                               </div>
                               <div className="flex gap-2.5">
                                 <div>
-                                  <div className="text-muted-foreground">Issue Date</div>
-                                  <div className="font-medium text-foreground">{formatDate(record?.issue_date)}</div>
+                                  <div className="text-white/70">Issue Date</div>
+                                  <div className="font-medium text-white">{formatDate(record?.issue_date)}</div>
                                 </div>
                               </div>
                               <div className="flex gap-2.5">
                                 <div>
-                                  <div className="text-muted-foreground">Expiry Date</div>
-                                  <div className="font-medium text-foreground">{formatDate(record?.expiry_date)}</div>
+                                  <div className="text-white/70">Expiry Date</div>
+                                  <div className="font-medium text-white">{formatDate(record?.expiry_date)}</div>
                                 </div>
                               </div>
                             </div>
@@ -2147,43 +2372,40 @@ export function EmployeeSelfServiceProfileView() {
                         )
                       })
                     ) : (
-                      <div className="text-xs text-muted-foreground">No identifications available.</div>
+                      <div className="text-xs text-white/80">No identifications available.</div>
                     )}
-                  </div>
-
-                  <div className="border-t border-border/50" />
+                  </SelfServiceSectionCard>
 
                   {/* Bank Accounts */}
-                  <div>
-                    <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Bank Accounts</div>
+                  <SelfServiceSectionCard title="Bank Accounts" doodle="doodle-curves">
                     {Array.isArray(employee.bank_accounts) && employee.bank_accounts.length ? (
                       employee.bank_accounts.map((entry, index) => {
                         const record = asRecord(entry)
                         return (
-                          <div key={`bank-${index}`} className={index > 0 ? "mt-3 pt-3 border-t border-border/50" : ""}>
+                          <div key={`bank-${index}`} className={index > 0 ? "mt-3 border-t border-white/15 pt-3" : ""}>
                             <div className="grid gap-3 sm:grid-cols-2 text-xs">
                               <div className="flex gap-2.5">
                                 <div>
-                                  <div className="text-muted-foreground">Bank Name</div>
-                                  <div className="font-medium text-foreground">{readString(record, ["bank_name"], "-")}</div>
+                                  <div className="text-white/70">Bank Name</div>
+                                  <div className="font-medium text-white">{readString(record, ["bank_name"], "-")}</div>
                                 </div>
                               </div>
                               <div className="flex gap-2.5">
                                 <div>
-                                  <div className="text-muted-foreground">Account Name</div>
-                                  <div className="font-medium text-foreground">{readString(record, ["account_name"], "-")}</div>
+                                  <div className="text-white/70">Account Name</div>
+                                  <div className="font-medium text-white">{readString(record, ["account_name"], "-")}</div>
                                 </div>
                               </div>
                               <div className="flex gap-2.5">
                                 <div>
-                                  <div className="text-muted-foreground">Account Number</div>
-                                  <div className="font-medium text-foreground">{readString(record, ["account_number"], "-")}</div>
+                                  <div className="text-white/70">Account Number</div>
+                                  <div className="font-medium text-white">{readString(record, ["account_number"], "-")}</div>
                                 </div>
                               </div>
                               <div className="flex gap-2.5">
                                 <div>
-                                  <div className="text-muted-foreground">Currency</div>
-                                  <div className="font-medium text-foreground">{readString(record, ["currency"], "-")}</div>
+                                  <div className="text-white/70">Currency</div>
+                                  <div className="font-medium text-white">{readString(record, ["currency"], "-")}</div>
                                 </div>
                               </div>
                             </div>
@@ -2191,37 +2413,34 @@ export function EmployeeSelfServiceProfileView() {
                         )
                       })
                     ) : (
-                      <div className="text-xs text-muted-foreground">No bank accounts available.</div>
+                      <div className="text-xs text-white/80">No bank accounts available.</div>
                     )}
-                  </div>
-
-                  <div className="border-t border-border/50" />
+                  </SelfServiceSectionCard>
 
                   {/* Academic Qualifications */}
-                  <div>
-                    <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Academic Qualifications</div>
+                  <SelfServiceSectionCard title="Academic Qualifications" doodle="doodle-grass">
                     {Array.isArray(employee.academic_qualifications) && employee.academic_qualifications.length ? (
                       employee.academic_qualifications.map((entry, index) => {
                         const record = asRecord(entry)
                         return (
-                          <div key={`academic-${index}`} className={index > 0 ? "mt-3 pt-3 border-t border-border/50" : ""}>
+                          <div key={`academic-${index}`} className={index > 0 ? "mt-3 border-t border-white/15 pt-3" : ""}>
                             <div className="grid gap-3 sm:grid-cols-2 text-xs">
                               <div className="flex gap-2.5">
                                 <div>
-                                  <div className="text-muted-foreground">Qualification</div>
-                                  <div className="font-medium text-foreground">{readString(record, ["qualification", "name"], "-")}</div>
+                                  <div className="text-white/70">Qualification</div>
+                                  <div className="font-medium text-white">{readString(record, ["qualification", "name"], "-")}</div>
                                 </div>
                               </div>
                               <div className="flex gap-2.5">
                                 <div>
-                                  <div className="text-muted-foreground">Institution</div>
-                                  <div className="font-medium text-foreground">{readString(record, ["institution"], "-")}</div>
+                                  <div className="text-white/70">Institution</div>
+                                  <div className="font-medium text-white">{readString(record, ["institution"], "-")}</div>
                                 </div>
                               </div>
                               <div className="flex gap-2.5">
                                 <div>
-                                  <div className="text-muted-foreground">Year</div>
-                                  <div className="font-medium text-foreground">{readString(record, ["year"], "-")}</div>
+                                  <div className="text-white/70">Year</div>
+                                  <div className="font-medium text-white">{readString(record, ["year"], "-")}</div>
                                 </div>
                               </div>
                             </div>
@@ -2229,37 +2448,34 @@ export function EmployeeSelfServiceProfileView() {
                         )
                       })
                     ) : (
-                      <div className="text-xs text-muted-foreground">No academic qualifications available.</div>
+                      <div className="text-xs text-white/80">No academic qualifications available.</div>
                     )}
-                  </div>
-
-                  <div className="border-t border-border/50" />
+                  </SelfServiceSectionCard>
 
                   {/* Professional Qualifications */}
-                  <div>
-                    <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Professional Qualifications</div>
+                  <SelfServiceSectionCard title="Professional Qualifications" doodle="doodle-circles">
                     {Array.isArray(employee.professional_qualifications) && employee.professional_qualifications.length ? (
                       employee.professional_qualifications.map((entry, index) => {
                         const record = asRecord(entry)
                         return (
-                          <div key={`professional-${index}`} className={index > 0 ? "mt-3 pt-3 border-t border-border/50" : ""}>
+                          <div key={`professional-${index}`} className={index > 0 ? "mt-3 border-t border-white/15 pt-3" : ""}>
                             <div className="grid gap-3 sm:grid-cols-2 text-xs">
                               <div className="flex gap-2.5">
                                 <div>
-                                  <div className="text-muted-foreground">Qualification</div>
-                                  <div className="font-medium text-foreground">{readString(record, ["qualification", "name"], "-")}</div>
+                                  <div className="text-white/70">Qualification</div>
+                                  <div className="font-medium text-white">{readString(record, ["qualification", "name"], "-")}</div>
                                 </div>
                               </div>
                               <div className="flex gap-2.5">
                                 <div>
-                                  <div className="text-muted-foreground">Issuer</div>
-                                  <div className="font-medium text-foreground">{readString(record, ["issuer", "institution"], "-")}</div>
+                                  <div className="text-white/70">Issuer</div>
+                                  <div className="font-medium text-white">{readString(record, ["issuer", "institution"], "-")}</div>
                                 </div>
                               </div>
                               <div className="flex gap-2.5">
                                 <div>
-                                  <div className="text-muted-foreground">Year</div>
-                                  <div className="font-medium text-foreground">{readString(record, ["year"], "-")}</div>
+                                  <div className="text-white/70">Year</div>
+                                  <div className="font-medium text-white">{readString(record, ["year"], "-")}</div>
                                 </div>
                               </div>
                             </div>
@@ -2267,43 +2483,40 @@ export function EmployeeSelfServiceProfileView() {
                         )
                       })
                     ) : (
-                      <div className="text-xs text-muted-foreground">No professional qualifications available.</div>
+                      <div className="text-xs text-white/80">No professional qualifications available.</div>
                     )}
-                  </div>
-
-                  <div className="border-t border-border/50" />
+                  </SelfServiceSectionCard>
 
                   {/* Experience Details */}
-                  <div>
-                    <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Experience Details</div>
+                  <SelfServiceSectionCard title="Experience Details" doodle="doodle-curves">
                     {Array.isArray(employee.experience_details) && employee.experience_details.length ? (
                       employee.experience_details.map((entry, index) => {
                         const record = asRecord(entry)
                         return (
-                          <div key={`experience-${index}`} className={index > 0 ? "mt-3 pt-3 border-t border-border/50" : ""}>
+                          <div key={`experience-${index}`} className={index > 0 ? "mt-3 border-t border-white/15 pt-3" : ""}>
                             <div className="grid gap-3 sm:grid-cols-2 text-xs">
                               <div className="flex gap-2.5">
                                 <div>
-                                  <div className="text-muted-foreground">Company</div>
-                                  <div className="font-medium text-foreground">{readString(record, ["company_name", "company"], "-")}</div>
+                                  <div className="text-white/70">Company</div>
+                                  <div className="font-medium text-white">{readString(record, ["company_name", "company"], "-")}</div>
                                 </div>
                               </div>
                               <div className="flex gap-2.5">
                                 <div>
-                                  <div className="text-muted-foreground">Role</div>
-                                  <div className="font-medium text-foreground">{readString(record, ["role", "position"], "-")}</div>
+                                  <div className="text-white/70">Role</div>
+                                  <div className="font-medium text-white">{readString(record, ["role", "position"], "-")}</div>
                                 </div>
                               </div>
                               <div className="flex gap-2.5">
                                 <div>
-                                  <div className="text-muted-foreground">Start Date</div>
-                                  <div className="font-medium text-foreground">{formatDate(record?.start_date)}</div>
+                                  <div className="text-white/70">Start Date</div>
+                                  <div className="font-medium text-white">{formatDate(record?.start_date)}</div>
                                 </div>
                               </div>
                               <div className="flex gap-2.5">
                                 <div>
-                                  <div className="text-muted-foreground">End Date</div>
-                                  <div className="font-medium text-foreground">{formatDate(record?.end_date)}</div>
+                                  <div className="text-white/70">End Date</div>
+                                  <div className="font-medium text-white">{formatDate(record?.end_date)}</div>
                                 </div>
                               </div>
                             </div>
@@ -2311,43 +2524,40 @@ export function EmployeeSelfServiceProfileView() {
                         )
                       })
                     ) : (
-                      <div className="text-xs text-muted-foreground">No experience details available.</div>
+                      <div className="text-xs text-white/80">No experience details available.</div>
                     )}
-                  </div>
-
-                  <div className="border-t border-border/50" />
+                  </SelfServiceSectionCard>
 
                   {/* Documents */}
-                  <div>
-                    <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Documents</div>
+                  <SelfServiceSectionCard title="Documents" doodle="doodle-grass">
                     {Array.isArray(employee.documents) && employee.documents.length ? (
                       employee.documents.map((entry, index) => {
                         const record = asRecord(entry)
                         return (
-                          <div key={`document-${index}`} className={index > 0 ? "mt-3 pt-3 border-t border-border/50" : ""}>
+                          <div key={`document-${index}`} className={index > 0 ? "mt-3 border-t border-white/15 pt-3" : ""}>
                             <div className="grid gap-3 sm:grid-cols-2 text-xs">
                               <div className="flex gap-2.5">
                                 <div>
-                                  <div className="text-muted-foreground">Type</div>
-                                  <div className="font-medium text-foreground">{readString(record, ["document_type", "type"], "-")}</div>
+                                  <div className="text-white/70">Type</div>
+                                  <div className="font-medium text-white">{readString(record, ["document_type", "type"], "-")}</div>
                                 </div>
                               </div>
                               <div className="flex gap-2.5">
                                 <div>
-                                  <div className="text-muted-foreground">Title</div>
-                                  <div className="font-medium text-foreground">{readString(record, ["title", "name"], "-")}</div>
+                                  <div className="text-white/70">Title</div>
+                                  <div className="font-medium text-white">{readString(record, ["title", "name"], "-")}</div>
                                 </div>
                               </div>
                               <div className="flex gap-2.5">
                                 <div>
-                                  <div className="text-muted-foreground">Status</div>
-                                  <div className="font-medium text-foreground">{readString(record, ["status"], "-")}</div>
+                                  <div className="text-white/70">Status</div>
+                                  <div className="font-medium text-white">{readString(record, ["status"], "-")}</div>
                                 </div>
                               </div>
                               <div className="flex gap-2.5">
                                 <div>
-                                  <div className="text-muted-foreground">Uploaded At</div>
-                                  <div className="font-medium text-foreground">{formatDate(record?.created_at)}</div>
+                                  <div className="text-white/70">Uploaded At</div>
+                                  <div className="font-medium text-white">{formatDate(record?.created_at)}</div>
                                 </div>
                               </div>
                             </div>
@@ -2355,9 +2565,9 @@ export function EmployeeSelfServiceProfileView() {
                         )
                       })
                     ) : (
-                      <div className="text-xs text-muted-foreground">No documents available.</div>
+                      <div className="text-xs text-white/80">No documents available.</div>
                     )}
-                  </div>
+                  </SelfServiceSectionCard>
                 </div>
               ) : null}
 
@@ -2450,33 +2660,52 @@ export function EmployeePromotionView() {
   const { loading, error } = useSelfEmployeeData()
 
   return (
-    <div className="grid gap-4 px-4 lg:px-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Promotion</CardTitle>
-          <CardDescription>Promotion updates will appear here when they are available.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="flex flex-col items-center justify-center gap-4 py-10">
-              <LumaSpin />
-              <p className="text-sm text-muted-foreground">Loading promotion context...</p>
+    <section className="space-y-4 px-4 py-2 lg:px-6">
+      <DoodleSprites />
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-10">
+          <LumaSpin />
+          <p className="text-sm text-muted-foreground">Loading promotion context...</p>
+        </div>
+      ) : error ? (
+        <p className="text-sm text-red-600">{error}</p>
+      ) : (
+        <div className="max-w-sm mx-auto">
+          <div className="relative overflow-hidden rounded-2xl p-6 text-white flex flex-col items-center justify-center min-h-[180px]" style={{ backgroundColor: 'var(--primary)' }}>
+            <Doodle name="doodle-circles" />
+            <div className="relative z-10 flex flex-col items-center">
+              <h3 className="text-xl font-semibold tracking-tight text-center">
+                No promotion currently assigned to you
+              </h3>
+              <p className="mt-2 text-sm text-white/70 text-center">
+                When HR processes or approves a promotion for you, the details will show up here.
+              </p>
             </div>
-          ) : null}
-          {!loading && error ? <p className="text-sm text-red-600">{error}</p> : null}
-          {!loading && !error ? (
-            <div className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50/70 px-6 py-10 text-center">
-              <div className="max-w-md space-y-2">
-                <h3 className="text-lg font-semibold text-foreground">No promotion updates right now</h3>
-                <p className="text-sm text-muted-foreground">
-                  You do not have any active promotion records at the moment. HR or your manager will update this page when something changes.
-                </p>
-              </div>
+          </div>
+        </div>
+      )}
+    </section>
+  )
+}
+
+export function EmployeePayrollView() {
+  return (
+    <section className="space-y-4 px-4 py-2 lg:px-6">
+      <DoodleSprites />
+      <div className="max-w-sm mx-auto">
+        <div className="relative overflow-hidden rounded-2xl p-6 text-white flex flex-col items-center justify-center min-h-[180px]" style={{ backgroundColor: 'var(--primary)' }}>
+          <Doodle name="doodle-circles" />
+          <div className="relative z-10 flex flex-col items-center">
+            <div className="flex items-center justify-center gap-4">
+              <ChartBar size={36} className="text-white/90" />
+              <Settings size={36} className="text-white/90" />
+              <Sparkles size={36} className="text-white/90" />
             </div>
-          ) : null}
-        </CardContent>
-      </Card>
-    </div>
+            <h3 className="text-2xl font-semibold tracking-tight text-center mt-4">Coming Soon</h3>
+          </div>
+        </div>
+      </div>
+    </section>
   )
 }
 
@@ -2514,24 +2743,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
   })
 
   const employeeId = readNumber(employee, ["id", "employee_id"])
-  const leaveTabs = [
-    { key: "requests", label: "Requests" },
-    { key: "balances", label: "Balances" },
-    { key: "holidays", label: "Holidays" },
-    { key: "policies", label: "Policies" },
-  ] as const
-  const [activeTab, setActiveTab] = React.useState<SelfLeaveTab>(tab)
-
-  React.useEffect(() => {
-    setActiveTab(tab)
-  }, [tab])
-
-  const setActiveLeaveTab = React.useCallback((nextTab: SelfLeaveTab) => {
-    setActiveTab(nextTab)
-    if (typeof window !== "undefined") {
-      window.history.replaceState(window.history.state, "", `/dashboard/me/leave/${nextTab}`)
-    }
-  }, [])
+  const activeTab = tab
 
   const availableLeaveTypes = React.useMemo(() => {
     const options = new Map<string, { id: string; label: string }>()
@@ -2571,6 +2783,60 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
     return Array.from(options.values())
   }, [balances, leaveTypes, policies, requests])
 
+  const leaveTypeLabelById = React.useMemo(() => {
+    const labels = new Map<string, string>()
+
+    leaveTypes.forEach((row) => {
+      const id = readNumberish(row.id ?? row.leave_type_id)
+      const label =
+        readString(asRecord(row.leave_type), ["name", "display_name", "code"], "") ||
+        readString(row, ["name", "display_name", "code"], "")
+
+      if (id !== null && label) {
+        labels.set(String(id), label)
+      }
+    })
+
+    return labels
+  }, [leaveTypes])
+
+  const balanceTotals = React.useMemo(() => {
+    const totals = leaveBalancesFull?.totals
+    return [
+      {
+        label: "Allocated",
+        value: readLeaveTotalsValue(totals, ["allocated_days", "allocated"]),
+      },
+      {
+        label: "Used",
+        value: readLeaveTotalsValue(totals, ["used_days", "used"]),
+      },
+      {
+        label: "Pending",
+        value: readLeaveTotalsValue(totals, ["pending_days", "pending"]),
+      },
+      {
+        label: "Carried Forward",
+        value: readLeaveTotalsValue(totals, ["carried_forward_days", "carried_forward"]),
+      },
+      {
+        label: "Expired",
+        value: readLeaveTotalsValue(totals, ["expired_days", "expired"]),
+      },
+      {
+        label: "Available",
+        value: readLeaveTotalsValue(totals, ["available_days", "available", "remaining_days", "remaining"]),
+      },
+    ]
+  }, [leaveBalancesFull?.totals])
+
+  const selectedLeaveTypeLabel = React.useMemo(() => {
+    if (!requestForm.leave_type_id) {
+      return ""
+    }
+    return availableLeaveTypes.find((item) => item.id === requestForm.leave_type_id)?.label ?? ""
+  }, [availableLeaveTypes, requestForm.leave_type_id])
+
   const readEndpointError = React.useCallback(
     (errorObject: unknown, fallbackMessage: string) => {
       const message = errorObject instanceof Error ? errorObject.message : fallbackMessage
@@ -2601,75 +2867,104 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
     setPoliciesError(null)
 
     try {
-      const requestsResult = await listMyLeaveRequests(token, {
-        page: 1,
-        limit: 100,
-        sortBy: "created_at",
-        sortOrder: "DESC",
-      })
-      setRequests(requestsResult.rows)
+      if (activeTab === "requests") {
+        const [requestsResult, typesResult] = await Promise.allSettled([
+          listMyLeaveRequests(token, {
+            page: 1,
+            limit: 100,
+            sortBy: "created_at",
+            sortOrder: "DESC",
+          }),
+          listLeaveTypes(token, { page: 1, limit: 100 }),
+        ])
 
-      const [typesResult, balancesResult, holidaysResult, policiesResult] = await Promise.allSettled([
-        listLeaveTypes(token, { page: 1, limit: 100 }),
-        listMyLeaveBalances(token, { page: 1, limit: 100 }),
-        listAttendanceHolidays(token, { page: 1, limit: 365 }),
-        listLeavePolicies(token, { page: 1, limit: 100 }),
-      ])
+        if (requestsResult.status === "fulfilled") {
+          setRequests(requestsResult.value.rows)
+        } else {
+          setRequests([])
+          setError(readEndpointError(requestsResult.reason, "Failed to load leave requests."))
+        }
 
-      if (typesResult.status === "fulfilled") {
-        setLeaveTypes(typesResult.value.rows)
-      } else {
-        setLeaveTypes([])
-        setLeaveTypesError(readEndpointError(typesResult.reason, "Failed to load leave types."))
+        if (typesResult.status === "fulfilled") {
+          setLeaveTypes(typesResult.value.rows)
+        } else {
+          setLeaveTypes([])
+          setLeaveTypesError(readEndpointError(typesResult.reason, "Failed to load leave types."))
+        }
       }
 
-      if (balancesResult.status === "fulfilled") {
-        setBalances(balancesResult.value.rows)
-        setLeaveBalancesFull(balancesResult.value)
-      } else {
-        setBalances([])
-        setLeaveBalancesFull(null)
-        setBalancesError(readEndpointError(balancesResult.reason, "Failed to load leave balances."))
+      if (activeTab === "balances") {
+        const [balancesResult, typesResult] = await Promise.allSettled([
+          listMyLeaveBalances(token, { page: 1, limit: 100 }),
+          listLeaveTypes(token, { page: 1, limit: 100 }),
+        ])
+
+        if (balancesResult.status === "fulfilled") {
+          setBalances(balancesResult.value.rows)
+          setLeaveBalancesFull(balancesResult.value)
+        } else {
+          throw balancesResult.reason
+        }
+
+        if (typesResult.status === "fulfilled") {
+          setLeaveTypes(typesResult.value.rows)
+          setLeaveTypesError(null)
+        } else {
+          setLeaveTypes([])
+          setLeaveTypesError(readEndpointError(typesResult.reason, "Failed to load leave types."))
+        }
       }
 
-      if (holidaysResult.status === "fulfilled") {
-        setHolidays(holidaysResult.value.rows)
-      } else {
-        setHolidays([])
-        setHolidaysError(readEndpointError(holidaysResult.reason, "Failed to load holiday calendar."))
+      if (activeTab === "holidays") {
+        const holidaysResult = await listAttendanceHolidays(token, { page: 1, limit: 365 })
+        setHolidays(holidaysResult.rows)
       }
 
-      if (policiesResult.status === "fulfilled") {
-        setPolicies(policiesResult.value.rows)
-      } else {
-        setPolicies([])
-        setPoliciesError(readEndpointError(policiesResult.reason, "Failed to load leave policies."))
+      if (activeTab === "policies") {
+        const policiesResult = await listLeavePolicies(token, { page: 1, limit: 100 })
+        setPolicies(policiesResult.rows)
       }
     } catch (errorObject) {
-      const text = errorObject instanceof Error ? errorObject.message : "Failed to load leave data."
-      setError(text)
+      if (activeTab === "balances") {
+        setBalances([])
+        setLeaveBalancesFull(null)
+        setBalancesError(readEndpointError(errorObject, "Failed to load leave balances."))
+      } else if (activeTab === "holidays") {
+        setHolidays([])
+        setHolidaysError(readEndpointError(errorObject, "Failed to load holiday calendar."))
+      } else if (activeTab === "policies") {
+        setPolicies([])
+        setPoliciesError(readEndpointError(errorObject, "Failed to load leave policies."))
+      } else {
+        setError(readEndpointError(errorObject, "Failed to load leave data."))
+      }
     } finally {
       setLoading(false)
     }
-  }, [employeeId, readEndpointError, token])
+  }, [activeTab, employeeId, readEndpointError, token])
 
   React.useEffect(() => {
     void loadData()
   }, [loadData])
 
-  const onRequestLeave = async () => {
+  const onRequestLeave = async (submit: boolean) => {
     if (!token || employeeId === null) {
       setMessage("Your profile is not ready for leave requests.")
       return
     }
 
-    if (!requestForm.leave_type_id || !requestForm.start_date || !requestForm.end_date || !requestForm.reason.trim()) {
-      setMessage("Leave type, dates, and reason are required.")
+    if (!requestForm.leave_type_id || !requestForm.start_date || !requestForm.end_date) {
+      setMessage("Leave type and dates are required.")
+      return
+    }
+
+    if (submit && !requestForm.reason.trim()) {
+      setMessage("A reason is required before submitting the request.")
       return
     }
 
     if (availableLeaveTypes.length === 0) {
-      setMessage("Leave requests cannot be submitted until leave types are available to your account.")
+      setMessage("Leave requests cannot be created until leave types are available to your account.")
       return
     }
 
@@ -2682,18 +2977,19 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
         start_date: requestForm.start_date ? `${requestForm.start_date}T00:00:00` : "",
         end_date: requestForm.end_date ? `${requestForm.end_date}T00:00:00` : "",
         reason: requestForm.reason.trim(),
-        submit: true,
+        submit,
       })
       setRequestForm({ leave_type_id: "", start_date: "", end_date: "", reason: "" })
-      setMessage("Leave request submitted.")
+      setMessage(submit ? "Leave request submitted." : "Leave request saved as a draft.")
       setRequestDialogOpen(false)
-      setActiveLeaveTab("requests")
       await loadData()
     } catch (errorObject) {
       const text =
         errorObject instanceof Error
           ? errorObject.message
-          : "Failed to submit leave request."
+          : submit
+            ? "Failed to submit leave request."
+            : "Failed to save draft."
       setMessage(text)
     } finally {
       setLoading(false)
@@ -2791,59 +3087,83 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
   let tabContent: React.ReactNode = null
   if (activeTab === "requests") {
     tabContent = (
-      <div className="space-y-4 px-4 lg:px-6">
-        <section className="space-y-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <Button type="button" onClick={() => setRequestDialogOpen(true)} className="sm:hidden">
+      <section className="space-y-4 px-4 py-2 lg:px-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <h2 className="text-3xl font-semibold tracking-tight text-foreground">My Requests</h2>
+          {requests.length > 0 && (
+            <div className="flex gap-2">
+              <Button type="button" onClick={() => setRequestDialogOpen(true)} className="sm:hidden bg-primary text-white hover:bg-primary/90 !text-white">
+                New Leave Request
+              </Button>
+              <Button type="button" onClick={() => setRequestDialogOpen(true)} className="hidden sm:inline-flex bg-primary text-white hover:bg-primary/90 !text-white">
                 New Leave Request
               </Button>
             </div>
-            <Button type="button" onClick={() => setRequestDialogOpen(true)} className="hidden sm:inline-flex sm:self-start">
+          )}
+        </div>
+        {requests.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <p className="text-sm text-muted-foreground">No leave requests found.</p>
+            <Button
+              type="button"
+              onClick={() => setRequestDialogOpen(true)}
+              className="mt-6 bg-primary text-white hover:bg-primary/90 !text-white"
+            >
               New Leave Request
             </Button>
           </div>
-          <div className="space-y-2 pt-3">
-            <div className="space-y-1">
-              <h2 className="text-3xl font-semibold tracking-tight text-foreground">My Requests</h2>
-            </div>
-            {requests.length === 0 ? <p className="text-sm text-slate-500">No leave requests found.</p> : null}
+        ) : (
+          <div className="space-y-2">
             {requests.map((row, index) => {
               const id = readNumber(row, ["id"])
               const status = readString(row, ["status"], "pending").toLowerCase()
               const canCancel = ["pending", "draft"].includes(status)
+              const statusMeta = resolveLeaveStatusMeta(status)
               return (
-                <div key={String(row.id ?? index)} className="rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800">
-                  <p className="font-medium">{readString(row, ["leave_no", "request_no", "reason"], "Request")}</p>
-                  <p className="text-slate-600 dark:text-slate-300">{formatDate(row.start_date)} to {formatDate(row.end_date)}</p>
-                  <p className="text-slate-600 dark:text-slate-300">Status: {readString(row, ["status"], "pending")}</p>
-                  <p className="text-slate-600 dark:text-slate-300">Leave Type: {readString(asRecord(row.leave_type), ["name"], "-")}</p>
-                  <div className="mt-2 flex gap-2">
-                    {id && (
-                      <Button variant="outline" size="sm" onClick={() => void onDownloadPdf(id)} disabled={loading}>
-                        Download PDF
-                      </Button>
-                    )}
-                    {id && canCancel && (
-                      <Button variant="destructive" size="sm" onClick={() => openCancelDialog(id)} disabled={loading}>
-                        Cancel
-                      </Button>
-                    )}
-                    {id && status === "draft" && (
-                      <Button size="sm" onClick={() => void onSubmitRequest(id)} disabled={loading}>
-                        Submit
-                      </Button>
-                    )}
+                <div key={String(row.id ?? index)} className="relative overflow-hidden rounded-2xl p-4 text-white" style={{ backgroundColor: 'var(--primary)' }}>
+                  <Doodle name="doodle-circles" />
+                  <div className="relative z-10">
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="font-medium">{readString(row, ["leave_no", "request_no", "reason"], "Request")}</p>
+                      <Badge className={cn("border text-xs uppercase tracking-wide", statusMeta.badgeClassName)}>
+                        {statusMeta.label}
+                      </Badge>
+                    </div>
+                    <p className="text-white/80">{formatDate(row.start_date)} to {formatDate(row.end_date)}</p>
+                    <p className="text-white/80">{statusMeta.helperText || `Status: ${readString(row, ["status"], "pending")}`}</p>
+                    <p className="text-white/80">Leave Type: {readString(asRecord(row.leave_type), ["name"], "-")}</p>
+                    <div className="mt-2 flex gap-2">
+                      {id && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => void onDownloadPdf(id)}
+                          disabled={loading}
+                          className="border-primary bg-primary text-white hover:bg-primary/90 hover:text-white"
+                        >
+                          Download PDF
+                        </Button>
+                      )}
+                      {id && canCancel && (
+                        <Button variant="destructive" size="sm" onClick={() => openCancelDialog(id)} disabled={loading} className="!text-white">
+                          Cancel
+                        </Button>
+                      )}
+                      {id && status === "draft" && (
+                        <Button size="sm" onClick={() => void onSubmitRequest(id)} disabled={loading} className="bg-white/20 text-white hover:bg-white/30">
+                          Submit
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </div>
               )
             })}
           </div>
-        </section>
-
-        {message ? <p className="text-sm text-slate-700 md:col-span-2 dark:text-slate-300">{message}</p> : null}
-        {error ? <p className="text-sm text-red-600 md:col-span-2">{error}</p> : null}
-      </div>
+        )}
+        {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
+        {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      </section>
     )
   }
   if (activeTab === "balances") {
@@ -2862,16 +3182,50 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
           </div>
         ) : null}
         {!loading && balances.length === 0 ? <p className="text-sm text-slate-500">No balance records found.</p> : null}
+        <div className="flex flex-wrap items-end gap-x-5 gap-y-2 border-b border-border/70 pb-3">
+          {balanceTotals.map((item) => (
+            <div key={item.label} className="min-w-[88px]">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                {item.label}
+              </p>
+              <p className="mt-0.5 text-lg font-semibold tracking-tight text-primary">
+                {formatDayValue(item.value)}
+              </p>
+              <p className="text-[11px] text-muted-foreground">days</p>
+            </div>
+          ))}
+        </div>
         <div className="space-y-2">
           {balances.map((row, index) => (
-            <div key={String(row.id ?? index)} className="rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800">
-              <p className="font-medium">{readString(asRecord(row.leave_type), ["name"], "Leave type")}</p>
-              <p className="text-slate-600 dark:text-slate-300">Fiscal Year: {readString(row, ["fiscal_year"], fiscalYear)}</p>
-              <div className="mt-1 grid grid-cols-2 gap-2 text-xs">
-                <div>Allocated: {String(row.allocated_days ?? "-")}</div>
-                <div>Used: {String(row.used_days ?? "-")}</div>
-                <div>Pending: {String(row.pending_days ?? "-")}</div>
-                <div>Available: {String(row.available_days ?? row.remaining_days ?? "-")}</div>
+            <div key={String(row.id ?? index)} className="relative overflow-hidden rounded-2xl p-4 text-white" style={{ backgroundColor: 'var(--primary)' }}>
+              <Doodle name="doodle-circles" />
+              <div className="relative z-10">
+                <p className="font-medium">
+                  {(() => {
+                    const nestedLeaveType = asRecord(row.leave_type)
+                    const nestedLabel =
+                      readString(nestedLeaveType, ["name", "display_name", "code"], "") ||
+                      readString(row, ["leave_type_name", "leave_type_code"], "")
+
+                    if (nestedLabel) {
+                      return nestedLabel
+                    }
+
+                    const leaveTypeId = readNumberish(row.leave_type_id ?? nestedLeaveType?.id)
+                    if (leaveTypeId !== null) {
+                      return leaveTypeLabelById.get(String(leaveTypeId)) ?? `Leave type #${leaveTypeId}`
+                    }
+
+                    return "Leave type"
+                  })()}
+                </p>
+                <p className="text-white/80">Fiscal Year: {readString(row, ["fiscal_year"], fiscalYear)}</p>
+                <div className="mt-1 grid grid-cols-2 gap-2 text-xs text-white/80">
+                  <div>Allocated: {String(row.allocated_days ?? "-")}</div>
+                  <div>Used: {String(row.used_days ?? "-")}</div>
+                  <div>Pending: {String(row.pending_days ?? "-")}</div>
+                  <div>Available: {String(row.available_days ?? row.remaining_days ?? "-")}</div>
+                </div>
               </div>
             </div>
           ))}
@@ -2902,9 +3256,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
           </div>
         ) : null}
         {!loading && sortedHolidays.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/70 px-5 py-8 text-sm text-slate-500">
-            No holidays were returned by `/api/attendance/holidays`.
-          </div>
+          <p className="text-sm text-slate-500">No holidays were returned by `/api/attendance/holidays`.</p>
         ) : null}
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {sortedHolidays.map((row, index) => {
@@ -2920,18 +3272,21 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
                 : formatDate(holidayStart)
 
             return (
-              <div key={String(row.id ?? index)} className="rounded-2xl border border-slate-200 bg-white p-4 text-sm shadow-sm dark:border-slate-800">
-                <div className="flex items-start justify-between gap-3">
-                  <p className="font-medium text-foreground">{readString(row, ["name", "title"], "Holiday")}</p>
-                  {holidayType ? (
-                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium uppercase tracking-wide text-slate-600">
-                      {holidayType}
-                    </span>
-                  ) : null}
+              <div key={String(row.id ?? index)} className="relative overflow-hidden rounded-2xl p-4 text-white" style={{ backgroundColor: 'var(--primary)' }}>
+                <Doodle name="doodle-circles" />
+                <div className="relative z-10">
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="font-medium">{readString(row, ["name", "title"], "Holiday")}</p>
+                    {holidayType ? (
+                      <span className="rounded-full bg-white/20 px-2.5 py-1 text-[11px] font-medium uppercase tracking-wide text-white/90">
+                        {holidayType}
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="mt-2 text-white/80">{dateLabel}</p>
+                  {holidayBranch ? <p className="mt-1 text-xs text-white/60">Branch: {holidayBranch}</p> : null}
+                  {holidayDescription ? <p className="mt-2 text-xs text-white/60">{holidayDescription}</p> : null}
                 </div>
-                <p className="mt-2 text-slate-600 dark:text-slate-300">{dateLabel}</p>
-                {holidayBranch ? <p className="mt-1 text-xs text-slate-500">Branch: {holidayBranch}</p> : null}
-                {holidayDescription ? <p className="mt-2 text-xs text-slate-500">{holidayDescription}</p> : null}
               </div>
             )
           })}
@@ -2956,10 +3311,13 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
         {!loading && policies.length === 0 ? <p className="text-sm text-slate-500">No leave policies found.</p> : null}
         <div className="space-y-2">
           {policies.map((row, index) => (
-            <div key={String(row.id ?? index)} className="rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800">
-              <p className="font-medium">{readString(row, ["name"], "Policy")}</p>
-              <p className="text-slate-600 dark:text-slate-300">Status: {readString(row, ["status"], "-")}</p>
-              <p className="text-slate-600 dark:text-slate-300">Accrual: {readString(row, ["accrual_method"], "-")}</p>
+            <div key={String(row.id ?? index)} className="relative overflow-hidden rounded-2xl p-4 text-white" style={{ backgroundColor: 'var(--primary)' }}>
+              <Doodle name="doodle-circles" />
+              <div className="relative z-10">
+                <p className="font-medium">{readString(row, ["name"], "Policy")}</p>
+                <p className="text-white/80">Status: {readString(row, ["status"], "-")}</p>
+                <p className="text-white/80">Accrual: {readString(row, ["accrual_method"], "-")}</p>
+              </div>
             </div>
           ))}
         </div>
@@ -2970,44 +3328,25 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
   }
 
   return (
-    <div>
-      <div className="sticky top-(--header-height) z-40 mb-4 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-        <div className="glass-scrollbar overflow-x-auto">
-          <div className="inline-flex min-w-full items-center gap-4 border-b border-border/80">
-            {leaveTabs.map((t) => {
-              const isActive = activeTab === t.key
-              return (
-                <button
-                  key={t.key}
-                  type="button"
-                  onClick={() => setActiveLeaveTab(t.key)}
-                  className={cn(
-                    "border-b-2 px-1 py-2 text-[0.92rem] font-medium whitespace-nowrap transition-colors duration-200",
-                    isActive
-                      ? "border-[var(--primary)] text-[var(--primary)]"
-                      : "border-transparent text-slate-600 hover:text-slate-900"
-                  )}
-                >
-                  {t.label}
-                </button>
-              )
-            })}
-          </div>
-        </div>
+    <div className="flex flex-col flex-1 min-h-0">
+      <DoodleSprites />
+      <div className="flex-1 min-h-0 relative">
+        {tabContent}
       </div>
-      {tabContent}
       <Dialog open={requestDialogOpen} onOpenChange={setRequestDialogOpen}>
         <DialogPopup className="sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>Request Leave</DialogTitle>
-            <DialogDescription>Submit a new leave request without leaving this page.</DialogDescription>
+            <DialogDescription>Save a draft or submit a new leave request without leaving this page.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-3">
             <div className="space-y-1">
               <Label>Leave Type</Label>
               <Select value={requestForm.leave_type_id} onValueChange={(value) => setRequestForm((prev) => ({ ...prev, leave_type_id: value ?? "" }))}>
                 <SelectTrigger>
-                  <SelectValue placeholder={availableLeaveTypes.length > 0 ? "Select leave type" : "No leave types available"} />
+                  <SelectValue placeholder={availableLeaveTypes.length > 0 ? "Select leave type" : "No leave types available"}>
+                    {selectedLeaveTypeLabel || undefined}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {availableLeaveTypes.map((row) => (
@@ -3031,8 +3370,8 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
             </div>
             <div className="space-y-1">
               <Label>Reason</Label>
-              <textarea
-                className="min-h-24 rounded-md border border-slate-300 px-3 py-2 text-sm"
+              <Textarea
+                className="min-h-24"
                 value={requestForm.reason}
                 onChange={(event) => setRequestForm((prev) => ({ ...prev, reason: event.target.value }))}
               />
@@ -3043,7 +3382,15 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
             <Button type="button" variant="outline" onClick={() => setRequestDialogOpen(false)}>
               Close
             </Button>
-            <Button type="button" onClick={() => void onRequestLeave()} disabled={loading || availableLeaveTypes.length === 0}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void onRequestLeave(false)}
+              disabled={loading || availableLeaveTypes.length === 0}
+            >
+              Save Draft
+            </Button>
+            <Button type="button" onClick={() => void onRequestLeave(true)} disabled={loading || availableLeaveTypes.length === 0} className="bg-primary text-white hover:bg-primary/90 !text-white">
               Submit Request
             </Button>
           </DialogFooter>
@@ -3057,9 +3404,9 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
           </DialogHeader>
           <div className="grid gap-2">
             <Label htmlFor="cancel-reason">Reason</Label>
-            <textarea
+            <Textarea
               id="cancel-reason"
-              className="min-h-24 rounded-md border border-slate-300 px-3 py-2 text-sm"
+              className="min-h-24"
               maxLength={2000}
               value={cancelReason}
               onChange={(event) => setCancelReason(event.target.value)}

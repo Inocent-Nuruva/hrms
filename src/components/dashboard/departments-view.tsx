@@ -4,6 +4,8 @@ import * as React from "react"
 import { Pencil, Plus, RefreshCw, Trash2 } from "lucide-react"
 import { SearchToggleField } from "@/components/common/search-toggle-field"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
+import { Textarea } from "@/components/ui/textarea"
+import { useDebouncedValue } from "@/hooks/use-debounced-value"
 
 import {
   createDepartment,
@@ -123,8 +125,20 @@ export function DepartmentsView() {
   const [branches, setBranches] = React.useState<AdminRecord[]>([])
   const [allDepartments, setAllDepartments] = React.useState<AdminRecord[]>([])
   const [pendingDelete, setPendingDelete] = React.useState<AdminRecord | null>(null)
+  const debouncedSearch = useDebouncedValue(query.search, 350)
 
-  const fetchDepartments = React.useCallback(async () => {
+  const normalizedQuery = React.useMemo(
+    () => ({
+      ...query,
+      search: debouncedSearch,
+      status: query.status || undefined,
+      branch_id: query.branch_id > 0 ? query.branch_id : undefined,
+      parent_id: query.parent_id > 0 ? query.parent_id : undefined,
+    }),
+    [debouncedSearch, query]
+  )
+
+  const fetchDepartments = React.useCallback(async (signal?: AbortSignal) => {
     const token = readStoredToken()
     if (!token) {
       setError("Authentication required. Please log in again.")
@@ -135,28 +149,39 @@ export function DepartmentsView() {
     setLoading(true)
     setError(null)
     try {
-      const result = await listDepartments(token, {
-        ...query,
-        page,
-        status: query.status || undefined,
-        branch_id: query.branch_id > 0 ? query.branch_id : undefined,
-        parent_id: query.parent_id > 0 ? query.parent_id : undefined,
-      })
+      const result = await listDepartments(
+        token,
+        {
+          ...normalizedQuery,
+          page,
+        },
+        {
+          signal,
+          cacheTtlMs: 20_000,
+        }
+      )
       setRows(result.rows)
       setTotalPages(result.totalPages)
       setTotal(result.total)
     } catch (errorObject) {
+      if (signal?.aborted) {
+        return
+      }
       setRows([])
       setTotalPages(null)
       setTotal(null)
       setError(errorObject instanceof Error ? errorObject.message : "Failed to load departments.")
     } finally {
-      setLoading(false)
+      if (!signal?.aborted) {
+        setLoading(false)
+      }
     }
-  }, [page, query])
+  }, [normalizedQuery, page])
 
   React.useEffect(() => {
-    void fetchDepartments()
+    const controller = new AbortController()
+    void fetchDepartments(controller.signal)
+    return () => controller.abort()
   }, [fetchDepartments])
 
   React.useEffect(() => {
@@ -170,7 +195,7 @@ export function DepartmentsView() {
       sortBy: "created_at",
       sortOrder: "DESC",
       status: "active",
-    })
+    }, { cacheTtlMs: 60_000 })
       .then((result) => setBranches(result.rows))
       .catch(() => setBranches([]))
   }, [])
@@ -185,7 +210,7 @@ export function DepartmentsView() {
       limit: 100,
       sortBy: "created_at",
       sortOrder: "DESC",
-    })
+    }, { cacheTtlMs: 60_000 })
       .then((result) => setAllDepartments(result.rows))
       .catch(() => setAllDepartments([]))
   }, [])
@@ -428,7 +453,7 @@ export function DepartmentsView() {
               </label>
               <label className="grid gap-1 md:col-span-2">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Description</span>
-                <textarea className="min-h-20 rounded-md border border-slate-300 px-3 py-2 text-sm" value={form.description} onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))} />
+                <Textarea className="min-h-20 rounded-md border border-slate-300 px-3 py-2 text-sm" value={form.description} onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))} />
               </label>
               <label className="grid gap-1">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Status</span>

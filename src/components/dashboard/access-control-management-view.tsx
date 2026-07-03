@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/animate-ui/components/base/dialog"
 import { ResizableTable } from "@/components/ui/resizable-table"
+import { Textarea } from "@/components/ui/textarea"
 import {
   createAccessControlResource,
   deleteAccessControlResourceById,
@@ -624,7 +625,7 @@ function FieldInput({
 
   if (field.type === "json") {
     return (
-      <textarea
+      <Textarea
         className="min-h-20 w-full rounded-md border border-slate-300 p-2 font-mono text-xs"
         value={value}
         placeholder={field.placeholder}
