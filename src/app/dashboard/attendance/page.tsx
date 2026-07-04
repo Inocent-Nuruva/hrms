@@ -1,5 +1,5 @@
-import { AttendanceManagementClient } from "@/components/dashboard/attendance-management-client"
+import { AttendanceActivityClient } from "@/components/dashboard/attendance-activity-client"
 
 export default function AttendanceIndexPage() {
-  return <AttendanceManagementClient section="settings" />
+  return <AttendanceActivityClient section="daily-summaries" />
 }

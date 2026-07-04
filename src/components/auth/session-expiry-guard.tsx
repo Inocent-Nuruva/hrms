@@ -17,17 +17,26 @@ export function SessionExpiryGuard() {
     redirectToLogin()
   }, [])
 
+  const isProtectedPath = React.useCallback((pathname: string) => {
+    return pathname.startsWith(ROUTES.dashboard) || pathname.startsWith(ROUTES.onboarding)
+  }, [])
+
   const ensureFreshSession = React.useCallback(async () => {
     if (typeof window === "undefined") {
       return
     }
 
-    if (window.location.pathname === ROUTES.login) {
+    const pathname = window.location.pathname
+
+    if (pathname === ROUTES.login) {
       return
     }
 
     const { accessToken, refreshToken } = readStoredSessionTokens()
     if (!accessToken) {
+      if (isProtectedPath(pathname)) {
+        expireSession()
+      }
       return
     }
 
@@ -63,7 +72,7 @@ export function SessionExpiryGuard() {
     }
 
     await refreshInFlightRef.current
-  }, [expireSession])
+  }, [expireSession, isProtectedPath])
 
   React.useEffect(() => {
     void ensureFreshSession()

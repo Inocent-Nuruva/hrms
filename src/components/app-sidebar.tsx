@@ -9,10 +9,6 @@ import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar"
 import { UsersRound } from "@/components/animate-ui/icons/users-round"
@@ -269,7 +265,6 @@ const employeeSearchIndex = [
 interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
   userName?: string | null
   userEmail?: string | null
-  companyName?: string | null
   accessMode?: AppSidebarAccessMode
   permissionLabels?: string[]
   activeResource?: AdminResourceKey
@@ -306,6 +301,21 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, string[]> = {
     "attendance_mobile_punches:read",
     "attendance_holidays:read",
     "attendance_device_sync_logs:read",
+    "attendance_daily_summaries:read",
+    "attendance_recalculation_jobs:read",
+    "attendance_unmatched_logs:read",
+    "attendance_shifts:read",
+    "attendance_shift_breaks:read",
+    "attendance_shift_assignments:read",
+    "attendance_shift_schedules:read",
+    "attendance_shift_rotation_groups:read",
+    "attendance_shift_rotation_rules:read",
+    "attendance_timetables:read",
+    "attendance_timetable_days:read",
+    "attendance_timetable_holiday_rules:read",
+    "attendance_timetable_rotations:read",
+    "attendance_timetable_rotation_rules:read",
+    "attendance_employee_timetables:read",
   ],
   "/dashboard/attendance/settings": ["attendance_settings:read"],
   "/dashboard/attendance/policies": ["attendance_policies:read"],
@@ -317,6 +327,21 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, string[]> = {
   "/dashboard/attendance/mobile-punches": ["attendance_mobile_punches:read"],
   "/dashboard/attendance/holidays": ["attendance_holidays:read"],
   "/dashboard/attendance/device-sync-logs": ["attendance_device_sync_logs:read"],
+  "/dashboard/attendance/daily-summaries": ["attendance_daily_summaries:read"],
+  "/dashboard/attendance/recalculation-jobs": ["attendance_recalculation_jobs:read"],
+  "/dashboard/attendance/unmatched-logs": ["attendance_unmatched_logs:read"],
+  "/dashboard/attendance/shifts": ["attendance_shifts:read"],
+  "/dashboard/attendance/shift-breaks": ["attendance_shift_breaks:read"],
+  "/dashboard/attendance/shift-assignments": ["attendance_shift_assignments:read"],
+  "/dashboard/attendance/shift-schedules": ["attendance_shift_schedules:read"],
+  "/dashboard/attendance/shift-rotation-groups": ["attendance_shift_rotation_groups:read"],
+  "/dashboard/attendance/shift-rotation-rules": ["attendance_shift_rotation_rules:read"],
+  "/dashboard/attendance/timetables": ["attendance_timetables:read"],
+  "/dashboard/attendance/timetable-days": ["attendance_timetable_days:read"],
+  "/dashboard/attendance/timetable-holiday-rules": ["attendance_timetable_holiday_rules:read"],
+  "/dashboard/attendance/timetable-rotations": ["attendance_timetable_rotations:read"],
+  "/dashboard/attendance/timetable-rotation-rules": ["attendance_timetable_rotation_rules:read"],
+  "/dashboard/attendance/employee-timetables": ["attendance_employee_timetables:read"],
   "/dashboard/departments": ["departments:read"],
   "/dashboard/branches": ["branches:read"],
   "/dashboard/positions": ["positions:read", "designations:read"],
@@ -418,7 +443,6 @@ function filterAdminSearchByPermissions(searchItems: SearchItem[], normalizedPer
 export function AppSidebar({
   userName,
   userEmail,
-  companyName,
   accessMode = "admin",
   permissionLabels = [],
   activeResource,
@@ -452,22 +476,7 @@ export function AppSidebar({
 
   return (
     <Sidebar collapsible="offcanvas" {...props}>
-      <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              className="data-[slot=sidebar-menu-button]:h-auto data-[slot=sidebar-menu-button]:cursor-default data-[slot=sidebar-menu-button]:items-center data-[slot=sidebar-menu-button]:rounded-xl data-[slot=sidebar-menu-button]:p-2!"
-              render={<div />}
-              aria-disabled="true"
-            >
-              <span className="overflow-visible text-xs font-semibold leading-tight whitespace-normal text-clip">
-                {companyName ?? (accessMode === "employee" ? "HRMS Portal" : "HRMS Admin")}
-              </span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarHeader>
-      <SidebarContent className="px-2">
+      <SidebarContent className="px-2 pt-3">
         <NavMain
           items={navData.navMain}
           activeResource={activeResource}

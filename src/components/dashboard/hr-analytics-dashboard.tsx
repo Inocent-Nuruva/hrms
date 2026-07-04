@@ -204,6 +204,7 @@ type AttendanceListResult = AdminRecord[] | { rows?: AdminRecord[] }
 
 interface HrAnalyticsDashboardProps {
   refreshKey?: number
+  companyName?: string | null
 }
 
 function AnimatedMetricValue({ value }: { value: string | number }) {
@@ -287,7 +288,10 @@ function Doodle({ name = "doodle-circles" }: { name?: string }) {
   );
 }
 
-export default function HrAnalyticsDashboard({ refreshKey = 0 }: HrAnalyticsDashboardProps) {
+export default function HrAnalyticsDashboard({
+  refreshKey = 0,
+  companyName,
+}: HrAnalyticsDashboardProps) {
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
@@ -560,12 +564,13 @@ export default function HrAnalyticsDashboard({ refreshKey = 0 }: HrAnalyticsDash
   ]
 
   const statusOrder = ["active", "onboarding", "suspended", "terminated", "exited"]
+  const dashboardTitle = companyName?.trim() || "HRMS"
 
   return (
-    <div className="px-4 pb-10 pt-3 lg:px-6">
+    <div className="px-4 pb-8 pt-2 lg:px-6">
       <DoodleSprites />
-      <section className="border-b border-slate-200 pb-5">
-        <div className="flex flex-col gap-5">
+      <section className="border-b border-slate-200 pb-3">
+        <div className="flex flex-col gap-4">
           {/* Admin dashboard top uses same primary + doodle header treatment, without altering item arrangement */}
           <div 
             className="relative overflow-hidden rounded-2xl p-5 md:p-6 text-white transition-all"
@@ -575,8 +580,8 @@ export default function HrAnalyticsDashboard({ refreshKey = 0 }: HrAnalyticsDash
             <div className="relative z-10 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
               <div className="space-y-2">
                 <div>
-                  <h1 className="text-2xl font-normal tracking-[-0.04em] text-white sm:text-[2.85rem]">
-                    Workforce Analytics
+                  <h1 className="text-2xl font-normal text-white sm:text-4xl">
+                    {dashboardTitle}
                   </h1>
                 </div>
               </div>
@@ -610,21 +615,21 @@ export default function HrAnalyticsDashboard({ refreshKey = 0 }: HrAnalyticsDash
             </div>
           </div>
 
-          <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-x-5 gap-y-2 sm:grid-cols-2 xl:grid-cols-4">
             {metrics.map((m, idx) => {
               return (
                 <div
                   key={idx}
-                  className="flex items-start justify-between gap-4 border-b border-slate-200 pb-4 transition-transform duration-500 ease-out last:border-b-0 sm:last:border-b sm:nth-[3]:border-b-0 xl:border-b-0"
+                  className="flex items-start justify-between gap-3 border-b border-slate-200 pb-2 transition-transform duration-500 ease-out last:border-b-0 sm:last:border-b sm:nth-[3]:border-b-0 xl:border-b-0"
                 >
                   <div className="min-w-0">
                     <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
                       {m.label}
                     </div>
-                    <div className="mt-2 text-4xl font-semibold tracking-[-0.05em] text-slate-950">
+                    <div className="mt-1 text-3xl font-semibold text-[var(--primary)]">
                       <AnimatedMetricValue value={m.value} />
                     </div>
-                    {m.sub ? <div className="mt-1 text-sm leading-5 text-slate-500">{m.sub}</div> : null}
+                    {m.sub ? <div className="text-sm leading-5 text-slate-500">{m.sub}</div> : null}
                   </div>
                 </div>
               )
@@ -824,7 +829,7 @@ export default function HrAnalyticsDashboard({ refreshKey = 0 }: HrAnalyticsDash
                             {name}
                           </div>
                         </div>
-                        <div className="shrink-0 text-3xl font-semibold tracking-[-0.04em] text-slate-900">{count}</div>
+                        <div className="shrink-0 text-3xl font-semibold text-[var(--primary)]">{count}</div>
                       </div>
                     </div>
                   ))}
@@ -839,13 +844,16 @@ export default function HrAnalyticsDashboard({ refreshKey = 0 }: HrAnalyticsDash
                           <div className="truncate text-sm font-medium text-slate-800" title={name}>
                             {name}
                           </div>
-                          <div className="text-sm font-medium tabular-nums text-slate-500">
+                          <div className="text-sm font-semibold tabular-nums text-[var(--primary)]">
                             {count}
                           </div>
                         </div>
                         <div>
                           <div className="h-2 w-full rounded-full bg-slate-200/80">
-                            <div className="h-2 rounded-full bg-sky-600" style={{ width: `${width}%` }} />
+                            <div
+                              className="h-2 rounded-full bg-[var(--primary)]"
+                              style={{ width: `${width}%` }}
+                            />
                           </div>
                         </div>
                       </div>

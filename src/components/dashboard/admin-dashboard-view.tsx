@@ -914,6 +914,12 @@ export default function AdminDashboardView({
 
   const identityIsAdmin = roleLabels.some((role) => ADMIN_ROLE_KEYS.has(role))
   const accessMode = identityIsAdmin ? "admin" : "employee"
+  const effectivePermissionLabels = React.useMemo(() => {
+    if (!identityIsAdmin) {
+      return permissionLabels
+    }
+    return Array.from(new Set([...permissionLabels, "admin"]))
+  }, [identityIsAdmin, permissionLabels])
 
   React.useEffect(() => {
     if (typeof window === "undefined") {
@@ -948,7 +954,7 @@ export default function AdminDashboardView({
       return
     }
 
-    if (!canAccessDashboardRoute(currentPath, permissionLabels)) {
+    if (!canAccessDashboardRoute(currentPath, effectivePermissionLabels)) {
       router.replace(SELF_SERVICE_HOME_ROUTE)
       return
     }
@@ -971,7 +977,7 @@ export default function AdminDashboardView({
     ) {
       router.replace(SELF_SERVICE_HOME_ROUTE)
     }
-  }, [accessMode, currentPath, identityReady, permissionLabels, router])
+  }, [accessMode, currentPath, effectivePermissionLabels, identityReady, router])
 
   return (
     <SidebarProvider
@@ -986,9 +992,8 @@ export default function AdminDashboardView({
         variant="inset"
         userName={adminName}
         userEmail={adminEmail}
-        companyName={companyName}
         accessMode={accessMode}
-        permissionLabels={permissionLabels}
+        permissionLabels={effectivePermissionLabels}
         activeResource={resolvedActiveResource}
         onSelectResource={navigateToResource}
       />
@@ -1003,7 +1008,7 @@ export default function AdminDashboardView({
           <div className="@container/main flex flex-1 flex-col gap-2">
             <div className="flex flex-col gap-3 px-3 py-3 md:gap-4 md:px-4 md:py-4">
               {resolvedShowOverview && accessMode === "admin" ? (
-                <HrAnalyticsDashboard refreshKey={overviewRefreshKey} />
+                <HrAnalyticsDashboard refreshKey={overviewRefreshKey} companyName={companyName} />
               ) : null}
               {children}
               {resolvedActiveResource && resolvedUseApis ? (

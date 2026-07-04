@@ -2,8 +2,13 @@
   "name": "hrms",
   "version": "0.1.0",
   "private": true,
+  "main": "desktop/main.cjs",
   "scripts": {
     "dev": "next dev",
+    "desktop": "electron .",
+    "desktop:build": "npm run desktop:package",
+    "desktop:package": "npm run build && electron-builder --dir",
+    "desktop:installer": "npm run build && electron-builder",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"
@@ -47,6 +52,8 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "electron": "^37.2.0",
+    "electron-builder": "^26.0.12",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
@@ -55,5 +62,32 @@
     "eslint-config-next": "16.2.4",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "build": {
+    "appId": "com.hrms.desktop",
+    "productName": "HRMS",
+    "asar": false,
+    "icon": "desktop/icon.ico",
+    "directories": {
+      "output": "dist-desktop"
+    },
+    "files": [
+      ".next/**",
+      "!.next/cache/**",
+      "!.next/dev/**",
+      "!.next/diagnostics/**",
+      "desktop/**",
+      "node_modules/**",
+      "package.json",
+      "public/**",
+      "next.config.ts"
+    ],
+    "win": {
+      "icon": "desktop/icon.ico",
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    }
   }
 }
