@@ -480,10 +480,13 @@ export function PositionsView() {
       />
 
       {openForm ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/35 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-2xl rounded-lg border border-slate-200 bg-white p-4 shadow-lg">
-            <h3 className="text-lg font-semibold text-slate-900">{editingId === null ? "Add" : "Edit"} Position</h3>
-            <div className="mt-3 grid gap-3 md:grid-cols-2">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/35 p-3 backdrop-blur-sm sm:items-center sm:p-4">
+          <div className="flex w-full max-w-2xl flex-col rounded-lg border border-slate-200 bg-white shadow-lg max-sm:min-h-[calc(100svh-1.5rem)] sm:max-h-[min(92svh,860px)]">
+            <div className="border-b border-slate-200 px-4 py-4 sm:px-5">
+              <h3 className="text-lg font-semibold text-slate-900">{editingId === null ? "Add" : "Edit"} Position</h3>
+            </div>
+            <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-5">
+            <div className="grid gap-3 md:grid-cols-2">
               <label className="grid gap-1">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Name</span>
                 <input className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={form.name} onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} />
@@ -599,7 +602,8 @@ export function PositionsView() {
                 <Textarea className="min-h-20 rounded-md border border-slate-300 px-3 py-2 text-sm" value={form.description} onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))} />
               </label>
             </div>
-            <div className="mt-4 flex justify-end gap-2">
+            </div>
+            <div className="flex justify-end gap-2 border-t border-slate-200 px-4 py-4 sm:px-5">
               <button type="button" className="rounded-md border border-slate-300 px-3 py-2 text-sm" onClick={() => setOpenForm(false)}>
                 Cancel
               </button>

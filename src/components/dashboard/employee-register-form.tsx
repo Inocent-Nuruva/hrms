@@ -1545,11 +1545,6 @@ export function EmployeeRegisterForm() {
     }
   }, [form.reportsTo, reportsToOptions])
 
-  React.useEffect(() => {
-    if (form.employmentType !== "probation" && probationEndDate) {
-      setProbationEndDate(undefined)
-    }
-  }, [form.employmentType, probationEndDate])
   const onboardingWorkflowOptions = React.useMemo(
     () =>
       onboardingWorkflows
@@ -3197,15 +3192,13 @@ export function EmployeeRegisterForm() {
                     />
                   </Field>
 
-                  {form.employmentType === "probation" ? (
-                    <Field label="Probation End Date" htmlFor="probation-date" delayMs={268}>
-                      <DatePickerPresets
-                        value={probationEndDate ? probationEndDate.toISOString().slice(0, 10) : ""}
-                        onChange={(v) => setProbationEndDate(v ? new Date(v) : undefined)}
-                        placeholder="Select probation end date"
-                      />
-                    </Field>
-                  ) : null}
+                  <Field label="Probation End Date" htmlFor="probation-date" delayMs={268}>
+                    <DatePickerPresets
+                      value={probationEndDate ? probationEndDate.toISOString().slice(0, 10) : ""}
+                      onChange={(v) => setProbationEndDate(v ? new Date(v) : undefined)}
+                      placeholder="Select probation end date"
+                    />
+                  </Field>
 
                   {isInviteMode ? (
                     <>

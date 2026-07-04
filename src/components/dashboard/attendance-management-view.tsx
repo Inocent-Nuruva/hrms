@@ -2612,6 +2612,11 @@ export function AttendanceManagementView({ section }: { section: string }) {
       <ResizableTable
         title={activeSection.replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()) || "Attendance"}
         data={filteredRows}
+        onRowSelect={(_, row) => {
+          if (row) {
+            handleRowClick(row)
+          }
+        }}
         columns={[
           ...columns.map((column: string) => ({
             key: column,
