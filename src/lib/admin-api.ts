@@ -3655,6 +3655,10 @@ export async function createEmployeeProfile(token: string, data: CreateEmployeeP
 
 export async function getEmployeeById(id: string | number, token: string) {
   const payload = await adminRequest<unknown>(`/api/employees/${id}`, { token })
+  const root = asRecord(payload)
+  if (looksLikeEmployeeRecord(root)) {
+    return root
+  }
   return normalizeSingle(payload)
 }
 

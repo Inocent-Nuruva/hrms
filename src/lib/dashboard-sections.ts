@@ -56,8 +56,8 @@ export const attendanceSectionTabGroups: DashboardSectionTabGroup[] = [
   {
     title: "Attendance Operations",
     items: [
-      { title: "Mobile Punch Review", url: "/dashboard/attendance/mobile-punches" },
       { title: "Daily Summaries", url: "/dashboard/attendance/daily-summaries" },
+      { title: "Mobile Punch Review", url: "/dashboard/attendance/mobile-punches" },
       { title: "Recalculation Jobs", url: "/dashboard/attendance/recalculation-jobs" },
       { title: "Unmatched Logs", url: "/dashboard/attendance/unmatched-logs" },
       { title: "Device Sync Logs", url: "/dashboard/attendance/device-sync-logs" },

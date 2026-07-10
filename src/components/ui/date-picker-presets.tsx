@@ -32,9 +32,10 @@ export function DatePickerPresets({
   id,
 }: DatePickerPresetsProps) {
   const selectedDate = parseDateValue(value)
+  const [open, setOpen] = React.useState(false)
 
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         id={id}
         className={cn(
@@ -55,13 +56,14 @@ export function DatePickerPresets({
           onSelect={(nextDate) => {
             if (!nextDate) {
               onChange("")
+              setOpen(false)
               return
             }
             onChange(format(nextDate, "yyyy-MM-dd"))
+            setOpen(false)
           }}
         />
       </PopoverContent>
     </Popover>
   )
 }
-

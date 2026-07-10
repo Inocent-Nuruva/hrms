@@ -269,6 +269,33 @@ function formatDisplayTime(value: string) {
   }).format(date)
 }
 
+function formatClockValue(value: unknown) {
+  if (typeof value !== "string") {
+    return "—"
+  }
+
+  const trimmed = value.trim()
+  if (!trimmed || trimmed.toLowerCase() === "invalid date") {
+    return "—"
+  }
+
+  if (isTimeValue(trimmed)) {
+    return formatDisplayTime(trimmed)
+  }
+
+  if (isIsoDateString(trimmed) || trimmed.includes("T") || /\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}/.test(trimmed)) {
+    const parsed = new Date(trimmed)
+    if (!Number.isNaN(parsed.getTime())) {
+      return new Intl.DateTimeFormat("en-GB", {
+        hour: "numeric",
+        minute: "2-digit",
+      }).format(parsed)
+    }
+  }
+
+  return trimmed
+}
+
 function stringifyValue(value: unknown): string {
   if (value === null || value === undefined) return "-"
   if (typeof value === "string") {
@@ -872,26 +899,6 @@ function enrichRowsWithReadableNames(rows: AdminRecord[], branches: AdminRecord[
       }
     }
 
-    if (!readStringFromRow(next, ["timetable_used"])) {
-      const timetableUsed = readStringFromRow(row, [
-        "timetable_used",
-        "timetableUsed",
-        "timetable_name",
-        "timetableName",
-        "timetable_used_name",
-        "timetableUsedName",
-        "shift_name",
-        "shiftName",
-        "schedule_name",
-        "scheduleName",
-        "schedule_source",
-        "scheduleSource",
-      ])
-      if (timetableUsed) {
-        next.timetable_used = timetableUsed
-      }
-    }
-
     if (!readStringFromRow(next, ["attendance_status"])) {
       const attendanceStatus = readStringFromRow(row, [
         "attendance_status",
@@ -958,7 +965,6 @@ function resolveVisibleColumns(rows: AdminRecord[], section: AttendanceActivityS
           "branch_name",
           "attendance_date",
           "attendance_status",
-          "timetable_used",
           "check_in_time",
           "check_out_time",
         ]
@@ -1064,7 +1070,7 @@ function resolveDailySummaryCellValue(column: string, row: AdminRecord): React.R
     return readFirstValue(row, ["attendance_status", "attendanceStatus", "status", "summary_status", "summaryStatus", "state"])
   }
   if (column === "timetable_used") {
-    return readFirstValue(row, [
+    const directTimetableValue = readFirstValue(row, [
       "timetable_used",
       "timetableUsed",
       "timetable_name",
@@ -1079,9 +1085,22 @@ function resolveDailySummaryCellValue(column: string, row: AdminRecord): React.R
       "scheduleSource",
       "timetable",
     ])
+    if (directTimetableValue && directTimetableValue.toLowerCase() !== "invalid date") {
+      return directTimetableValue
+    }
+
+    const nestedTimetable = readNestedRecord(row, ["timetable", "schedule", "shift"])
+    if (nestedTimetable) {
+      return (
+        readFirstValue(nestedTimetable, ["name", "timetable_name", "timetableName", "code", "shift_name", "shiftName"]) ??
+        "—"
+      )
+    }
+
+    return "—"
   }
   if (column === "check_in_time") {
-    return readFirstValue(row, [
+    return formatClockValue(readFirstValue(row, [
       "check_in_time",
       "checkInTime",
       "check_in_at",
@@ -1094,10 +1113,10 @@ function resolveDailySummaryCellValue(column: string, row: AdminRecord): React.R
       "clockInAt",
       "expected_check_in_time",
       "expectedCheckInTime",
-    ])
+    ]))
   }
   if (column === "check_out_time") {
-    return readFirstValue(row, [
+    return formatClockValue(readFirstValue(row, [
       "check_out_time",
       "checkOutTime",
       "check_out_at",
@@ -1110,7 +1129,7 @@ function resolveDailySummaryCellValue(column: string, row: AdminRecord): React.R
       "clockOutAt",
       "expected_check_out_time",
       "expectedCheckOutTime",
-    ])
+    ]))
   }
   return stringifyValue(row[column])
 }
@@ -1261,7 +1280,12 @@ function TableBlock({
       <ResizableTable
         title="Attendance Activity"
         data={rows}
-        columns={columns.map((c: string) => ({ key: c, label: c, defaultWidth: 75 }))}
+        columns={columns.map((c: string) => ({
+          key: c,
+          label: prettifyLabel(c),
+          defaultWidth: 75,
+          render: (row: AdminRecord) => resolveTableCellValue(section, c, row),
+        }))}
         itemsPerPage={20}
         storageKey="attendance-activity"
       />
@@ -1898,30 +1922,31 @@ export function AttendanceActivityView({ section }: { section: string }) {
         ) : null}
 
         {activeSection === "daily-summaries" ? (
-          <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-            <div className="flex flex-col gap-4">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/80 p-3.5">
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
                 <div className="flex flex-col gap-1">
                   <h2 className="text-base font-semibold text-slate-900">Filters</h2>
                 </div>
-                <label className="relative block w-full lg:max-w-sm">
-                  <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <label className="relative block w-full lg:max-w-[25rem]">
+                  <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
                   <input
-                    className="h-10 w-full rounded-md border border-slate-300 bg-white pl-10 pr-3 text-sm text-slate-900 placeholder:text-slate-400"
+                    className="h-9 w-full rounded-md border border-slate-300 bg-white pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400"
                     value={employeeSearch}
                     onChange={(event) => setEmployeeSearch(event.target.value)}
                     placeholder="Search employee by name, number, or ID"
                   />
                 </label>
               </div>
-              <div className="flex flex-col gap-4">
-                <div className="grid gap-3 md:grid-cols-2">
+              <div className="flex flex-col gap-3">
+                <div className="grid gap-2.5 md:grid-cols-2 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,0.85fr)_minmax(260px,0.7fr)_minmax(280px,1fr)]">
                   <label className="grid gap-1 text-sm">
                     <span className="font-medium text-slate-700">From date</span>
                     <DatePickerPresets
                       value={dailySummaryFilters.from_date}
                       onChange={(value) => setDailySummaryFilters((current) => ({ ...current, from_date: value }))}
                       placeholder="From date"
+                      className="h-9"
                     />
                   </label>
                   <label className="grid gap-1 text-sm">
@@ -1930,14 +1955,13 @@ export function AttendanceActivityView({ section }: { section: string }) {
                       value={dailySummaryFilters.to_date}
                       onChange={(value) => setDailySummaryFilters((current) => ({ ...current, to_date: value }))}
                       placeholder="To date"
+                      className="h-9"
                     />
                   </label>
-                </div>
-                <div className="grid gap-3 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
-                  <label className="grid gap-1 text-sm lg:max-w-md">
+                  <label className="grid max-w-md gap-1 text-sm">
                     <span className="font-medium text-slate-700">Employee</span>
                     <select
-                      className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
+                      className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
                       value={dailySummaryFilters.employee_id}
                       onChange={(event) => setDailySummaryFilters((current) => ({ ...current, employee_id: event.target.value }))}
                     >
@@ -1956,7 +1980,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
                   <label className="grid gap-1 text-sm">
                     <span className="font-medium text-slate-700">Organization</span>
                     <select
-                      className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
+                      className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
                       value={dailySummaryFilters.organization_id}
                       onChange={(event) => setDailySummaryFilters((current) => ({ ...current, organization_id: event.target.value }))}
                     >
@@ -1973,11 +1997,11 @@ export function AttendanceActivityView({ section }: { section: string }) {
                     </select>
                   </label>
                 </div>
-                <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
-                  <label className="grid gap-1 text-sm">
+                <div className="grid gap-2.5 lg:grid-cols-[minmax(220px,0.7fr)_auto] lg:items-end">
+                  <label className="grid max-w-md gap-1 text-sm">
                     <span className="font-medium text-slate-700">Status</span>
                     <select
-                      className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
+                      className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
                       value={dailySummaryFilters.status}
                       onChange={(event) => setDailySummaryFilters((current) => ({ ...current, status: event.target.value }))}
                     >
@@ -1989,9 +2013,9 @@ export function AttendanceActivityView({ section }: { section: string }) {
                       ))}
                     </select>
                   </label>
-                  <div className="flex flex-wrap gap-3 md:self-end">
+                  <div className="flex flex-wrap gap-2 lg:self-end">
                     <button
-                      className="inline-flex h-11 items-center justify-center rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="inline-flex h-9 items-center justify-center rounded-lg bg-slate-900 px-3.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
                       type="button"
                       disabled={loading}
                       onClick={() => {
@@ -2004,7 +2028,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
                       Apply Filters
                     </button>
                     <button
-                      className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                      className="inline-flex h-9 items-center justify-center rounded-lg border border-slate-300 bg-white px-3.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
                       type="button"
                       onClick={() => {
                         const today = getTodayDateInputValue()
@@ -2030,7 +2054,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
                   </div>
                 </div>
               </div>
-              <div className="flex flex-col gap-3 border-t border-slate-200 pt-3">
+              <div className="flex flex-col gap-2 border-t border-slate-200 pt-2.5">
                 <p className="text-xs text-slate-500">
                   Update the fields you need, then click Apply Filters to refresh results.
                 </p>

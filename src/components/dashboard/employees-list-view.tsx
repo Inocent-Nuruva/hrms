@@ -13,7 +13,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { ResizableTable } from "@/components/ui/resizable-table"
+import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 import { listEmployees, type AdminRecord, type EmployeesQueryParams } from "@/lib/admin-api"
 import { useDebouncedValue } from "@/hooks/use-debounced-value"
 import { useRenderDiagnostics } from "@/hooks/use-render-diagnostics"
@@ -96,7 +96,20 @@ function readNestedName(value: unknown) {
   if (!record) {
     return "—"
   }
-  return readString(record, ["name"])
+  return readString(record, ["name", "department_name", "departmentName", "position_name", "positionName"])
+}
+
+function formatEmployeeDate(value: string) {
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) {
+    return value
+  }
+
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(parsed)
 }
 
 
@@ -312,7 +325,7 @@ export function EmployeesListView() {
   const canGoNext = !loading && (totalPages === null || page < totalPages)
 
   const openEmployeeDetails = (row: AdminRecord, missingItemKey?: string) => {
-    const employeeNo = readString(row, ["employee_no", "user_no", "employeeNo"])
+    const employeeNo = readString(row, ["employee_no", "employeeNo", "user_no", "employee_number", "employeeNumber"])
     if (employeeNo === "-") {
       return
     }
@@ -321,7 +334,7 @@ export function EmployeesListView() {
 
   const handleEmployeeSelect = (employeeId: string) => {
     const matched = rows.find((r) => {
-      const id = String(r.id ?? r.employee_id ?? r.employee_no ?? "")
+      const id = String(r.id ?? r.employee_id ?? r.employee_no ?? r.employeeNo ?? "")
       return id === employeeId
     })
     if (matched) {
@@ -329,13 +342,14 @@ export function EmployeesListView() {
     }
   }
 
-  const employeeColumns = React.useMemo(() => [
+  const employeeColumns = React.useMemo<Column<AdminRecord>[]>(() => [
     {
       key: "employee_no",
       label: "No",
       defaultWidth: 80,
       sortable: true,
-      render: (row: AdminRecord) => readString(row, ["employee_no", "user_no"])
+      render: (row: AdminRecord) =>
+        readString(row, ["employee_no", "employeeNo", "user_no", "employee_number", "employeeNumber"])
     },
     {
       key: "name",
@@ -349,7 +363,17 @@ export function EmployeesListView() {
       label: "Dept",
       defaultWidth: 90,
       sortable: true,
-      render: (row: AdminRecord) => readNestedName(row.primary_department)
+      render: (row: AdminRecord) => {
+        const directDepartmentName = readString(row, ["department_name", "departmentName"])
+        if (directDepartmentName !== "-") {
+          return directDepartmentName
+        }
+        const primaryDepartmentName = readNestedName(row.primary_department)
+        if (primaryDepartmentName !== "—") {
+          return primaryDepartmentName
+        }
+        return readNestedName(row.department)
+      }
     },
     {
       key: "position",
@@ -357,6 +381,10 @@ export function EmployeesListView() {
       defaultWidth: 100,
       sortable: true,
       render: (row: AdminRecord) => {
+        const directPositionName = readString(row, ["position_name", "positionName"])
+        if (directPositionName !== "-") {
+          return directPositionName
+        }
         const primaryPositionName = readNestedName(row.primary_position)
         if (primaryPositionName !== "—") {
           return primaryPositionName
@@ -370,8 +398,8 @@ export function EmployeesListView() {
       defaultWidth: 70,
       sortable: true,
       render: (row: AdminRecord) => {
-        const raw = readString(row, ["hire_date", "hired_at", "joined_at", "join_date", "created_at"])
-        return raw && /^\d{4}-\d{2}-\d{2}/.test(raw) ? raw : "—"
+        const raw = readString(row, ["hire_date", "hireDate", "hired_at", "joined_at", "join_date", "created_at"])
+        return raw && /^\d{4}-\d{2}-\d{2}/.test(raw) ? formatEmployeeDate(raw) : "—"
       }
     },
     {
@@ -380,7 +408,7 @@ export function EmployeesListView() {
       defaultWidth: 70,
       sortable: true,
       render: (row: AdminRecord) => {
-        const s = (readString(row, ["employment_status", "status"]) || "active").toLowerCase()
+        const s = (readString(row, ["employment_status", "employmentStatus", "status"]) || "active").toLowerCase()
         const display = s.charAt(0).toUpperCase() + s.slice(1).replace("-", " ")
         const isActive = s === "active" || s === "onboarding"
         return (
@@ -432,7 +460,7 @@ export function EmployeesListView() {
       <ResizableTable
         title="Employees"
         data={rows}
-        columns={employeeColumns as any}
+        columns={employeeColumns}
         onRowSelect={(id, row) => {
           if (row) openEmployeeDetails(row as AdminRecord)
         }}

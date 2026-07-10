@@ -25,6 +25,7 @@ import {
   deleteEmployeeDocument,
   deleteEmployeeSectionItem,
   EMPLOYEE_STATUS_VALUES,
+  getEmployeeById,
   isEmployeeStatusValue,
   listEmployees,
   patchEmployeeStatus,
@@ -148,6 +149,16 @@ function asRecordArray(value: unknown): AdminRecord[] {
   return value.filter((entry) => typeof entry === "object" && entry !== null) as AdminRecord[]
 }
 
+function firstRecordArray(...values: unknown[]) {
+  for (const value of values) {
+    const list = asRecordArray(value)
+    if (list.length > 0) {
+      return list
+    }
+  }
+  return [] as AdminRecord[]
+}
+
 function readNestedString(value: unknown, keys: string[]) {
   const record = asRecord(value)
   if (!record) {
@@ -156,8 +167,91 @@ function readNestedString(value: unknown, keys: string[]) {
   return readString(record, keys)
 }
 
+function mergeEmployeeProfileRecord(record: AdminRecord | null) {
+  if (!record) {
+    return null
+  }
+
+  const nestedEmployee =
+    asRecord(record.employee) ??
+    asRecord(record.employee_profile) ??
+    asRecord(record.profile) ??
+    null
+
+  const merged: AdminRecord = {
+    ...record,
+    ...(nestedEmployee ?? {}),
+  }
+
+  if (!merged.company_user && record.companyUser) {
+    merged.company_user = record.companyUser
+  }
+  if (!merged.primary_branch && record.primaryBranch) {
+    merged.primary_branch = record.primaryBranch
+  }
+  if (!merged.primary_department && record.primaryDepartment) {
+    merged.primary_department = record.primaryDepartment
+  }
+  if (!merged.primary_position && record.primaryPosition) {
+    merged.primary_position = record.primaryPosition
+  }
+  if (!merged.position && record.positionDetail) {
+    merged.position = record.positionDetail
+  }
+  if (!merged.manager && record.managerDetail) {
+    merged.manager = record.managerDetail
+  }
+
+  if (!merged.contacts && record.contact_details) {
+    merged.contacts = record.contact_details
+  }
+  if (!merged.addresses && record.addressDetails) {
+    merged.addresses = record.addressDetails
+  }
+  if (!merged.relatives && record.nextOfKin) {
+    merged.relatives = record.nextOfKin
+  }
+  if (!merged.identifications && record.identificationDocuments) {
+    merged.identifications = record.identificationDocuments
+  }
+  if (!merged.bank_accounts && record.bankAccounts) {
+    merged.bank_accounts = record.bankAccounts
+  }
+  if (!merged.academic_qualifications && record.academicQualifications) {
+    merged.academic_qualifications = record.academicQualifications
+  }
+  if (!merged.professional_qualifications && record.professionalQualifications) {
+    merged.professional_qualifications = record.professionalQualifications
+  }
+  if (!merged.experience_details && record.experienceDetails) {
+    merged.experience_details = record.experienceDetails
+  }
+
+  return merged
+}
+
+function formatProfileDate(value: unknown) {
+  if (typeof value !== "string" || !value.trim()) {
+    return "-"
+  }
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) {
+    return value
+  }
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(parsed)
+}
+
+function getProfileSectionItems(employee: AdminRecord, keys: string[]) {
+  const values = keys.map((key) => employee[key])
+  return firstRecordArray(...values)
+}
+
 function employeeDisplayName(row: AdminRecord) {
-  const named = readString(row, ["full_name", "fullName", "name"])
+  const named = readString(row, ["full_name", "fullName", "employee_name", "employeeName", "name"])
   if (named !== "-") {
     return named
   }
@@ -170,7 +264,7 @@ function employeeDisplayName(row: AdminRecord) {
 function employeeDisplayNameFromLinkedUser(row: AdminRecord) {
   const companyUser = resolveCompanyUserRecord(row)
   if (companyUser) {
-    const userNamed = readString(companyUser, ["full_name", "fullName", "name"])
+    const userNamed = readString(companyUser, ["full_name", "fullName", "employee_name", "employeeName", "name"])
     if (userNamed !== "-") {
       return userNamed
     }
@@ -1454,12 +1548,21 @@ export function EmployeeProfilePage({
           search: decodedNo,
         })
 
-        const matched = result.rows.find((row) => readString(row, ["employee_no", "user_no"]) === decodedNo)
+        const matched = result.rows.find(
+          (row) =>
+            readString(row, ["employee_no", "employeeNo", "user_no", "employee_number", "employeeNumber"]) === decodedNo
+        )
         if (!matched) {
           setError("Employee not found.")
           setEmployee(null)
         } else {
-          setEmployee(matched)
+          const employeeId = readNumber(matched.id)
+          if (employeeId === null) {
+            setEmployee(mergeEmployeeProfileRecord(matched))
+          } else {
+            const detailedEmployee = await getEmployeeById(employeeId, token).catch(() => null)
+            setEmployee(mergeEmployeeProfileRecord(detailedEmployee ?? matched))
+          }
         }
       } catch (errorObject) {
         setError(errorObject instanceof Error ? errorObject.message : "Failed to load employee profile.")
@@ -1534,7 +1637,7 @@ export function EmployeeProfilePage({
   }, [profileSearch, profileSearchOpen])
 
   function openEmployeeProfile(row: AdminRecord) {
-    const nextEmployeeNo = readString(row, ["employee_no", "user_no", "employeeNo"])
+    const nextEmployeeNo = readString(row, ["employee_no", "employeeNo", "user_no", "employee_number", "employeeNumber"])
     if (nextEmployeeNo === "-") {
       return
     }
@@ -1603,7 +1706,7 @@ export function EmployeeProfilePage({
                   {profileSearchResults.length > 0 ? (
                     <div className="max-h-72 space-y-1 overflow-y-auto">
                       {profileSearchResults.map((row, index) => {
-                        const nextEmployeeNo = readString(row, ["employee_no", "user_no", "employeeNo"])
+                        const nextEmployeeNo = readString(row, ["employee_no", "employeeNo", "user_no", "employee_number", "employeeNumber"])
                         return (
                           <button
                             key={`${nextEmployeeNo}-${index}`}
@@ -1661,34 +1764,34 @@ export function EmployeeProfilePage({
       <div className="px-4 py-4">
         <div className="grid gap-x-8 md:grid-cols-2">
           <div>
-            <SummaryRow label="Employee No" value={readString(employee, ["employee_no", "user_no"])} />
-            <SummaryRow label="Status" value={readString(employee, ["employment_status", "status"])} />
-            <SummaryRow label="Employment Type" value={readString(employee, ["employment_type"])} />
-            <SummaryRow label="Hire Date" value={readString(employee, ["hire_date"])} />
-            <SummaryRow label="Branch" value={readNestedString(employee.primary_branch, ["name"])} />
+            <SummaryRow label="Employee No" value={readString(employee, ["employee_no", "employeeNo", "user_no", "employee_number", "employeeNumber"])} />
+            <SummaryRow label="Status" value={readString(employee, ["employment_status", "employmentStatus", "status"])} />
+            <SummaryRow label="Employment Type" value={readString(employee, ["employment_type", "employmentType"])} />
+            <SummaryRow label="Hire Date" value={formatProfileDate(employee.hire_date ?? employee.hireDate)} />
+            <SummaryRow label="Branch" value={readString(employee, ["branch_name", "branchName"]) !== "-" ? readString(employee, ["branch_name", "branchName"]) : readNestedString(employee.primary_branch ?? employee.branch, ["name", "branch_name", "branchName"])} />
           </div>
           <div>
-            <SummaryRow label="Department" value={readNestedString(employee.primary_department, ["name"])} />
-            <SummaryRow label="Position" value={readNestedString(employee.position, ["name"])} />
-            <SummaryRow label="Manager" value={employeeDisplayName(asRecord(employee.manager) ?? {})} />
-            <SummaryRow label="Last Updated" value={formatDateTime(employee.updated_at)} />
+            <SummaryRow label="Department" value={readString(employee, ["department_name", "departmentName"]) !== "-" ? readString(employee, ["department_name", "departmentName"]) : readNestedString(employee.primary_department ?? employee.department, ["name", "department_name", "departmentName"])} />
+            <SummaryRow label="Position" value={readString(employee, ["position_name", "positionName"]) !== "-" ? readString(employee, ["position_name", "positionName"]) : readNestedString(employee.primary_position ?? employee.position, ["name", "position_name", "positionName"])} />
+            <SummaryRow label="Manager" value={readString(employee, ["manager_name", "managerName"]) !== "-" ? readString(employee, ["manager_name", "managerName"]) : employeeDisplayName(asRecord(employee.manager) ?? {})} />
+            <SummaryRow label="Last Updated" value={formatDateTime(employee.updated_at ?? employee.updatedAt)} />
             <SummaryRow label="Employee Id" value={String(employee.id ?? "-")} />
           </div>
         </div>
       </div>
 
       <div className="divide-y divide-border">
-        <Section title="Contacts" items={asRecordArray(employee.contacts)} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} requestedRouteKey={requestedRouteKey} />
-        <Section title="Documents" items={asRecordArray(employee.documents)} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} requestedRouteKey={requestedRouteKey} />
-        <Section title="Addresses" items={asRecordArray(employee.addresses)} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} requestedRouteKey={requestedRouteKey} />
-        <Section title="Relatives" items={asRecordArray(employee.relatives)} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} requestedRouteKey={requestedRouteKey} />
-        <Section title="Identifications" items={asRecordArray(employee.identifications)} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} requestedRouteKey={requestedRouteKey} />
-        <Section title="Bank Accounts" items={asRecordArray(employee.bank_accounts)} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} requestedRouteKey={requestedRouteKey} />
-        <Section title="Departments" items={asRecordArray(employee.departments)} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} requestedRouteKey={requestedRouteKey} />
-        <Section title="Academic Qualifications" items={asRecordArray(employee.academic_qualifications)} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} requestedRouteKey={requestedRouteKey} />
-        <Section title="Professional Qualifications" items={asRecordArray(employee.professional_qualifications)} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} requestedRouteKey={requestedRouteKey} />
-        <Section title="Experience Details" items={asRecordArray(employee.experience_details)} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} requestedRouteKey={requestedRouteKey} />
-        <Section title="Company User" items={employee.company_user ? [asRecord(employee.company_user) ?? {}] : []} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} requestedRouteKey={requestedRouteKey} />
+        <Section title="Contacts" items={getProfileSectionItems(employee, ["contacts", "contact_details", "contactDetails"])} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} requestedRouteKey={requestedRouteKey} />
+        <Section title="Documents" items={getProfileSectionItems(employee, ["documents", "employee_documents", "employeeDocuments"])} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} requestedRouteKey={requestedRouteKey} />
+        <Section title="Addresses" items={getProfileSectionItems(employee, ["addresses", "address_details", "addressDetails"])} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} requestedRouteKey={requestedRouteKey} />
+        <Section title="Relatives" items={getProfileSectionItems(employee, ["relatives", "next_of_kin", "nextOfKin"])} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} requestedRouteKey={requestedRouteKey} />
+        <Section title="Identifications" items={getProfileSectionItems(employee, ["identifications", "identification_documents", "identificationDocuments"])} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} requestedRouteKey={requestedRouteKey} />
+        <Section title="Bank Accounts" items={getProfileSectionItems(employee, ["bank_accounts", "bankAccounts"])} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} requestedRouteKey={requestedRouteKey} />
+        <Section title="Departments" items={getProfileSectionItems(employee, ["departments", "department_assignments", "departmentAssignments"])} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} requestedRouteKey={requestedRouteKey} />
+        <Section title="Academic Qualifications" items={getProfileSectionItems(employee, ["academic_qualifications", "academicQualifications"])} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} requestedRouteKey={requestedRouteKey} />
+        <Section title="Professional Qualifications" items={getProfileSectionItems(employee, ["professional_qualifications", "professionalQualifications"])} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} requestedRouteKey={requestedRouteKey} />
+        <Section title="Experience Details" items={getProfileSectionItems(employee, ["experience_details", "experienceDetails"])} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} requestedRouteKey={requestedRouteKey} />
+        <Section title="Company User" items={firstRecordArray(employee.company_user ? [asRecord(employee.company_user) ?? {}] : [], employee.companyUser ? [asRecord(employee.companyUser) ?? {}] : [])} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} requestedRouteKey={requestedRouteKey} />
       </div>
 
       <AlertDialog open={statusDialogOpen} onOpenChange={setStatusDialogOpen}>

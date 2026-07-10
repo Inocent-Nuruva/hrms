@@ -121,8 +121,8 @@ const HOLIDAY_IMPORT_COUNTRIES: Array<{ code: HolidayImportCountryCode; label: s
 
 const TAB_LOOKUP_REQUIREMENTS: Record<LeaveTab, LeaveLookupKey[]> = {
   types: [],
-  requests: [],
-  balances: [],
+  requests: ["employees", "types"],
+  balances: ["employees", "types"],
   holidays: [],
   policies: [],
   workflows: [],
@@ -175,6 +175,10 @@ function readNumber(row: AdminRecord, keys: string[]) {
     }
   }
   return null
+}
+
+function asRecord(value: unknown): AdminRecord | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? (value as AdminRecord) : null
 }
 
 function readBoolean(row: AdminRecord, keys: string[]) {
@@ -341,6 +345,7 @@ export function LeaveManagementView({
   const [editingPolicyId, setEditingPolicyId] = React.useState<number | null>(null)
   const [policyPreviewOpen, setPolicyPreviewOpen] = React.useState(false)
   const [selectedPolicyRow, setSelectedPolicyRow] = React.useState<AdminRecord | null>(null)
+  const [selectedBalanceRow, setSelectedBalanceRow] = React.useState<AdminRecord | null>(null)
   const [workflowSteps, setWorkflowSteps] = React.useState<AdminRecord[]>([])
   const [workflowSheetOpen, setWorkflowSheetOpen] = React.useState(false)
   const [stepDialogOpen, setStepDialogOpen] = React.useState(false)
@@ -720,11 +725,11 @@ export function LeaveManagementView({
     if (!match) {
       return `#${employeeId}`
     }
-    const fullName = readString(match, ["full_name", "name"])
+    const fullName = readString(match, ["full_name", "fullName", "employee_name", "employeeName", "name"])
     if (fullName !== "-") {
       return fullName
     }
-    return [readString(match, ["first_name"]), readString(match, ["last_name"])]
+    return [readString(match, ["first_name", "firstName"]), readString(match, ["last_name", "lastName"])]
       .filter((part) => part !== "-")
       .join(" ")
   }
@@ -737,6 +742,61 @@ export function LeaveManagementView({
     }
     return employeeLabel(readNumber(row, ["employee_id"]))
   }
+
+  const leaveTypeLabel = (leaveTypeId: number | null) => {
+    if (leaveTypeId === null) {
+      return "-"
+    }
+    const match = types.find((row) => readNumber(row, ["id", "leave_type_id", "leaveTypeId", "type_id", "typeId"]) === leaveTypeId)
+    if (!match) {
+      return `#${leaveTypeId}`
+    }
+    return readString(match, ["name", "leave_type_name", "leaveTypeName", "type_name", "typeName", "title"])
+  }
+
+  const leaveTypeLabelFromRow = (row: AdminRecord) => {
+    const nestedLeaveType =
+      asRecord(row.leave_type) ??
+      asRecord(row.leaveType) ??
+      asRecord(row.type)
+
+    const inlineLeaveTypeName = readString(row, [
+      "leave_type_name",
+      "leaveTypeName",
+      "type_name",
+      "typeName",
+    ])
+    if (inlineLeaveTypeName !== "-") {
+      return inlineLeaveTypeName
+    }
+    if (nestedLeaveType) {
+      const nestedLeaveTypeName = readString(nestedLeaveType, [
+        "name",
+        "leave_type_name",
+        "leaveTypeName",
+        "type_name",
+        "typeName",
+        "title",
+      ])
+      if (nestedLeaveTypeName !== "-") {
+        return nestedLeaveTypeName
+      }
+    }
+    return leaveTypeLabel(
+      readNumber(row, ["leave_type_id", "leaveTypeId", "type_id", "typeId", "leave_type", "leaveType"])
+    )
+  }
+
+  const resetBalanceForm = React.useCallback(() => {
+    setBalanceForm({
+      employee_id: "",
+      leave_type_id: "",
+      fiscal_year: String(new Date().getFullYear()),
+      allocated_days: "0",
+      carried_forward_days: "0",
+      expired_days: "0",
+    })
+  }, [])
 
   const optionLabel = (rows: AdminRecord[], id: number | null, nameKeys: string[] = ["name", "title"]) => {
     if (id === null) {
@@ -1067,10 +1127,24 @@ export function LeaveManagementView({
     }
   }
 
-  async function openBalanceDialog() {
+  async function openBalanceDialog(row?: AdminRecord) {
     const loaded = await ensureLookups(["types", "employees"])
     if (!loaded) {
       return
+    }
+    if (row) {
+      setSelectedBalanceRow(row)
+      setBalanceForm({
+        employee_id: String(readNumber(row, ["employee_id", "employeeId"]) ?? ""),
+        leave_type_id: String(readNumber(row, ["leave_type_id", "leaveTypeId", "type_id", "typeId"]) ?? ""),
+        fiscal_year: readString(row, ["fiscal_year", "fiscalYear"]) === "-" ? String(new Date().getFullYear()) : readString(row, ["fiscal_year", "fiscalYear"]),
+        allocated_days: String(readNumber(row, ["allocated_days", "allocated"]) ?? 0),
+        carried_forward_days: String(readNumber(row, ["carried_forward_days", "carried_forward", "carriedForwardDays", "carriedForward"]) ?? 0),
+        expired_days: String(readNumber(row, ["expired_days", "expired", "expiredDays"]) ?? 0),
+      })
+    } else {
+      setSelectedBalanceRow(null)
+      resetBalanceForm()
     }
     setBalanceDialogOpen(true)
   }
@@ -2016,12 +2090,34 @@ export function LeaveManagementView({
         </DialogPopup>
       </Dialog>
 
-      <Dialog open={balanceDialogOpen} onOpenChange={setBalanceDialogOpen}>
+      <Dialog
+        open={balanceDialogOpen}
+        onOpenChange={(open) => {
+          setBalanceDialogOpen(open)
+          if (!open) {
+            setSelectedBalanceRow(null)
+            resetBalanceForm()
+          }
+        }}
+      >
         <DialogPopup from="bottom" className="sm:max-w-4xl">
           <DialogHeader>
             <DialogTitle>Adjust Leave Balance</DialogTitle>
-            <DialogDescription>Enter the balance adjustment details, then save them.</DialogDescription>
+            <DialogDescription>
+              {selectedBalanceRow
+                ? `Editing ${employeeLabelFromRow(selectedBalanceRow)} for ${leaveTypeLabelFromRow(selectedBalanceRow)}. You can update the values below before saving.`
+                : "Enter the balance adjustment details, then save them."}
+            </DialogDescription>
           </DialogHeader>
+          {selectedBalanceRow ? (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+              <span className="font-medium text-slate-900">{employeeLabelFromRow(selectedBalanceRow)}</span>
+              {" · "}
+              <span>{leaveTypeLabelFromRow(selectedBalanceRow)}</span>
+              {" · FY "}
+              <span>{readString(selectedBalanceRow, ["fiscal_year", "fiscalYear"])}</span>
+            </div>
+          ) : null}
           <div className="grid gap-3 md:grid-cols-3">
             <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={balanceForm.employee_id} onChange={(event) => setBalanceForm((prev) => ({ ...prev, employee_id: event.target.value }))}>
               <option value="">Select employee</option>
@@ -2061,7 +2157,7 @@ export function LeaveManagementView({
               Cancel
             </button>
             <button type="button" className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white" disabled={saving} onClick={() => void submitBalanceAdjustment()}>
-              {saving ? "Saving..." : "Adjust Leave Balance"}
+              {saving ? "Saving..." : selectedBalanceRow ? "Save Balance Changes" : "Adjust Leave Balance"}
             </button>
           </DialogFooter>
         </DialogPopup>
@@ -2281,14 +2377,14 @@ export function LeaveManagementView({
             data={balances}
             columns={[
               { key: "employee", label: "Employee", defaultWidth: 100, render: (r) => employeeLabelFromRow(r) },
-              { key: "type", label: "Type", defaultWidth: 75, render: (r) => readString(r, ["leave_type_name"]) },
+              { key: "type", label: "Type", defaultWidth: 75, render: (r) => leaveTypeLabelFromRow(r) },
               { key: "fiscal_year", label: "FY", defaultWidth: 55, render: (r) => readString(r, ["fiscal_year"]) },
               { key: "allocated_days", label: "Alloc", defaultWidth: 55, render: (r) => readString(r, ["allocated_days", "allocated"]) },
               { key: "used_days", label: "Used", defaultWidth: 45, render: (r) => readString(r, ["used_days", "used"]) },
               { key: "remaining", label: "Rem", defaultWidth: 45, render: (r) => readString(r, ["remaining_days", "remaining"]) },
               { key: "actions", label: "Act", defaultWidth: 50, sortable: false, render: (row) => (
                 <div className="flex justify-end" onClick={e=>e.stopPropagation()}>
-                  <button type="button" className="admin-table-icon-button" onClick={() => { void row; setBalanceDialogOpen(true); }}>
+                  <button type="button" className="admin-table-icon-button" onClick={() => void openBalanceDialog(row)}>
                     <Pencil className="size-4" />
                   </button>
                 </div>
