@@ -2,6 +2,7 @@ import { redirect } from "next/navigation"
 
 import { AttendanceActivityClient } from "@/components/dashboard/attendance-activity-client"
 import { AttendanceManagementClient } from "@/components/dashboard/attendance-management-client"
+import { HrAttendanceCorrectionApprovalsView } from "@/components/dashboard/hr-attendance-correction-approvals-view"
 import { ScheduleManagementClient } from "@/components/dashboard/schedule-management-client"
 
 const ALLOWED_VIEWS = new Set([
@@ -27,6 +28,7 @@ const ALLOWED_VIEWS = new Set([
   "attendance-history",
   "schedule-preview",
   "corrections",
+  "correction-requests",
   "shifts",
   "shift-breaks",
   "shift-assignments",
@@ -99,8 +101,17 @@ export default async function AttendanceViewPage({ params, searchParams }: Atten
     redirect(`/dashboard/access-control/${normalized}`)
   }
 
+  // Business trips live under Leave Management now.
+  if (normalized === "business-trips") {
+    redirect("/dashboard/leave-management/business-trips")
+  }
+
   if (!ALLOWED_VIEWS.has(normalized)) {
     redirect("/dashboard/attendance")
+  }
+
+  if (normalized === "correction-requests") {
+    return <HrAttendanceCorrectionApprovalsView />
   }
 
   if (SCHEDULE_ATTENDANCE_VIEWS.has(normalized)) {

@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation"
 
 import { AppSidebar } from "@/components/app-sidebar"
 import { canAccessDashboardRoute } from "@/components/app-sidebar"
+import { hasAdminDashboardAccess } from "@/components/app-sidebar"
 import { DataTable } from "@/components/data-table"
 import { AccountSettingsPanel } from "@/components/dashboard/account-settings-panel"
 import { SiteHeader } from "@/components/site-header"
@@ -66,76 +67,6 @@ const RESOURCE_ROUTE_MAP: Record<AdminResourceKey, string> = {
 }
 
 const SELF_SERVICE_HOME_ROUTE = "/dashboard"
-const ADMIN_ROLE_KEYS = new Set([
-  "admin",
-  "administrator",
-  "super_admin",
-  "super-admin",
-  "company_admin",
-  "company-admin",
-  "hr_admin",
-  "hr-admin",
-  "owner",
-  "root",
-])
-
-const EMPLOYEE_RESTRICTED_ROUTE_PREFIXES = [
-  "/dashboard/access-control",
-  "/dashboard/users",
-  "/dashboard/roles",
-  "/dashboard/permissions",
-  "/dashboard/companies",
-  "/dashboard/departments",
-  "/dashboard/branches",
-  "/dashboard/positions",
-  "/dashboard/designations",
-  "/dashboard/operations/recruitment",
-  "/dashboard/operations/reports",
-  "/dashboard/employees/onboarding",
-  "/dashboard/leave-management/requests",
-  "/dashboard/leave-management/balances",
-  "/dashboard/leave-management/holidays",
-  "/dashboard/leave-management/policies",
-  "/dashboard/leave-management/types",
-  "/dashboard/leave-management/workflows",
-]
-
-const EMPLOYEE_ALLOWED_ATTENDANCE_ROUTES = new Set([
-  "/dashboard/attendance/today",
-  "/dashboard/attendance/punch-history",
-  "/dashboard/attendance/attendance-history",
-  "/dashboard/attendance/schedule-preview",
-  "/dashboard/attendance/corrections",
-])
-
-const EMPLOYEE_RESTRICTED_ATTENDANCE_PREFIXES = [
-  "/dashboard/attendance/settings",
-  "/dashboard/attendance/policies",
-  "/dashboard/attendance/devices",
-  "/dashboard/attendance/checkpoints",
-  "/dashboard/attendance/holiday-groups",
-  "/dashboard/attendance/geofences",
-  "/dashboard/attendance/wifi-networks",
-  "/dashboard/attendance/mobile-punches",
-  "/dashboard/attendance/holidays",
-  "/dashboard/attendance/device-sync-logs",
-  "/dashboard/attendance/daily-summaries",
-  "/dashboard/attendance/recalculation-jobs",
-  "/dashboard/attendance/unmatched-logs",
-  "/dashboard/attendance/shifts",
-  "/dashboard/attendance/shift-breaks",
-  "/dashboard/attendance/shift-assignments",
-  "/dashboard/attendance/shift-schedules",
-  "/dashboard/attendance/shift-rotation-groups",
-  "/dashboard/attendance/shift-rotation-rules",
-  "/dashboard/attendance/timetables",
-  "/dashboard/attendance/timetable-days",
-  "/dashboard/attendance/timetable-holiday-rules",
-  "/dashboard/attendance/timetable-rotations",
-  "/dashboard/attendance/timetable-rotation-rules",
-  "/dashboard/attendance/employee-timetables",
-]
-
 function decodeBase64Url(input: string) {
   try {
     const normalized = input.replace(/-/g, "+").replace(/_/g, "/")
@@ -175,104 +106,6 @@ function getStringValue(record: AdminRecord | null, keys: string[]) {
     }
   }
   return null
-}
-
-function readRoleCandidate(value: unknown): string | null {
-  if (typeof value === "string" && value.trim()) {
-    return value.trim()
-  }
-  const record = asRecord(value)
-  if (!record) {
-    return null
-  }
-  return (
-    readString(record, ["name", "role", "key", "code", "slug", "type", "user_type"]) ?? null
-  )
-}
-
-function resolveClientRoleLabel(root: AdminRecord | null) {
-  if (!root) {
-    return null
-  }
-
-  const direct = readString(root, ["role", "user_type", "type"])
-  if (direct) {
-    return direct
-  }
-
-  const candidates = [
-    root.role,
-    root.roles,
-    root.userRole,
-    root.user_role,
-    root.role_name,
-    root.roleName,
-    root.authorities,
-    root.permissions,
-  ]
-
-  for (const candidate of candidates) {
-    const scalar = readRoleCandidate(candidate)
-    if (scalar) {
-      return scalar
-    }
-
-    if (Array.isArray(candidate)) {
-      for (const item of candidate) {
-        const nested = readRoleCandidate(item)
-        if (nested) {
-          return nested
-        }
-      }
-    }
-  }
-
-  return null
-}
-
-function collectRoleLabels(root: AdminRecord | null) {
-  const labels = new Set<string>()
-  if (!root) {
-    return labels
-  }
-
-  const push = (value: unknown) => {
-    const role = readRoleCandidate(value)
-    if (role) {
-      labels.add(role.toLowerCase().trim())
-    }
-  }
-
-  push(root.role)
-  push(root.user_type)
-  push(root.type)
-
-  const candidates = [root.roles, root.authorities, root.userRole, root.user_role]
-  for (const candidate of candidates) {
-    if (Array.isArray(candidate)) {
-      candidate.forEach((entry) => push(entry))
-      continue
-    }
-    push(candidate)
-  }
-
-  return labels
-}
-
-function resolveAdminFlag(root: AdminRecord | null) {
-  if (!root) {
-    return false
-  }
-  const candidates = [
-    root.is_admin,
-    root.isAdmin,
-    root.admin,
-    root.is_super_admin,
-    root.isSuperAdmin,
-    root.super_admin,
-    root.superAdmin,
-  ]
-  return candidates.some((value) => value === true || value === 1 || value === "1" || value === "true")
 }
 
 function collectPermissionLabelsFromUnknown(value: unknown, sink: Set<string>) {
@@ -535,7 +368,10 @@ export default function AdminDashboardView({
 
   const loadData = React.useCallback(
     async function runLoadData(accessToken: string, retryOnUnauthorized = true) {
-      if (!useApis) {
+      // Use path-resolved flag so /dashboard/permissions and /dashboard/roles
+      // still hit GET /api/permissions and GET /api/roles even when the layout
+      // mounts AdminDashboardView without useApis/activeResource props.
+      if (!resolvedUseApis) {
         setCollections({ users: [], roles: [], permissions: [], companies: [] })
         setRows([])
         setCurrentAdmin(null)
@@ -565,6 +401,7 @@ export default function AdminDashboardView({
         const [usersResult, roles, permissions, admin] = await Promise.all([
           listUsers(accessToken, usersQuery),
           listResource("roles", accessToken).catch(() => []),
+          // Catalog from GET /api/permissions (all permissions visible to actor)
           listResource("permissions", accessToken).catch(() => []),
           getCurrentAdmin(accessToken).catch(() => null),
         ])
@@ -576,7 +413,11 @@ export default function AdminDashboardView({
           companies: [],
         }
         setCollections(fetchedCollections)
-        setRows(activeResource ? fetchedCollections[activeResource] ?? [] : [])
+        setRows(
+          resolvedActiveResource
+            ? fetchedCollections[resolvedActiveResource] ?? []
+            : []
+        )
         setCurrentAdmin(admin)
         setMyCompany(null)
         setUsersTotal(usersResult.total)
@@ -610,7 +451,15 @@ export default function AdminDashboardView({
         setLoading(false)
       }
     },
-    [activeResource, attemptRefreshToken, clearStoredSession, router, token, useApis, usersQuery]
+    [
+      attemptRefreshToken,
+      clearStoredSession,
+      resolvedActiveResource,
+      resolvedUseApis,
+      router,
+      token,
+      usersQuery,
+    ]
   )
 
   React.useEffect(() => {
@@ -781,16 +630,12 @@ export default function AdminDashboardView({
     adminEmail: string | null
     companyName: string | null
     tokenCompanyName: string | null
-    role: string | null
-    isAdmin: boolean
     permissionLabels: string[]
   }>({
     adminName: null,
     adminEmail: null,
     companyName: null,
     tokenCompanyName: null,
-    role: null,
-    isAdmin: false,
     permissionLabels: [],
   })
   const [identityReady, setIdentityReady] = React.useState(false)
@@ -803,8 +648,6 @@ export default function AdminDashboardView({
     let adminName: string | null = null
     let adminEmail: string | null = null
     let companyName: string | null = null
-    let userRole: string | null = null
-    let userIsAdmin = false
     const permissionLabels = new Set<string>()
 
     const rawUser = window.localStorage.getItem(AUTH_STORAGE_KEYS.user)
@@ -842,15 +685,11 @@ export default function AdminDashboardView({
             .trim() || null
         adminName = readString(root, ["fullName", "full_name", "name"]) ?? composedAdminName
         adminEmail = readString(root, ["email"]) ?? null
-        userRole = resolveClientRoleLabel(root)
-        userIsAdmin = resolveAdminFlag(root)
         resolvePermissionLabels(root).forEach((entry) => permissionLabels.add(entry))
       } catch {
         adminName = null
         adminEmail = null
         companyName = null
-        userRole = null
-        userIsAdmin = false
       }
     }
 
@@ -863,8 +702,6 @@ export default function AdminDashboardView({
         "company",
         "organization_name",
       ]) ?? null
-    const tokenRole = resolveClientRoleLabel(payload)
-    const tokenIsAdmin = resolveAdminFlag(payload)
     resolvePermissionLabels(payload).forEach((entry) => permissionLabels.add(entry))
 
     setClientIdentity({
@@ -872,8 +709,6 @@ export default function AdminDashboardView({
       adminEmail,
       companyName,
       tokenCompanyName,
-      role: userRole ?? tokenRole,
-      isAdmin: userIsAdmin || tokenIsAdmin,
       permissionLabels: Array.from(permissionLabels),
     })
     setIdentityReady(true)
@@ -901,25 +736,19 @@ export default function AdminDashboardView({
     resolvePermissionLabels(currentAdmin).forEach((entry) => merged.add(entry))
     return Array.from(merged)
   }, [clientIdentity.permissionLabels, currentAdmin])
-  const roleLabels = React.useMemo(() => {
-    const merged = new Set<string>()
-    collectRoleLabels(currentAdmin).forEach((entry) => merged.add(entry))
-    collectRoleLabels(decodeJwtPayload(token)).forEach((entry) => merged.add(entry))
-    const identityRole = (clientIdentity.role ?? "").toLowerCase().trim()
-    if (identityRole) {
-      merged.add(identityRole)
-    }
-    return Array.from(merged)
-  }, [clientIdentity.role, currentAdmin, token])
-
-  const identityIsAdmin = roleLabels.some((role) => ADMIN_ROLE_KEYS.has(role))
+  const identityIsAdmin = hasAdminDashboardAccess(permissionLabels)
   const accessMode = identityIsAdmin ? "admin" : "employee"
-  const effectivePermissionLabels = React.useMemo(() => {
-    if (!identityIsAdmin) {
-      return permissionLabels
-    }
-    return Array.from(new Set([...permissionLabels, "admin"]))
-  }, [identityIsAdmin, permissionLabels])
+  const effectivePermissionLabels = permissionLabels
+
+  // Publish access mode + actor permissions for feature pages (offboarding, access control, etc.).
+  if (typeof window !== "undefined" && identityReady) {
+    window.sessionStorage.setItem("hrms.dashboard.accessMode", accessMode)
+    window.sessionStorage.setItem("hrms.dashboard.isAdmin", identityIsAdmin ? "1" : "0")
+    window.sessionStorage.setItem(
+      "hrms.dashboard.actorPermissions",
+      JSON.stringify(effectivePermissionLabels)
+    )
+  }
 
   React.useEffect(() => {
     if (typeof window === "undefined") {
@@ -957,25 +786,6 @@ export default function AdminDashboardView({
     if (!canAccessDashboardRoute(currentPath, effectivePermissionLabels)) {
       router.replace(SELF_SERVICE_HOME_ROUTE)
       return
-    }
-
-    if (accessMode !== "employee") {
-      return
-    }
-
-    const isAllowedEmployeeAttendanceRoute =
-      EMPLOYEE_ALLOWED_ATTENDANCE_ROUTES.has(currentPath)
-    const isRestrictedEmployeeAttendanceRoute =
-      currentPath === "/dashboard/attendance" ||
-      currentPath === "/dashboard/employees/attendance" ||
-      EMPLOYEE_RESTRICTED_ATTENDANCE_PREFIXES.some((prefix) => currentPath.startsWith(prefix)) ||
-      (currentPath.startsWith("/dashboard/attendance/") && !isAllowedEmployeeAttendanceRoute)
-
-    if (
-      isRestrictedEmployeeAttendanceRoute ||
-      EMPLOYEE_RESTRICTED_ROUTE_PREFIXES.some((prefix) => currentPath.startsWith(prefix))
-    ) {
-      router.replace(SELF_SERVICE_HOME_ROUTE)
     }
   }, [accessMode, currentPath, effectivePermissionLabels, identityReady, router])
 
@@ -1018,6 +828,7 @@ export default function AdminDashboardView({
                   rows={rows}
                   roles={collections.roles}
                   permissions={collections.permissions}
+                  actorPermissions={effectivePermissionLabels}
                   usersQuery={usersQuery}
                   usersTotal={usersTotal}
                   usersTotalPages={usersTotalPages}

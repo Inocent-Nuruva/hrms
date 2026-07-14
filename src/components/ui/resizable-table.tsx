@@ -8,6 +8,7 @@ import "react-resizable/css/styles.css";
 import React from "react";
 import { useTheme } from "@/components/theme-provider";
 import { useRenderDiagnostics } from "@/hooks/use-render-diagnostics";
+import { cn } from "@/lib/utils";
 
 export interface Employee {
   id: string;
@@ -69,6 +70,8 @@ interface ResizableTableProps<T = any> {
   itemsPerPage?: number;
   loading?: boolean;
   showCheckboxes?: boolean;
+  /** When false, hides the table toolbar Export dropdown. Default true. */
+  showExport?: boolean;
   storageKey?: string;
 }
 
@@ -88,6 +91,7 @@ export function ResizableTable<T = any>({
   itemsPerPage = 10,
   loading = false,
   showCheckboxes = false,
+  showExport = true,
   storageKey
 }: ResizableTableProps<T> = {}) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -329,6 +333,13 @@ export function ResizableTable<T = any>({
     setCurrentPage(1);
   };
 
+  const clearSort = () => {
+    setSortField(null);
+    setSortOrder("asc");
+    setShowSortMenu(false);
+    setCurrentPage(1);
+  };
+
   const sortedData = useMemo(() => {
     if (!sortField) return tableData;
 
@@ -372,46 +383,38 @@ export function ResizableTable<T = any>({
     const normalized = String(status || "").toLowerCase().replace(/\s+/g, "-");
     if (!mounted) {
       return {
-        bgColor: "bg-green-500/10",
-        borderColor: "border-green-500/30",
-        textColor: "text-green-400",
-        dotColor: "bg-green-400",
+        textColor: "text-emerald-500",
+        dotColor: "bg-emerald-500",
       };
     }
 
-    const statusMap: Record<string, any> = {
+    const statusMap: Record<string, { textColor: string; dotColor: string }> = {
       active: {
-        bgColor: isDark ? "bg-green-500/10" : "bg-green-50",
-        borderColor: isDark ? "border-green-500/30" : "border-green-200",
-        textColor: isDark ? "text-green-400" : "text-green-600",
-        dotColor: isDark ? "bg-green-400" : "bg-green-600",
+        textColor: isDark ? "text-emerald-400" : "text-emerald-600",
+        dotColor: isDark ? "bg-emerald-400" : "bg-emerald-500",
       },
       inactive: {
-        bgColor: isDark ? "bg-red-500/10" : "bg-red-50",
-        borderColor: isDark ? "border-red-500/30" : "border-red-200",
-        textColor: isDark ? "text-red-400" : "text-red-600",
-        dotColor: isDark ? "bg-red-400" : "bg-red-600",
+        textColor: isDark ? "text-rose-400" : "text-rose-600",
+        dotColor: isDark ? "bg-rose-400" : "bg-rose-500",
       },
       "on-leave": {
-        bgColor: isDark ? "bg-yellow-500/10" : "bg-yellow-50",
-        borderColor: isDark ? "border-yellow-500/30" : "border-yellow-200",
-        textColor: isDark ? "text-yellow-400" : "text-yellow-600",
-        dotColor: isDark ? "bg-yellow-400" : "bg-yellow-600",
+        textColor: isDark ? "text-amber-400" : "text-amber-600",
+        dotColor: isDark ? "bg-amber-400" : "bg-amber-500",
       },
       onboarding: {
-        bgColor: isDark ? "bg-blue-500/10" : "bg-blue-50",
-        borderColor: isDark ? "border-blue-500/30" : "border-blue-200",
-        textColor: isDark ? "text-blue-400" : "text-blue-600",
-        dotColor: isDark ? "bg-blue-400" : "bg-blue-600",
+        textColor: isDark ? "text-sky-400" : "text-sky-600",
+        dotColor: isDark ? "bg-sky-400" : "bg-sky-500",
+      },
+      pending: {
+        textColor: isDark ? "text-amber-400" : "text-amber-600",
+        dotColor: isDark ? "bg-amber-400" : "bg-amber-500",
       },
     };
 
     return (
       statusMap[normalized] || {
-        bgColor: isDark ? "bg-slate-500/10" : "bg-slate-100",
-        borderColor: isDark ? "border-slate-500/30" : "border-slate-200",
         textColor: isDark ? "text-slate-400" : "text-slate-600",
-        dotColor: isDark ? "bg-slate-400" : "bg-slate-600",
+        dotColor: isDark ? "bg-slate-400" : "bg-slate-500",
       }
     );
   };
@@ -540,15 +543,19 @@ export function ResizableTable<T = any>({
     const keyLower = col.key.toLowerCase();
 
     if (col.key === "status" || keyLower === "status" || keyLower.includes("status")) {
-      const { bgColor, textColor, dotColor } = getStatusColor(String(raw || ""));
-      const display = String(raw || "")
+      const statusRaw = String(raw ?? "").trim();
+      const { textColor, dotColor } = getStatusColor(statusRaw || "unknown");
+      const display = (statusRaw || "Unknown")
         .replace(/[-_]/g, " ")
         .replace(/\b\w/g, (l) => l.toUpperCase());
       return (
-        <div className={`inline-flex items-center gap-1 px-1.5 py-0.5 font-medium whitespace-nowrap ${bgColor} ${textColor} rounded text-xs`}>
-          <div className={`w-1 h-1 rounded-full ${dotColor}`}></div>
-          {display}
-        </div>
+        <span
+          className={`inline-flex items-center gap-1.5 text-xs font-semibold whitespace-nowrap ${textColor}`}
+          title={display}
+        >
+          <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${dotColor}`} />
+          <span className="max-w-[9rem] truncate">{display}</span>
+        </span>
       );
     }
 
@@ -600,16 +607,27 @@ export function ResizableTable<T = any>({
               <>
                 <div className="fixed inset-0 z-10" onClick={() => setShowSortMenu(false)} />
                 <div className="absolute right-0 mt-1 w-40 bg-background border border-border/50 shadow-lg rounded-md z-20 py-0.5 max-h-72 overflow-auto text-xs">
+                  <button
+                    type="button"
+                    onClick={clearSort}
+                    className={`w-full px-2 py-1 text-left hover:bg-muted/50 transition-colors ${sortField === null ? "bg-muted/30" : ""}`}
+                  >
+                    Default view
+                  </button>
                   {sortableColumns.length > 0 ? (
-                    sortableColumns.map((col) => (
-                      <button
-                        key={col.key}
-                        onClick={() => handleSort(col.key)}
-                        className={`w-full px-2 py-1 text-left hover:bg-muted/50 transition-colors ${sortField === col.key ? "bg-muted/30" : ""}`}
-                      >
-                        {col.label} {sortField === col.key && `(${sortOrder === "asc" ? "↑" : "↓"})`}
-                      </button>
-                    ))
+                    <>
+                      <div className="my-0.5 border-t border-border/40" />
+                      {sortableColumns.map((col) => (
+                        <button
+                          key={col.key}
+                          type="button"
+                          onClick={() => handleSort(col.key)}
+                          className={`w-full px-2 py-1 text-left hover:bg-muted/50 transition-colors ${sortField === col.key ? "bg-muted/30" : ""}`}
+                        >
+                          {col.label} {sortField === col.key && `(${sortOrder === "asc" ? "↑" : "↓"})`}
+                        </button>
+                      ))}
+                    </>
                   ) : (
                     <div className="px-2 py-1 text-muted-foreground">No sortable columns</div>
                   )}
@@ -619,42 +637,44 @@ export function ResizableTable<T = any>({
           </div>
 
           {/* Export */}
-          <div className="relative">
-            <button
-              onClick={() => setShowExportMenu(!showExportMenu)}
-              className="px-2 py-1 bg-background border border-border/50 text-foreground text-xs hover:bg-muted/30 transition-colors flex items-center gap-1.5 rounded-md"
-            >
-              <Download size={12} />
-              Export
-              <ChevronDown size={12} className="opacity-50" />
-            </button>
+          {showExport ? (
+            <div className="relative">
+              <button
+                onClick={() => setShowExportMenu(!showExportMenu)}
+                className="px-2 py-1 bg-background border border-border/50 text-foreground text-xs hover:bg-muted/30 transition-colors flex items-center gap-1.5 rounded-md"
+              >
+                <Download size={12} />
+                Export
+                <ChevronDown size={12} className="opacity-50" />
+              </button>
 
-            {showExportMenu && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={() => setShowExportMenu(false)} />
-                <div className="absolute right-0 mt-1 w-28 bg-background border border-border/50 shadow-lg rounded-md z-20 text-xs">
-                  <button
-                    onClick={() => {
-                      exportToCSV();
-                      setShowExportMenu(false);
-                    }}
-                    className="w-full px-2 py-1 text-left hover:bg-muted/50 transition-colors"
-                  >
-                    CSV
-                  </button>
-                  <button
-                    onClick={() => {
-                      exportToJSON();
-                      setShowExportMenu(false);
-                    }}
-                    className="w-full px-2 py-1 text-left hover:bg-muted/50 transition-colors border-t border-border/30"
-                  >
-                    JSON
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
+              {showExportMenu && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setShowExportMenu(false)} />
+                  <div className="absolute right-0 mt-1 w-28 bg-background border border-border/50 shadow-lg rounded-md z-20 text-xs">
+                    <button
+                      onClick={() => {
+                        exportToCSV();
+                        setShowExportMenu(false);
+                      }}
+                      className="w-full px-2 py-1 text-left hover:bg-muted/50 transition-colors"
+                    >
+                      CSV
+                    </button>
+                    <button
+                      onClick={() => {
+                        exportToJSON();
+                        setShowExportMenu(false);
+                      }}
+                      className="w-full px-2 py-1 text-left hover:bg-muted/50 transition-colors border-t border-border/30"
+                    >
+                      JSON
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -675,21 +695,30 @@ export function ResizableTable<T = any>({
                 </div>
               )}
 
-              {visibleTableColumns.map((col) => (
+              {visibleTableColumns.map((col) => {
+                const isActions = col.key === "actions" || col.key === "act"
+                return (
                 <Resizable
                   key={col.key}
                   width={getColumnWidth(col)}
                   height={0}
                   onResize={(e, data) => handleResize(col.key, data)}
-                  minConstraints={[60, 0]}
-                  maxConstraints={[500, 0]}
+                  minConstraints={[isActions ? 44 : 60, 0]}
+                  maxConstraints={[isActions ? 280 : 500, 0]}
                   handle={<div className="absolute right-0 top-0 bottom-0 w-1 hover:w-1.5 cursor-col-resize bg-transparent hover:bg-primary/40 transition-all" />}
                 >
-                  <div className="flex items-center border-r border-border px-1.5 relative flex-shrink-0 overflow-hidden text-base" style={{ width: getColumnWidth(col) }}>
+                  <div
+                    className={cn(
+                      "relative flex flex-shrink-0 items-center border-r border-border px-1.5 text-base",
+                      isActions ? "justify-end overflow-visible" : "overflow-hidden"
+                    )}
+                    style={{ width: getColumnWidth(col) }}
+                  >
                     <span className="truncate">{col.label}</span>
                   </div>
                 </Resizable>
-              ))}
+                )
+              })}
             </div>
 
             {/* Rows */}
@@ -730,21 +759,29 @@ export function ResizableTable<T = any>({
                         )}
 
                         {/* Data columns */}
-                        {visibleTableColumns.map((col) => (
+                        {visibleTableColumns.map((col) => {
+                          const isActions = col.key === "actions" || col.key === "act"
+                          return (
                           <div
                             key={col.key}
-                            className="flex items-center min-w-0 border-r border-border px-1.5 flex-shrink-0 overflow-hidden text-xs"
+                            className={cn(
+                              "flex min-w-0 flex-shrink-0 items-center border-r border-border px-1.5 text-xs",
+                              isActions
+                                ? "justify-end overflow-visible"
+                                : "overflow-hidden"
+                            )}
                             style={{ width: getColumnWidth(col) }}
                             onClick={(e) => {
                               // allow inner links/buttons to work
-                              if ((e.target as HTMLElement).closest("a,button")) {
+                              if ((e.target as HTMLElement).closest("a,button,[data-slot='popover-trigger'],[data-slot='dropdown-menu-trigger']")) {
                                 e.stopPropagation();
                               }
                             }}
                           >
                             {renderCell(col, item, index)}
                           </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     </motion.div>
                   );

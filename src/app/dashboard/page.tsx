@@ -1,5 +1,5 @@
-import { EmployeeHomeDashboard } from "@/components/dashboard/employee-home-dashboard"
+import { DashboardLandingPage } from "@/components/dashboard/dashboard-landing-page"
 
 export default function DashboardIndexPage() {
-  return <EmployeeHomeDashboard />
+  return <DashboardLandingPage />
 }

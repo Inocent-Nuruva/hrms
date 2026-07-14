@@ -16,6 +16,7 @@ import {
   type AdminRecord,
   type DepartmentsQueryParams,
 } from "@/lib/admin-api"
+import { canPerformPermission, normalizePermissionLabels } from "@/components/app-sidebar"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import {
   AlertDialog,
@@ -55,22 +56,73 @@ function readStoredToken() {
     return ""
   }
 
-  const direct = window.localStorage.getItem(TOKEN_STORAGE_KEY)?.trim() ?? ""
-  if (direct) {
-    return direct
+  const authTokensRaw = window.localStorage.getItem(AUTH_STORAGE_KEYS.tokens)
+  if (authTokensRaw) {
+    try {
+      const parsed = JSON.parse(authTokensRaw) as { accessToken?: string; access_token?: string }
+      const accessToken = (parsed.accessToken ?? parsed.access_token ?? "").trim()
+      if (accessToken) {
+        return accessToken
+      }
+    } catch {
+      // Fall through to legacy key.
+    }
   }
 
-  const authTokensRaw = window.localStorage.getItem(AUTH_STORAGE_KEYS.tokens)
-  if (!authTokensRaw) {
-    return ""
+  return window.localStorage.getItem(TOKEN_STORAGE_KEY)?.trim() ?? ""
+}
+
+function collectPermissionNames(value: unknown, sink: Set<string>) {
+  if (typeof value === "string" && value.trim()) {
+    sink.add(value.trim())
+    return
   }
+
+  if (Array.isArray(value)) {
+    value.forEach((entry) => collectPermissionNames(entry, sink))
+    return
+  }
+
+  if (typeof value !== "object" || value === null) {
+    return
+  }
+
+  const record = value as Record<string, unknown>
+  for (const key of ["permissions", "authorities", "actions", "scopes", "data", "items", "results", "user"]) {
+    collectPermissionNames(record[key], sink)
+  }
+}
+
+function readActorPermissions() {
+  if (typeof window === "undefined") {
+    return [] as string[]
+  }
+
+  const names = new Set<string>()
 
   try {
-    const parsed = JSON.parse(authTokensRaw) as { accessToken?: string; access_token?: string }
-    return (parsed.accessToken ?? parsed.access_token ?? "").trim()
+    const raw = window.sessionStorage.getItem("hrms.dashboard.actorPermissions")
+    if (raw) {
+      const parsed = JSON.parse(raw) as unknown
+      if (Array.isArray(parsed)) {
+        return normalizePermissionLabels(parsed.filter((entry) => typeof entry === "string"))
+      }
+    }
   } catch {
-    return ""
+    // Fall through to local payload inspection.
   }
+
+  for (const key of [AUTH_STORAGE_KEYS.user, AUTH_STORAGE_KEYS.tokens, "hrms.admin.user"]) {
+    try {
+      const raw = window.localStorage.getItem(key)
+      if (!raw) continue
+      collectPermissionNames(JSON.parse(raw) as unknown, names)
+    } catch {
+      // Ignore malformed local storage entries.
+    }
+  }
+
+  return normalizePermissionLabels(Array.from(names))
 }
 
 function readString(row: AdminRecord, keys: string[]) {
@@ -110,6 +162,21 @@ function emptyForm(): DepartmentForm {
 }
 
 export function DepartmentsView() {
+  // Browser storage only — keep empty until after mount to avoid SSR hydration mismatch.
+  const [actorPermissions, setActorPermissions] = React.useState<string[]>([])
+  const [permissionsReady, setPermissionsReady] = React.useState(false)
+  const canCreateDepartments = React.useMemo(
+    () => permissionsReady && canPerformPermission(actorPermissions, "departments:create"),
+    [actorPermissions, permissionsReady]
+  )
+  const canUpdateDepartments = React.useMemo(
+    () => permissionsReady && canPerformPermission(actorPermissions, "departments:update"),
+    [actorPermissions, permissionsReady]
+  )
+  const canDeleteDepartments = React.useMemo(
+    () => permissionsReady && canPerformPermission(actorPermissions, "departments:delete"),
+    [actorPermissions, permissionsReady]
+  )
   const [query, setQuery] = React.useState(DEFAULT_QUERY)
   const [rows, setRows] = React.useState<AdminRecord[]>([])
   const [loading, setLoading] = React.useState(false)
@@ -126,6 +193,11 @@ export function DepartmentsView() {
   const [allDepartments, setAllDepartments] = React.useState<AdminRecord[]>([])
   const [pendingDelete, setPendingDelete] = React.useState<AdminRecord | null>(null)
   const debouncedSearch = useDebouncedValue(query.search, 350)
+
+  React.useEffect(() => {
+    setActorPermissions(readActorPermissions())
+    setPermissionsReady(true)
+  }, [])
 
   const normalizedQuery = React.useMemo(
     () => ({
@@ -251,6 +323,15 @@ export function DepartmentsView() {
   }
 
   async function submitForm() {
+    if (editingId === null && !canCreateDepartments) {
+      setError("You do not have permission to create departments.")
+      return
+    }
+    if (editingId !== null && !canUpdateDepartments) {
+      setError("You do not have permission to update departments.")
+      return
+    }
+
     const token = readStoredToken()
     if (!token) {
       setError("Authentication required. Please log in again.")
@@ -285,6 +366,11 @@ export function DepartmentsView() {
   }
 
   async function handleDelete(row: AdminRecord) {
+    if (!canDeleteDepartments) {
+      setError("You do not have permission to delete departments.")
+      return
+    }
+
     const token = readStoredToken()
     const id = readNumber(row, ["id"])
     if (!token || id === null) {
@@ -318,30 +404,34 @@ export function DepartmentsView() {
         const id = readNumber(row, ["id"])
         return (
           <div className="flex justify-end gap-1 pr-1" onClick={(e) => e.stopPropagation()}>
-            <button
-              type="button"
-              className="admin-table-icon-button"
-              onClick={() => {
-                fillFormFromRow(row)
-                setEditingId(id)
-                setOpenCreate(true)
-              }}
-              aria-label="Edit department"
-              title="Edit department"
-            >
-              <Pencil className="size-4" />
-            </button>
-            <button
-              type="button"
-              className="admin-table-icon-button"
-              data-variant="danger"
-              disabled={saving}
-              onClick={() => setPendingDelete(row)}
-              aria-label="Delete department"
-              title="Delete department"
-            >
-              <Trash2 className="size-4" />
-            </button>
+            {canUpdateDepartments ? (
+              <button
+                type="button"
+                className="admin-table-icon-button"
+                onClick={() => {
+                  fillFormFromRow(row)
+                  setEditingId(id)
+                  setOpenCreate(true)
+                }}
+                aria-label="Edit department"
+                title="Edit department"
+              >
+                <Pencil className="size-4" />
+              </button>
+            ) : null}
+            {canDeleteDepartments ? (
+              <button
+                type="button"
+                className="admin-table-icon-button"
+                data-variant="danger"
+                disabled={saving}
+                onClick={() => setPendingDelete(row)}
+                aria-label="Delete department"
+                title="Delete department"
+              >
+                <Trash2 className="size-4" />
+              </button>
+            ) : null}
           </div>
         )
       },
@@ -349,58 +439,10 @@ export function DepartmentsView() {
   ]
 
   return (
-    <div>
-      <div className="mb-5 flex items-start justify-between gap-3">
-        <div>
-          <h2 className="text-[2rem] font-semibold leading-none tracking-[-0.03em] text-slate-900">
-            Department Management
-          </h2>
-          <p className="mt-2 text-sm text-slate-500">Departments</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-slate-900 text-white transition hover:bg-slate-800 disabled:opacity-60"
-            onClick={() => {
-              setEditingId(null)
-              setForm(emptyForm())
-              setOpenCreate(true)
-            }}
-            aria-label="Add department"
-            title="Add department"
-          >
-            <Plus className="size-5" />
-          </button>
-          <button
-            type="button"
-            className="inline-flex h-12 w-12 items-center justify-center rounded-xl border border-slate-300 bg-white text-primary transition hover:bg-slate-50 disabled:opacity-60"
-            onClick={() => void fetchDepartments()}
-            disabled={loading}
-            aria-label="Refresh"
-            title="Refresh"
-          >
-            <RefreshCw className={`size-5 text-primary ${loading ? "animate-spin" : ""}`} />
-          </button>
-        </div>
-      </div>
-      <div className="mb-4 flex flex-wrap items-end gap-3">
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Status</label>
-          <select
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm"
-            value={query.status}
-            onChange={(event) => {
-              setPage(1)
-              setQuery((previous) => ({ ...previous, status: event.target.value }))
-            }}
-          >
-            <option value="">All</option>
-            <option value="active">active</option>
-            <option value="inactive">inactive</option>
-          </select>
-        </div>
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-1.5">
         <SearchToggleField
-          className="min-w-[220px]"
+          className="min-w-0"
           placeholder="Search department"
           value={query.search}
           onChange={(value) => {
@@ -408,9 +450,50 @@ export function DepartmentsView() {
             setQuery((previous) => ({ ...previous, search: value }))
           }}
         />
+        <select
+          className="h-8 min-w-[8rem] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
+          value={query.status}
+          onChange={(event) => {
+            setPage(1)
+            setQuery((previous) => ({ ...previous, status: event.target.value }))
+          }}
+          aria-label="Filter department status"
+        >
+          <option value="">All statuses</option>
+          <option value="active">active</option>
+          <option value="inactive">inactive</option>
+        </select>
+        <div className="ml-auto flex items-center gap-1.5">
+          {canCreateDepartments ? (
+            <button
+              type="button"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-slate-900 px-2.5 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
+              onClick={() => {
+                setEditingId(null)
+                setForm(emptyForm())
+                setOpenCreate(true)
+              }}
+              aria-label="Add department"
+              title="Add department"
+            >
+              <Plus className="size-3.5" />
+              Add Department
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 bg-white text-primary transition hover:bg-slate-50 disabled:opacity-60"
+            onClick={() => void fetchDepartments()}
+            disabled={loading}
+            aria-label="Refresh"
+            title="Refresh"
+          >
+            <RefreshCw className={`size-3.5 text-primary ${loading ? "animate-spin" : ""}`} />
+          </button>
+        </div>
       </div>
 
-      {error ? <p className="mb-3 text-sm text-rose-600">{error}</p> : null}
+      {error ? <p className="text-sm text-rose-600">{error}</p> : null}
 
       <ResizableTable
         title="Department"

@@ -2075,47 +2075,46 @@ export function ScheduleManagementView({ section }: { section: string }) {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="mx-auto w-full max-w-6xl rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-sm dark:border-slate-800 dark:bg-[#101826]/92 lg:px-6">
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
+    <div className="space-y-2">
+      <div className="w-full">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
               {config.moduleTitle}
             </p>
-            <div>
-              <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-100 md:text-[2rem]">{config.title}</h1>
-              <p className="mt-2 max-w-3xl text-[0.95rem] text-slate-600 dark:text-slate-300">{config.description}</p>
-            </div>
+            <h1 className="text-sm font-semibold tracking-tight text-slate-900 dark:text-slate-100">{config.title}</h1>
           </div>
-          <div className="flex items-center gap-3 self-start">
+          <div className="ml-auto flex items-center gap-1.5">
             <button
-              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-300 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-              type="button"
-              onClick={() => {
-                setMessage(null)
-                void fetchRows()
-              }}
-            >
-              <RefreshCwIcon className="h-4 w-4 text-primary" />
-            </button>
-            <button
-              className="inline-flex h-9 items-center justify-center rounded-xl bg-[var(--primary)] px-3.5 text-sm font-semibold text-white transition hover:brightness-95"
+              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md bg-[var(--primary)] px-2.5 text-xs font-semibold text-white transition hover:brightness-95"
               type="button"
               onClick={() => {
                 setFormError(null)
                 setCreateOpen(true)
               }}
             >
-              <PlusIcon className="mr-2 h-4 w-4" />
+              <PlusIcon className="h-3.5 w-3.5" />
               Create
+            </button>
+            <button
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              type="button"
+              onClick={() => {
+                setMessage(null)
+                void fetchRows()
+              }}
+              aria-label="Refresh"
+              title="Refresh"
+            >
+              <RefreshCwIcon className="h-3.5 w-3.5 text-primary" />
             </button>
           </div>
         </div>
 
-        {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
-        {message ? <p className="mt-4 text-sm text-green-600">{message}</p> : null}
+        {error ? <p className="mt-2 text-sm text-red-600">{error}</p> : null}
+        {message ? <p className="mt-2 text-sm text-green-600">{message}</p> : null}
 
-        <div className="mt-5">
+        <div className="mt-2">
           <TableScrollContainer>
             <table className="min-w-full min-w-[720px] text-left text-sm">
               <thead className="bg-[var(--table-header-accent-bg)] text-[var(--table-header-accent)] backdrop-blur-sm">

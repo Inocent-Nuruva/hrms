@@ -13,14 +13,24 @@ export const employeeSectionTabGroups: DashboardSectionTabGroup[] = [
     items: [
       { title: "All Employees", url: "/dashboard/employees/all" },
       { title: "Registration", url: "/dashboard/employees/registration" },
-      { title: "Invite", url: "/dashboard/employees/invite" },
       { title: "Onboarding", url: "/dashboard/employees/onboarding" },
+      { title: "Profile Updates", url: "/dashboard/employees/profile-update-approvals" },
       { title: "Offboarding", url: "/dashboard/employees/offboarding" },
     ],
   },
 ]
 
 export const attendanceSectionTabGroups: DashboardSectionTabGroup[] = [
+  {
+    title: "Attendance Operations",
+    items: [
+      { title: "Daily Summaries", url: "/dashboard/attendance/daily-summaries" },
+      { title: "Mobile Punch Review", url: "/dashboard/attendance/mobile-punches" },
+      { title: "Recalculation Jobs", url: "/dashboard/attendance/recalculation-jobs" },
+      { title: "Unmatched Logs", url: "/dashboard/attendance/unmatched-logs" },
+      { title: "Device Sync Logs", url: "/dashboard/attendance/device-sync-logs" },
+    ],
+  },
   {
     title: "Attendance Setup",
     items: [
@@ -44,6 +54,11 @@ export const attendanceSectionTabGroups: DashboardSectionTabGroup[] = [
     ],
   },
   {
+    // Single-item group → rendered as a direct tab link (no dropdown).
+    title: "Correction Requests",
+    items: [{ title: "Correction Requests", url: "/dashboard/attendance/correction-requests" }],
+  },
+  {
     title: "Timetable Management",
     items: [
       { title: "Timetables", url: "/dashboard/attendance/timetables" },
@@ -51,16 +66,6 @@ export const attendanceSectionTabGroups: DashboardSectionTabGroup[] = [
       { title: "Timetable Holiday Rules", url: "/dashboard/attendance/timetable-holiday-rules" },
       { title: "Timetable Rotations and Rules", url: "/dashboard/attendance/timetable-rotations" },
       { title: "Employee Timetables", url: "/dashboard/attendance/employee-timetables" },
-    ],
-  },
-  {
-    title: "Attendance Operations",
-    items: [
-      { title: "Daily Summaries", url: "/dashboard/attendance/daily-summaries" },
-      { title: "Mobile Punch Review", url: "/dashboard/attendance/mobile-punches" },
-      { title: "Recalculation Jobs", url: "/dashboard/attendance/recalculation-jobs" },
-      { title: "Unmatched Logs", url: "/dashboard/attendance/unmatched-logs" },
-      { title: "Device Sync Logs", url: "/dashboard/attendance/device-sync-logs" },
     ],
   },
 ]
@@ -103,6 +108,7 @@ export const leaveManagementSectionTabGroups: DashboardSectionTabGroup[] = [
       { title: "Leave Types", url: "/dashboard/leave-management/types" },
       { title: "Leave Requests", url: "/dashboard/leave-management/requests" },
       { title: "Leave Balances", url: "/dashboard/leave-management/balances" },
+      { title: "Business Trips", url: "/dashboard/leave-management/business-trips" },
       { title: "Holidays", url: "/dashboard/leave-management/holidays" },
       { title: "Policies", url: "/dashboard/leave-management/policies" },
       { title: "Workflows", url: "/dashboard/leave-management/workflows" },

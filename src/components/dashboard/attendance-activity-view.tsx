@@ -15,6 +15,8 @@ import {
 import { ResizableTable } from "@/components/ui/resizable-table"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 import { Textarea } from "@/components/ui/textarea"
+import { LumaSpin } from "@/components/ui/luma-spin"
+import { toast } from "sonner"
 import {
   Popover,
   PopoverContent,
@@ -25,6 +27,7 @@ import {
   createMyAttendanceCorrectionRequest,
   createMyAttendanceCheckIn,
   createMyAttendanceCheckOut,
+  downloadAttendanceReport,
   getMyAttendanceSchedule,
   getMyAttendanceToday,
   listMyAttendanceCorrectionRequests,
@@ -204,6 +207,48 @@ function getTodayDateInputValue() {
   const now = new Date()
   const offset = now.getTimezoneOffset() * 60_000
   return new Date(now.getTime() - offset).toISOString().slice(0, 10)
+}
+
+function formatDateLabel(value: string) {
+  if (!value.trim()) {
+    return ""
+  }
+  const parsed = new Date(`${value}T00:00:00`)
+  if (Number.isNaN(parsed.getTime())) {
+    return value
+  }
+  return parsed.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  })
+}
+
+function getDailySummaryLoadingLabel(filters: Record<string, string>) {
+  const fromDate = filters.from_date?.trim() || ""
+  const toDate = filters.to_date?.trim() || ""
+  const today = getTodayDateInputValue()
+
+  if (fromDate && toDate && fromDate === toDate) {
+    if (fromDate === today) {
+      return "Loading today's daily summaries…"
+    }
+    return `Loading daily summaries for ${formatDateLabel(fromDate)}…`
+  }
+
+  if (fromDate && toDate) {
+    return `Loading daily summaries for ${formatDateLabel(fromDate)} – ${formatDateLabel(toDate)}…`
+  }
+
+  if (fromDate) {
+    return `Loading daily summaries from ${formatDateLabel(fromDate)}…`
+  }
+
+  if (toDate) {
+    return `Loading daily summaries through ${formatDateLabel(toDate)}…`
+  }
+
+  return "Loading daily summaries…"
 }
 
 function formatLoadError(errorObject: unknown, fallback: string) {
@@ -1266,12 +1311,23 @@ function buildRangePayload(values: Record<string, string>) {
   }
 }
 
+function AttendanceViewLoader({ label = "Loading attendance data…" }: { label?: string }) {
+  return (
+    <div className="flex min-h-[220px] flex-col items-center justify-center gap-3 rounded-xl border border-border/70 bg-card px-4 py-10 shadow-sm">
+      <LumaSpin />
+      <p className="text-sm font-medium text-foreground">{label}</p>
+    </div>
+  )
+}
+
 function TableBlock({
   rows,
   section,
+  loading = false,
 }: {
   rows: AdminRecord[]
   section: AttendanceActivitySectionKey
+  loading?: boolean
 }) {
   const columns = React.useMemo(() => resolveVisibleColumns(rows, section), [rows, section])
 
@@ -1287,6 +1343,8 @@ function TableBlock({
           render: (row: AdminRecord) => resolveTableCellValue(section, c, row),
         }))}
         itemsPerPage={20}
+        loading={loading}
+        showExport={false}
         storageKey="attendance-activity"
       />
     </div>
@@ -1302,7 +1360,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
   const [rows, setRows] = React.useState<AdminRecord[]>([])
   const [dailySummaryRows, setDailySummaryRows] = React.useState<AdminRecord[]>([])
   const [singleRecord, setSingleRecord] = React.useState<AdminRecord | null>(null)
-  const [loading, setLoading] = React.useState(false)
+  const [loading, setLoading] = React.useState(true)
   const [message, setMessage] = React.useState<string | null>(null)
   const [error, setError] = React.useState<string | null>(null)
 
@@ -1329,7 +1387,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
       status: "",
     }
   })
-  const [hasAppliedDailySummaryFilters, setHasAppliedDailySummaryFilters] = React.useState(false)
+  const [hasAppliedDailySummaryFilters, setHasAppliedDailySummaryFilters] = React.useState(true)
   const [historyFilters, setHistoryFilters] = React.useState<Record<string, string>>(() => ({
     from_date: "",
     to_date: "",
@@ -1337,6 +1395,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
   const [correctionRequests, setCorrectionRequests] = React.useState<AdminRecord[]>([])
   const [correctionDialogOpen, setCorrectionDialogOpen] = React.useState(false)
   const [correctionBusy, setCorrectionBusy] = React.useState(false)
+  const [attendanceExporting, setAttendanceExporting] = React.useState(false)
   const [correctionForm, setCorrectionForm] = React.useState({
     attendance_date: getTodayDateInputValue(),
     request_type: "check_in",
@@ -1416,6 +1475,9 @@ export function AttendanceActivityView({ section }: { section: string }) {
     if (!token) {
       setRows([])
       setSingleRecord(null)
+      setDailySummaryRows([])
+      setCorrectionRequests([])
+      setLoading(false)
       setError("Authentication required. Please log in again.")
       return
     }
@@ -1424,6 +1486,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
       activeSection,
       historyFilters,
       dailySummaryFilters: appliedDailySummaryFilters,
+      hasAppliedDailySummaryFilters,
     })
 
     if (!force) {
@@ -1500,6 +1563,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
           setDailySummaryRows([])
           setRows([])
           setSingleRecord(null)
+          setCorrectionRequests([])
           return
         }
 
@@ -1698,6 +1762,53 @@ export function AttendanceActivityView({ section }: { section: string }) {
     }
   }
 
+  const exportDailySummaryReport = async (format: "xlsx" | "csv" | "pdf") => {
+    const token = readStoredToken()
+    if (!token) {
+      toast.error("Authentication required. Please log in again.")
+      return
+    }
+
+    setAttendanceExporting(true)
+    setError(null)
+    setMessage(null)
+
+    try {
+      const blobResult = await downloadAttendanceReport(token, {
+        page: 1,
+        limit: 100,
+        sortBy: "created_at",
+        sortOrder: "DESC",
+        search: employeeSearch.trim() || undefined,
+        from_date: dailySummaryFilters.from_date || undefined,
+        to_date: dailySummaryFilters.to_date || undefined,
+        employee_id: dailySummaryFilters.employee_id
+          ? Number(dailySummaryFilters.employee_id)
+          : undefined,
+        organization_id: dailySummaryFilters.organization_id
+          ? Number(dailySummaryFilters.organization_id)
+          : undefined,
+        status: dailySummaryFilters.status || undefined,
+        format,
+      })
+
+      const url = URL.createObjectURL(blobResult.blob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = blobResult.filename
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+
+      toast.success(`Attendance report downloaded as ${format.toUpperCase()}.`)
+    } catch (errorObject) {
+      toast.error(formatLoadError(errorObject, "Could not download the attendance report."))
+    } finally {
+      setAttendanceExporting(false)
+    }
+  }
+
   if (activeSection === 'punch-action') {
     return (
       <div className="py-4 text-sm text-muted-foreground">
@@ -1766,14 +1877,16 @@ export function AttendanceActivityView({ section }: { section: string }) {
               </Popover>
             )}
             <button
-              className="inline-flex h-8 items-center justify-center rounded-lg border border-border px-2 text-xs font-medium text-foreground transition hover:bg-muted"
+              className="inline-flex h-8 items-center justify-center rounded-lg border border-border px-2 text-xs font-medium text-foreground transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
               type="button"
+              disabled={loading}
+              aria-label="Refresh"
               onClick={() => {
                 setMessage(null)
                 void fetchSectionData(true)
               }}
             >
-              <RefreshCwIcon className="size-3.5 text-primary" />
+              <RefreshCwIcon className={`size-3.5 text-primary ${loading ? "animate-spin" : ""}`} />
             </button>
           </div>
         </div>
@@ -1783,10 +1896,14 @@ export function AttendanceActivityView({ section }: { section: string }) {
         {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
         {message ? <p className="mt-4 text-sm text-green-600">{message}</p> : null}
 
-        {loading ? (
-          <p className="mt-3 text-xs text-muted-foreground">
-            {activeSection === "daily-summaries" && rows.length ? "Updating results…" : "Loading…"}
-          </p>
+        {loading &&
+        activeSection !== "daily-summaries" &&
+        rows.length === 0 &&
+        !singleRecord &&
+        correctionRequests.length === 0 ? (
+          <div className="mt-4">
+            <AttendanceViewLoader label={`Loading ${config.title.toLowerCase()}…`} />
+          </div>
         ) : null}
 
         {!loading && activeSection === "today" ? <TodayOverview record={singleRecord} /> : null}
@@ -1922,149 +2039,177 @@ export function AttendanceActivityView({ section }: { section: string }) {
         ) : null}
 
         {activeSection === "daily-summaries" ? (
-          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/80 p-3.5">
-            <div className="flex flex-col gap-3">
-              <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-                <div className="flex flex-col gap-1">
-                  <h2 className="text-base font-semibold text-slate-900">Filters</h2>
+          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/80 p-3">
+            <div className="flex flex-col gap-2.5">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1">
+                  <h2 className="shrink-0 text-sm font-semibold text-slate-900">Filters</h2>
+                  <p className="text-[11px] leading-snug text-slate-500">
+                    Showing today by default. Update fields, then Apply Filters to refresh.
+                  </p>
                 </div>
-                <label className="relative block w-full lg:max-w-[25rem]">
-                  <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                <label className="relative block w-full sm:max-w-[16rem] sm:shrink-0">
+                  <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
                   <input
-                    className="h-9 w-full rounded-md border border-slate-300 bg-white pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400"
+                    className="h-8 w-full rounded-md border border-slate-300 bg-white pl-8 pr-2.5 text-sm text-slate-900 placeholder:text-slate-400"
                     value={employeeSearch}
                     onChange={(event) => setEmployeeSearch(event.target.value)}
-                    placeholder="Search employee by name, number, or ID"
+                    placeholder="Name, number, or ID"
+                    aria-label="Search employee by name, number, or ID"
                   />
                 </label>
               </div>
-              <div className="flex flex-col gap-3">
-                <div className="grid gap-2.5 md:grid-cols-2 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,0.85fr)_minmax(260px,0.7fr)_minmax(280px,1fr)]">
-                  <label className="grid gap-1 text-sm">
-                    <span className="font-medium text-slate-700">From date</span>
-                    <DatePickerPresets
-                      value={dailySummaryFilters.from_date}
-                      onChange={(value) => setDailySummaryFilters((current) => ({ ...current, from_date: value }))}
-                      placeholder="From date"
-                      className="h-9"
-                    />
-                  </label>
-                  <label className="grid gap-1 text-sm">
-                    <span className="font-medium text-slate-700">To date</span>
-                    <DatePickerPresets
-                      value={dailySummaryFilters.to_date}
-                      onChange={(value) => setDailySummaryFilters((current) => ({ ...current, to_date: value }))}
-                      placeholder="To date"
-                      className="h-9"
-                    />
-                  </label>
-                  <label className="grid max-w-md gap-1 text-sm">
-                    <span className="font-medium text-slate-700">Employee</span>
-                    <select
-                      className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
-                      value={dailySummaryFilters.employee_id}
-                      onChange={(event) => setDailySummaryFilters((current) => ({ ...current, employee_id: event.target.value }))}
-                    >
-                      <option value="">All employees</option>
-                      {filteredEmployeeOptions.map((employee, index) => {
-                        const employeeId = readNumberFromRow(employee, ["id", "employee_id", "employeeId"])
-                        if (employeeId === null) return null
-                        return (
-                          <option key={`attendance-employee-${employeeId}-${index}`} value={String(employeeId)}>
-                            {getEmployeeOptionLabel(employee)}
-                          </option>
-                        )
-                      })}
-                    </select>
-                  </label>
-                  <label className="grid gap-1 text-sm">
-                    <span className="font-medium text-slate-700">Organization</span>
-                    <select
-                      className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
-                      value={dailySummaryFilters.organization_id}
-                      onChange={(event) => setDailySummaryFilters((current) => ({ ...current, organization_id: event.target.value }))}
-                    >
-                      <option value="">All organizations</option>
-                      {branches.map((branch, index) => {
-                        const branchId = readNumberFromRow(branch, ["id", "branch_id", "branchId"])
-                        if (branchId === null) return null
-                        return (
-                          <option key={`attendance-branch-${branchId}-${index}`} value={String(branchId)}>
-                            {getBranchOptionLabel(branch)}
-                          </option>
-                        )
-                      })}
-                    </select>
-                  </label>
-                </div>
-                <div className="grid gap-2.5 lg:grid-cols-[minmax(220px,0.7fr)_auto] lg:items-end">
-                  <label className="grid max-w-md gap-1 text-sm">
-                    <span className="font-medium text-slate-700">Status</span>
-                    <select
-                      className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
-                      value={dailySummaryFilters.status}
-                      onChange={(event) => setDailySummaryFilters((current) => ({ ...current, status: event.target.value }))}
-                    >
-                      <option value="">All statuses</option>
-                      {DAILY_SUMMARY_STATUS_OPTIONS.map((status) => (
-                        <option key={status} value={status}>
-                          {prettifyLabel(status)}
+
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+                <label className="grid min-w-0 gap-1 text-xs">
+                  <span className="font-medium text-slate-600">From</span>
+                  <DatePickerPresets
+                    value={dailySummaryFilters.from_date}
+                    onChange={(value) => setDailySummaryFilters((current) => ({ ...current, from_date: value }))}
+                    placeholder="From"
+                    className="h-8 px-2.5 text-xs"
+                  />
+                </label>
+                <label className="grid min-w-0 gap-1 text-xs">
+                  <span className="font-medium text-slate-600">To</span>
+                  <DatePickerPresets
+                    value={dailySummaryFilters.to_date}
+                    onChange={(value) => setDailySummaryFilters((current) => ({ ...current, to_date: value }))}
+                    placeholder="To"
+                    className="h-8 px-2.5 text-xs"
+                  />
+                </label>
+                <label className="grid min-w-0 gap-1 text-xs">
+                  <span className="font-medium text-slate-600">Employee</span>
+                  <select
+                    className="h-8 w-full min-w-0 rounded-md border border-slate-300 bg-white px-2.5 text-sm text-slate-900"
+                    value={dailySummaryFilters.employee_id}
+                    onChange={(event) => setDailySummaryFilters((current) => ({ ...current, employee_id: event.target.value }))}
+                  >
+                    <option value="">All employees</option>
+                    {filteredEmployeeOptions.map((employee, index) => {
+                      const employeeId = readNumberFromRow(employee, ["id", "employee_id", "employeeId"])
+                      if (employeeId === null) return null
+                      return (
+                        <option key={`attendance-employee-${employeeId}-${index}`} value={String(employeeId)}>
+                          {getEmployeeOptionLabel(employee)}
                         </option>
-                      ))}
-                    </select>
-                  </label>
-                  <div className="flex flex-wrap gap-2 lg:self-end">
-                    <button
-                      className="inline-flex h-9 items-center justify-center rounded-lg bg-slate-900 px-3.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                      type="button"
-                      disabled={loading}
-                      onClick={() => {
-                        setHasAppliedDailySummaryFilters(true)
-                        setAppliedDailySummaryFilters({ ...dailySummaryFilters })
-                        setMessage(null)
-                        setError(null)
-                      }}
-                    >
-                      Apply Filters
-                    </button>
-                    <button
-                      className="inline-flex h-9 items-center justify-center rounded-lg border border-slate-300 bg-white px-3.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                      type="button"
-                      onClick={() => {
-                        const today = getTodayDateInputValue()
-                        const resetFilters = {
-                          from_date: today,
-                          to_date: today,
-                          employee_id: "",
-                          organization_id: "",
-                          status: "",
-                        }
-                        setEmployeeSearch("")
-                        setDailySummaryFilters(resetFilters)
-                        setAppliedDailySummaryFilters(resetFilters)
-                        setHasAppliedDailySummaryFilters(false)
-                        setDailySummaryRows([])
-                        setRows([])
-                        setError(null)
-                        setMessage(null)
-                      }}
-                    >
-                      Reset To Today
-                    </button>
-                  </div>
-                </div>
+                      )
+                    })}
+                  </select>
+                </label>
+                <label className="grid min-w-0 gap-1 text-xs">
+                  <span className="font-medium text-slate-600">Organization</span>
+                  <select
+                    className="h-8 w-full min-w-0 rounded-md border border-slate-300 bg-white px-2.5 text-sm text-slate-900"
+                    value={dailySummaryFilters.organization_id}
+                    onChange={(event) => setDailySummaryFilters((current) => ({ ...current, organization_id: event.target.value }))}
+                  >
+                    <option value="">All organizations</option>
+                    {branches.map((branch, index) => {
+                      const branchId = readNumberFromRow(branch, ["id", "branch_id", "branchId"])
+                      if (branchId === null) return null
+                      return (
+                        <option key={`attendance-branch-${branchId}-${index}`} value={String(branchId)}>
+                          {getBranchOptionLabel(branch)}
+                        </option>
+                      )
+                    })}
+                  </select>
+                </label>
+                <label className="grid min-w-0 gap-1 text-xs sm:col-span-2 md:col-span-1 lg:col-span-1">
+                  <span className="font-medium text-slate-600">Status</span>
+                  <select
+                    className="h-8 w-full min-w-0 rounded-md border border-slate-300 bg-white px-2.5 text-sm text-slate-900"
+                    value={dailySummaryFilters.status}
+                    onChange={(event) => setDailySummaryFilters((current) => ({ ...current, status: event.target.value }))}
+                  >
+                    <option value="">All statuses</option>
+                    {DAILY_SUMMARY_STATUS_OPTIONS.map((status) => (
+                      <option key={status} value={status}>
+                        {prettifyLabel(status)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
               </div>
-              <div className="flex flex-col gap-2 border-t border-slate-200 pt-2.5">
-                <p className="text-xs text-slate-500">
-                  Update the fields you need, then click Apply Filters to refresh results.
-                </p>
-                {!hasAppliedDailySummaryFilters ? (
-                  <p className="text-xs text-slate-500">
-                    Daily summaries are loaded only after you apply filters.
-                  </p>
-                ) : null}
+
+              <div className="flex flex-col gap-2 border-t border-slate-200 pt-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    className="inline-flex h-8 items-center justify-center rounded-md bg-slate-900 px-3 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                    type="button"
+                    disabled={loading}
+                    onClick={() => {
+                      setHasAppliedDailySummaryFilters(true)
+                      setAppliedDailySummaryFilters({ ...dailySummaryFilters })
+                      setMessage(null)
+                      setError(null)
+                    }}
+                  >
+                    Apply Filters
+                  </button>
+                  <button
+                    className="inline-flex h-8 items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                    type="button"
+                    onClick={() => {
+                      const today = getTodayDateInputValue()
+                      const resetFilters = {
+                        from_date: today,
+                        to_date: today,
+                        employee_id: "",
+                        organization_id: "",
+                        status: "",
+                      }
+                      setEmployeeSearch("")
+                      setDailySummaryFilters(resetFilters)
+                      setAppliedDailySummaryFilters(resetFilters)
+                      setHasAppliedDailySummaryFilters(true)
+                      setError(null)
+                      setMessage(null)
+                    }}
+                  >
+                    Reset To Today
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    className="inline-flex h-8 items-center justify-center rounded-md border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    onClick={() => void exportDailySummaryReport("xlsx")}
+                    disabled={attendanceExporting}
+                  >
+                    {attendanceExporting ? "Exporting..." : "XLSX"}
+                  </button>
+                  <button
+                    type="button"
+                    className="inline-flex h-8 items-center justify-center rounded-md border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    onClick={() => void exportDailySummaryReport("csv")}
+                    disabled={attendanceExporting}
+                  >
+                    CSV
+                  </button>
+                  <button
+                    type="button"
+                    className="inline-flex h-8 items-center justify-center rounded-md border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    onClick={() => void exportDailySummaryReport("pdf")}
+                    disabled={attendanceExporting}
+                  >
+                    PDF
+                  </button>
+                </div>
               </div>
             </div>
+          </div>
+        ) : null}
+
+        {activeSection === "daily-summaries" ? (
+          <div className="mt-4">
+            {loading && rows.length === 0 ? (
+              <AttendanceViewLoader label={getDailySummaryLoadingLabel(appliedDailySummaryFilters)} />
+            ) : (
+              <TableBlock rows={rows} section={activeSection} loading={loading} />
+            )}
           </div>
         ) : null}
 
@@ -2072,7 +2217,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
 
         {/* Punch Action is only available in the native mobile app (iOS/Android). No content shown in browser. */}
 
-        {!loading && activeSection === "recalculation-jobs" ? (
+        {activeSection === "recalculation-jobs" ? (
           <div className="mt-6 space-y-6">
             <div className="flex flex-wrap gap-3">
               <button className="inline-flex h-11 items-center justify-center rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800" type="button" onClick={() => void runPendingJobs()}>
@@ -2121,18 +2266,24 @@ export function AttendanceActivityView({ section }: { section: string }) {
                 </div>
               </div>
             </div>
-            <TableBlock rows={rows} section={activeSection} />
+            {loading && rows.length === 0 ? (
+              <AttendanceViewLoader label="Loading recalculation jobs…" />
+            ) : (
+              <TableBlock rows={rows} section={activeSection} loading={loading} />
+            )}
           </div>
         ) : null}
 
-        {((activeSection === "daily-summaries" || !loading) &&
-          activeSection !== "today" &&
-          activeSection !== "punch-history" &&
-          activeSection !== "attendance-history" &&
-          activeSection !== "schedule-preview" &&
-          activeSection !== "recalculation-jobs") ? (
+        {!loading &&
+        activeSection !== "daily-summaries" &&
+        activeSection !== "today" &&
+        activeSection !== "punch-history" &&
+        activeSection !== "attendance-history" &&
+        activeSection !== "schedule-preview" &&
+        activeSection !== "recalculation-jobs" &&
+        activeSection !== "corrections" ? (
           <div className="mt-6">
-            <TableBlock rows={rows} section={activeSection} />
+            <TableBlock rows={rows} section={activeSection} loading={loading} />
           </div>
         ) : null}
 

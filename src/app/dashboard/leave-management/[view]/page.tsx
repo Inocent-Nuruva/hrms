@@ -1,8 +1,17 @@
 import { redirect } from "next/navigation"
 
+import { AttendanceBusinessTripsView } from "@/components/dashboard/attendance-business-trips-view"
 import { LeaveManagementView } from "@/components/dashboard/leave-management-view"
 
-const ALLOWED_VIEWS = new Set(["types", "requests", "balances", "holidays", "policies", "workflows"])
+const ALLOWED_VIEWS = new Set([
+  "types",
+  "requests",
+  "balances",
+  "business-trips",
+  "holidays",
+  "policies",
+  "workflows",
+])
 
 type LeaveView = "types" | "requests" | "balances" | "holidays" | "policies" | "workflows"
 
@@ -20,6 +29,10 @@ export default async function LeaveManagementViewPage({
 
   if (!ALLOWED_VIEWS.has(normalized)) {
     redirect("/dashboard/leave-management")
+  }
+
+  if (normalized === "business-trips") {
+    return <AttendanceBusinessTripsView />
   }
 
   return <LeaveManagementView activeTab={normalized as LeaveView} showTabButtons={false} />

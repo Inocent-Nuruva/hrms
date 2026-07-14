@@ -1214,11 +1214,13 @@ function Field({
 }) {
   return (
     <AnimatedField delayMs={delayMs} className={className}>
-      <div className="flex h-full flex-col gap-2">
-        <Label htmlFor={htmlFor}>{label}</Label>
+      <div className="flex h-full flex-col gap-1">
+        <Label htmlFor={htmlFor} className="text-xs font-medium text-slate-700">
+          {label}
+        </Label>
         {children}
         {hint || reserveHintSpace ? (
-          <div className="min-h-4 text-xs text-muted-foreground">
+          <div className="min-h-3.5 text-[11px] leading-snug text-muted-foreground">
             {hint}
           </div>
         ) : null}
@@ -1380,6 +1382,7 @@ export function EmployeeRegisterForm() {
   const [reportsToRecords, setReportsToRecords] = React.useState<AdminRecord[]>([])
   const [onboardingWorkflows, setOnboardingWorkflows] = React.useState<AdminRecord[]>([])
   const [shiftRecords, setShiftRecords] = React.useState<AdminRecord[]>([])
+  const [rotationGroupRecords, setRotationGroupRecords] = React.useState<AdminRecord[]>([])
   const [timetableRecords, setTimetableRecords] = React.useState<AdminRecord[]>([])
   const [accessGroupRecords, setAccessGroupRecords] = React.useState<AdminRecord[]>([])
   const [accessOrganizationRecords, setAccessOrganizationRecords] = React.useState<AdminRecord[]>([])
@@ -1505,8 +1508,24 @@ export function EmployeeRegisterForm() {
       })
       .map((row) => {
         const id = readRecordId(row)
-        const label = readString(row, ["full_name", "name", "first_name"]) || (row.first_name ? `${row.first_name} ${row.last_name || ""}`.trim() : "-")
-        return id != null ? { id, label: label !== "-" ? label : `Employee #${id}` } : null
+        const composedName = [row.firstName ?? row.first_name, row.lastName ?? row.last_name]
+          .filter((part): part is string => typeof part === "string" && Boolean(part.trim()))
+          .join(" ")
+          .trim()
+        const label =
+          readString(row, [
+            "fullName",
+            "full_name",
+            "displayName",
+            "display_name",
+            "name",
+            "firstName",
+            "first_name",
+          ]) ||
+          composedName ||
+          readString(row, ["employeeNo", "employee_no", "user_no"]) ||
+          (id != null ? `Employee #${id}` : null)
+        return id != null && label ? { id, label } : null
       })
       .filter((o): o is { id: number; label: string } => o !== null)
   }, [reportsToRecords, selectedDepartmentId])
@@ -1573,6 +1592,35 @@ export function EmployeeRegisterForm() {
         })
         .filter((option): option is { id: number; label: string } => option !== null && option.label !== "-"),
     [shiftRecords]
+  )
+  const rotationGroupOptions = React.useMemo(
+    () =>
+      rotationGroupRecords
+        .map((row) => {
+          const id =
+            readRecordId(row) ??
+            (typeof row.rotation_group_id === "number"
+              ? row.rotation_group_id
+              : typeof row.rotationGroupId === "number"
+                ? row.rotationGroupId
+                : null)
+          if (id === null) {
+            return null
+          }
+          const name = readString(row, ["name", "title", "rotation_group_name", "rotationGroupName"])
+          const code = readString(row, ["code", "rotation_group_code", "rotationGroupCode"])
+          const label =
+            name !== "-" && code !== "-"
+              ? `${name} (${code})`
+              : name !== "-"
+                ? name
+                : code !== "-"
+                  ? code
+                  : `Rotation group #${id}`
+          return { id, label }
+        })
+        .filter((option): option is { id: number; label: string } => option !== null),
+    [rotationGroupRecords]
   )
   const timetableOptions = React.useMemo(
     () =>
@@ -1659,6 +1707,81 @@ export function EmployeeRegisterForm() {
       ? visibleRegisterSteps[currentVisibleStepIndex + 1] ?? null
       : null
   const isDraftBankMobileMoney = draftBankAccount.paymentMode === "mobile_money"
+
+  const isRegisterStepFilled = React.useCallback(
+    (step: RegisterStep) => {
+      const hasText = (...values: Array<string | number | null | undefined>) =>
+        values.some((value) => typeof value === "string" ? value.trim().length > 0 : value !== null && value !== undefined && String(value).trim().length > 0)
+
+      switch (step) {
+        case "details":
+          return (
+            hasText(
+              form.firstName,
+              form.middleName,
+              form.lastName,
+              form.preferredName,
+              form.branch,
+              form.department,
+              form.position,
+              form.designation,
+              form.gender,
+              form.maritalStatus,
+              form.nationality,
+              form.employmentType,
+              form.reportsTo,
+              form.employeeNo
+            ) || Boolean(dob) || Boolean(hireDate) || Boolean(probationEndDate)
+          )
+        case "contacts":
+          return contacts.length > 0
+        case "addresses":
+          return addresses.length > 0
+        case "relatives":
+          return relatives.length > 0
+        case "identifications":
+          return identifications.length > 0
+        case "bankAccounts":
+          return bankAccounts.length > 0
+        case "academic":
+          return academicQualifications.length > 0
+        case "professional":
+          return professionalQualifications.length > 0
+        case "experience":
+          return experienceDetails.length > 0
+        default:
+          return false
+      }
+    },
+    [
+      academicQualifications.length,
+      addresses.length,
+      bankAccounts.length,
+      contacts.length,
+      dob,
+      experienceDetails.length,
+      form.branch,
+      form.department,
+      form.designation,
+      form.employeeNo,
+      form.employmentType,
+      form.firstName,
+      form.gender,
+      form.lastName,
+      form.maritalStatus,
+      form.middleName,
+      form.nationality,
+      form.position,
+      form.preferredName,
+      form.reportsTo,
+      hireDate,
+      identifications.length,
+      probationEndDate,
+      professionalQualifications.length,
+      relatives.length,
+    ]
+  )
+
   const getStepTransitionClass = React.useCallback(
     (step: RegisterStep) => {
       if (currentStep !== step) {
@@ -2267,6 +2390,7 @@ export function EmployeeRegisterForm() {
         employeesResult,
         workflowResult,
         shiftResult,
+        rotationGroupsResult,
         timetableResult,
         accessGroupsResult,
         accessOrganizationsResult,
@@ -2280,6 +2404,12 @@ export function EmployeeRegisterForm() {
         listEmployees(accessToken, { page: 1, limit: 200, sortBy: "first_name", sortOrder: "ASC" }),
         listOnboardingWorkflows(accessToken, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
         listShiftResources(accessToken, "shifts", { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
+        listShiftResources(accessToken, "shift-rotation-groups", {
+          page: 1,
+          limit: 100,
+          sortBy: "created_at",
+          sortOrder: "DESC",
+        }),
         listTimetableResources(accessToken, "timetables", { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
         listAccessControlResources(accessToken, "groups", { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
         listAccessControlResources(accessToken, "organizations", { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
@@ -2295,6 +2425,8 @@ export function EmployeeRegisterForm() {
       const resolvedReportsTo = employeesResult.status === "fulfilled" ? employeesResult.value.rows : []
       const resolvedWorkflows = workflowResult.status === "fulfilled" ? workflowResult.value.rows : []
       const resolvedShifts = shiftResult.status === "fulfilled" ? shiftResult.value.rows : []
+      const resolvedRotationGroups =
+        rotationGroupsResult.status === "fulfilled" ? rotationGroupsResult.value.rows : []
       const resolvedTimetables = timetableResult.status === "fulfilled" ? timetableResult.value.rows : []
       const resolvedAccessGroups = accessGroupsResult.status === "fulfilled" ? accessGroupsResult.value.rows : []
       const resolvedAccessOrganizations =
@@ -2311,6 +2443,7 @@ export function EmployeeRegisterForm() {
       setReportsToRecords(resolvedReportsTo)
       setOnboardingWorkflows(resolvedWorkflows)
       setShiftRecords(resolvedShifts)
+      setRotationGroupRecords(resolvedRotationGroups)
       setTimetableRecords(resolvedTimetables)
       setAccessGroupRecords(resolvedAccessGroups)
       setAccessOrganizationRecords(resolvedAccessOrganizations)
@@ -2900,39 +3033,32 @@ export function EmployeeRegisterForm() {
 
   if (!registrationContextResolved) {
     return (
-      <div className="px-4 lg:px-6">
-        <Card className="animate-card-entrance">
-          <CardHeader>
-            <CardTitle>Loading registration</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-slate-500">Checking your registration access...</p>
-          </CardContent>
-        </Card>
+      <div className="rounded-lg border border-slate-200 bg-white px-3 py-4">
+        <p className="text-sm font-medium text-slate-900">Loading registration</p>
+        <p className="mt-1 text-xs text-slate-500">Checking your registration access...</p>
       </div>
     )
   }
 
   if (!isRegisteringOthers && selfRegistrationStatus !== "onboarding") {
     return (
-      <div className="px-4 lg:px-6">
-        <Card className="animate-card-entrance">
-          <CardHeader>
-            <CardTitle>Self registration unavailable</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-slate-500">
-              This page is available only while your employee status is onboarding.
-            </p>
-          </CardContent>
-        </Card>
+      <div className="rounded-lg border border-slate-200 bg-white px-3 py-4">
+        <p className="text-sm font-medium text-slate-900">Self registration unavailable</p>
+        <p className="mt-1 text-xs text-slate-500">
+          This page is available only while your employee status is onboarding.
+        </p>
       </div>
     )
   }
 
+  const stepProgress =
+    currentVisibleStepIndex >= 0
+      ? ((currentVisibleStepIndex + 1) / Math.max(visibleRegisterSteps.length, 1)) * 100
+      : 0
+
   return (
-    <div className="px-4 lg:px-6">
-      <div className="animate-card-entrance overflow-visible rounded-2xl">
+    <div className="space-y-2">
+      <div className="animate-card-entrance overflow-visible rounded-xl border border-slate-200/80 bg-white">
         <Tabs
           value={currentStep}
           onValueChange={(value) => {
@@ -2946,30 +3072,86 @@ export function EmployeeRegisterForm() {
             }
           }}
         >
-          <div className="border-b">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-                <UserPlus2Icon className="size-4" />
+          <div className="space-y-1.5 border-b border-slate-200 px-3 pt-3 pb-0 sm:px-4">
+            <div className="flex flex-wrap items-center justify-between gap-1.5">
+              <h2 className="flex items-center gap-1.5 text-sm font-semibold tracking-tight text-slate-900">
+                <UserPlus2Icon className="size-3.5 text-primary" />
                 {isRegisteringOthers ? "Employee Registration" : "Self Registration"}
               </h2>
+              {!isInviteMode ? (
+                <p className="text-[11px] font-medium text-slate-500">
+                  Step {Math.max(currentVisibleStepIndex + 1, 1)} of {visibleRegisterSteps.length}
+                  <span className="mx-1.5 text-slate-300">·</span>
+                  <span className="text-slate-700">
+                    {REGISTER_STEP_LABELS[currentStep] ?? "Details"}
+                  </span>
+                </p>
+              ) : null}
             </div>
-            <TabsList className="flex w-full items-center gap-4 border-b border-border/80 bg-transparent p-0 overflow-x-auto sm:overflow-hidden">
-              {visibleRegisterSteps.map((step) => (
-                <TabsTrigger
-                  key={step}
-                  value={step}
-                  className="border-b-2 px-1 py-2 text-[0.92rem] font-medium whitespace-nowrap transition-colors duration-200 data-active:border-[var(--primary)] data-active:text-[var(--primary)] border-transparent text-slate-600 hover:text-slate-900"
-                >
-                  {REGISTER_STEP_LABELS[step]}
-                </TabsTrigger>
-              ))}
-            </TabsList>
+
+            {!isInviteMode ? (
+              <div className="h-1 overflow-hidden rounded-full bg-slate-100">
+                <div
+                  className="h-full rounded-full bg-[var(--primary)] transition-all duration-300 ease-out"
+                  style={{ width: `${stepProgress}%` }}
+                />
+              </div>
+            ) : null}
+
+            <div className="glass-scrollbar -mx-3 overflow-x-auto px-3 sm:-mx-4 sm:px-4">
+              <TabsList className="inline-flex h-auto min-w-full items-center gap-0.5 rounded-none border-0 border-b border-border/80 bg-transparent p-0">
+                {visibleRegisterSteps.map((step, index) => {
+                  const isActive = currentStep === step
+                  const isVisited = currentVisibleStepIndex >= index
+                  const hasData = isRegisterStepFilled(step)
+                  const isEmptyVisited = isVisited && !hasData
+                  const isFilledVisited = isVisited && hasData
+                  return (
+                    <TabsTrigger
+                      key={step}
+                      value={step}
+                      className={cn(
+                        "h-auto shrink-0 rounded-none border-0 border-b-2 bg-transparent px-2 py-1.5 text-xs font-medium whitespace-nowrap shadow-none transition-colors",
+                        "data-active:bg-transparent data-active:shadow-none",
+                        isActive && hasData
+                          ? "border-[var(--primary)] text-[var(--primary)]"
+                          : isActive && !hasData
+                            ? "border-rose-500 text-rose-600"
+                            : isEmptyVisited
+                              ? "border-transparent text-rose-600 hover:text-rose-700"
+                              : isFilledVisited
+                                ? "border-transparent text-emerald-700 hover:text-emerald-800"
+                                : "border-transparent text-slate-600 hover:text-slate-900"
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "mr-1.5 inline-flex size-4 items-center justify-center rounded-full text-[10px] font-semibold leading-none",
+                          isActive && hasData
+                            ? "bg-[var(--primary)] text-white"
+                            : isActive && !hasData
+                              ? "bg-rose-500 text-white"
+                              : isEmptyVisited
+                                ? "bg-rose-100 text-rose-700"
+                                : isFilledVisited
+                                  ? "bg-emerald-100 text-emerald-700"
+                                  : "bg-slate-100 text-slate-500"
+                        )}
+                      >
+                        {index + 1}
+                      </span>
+                      {REGISTER_STEP_LABELS[step]}
+                    </TabsTrigger>
+                  )
+                })}
+              </TabsList>
+            </div>
           </div>
 
-          <div className="space-y-7 px-4 pb-7 pt-6 sm:px-5 lg:px-6">
-            <TabsContents className="px-3 pt-6 sm:px-4 lg:px-5 [&_[data-slot=input]]:h-11 [&_[data-slot=input]]:px-4 [&_[data-slot=select-trigger]]:h-11 [&_[data-slot=select-trigger]]:px-4 [&_[data-slot=select-content]]:p-1 [&_[data-slot=select-item]]:px-3 [&_[data-slot=select-item]]:py-2">
+          <div className="space-y-3 px-3 py-3 sm:px-4">
+            <TabsContents className="[&_[data-slot=input]]:h-9 [&_[data-slot=input]]:px-3 [&_[data-slot=select-trigger]]:h-9 [&_[data-slot=select-trigger]]:px-3 [&_[data-slot=select-content]]:p-1 [&_[data-slot=select-item]]:px-2.5 [&_[data-slot=select-item]]:py-1.5">
               <TabsContent value="details" className={getStepTransitionClass("details")}>
-                <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                   <Field label="Employee Number" htmlFor="employeeNo" delayMs={30}>
                     <Input
                       id="employeeNo"
@@ -3630,24 +3812,41 @@ export function EmployeeRegisterForm() {
                               />
                             </Field>
                             <Field
-                              label="Rotation Group ID"
+                              label="Rotation Group (optional)"
                               htmlFor="provisioning-rotation-group"
                               delayMs={110}
-                              hint="Use numeric rotation group ID if applicable."
+                              hint="Select a rotation group if this shift assignment uses rotations."
                               reserveHintSpace
                             >
-                              <Input
-                                id="provisioning-rotation-group"
-                                inputMode="numeric"
-                                value={onboarding.shiftAssignment.rotationGroupId}
-                                onChange={(event) =>
+                              <Select
+                                value={onboarding.shiftAssignment.rotationGroupId || "none"}
+                                onValueChange={(value) =>
                                   updateShiftAssignmentField(
                                     "rotationGroupId",
-                                    event.target.value.replace(/[^\d]/g, "")
+                                    (value ?? "none") === "none" ? "" : (value ?? "")
                                   )
                                 }
-                                placeholder="Optional rotation group ID"
-                              />
+                              >
+                                <SelectTrigger id="provisioning-rotation-group" className="w-full">
+                                  <SelectValue placeholder="None">
+                                    {onboarding.shiftAssignment.rotationGroupId
+                                      ? rotationGroupOptions.find(
+                                          (option) =>
+                                            String(option.id) === onboarding.shiftAssignment.rotationGroupId
+                                        )?.label ??
+                                        `Rotation group #${onboarding.shiftAssignment.rotationGroupId}`
+                                      : "None"}
+                                  </SelectValue>
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="none">None</SelectItem>
+                                  {rotationGroupOptions.map((option) => (
+                                    <SelectItem key={option.id} value={String(option.id)}>
+                                      {option.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
                             </Field>
                             <div className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2">
                               <div className="space-y-0.5">
@@ -4421,37 +4620,45 @@ export function EmployeeRegisterForm() {
               </TabsContent>
             </TabsContents>
 
-            <div className="flex flex-wrap justify-between gap-3">
-              <Button variant="outline" onClick={clearForm}>
+            <div className="flex flex-wrap items-center justify-between gap-1.5 border-t border-slate-100 pt-2.5">
+              <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" onClick={clearForm}>
                 Clear
               </Button>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 {previousVisibleStep ? (
                   <Button
                     variant="outline"
+                    size="sm"
+                    className="h-8 px-2.5 text-xs"
                     onClick={() => {
                       setTabDirection("backward")
                       setCurrentStep(previousVisibleStep)
                     }}
                   >
-                    <ChevronLeftIcon />
+                    <ChevronLeftIcon className="size-3.5" />
                     Previous
                   </Button>
                 ) : null}
 
                 {nextVisibleStep ? (
                   <Button
-                    className="rounded-none"
+                    size="sm"
+                    className="h-8 px-2.5 text-xs"
                     onClick={() => {
                       setTabDirection("forward")
                       setCurrentStep(nextVisibleStep)
                     }}
                   >
                     Next
-                    <ChevronRightIcon />
+                    <ChevronRightIcon className="size-3.5" />
                   </Button>
                 ) : (
-                  <Button className="rounded-none" onClick={() => void submitRegistration()} disabled={isSubmitting}>
+                  <Button
+                    size="sm"
+                    className="h-8 px-2.5 text-xs"
+                    onClick={() => void submitRegistration()}
+                    disabled={isSubmitting}
+                  >
                     {isSubmitting ? "Saving..." : isInviteMode ? "Save Invite" : "Save Employee"}
                   </Button>
                 )}

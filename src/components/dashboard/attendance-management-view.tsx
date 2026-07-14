@@ -672,7 +672,7 @@ function getAttendanceDeviceLink(row: AdminRecord) {
   }
 
   return {
-    href: `/dashboard/attendance/devices/${deviceId}`,
+    href: `/dashboard/access-control/devices/${deviceId}`,
     label: deviceLabel,
     detail: detailParts.join(" • "),
   }
@@ -2262,85 +2262,57 @@ export function AttendanceManagementView({ section }: { section: string }) {
   }
 
   return (
-    <div className="mx-auto w-full max-w-6xl">
-      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100 md:text-lg">Attendance Management</h2>
-          <div className="flex items-center gap-1.5">
-            <p className="text-[0.95rem] text-slate-500 capitalize dark:text-slate-400">{activeSection.replaceAll("-", " ")}</p>
-            {activeSection === "devices" ? (
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <button
-                      type="button"
-                      className="inline-flex h-4 w-4 items-center justify-center rounded-full text-slate-400 transition hover:text-slate-700"
-                      aria-label="About device sync"
-                    />
-                  }
-                >
-                  <CircleHelpIcon className="h-3.5 w-3.5" />
-                </TooltipTrigger>
-                <TooltipContent side="top" align="start" className="max-w-72 text-left leading-relaxed">
-                  Click a device row to open its device page, where you can sync it and manage
-                  assigned employees.
-                </TooltipContent>
-              </Tooltip>
-            ) : null}
-            {sectionGuidance.length && guidanceDismissed ? (
-              <button
-                type="button"
-                className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-700 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:text-slate-100"
-                aria-label="Show setup guidance"
-                onClick={() => {
-                  setGuidanceDismissed(false)
-                  if (typeof window !== "undefined") {
-                    window.localStorage.removeItem(guidanceStorageKey)
-                  }
-                }}
+    <div className="w-full space-y-2">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <h2 className="text-sm font-semibold capitalize text-slate-900 dark:text-slate-100">{activeSection.replaceAll("-", " ")}</h2>
+          {activeSection === "devices" ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    className="inline-flex h-4 w-4 items-center justify-center rounded-full text-slate-400 transition hover:text-slate-700"
+                    aria-label="About device sync"
+                  />
+                }
               >
-                <InfoIcon className="h-3.5 w-3.5" />
-              </button>
-            ) : null}
-          </div>
-          {sectionGuidance.length && !guidanceDismissed ? (
-            <div className="mt-3 max-w-4xl rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-[0.95rem] text-sky-900 dark:border-sky-900/70 dark:bg-sky-950/35 dark:text-sky-100">
-              <div className="mb-2 flex items-start justify-between gap-3">
-                <div className="flex items-center gap-2 text-sky-900 dark:text-sky-100">
-                  <InfoIcon className="mt-0.5 h-4 w-4 shrink-0" />
-                  <span className="text-xs font-semibold uppercase tracking-[0.2em]">Setup Guidance</span>
-                </div>
-                <button
-                  type="button"
-                  className="inline-flex h-6 w-6 items-center justify-center rounded-full text-sky-700 transition hover:bg-sky-100 hover:text-sky-950 dark:text-sky-300 dark:hover:bg-sky-900/60 dark:hover:text-sky-50"
-                  aria-label="Hide setup guidance"
-                  onClick={() => {
-                    setGuidanceDismissed(true)
-                    if (typeof window !== "undefined") {
-                      window.localStorage.setItem(guidanceStorageKey, "true")
-                    }
-                  }}
-                >
-                  <XIcon className="h-4 w-4" />
-                </button>
-              </div>
-              {sectionGuidance.map((line, index) => (
-                <p key={`${activeSection}-guidance-${index}`}>{line}</p>
-              ))}
-            </div>
+                <CircleHelpIcon className="h-3.5 w-3.5" />
+              </TooltipTrigger>
+              <TooltipContent side="top" align="start" className="max-w-72 text-left leading-relaxed">
+                Click a device row to open its device page, where you can sync it and manage
+                assigned employees.
+              </TooltipContent>
+            </Tooltip>
+          ) : null}
+          {sectionGuidance.length && guidanceDismissed ? (
+            <button
+              type="button"
+              className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-700 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:text-slate-100"
+              aria-label="Show setup guidance"
+              onClick={() => {
+                setGuidanceDismissed(false)
+                if (typeof window !== "undefined") {
+                  window.localStorage.removeItem(guidanceStorageKey)
+                }
+              }}
+            >
+              <InfoIcon className="h-3.5 w-3.5" />
+            </button>
           ) : null}
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="ml-auto flex flex-wrap items-center gap-1.5">
           {supportsCreate ? (
             <>
               <button
                 type="button"
-                className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-[var(--primary)] text-white transition hover:brightness-95"
+                className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[var(--primary)] px-2.5 text-xs font-semibold text-white transition hover:brightness-95"
                 onClick={() => setCreateOpen(true)}
                 aria-label={`Create ${activeSection.replaceAll("-", " ")}`}
                 title="Create"
               >
-                <PlusIcon className="h-4 w-4" />
+                <PlusIcon className="h-3.5 w-3.5" />
+                Create
               </button>
               <Dialog open={createOpen} onOpenChange={setCreateOpen}>
                 <DialogPopup className="flex max-h-[90vh] w-[min(920px,96vw)] flex-col overflow-hidden sm:max-w-4xl">
@@ -2513,18 +2485,47 @@ export function AttendanceManagementView({ section }: { section: string }) {
           <button
             type="button"
             onClick={() => void fetchRows()}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-300 text-primary hover:bg-slate-50 dark:border-slate-700 dark:text-primary dark:hover:bg-slate-800"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 text-primary hover:bg-slate-50 dark:border-slate-700 dark:text-primary dark:hover:bg-slate-800"
             disabled={loading}
             aria-label="Refresh"
             title="Refresh"
           >
-            <RefreshCwIcon className={`h-4 w-4 text-primary ${loading ? "animate-spin" : ""}`} />
+            <RefreshCwIcon className={`h-3.5 w-3.5 text-primary ${loading ? "animate-spin" : ""}`} />
           </button>
         </div>
       </div>
 
-      {error ? <p className="mb-3 text-sm text-red-600">{error}</p> : null}
-      {message ? <p className="mb-3 text-sm text-green-700">{message}</p> : null}
+      {sectionGuidance.length && !guidanceDismissed ? (
+        <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900 dark:border-sky-900/70 dark:bg-sky-950/35 dark:text-sky-100">
+          <div className="mb-1.5 flex items-start justify-between gap-2">
+            <div className="flex items-center gap-1.5 text-sky-900 dark:text-sky-100">
+              <InfoIcon className="h-3.5 w-3.5 shrink-0" />
+              <span className="text-[10px] font-semibold uppercase tracking-wide">Setup Guidance</span>
+            </div>
+            <button
+              type="button"
+              className="inline-flex h-5 w-5 items-center justify-center rounded-full text-sky-700 transition hover:bg-sky-100 hover:text-sky-950 dark:text-sky-300 dark:hover:bg-sky-900/60 dark:hover:text-sky-50"
+              aria-label="Hide setup guidance"
+              onClick={() => {
+                setGuidanceDismissed(true)
+                if (typeof window !== "undefined") {
+                  window.localStorage.setItem(guidanceStorageKey, "true")
+                }
+              }}
+            >
+              <XIcon className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          {sectionGuidance.map((line, index) => (
+            <p key={`${activeSection}-guidance-${index}`} className="leading-relaxed">
+              {line}
+            </p>
+          ))}
+        </div>
+      ) : null}
+
+      {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      {message ? <p className="text-sm text-green-700">{message}</p> : null}
       {isDeviceSyncLogsSection ? (
         <div className="mb-4 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-950">
           <p className="font-medium">Device sync logs are read-only.</p>
@@ -2534,78 +2535,68 @@ export function AttendanceManagementView({ section }: { section: string }) {
             assigned to that terminal.
           </p>
           <Link
-            href="/dashboard/attendance/devices"
+            href="/dashboard/access-control/devices"
             className="mt-2 inline-flex text-sm font-medium text-sky-800 underline underline-offset-4 hover:text-sky-950"
           >
-            Go to attendance devices
+            Go to devices
           </Link>
         </div>
       ) : null}
 
       {activeSection === "devices" ? (
-        <div className="mb-4 space-y-3 rounded-xl border border-slate-200 bg-slate-50/80 p-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <p className="text-sm font-semibold text-slate-900">Device verification tools</p>
-              <p className="text-xs text-slate-600">
-                Search by code, serial, model, vendor, branch, integration type, or IP right after creating a device.
-              </p>
-            </div>
-            <p className="text-xs text-slate-600">
-              Showing {filteredRows.length} of {rows.length} devices
-            </p>
-          </div>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <input
-              type="text"
-              className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
-              value={deviceSearch}
-              onChange={(event) => setDeviceSearch(event.target.value)}
-              placeholder="Search code, serial, model, vendor, branch or IP"
-            />
-            <select
-              className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
-              value={deviceBranchFilter}
-              onChange={(event) => setDeviceBranchFilter(event.target.value)}
-            >
-              <option value="all">All branches</option>
-              {branches.map((branch, index) => {
-                const branchId = readNumberFromRecord(branch, ["id", "branch_id"])
-                if (branchId === null) {
-                  return null
-                }
-                return (
-                  <option key={`device-branch-filter-${branchId}-${index}`} value={String(branchId)}>
-                    {resolveBranchName(branchId)}
-                  </option>
-                )
-              })}
-            </select>
-            <select
-              className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
-              value={deviceVendorFilter}
-              onChange={(event) => setDeviceVendorFilter(event.target.value)}
-            >
-              <option value="all">All vendors</option>
-              {deviceVendorOptions.map((vendor) => (
-                <option key={vendor} value={vendor}>
-                  {vendor}
+        <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50/80 p-2">
+          <input
+            type="text"
+            className="h-8 min-w-[12rem] flex-1 rounded-md border border-slate-300 bg-white px-2.5 text-xs text-slate-900 sm:max-w-xs"
+            value={deviceSearch}
+            onChange={(event) => setDeviceSearch(event.target.value)}
+            placeholder="Search code, serial, model, vendor, branch or IP"
+          />
+          <select
+            className="h-8 min-w-[8.5rem] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
+            value={deviceBranchFilter}
+            onChange={(event) => setDeviceBranchFilter(event.target.value)}
+          >
+            <option value="all">All branches</option>
+            {branches.map((branch, index) => {
+              const branchId = readNumberFromRecord(branch, ["id", "branch_id"])
+              if (branchId === null) {
+                return null
+              }
+              return (
+                <option key={`device-branch-filter-${branchId}-${index}`} value={String(branchId)}>
+                  {resolveBranchName(branchId)}
                 </option>
-              ))}
-            </select>
-            <select
-              className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
-              value={deviceIntegrationFilter}
-              onChange={(event) => setDeviceIntegrationFilter(event.target.value)}
-            >
-              <option value="all">All integrations</option>
-              {deviceIntegrationOptions.map((integration) => (
-                <option key={integration} value={integration}>
-                  {integration}
-                </option>
-              ))}
-            </select>
-          </div>
+              )
+            })}
+          </select>
+          <select
+            className="h-8 min-w-[8rem] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
+            value={deviceVendorFilter}
+            onChange={(event) => setDeviceVendorFilter(event.target.value)}
+          >
+            <option value="all">All vendors</option>
+            {deviceVendorOptions.map((vendor) => (
+              <option key={vendor} value={vendor}>
+                {vendor}
+              </option>
+            ))}
+          </select>
+          <select
+            className="h-8 min-w-[8.5rem] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
+            value={deviceIntegrationFilter}
+            onChange={(event) => setDeviceIntegrationFilter(event.target.value)}
+          >
+            <option value="all">All integrations</option>
+            {deviceIntegrationOptions.map((integration) => (
+              <option key={integration} value={integration}>
+                {integration}
+              </option>
+            ))}
+          </select>
+          <p className="ml-auto text-[11px] text-slate-600">
+            {filteredRows.length}/{rows.length} devices
+          </p>
         </div>
       ) : null}
 

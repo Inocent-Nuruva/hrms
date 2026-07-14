@@ -4,7 +4,17 @@ import * as React from "react"
 
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 import { Textarea } from "@/components/ui/textarea"
-import { Check, Copy, Download, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react"
+import {
+  Check,
+  Copy,
+  Download,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Trash2,
+  X,
+} from "lucide-react"
 import { SearchToggleField } from "@/components/common/search-toggle-field"
 
 import {
@@ -21,6 +31,7 @@ import {
   deleteLeaveType,
   deleteLeaveWorkflow,
   deleteLeaveWorkflowStep,
+  getCurrentAdmin,
   getLeaveWorkflow,
   leaveRequestApprovalAction,
   listBranches,
@@ -43,6 +54,7 @@ import {
   type AdminRecord,
 } from "@/lib/admin-api"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
+import { cn } from "@/lib/utils"
 import { Switch } from "@/components/ui/switch"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 import ExampleProgress from "@/components/ui/progress-1"
@@ -80,6 +92,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 
@@ -151,6 +169,97 @@ function readStoredToken() {
   }
 }
 
+function decodeJwtPayload(token: string) {
+  const parts = token.split(".")
+  if (parts.length !== 3 || !parts[1]) {
+    return null
+  }
+
+  try {
+    const normalized = parts[1].replace(/-/g, "+").replace(/_/g, "/")
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=")
+    return asRecord(JSON.parse(atob(padded)))
+  } catch {
+    return null
+  }
+}
+
+function readSessionCompanyName() {
+  if (typeof window === "undefined") {
+    return ""
+  }
+
+  const tryRecord = (record: AdminRecord | null) => {
+    if (!record) {
+      return ""
+    }
+    const direct = readString(record, [
+      "companyName",
+      "company_name",
+      "organization_name",
+      "tenant_name",
+      "display_name",
+    ])
+    if (direct !== "-") {
+      return direct
+    }
+    const nested =
+      asRecord(record.company) ?? asRecord(record.organization) ?? asRecord(record.tenant)
+    if (nested) {
+      const nestedName = readString(nested, ["name", "companyName", "company_name", "display_name"])
+      if (nestedName !== "-") {
+        return nestedName
+      }
+    }
+    return ""
+  }
+
+  try {
+    const rawUser = window.localStorage.getItem(AUTH_STORAGE_KEYS.user)
+    if (rawUser) {
+      const fromUser = tryRecord(asRecord(JSON.parse(rawUser)))
+      if (fromUser) {
+        return fromUser
+      }
+    }
+  } catch {
+    // ignore malformed user payload
+  }
+
+  const token = readStoredToken()
+  if (token) {
+    const fromToken = tryRecord(decodeJwtPayload(token))
+    if (fromToken) {
+      return fromToken
+    }
+  }
+
+  return ""
+}
+
+function resolveLeaveTypeCompanyName(row: AdminRecord) {
+  const fromRow = readString(row, [
+    "company_name",
+    "companyName",
+    "organization_name",
+    "company",
+  ])
+  if (fromRow !== "-" && !/^\d+$/.test(fromRow)) {
+    return fromRow
+  }
+
+  const nested =
+    asRecord(row.company) ?? asRecord(row.organization) ?? asRecord(row.tenant)
+  if (nested) {
+    const nestedName = readString(nested, ["name", "company_name", "companyName", "display_name"])
+    if (nestedName !== "-") {
+      return nestedName
+    }
+  }
+
+  return readSessionCompanyName() || fromRow
+}
+
 function readString(row: AdminRecord, keys: string[]) {
   for (const key of keys) {
     const value = row[key]
@@ -197,6 +306,67 @@ function readBoolean(row: AdminRecord, keys: string[]) {
     }
   }
   return false
+}
+
+function readDisplayValue(row: AdminRecord, keys: string[]) {
+  for (const key of keys) {
+    const value = row[key]
+    if (value === null || value === undefined) {
+      continue
+    }
+    if (typeof value === "string" && value.trim()) {
+      return value.trim()
+    }
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return String(value)
+    }
+    if (typeof value === "boolean") {
+      return value ? "Yes" : "No"
+    }
+  }
+  return "-"
+}
+
+function formatLeaveDateTime(value: string) {
+  if (!value || value === "-") {
+    return "-"
+  }
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) {
+    return value
+  }
+  return parsed.toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+}
+
+function formatLeaveDays(value: string) {
+  if (!value || value === "-") {
+    return "-"
+  }
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) {
+    return value
+  }
+  if (parsed === 0) {
+    return "0 (not fixed)"
+  }
+  return Number.isInteger(parsed) ? String(parsed) : parsed.toFixed(2)
+}
+
+function formatGenderRestriction(value: string) {
+  if (!value || value === "-") {
+    return "Any"
+  }
+  const normalized = value.trim().toLowerCase()
+  if (normalized === "any") return "Any"
+  if (normalized === "female") return "Female"
+  if (normalized === "male") return "Male"
+  return value
 }
 
 function normalizeHolidayValue(value: string) {
@@ -309,6 +479,351 @@ function SearchableSelect({
   )
 }
 
+function StatusIndicator({ status }: { status: string }) {
+  const normalized = status.trim().toLowerCase()
+  const label =
+    status
+      .replace(/[_-]+/g, " ")
+      .replace(/\b\w/g, (char) => char.toUpperCase())
+      .trim() || "—"
+
+  const tone =
+    ["active", "approved", "completed", "present"].includes(normalized)
+      ? "good"
+      : ["inactive", "rejected", "cancelled", "canceled", "terminated"].includes(normalized)
+        ? "bad"
+        : ["pending", "submitted", "in_review", "draft", "probation", "suspended"].includes(
+              normalized
+            )
+          ? "warn"
+          : "neutral"
+
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 text-xs font-medium",
+        tone === "good" && "text-emerald-600 dark:text-emerald-400",
+        tone === "bad" && "text-rose-600 dark:text-rose-400",
+        tone === "warn" && "text-amber-600 dark:text-amber-400",
+        tone === "neutral" && "text-muted-foreground"
+      )}
+    >
+      <span
+        className={cn(
+          "size-1.5 shrink-0 rounded-full",
+          tone === "good" && "bg-emerald-500",
+          tone === "bad" && "bg-rose-500",
+          tone === "warn" && "bg-amber-500",
+          tone === "neutral" && "bg-muted-foreground/50"
+        )}
+      />
+      {label}
+    </span>
+  )
+}
+
+type LeaveActor = {
+  membershipId: number | null
+  userId: number | null
+  email: string
+  employeeId: number | null
+  isCompanyAdmin: boolean
+}
+
+type LeaveApprovalRecord = {
+  id: number | null
+  level: number
+  status: string
+  companyUserId: number | null
+  userId: number | null
+  email: string
+  name: string
+  actedAt: string
+  comments: string
+  isCurrentLevel: boolean
+}
+
+function asRecordList(value: unknown): AdminRecord[] {
+  if (!Array.isArray(value)) return []
+  return value.filter((entry): entry is AdminRecord => !!entry && typeof entry === "object")
+}
+
+function personName(record: AdminRecord | null, fallback = "Unknown") {
+  if (!record) return fallback
+  const full = readString(record, ["full_name", "fullName", "name"])
+  if (full !== "-") return full
+  const first = readString(record, ["first_name", "firstName"])
+  const last = readString(record, ["last_name", "lastName"])
+  const composed = [first !== "-" ? first : "", last !== "-" ? last : ""].filter(Boolean).join(" ").trim()
+  return composed || fallback
+}
+
+function resolveLeaveActor(token: string, profile: AdminRecord | null): LeaveActor {
+  const jwt = decodeJwtPayload(token)
+  const membershipId =
+    readNumber(jwt ?? {}, ["membershipId", "membership_id", "company_user_id", "companyUserId"]) ??
+    readNumber(profile ?? {}, ["membership_id", "membershipId", "company_user_id", "companyUserId"])
+  const userId =
+    readNumber(jwt ?? {}, ["sub", "user_id", "userId", "id"]) ??
+    readNumber(profile ?? {}, ["id", "user_id", "userId"])
+  const email = (
+    readString(jwt ?? {}, ["email"]) !== "-"
+      ? readString(jwt ?? {}, ["email"])
+      : readString(profile ?? {}, ["email"])
+  )
+    .trim()
+    .toLowerCase()
+  const employeeId = readNumber(profile ?? {}, ["employee_id", "employeeId"])
+  const roleNames = Array.isArray(jwt?.roles)
+    ? jwt!.roles.map((role) => String(role).toLowerCase())
+    : asRecordList(profile?.roles).map((role) =>
+        readString(role, ["name", "display_name"]).toLowerCase()
+      )
+  const isCompanyAdmin = roleNames.some(
+    (role) => role.includes("company_admin") || role.includes("admin")
+  )
+
+  return {
+    membershipId,
+    userId,
+    email: email === "-" ? "" : email,
+    employeeId,
+    isCompanyAdmin,
+  }
+}
+
+function getLeaveApprovals(row: AdminRecord): LeaveApprovalRecord[] {
+  const currentLevel =
+    readNumber(row, ["current_approval_level", "currentApprovalLevel"]) ?? 0
+  return asRecordList(row.approvals)
+    .map((approval) => {
+      const approver = asRecord(approval.approver)
+      const level = readNumber(approval, ["approval_level", "approvalLevel"]) ?? 0
+      const status = readString(approval, ["status"]).toLowerCase()
+      return {
+        id: readNumber(approval, ["id"]),
+        level,
+        status: status === "-" ? "pending" : status,
+        companyUserId: readNumber(approval, [
+          "approver_company_user_id",
+          "approverCompanyUserId",
+          "company_user_id",
+          "companyUserId",
+        ]),
+        userId: readNumber(approver ?? {}, ["id", "user_id", "userId"]),
+        email: readString(approver ?? {}, ["email"]).toLowerCase(),
+        name: personName(approver, "Approver"),
+        actedAt:
+          readString(approval, ["acted_at", "actedAt", "updated_at", "updatedAt"]) === "-"
+            ? ""
+            : readString(approval, ["acted_at", "actedAt", "updated_at", "updatedAt"]),
+        comments:
+          readString(approval, ["comments", "comment", "notes"]) === "-"
+            ? ""
+            : readString(approval, ["comments", "comment", "notes"]),
+        isCurrentLevel: currentLevel > 0 ? level === currentLevel : level === 1,
+      }
+    })
+    .sort((a, b) => a.level - b.level || (a.name || "").localeCompare(b.name || ""))
+}
+
+function isLeaveActorMatch(actor: LeaveActor, approval: LeaveApprovalRecord) {
+  if (
+    actor.membershipId !== null &&
+    approval.companyUserId !== null &&
+    actor.membershipId === approval.companyUserId
+  ) {
+    return true
+  }
+  if (actor.userId !== null && approval.userId !== null && actor.userId === approval.userId) {
+    return true
+  }
+  if (actor.email && approval.email && actor.email === approval.email) {
+    return true
+  }
+  return false
+}
+
+function getLeaveRequestPermissions(row: AdminRecord, actor: LeaveActor | null) {
+  const status = readString(row, ["status"]).toLowerCase()
+  const isTerminal = ["rejected", "cancelled", "canceled", "completed", "approved"].includes(status)
+  const approvals = getLeaveApprovals(row)
+  const currentLevel =
+    readNumber(row, ["current_approval_level", "currentApprovalLevel"]) ??
+    (status === "in_review" || status === "submitted" ? 1 : 0)
+
+  const pendingAtCurrent = approvals.filter(
+    (approval) =>
+      approval.status === "pending" &&
+      (currentLevel > 0 ? approval.level === currentLevel : approval.isCurrentLevel)
+  )
+
+  const myPending = actor
+    ? pendingAtCurrent.find((approval) => isLeaveActorMatch(actor, approval))
+    : undefined
+
+  const canApproveOrReject =
+    !isTerminal &&
+    Boolean(myPending) &&
+    (status === "in_review" || status === "submitted" || status === "pending")
+
+  const employeeId = readNumber(row, ["employee_id", "employeeId"])
+  const nestedEmployee = asRecord(row.employee)
+  const requestEmployeeId = employeeId ?? readNumber(nestedEmployee ?? {}, ["id"])
+  const isOwner =
+    actor !== null &&
+    ((actor.employeeId !== null &&
+      requestEmployeeId !== null &&
+      actor.employeeId === requestEmployeeId) ||
+      (actor.userId !== null &&
+        readNumber(nestedEmployee ?? {}, ["user_id", "userId"]) === actor.userId))
+
+  const canCancel =
+    !isTerminal &&
+    status !== "approved" &&
+    Boolean(actor) &&
+    (isOwner || Boolean(actor?.isCompanyAdmin))
+
+  const pendingNames = pendingAtCurrent.map((approval) => approval.name).filter(Boolean)
+  const waitingLabel =
+    pendingNames.length === 0
+      ? currentLevel > 0
+        ? `Waiting at level ${currentLevel}`
+        : "No active approver"
+      : pendingNames.length === 1
+        ? `Pending: ${pendingNames[0]}`
+        : `Pending: ${pendingNames[0]} +${pendingNames.length - 1}`
+
+  return {
+    status,
+    isTerminal,
+    canApproveOrReject,
+    canCancel,
+    currentLevel,
+    pendingAtCurrent,
+    waitingLabel,
+    approvals,
+    reasonApprove: canApproveOrReject
+      ? "You can approve this request at the current level."
+      : isTerminal
+        ? "This request is already closed."
+        : pendingAtCurrent.length === 0
+          ? "No pending approval step is available."
+          : `Waiting for ${pendingNames.join(", ") || "another approver"} at level ${currentLevel || "—"}.`,
+    reasonCancel: canCancel
+      ? "You can cancel this request."
+      : isTerminal
+        ? "This request is already closed."
+        : "Only the requester or a company admin can cancel this request.",
+  }
+}
+
+function ApprovalChain({
+  row,
+  actor,
+  compact = false,
+}: {
+  row: AdminRecord
+  actor: LeaveActor | null
+  compact?: boolean
+}) {
+  const permissions = getLeaveRequestPermissions(row, actor)
+  const levels = Array.from(new Set(permissions.approvals.map((item) => item.level))).sort(
+    (a, b) => a - b
+  )
+
+  if (permissions.approvals.length === 0) {
+    return (
+      <p className={cn("text-xs text-muted-foreground", compact && "mt-2")}>
+        No approval chain is attached to this request yet.
+      </p>
+    )
+  }
+
+  return (
+    <div className={cn("flex flex-col", compact ? "mt-3 gap-2" : "gap-3")}>
+      {!compact ? (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs font-medium text-foreground">Approval chain</p>
+          <p className="text-[11px] text-muted-foreground">{permissions.waitingLabel}</p>
+        </div>
+      ) : (
+        <p className="text-[11px] text-muted-foreground">{permissions.waitingLabel}</p>
+      )}
+
+      <ol className="relative flex flex-col gap-0 border-l border-border/80 pl-4">
+        {levels.map((level) => {
+          const items = permissions.approvals.filter((item) => item.level === level)
+          const isCurrent = permissions.currentLevel > 0 && level === permissions.currentLevel
+          const levelDone = items.length > 0 && items.every((item) => item.status === "approved")
+          const levelRejected = items.some((item) => item.status === "rejected")
+
+          return (
+            <li key={`approval-level-${level}`} className="relative pb-4 last:pb-0">
+              <span
+                className={cn(
+                  "absolute top-1.5 -left-[1.28rem] size-2.5 rounded-full ring-4 ring-background",
+                  levelRejected
+                    ? "bg-rose-500"
+                    : levelDone
+                      ? "bg-emerald-500"
+                      : isCurrent
+                        ? "bg-amber-500"
+                        : "bg-muted-foreground/40"
+                )}
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-xs font-semibold text-foreground">Level {level}</p>
+                {isCurrent ? (
+                  <span className="rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300">
+                    Current
+                  </span>
+                ) : null}
+                {levelDone ? (
+                  <span className="text-[10px] font-medium text-emerald-600">Complete</span>
+                ) : null}
+              </div>
+              <ul className="mt-1.5 flex flex-col gap-1.5">
+                {items.map((item) => {
+                  const mine = actor ? isLeaveActorMatch(actor, item) : false
+                  return (
+                    <li
+                      key={`${item.id ?? item.name}-${item.level}-${item.companyUserId ?? item.userId}`}
+                      className={cn(
+                        "rounded-md border border-border/60 px-2.5 py-2",
+                        isCurrent && item.status === "pending" && "border-amber-500/30 bg-amber-500/5",
+                        mine && item.status === "pending" && "ring-1 ring-primary/30"
+                      )}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-xs font-medium text-foreground">
+                            {item.name}
+                            {mine ? (
+                              <span className="ml-1 text-[10px] font-normal text-primary">(you)</span>
+                            ) : null}
+                          </p>
+                          {item.email && item.email !== "-" ? (
+                            <p className="truncate text-[11px] text-muted-foreground">{item.email}</p>
+                          ) : null}
+                        </div>
+                        <StatusIndicator status={item.status} />
+                      </div>
+                      {item.comments ? (
+                        <p className="mt-1 text-[11px] text-muted-foreground">{item.comments}</p>
+                      ) : null}
+                    </li>
+                  )
+                })}
+              </ul>
+            </li>
+          )
+        })}
+      </ol>
+    </div>
+  )
+}
+
 export function LeaveManagementView({
   activeTab = "types",
   showTabButtons = true,
@@ -318,6 +833,8 @@ export function LeaveManagementView({
   const [requests, setRequests] = React.useState<AdminRecord[]>([])
   const [requestSearch, setRequestSearch] = React.useState("")
   const [requestStatusFilter, setRequestStatusFilter] = React.useState("all")
+  const [typeSearch, setTypeSearch] = React.useState("")
+  const [typeStatusFilter, setTypeStatusFilter] = React.useState("all")
   const [balances, setBalances] = React.useState<AdminRecord[]>([])
   const [holidays, setHolidays] = React.useState<AdminRecord[]>([])
   const [policies, setPolicies] = React.useState<AdminRecord[]>([])
@@ -351,6 +868,11 @@ export function LeaveManagementView({
   const [stepDialogOpen, setStepDialogOpen] = React.useState(false)
   const [editingWorkflowId, setEditingWorkflowId] = React.useState<number | null>(null)
   const [editingWorkflowStepId, setEditingWorkflowStepId] = React.useState<number | null>(null)
+  const [selectedLeaveTypeRow, setSelectedLeaveTypeRow] = React.useState<AdminRecord | null>(null)
+  const [leaveTypeDetailsOpen, setLeaveTypeDetailsOpen] = React.useState(false)
+  const [selectedLeaveRequestRow, setSelectedLeaveRequestRow] = React.useState<AdminRecord | null>(null)
+  const [leaveRequestDetailsOpen, setLeaveRequestDetailsOpen] = React.useState(false)
+  const [currentActor, setCurrentActor] = React.useState<LeaveActor | null>(null)
   const [cancelReason, setCancelReason] = React.useState("Cancelled by admin")
   const [selectedWorkflowId, setSelectedWorkflowId] = React.useState("")
   const [copiedLeaveId, setCopiedLeaveId] = React.useState("")
@@ -630,6 +1152,29 @@ export function LeaveManagementView({
     setTab(activeTab)
   }, [activeTab])
 
+  React.useEffect(() => {
+    if (tab !== "types") {
+      setLeaveTypeDetailsOpen(false)
+      return
+    }
+    setSelectedLeaveTypeRow((current) => {
+      if (!current) {
+        return null
+      }
+      if (types.length === 0) {
+        return null
+      }
+      const currentId = readNumber(current, ["id"])
+      const refreshed = types.find((row) => readNumber(row, ["id"]) === currentId)
+      return refreshed ?? null
+    })
+  }, [tab, types])
+
+  function openLeaveTypeDetails(row: AdminRecord) {
+    setSelectedLeaveTypeRow(row)
+    setLeaveTypeDetailsOpen(true)
+  }
+
   const fetchHolidayCatalog = React.useCallback(async (country: HolidayImportCountryCode, yearValue: string) => {
     const year = Number(yearValue)
     if (!Number.isInteger(year) || year < 1970 || year > 2100) {
@@ -735,6 +1280,11 @@ export function LeaveManagementView({
   }
 
   const employeeLabelFromRow = (row: AdminRecord) => {
+    const nestedEmployee = asRecord(row.employee)
+    if (nestedEmployee) {
+      const nestedName = personName(nestedEmployee, "")
+      if (nestedName) return nestedName
+    }
     const inlineEmployeeName =
       readString(row, ["employee_name", "employeeName", "full_name", "fullName", "name"])
     if (inlineEmployeeName !== "-") {
@@ -742,6 +1292,38 @@ export function LeaveManagementView({
     }
     return employeeLabel(readNumber(row, ["employee_id"]))
   }
+
+  const leaveTypeLabelFromRequest = (row: AdminRecord) => {
+    const nestedType = asRecord(row.leave_type) ?? asRecord(row.leaveType)
+    if (nestedType) {
+      const name = readString(nestedType, ["name", "code"])
+      if (name !== "-") return name
+    }
+    const direct = readString(row, ["leave_type_name", "leaveTypeName", "leave_type", "leave_type_id"])
+    if (direct !== "-" && Number.isNaN(Number(direct))) return direct
+    return leaveTypeLabel(readNumber(row, ["leave_type_id", "leaveTypeId"]))
+  }
+
+  React.useEffect(() => {
+    const token = readStoredToken()
+    if (!token) {
+      setCurrentActor(null)
+      return
+    }
+    let cancelled = false
+    void getCurrentAdmin(token)
+      .then((profile) => {
+        if (cancelled) return
+        setCurrentActor(resolveLeaveActor(token, profile))
+      })
+      .catch(() => {
+        if (cancelled) return
+        setCurrentActor(resolveLeaveActor(token, null))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const leaveTypeLabel = (leaveTypeId: number | null) => {
     if (leaveTypeId === null) {
@@ -832,6 +1414,26 @@ export function LeaveManagementView({
       return { value: String(id), label: readString(row, ["name", "title"]) }
     })
     .filter((option): option is SearchableOption => Boolean(option))
+
+  const filteredTypes = types.filter((row) => {
+    const status = readString(row, ["status"]).toLowerCase()
+    if (typeStatusFilter !== "all" && status !== typeStatusFilter) {
+      return false
+    }
+    const query = typeSearch.trim().toLowerCase()
+    if (!query) {
+      return true
+    }
+    return [
+      readString(row, ["name"]),
+      readString(row, ["code"]),
+      readString(row, ["description"]),
+      readString(row, ["gender_restriction"]),
+    ]
+      .join(" ")
+      .toLowerCase()
+      .includes(query)
+  })
 
   const filteredRequests = requests.filter((row) => {
     const status = readString(row, ["status"]).toLowerCase()
@@ -1730,19 +2332,54 @@ export function LeaveManagementView({
     }
   }
 
-  async function approveRequest(row: AdminRecord, approve: boolean) {
+  async function approveRequest(
+    row: AdminRecord,
+    action: "approve" | "reject" | "return_for_correction" = "approve"
+  ) {
     const token = readStoredToken()
     const id = readNumber(row, ["id"])
     if (!token || id === null) {
       return
     }
+    const permissions = getLeaveRequestPermissions(row, currentActor)
+    if (!permissions.canApproveOrReject) {
+      showErrorAlert(permissions.reasonApprove)
+      return
+    }
     setSaving(true)
     try {
+      // API: POST /api/leave/requests/{id}/approval-action
+      // body: { action: approve | reject | return_for_correction, comments?: string }
+      // Do not send `approve` — backend rejects that property.
+      const defaultComment =
+        action === "approve"
+          ? "Approved from dashboard"
+          : action === "reject"
+            ? "Rejected from dashboard"
+            : "Returned for correction from dashboard"
+
       await leaveRequestApprovalAction(token, id, {
-        approve,
-        comments: approve ? "Approved from dashboard" : "Rejected from dashboard",
+        action,
+        comments: defaultComment,
       })
+
+      const successMessage =
+        action === "approve"
+          ? "Leave request approved."
+          : action === "reject"
+            ? "Leave request rejected."
+            : "Leave request returned for correction."
+      showSuccessAlert(successMessage)
       await reloadAll(tab, true)
+      if (selectedLeaveRequestRow && readNumber(selectedLeaveRequestRow, ["id"]) === id) {
+        const refreshed = (await listLeaveRequests(token, {
+          page: 1,
+          limit: 100,
+          sortBy: "created_at",
+          sortOrder: "DESC",
+        })).rows.find((item) => readNumber(item, ["id"]) === id)
+        if (refreshed) setSelectedLeaveRequestRow(refreshed)
+      }
     } catch (errorObject) {
       const message = errorObject instanceof Error ? errorObject.message : "Failed to update leave request."
       setError(message)
@@ -1761,10 +2398,18 @@ export function LeaveManagementView({
     if (!reason.trim()) {
       return
     }
+    const permissions = getLeaveRequestPermissions(row, currentActor)
+    if (!permissions.canCancel) {
+      showErrorAlert(permissions.reasonCancel)
+      return
+    }
     setSaving(true)
     try {
       await cancelLeaveRequest(token, id, reason.trim())
+      showSuccessAlert("Leave request cancelled.")
       await reloadAll(tab, true)
+      setLeaveRequestDetailsOpen(false)
+      setSelectedLeaveRequestRow(null)
     } catch (errorObject) {
       const message = errorObject instanceof Error ? errorObject.message : "Failed to cancel leave request."
       setError(message)
@@ -1814,107 +2459,124 @@ export function LeaveManagementView({
     }
   }
 
-  return (
-    <div>
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        {showTabButtons ? ["types", "requests", "balances", "holidays", "policies", "workflows"].map((entry) => {
-          const key = entry as LeaveTab
-          return (
-            <button
-              key={entry}
-              type="button"
-              className={
-                tab === key
-                  ? "rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white"
-                  : "rounded-md border border-slate-300 px-3 py-2 text-sm"
-              }
-              onClick={() => setTab(key)}
-            >
-              {entry === "types"
-                ? "Leave Types"
-                : entry === "requests"
-                  ? "Leave Requests"
-                  : entry === "balances"
-                    ? "Leave Balances"
-                    : entry === "holidays"
-                      ? "Holidays"
-                      : entry === "policies"
-                        ? "Leave Policies"
-                        : "Leave Workflows"}
-            </button>
-          )
-        }) : null}
-        <button
-          type="button"
-          className={`${showTabButtons ? "ml-auto" : ""} inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-300 text-sm`}
-          onClick={() => void reloadAll(tab, true)}
-          disabled={loading}
-        >
-          <RefreshCw className={`h-4 w-4 text-primary ${loading ? "animate-spin" : ""}`} />
-        </button>
-      </div>
+  const refreshButton = (
+    <button
+      type="button"
+      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-slate-300 bg-white text-sm"
+      onClick={() => void reloadAll(tab, true)}
+      disabled={loading}
+      aria-label="Refresh"
+      title="Refresh"
+    >
+      <RefreshCw className={`h-3.5 w-3.5 text-primary ${loading ? "animate-spin" : ""}`} />
+    </button>
+  )
 
-      {error ? <p className="mb-3 text-sm text-rose-600">{error}</p> : null}
+  return (
+    <div className="space-y-2">
+      {showTabButtons ? (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {["types", "requests", "balances", "holidays", "policies", "workflows"].map((entry) => {
+            const key = entry as LeaveTab
+            return (
+              <button
+                key={entry}
+                type="button"
+                className={
+                  tab === key
+                    ? "inline-flex h-8 items-center rounded-md bg-slate-900 px-2.5 text-xs font-medium text-white"
+                    : "inline-flex h-8 items-center rounded-md border border-slate-300 px-2.5 text-xs"
+                }
+                onClick={() => setTab(key)}
+              >
+                {entry === "types"
+                  ? "Leave Types"
+                  : entry === "requests"
+                    ? "Leave Requests"
+                    : entry === "balances"
+                      ? "Leave Balances"
+                      : entry === "holidays"
+                        ? "Holidays"
+                        : entry === "policies"
+                          ? "Leave Policies"
+                          : "Leave Workflows"}
+              </button>
+            )
+          })}
+        </div>
+      ) : null}
+
+      {error ? <p className="text-sm text-rose-600">{error}</p> : null}
 
       {tab === "types" ? (
-        <div className="space-y-4">
-          <div className="flex justify-end">
-            <button
-              type="button"
-              className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white"
-              onClick={() => setTypeDialogOpen(true)}
-            >
-              <Plus className="h-4 w-4" />
-              Create Leave Type
-            </button>
-          </div>
-
-          <div className="grid gap-3 border-b border-slate-200 p-3 md:grid-cols-2 mb-2">
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-1.5">
             <SearchToggleField
-              className="w-full"
+              className="min-w-0"
               placeholder="Search leave types"
-              value={requestSearch}
-              onChange={setRequestSearch}
+              value={typeSearch}
+              onChange={setTypeSearch}
             />
             <select
-              className="h-10 rounded-md border border-slate-300 px-3 text-sm"
-              value={requestStatusFilter}
-              onChange={(event) => setRequestStatusFilter(event.target.value)}
+              className="h-8 min-w-[8.5rem] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
+              value={typeStatusFilter}
+              onChange={(event) => setTypeStatusFilter(event.target.value)}
+              aria-label="Filter leave type status"
             >
               <option value="all">All statuses</option>
-              <option value="draft">draft</option>
-              <option value="submitted">submitted</option>
-              <option value="in_review">in_review</option>
-              <option value="approved">approved</option>
-              <option value="rejected">rejected</option>
-              <option value="cancelled">cancelled</option>
-              <option value="completed">completed</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
             </select>
+            <div className="ml-auto flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                className="inline-flex h-8 items-center gap-1.5 rounded-md bg-slate-900 px-2.5 text-xs font-semibold text-white"
+                onClick={() => setTypeDialogOpen(true)}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Create Leave Type
+              </button>
+              {refreshButton}
+            </div>
           </div>
           <ResizableTable
             title="Leave Types"
-            data={types}
+            data={filteredTypes}
+            onRowSelect={(_, row) => {
+              if (row) {
+                openLeaveTypeDetails(row)
+              }
+            }}
             columns={[
               { key: "name", label: "Name", defaultWidth: 110, sortable: true, render: (r) => readString(r, ["name"]) },
               { key: "code", label: "Code", defaultWidth: 55, sortable: true, render: (r) => readString(r, ["code"]) },
-              { key: "status", label: "Status", defaultWidth: 55, sortable: true, render: (r) => {
-                  const isActive = readString(r, ["status"]) === "active";
-                  return <span className={isActive ? "inline-flex rounded-full bg-emerald-500 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-white" : "inline-flex rounded-full bg-rose-500 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-white"}>{isActive ? "Active" : "Inactive"}</span>;
-                } },
+              {
+                key: "status",
+                label: "Status",
+                defaultWidth: 55,
+                sortable: true,
+                render: (r) => <StatusIndicator status={readString(r, ["status"])} />,
+              },
               { key: "is_paid", label: "Paid", defaultWidth: 45, render: (r) => readBoolean(r, ["is_paid"]) ? "Y" : "N" },
               { key: "actions", label: "Actions", defaultWidth: 80, sortable: false, render: (row) => {
                   const isActive = readString(row, ["status"]) === "active";
                   return (
-                    <div className="flex justify-end items-center gap-3" onClick={e => e.stopPropagation()}>
-                      <Switch checked={isActive} onCheckedChange={() => void toggleTypeStatus(row)} aria-label="Toggle Status" />
+                    <div className="flex items-center justify-end gap-1.5" onClick={e => e.stopPropagation()}>
+                      <Switch
+                        size="sm"
+                        checked={isActive}
+                        onCheckedChange={() => void toggleTypeStatus(row)}
+                        aria-label="Toggle Status"
+                        className="scale-90"
+                      />
                       <button
                         type="button"
-                        className="group rounded-md border border-rose-200 p-2 text-rose-600 transition-all duration-300 hover:-translate-y-0.5 hover:scale-110 hover:bg-rose-50 hover:shadow-sm active:scale-95"
+                        className="group rounded-md border border-rose-200 p-1.5 text-rose-600 transition-all duration-300 hover:-translate-y-0.5 hover:scale-110 hover:bg-rose-50 hover:shadow-sm active:scale-95"
                         onClick={() => setPendingTypeDelete(row)}
                         aria-label="Delete leave type"
                         title="Delete leave type"
                       >
-                        <Trash2 className="h-4 w-4 transition-transform duration-300 group-hover:rotate-12 group-hover:scale-110" />
+                        <Trash2 className="size-3.5 transition-transform duration-300 group-hover:rotate-12 group-hover:scale-110" />
                       </button>
                     </div>
                   );
@@ -1924,61 +2586,490 @@ export function LeaveManagementView({
             loading={loading}
             storageKey="leave-types"
           />
+
+          <Dialog
+            open={leaveTypeDetailsOpen}
+            onOpenChange={(open) => {
+              setLeaveTypeDetailsOpen(open)
+              if (!open) {
+                setSelectedLeaveTypeRow(null)
+              }
+            }}
+          >
+            <DialogPopup
+              from="bottom"
+              className="flex max-h-[min(92dvh,36rem)] w-[calc(100%-1rem)] max-w-md flex-col gap-0 overflow-hidden p-3 sm:max-w-lg sm:p-4"
+            >
+              <DialogHeader className="shrink-0 space-y-1 pr-8 text-left">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <DialogTitle className="text-base leading-snug sm:text-lg">
+                    {selectedLeaveTypeRow ? readString(selectedLeaveTypeRow, ["name"]) : "Leave type details"}
+                  </DialogTitle>
+                  {selectedLeaveTypeRow ? (
+                    <StatusIndicator status={readString(selectedLeaveTypeRow, ["status"])} />
+                  ) : null}
+                </div>
+                <DialogDescription className="text-xs">
+                  {selectedLeaveTypeRow
+                    ? readDisplayValue(selectedLeaveTypeRow, ["code"])
+                    : "Leave type details"}
+                </DialogDescription>
+              </DialogHeader>
+
+              {selectedLeaveTypeRow ? (
+                <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto overscroll-contain py-2 pr-0.5">
+                  <p className="rounded-md border border-slate-200 bg-slate-50/80 px-2.5 py-2 text-xs leading-relaxed text-slate-700">
+                    {readString(selectedLeaveTypeRow, ["description"])}
+                  </p>
+
+                  <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5 rounded-md border border-slate-200 bg-white p-2.5 text-xs sm:grid-cols-3">
+                    {[
+                      { label: "ID", value: readDisplayValue(selectedLeaveTypeRow, ["id"]) },
+                      { label: "Company", value: resolveLeaveTypeCompanyName(selectedLeaveTypeRow) },
+                      { label: "Code", value: readDisplayValue(selectedLeaveTypeRow, ["code"]) },
+                      { label: "Status", value: readDisplayValue(selectedLeaveTypeRow, ["status"]) },
+                      { label: "Paid", value: readBoolean(selectedLeaveTypeRow, ["is_paid"]) ? "Yes" : "No" },
+                      {
+                        label: "Attachment",
+                        value: readBoolean(selectedLeaveTypeRow, ["requires_attachment"]) ? "Yes" : "No",
+                      },
+                      {
+                        label: "Carry forward",
+                        value: readBoolean(selectedLeaveTypeRow, ["is_carry_forward_allowed"]) ? "Yes" : "No",
+                      },
+                      {
+                        label: "Gender",
+                        value: formatGenderRestriction(
+                          readDisplayValue(selectedLeaveTypeRow, ["gender_restriction"])
+                        ),
+                      },
+                      {
+                        label: "Max days / year",
+                        value: formatLeaveDays(readDisplayValue(selectedLeaveTypeRow, ["max_days_per_year"])),
+                      },
+                      {
+                        label: "Max CF days",
+                        value: formatLeaveDays(
+                          readDisplayValue(selectedLeaveTypeRow, ["max_carry_forward_days"])
+                        ),
+                      },
+                      {
+                        label: "Created",
+                        value: formatLeaveDateTime(readDisplayValue(selectedLeaveTypeRow, ["created_at"])),
+                      },
+                      {
+                        label: "Updated",
+                        value: formatLeaveDateTime(readDisplayValue(selectedLeaveTypeRow, ["updated_at"])),
+                      },
+                    ].map((item) => (
+                      <div key={item.label} className="min-w-0 border-b border-slate-100 pb-1.5 last:border-b-0 sm:border-b-0 sm:pb-0">
+                        <dt className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
+                          {item.label}
+                        </dt>
+                        <dd className="mt-0.5 truncate font-medium text-slate-900" title={item.value}>
+                          {item.value}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                </div>
+              ) : null}
+
+              <DialogFooter className="mt-2 shrink-0 border-t border-slate-100 pt-2 sm:justify-end">
+                <button
+                  type="button"
+                  className="inline-flex h-8 items-center justify-center rounded-md border border-slate-300 px-3 text-xs font-medium text-slate-700"
+                  onClick={() => setLeaveTypeDetailsOpen(false)}
+                >
+                  Close
+                </button>
+              </DialogFooter>
+            </DialogPopup>
+          </Dialog>
         </div>
       ) : null}
 
       {tab === "requests" ? (
-        <div className="space-y-4">
-          <div className="flex justify-end">
-            <button
-              type="button"
-              className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white"
-              onClick={() => void openRequestDialog()}
-            >
-              Create Leave Request
-            </button>
+        <div className="space-y-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+              <SearchToggleField
+                className="min-w-0 flex-1 sm:flex-none"
+                placeholder="Search leave requests"
+                value={requestSearch}
+                onChange={setRequestSearch}
+              />
+              <select
+                className="h-8 w-full min-w-[8.5rem] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900 sm:w-auto"
+                value={requestStatusFilter}
+                onChange={(event) => setRequestStatusFilter(event.target.value)}
+                aria-label="Filter leave request status"
+              >
+                <option value="all">All statuses</option>
+                <option value="draft">draft</option>
+                <option value="submitted">submitted</option>
+                <option value="in_review">in_review</option>
+                <option value="approved">approved</option>
+                <option value="rejected">rejected</option>
+                <option value="cancelled">cancelled</option>
+                <option value="completed">completed</option>
+              </select>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5 sm:ml-auto">
+              <button
+                type="button"
+                className="inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md bg-slate-900 px-2.5 text-xs font-semibold text-white sm:flex-none"
+                onClick={() => void openRequestDialog()}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Create Leave Request
+              </button>
+              {refreshButton}
+            </div>
           </div>
 
-          <ResizableTable
-            title="Leave Requests"
-            data={filteredRequests}
-            columns={[
-              { key: "leave_id", label: "ID", defaultWidth: 70, render: (r) => leaveRequestLabel(r) },
-              { key: "employee", label: "Employee", defaultWidth: 90, render: (r) => employeeLabelFromRow(r) },
-              { key: "leave_type", label: "Type", defaultWidth: 75, render: (r) => readString(r, ["leave_type_name", "leave_type", "leave_type_id"]) },
-              { key: "start_date", label: "Start", defaultWidth: 65, render: (r) => readString(r, ["start_date"]) },
-              { key: "end_date", label: "End", defaultWidth: 65, render: (r) => readString(r, ["end_date"]) },
-              { key: "status", label: "Status", defaultWidth: 55, render: (r) => readString(r, ["status"]) },
-              { key: "actions", label: "Actions", defaultWidth: 90, sortable: false, render: (row) => {
-                  const status = readString(row, ["status"]).toLowerCase();
-                  const isTerminal = status === "rejected" || status === "cancelled" || status === "completed";
-                  const showReview = !isTerminal && status !== "approved";
-                  const showCancel = !isTerminal;
-                  return (
-                    <div className="flex justify-end gap-1" onClick={e=>e.stopPropagation()}>
-                      {isTerminal ? (
-                        <span className="text-xs text-slate-500">No actions</span>
-                      ) : (
-                        <>
-                          {showReview && (
-                            <>
-                              <button type="button" className="rounded-md border border-emerald-300 px-2 py-1 text-xs text-emerald-700" onClick={() => void approveRequest(row, true)}>Approve</button>
-                              <button type="button" className="rounded-md border border-amber-300 px-2 py-1 text-xs text-amber-700" onClick={() => void approveRequest(row, false)}>Reject</button>
-                            </>
-                          )}
-                          {showCancel && (
-                            <button type="button" className="rounded-md border border-rose-300 px-2 py-1 text-xs text-rose-700" onClick={() => { setPendingRequestCancel(row); setCancelReason("Cancelled by admin"); }}>Cancel</button>
-                          )}
-                        </>
-                      )}
+          {/* Mobile card list */}
+          <div className="space-y-2 md:hidden">
+            {loading && filteredRequests.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">Loading leave requests…</p>
+            ) : filteredRequests.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">No leave requests found.</p>
+            ) : (
+              filteredRequests.map((row, index) => {
+                const permissions = getLeaveRequestPermissions(row, currentActor)
+                const rowKey = String(readNumber(row, ["id"]) ?? leaveRequestLabel(row) ?? index)
+
+                return (
+                  <div
+                    key={`leave-request-card-${rowKey}`}
+                    className="rounded-lg border border-border/70 bg-background p-3"
+                  >
+                    <button
+                      type="button"
+                      className="flex w-full items-start justify-between gap-2 text-left"
+                      onClick={() => {
+                        setSelectedLeaveRequestRow(row)
+                        setLeaveRequestDetailsOpen(true)
+                      }}
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-foreground">
+                          {employeeLabelFromRow(row)}
+                        </p>
+                        <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                          {leaveRequestLabel(row)} · {leaveTypeLabelFromRequest(row)}
+                        </p>
+                      </div>
+                      <StatusIndicator status={readString(row, ["status"])} />
+                    </button>
+                    <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                      <div>
+                        <span className="block text-[10px] uppercase tracking-wide">Start</span>
+                        <span className="font-medium text-foreground">
+                          {readString(row, ["start_date"]) || "—"}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="block text-[10px] uppercase tracking-wide">End</span>
+                        <span className="font-medium text-foreground">
+                          {readString(row, ["end_date"]) || "—"}
+                        </span>
+                      </div>
                     </div>
-                  );
-                } },
-            ]}
-            itemsPerPage={15}
-            loading={loading}
-            storageKey="leave-requests"
-          />
+
+                    <ApprovalChain row={row} actor={currentActor} compact />
+
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      <button
+                        type="button"
+                        className="inline-flex h-8 flex-1 items-center justify-center gap-1 rounded-md border border-emerald-300 px-2 text-xs font-medium text-emerald-700 disabled:cursor-not-allowed disabled:opacity-40 sm:flex-none"
+                        disabled={!permissions.canApproveOrReject || saving}
+                        title={permissions.reasonApprove}
+                        onClick={() => void approveRequest(row, "approve")}
+                      >
+                        <Check className="size-3.5" />
+                        Approve
+                      </button>
+                      <button
+                        type="button"
+                        className="inline-flex h-8 flex-1 items-center justify-center gap-1 rounded-md border border-amber-300 px-2 text-xs font-medium text-amber-700 disabled:cursor-not-allowed disabled:opacity-40 sm:flex-none"
+                        disabled={!permissions.canApproveOrReject || saving}
+                        title={permissions.reasonApprove}
+                        onClick={() => void approveRequest(row, "reject")}
+                      >
+                        <X className="size-3.5" />
+                        Reject
+                      </button>
+                      <button
+                        type="button"
+                        className="inline-flex h-8 flex-1 items-center justify-center gap-1 rounded-md border border-rose-300 px-2 text-xs font-medium text-rose-700 disabled:cursor-not-allowed disabled:opacity-40 sm:flex-none"
+                        disabled={!permissions.canCancel || saving}
+                        title={permissions.reasonCancel}
+                        onClick={() => {
+                          setPendingRequestCancel(row)
+                          setCancelReason("Cancelled by admin")
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                    {!permissions.canApproveOrReject && !permissions.isTerminal ? (
+                      <p className="mt-2 text-[11px] text-muted-foreground">
+                        {permissions.waitingLabel}
+                      </p>
+                    ) : null}
+                  </div>
+                )
+              })
+            )}
+          </div>
+
+          {/* Desktop / tablet table */}
+          <div className="hidden min-w-0 md:block">
+            <ResizableTable
+              title="Leave Requests"
+              data={filteredRequests}
+              onRowSelect={(_, row) => {
+                if (row) {
+                  setSelectedLeaveRequestRow(row)
+                  setLeaveRequestDetailsOpen(true)
+                }
+              }}
+              columns={[
+                {
+                  key: "leave_id",
+                  label: "ID",
+                  defaultWidth: 72,
+                  render: (r) => leaveRequestLabel(r),
+                },
+                {
+                  key: "employee",
+                  label: "Employee",
+                  defaultWidth: 110,
+                  render: (r) => employeeLabelFromRow(r),
+                },
+                {
+                  key: "leave_type",
+                  label: "Type",
+                  defaultWidth: 90,
+                  render: (r) => leaveTypeLabelFromRequest(r),
+                },
+                {
+                  key: "start_date",
+                  label: "Start",
+                  defaultWidth: 84,
+                  render: (r) => readString(r, ["start_date"]),
+                },
+                {
+                  key: "end_date",
+                  label: "End",
+                  defaultWidth: 84,
+                  render: (r) => readString(r, ["end_date"]),
+                },
+                {
+                  key: "status",
+                  label: "Status",
+                  defaultWidth: 100,
+                  render: (r) => <StatusIndicator status={readString(r, ["status"])} />,
+                },
+                {
+                  key: "pending",
+                  label: "Pending with",
+                  defaultWidth: 130,
+                  sortable: false,
+                  render: (r) => {
+                    const permissions = getLeaveRequestPermissions(r, currentActor)
+                    if (permissions.isTerminal) {
+                      return <span className="text-[11px] text-muted-foreground">—</span>
+                    }
+                    return (
+                      <span className="block max-w-full truncate text-xs text-foreground" title={permissions.waitingLabel}>
+                        {permissions.waitingLabel}
+                      </span>
+                    )
+                  },
+                },
+                {
+                  key: "actions",
+                  label: "Actions",
+                  defaultWidth: 56,
+                  sortable: false,
+                  render: (row) => {
+                    const permissions = getLeaveRequestPermissions(row, currentActor)
+
+                    if (permissions.isTerminal) {
+                      return (
+                        <span className="text-[11px] text-muted-foreground">—</span>
+                      )
+                    }
+
+                    return (
+                      <div
+                        className="flex w-full items-center justify-end"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <DropdownMenu>
+                          <DropdownMenuTrigger
+                            className="inline-flex size-8 items-center justify-center rounded-md border border-border bg-background text-foreground transition-colors hover:bg-muted"
+                            aria-label="Request actions"
+                          >
+                            <MoreHorizontal className="size-4" />
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="min-w-48">
+                            <DropdownMenuItem
+                              disabled={!permissions.canApproveOrReject || saving}
+                              onClick={() => {
+                                if (!permissions.canApproveOrReject) return
+                                void approveRequest(row, "approve")
+                              }}
+                              className="text-emerald-700 focus:text-emerald-700"
+                            >
+                              <Check className="size-3.5" />
+                              Approve
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              disabled={!permissions.canApproveOrReject || saving}
+                              onClick={() => {
+                                if (!permissions.canApproveOrReject) return
+                                void approveRequest(row, "reject")
+                              }}
+                              className="text-amber-700 focus:text-amber-700"
+                            >
+                              <X className="size-3.5" />
+                              Reject
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              variant="destructive"
+                              disabled={!permissions.canCancel || saving}
+                              onClick={() => {
+                                if (!permissions.canCancel) return
+                                setPendingRequestCancel(row)
+                                setCancelReason("Cancelled by admin")
+                              }}
+                            >
+                              Cancel request
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setSelectedLeaveRequestRow(row)
+                                setLeaveRequestDetailsOpen(true)
+                              }}
+                            >
+                              View approval chain
+                            </DropdownMenuItem>
+                            {!permissions.canApproveOrReject ? (
+                              <div className="border-t border-border px-2 py-1.5 text-[11px] leading-snug text-muted-foreground">
+                                {permissions.reasonApprove}
+                              </div>
+                            ) : null}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    )
+                  },
+                },
+              ]}
+              itemsPerPage={15}
+              loading={loading}
+              showExport={false}
+              storageKey="leave-requests-v3"
+            />
+          </div>
+
+          <Dialog
+            open={leaveRequestDetailsOpen}
+            onOpenChange={(open) => {
+              setLeaveRequestDetailsOpen(open)
+              if (!open) setSelectedLeaveRequestRow(null)
+            }}
+          >
+            <DialogPopup
+              from="bottom"
+              className="flex max-h-[min(92dvh,40rem)] w-[calc(100%-1rem)] max-w-lg flex-col gap-0 overflow-hidden p-3 sm:max-w-xl sm:p-4"
+            >
+              <DialogHeader className="shrink-0 space-y-1 pr-8 text-left">
+                <div className="flex flex-wrap items-center gap-2">
+                  <DialogTitle className="text-base leading-snug sm:text-lg">
+                    {selectedLeaveRequestRow
+                      ? leaveRequestLabel(selectedLeaveRequestRow)
+                      : "Leave request"}
+                  </DialogTitle>
+                  {selectedLeaveRequestRow ? (
+                    <StatusIndicator status={readString(selectedLeaveRequestRow, ["status"])} />
+                  ) : null}
+                </div>
+                <DialogDescription className="text-xs">
+                  {selectedLeaveRequestRow
+                    ? `${employeeLabelFromRow(selectedLeaveRequestRow)} · ${leaveTypeLabelFromRequest(selectedLeaveRequestRow)}`
+                    : "Approval details"}
+                </DialogDescription>
+              </DialogHeader>
+
+              {selectedLeaveRequestRow ? (
+                <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain py-2">
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="rounded-md border border-border/60 px-2.5 py-2">
+                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Start</p>
+                      <p className="font-medium text-foreground">
+                        {readString(selectedLeaveRequestRow, ["start_date"])}
+                      </p>
+                    </div>
+                    <div className="rounded-md border border-border/60 px-2.5 py-2">
+                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">End</p>
+                      <p className="font-medium text-foreground">
+                        {readString(selectedLeaveRequestRow, ["end_date"])}
+                      </p>
+                    </div>
+                  </div>
+
+                  <ApprovalChain row={selectedLeaveRequestRow} actor={currentActor} />
+
+                  {(() => {
+                    const permissions = getLeaveRequestPermissions(
+                      selectedLeaveRequestRow,
+                      currentActor
+                    )
+                    return (
+                      <div className="flex flex-wrap gap-1.5 border-t border-border pt-3">
+                        <button
+                          type="button"
+                          className="inline-flex h-9 flex-1 items-center justify-center gap-1 rounded-md border border-emerald-300 px-3 text-xs font-medium text-emerald-700 disabled:cursor-not-allowed disabled:opacity-40 sm:flex-none"
+                          disabled={!permissions.canApproveOrReject || saving}
+                          title={permissions.reasonApprove}
+                          onClick={() => void approveRequest(selectedLeaveRequestRow, "approve")}
+                        >
+                          <Check className="size-3.5" />
+                          Approve
+                        </button>
+                        <button
+                          type="button"
+                          className="inline-flex h-9 flex-1 items-center justify-center gap-1 rounded-md border border-amber-300 px-3 text-xs font-medium text-amber-700 disabled:cursor-not-allowed disabled:opacity-40 sm:flex-none"
+                          disabled={!permissions.canApproveOrReject || saving}
+                          title={permissions.reasonApprove}
+                          onClick={() => void approveRequest(selectedLeaveRequestRow, "reject")}
+                        >
+                          <X className="size-3.5" />
+                          Reject
+                        </button>
+                        <button
+                          type="button"
+                          className="inline-flex h-9 flex-1 items-center justify-center gap-1 rounded-md border border-rose-300 px-3 text-xs font-medium text-rose-700 disabled:cursor-not-allowed disabled:opacity-40 sm:flex-none"
+                          disabled={!permissions.canCancel || saving}
+                          title={permissions.reasonCancel}
+                          onClick={() => {
+                            setPendingRequestCancel(selectedLeaveRequestRow)
+                            setCancelReason("Cancelled by admin")
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )
+                  })()}
+                </div>
+              ) : null}
+            </DialogPopup>
+          </Dialog>
         </div>
       ) : null}
 
@@ -2360,16 +3451,17 @@ export function LeaveManagementView({
       </Dialog>
 
       {tab === "balances" ? (
-        <div className="space-y-4">
-          <div className="flex justify-end">
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center justify-end gap-1.5">
             <button
               type="button"
-              className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-slate-900 px-2.5 text-xs font-semibold text-white"
               onClick={() => void openBalanceDialog()}
             >
-              <Plus className="h-4 w-4" />
+              <Plus className="h-3.5 w-3.5" />
               Adjust Leave Balance
             </button>
+            {refreshButton}
           </div>
 
           <ResizableTable
@@ -2398,34 +3490,33 @@ export function LeaveManagementView({
       ) : null}
 
       {tab === "holidays" ? (
-        <div className="space-y-4">
-          <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <button
-                type="button"
-                className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700"
-                onClick={() => setHolidayImportDialogOpen(true)}
-              >
-                <Download className="h-4 w-4" />
-                Import Holidays
-              </button>
-              <button
-                type="button"
-                className="inline-flex items-center gap-2 rounded-md border border-rose-200 bg-white px-3 py-2 text-sm font-medium text-rose-700"
-                onClick={() => setHolidayRemoveDialogOpen(true)}
-              >
-                <Trash2 className="h-4 w-4" />
-                Remove Country Holidays
-              </button>
-              <button
-                type="button"
-                className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white"
-                onClick={() => setHolidayDialogOpen(true)}
-              >
-                <Plus className="h-4 w-4" />
-                Add Holiday
-              </button>
-            </div>
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center justify-end gap-1.5">
+            <button
+              type="button"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-medium text-slate-700"
+              onClick={() => setHolidayImportDialogOpen(true)}
+            >
+              <Download className="h-3.5 w-3.5" />
+              Import
+            </button>
+            <button
+              type="button"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-rose-200 bg-white px-2.5 text-xs font-medium text-rose-700"
+              onClick={() => setHolidayRemoveDialogOpen(true)}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Remove Country
+            </button>
+            <button
+              type="button"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-slate-900 px-2.5 text-xs font-semibold text-white"
+              onClick={() => setHolidayDialogOpen(true)}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Add Holiday
+            </button>
+            {refreshButton}
           </div>
 
           <ResizableTable
@@ -2434,7 +3525,20 @@ export function LeaveManagementView({
             columns={[
               { key: "name", label: "Name", defaultWidth: 110, sortable: true, render: (r) => readString(r, ["name"]) },
               { key: "holiday_date", label: "Date", defaultWidth: 70, sortable: true, render: (r) => readString(r, ["holiday_date"]) },
-              { key: "is_recurring", label: "Recur", defaultWidth: 50, render: (r) => <Switch checked={readBoolean(r, ["is_recurring"])} onCheckedChange={() => void toggleHolidayRecurring(r)} aria-label="Toggle recurring" /> },
+              {
+                key: "is_recurring",
+                label: "Recur",
+                defaultWidth: 50,
+                render: (r) => (
+                  <Switch
+                    size="sm"
+                    checked={readBoolean(r, ["is_recurring"])}
+                    onCheckedChange={() => void toggleHolidayRecurring(r)}
+                    aria-label="Toggle recurring"
+                    className="scale-90"
+                  />
+                ),
+              },
               { key: "actions", label: "Act", defaultWidth: 45, sortable: false, render: (row) => (
                 <div className="flex justify-end" onClick={e=>e.stopPropagation()}>
                   <button type="button" className="rounded-md border border-rose-200 p-2 text-rose-600" onClick={() => setPendingHolidayDelete(row)}>
@@ -2451,16 +3555,17 @@ export function LeaveManagementView({
       ) : null}
 
       {tab === "policies" ? (
-        <div className="space-y-4">
-          <div className="flex justify-end">
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center justify-end gap-1.5">
             <button
               type="button"
-              className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-slate-900 px-2.5 text-xs font-semibold text-white"
               onClick={openCreatePolicySheet}
             >
-              <Plus className="h-4 w-4" />
+              <Plus className="h-3.5 w-3.5" />
               Create Policy
             </button>
+            {refreshButton}
           </div>
 
           <ResizableTable title="Leave Policies" data={policies} itemsPerPage={15} loading={loading} storageKey="leave-policies" />
@@ -2605,20 +3710,23 @@ export function LeaveManagementView({
       ) : null}
 
       {tab === "workflows" ? (
-        <div className="space-y-4">
-          <div className="flex justify-end">
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center justify-end gap-1.5">
             <button
               type="button"
-              className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-slate-900 px-2.5 text-xs font-semibold text-white"
               onClick={openCreateWorkflowSheet}
             >
-              <Plus className="h-4 w-4" />
+              <Plus className="h-3.5 w-3.5" />
               Create Workflow
             </button>
+            {refreshButton}
           </div>
 
-          <ResizableTable title="Leave Policies" data={policies} itemsPerPage={15} loading={loading} storageKey="leave-policies" />
-          <ResizableTable title="Leave Workflows" data={workflows} itemsPerPage={15} loading={loading} storageKey="leave-workflows" />
+          <div className="space-y-2">
+            <ResizableTable title="Leave Policies" data={policies} itemsPerPage={15} loading={loading} storageKey="leave-policies" />
+            <ResizableTable title="Leave Workflows" data={workflows} itemsPerPage={15} loading={loading} storageKey="leave-workflows" />
+          </div>
 
           <Sheet open={workflowSheetOpen} onOpenChange={setWorkflowSheetOpen}>
             <SheetContent side="right" className="w-full overflow-y-auto data-[side=right]:w-1/2 sm:max-w-none">

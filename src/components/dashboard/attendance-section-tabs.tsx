@@ -2,76 +2,76 @@
 
 import * as React from "react"
 
+import {
+  hasAdminDashboardAccess,
+  normalizePermissionLabels,
+} from "@/components/app-sidebar"
 import { DashboardSectionTabs } from "@/components/dashboard/dashboard-section-tabs"
 import {
   attendanceSectionTabGroups,
   employeeAttendanceSectionTabGroups,
 } from "@/lib/dashboard-sections"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
-import { asRecord, readString } from "@/utils/token-utils"
 
-const ADMIN_ROLE_KEYS = new Set([
-  "admin",
-  "administrator",
-  "super_admin",
-  "super-admin",
-  "company_admin",
-  "company-admin",
-  "hr_admin",
-  "hr-admin",
-  "owner",
-  "root",
-])
+function readPermissionsFromUnknown(value: unknown, sink: Set<string>) {
+  if (typeof value === "string" && value.trim()) {
+    sink.add(value.trim())
+    return
+  }
 
-function readRoleLabels(record: Record<string, unknown> | null) {
-  if (!record) {
+  if (Array.isArray(value)) {
+    value.forEach((entry) => readPermissionsFromUnknown(entry, sink))
+    return
+  }
+
+  if (typeof value !== "object" || value === null) {
+    return
+  }
+
+  const record = value as Record<string, unknown>
+  for (const key of ["permissions", "authorities", "actions", "scopes", "data", "items", "results", "user"]) {
+    readPermissionsFromUnknown(record[key], sink)
+  }
+}
+
+function readStoredPermissionLabels() {
+  if (typeof window === "undefined") {
     return [] as string[]
   }
 
   const labels = new Set<string>()
-  const push = (value: unknown) => {
-    if (typeof value === "string" && value.trim()) {
-      labels.add(value.trim().toLowerCase())
-      return
-    }
-    if (typeof value === "object" && value !== null) {
-      const nested = value as Record<string, unknown>
-      const nestedLabel = readString(nested, ["name", "role", "key", "code", "slug", "type", "user_type"])
-      if (nestedLabel) {
-        labels.add(nestedLabel.toLowerCase())
+
+  const rawActorPermissions = window.sessionStorage.getItem("hrms.dashboard.actorPermissions")
+  if (rawActorPermissions) {
+    try {
+      const parsed = JSON.parse(rawActorPermissions)
+      if (Array.isArray(parsed)) {
+        return normalizePermissionLabels(parsed.filter((entry) => typeof entry === "string"))
       }
+    } catch {
+      // Fall through to local sources.
     }
   }
 
-  push(record.role)
-  push(record.user_type)
-  push(record.type)
-
-  for (const key of ["roles", "authorities", "userRole", "user_role"]) {
-    const value = record[key]
-    if (Array.isArray(value)) {
-      value.forEach((entry) => push(entry))
-      continue
+  const rawUser = window.localStorage.getItem(AUTH_STORAGE_KEYS.user)
+  if (rawUser) {
+    try {
+      readPermissionsFromUnknown(JSON.parse(rawUser), labels)
+    } catch {
+      // ignore malformed stored user
     }
-    push(value)
   }
 
-  return Array.from(labels)
-}
-
-function decodeJwtPayload(token: string) {
-  const parts = token.split(".")
-  if (parts.length !== 3 || !parts[1]) {
-    return null
+  const rawTokens = window.localStorage.getItem(AUTH_STORAGE_KEYS.tokens)
+  if (rawTokens) {
+    try {
+      readPermissionsFromUnknown(JSON.parse(rawTokens), labels)
+    } catch {
+      // ignore malformed stored tokens
+    }
   }
 
-  try {
-    const normalized = parts[1].replace(/-/g, "+").replace(/_/g, "/")
-    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=")
-    return asRecord(JSON.parse(atob(padded)))
-  } catch {
-    return null
-  }
+  return normalizePermissionLabels(Array.from(labels))
 }
 
 export function AttendanceSectionTabs() {
@@ -82,33 +82,8 @@ export function AttendanceSectionTabs() {
       return
     }
 
-    let storedUser: Record<string, unknown> | null = null
-    const rawUser = window.localStorage.getItem(AUTH_STORAGE_KEYS.user)
-    if (rawUser) {
-      try {
-        storedUser = asRecord(JSON.parse(rawUser))
-      } catch {
-        storedUser = null
-      }
-    }
-
-    const tokensRaw = window.localStorage.getItem(AUTH_STORAGE_KEYS.tokens)
-    let accessToken = ""
-    if (tokensRaw) {
-      try {
-        const parsed = JSON.parse(tokensRaw) as Record<string, unknown>
-        accessToken =
-          (typeof parsed.accessToken === "string" && parsed.accessToken.trim()) ||
-          (typeof parsed.access_token === "string" && parsed.access_token.trim()) ||
-          ""
-      } catch {
-        accessToken = ""
-      }
-    }
-
-    const tokenPayload = accessToken ? decodeJwtPayload(accessToken) : null
-    const roleLabels = [...readRoleLabels(storedUser), ...readRoleLabels(tokenPayload)]
-    setIsAdmin(roleLabels.some((role) => ADMIN_ROLE_KEYS.has(role)))
+    const normalizedPermissions = readStoredPermissionLabels()
+    setIsAdmin(hasAdminDashboardAccess(normalizedPermissions))
   }, [])
 
   if (isAdmin === null) {

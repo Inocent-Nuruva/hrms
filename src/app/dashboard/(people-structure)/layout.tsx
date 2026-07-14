@@ -7,7 +7,7 @@ export default function PeopleStructureLayout({
   children: React.ReactNode
 }) {
   return (
-    <div className="flex flex-col gap-3 md:gap-4">
+    <div className="flex flex-col gap-2 md:gap-2.5">
       <DashboardSectionTabs groups={positionsSectionTabGroups} />
       {children}
     </div>

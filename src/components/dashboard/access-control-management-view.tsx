@@ -48,6 +48,69 @@ const ROUTE_TO_RESOURCE: Record<AccessControlSectionKey, AccessControlResourceKe
   groups: "groups",
 }
 
+/** Maps UI section to API permission prefix used by /api/permissions. */
+const SECTION_PERMISSION_PREFIX: Record<AccessControlSectionKey, string> = {
+  doors: "access_doors",
+  templates: "access_schedule_templates",
+  organizations: "access_organizations",
+  groups: "access_groups",
+}
+
+function readActorPermissionNames(): string[] {
+  if (typeof window === "undefined") return []
+  const names = new Set<string>()
+  try {
+    const raw = window.sessionStorage.getItem("hrms.dashboard.actorPermissions")
+    if (raw) {
+      const parsed = JSON.parse(raw) as unknown
+      if (Array.isArray(parsed)) {
+        parsed.forEach((entry) => {
+          if (typeof entry === "string" && entry.trim()) names.add(entry.trim().toLowerCase())
+        })
+      }
+    }
+  } catch {
+    // ignore
+  }
+  // Fallback: JWT permissions
+  try {
+    const token =
+      window.localStorage.getItem("hrms.admin.accessToken")?.trim() ||
+      (() => {
+        const raw = window.localStorage.getItem("auth_tokens") || window.localStorage.getItem("hrms.auth.tokens")
+        if (!raw) return ""
+        const parsed = JSON.parse(raw) as { accessToken?: string; access_token?: string }
+        return (parsed.accessToken ?? parsed.access_token ?? "").trim()
+      })()
+    if (token) {
+      const parts = token.split(".")
+      if (parts[1]) {
+        const payload = JSON.parse(
+          atob(parts[1].replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(parts[1].length / 4) * 4, "="))
+        ) as { permissions?: unknown }
+        if (Array.isArray(payload.permissions)) {
+          payload.permissions.forEach((entry) => {
+            if (typeof entry === "string") names.add(entry.toLowerCase())
+          })
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return Array.from(names)
+}
+
+function canAccessControlAction(
+  section: AccessControlSectionKey,
+  action: "create" | "update" | "delete" | "read"
+) {
+  const perms = readActorPermissionNames()
+  if (perms.length === 0) return false
+  const required = `${SECTION_PERMISSION_PREFIX[section]}:${action}`.toLowerCase()
+  return perms.some((entry) => entry.replace(/\./g, ":") === required)
+}
+
 const SECTION_TITLES: Record<AccessControlSectionKey, string> = {
   doors: "Doors",
   templates: "Templates",
@@ -886,6 +949,10 @@ export function AccessControlManagementView({
   )
 
   const onCreate = async () => {
+    if (!canCreate) {
+      setFormError(`Missing permission: ${SECTION_PERMISSION_PREFIX[activeSection]}:create`)
+      return
+    }
     const token = readStoredToken()
     if (!token) {
       setFormError("Authentication required. Please log in again.")
@@ -905,6 +972,10 @@ export function AccessControlManagementView({
   }
 
   const onEdit = async () => {
+    if (!canUpdate) {
+      setFormError(`Missing permission: ${SECTION_PERMISSION_PREFIX[activeSection]}:update`)
+      return
+    }
     const token = readStoredToken()
     if (!token) {
       setFormError("Authentication required. Please log in again.")
@@ -927,6 +998,10 @@ export function AccessControlManagementView({
   }
 
   const onDelete = async () => {
+    if (!canDelete) {
+      setFormError(`Missing permission: ${SECTION_PERMISSION_PREFIX[activeSection]}:delete`)
+      return
+    }
     const token = readStoredToken()
     if (!token) {
       setFormError("Authentication required. Please log in again.")
@@ -977,38 +1052,45 @@ export function AccessControlManagementView({
     setFormError(null)
   }
 
+  const canCreate = canAccessControlAction(activeSection, "create")
+  const canUpdate = canAccessControlAction(activeSection, "update")
+  const canDelete = canAccessControlAction(activeSection, "delete")
+
   return (
-    <div className="rounded-xl border border-slate-200 bg-white/80 px-4 py-5 shadow-sm lg:px-6">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-900">{moduleTitle}</h2>
-          <p className="text-sm text-slate-500">{title}</p>
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <div className="min-w-0">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{moduleTitle}</p>
+          <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="ml-auto flex flex-wrap items-center gap-1.5">
+          {canCreate ? (
           <button
             type="button"
-            className="inline-flex h-10 w-10 items-center justify-center rounded-md bg-[var(--primary)] text-white transition hover:brightness-95"
+            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[var(--primary)] px-2.5 text-xs font-semibold text-white transition hover:brightness-95"
             onClick={() => setCreateOpen(true)}
             aria-label={`Create ${title}`}
             title="Create"
           >
-            <PlusIcon className="h-4 w-4" />
+            <PlusIcon className="h-3.5 w-3.5" />
+            Create
           </button>
+          ) : null}
           <button
             type="button"
             onClick={() => void fetchRows()}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-slate-300 text-primary hover:bg-slate-50"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 text-primary hover:bg-slate-50"
             disabled={loading}
             aria-label="Refresh"
             title="Refresh"
           >
-            <RefreshCwIcon className={`h-4 w-4 text-primary ${loading ? "animate-spin" : ""}`} />
+            <RefreshCwIcon className={`h-3.5 w-3.5 text-primary ${loading ? "animate-spin" : ""}`} />
           </button>
         </div>
       </div>
 
-      {error ? <p className="mb-3 text-sm text-red-600">{error}</p> : null}
-      {message ? <p className="mb-3 text-sm text-green-700">{message}</p> : null}
+      {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      {message ? <p className="text-sm text-green-700">{message}</p> : null}
 
       <ResizableTable
         title={title}

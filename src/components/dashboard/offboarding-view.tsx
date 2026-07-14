@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { TableScrollContainer } from "@/components/common/table-scroll-container"
 import { ResizableTable } from "@/components/ui/resizable-table"
 import { Textarea } from "@/components/ui/textarea"
 import { Plus, RefreshCw } from "lucide-react"
@@ -113,11 +112,169 @@ function readNumber(row: AdminRecord, keys: string[]) {
   return null
 }
 
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  const parts = token.split(".")
+  if (parts.length !== 3 || !parts[1]) return null
+  try {
+    const normalized = parts[1].replace(/-/g, "+").replace(/_/g, "/")
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=")
+    return JSON.parse(atob(padded)) as Record<string, unknown>
+  } catch {
+    return null
+  }
+}
+
+// Keep in sync with admin-dashboard-view ADMIN_ROLE_KEYS.
+const OFFBOARDING_ADMIN_ROLES = new Set([
+  "admin",
+  "administrator",
+  "super_admin",
+  "super-admin",
+  "company_admin",
+  "company-admin",
+  "hr_admin",
+  "hr-admin",
+  "owner",
+  "root",
+])
+
+function normalizeRoleLabel(value: unknown): string | null {
+  if (typeof value === "string" && value.trim()) {
+    return value.toLowerCase().trim()
+  }
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>
+    for (const key of ["name", "role", "key", "code", "slug", "type", "user_type", "display_name"]) {
+      const nested = record[key]
+      if (typeof nested === "string" && nested.trim()) {
+        return nested.toLowerCase().trim()
+      }
+    }
+  }
+  return null
+}
+
+function collectRoleLabelsFromUnknown(root: unknown): string[] {
+  const labels = new Set<string>()
+  const push = (value: unknown) => {
+    const role = normalizeRoleLabel(value)
+    if (role) labels.add(role)
+  }
+
+  if (!root || typeof root !== "object") return []
+  const record = root as Record<string, unknown>
+  push(record.role)
+  push(record.user_type)
+  push(record.userType)
+  push(record.type)
+
+  for (const key of ["roles", "authorities", "userRole", "user_role"]) {
+    const candidate = record[key]
+    if (Array.isArray(candidate)) {
+      candidate.forEach(push)
+    } else {
+      push(candidate)
+    }
+  }
+  return Array.from(labels)
+}
+
+function isAdminRoleLabel(role: string) {
+  const normalized = role.toLowerCase().trim()
+  if (OFFBOARDING_ADMIN_ROLES.has(normalized)) return true
+  const underscored = normalized.replace(/[\s-]+/g, "_")
+  return OFFBOARDING_ADMIN_ROLES.has(underscored)
+}
+
+/**
+ * Create offboarding request/workflow is admin-only.
+ * Employee dashboard mode never gets create actions.
+ */
+function canManageOffboarding(token: string) {
+  if (typeof window !== "undefined") {
+    const accessMode = window.sessionStorage.getItem("hrms.dashboard.accessMode")
+    const isAdminFlag = window.sessionStorage.getItem("hrms.dashboard.isAdmin")
+    // Hard stop: employee shell never shows create, regardless of JWT noise.
+    if (accessMode === "employee" || isAdminFlag === "0") {
+      return false
+    }
+  }
+
+  const roleLabels = new Set<string>()
+  const payload = token ? decodeJwtPayload(token) : null
+  collectRoleLabelsFromUnknown(payload).forEach((role) => roleLabels.add(role))
+
+  if (typeof window !== "undefined") {
+    try {
+      const rawUser = window.localStorage.getItem(AUTH_STORAGE_KEYS.user)
+      if (rawUser) {
+        collectRoleLabelsFromUnknown(JSON.parse(rawUser)).forEach((role) => roleLabels.add(role))
+      }
+    } catch {
+      // ignore malformed stored user
+    }
+  }
+
+  return [...roleLabels].some(isAdminRoleLabel)
+}
+
+function StatusDot({ status }: { status: string }) {
+  const normalized = status.trim().toLowerCase()
+  const label =
+    status.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()).trim() || "—"
+  const tone =
+    ["active", "approved", "completed", "cleared", "submitted"].includes(normalized)
+      ? "good"
+      : ["inactive", "rejected", "cancelled", "canceled"].includes(normalized)
+        ? "bad"
+        : ["pending", "draft", "in_progress", "in_review"].includes(normalized)
+          ? "warn"
+          : "neutral"
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 text-xs font-medium",
+        tone === "good" && "text-emerald-600",
+        tone === "bad" && "text-rose-600",
+        tone === "warn" && "text-amber-600",
+        tone === "neutral" && "text-muted-foreground"
+      )}
+    >
+      <span
+        className={cn(
+          "size-1.5 rounded-full",
+          tone === "good" && "bg-emerald-500",
+          tone === "bad" && "bg-rose-500",
+          tone === "warn" && "bg-amber-500",
+          tone === "neutral" && "bg-muted-foreground/50"
+        )}
+      />
+      {label}
+    </span>
+  )
+}
+
+function EmptyState({
+  title,
+  description,
+}: {
+  title: string
+  description: string
+}) {
+  return (
+    <div className="flex min-h-[220px] flex-col items-center justify-center rounded-lg border border-dashed border-border px-6 py-10 text-center">
+      <p className="text-sm font-medium text-foreground">{title}</p>
+      <p className="mt-1 max-w-md text-xs text-muted-foreground">{description}</p>
+    </div>
+  )
+}
+
 type Tab = "requests" | "workflows"
 type OffboardingLookupKey = "employees" | "branches" | "departments" | "workflows"
 
 export function OffboardingView() {
   const [tab, setTab] = React.useState<Tab>("requests")
+  const [canManage, setCanManage] = React.useState(false)
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -140,11 +297,11 @@ export function OffboardingView() {
   })
 
   const [workflowSheetOpen, setWorkflowSheetOpen] = React.useState(false)
+  const [stepDialogOpen, setStepDialogOpen] = React.useState(false)
   const [requestSheetOpen, setRequestSheetOpen] = React.useState(false)
   const [selectedWorkflowId, setSelectedWorkflowId] = React.useState("")
 
   const [requestDetailsOpen, setRequestDetailsOpen] = React.useState(false)
-  const [clearanceDialogOpen, setClearanceDialogOpen] = React.useState(false)
   const [selectedRequest, setSelectedRequest] = React.useState<AdminRecord | null>(null)
   const [requestApprovals, setRequestApprovals] = React.useState<AdminRecord[]>([])
   const [requestAuditLogs, setRequestAuditLogs] = React.useState<AdminRecord[]>([])
@@ -329,6 +486,10 @@ export function OffboardingView() {
         const workflowsResult = await listOffboardingWorkflows(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" })
         setWorkflows(workflowsResult.rows)
         setLoadedLookups((current) => ({ ...current, workflows: true }))
+        if (!selectedWorkflowId && workflowsResult.rows.length > 0) {
+          const firstId = readNumber(workflowsResult.rows[0], ["id", "workflow_id"])
+          if (firstId !== null) setSelectedWorkflowId(String(firstId))
+        }
       }
       setLoadedTabs((current) => ({ ...current, [targetTab]: true }))
     } catch (errorObject) {
@@ -341,17 +502,38 @@ export function OffboardingView() {
   }, [tab])
 
   React.useEffect(() => {
+    const syncManageAccess = () => {
+      const token = readStoredToken()
+      setCanManage(canManageOffboarding(token))
+    }
+    syncManageAccess()
+    // Re-check shortly after mount in case parent dashboard identity resolves later.
+    const timer = window.setTimeout(syncManageAccess, 50)
+    const timer2 = window.setTimeout(syncManageAccess, 250)
+    window.addEventListener("storage", syncManageAccess)
+    window.addEventListener("focus", syncManageAccess)
+    return () => {
+      window.clearTimeout(timer)
+      window.clearTimeout(timer2)
+      window.removeEventListener("storage", syncManageAccess)
+      window.removeEventListener("focus", syncManageAccess)
+    }
+  }, [])
+
+  React.useEffect(() => {
     if (loadedTabs[tab]) return
     void reloadAll(tab)
   }, [loadedTabs, reloadAll, tab])
 
   async function openRequestSheet() {
+    if (!canManage) return
     const loaded = await ensureLookups(["employees", "branches", "departments", "workflows"])
     if (!loaded) return
     setRequestSheetOpen(true)
   }
 
   async function openWorkflowSheet() {
+    if (!canManage) return
     const loaded = await ensureLookups(["workflows"])
     if (!loaded) return
     setWorkflowSheetOpen(true)
@@ -458,13 +640,63 @@ export function OffboardingView() {
     }
   }
 
+  const selectedWorkflow = React.useMemo(() => {
+    if (!selectedWorkflowId) return null
+    return (
+      workflows.find(
+        (row) => String(readNumber(row, ["id", "workflow_id"]) ?? "") === selectedWorkflowId
+      ) ?? null
+    )
+  }, [selectedWorkflowId, workflows])
+
+  const selectedWorkflowSteps = React.useMemo(() => {
+    if (!selectedWorkflow) return [] as AdminRecord[]
+    const steps = Array.isArray(selectedWorkflow.steps)
+      ? (selectedWorkflow.steps as AdminRecord[])
+      : []
+    return [...steps].sort(
+      (a, b) =>
+        (readNumber(a, ["approval_level", "step_order", "order"]) ?? 0) -
+        (readNumber(b, ["approval_level", "step_order", "order"]) ?? 0)
+    )
+  }, [selectedWorkflow])
+
+  function openAddStepDialog() {
+    if (!canManage || !selectedWorkflowId) {
+      showErrorAlert("Select a workflow first.")
+      return
+    }
+    const nextLevel = String(
+      (selectedWorkflowSteps.reduce(
+        (max, step) => Math.max(max, readNumber(step, ["approval_level"]) ?? 0),
+        0
+      ) || 0) + 1
+    )
+    setStepForm((prev) => ({
+      ...prev,
+      approval_level: nextLevel,
+      step_name: "",
+      task_title: "",
+      task_description: "",
+      task_type: "hr",
+      action_type: "verify",
+      is_required: "true",
+      expected_duration_days: "2",
+    }))
+    setStepDialogOpen(true)
+  }
+
   async function submitWorkflowStepForm() {
     const token = readStoredToken()
-    if (!token || !selectedWorkflowId || !stepForm.step_name.trim() || !stepForm.task_title.trim()) return
+    if (!token || !selectedWorkflowId) return
+    if (!stepForm.step_name.trim() || !stepForm.task_title.trim()) {
+      showErrorAlert("Step name and task title are required.")
+      return
+    }
     setSaving(true)
     try {
       await createOffboardingWorkflowStep(token, selectedWorkflowId, {
-        approval_level: Number(stepForm.approval_level),
+        approval_level: Number(stepForm.approval_level) || 1,
         step_name: stepForm.step_name.trim(),
         task_title: stepForm.task_title.trim(),
         task_description: stepForm.task_description.trim(),
@@ -473,14 +705,19 @@ export function OffboardingView() {
         role_id: stepForm.role_id ? Number(stepForm.role_id) : undefined,
         position_id: stepForm.position_id ? Number(stepForm.position_id) : undefined,
         company_user_id: stepForm.company_user_id ? Number(stepForm.company_user_id) : undefined,
-        assigned_branch_id: stepForm.assigned_branch_id ? Number(stepForm.assigned_branch_id) : undefined,
-        assigned_department_id: stepForm.assigned_department_id ? Number(stepForm.assigned_department_id) : undefined,
+        assigned_branch_id: stepForm.assigned_branch_id
+          ? Number(stepForm.assigned_branch_id)
+          : undefined,
+        assigned_department_id: stepForm.assigned_department_id
+          ? Number(stepForm.assigned_department_id)
+          : undefined,
         action_type: stepForm.action_type,
         is_required: stepForm.is_required === "true",
-        expected_duration_days: Number(stepForm.expected_duration_days),
+        expected_duration_days: Number(stepForm.expected_duration_days) || 1,
       })
+      setStepDialogOpen(false)
       showSuccessAlert("Workflow step added.")
-      await reloadAll(tab, true)
+      await reloadAll("workflows", true)
     } catch (errorObject) {
       showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to add workflow step.")
     } finally {
@@ -577,323 +814,861 @@ export function OffboardingView() {
   }
 
   return (
-    <div>
-      <div className="mb-4">
-        <div className="glass-scrollbar overflow-x-auto">
-          <div className="inline-flex min-w-full items-center gap-4 border-b border-border/80">
-            <button
-              type="button"
-              onClick={() => setTab("requests")}
-              className={cn(
-                "border-b-2 px-1 py-2 text-[0.92rem] font-medium whitespace-nowrap transition-colors duration-200",
-                tab === "requests"
-                  ? "border-[var(--primary)] text-[var(--primary)]"
-                  : "border-transparent text-slate-600 hover:text-slate-900"
-              )}
-            >
-              Requests
-            </button>
-            <button
-              type="button"
-              onClick={() => setTab("workflows")}
-              className={cn(
-                "border-b-2 px-1 py-2 text-[0.92rem] font-medium whitespace-nowrap transition-colors duration-200",
-                tab === "workflows"
-                  ? "border-[var(--primary)] text-[var(--primary)]"
-                  : "border-transparent text-slate-600 hover:text-slate-900"
-              )}
-            >
-              Workflows
-            </button>
-            <button
-              type="button"
-              className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-md border border-border text-sm"
-              onClick={() => void reloadAll(tab, true)}
-              disabled={loading}
-            >
-              <RefreshCw className={`h-4 w-4 text-primary ${loading ? "animate-spin" : ""}`} />
-            </button>
-          </div>
-        </div>
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 pb-6">
+      <div className="flex flex-col gap-1">
+        <h1 className="text-xl font-semibold tracking-tight text-foreground">Offboarding</h1>
+        <p className="text-sm text-muted-foreground">
+          {canManage
+            ? "Review offboarding requests and manage exit workflows."
+            : "View offboarding requests and company exit workflows."}
+        </p>
       </div>
 
-      {error ? <p className="mb-3 text-sm text-rose-600">{error}</p> : null}
+      <div className="inline-flex w-fit items-center gap-1 border-b border-border">
+        <button
+          type="button"
+          onClick={() => setTab("requests")}
+          className={cn(
+            "border-b-2 px-3 py-2 text-sm font-medium transition-colors",
+            tab === "requests"
+              ? "border-primary text-primary"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          )}
+        >
+          Requests
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab("workflows")}
+          className={cn(
+            "border-b-2 px-3 py-2 text-sm font-medium transition-colors",
+            tab === "workflows"
+              ? "border-primary text-primary"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          )}
+        >
+          Workflows
+        </button>
+      </div>
+
+      {error ? (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {error}
+        </div>
+      ) : null}
 
       {tab === "requests" ? (
-        <div className="space-y-4">
-          <div className="flex justify-end">
-            <Button
-              type="button"
-              onClick={() => void openRequestSheet()}
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Create Offboarding
-            </Button>
-          </div>
-
-          <div className="grid gap-3 rounded-xl border border-border p-4 md:grid-cols-3">
-            <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={taskForm.request_id} onChange={(event) => { const v = event.target.value; setTaskForm((prev) => ({ ...prev, request_id: v })); setClearanceForm((prev) => ({ ...prev, request_id: v })); setDocumentForm((prev) => ({ ...prev, request_id: v })) }}>
-              <option value="">Select request</option>
-              {requests.map((row, index) => {
-                const id = readNumber(row, ["id"])
-                if (id === null) return null
-                return <option key={`off-req-${id}-${index}`} value={String(id)}>{requestLabel(row)}</option>
-              })}
-            </select>
-            <input className="h-10 rounded-md border border-slate-300 px-3 text-sm" placeholder="Task title" value={taskForm.title} onChange={(event) => setTaskForm((prev) => ({ ...prev, title: event.target.value }))} />
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void submitTaskForm()}
-              disabled={saving}
-              title="Add task"
-            >
-              Add Task
-            </Button>
-            <input className="h-10 rounded-md border border-slate-300 px-3 text-sm" placeholder="Document title" value={documentForm.title} onChange={(event) => setDocumentForm((prev) => ({ ...prev, title: event.target.value }))} />
-            <input className="h-10 rounded-md border border-slate-300 px-3 text-sm" placeholder="File path" value={documentForm.file_path} onChange={(event) => setDocumentForm((prev) => ({ ...prev, file_path: event.target.value, file_name: event.target.value, original_file_name: event.target.value }))} />
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void submitDocumentForm()}
-              disabled={saving}
-              title="Add document"
-            >
-              Add Document
-            </Button>
-            <div className="md:col-span-3">
-              <Button
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-medium text-foreground">Offboarding requests</p>
+            <div className="flex items-center gap-1.5">
+              {canManage ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => void openRequestSheet()}
+                >
+                  <Plus data-icon="inline-start" />
+                  Create request
+                </Button>
+              ) : null}
+              <button
                 type="button"
-                variant="outline"
-                onClick={() => setClearanceDialogOpen(true)}
-                disabled={saving}
-                title="Add clearance"
+                className="inline-flex size-8 items-center justify-center rounded-md border border-border text-sm"
+                onClick={() => void reloadAll("requests", true)}
+                disabled={loading}
+                aria-label="Refresh"
+                title="Refresh"
               >
-                Add Clearance
-              </Button>
+                <RefreshCw className={`size-3.5 text-primary ${loading ? "animate-spin" : ""}`} />
+              </button>
             </div>
           </div>
 
-          <ResizableTable
-            title="Offboarding"
-            data={requests}
-            itemsPerPage={15}
-            loading={loading}
-            storageKey="offboarding-requests"
-          />
+          {loading && requests.length === 0 ? (
+            <EmptyState title="Loading…" description="Checking for offboarding requests." />
+          ) : requests.length === 0 ? (
+            <EmptyState
+              title="No offboarding requests"
+              description={
+                canManage
+                  ? "There are no offboarding requests yet. Create one when an employee is leaving."
+                  : "No offboarding requested."
+              }
+            />
+          ) : (
+            <div className="min-w-0 overflow-hidden">
+              <ResizableTable
+                title="Offboarding Requests"
+                data={requests}
+                itemsPerPage={15}
+                loading={loading}
+                showExport={false}
+                storageKey="offboarding-requests-v2"
+                onRowSelect={(_, row) => {
+                  if (row) void openRequestDetails(row)
+                }}
+                columns={[
+                  {
+                    key: "request",
+                    label: "Request",
+                    defaultWidth: 160,
+                    render: (row) => (
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-medium text-foreground">
+                          {requestLabel(row)}
+                        </p>
+                        <p className="truncate text-[11px] text-muted-foreground">
+                          {readString(row, ["offboarding_type", "type"])}
+                        </p>
+                      </div>
+                    ),
+                  },
+                  {
+                    key: "employee",
+                    label: "Employee",
+                    defaultWidth: 140,
+                    render: (row) => {
+                      const nested = asRecord(row.employee)
+                      if (nested) return employeeLabel(nested)
+                      return readString(row, ["employee_name", "employeeName", "full_name"])
+                    },
+                  },
+                  {
+                    key: "last_working_date",
+                    label: "Last day",
+                    defaultWidth: 100,
+                    render: (row) =>
+                      readString(row, ["last_working_date", "lastWorkingDate", "exit_date"]),
+                  },
+                  {
+                    key: "status",
+                    label: "Status",
+                    defaultWidth: 100,
+                    render: (row) => (
+                      <StatusDot status={readString(row, ["status"])} />
+                    ),
+                  },
+                  {
+                    key: "updated",
+                    label: "Updated",
+                    defaultWidth: 120,
+                    render: (row) =>
+                      readString(row, ["updated_at", "updatedAt", "created_at", "createdAt"]),
+                  },
+                ]}
+              />
+            </div>
+          )}
         </div>
       ) : null}
 
-      <Sheet open={requestSheetOpen} onOpenChange={setRequestSheetOpen}>
-        <SheetContent side="right" className="w-full overflow-y-auto data-[side=right]:w-full sm:data-[side=right]:w-1/2 data-[side=right]:sm:max-w-none">
-          <SheetHeader>
-            <SheetTitle>Create Offboarding Request</SheetTitle>
-            <SheetDescription>Fill details, choose workflow if needed, then create as draft or submitted request.</SheetDescription>
-          </SheetHeader>
-          <div className="mt-4 grid gap-3 px-4 pb-4 md:grid-cols-2">
-            <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={requestForm.employee_id} onChange={(event) => setRequestForm((prev) => ({ ...prev, employee_id: event.target.value }))}>
-              <option value="">Select employee</option>
-              {employees.map((employee, index) => {
-                const id = readNumber(employee, ["id", "employee_id", "user_id"])
-                if (id === null) return null
-                return <option key={`off-emp-${id}-${index}`} value={String(id)}>{employeeLabel(employee)}</option>
-              })}
-            </select>
-            <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={requestForm.offboarding_type} onChange={(event) => setRequestForm((prev) => ({ ...prev, offboarding_type: event.target.value }))}>
-              <option value="resignation">resignation</option><option value="termination">termination</option><option value="retirement">retirement</option><option value="contract_end">contract_end</option><option value="absconded">absconded</option><option value="deceased">deceased</option><option value="layoff">layoff</option><option value="other">other</option>
-            </select>
-            <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={requestForm.submit} onChange={(event) => setRequestForm((prev) => ({ ...prev, submit: event.target.value }))}>
-              <option value="false">Save draft</option><option value="true">Submit now</option>
-            </select>
-            <input className="h-10 rounded-md border border-slate-300 px-3 text-sm" placeholder="Title" value={requestForm.title} onChange={(event) => setRequestForm((prev) => ({ ...prev, title: event.target.value }))} />
-            <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={requestForm.branch_id} onChange={(event) => setRequestForm((prev) => ({ ...prev, branch_id: event.target.value }))}>
-              <option value="">Branch (optional)</option>
-              {branches.map((row, index) => {
-                const id = readNumber(row, ["id", "branch_id"])
-                if (id === null) return null
-                return <option key={`off-branch-${id}-${index}`} value={String(id)}>{readString(row, ["name", "title"])}</option>
-              })}
-            </select>
-            <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={requestForm.department_id} onChange={(event) => setRequestForm((prev) => ({ ...prev, department_id: event.target.value }))}>
-              <option value="">Department (optional)</option>
-              {departments.map((row, index) => {
-                const id = readNumber(row, ["id", "department_id"])
-                if (id === null) return null
-                return <option key={`off-dept-${id}-${index}`} value={String(id)}>{readString(row, ["name", "title"])}</option>
-              })}
-            </select>
-            <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={requestForm.workflow_id} onChange={(event) => setRequestForm((prev) => ({ ...prev, workflow_id: event.target.value }))}>
-              <option value="">Workflow (optional)</option>
-              {workflows.map((row, index) => {
-                const id = readNumber(row, ["id", "workflow_id"])
-                if (id === null) return null
-                return <option key={`off-wf-${id}-${index}`} value={String(id)}>{readString(row, ["name", "title"])}</option>
-              })}
-            </select>
-            <DatePickerPresets value={requestForm.notice_date} onChange={(value) => setRequestForm((prev) => ({ ...prev, notice_date: value }))} placeholder="Notice date" />
-            <DatePickerPresets value={requestForm.last_working_date} onChange={(value) => setRequestForm((prev) => ({ ...prev, last_working_date: value }))} placeholder="Last working date" />
-            <Textarea
-              containerClassName="md:col-span-2"
-              className="min-h-20 resize-none overflow-hidden rounded-md border border-slate-300 px-3 py-2 text-sm"
-              placeholder="Reason"
-              value={requestForm.reason}
-              onInput={autoResizeTextarea}
-              onChange={(event) => setRequestForm((prev) => ({ ...prev, reason: event.target.value }))}
-            />
-            <Textarea
-              containerClassName="md:col-span-2"
-              className="min-h-20 resize-none overflow-hidden rounded-md border border-slate-300 px-3 py-2 text-sm"
-              placeholder="Description"
-              value={requestForm.description}
-              onInput={autoResizeTextarea}
-              onChange={(event) => setRequestForm((prev) => ({ ...prev, description: event.target.value }))}
-            />
-          </div>
-          <SheetFooter>
-            <Button type="button" variant="outline" onClick={() => setRequestSheetOpen(false)}>Cancel</Button>
-            <Button
-              type="button"
-              disabled={saving}
-              onClick={async () => {
-                const created = await submitRequestForm()
-                if (created) {
-                  setRequestSheetOpen(false)
-                }
-              }}
-            >
-              {saving ? "Saving..." : "Create Offboarding"}
-            </Button>
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
+      {canManage ? (
+        <Sheet open={requestSheetOpen} onOpenChange={setRequestSheetOpen}>
+          <SheetContent
+            side="right"
+            className="w-full overflow-y-auto data-[side=right]:w-full sm:data-[side=right]:w-[28rem] data-[side=right]:sm:max-w-none"
+          >
+            <SheetHeader>
+              <SheetTitle>Create offboarding request</SheetTitle>
+              <SheetDescription>
+                Capture exit details and optionally attach a workflow.
+              </SheetDescription>
+            </SheetHeader>
+            <div className="mt-4 grid gap-3 px-4 pb-4">
+              <label className="grid gap-1 text-xs">
+                <span className="font-medium text-muted-foreground">Employee</span>
+                <select
+                  className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                  value={requestForm.employee_id}
+                  onChange={(event) =>
+                    setRequestForm((prev) => ({ ...prev, employee_id: event.target.value }))
+                  }
+                >
+                  <option value="">Select employee</option>
+                  {employees.map((employee, index) => {
+                    const id = readNumber(employee, ["id", "employee_id", "user_id"])
+                    if (id === null) return null
+                    return (
+                      <option key={`off-emp-${id}-${index}`} value={String(id)}>
+                        {employeeLabel(employee)}
+                      </option>
+                    )
+                  })}
+                </select>
+              </label>
+
+              <label className="grid gap-1 text-xs">
+                <span className="font-medium text-muted-foreground">Type</span>
+                <select
+                  className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                  value={requestForm.offboarding_type}
+                  onChange={(event) =>
+                    setRequestForm((prev) => ({
+                      ...prev,
+                      offboarding_type: event.target.value,
+                    }))
+                  }
+                >
+                  <option value="resignation">Resignation</option>
+                  <option value="termination">Termination</option>
+                  <option value="retirement">Retirement</option>
+                  <option value="contract_end">Contract end</option>
+                  <option value="absconded">Absconded</option>
+                  <option value="deceased">Deceased</option>
+                  <option value="layoff">Layoff</option>
+                  <option value="other">Other</option>
+                </select>
+              </label>
+
+              <label className="grid gap-1 text-xs">
+                <span className="font-medium text-muted-foreground">Title</span>
+                <input
+                  className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                  placeholder="e.g. Resignation - IT Officer"
+                  value={requestForm.title}
+                  onChange={(event) =>
+                    setRequestForm((prev) => ({ ...prev, title: event.target.value }))
+                  }
+                />
+              </label>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="grid gap-1 text-xs">
+                  <span className="font-medium text-muted-foreground">Notice date</span>
+                  <DatePickerPresets
+                    value={requestForm.notice_date}
+                    onChange={(value) =>
+                      setRequestForm((prev) => ({ ...prev, notice_date: value }))
+                    }
+                    placeholder="Notice date"
+                  />
+                </label>
+                <label className="grid gap-1 text-xs">
+                  <span className="font-medium text-muted-foreground">Last working date</span>
+                  <DatePickerPresets
+                    value={requestForm.last_working_date}
+                    onChange={(value) =>
+                      setRequestForm((prev) => ({ ...prev, last_working_date: value }))
+                    }
+                    placeholder="Last working date"
+                  />
+                </label>
+              </div>
+
+              <label className="grid gap-1 text-xs">
+                <span className="font-medium text-muted-foreground">Workflow</span>
+                <select
+                  className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                  value={requestForm.workflow_id}
+                  onChange={(event) =>
+                    setRequestForm((prev) => ({ ...prev, workflow_id: event.target.value }))
+                  }
+                >
+                  <option value="">Optional</option>
+                  {workflows.map((row, index) => {
+                    const id = readNumber(row, ["id", "workflow_id"])
+                    if (id === null) return null
+                    return (
+                      <option key={`off-wf-${id}-${index}`} value={String(id)}>
+                        {readString(row, ["name", "title"])}
+                      </option>
+                    )
+                  })}
+                </select>
+              </label>
+
+              <label className="grid gap-1 text-xs">
+                <span className="font-medium text-muted-foreground">Reason</span>
+                <Textarea
+                  className="min-h-20 rounded-md border border-input px-3 py-2 text-sm"
+                  placeholder="Reason for leaving"
+                  value={requestForm.reason}
+                  onChange={(event) =>
+                    setRequestForm((prev) => ({ ...prev, reason: event.target.value }))
+                  }
+                />
+              </label>
+
+              <label className="grid gap-1 text-xs">
+                <span className="font-medium text-muted-foreground">Description</span>
+                <Textarea
+                  className="min-h-20 rounded-md border border-input px-3 py-2 text-sm"
+                  placeholder="Optional notes"
+                  value={requestForm.description}
+                  onChange={(event) =>
+                    setRequestForm((prev) => ({ ...prev, description: event.target.value }))
+                  }
+                />
+              </label>
+
+              <label className="grid gap-1 text-xs">
+                <span className="font-medium text-muted-foreground">Save mode</span>
+                <select
+                  className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                  value={requestForm.submit}
+                  onChange={(event) =>
+                    setRequestForm((prev) => ({ ...prev, submit: event.target.value }))
+                  }
+                >
+                  <option value="false">Save draft</option>
+                  <option value="true">Submit now</option>
+                </select>
+              </label>
+            </div>
+            <SheetFooter>
+              <Button type="button" variant="outline" onClick={() => setRequestSheetOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                disabled={saving}
+                onClick={async () => {
+                  const created = await submitRequestForm()
+                  if (created) setRequestSheetOpen(false)
+                }}
+              >
+                {saving ? "Saving…" : "Create request"}
+              </Button>
+            </SheetFooter>
+          </SheetContent>
+        </Sheet>
+      ) : null}
 
       {tab === "workflows" ? (
-        <div className="space-y-4">
-          <div className="flex justify-end">
-            <Button
-              type="button"
-              onClick={() => void openWorkflowSheet()}
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Create Workflow
-            </Button>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-foreground">Exit workflows</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Each workflow is a ordered checklist for leaving the company (HR → IT → Finance → Manager).
+              </p>
+            </div>
+            <div className="flex items-center gap-1.5">
+              {canManage ? (
+                <Button type="button" size="sm" onClick={() => void openWorkflowSheet()}>
+                  <Plus data-icon="inline-start" />
+                  New workflow
+                </Button>
+              ) : null}
+              <button
+                type="button"
+                className="inline-flex size-8 items-center justify-center rounded-md border border-border text-sm"
+                onClick={() => void reloadAll("workflows", true)}
+                disabled={loading}
+                aria-label="Refresh"
+                title="Refresh"
+              >
+                <RefreshCw className={`size-3.5 text-primary ${loading ? "animate-spin" : ""}`} />
+              </button>
+            </div>
           </div>
 
-          <div className="grid gap-3 rounded-xl border border-border p-4 md:grid-cols-4">
-            <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={selectedWorkflowId} onChange={(event) => setSelectedWorkflowId(event.target.value)}>
-              <option value="">Select workflow for steps</option>
-              {workflows.map((row, index) => {
-                const id = readNumber(row, ["id", "workflow_id"])
-                if (id === null) return null
-                return <option key={`owf-${id}-${index}`} value={String(id)}>{readString(row, ["name", "title"])}</option>
-              })}
-            </select>
-            <input className="h-10 rounded-md border border-slate-300 px-3 text-sm" placeholder="Step name" value={stepForm.step_name} onChange={(event) => setStepForm((prev) => ({ ...prev, step_name: event.target.value }))} />
-            <input className="h-10 rounded-md border border-slate-300 px-3 text-sm" placeholder="Task title" value={stepForm.task_title} onChange={(event) => setStepForm((prev) => ({ ...prev, task_title: event.target.value }))} />
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void submitWorkflowStepForm()}
-              disabled={saving}
-            >
-              Add Step
-            </Button>
-          </div>
+          {loading && workflows.length === 0 ? (
+            <EmptyState title="Loading…" description="Loading exit workflows." />
+          ) : workflows.length === 0 ? (
+            <EmptyState
+              title="No exit workflows"
+              description={
+                canManage
+                  ? "Create a workflow to define the clearance steps every departure should follow."
+                  : "No exit workflows are available yet."
+              }
+            />
+          ) : (
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,16rem)_minmax(0,1fr)]">
+              {/* Workflow picker */}
+              <div className="flex flex-col gap-2">
+                <p className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+                  Workflows
+                </p>
+                <ul className="flex flex-col gap-1.5">
+                  {workflows.map((row, index) => {
+                    const id = readNumber(row, ["id", "workflow_id"])
+                    if (id === null) return null
+                    const active = selectedWorkflowId === String(id)
+                    const stepCount = Array.isArray(row.steps) ? row.steps.length : 0
+                    const isDefault =
+                      row.is_default === true ||
+                      String(row.is_default ?? "").toLowerCase() === "true"
+                    return (
+                      <li key={`wf-pick-${id}-${index}`}>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedWorkflowId(String(id))}
+                          className={cn(
+                            "w-full rounded-lg border px-3 py-2.5 text-left transition-colors",
+                            active
+                              ? "border-primary/40 bg-primary/5 ring-1 ring-primary/20"
+                              : "border-border/70 hover:bg-muted/40"
+                          )}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="text-sm font-medium text-foreground">
+                              {readString(row, ["name", "title"])}
+                            </p>
+                            <StatusDot status={readString(row, ["status"])} />
+                          </div>
+                          <p className="mt-1 text-[11px] text-muted-foreground">
+                            {stepCount} step{stepCount === 1 ? "" : "s"}
+                            {isDefault ? " · Default" : ""}
+                          </p>
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </div>
 
-          <ResizableTable
-            title="Workflow"
-            data={workflows}
-            itemsPerPage={15}
-            loading={loading}
-            storageKey="offboarding-workflows"
-          />
+              {/* Selected workflow detail */}
+              <div className="min-w-0 rounded-xl border border-border/70 bg-background">
+                {selectedWorkflow ? (
+                  <div className="flex flex-col gap-4 p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border/60 pb-3">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h2 className="text-base font-semibold text-foreground">
+                            {readString(selectedWorkflow, ["name", "title"])}
+                          </h2>
+                          {(selectedWorkflow.is_default === true ||
+                            String(selectedWorkflow.is_default ?? "").toLowerCase() ===
+                              "true") && (
+                            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                              Default
+                            </span>
+                          )}
+                          <StatusDot status={readString(selectedWorkflow, ["status"])} />
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {readString(selectedWorkflow, ["description"]) === "-"
+                            ? "No description provided."
+                            : readString(selectedWorkflow, ["description"])}
+                        </p>
+                      </div>
+                      {canManage ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={openAddStepDialog}
+                          disabled={!selectedWorkflowId}
+                        >
+                          <Plus data-icon="inline-start" />
+                          Add step
+                        </Button>
+                      ) : null}
+                    </div>
+
+                    {selectedWorkflowSteps.length === 0 ? (
+                      <EmptyState
+                        title="No steps yet"
+                        description={
+                          canManage
+                            ? "Add ordered steps (for example HR review, IT access revocation, finance settlement)."
+                            : "This workflow has no steps configured."
+                        }
+                      />
+                    ) : (
+                      <div className="flex flex-col gap-1">
+                        <p className="mb-2 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+                          Exit path ({selectedWorkflowSteps.length} steps)
+                        </p>
+                        <ol className="relative flex flex-col border-l border-border pl-5">
+                          {selectedWorkflowSteps.map((step, index) => {
+                            const level =
+                              readNumber(step, ["approval_level", "step_order"]) ?? index + 1
+                            const stepName = readString(step, ["step_name", "name", "title"])
+                            const taskTitle = readString(step, ["task_title", "taskTitle"])
+                            const taskDescription = readString(step, [
+                              "task_description",
+                              "taskDescription",
+                              "description",
+                            ])
+                            const taskType = readString(step, ["task_type", "taskType"])
+                            const actionType = readString(step, ["action_type", "actionType"])
+                            const days = readNumber(step, [
+                              "expected_duration_days",
+                              "expectedDurationDays",
+                            ])
+                            const required =
+                              step.is_required === true ||
+                              String(step.is_required ?? "").toLowerCase() === "true"
+                            const isLast = index === selectedWorkflowSteps.length - 1
+
+                            return (
+                              <li
+                                key={`wf-step-${readNumber(step, ["id"]) ?? index}`}
+                                className={cn("relative pb-5", isLast && "pb-0")}
+                              >
+                                <span className="absolute top-1 -left-[1.55rem] flex size-6 items-center justify-center rounded-full border border-border bg-background text-[11px] font-semibold text-foreground shadow-sm">
+                                  {level}
+                                </span>
+                                <div className="rounded-lg border border-border/70 bg-muted/10 px-3 py-3">
+                                  <div className="flex flex-wrap items-start justify-between gap-2">
+                                    <div className="min-w-0">
+                                      <p className="text-sm font-semibold text-foreground">
+                                        {stepName === "-" ? `Step ${level}` : stepName}
+                                      </p>
+                                      {taskTitle !== "-" ? (
+                                        <p className="mt-0.5 text-xs text-foreground/90">
+                                          {taskTitle}
+                                        </p>
+                                      ) : null}
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-1.5">
+                                      {taskType !== "-" ? (
+                                        <span className="rounded-full bg-background px-2 py-0.5 text-[10px] font-medium text-muted-foreground ring-1 ring-border">
+                                          {taskType.replace(/[_-]+/g, " ")}
+                                        </span>
+                                      ) : null}
+                                      {actionType !== "-" ? (
+                                        <span className="rounded-full bg-background px-2 py-0.5 text-[10px] font-medium text-muted-foreground ring-1 ring-border">
+                                          {actionType.replace(/[_-]+/g, " ")}
+                                        </span>
+                                      ) : null}
+                                      {required ? (
+                                        <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                                          Required
+                                        </span>
+                                      ) : (
+                                        <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                                          Optional
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  {taskDescription !== "-" ? (
+                                    <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                                      {taskDescription}
+                                    </p>
+                                  ) : null}
+                                  <div className="mt-2 flex flex-wrap gap-3 text-[11px] text-muted-foreground">
+                                    {days !== null ? (
+                                      <span>~{days} day{days === 1 ? "" : "s"}</span>
+                                    ) : null}
+                                    {readString(step, ["approver_type"]) !== "-" ? (
+                                      <span>
+                                        Assigned by{" "}
+                                        {readString(step, ["approver_type"]).replace(/[_-]+/g, " ")}
+                                        {readNumber(step, ["role_id"])
+                                          ? ` · role #${readNumber(step, ["role_id"])}`
+                                          : ""}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                </div>
+                                {!isLast ? (
+                                  <p className="mt-2 pl-1 text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+                                    then
+                                  </p>
+                                ) : (
+                                  <p className="mt-2 pl-1 text-[10px] font-medium tracking-wide text-emerald-600 uppercase">
+                                    exit complete
+                                  </p>
+                                )}
+                              </li>
+                            )
+                          })}
+                        </ol>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <EmptyState
+                    title="Select a workflow"
+                    description="Choose a workflow on the left to inspect its exit path."
+                  />
+                )}
+              </div>
+            </div>
+          )}
         </div>
       ) : null}
 
-      <Sheet open={workflowSheetOpen} onOpenChange={setWorkflowSheetOpen}>
-        <SheetContent side="right" className="w-full overflow-y-auto data-[side=right]:w-full sm:data-[side=right]:w-1/2 data-[side=right]:sm:max-w-none">
-          <SheetHeader>
-            <SheetTitle>Create Offboarding Workflow</SheetTitle>
-            <SheetDescription>Configure the workflow and save it. Add detailed steps from the Workflows tab.</SheetDescription>
-          </SheetHeader>
-          <div className="mt-4 grid gap-3 px-4 pb-4 md:grid-cols-2">
-            <input className="h-10 rounded-md border border-slate-300 px-3 text-sm" placeholder="Workflow name" value={workflowForm.name} onChange={(event) => setWorkflowForm((prev) => ({ ...prev, name: event.target.value }))} />
-            <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={workflowForm.status} onChange={(event) => setWorkflowForm((prev) => ({ ...prev, status: event.target.value }))}><option value="active">active</option><option value="inactive">inactive</option></select>
-            <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={workflowForm.is_default} onChange={(event) => setWorkflowForm((prev) => ({ ...prev, is_default: event.target.value }))}><option value="false">Not default</option><option value="true">Default</option></select>
-            <Textarea
-              containerClassName="md:col-span-2"
-              className="min-h-20 resize-none overflow-hidden rounded-md border border-slate-300 px-3 py-2 text-sm"
-              placeholder="Description"
-              value={workflowForm.description}
-              onInput={autoResizeTextarea}
-              onChange={(event) => setWorkflowForm((prev) => ({ ...prev, description: event.target.value }))}
-            />
-          </div>
-          <SheetFooter>
-            <Button type="button" variant="outline" onClick={() => setWorkflowSheetOpen(false)}>Cancel</Button>
-            <Button type="button" disabled={saving} onClick={() => void submitWorkflowForm()}>{saving ? "Saving..." : "Create Workflow"}</Button>
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
+      {canManage ? (
+        <Sheet open={workflowSheetOpen} onOpenChange={setWorkflowSheetOpen}>
+          <SheetContent
+            side="right"
+            className="w-full overflow-y-auto data-[side=right]:w-full sm:data-[side=right]:w-[26rem] data-[side=right]:sm:max-w-none"
+          >
+            <SheetHeader>
+              <SheetTitle>New exit workflow</SheetTitle>
+              <SheetDescription>
+                Create the workflow shell first, then add ordered clearance steps.
+              </SheetDescription>
+            </SheetHeader>
+            <div className="mt-4 grid gap-3 px-4 pb-4">
+              <label className="grid gap-1 text-xs">
+                <span className="font-medium text-muted-foreground">Name</span>
+                <input
+                  className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                  placeholder="e.g. Standard employee exit"
+                  value={workflowForm.name}
+                  onChange={(event) =>
+                    setWorkflowForm((prev) => ({ ...prev, name: event.target.value }))
+                  }
+                />
+              </label>
+              <label className="grid gap-1 text-xs">
+                <span className="font-medium text-muted-foreground">Description</span>
+                <Textarea
+                  className="min-h-20 rounded-md border border-input px-3 py-2 text-sm"
+                  placeholder="What this exit path covers"
+                  value={workflowForm.description}
+                  onChange={(event) =>
+                    setWorkflowForm((prev) => ({ ...prev, description: event.target.value }))
+                  }
+                />
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="grid gap-1 text-xs">
+                  <span className="font-medium text-muted-foreground">Status</span>
+                  <select
+                    className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                    value={workflowForm.status}
+                    onChange={(event) =>
+                      setWorkflowForm((prev) => ({ ...prev, status: event.target.value }))
+                    }
+                  >
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                  </select>
+                </label>
+                <label className="grid gap-1 text-xs">
+                  <span className="font-medium text-muted-foreground">Default</span>
+                  <select
+                    className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                    value={workflowForm.is_default}
+                    onChange={(event) =>
+                      setWorkflowForm((prev) => ({ ...prev, is_default: event.target.value }))
+                    }
+                  >
+                    <option value="false">No</option>
+                    <option value="true">Yes</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+            <SheetFooter>
+              <Button type="button" variant="outline" onClick={() => setWorkflowSheetOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="button" disabled={saving} onClick={() => void submitWorkflowForm()}>
+                {saving ? "Saving…" : "Create workflow"}
+              </Button>
+            </SheetFooter>
+          </SheetContent>
+        </Sheet>
+      ) : null}
+
+      {canManage ? (
+        <Dialog open={stepDialogOpen} onOpenChange={setStepDialogOpen}>
+          <DialogPopup from="bottom" className="sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Add workflow step</DialogTitle>
+              <DialogDescription>
+                Steps run in order by level (1, then 2, then 3…).
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-3 py-2">
+              <div className="grid grid-cols-2 gap-3">
+                <label className="grid gap-1 text-xs">
+                  <span className="font-medium text-muted-foreground">Level</span>
+                  <input
+                    type="number"
+                    min={1}
+                    className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                    value={stepForm.approval_level}
+                    onChange={(event) =>
+                      setStepForm((prev) => ({ ...prev, approval_level: event.target.value }))
+                    }
+                  />
+                </label>
+                <label className="grid gap-1 text-xs">
+                  <span className="font-medium text-muted-foreground">Duration (days)</span>
+                  <input
+                    type="number"
+                    min={1}
+                    className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                    value={stepForm.expected_duration_days}
+                    onChange={(event) =>
+                      setStepForm((prev) => ({
+                        ...prev,
+                        expected_duration_days: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+              </div>
+              <label className="grid gap-1 text-xs">
+                <span className="font-medium text-muted-foreground">Step name</span>
+                <input
+                  className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                  placeholder="e.g. IT access revocation"
+                  value={stepForm.step_name}
+                  onChange={(event) =>
+                    setStepForm((prev) => ({ ...prev, step_name: event.target.value }))
+                  }
+                />
+              </label>
+              <label className="grid gap-1 text-xs">
+                <span className="font-medium text-muted-foreground">Task title</span>
+                <input
+                  className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                  placeholder="What the assignee must do"
+                  value={stepForm.task_title}
+                  onChange={(event) =>
+                    setStepForm((prev) => ({ ...prev, task_title: event.target.value }))
+                  }
+                />
+              </label>
+              <label className="grid gap-1 text-xs">
+                <span className="font-medium text-muted-foreground">Task description</span>
+                <Textarea
+                  className="min-h-20 rounded-md border border-input px-3 py-2 text-sm"
+                  placeholder="Optional details"
+                  value={stepForm.task_description}
+                  onChange={(event) =>
+                    setStepForm((prev) => ({ ...prev, task_description: event.target.value }))
+                  }
+                />
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="grid gap-1 text-xs">
+                  <span className="font-medium text-muted-foreground">Team / type</span>
+                  <select
+                    className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                    value={stepForm.task_type}
+                    onChange={(event) =>
+                      setStepForm((prev) => ({ ...prev, task_type: event.target.value }))
+                    }
+                  >
+                    <option value="hr">HR</option>
+                    <option value="it">IT</option>
+                    <option value="finance">Finance</option>
+                    <option value="manager">Manager</option>
+                    <option value="other">Other</option>
+                  </select>
+                </label>
+                <label className="grid gap-1 text-xs">
+                  <span className="font-medium text-muted-foreground">Action</span>
+                  <select
+                    className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                    value={stepForm.action_type}
+                    onChange={(event) =>
+                      setStepForm((prev) => ({ ...prev, action_type: event.target.value }))
+                    }
+                  >
+                    <option value="verify">Verify</option>
+                    <option value="approve">Approve</option>
+                    <option value="recommend">Recommend</option>
+                    <option value="complete">Complete</option>
+                  </select>
+                </label>
+              </div>
+              <label className="grid gap-1 text-xs">
+                <span className="font-medium text-muted-foreground">Required?</span>
+                <select
+                  className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                  value={stepForm.is_required}
+                  onChange={(event) =>
+                    setStepForm((prev) => ({ ...prev, is_required: event.target.value }))
+                  }
+                >
+                  <option value="true">Required</option>
+                  <option value="false">Optional</option>
+                </select>
+              </label>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setStepDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                disabled={saving}
+                onClick={() => void submitWorkflowStepForm()}
+              >
+                {saving ? "Saving…" : "Add step"}
+              </Button>
+            </DialogFooter>
+          </DialogPopup>
+        </Dialog>
+      ) : null}
 
       <Dialog open={requestDetailsOpen} onOpenChange={setRequestDetailsOpen}>
-        <DialogPopup from="bottom" className="sm:max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>{selectedRequest ? readString(selectedRequest, ["title"]) : "Request details"}</DialogTitle>
-            <DialogDescription>Approvals, progress, documents and audit trail.</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-3 py-2 md:grid-cols-2">
-            <div className="rounded-md border border-slate-200 p-3 text-sm">Progress: {requestProgress ? JSON.stringify(requestProgress) : "-"}</div>
-            <div className="rounded-md border border-slate-200 p-3 text-sm">Approvals: {requestApprovals.length}</div>
-            <div className="rounded-md border border-slate-200 p-3 text-sm">Documents: {requestDocuments.length}</div>
-            <div className="rounded-md border border-slate-200 p-3 text-sm">Audit logs: {requestAuditLogs.length}</div>
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setRequestDetailsOpen(false)}>Close</Button>
-          </DialogFooter>
-        </DialogPopup>
-      </Dialog>
-
-      <Dialog open={clearanceDialogOpen} onOpenChange={setClearanceDialogOpen}>
         <DialogPopup from="bottom" className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Add Clearance</DialogTitle>
-            <DialogDescription>Select a request and submit clearance details.</DialogDescription>
+            <DialogTitle>
+              {selectedRequest ? requestLabel(selectedRequest) : "Request details"}
+            </DialogTitle>
+            <DialogDescription>
+              Summary of this offboarding request.
+            </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-3 py-2">
-            <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={clearanceForm.request_id} onChange={(event) => setClearanceForm((prev) => ({ ...prev, request_id: event.target.value }))}>
-              <option value="">Select request</option>
-              {requests.map((row, index) => {
-                const id = readNumber(row, ["id"])
-                if (id === null) return null
-                return <option key={`off-clr-req-${id}-${index}`} value={String(id)}>{requestLabel(row)}</option>
-              })}
-            </select>
-            <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={clearanceForm.clearance_type} onChange={(event) => setClearanceForm((prev) => ({ ...prev, clearance_type: event.target.value }))}><option value="laptop">laptop</option><option value="id_card">id_card</option><option value="email">email</option><option value="system_access">system_access</option><option value="vehicle">vehicle</option><option value="documents">documents</option><option value="finance">finance</option><option value="other">other</option></select>
-            <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={clearanceForm.status} onChange={(event) => setClearanceForm((prev) => ({ ...prev, status: event.target.value }))}>
-              <option value="pending">pending</option>
-              <option value="cleared">cleared</option>
-              <option value="not_cleared">not_cleared</option>
-            </select>
-            <Textarea
-              className="min-h-20 resize-none overflow-hidden rounded-md border border-slate-300 px-3 py-2 text-sm"
-              placeholder="Clearance remarks"
-              value={clearanceForm.remarks}
-              onInput={autoResizeTextarea}
-              onChange={(event) => setClearanceForm((prev) => ({ ...prev, remarks: event.target.value }))}
-            />
-          </div>
+          {selectedRequest ? (
+            <div className="grid gap-3 py-2">
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="rounded-md border border-border/70 px-3 py-2">
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Status</p>
+                  <div className="mt-1">
+                    <StatusDot status={readString(selectedRequest, ["status"])} />
+                  </div>
+                </div>
+                <div className="rounded-md border border-border/70 px-3 py-2">
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Type</p>
+                  <p className="mt-1 font-medium text-foreground">
+                    {readString(selectedRequest, ["offboarding_type", "type"])}
+                  </p>
+                </div>
+                <div className="rounded-md border border-border/70 px-3 py-2">
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    Last working day
+                  </p>
+                  <p className="mt-1 font-medium text-foreground">
+                    {readString(selectedRequest, ["last_working_date", "lastWorkingDate"])}
+                  </p>
+                </div>
+                <div className="rounded-md border border-border/70 px-3 py-2">
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    Approvals
+                  </p>
+                  <p className="mt-1 font-medium text-foreground">{requestApprovals.length}</p>
+                </div>
+              </div>
+              <div className="rounded-md border border-border/70 px-3 py-2 text-xs">
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Reason</p>
+                <p className="mt-1 text-foreground">
+                  {readString(selectedRequest, ["reason", "description"])}
+                </p>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-xs">
+                <div className="rounded-md border border-border/70 px-3 py-2 text-center">
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Docs</p>
+                  <p className="mt-1 text-sm font-semibold">{requestDocuments.length}</p>
+                </div>
+                <div className="rounded-md border border-border/70 px-3 py-2 text-center">
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Audit</p>
+                  <p className="mt-1 text-sm font-semibold">{requestAuditLogs.length}</p>
+                </div>
+                <div className="rounded-md border border-border/70 px-3 py-2 text-center">
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Progress</p>
+                  <p className="mt-1 text-sm font-semibold">
+                    {requestProgress
+                      ? String(
+                          requestProgress.progress_percentage ??
+                            requestProgress.progress ??
+                            "—"
+                        )
+                      : "—"}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : null}
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setClearanceDialogOpen(false)}>Cancel</Button>
-            <Button
-              type="button"
-              disabled={saving}
-              onClick={async () => {
-                await submitClearanceForm()
-                setClearanceDialogOpen(false)
-              }}
-            >
-              Add Clearance
+            <Button type="button" variant="outline" onClick={() => setRequestDetailsOpen(false)}>
+              Close
             </Button>
           </DialogFooter>
         </DialogPopup>

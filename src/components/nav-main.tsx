@@ -22,10 +22,12 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar"
-import type { AdminResourceKey } from "@/lib/admin-api"
+import { getUnreadNotificationsCount, type AdminResourceKey } from "@/lib/admin-api"
 import { ChevronDownIcon } from "lucide-react"
 import { Bell } from "@/components/animate-ui/icons/bell"
 import { LayoutDashboard } from "@/components/animate-ui/icons/layout-dashboard"
+import { NotificationCenter } from "@/components/notification-center"
+import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 
 type NavMainNode = {
   title: string
@@ -38,6 +40,29 @@ type NavMainNode = {
 
 type NavMainItem = NavMainNode & {
   icon?: React.ReactNode
+}
+
+const LEGACY_ADMIN_TOKEN_KEY = "hrms.admin.accessToken"
+
+function readStoredToken() {
+  if (typeof window === "undefined") {
+    return ""
+  }
+
+  const authTokensRaw = window.localStorage.getItem(AUTH_STORAGE_KEYS.tokens)
+  if (authTokensRaw) {
+    try {
+      const parsed = JSON.parse(authTokensRaw) as { accessToken?: string; access_token?: string }
+      const accessToken = (parsed.accessToken ?? parsed.access_token ?? "").trim()
+      if (accessToken) {
+        return accessToken
+      }
+    } catch {
+      // Fall through to legacy key.
+    }
+  }
+
+  return window.localStorage.getItem(LEGACY_ADMIN_TOKEN_KEY)?.trim() ?? ""
 }
 
 function nodeContainsCurrentPath(node: NavMainNode, currentPath: string): boolean {
@@ -94,6 +119,8 @@ export function NavMain({
     return defaultOpenGroups
   })
   const [hoveredLink, setHoveredLink] = React.useState<string | null>(null)
+  const [notificationsOpen, setNotificationsOpen] = React.useState(false)
+  const [unreadNotificationCount, setUnreadNotificationCount] = React.useState(0)
   const groupedItems = React.useMemo(() => {
     const expandable = items.filter((item) => item.items?.length)
     const directLinks = items.filter((item) => !item.items?.length)
@@ -123,6 +150,41 @@ export function NavMain({
       setOpenGroups((previous) => ({ ...previous, ...stored }))
     } catch {
       // ignore invalid cache
+    }
+  }, [])
+
+  React.useEffect(() => {
+    let cancelled = false
+
+    const loadUnreadCount = async () => {
+      const token = readStoredToken()
+      if (!token) {
+        if (!cancelled) {
+          setUnreadNotificationCount(0)
+        }
+        return
+      }
+
+      try {
+        const count = await getUnreadNotificationsCount(token)
+        if (!cancelled) {
+          setUnreadNotificationCount(count)
+        }
+      } catch {
+        if (!cancelled) {
+          setUnreadNotificationCount(0)
+        }
+      }
+    }
+
+    void loadUnreadCount()
+    const intervalId = window.setInterval(() => {
+      void loadUnreadCount()
+    }, 60_000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(intervalId)
     }
   }, [])
 
@@ -246,12 +308,12 @@ export function NavMain({
               <LayoutDashboard size={40} animation="path-loop" animate={hoveredLink === "__dashboard" ? "path-loop" : false} />
               <span className="min-w-0 flex-1 text-left leading-[1.1rem] whitespace-normal">Dashboard</span>
             </SidebarMenuButton>
-            <Dialog>
+            <Dialog open={notificationsOpen} onOpenChange={setNotificationsOpen}>
               <DialogTrigger
                 render={
                   <Button
                     size="icon"
-                    className="size-7 group-data-[collapsible=icon]:opacity-0"
+                    className="relative size-7 group-data-[collapsible=icon]:opacity-0"
                     variant="outline"
                     aria-label="Notifications"
                     title="Notifications"
@@ -259,6 +321,11 @@ export function NavMain({
                 }
               >
                 <Bell size={40} animation="path-loop" animateOnHover="path-loop" />
+                {unreadNotificationCount > 0 ? (
+                  <span className="absolute -right-1 -top-1 inline-flex min-w-4 items-center justify-center rounded-full bg-blue-600 px-1 text-[10px] font-semibold leading-4 text-white">
+                    {unreadNotificationCount > 99 ? "99+" : unreadNotificationCount}
+                  </span>
+                ) : null}
                 <span className="sr-only">Notifications</span>
               </DialogTrigger>
               <DialogPopup from="right" showCloseButton className="sm:max-w-[425px]">
@@ -266,12 +333,11 @@ export function NavMain({
                   <DialogTitle>Notifications</DialogTitle>
                 </DialogHeader>
 
-                <div className="flex min-h-44 flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border bg-muted/25 p-6 text-center">
-                  <div className="rounded-full bg-muted p-3">
-                    <Bell size={24} className="text-muted-foreground" />
-                  </div>
-                  <p className="text-sm font-normal text-muted-foreground">No notifications yet</p>
-                </div>
+                <NotificationCenter
+                  open={notificationsOpen}
+                  onOpenChange={setNotificationsOpen}
+                  onUnreadCountChange={setUnreadNotificationCount}
+                />
 
                 <DialogFooter>
                   <DialogClose render={<Button variant="outline">Close</Button>} />

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation"
+import { AttendanceReportView } from "@/components/dashboard/attendance-report-view"
 import { EmployeeInviteView } from "@/components/dashboard/employee-invite-view"
-import HrAnalyticsDashboard from "@/components/dashboard/hr-analytics-dashboard"
 import {
   EmployeePromotionView,
   EmployeePayrollView,
@@ -44,7 +44,7 @@ export default async function OperationsViewPage({
   }
 
   if (normalized === "reports") {
-    return <HrAnalyticsDashboard />
+    return <AttendanceReportView />
   }
 
   return null

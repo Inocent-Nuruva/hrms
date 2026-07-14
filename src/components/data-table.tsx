@@ -5,8 +5,27 @@ import { toast } from "sonner"
 import { showErrorAlert } from "@/lib/error-alert"
 import { showSuccessAlert } from "@/lib/success-alert"
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogClose,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogPopup,
+  DialogTitle,
+} from "@/components/animate-ui/components/base/dialog"
 import {
   Drawer,
   DrawerClose,
@@ -17,6 +36,14 @@ import {
   DrawerTitle,
   DrawerTrigger,
 } from "@/components/ui/drawer"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -43,16 +70,41 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 import type { AdminRecord, AdminResourceKey, SortOrder, UsersQueryParams } from "@/lib/admin-api"
-import { RESOURCE_LABELS } from "@/lib/admin-api"
+import {
+  RESOURCE_LABELS,
+  assignPermissionToCurrentCompanyUser,
+  assignPermissionToRole,
+  assignUserToRole,
+  getPermissionById,
+  getRoleById,
+  listAllCurrentCompanyUsers,
+  listRolePermissions,
+  listRoleUsers,
+  revokePermissionFromCurrentCompanyUser,
+  revokePermissionFromRole,
+  revokeUserFromRole,
+} from "@/lib/admin-api"
 import { cn } from "@/lib/utils"
 import {
+  PermissionPicker,
+  permissionGroupFromName,
+  toPermissionOptions,
+  type PermissionOption,
+} from "@/components/dashboard/permission-picker"
+import {
+  CheckIcon,
   CopyIcon,
   EllipsisVerticalIcon,
   KeyRoundIcon,
+  Loader2Icon,
   PencilIcon,
   PlusIcon,
   Trash2Icon,
+  UsersIcon,
+  UserPlusIcon,
+  UserMinusIcon,
 } from "lucide-react"
 
 interface DataTableProps {
@@ -61,6 +113,8 @@ interface DataTableProps {
   rows: AdminRecord[]
   roles: AdminRecord[]
   permissions: AdminRecord[]
+  /** Current actor permission names from JWT/session (e.g. roles:create). */
+  actorPermissions?: string[]
   usersQuery: Required<UsersQueryParams>
   usersTotal: number | null
   usersTotalPages: number | null
@@ -84,6 +138,20 @@ interface DataTableProps {
     addRoleIds: (string | number)[],
     removeRoleIds: (string | number)[]
   ) => Promise<void>
+}
+
+function hasActorPermission(actorPermissions: string[] | undefined, required: string) {
+  const normalized = (actorPermissions ?? []).map((entry) => entry.trim().toLowerCase())
+  if (normalized.length === 0) return false
+  const need = required.toLowerCase().replace(/\./g, ":")
+  return normalized.some((entry) => entry.replace(/\./g, ":") === need)
+}
+
+function resourceActionPermission(
+  resource: AdminResourceKey,
+  action: "create" | "update" | "delete" | "read"
+) {
+  return `${resource}:${action}`
 }
 
 type EditableResource = Exclude<AdminResourceKey, "companies">
@@ -246,16 +314,61 @@ function rolePayloadId(value: string): string | number {
   return value
 }
 
+function readRecordString(record: AdminRecord, keys: string[]): string {
+  for (const key of keys) {
+    const value = record[key]
+    if (typeof value === "string" && value.trim()) {
+      return value.trim()
+    }
+  }
+  return ""
+}
+
 function roleLabel(role: AdminRecord) {
-  const display = role.display_name
-  if (typeof display === "string" && display.trim()) {
-    return display.trim()
+  return (
+    readRecordString(role, ["display_name", "displayName", "name", "title", "code", "key"]) ||
+    "Unnamed role"
+  )
+}
+
+/** Flatten useful text from a role/permission row for client-side search. */
+function accessControlSearchHaystack(row: AdminRecord): string {
+  const parts: string[] = []
+  const push = (value: unknown) => {
+    if (value === null || value === undefined) return
+    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+      const text = String(value).trim()
+      if (text) parts.push(text)
+    }
   }
-  const name = role.name
-  if (typeof name === "string" && name.trim()) {
-    return name.trim()
+
+  push(roleLabel(row))
+  push(permissionLabel(row))
+  push(permissionKey(row))
+  for (const key of [
+    "name",
+    "display_name",
+    "displayName",
+    "description",
+    "title",
+    "code",
+    "key",
+    "slug",
+    "id",
+  ]) {
+    push(row[key])
   }
-  return "Unnamed role"
+
+  // Nested labels (e.g. company, role group)
+  for (const nestKey of ["company", "group", "meta"]) {
+    const nested = asRecordValue(row[nestKey])
+    if (!nested) continue
+    for (const key of ["name", "display_name", "displayName", "title"]) {
+      push(nested[key])
+    }
+  }
+
+  return parts.join(" ").toLowerCase()
 }
 
 function asPermissionName(value: unknown): string | null {
@@ -269,52 +382,397 @@ function asPermissionName(value: unknown): string | null {
 }
 
 function permissionLabel(permission: AdminRecord) {
-  const display = permission.display_name
-  if (typeof display === "string" && display.trim()) {
-    return display.trim()
+  return (
+    readRecordString(permission, ["display_name", "displayName", "name"]) ||
+    "Unnamed permission"
+  )
+}
+
+function permissionKey(permission: AdminRecord) {
+  return (
+    asPermissionName(permission.name) ??
+    asPermissionName(permission.key) ??
+    asPermissionName(permission.code) ??
+    asPermissionName(permission.display_name) ??
+    asPermissionName(permission.displayName) ??
+    ""
+  )
+}
+
+function isSystemGenerated(record: AdminRecord) {
+  const value = record.is_system_generated ?? record.isSystemGenerated
+  return value === true
+}
+
+function asRecordValue(value: unknown): AdminRecord | null {
+  return typeof value === "object" && value !== null ? (value as AdminRecord) : null
+}
+
+function companyUserMembershipId(record: AdminRecord): string | null {
+  const id = record.id
+  if (typeof id === "number" && Number.isFinite(id)) return String(id)
+  if (typeof id === "string" && id.trim()) return id.trim()
+  return null
+}
+
+function readFiniteId(value: unknown): string | null {
+  if (typeof value === "number" && Number.isFinite(value)) return String(value)
+  if (typeof value === "string" && value.trim() && !Number.isNaN(Number(value.trim()))) {
+    return value.trim()
   }
-  const name = permission.name
-  if (typeof name === "string" && name.trim()) {
-    return name.trim()
+  return null
+}
+
+function companyUserLinkedUserId(record: AdminRecord): string | null {
+  // Prefer explicit user identity fields over membership id.
+  for (const key of [
+    "user_id",
+    "userId",
+    "platform_user_id",
+    "platformUserId",
+    "auth_user_id",
+    "authUserId",
+  ]) {
+    const id = readFiniteId(record[key])
+    if (id) return id
   }
-  return "Unnamed permission"
+
+  for (const nestKey of ["user", "account", "profile", "person"]) {
+    const nested = asRecordValue(record[nestKey])
+    if (!nested) continue
+    for (const key of ["id", "user_id", "userId"]) {
+      const id = readFiniteId(nested[key])
+      if (id) return id
+    }
+  }
+
+  return null
+}
+
+/**
+ * Resolve the id required by POST /api/roles/{roleId}/users { user_id }.
+ * Company-user rows sometimes only expose membership `id`; backends often accept that
+ * as user_id, so fall back to membership id when no linked user id is present.
+ */
+function resolveRoleAssignUserId(record: AdminRecord): string | null {
+  return companyUserLinkedUserId(record) ?? companyUserMembershipId(record)
+}
+
+function companyUserDisplayName(record: AdminRecord): string {
+  const nested = asRecordValue(record.user)
+  const first =
+    readRecordString(record, ["first_name", "firstName"]) ||
+    (nested ? readRecordString(nested, ["first_name", "firstName"]) : "")
+  const last =
+    readRecordString(record, ["last_name", "lastName"]) ||
+    (nested ? readRecordString(nested, ["last_name", "lastName"]) : "")
+  const full = `${first} ${last}`.trim()
+  if (full) return full
+  const email =
+    readRecordString(record, ["email"]) || (nested ? readRecordString(nested, ["email"]) : "")
+  if (email) return email
+  const userNo =
+    readRecordString(record, ["user_no", "userNo"]) ||
+    (nested ? readRecordString(nested, ["user_no", "userNo"]) : "")
+  return userNo || `User ${companyUserMembershipId(record) ?? "?"}`
+}
+
+function companyUserEmail(record: AdminRecord): string {
+  const nested = asRecordValue(record.user)
+  return (
+    readRecordString(record, ["email"]) ||
+    (nested ? readRecordString(nested, ["email"]) : "") ||
+    "—"
+  )
+}
+
+function companyUserStatus(record: AdminRecord): string {
+  const nested = asRecordValue(record.user)
+  return (
+    readRecordString(record, ["status"]) ||
+    (nested ? readRecordString(nested, ["status"]) : "") ||
+    "—"
+  )
+}
+
+function idsMatchPermission(candidate: unknown, permissionId: string | number): boolean {
+  const target = String(permissionId)
+  if (candidate === null || candidate === undefined) return false
+  if (typeof candidate === "string" || typeof candidate === "number") {
+    return String(candidate) === target
+  }
+  if (typeof candidate === "object") {
+    const rec = candidate as AdminRecord
+    const id = rec.id ?? rec.permission_id ?? rec.permissionId
+    if (id !== undefined && String(id) === target) return true
+    const name = rec.name
+    // name match is not used for id-based assignment; only id
+    void name
+  }
+  return false
+}
+
+function companyUserHasPermission(record: AdminRecord, permissionId: string | number): boolean {
+  const assignmentKeys = [
+    "permission_assignments",
+    "permissionAssignments",
+    "direct_permissions",
+    "directPermissions",
+  ]
+  for (const key of assignmentKeys) {
+    const list = record[key]
+    if (!Array.isArray(list)) continue
+    for (const entry of list) {
+      if (idsMatchPermission(entry, permissionId)) return true
+      const rec = asRecordValue(entry)
+      if (!rec) continue
+      if (idsMatchPermission(rec.permission_id ?? rec.permissionId, permissionId)) return true
+      const nestedPermission = asRecordValue(rec.permission)
+      if (nestedPermission && idsMatchPermission(nestedPermission.id, permissionId)) return true
+    }
+  }
+
+  const nestedUser = asRecordValue(record.user)
+  const permissionLists = [record.permissions, nestedUser?.permissions]
+  for (const list of permissionLists) {
+    if (!Array.isArray(list)) continue
+    for (const entry of list) {
+      if (idsMatchPermission(entry, permissionId)) return true
+    }
+  }
+  return false
+}
+
+function companyUserHasRole(record: AdminRecord, roleId: string | number): boolean {
+  const target = String(roleId)
+  const assignmentKeys = ["role_assignments", "roleAssignments", "roles"]
+  for (const key of assignmentKeys) {
+    const list = record[key]
+    if (!Array.isArray(list)) continue
+    for (const entry of list) {
+      if (typeof entry === "string" || typeof entry === "number") {
+        if (String(entry) === target) return true
+        continue
+      }
+      const rec = asRecordValue(entry)
+      if (!rec) continue
+      if (String(rec.role_id ?? rec.roleId ?? rec.id ?? "") === target) return true
+      const nestedRole = asRecordValue(rec.role)
+      if (nestedRole && String(nestedRole.id ?? "") === target) return true
+    }
+  }
+  const nestedUser = asRecordValue(record.user)
+  if (Array.isArray(nestedUser?.roles)) {
+    for (const entry of nestedUser.roles) {
+      if (typeof entry === "string" || typeof entry === "number") {
+        if (String(entry) === target) return true
+        continue
+      }
+      const rec = asRecordValue(entry)
+      if (rec && String(rec.id ?? "") === target) return true
+    }
+  }
+  return false
+}
+
+type AssignedMemberUser = {
+  membershipId: string
+  userId: string | null
+  name: string
+  email: string
+  status: string
+  source: AdminRecord
+}
+
+type DetailSheetTab = "general" | "assigned" | "permissions"
+
+function SectionLoader({ label }: { label: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-2 py-12">
+      <Loader2Icon className="size-6 animate-spin text-primary" />
+      <p className="text-xs text-muted-foreground">{label}</p>
+    </div>
+  )
+}
+
+function DetailTabs({
+  tabs,
+  value,
+  onChange,
+}: {
+  tabs: { id: DetailSheetTab; label: string }[]
+  value: DetailSheetTab
+  onChange: (next: DetailSheetTab) => void
+}) {
+  return (
+    <div className="flex gap-5 border-b border-border/70 px-1">
+      {tabs.map((tab) => {
+        const active = value === tab.id
+        return (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => onChange(tab.id)}
+            className={cn(
+              "relative -mb-px pb-2.5 text-sm transition-colors",
+              active
+                ? "font-semibold text-foreground"
+                : "font-medium text-muted-foreground hover:text-foreground"
+            )}
+          >
+            {tab.label}
+            {active ? (
+              <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-primary" />
+            ) : null}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function MicrosoftPermissionList({
+  options,
+  selectedNames,
+  emptyLabel = "No permissions included in this role.",
+}: {
+  options: PermissionOption[]
+  selectedNames: string[]
+  emptyLabel?: string
+}) {
+  const selectedSet = React.useMemo(() => new Set(selectedNames), [selectedNames])
+  const grouped = React.useMemo(() => {
+    const map = new Map<string, PermissionOption[]>()
+    for (const option of options) {
+      if (!selectedSet.has(option.name)) continue
+      const list = map.get(option.group) ?? []
+      list.push(option)
+      map.set(option.group, list)
+    }
+    return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b))
+  }, [options, selectedSet])
+
+  if (grouped.length === 0) {
+    return (
+      <p className="py-8 text-center text-sm text-muted-foreground">{emptyLabel}</p>
+    )
+  }
+
+  return (
+    <div className="space-y-5">
+      {grouped.map(([group, items]) => (
+        <div key={group} className="space-y-2">
+          <h4 className="text-sm font-semibold text-foreground">{group}</h4>
+          <ul className="space-y-2">
+            {items.map((item) => (
+              <li key={item.name} className="flex items-start gap-2.5">
+                <CheckIcon className="mt-0.5 size-4 shrink-0 text-primary" strokeWidth={2.5} />
+                <div className="min-w-0">
+                  <p className="text-sm leading-snug text-foreground">{item.label}</p>
+                  {item.description ? (
+                    <p className="mt-0.5 text-xs leading-snug text-muted-foreground">
+                      {item.description}
+                    </p>
+                  ) : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  )
 }
 
 function permissionScope(name: string) {
-  const normalized = name.trim()
-  if (!normalized) {
-    return "General"
-  }
-  if (!normalized.includes(":")) {
-    return "General"
-  }
-  return prettifyKey(normalized.split(":")[0] ?? "general")
+  return permissionGroupFromName(name)
+}
+
+type AccessControlTableRow = AdminRecord & {
+  __id: string
+  display: string
+  key: string
+  module: string
+  description: string
+  type: string
+  permissions_count?: number
+  __source: AdminRecord
 }
 
 function rolePermissionNamesFromRecord(row: AdminRecord): string[] {
-  const source = row.permissions
-  if (!Array.isArray(source)) {
-    return []
+  const candidates = [row.permissions, row.permission_assignments, row.role_permissions]
+  for (const source of candidates) {
+    if (!Array.isArray(source)) {
+      continue
+    }
+
+    const names = source
+      .map((entry) => {
+        if (typeof entry === "string" || typeof entry === "number") {
+          return asPermissionName(entry)
+        }
+        if (typeof entry === "object" && entry !== null) {
+          const permissionRecord = entry as AdminRecord
+          const nested = asRecordValue(permissionRecord.permission)
+          return (
+            asPermissionName(permissionRecord.name) ??
+            asPermissionName(permissionRecord.display_name) ??
+            asPermissionName(nested?.name) ??
+            asPermissionName(nested?.display_name) ??
+            asPermissionName(permissionRecord.id)
+          )
+        }
+        return null
+      })
+      .filter((value): value is string => Boolean(value))
+
+    if (names.length > 0) {
+      return Array.from(new Set(names))
+    }
   }
+  return []
+}
 
-  const names = source
-    .map((entry) => {
-      if (typeof entry === "string" || typeof entry === "number") {
-        return asPermissionName(entry)
-      }
-      if (typeof entry === "object" && entry !== null) {
-        const permissionRecord = entry as AdminRecord
-        return (
-          asPermissionName(permissionRecord.name) ??
-          asPermissionName(permissionRecord.display_name) ??
-          asPermissionName(permissionRecord.id)
-        )
-      }
-      return null
-    })
-    .filter((value): value is string => Boolean(value))
+function roleUserIdFromRecord(row: AdminRecord): string | null {
+  const direct = row.user_id ?? row.userId
+  if (typeof direct === "number" && Number.isFinite(direct)) return String(direct)
+  if (typeof direct === "string" && direct.trim()) return direct.trim()
+  for (const key of ["user", "company_user", "companyUser", "member"]) {
+    const nested = asRecordValue(row[key])
+    if (!nested) continue
+    const nestedId = nested.id ?? nested.user_id ?? nested.userId
+    if (typeof nestedId === "number" && Number.isFinite(nestedId)) return String(nestedId)
+    if (typeof nestedId === "string" && nestedId.trim()) return nestedId.trim()
+  }
+  // Last resort: only treat bare id as user id when no nested user object exists.
+  const id = row.id
+  if (typeof id === "number" && Number.isFinite(id)) return String(id)
+  if (typeof id === "string" && id.trim()) return id.trim()
+  return null
+}
 
-  return Array.from(new Set(names))
+function mapRoleApiUserToMember(row: AdminRecord, index: number): AssignedMemberUser {
+  const nestedUser =
+    asRecordValue(row.user) ??
+    asRecordValue(row.company_user) ??
+    asRecordValue(row.companyUser) ??
+    asRecordValue(row.member)
+  const displaySource = nestedUser ?? row
+  const userId = roleUserIdFromRecord(row)
+  const membershipId =
+    companyUserMembershipId(row) ??
+    companyUserMembershipId(displaySource) ??
+    userId ??
+    `role-user-${index}`
+
+  return {
+    membershipId,
+    userId,
+    name: companyUserDisplayName(displaySource),
+    email: companyUserEmail(displaySource),
+    status: companyUserStatus(displaySource),
+    source: row,
+  }
 }
 
 function userRoleIds(row: AdminRecord): string[] {
@@ -351,9 +809,9 @@ function toUserForm(row: AdminRecord): UserFormState {
 
 function toEntityForm(row: AdminRecord): BasicEntityForm {
   return {
-    name: typeof row.name === "string" ? row.name : "",
-    display_name: typeof row.display_name === "string" ? row.display_name : "",
-    description: typeof row.description === "string" ? row.description : "",
+    name: readRecordString(row, ["name"]),
+    display_name: readRecordString(row, ["display_name", "displayName"]),
+    description: readRecordString(row, ["description"]),
   }
 }
 
@@ -363,6 +821,7 @@ export function DataTable({
   rows,
   roles,
   permissions,
+  actorPermissions = [],
   usersQuery,
   usersTotal,
   usersTotalPages,
@@ -395,6 +854,30 @@ export function DataTable({
   const [initialEditingEntityForm, setInitialEditingEntityForm] = React.useState<BasicEntityForm>(EMPTY_ENTITY_FORM)
   const [editingRolePermissionNames, setEditingRolePermissionNames] = React.useState<string[]>([])
   const [initialEditingRolePermissionNames, setInitialEditingRolePermissionNames] = React.useState<string[]>([])
+  const [accessControlSearch, setAccessControlSearch] = React.useState("")
+  const [detailSheetTab, setDetailSheetTab] = React.useState<DetailSheetTab>("general")
+  const [memberCompanyUsers, setMemberCompanyUsers] = React.useState<AdminRecord[]>([])
+  const [assignedMemberIds, setAssignedMemberIds] = React.useState<Set<string>>(() => new Set())
+  /** Users from GET /api/roles/{roleId}/users — source of truth for role Assigned tab. */
+  const [roleAssignedUsers, setRoleAssignedUsers] = React.useState<AssignedMemberUser[]>([])
+  const [membersLoading, setMembersLoading] = React.useState(false)
+  const [membersError, setMembersError] = React.useState<string | null>(null)
+  const [membersBusy, setMembersBusy] = React.useState(false)
+  const [memberSearch, setMemberSearch] = React.useState("")
+  const [memberToAdd, setMemberToAdd] = React.useState<string>("")
+  /** Filters the assign-user picker list (not the assigned people list). */
+  const [assignPickerQuery, setAssignPickerQuery] = React.useState("")
+  const [membersRefreshKey, setMembersRefreshKey] = React.useState(0)
+  const [rolePermissionNamesFromApi, setRolePermissionNamesFromApi] = React.useState<string[] | null>(
+    null
+  )
+  const [rolePermissionsLoading, setRolePermissionsLoading] = React.useState(false)
+  const [revokeConfirm, setRevokeConfirm] = React.useState<{
+    membershipId: string
+    userId: string | null
+    displayName: string
+  } | null>(null)
+  const [peopleDialogOpen, setPeopleDialogOpen] = React.useState(false)
 
   const columns = React.useMemo(() => {
     const baseColumns = getVisibleColumns(rows)
@@ -416,21 +899,83 @@ export function DataTable({
       })
       .filter((item): item is { id: string; label: string } => Boolean(item))
   }, [roles])
-  const permissionOptions = React.useMemo(() => {
-    return permissions
-      .map((permission) => {
-        const id = asRoleId(permission.id)
-        const name =
-          asPermissionName(permission.name) ??
-          asPermissionName(permission.display_name) ??
-          asPermissionName(permission.id)
-        if (!name || !id) {
-          return null
+  const permissionOptions = React.useMemo(
+    () => toPermissionOptions(permissions),
+    [permissions]
+  )
+  const filteredAccessControlRows = React.useMemo(() => {
+    if (activeResource !== "roles" && activeResource !== "permissions") {
+      return rows
+    }
+    const query = accessControlSearch.trim().toLowerCase()
+    if (!query) {
+      return rows
+    }
+    const tokens = query.split(/\s+/).filter(Boolean)
+    return rows.filter((row) => {
+      const haystack = accessControlSearchHaystack(row)
+      // Every token must match (supports multi-word search like "company admin").
+      return tokens.every((token) => haystack.includes(token))
+    })
+  }, [accessControlSearch, activeResource, rows])
+
+  const accessControlTableRows = React.useMemo((): AccessControlTableRow[] => {
+    if (activeResource !== "roles" && activeResource !== "permissions") {
+      return []
+    }
+    return filteredAccessControlRows.map((row, index) => {
+      const id = String(getRowId(row, index + 1))
+      if (activeResource === "permissions") {
+        const key = permissionKey(row)
+        return {
+          ...row,
+          __id: id,
+          display: permissionLabel(row),
+          key: key || "—",
+          module: permissionScope(key),
+          description: readRecordString(row, ["description"]) || "—",
+          type: isSystemGenerated(row) ? "System" : "Custom",
+          __source: row,
         }
-        return { id, name, label: permissionLabel(permission) }
+      }
+      return {
+        ...row,
+        __id: id,
+        display: roleLabel(row),
+        key: readRecordString(row, ["name"]) || "—",
+        module: "Role",
+        description: readRecordString(row, ["description"]) || "—",
+        type: isSystemGenerated(row) ? "System" : "Custom",
+        permissions_count: rolePermissionNamesFromRecord(row).length,
+        __source: row,
+      }
+    })
+  }, [activeResource, filteredAccessControlRows])
+
+  const openAccessControlRow = React.useCallback(
+    (row: AdminRecord) => {
+      if (activeResource !== "roles" && activeResource !== "permissions") {
+        return
+      }
+      const rowId = getRowId(row, 0)
+      const rowLabel = stringifyValue(
+        row.name ?? row.display_name ?? row.displayName ?? row.email ?? rowId
+      )
+      const nextEntityForm = toEntityForm(row)
+      const nextRolePermissions =
+        activeResource === "roles" ? rolePermissionNamesFromRecord(row) : []
+      setEditingEntity({
+        resource: activeResource,
+        id: rowId,
+        label: rowLabel,
       })
-      .filter((item): item is { id: string; name: string; label: string } => Boolean(item))
-  }, [permissions])
+      setEditingEntityForm(nextEntityForm)
+      setInitialEditingEntityForm(nextEntityForm)
+      setEditingRolePermissionNames(nextRolePermissions)
+      setInitialEditingRolePermissionNames(nextRolePermissions)
+    },
+    [activeResource]
+  )
 
   const permissionIdsFromSelection = React.useCallback(
     (selection: string[]) => {
@@ -448,37 +993,38 @@ export function DataTable({
     [permissionOptions]
   )
 
+  const canCreateResource = hasActorPermission(
+    actorPermissions,
+    resourceActionPermission(activeResource, "create")
+  )
+  const canUpdateResource = hasActorPermission(
+    actorPermissions,
+    resourceActionPermission(activeResource, "update")
+  )
+  const canDeleteResource = hasActorPermission(
+    actorPermissions,
+    resourceActionPermission(activeResource, "delete")
+  )
+
   const isEditingEntityDirty = React.useMemo(() => {
     if (!editingEntity) {
       return false
     }
 
-    const formChanged =
+    // Permission assignments are applied live for roles; only field edits need Save.
+    return (
       editingEntityForm.name !== initialEditingEntityForm.name ||
       editingEntityForm.display_name !== initialEditingEntityForm.display_name ||
       editingEntityForm.description !== initialEditingEntityForm.description
-
-    if (editingEntity.resource !== "roles") {
-      return formChanged
-    }
-
-    const currentPermissions = [...editingRolePermissionNames].sort()
-    const initialPermissions = [...initialEditingRolePermissionNames].sort()
-    const permissionsChanged =
-      currentPermissions.length !== initialPermissions.length ||
-      currentPermissions.some((value, index) => value !== initialPermissions[index])
-
-    return formChanged || permissionsChanged
+    )
   }, [
     editingEntity,
     editingEntityForm.description,
     editingEntityForm.display_name,
     editingEntityForm.name,
-    editingRolePermissionNames,
     initialEditingEntityForm.description,
     initialEditingEntityForm.display_name,
     initialEditingEntityForm.name,
-    initialEditingRolePermissionNames,
   ])
 
   React.useEffect(() => {
@@ -548,6 +1094,10 @@ export function DataTable({
           toast.error("Role name is required.")
           return
         }
+        if (!roleForm.display_name.trim()) {
+          toast.error("Display name is required.")
+          return
+        }
         await onCreate("roles", {
           name: roleForm.name.trim(),
           display_name: roleForm.display_name.trim(),
@@ -560,7 +1110,7 @@ export function DataTable({
 
       if (activeResource === "permissions") {
         if (!roleForm.name.trim() || !roleForm.display_name.trim()) {
-          toast.error("Permission name and display name are required.")
+          toast.error("Permission key and display name are required.")
           return
         }
         await onCreate("permissions", {
@@ -634,18 +1184,19 @@ export function DataTable({
     }
 
     try {
+      // Role field updates: PATCH /api/roles/{id}
+      // Role permission membership is managed live via
+      // POST/DELETE /api/roles/{roleId}/permissions (not permission_ids on PATCH).
       await onPatch(editingEntity.resource, editingEntity.id, {
         name: editingEntityForm.name.trim(),
         display_name: editingEntityForm.display_name.trim(),
         description: editingEntityForm.description.trim(),
-        ...(editingEntity.resource === "roles"
-          ? { permission_ids: permissionIdsFromSelection(editingRolePermissionNames) }
-          : {}),
       })
       setEditingEntity(null)
       setInitialEditingEntityForm(EMPTY_ENTITY_FORM)
       setEditingRolePermissionNames([])
       setInitialEditingRolePermissionNames([])
+      setRolePermissionNamesFromApi(null)
       showSuccessAlert(`${RESOURCE_LABELS[editingEntity.resource]} updated.`)
     } catch (errorObject) {
       const message = errorObject instanceof Error ? errorObject.message : "Update failed."
@@ -670,6 +1221,139 @@ export function DataTable({
       toast.error(message)
     }
   }
+
+  const accessControlColumns = React.useMemo((): Column<AccessControlTableRow>[] => {
+    const actionsColumn: Column<AccessControlTableRow> = {
+      key: "actions",
+      label: "Actions",
+      defaultWidth: canDeleteResource ? 96 : 72,
+      sortable: false,
+      render: (row) => (
+        <div
+          className="flex items-center gap-1"
+          onClick={(event) => event.stopPropagation()}
+          onKeyDown={(event) => event.stopPropagation()}
+        >
+          <button
+            type="button"
+            className="inline-flex size-8 items-center justify-center rounded-md border border-border bg-background text-foreground transition-colors hover:bg-muted"
+            title="Open details"
+            aria-label="Open details"
+            onClick={() => openAccessControlRow(row.__source)}
+          >
+            <PencilIcon className="size-3.5" />
+          </button>
+          <button
+            type="button"
+            className="inline-flex size-8 items-center justify-center rounded-md border border-border bg-background text-foreground transition-colors hover:bg-muted"
+            title="Copy details"
+            aria-label="Copy details"
+            onClick={() => {
+              void navigator.clipboard
+                .writeText(JSON.stringify(row.__source, null, 2))
+                .then(() => showSuccessAlert("Record details copied."))
+                .catch(() => showErrorAlert("Clipboard access was denied."))
+            }}
+          >
+            <CopyIcon className="size-3.5" />
+          </button>
+          {isEditableResource(activeResource) && canDeleteResource ? (
+            <button
+              type="button"
+              className="inline-flex size-8 items-center justify-center rounded-md border border-rose-200 bg-background text-rose-600 transition-colors hover:bg-rose-50"
+              title="Delete"
+              aria-label="Delete"
+              onClick={() => void handleDelete(row.__id)}
+            >
+              <Trash2Icon className="size-3.5" />
+            </button>
+          ) : null}
+        </div>
+      ),
+    }
+
+    if (activeResource === "permissions") {
+      return [
+        {
+          key: "display",
+          label: "Permission",
+          defaultWidth: 200,
+          sortable: true,
+          render: (row) => (
+            <span className="font-medium text-slate-900">{row.display}</span>
+          ),
+        },
+        {
+          key: "module",
+          label: "Module",
+          defaultWidth: 140,
+          sortable: true,
+          render: (row) => (
+            <span className="text-sm text-slate-700">{row.module}</span>
+          ),
+        },
+        {
+          key: "description",
+          label: "Description",
+          defaultWidth: 260,
+          sortable: true,
+          render: (row) => (
+            <span className="line-clamp-2 text-xs text-slate-600">{row.description}</span>
+          ),
+        },
+        {
+          key: "type",
+          label: "Type",
+          defaultWidth: 100,
+          sortable: true,
+          render: (row) => (
+            <span className="text-sm text-slate-700">{row.type}</span>
+          ),
+        },
+        actionsColumn,
+      ]
+    }
+
+    return [
+      {
+        key: "display",
+        label: "Role",
+        defaultWidth: 200,
+        sortable: true,
+        render: (row) => (
+          <span className="font-medium text-slate-900">{row.display}</span>
+        ),
+      },
+      {
+        key: "permissions_count",
+        label: "Permissions",
+        defaultWidth: 120,
+        sortable: true,
+        render: (row) => (
+          <span className="text-sm text-slate-700">{row.permissions_count ?? 0}</span>
+        ),
+      },
+      {
+        key: "description",
+        label: "Description",
+        defaultWidth: 260,
+        sortable: true,
+        render: (row) => (
+          <span className="line-clamp-2 text-xs text-slate-600">{row.description}</span>
+        ),
+      },
+      {
+        key: "type",
+        label: "Type",
+        defaultWidth: 100,
+        sortable: true,
+        render: (row) => (
+          <span className="text-sm text-slate-700">{row.type}</span>
+        ),
+      },
+      actionsColumn,
+    ]
+  }, [activeResource, canDeleteResource, openAccessControlRow])
 
   const handleSetPassword = async () => {
     if (!token || !targetPasswordUser) {
@@ -696,25 +1380,589 @@ export function DataTable({
   const canNextPage = usersTotalPages
     ? usersQuery.page < usersTotalPages
     : rows.length >= usersQuery.limit
-  const canCreateResource = true
   const isAccessControlResource =
     activeResource === "roles" || activeResource === "permissions"
+
+  React.useEffect(() => {
+    setAccessControlSearch("")
+  }, [activeResource])
+
+  const canManageAssignments =
+    hasActorPermission(actorPermissions, "users:update") ||
+    hasActorPermission(actorPermissions, "company_users:update") ||
+    hasActorPermission(actorPermissions, "manage_company_users") ||
+    hasActorPermission(actorPermissions, "permissions:update") ||
+    hasActorPermission(actorPermissions, "roles:update") ||
+    hasActorPermission(actorPermissions, "users:assign-role")
+
+  React.useEffect(() => {
+    if (!editingEntity) {
+      setDetailSheetTab("general")
+      setMemberCompanyUsers([])
+      setAssignedMemberIds(new Set())
+      setRoleAssignedUsers([])
+      setMembersError(null)
+      setMembersLoading(false)
+      setMemberSearch("")
+      setMemberToAdd("")
+      setRolePermissionNamesFromApi(null)
+      setRolePermissionsLoading(false)
+      setRevokeConfirm(null)
+      setPeopleDialogOpen(false)
+      return
+    }
+    // Roles open on Assigned so the people summary from GET /roles/{id}/users is visible first.
+    setDetailSheetTab("assigned")
+    setMemberSearch("")
+    setMemberToAdd("")
+    setAssignPickerQuery("")
+    setRoleAssignedUsers([])
+    setPeopleDialogOpen(false)
+  }, [editingEntity?.id, editingEntity?.resource])
+
+  React.useEffect(() => {
+    if (!editingEntity) return
+    if (editingEntity.resource !== "permissions" && editingEntity.resource !== "roles") return
+    if (!token) {
+      setMembersError("Sign in to load assigned users.")
+      return
+    }
+
+    const controller = new AbortController()
+    let cancelled = false
+
+    const loadMembers = async () => {
+      setMembersLoading(true)
+      setMembersError(null)
+      try {
+        const companyUsers = await listAllCurrentCompanyUsers(token, {
+          signal: controller.signal,
+        })
+        if (cancelled) return
+        setMemberCompanyUsers(companyUsers)
+
+        const assigned = new Set<string>()
+        const entityId = editingEntity.id
+
+        if (editingEntity.resource === "permissions") {
+          for (const companyUser of companyUsers) {
+            const membershipId = companyUserMembershipId(companyUser)
+            if (membershipId && companyUserHasPermission(companyUser, entityId)) {
+              assigned.add(membershipId)
+            }
+          }
+          const permissionDetail = await getPermissionById(entityId, token).catch(() => null)
+          if (cancelled) return
+          if (permissionDetail && Array.isArray(permissionDetail.users)) {
+            const linkedUserIds = new Set<string>()
+            for (const entry of permissionDetail.users) {
+              if (typeof entry === "number" || typeof entry === "string") {
+                linkedUserIds.add(String(entry))
+                continue
+              }
+              const rec = asRecordValue(entry)
+              if (rec?.id !== undefined && rec.id !== null) {
+                linkedUserIds.add(String(rec.id))
+              }
+            }
+            for (const companyUser of companyUsers) {
+              const membershipId = companyUserMembershipId(companyUser)
+              const linkedUserId = companyUserLinkedUserId(companyUser)
+              if (membershipId && linkedUserId && linkedUserIds.has(linkedUserId)) {
+                assigned.add(membershipId)
+              }
+            }
+          }
+        } else {
+          // Roles: GET /api/roles/{id}, /permissions, /users
+          let roleUsersResult: { rows: AdminRecord[] }
+          try {
+            roleUsersResult = await listRoleUsers(token, entityId, {
+              page: 1,
+              limit: 100,
+              sortBy: "created_at",
+              sortOrder: "DESC",
+            })
+          } catch (roleUsersError) {
+            // Don't swallow silently — surface API failures for the Assigned list.
+            throw roleUsersError instanceof Error
+              ? roleUsersError
+              : new Error("Failed to load users assigned to this role.")
+          }
+
+          const [roleDetail, rolePermissions] = await Promise.all([
+            getRoleById(entityId, token).catch(() => null),
+            listRolePermissions(token, entityId).catch(() => [] as AdminRecord[]),
+          ])
+          if (cancelled) return
+
+          const permissionNames = (() => {
+            if (rolePermissions.length > 0) {
+              return rolePermissionNamesFromRecord({ permissions: rolePermissions })
+            }
+            if (roleDetail) {
+              return rolePermissionNamesFromRecord(roleDetail)
+            }
+            return [] as string[]
+          })()
+
+          setRolePermissionNamesFromApi(permissionNames)
+          setEditingRolePermissionNames(permissionNames)
+          setInitialEditingRolePermissionNames(permissionNames)
+
+          if (roleDetail) {
+            const nextForm = toEntityForm(roleDetail)
+            setEditingEntityForm(nextForm)
+            setInitialEditingEntityForm(nextForm)
+          }
+
+          // Primary list: render GET /api/roles/{roleId}/users rows directly.
+          const fromApi = roleUsersResult.rows.map((row, index) =>
+            mapRoleApiUserToMember(row, index)
+          )
+          setRoleAssignedUsers(fromApi)
+
+          const linkedUserIds = new Set(
+            fromApi.map((entry) => entry.userId).filter((id): id is string => Boolean(id))
+          )
+
+          for (const companyUser of companyUsers) {
+            const membershipId = companyUserMembershipId(companyUser)
+            const linkedUserId = companyUserLinkedUserId(companyUser)
+            if (
+              membershipId &&
+              ((linkedUserId && linkedUserIds.has(linkedUserId)) ||
+                companyUserHasRole(companyUser, entityId))
+            ) {
+              assigned.add(membershipId)
+            }
+          }
+        }
+
+        setAssignedMemberIds(assigned)
+      } catch (errorObject) {
+        if (cancelled || controller.signal.aborted) return
+        const message =
+          errorObject instanceof Error
+            ? errorObject.message
+            : "Failed to load assignment details."
+        setMembersError(message)
+        setMemberCompanyUsers([])
+        setAssignedMemberIds(new Set())
+      } finally {
+        if (!cancelled) {
+          setMembersLoading(false)
+          setRolePermissionsLoading(false)
+        }
+      }
+    }
+
+    if (editingEntity.resource === "roles") {
+      setRolePermissionsLoading(true)
+    }
+    void loadMembers()
+    return () => {
+      cancelled = true
+      controller.abort()
+    }
+  }, [editingEntity, token, membersRefreshKey])
+
+  const assignedMembers = React.useMemo((): AssignedMemberUser[] => {
+    const query = memberSearch.trim().toLowerCase()
+
+    // Roles: show people returned by GET /api/roles/{roleId}/users.
+    if (editingEntity?.resource === "roles") {
+      return roleAssignedUsers
+        .filter((row) => {
+          if (!query) return true
+          return `${row.name} ${row.email} ${row.status} ${row.userId ?? ""}`
+            .toLowerCase()
+            .includes(query)
+        })
+        .sort((a, b) => a.name.localeCompare(b.name))
+    }
+
+    return memberCompanyUsers
+      .filter((row) => {
+        const membershipId = companyUserMembershipId(row)
+        return membershipId ? assignedMemberIds.has(membershipId) : false
+      })
+      .map((row) => {
+        const membershipId = companyUserMembershipId(row) ?? ""
+        return {
+          membershipId,
+          userId: companyUserLinkedUserId(row),
+          name: companyUserDisplayName(row),
+          email: companyUserEmail(row),
+          status: companyUserStatus(row),
+          source: row,
+        }
+      })
+      .filter((row) => {
+        if (!query) return true
+        return `${row.name} ${row.email} ${row.status}`.toLowerCase().includes(query)
+      })
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }, [
+    assignedMemberIds,
+    editingEntity?.resource,
+    memberCompanyUsers,
+    memberSearch,
+    roleAssignedUsers,
+  ])
+
+  const availableMembers = React.useMemo(() => {
+    const assignedUserIds = new Set(
+      roleAssignedUsers
+        .flatMap((entry) => [entry.userId, entry.membershipId])
+        .filter((id): id is string => Boolean(id))
+    )
+    return memberCompanyUsers
+      .filter((row) => {
+        const membershipId = companyUserMembershipId(row)
+        if (!membershipId) return false
+        if (editingEntity?.resource === "roles") {
+          const assignUserId = resolveRoleAssignUserId(row)
+          if (assignUserId && assignedUserIds.has(assignUserId)) return false
+          if (assignedMemberIds.has(membershipId)) return false
+          return true
+        }
+        return !assignedMemberIds.has(membershipId)
+      })
+      .map((row) => {
+        const membershipId = companyUserMembershipId(row) ?? ""
+        const name = companyUserDisplayName(row)
+        const email = companyUserEmail(row)
+        const userId = resolveRoleAssignUserId(row)
+        return {
+          membershipId,
+          userId,
+          name,
+          email,
+          label: email && email !== "—" ? `${name} · ${email}` : name,
+        }
+      })
+      .sort((a, b) => a.label.localeCompare(b.label))
+  }, [assignedMemberIds, editingEntity?.resource, memberCompanyUsers, roleAssignedUsers])
+
+  const selectedMemberToAdd = React.useMemo(
+    () => availableMembers.find((entry) => entry.membershipId === memberToAdd) ?? null,
+    [availableMembers, memberToAdd]
+  )
+
+  const filteredAssignableMembers = React.useMemo(() => {
+    const query = assignPickerQuery.trim().toLowerCase()
+    if (!query) return availableMembers
+    const tokens = query.split(/\s+/).filter(Boolean)
+    return availableMembers.filter((user) => {
+      const haystack =
+        `${user.name} ${user.email} ${user.label} ${user.userId ?? ""} ${user.membershipId}`.toLowerCase()
+      return tokens.every((token) => haystack.includes(token))
+    })
+  }, [assignPickerQuery, availableMembers])
+
+  const displayedRolePermissionNames = rolePermissionNamesFromApi ?? editingRolePermissionNames
+
+  const handleAssignMember = async () => {
+    if (!token || !editingEntity) return
+    if (editingEntity.resource !== "permissions" && editingEntity.resource !== "roles") return
+    if (!memberToAdd) {
+      toast.error(
+        editingEntity.resource === "roles"
+          ? "Select a user to assign this role."
+          : "Select a user to assign this permission."
+      )
+      return
+    }
+    const membershipId = String(memberToAdd)
+    const selected = availableMembers.find((entry) => entry.membershipId === membershipId)
+    setMembersBusy(true)
+    try {
+      if (editingEntity.resource === "permissions") {
+        await assignPermissionToCurrentCompanyUser(token, membershipId, editingEntity.id)
+        showSuccessAlert("Permission assigned to user.")
+        setAssignedMemberIds((prev) => {
+          const next = new Set(prev)
+          next.add(membershipId)
+          return next
+        })
+      } else {
+        // POST /api/roles/{roleId}/users  body: { user_id }
+        const companyUser = memberCompanyUsers.find(
+          (row) => companyUserMembershipId(row) === membershipId
+        )
+        const userId =
+          selected?.userId ??
+          (companyUser ? resolveRoleAssignUserId(companyUser) : null) ??
+          membershipId
+        if (!userId) {
+          throw new Error(
+            "Could not resolve user_id for the selected person. Check that the company user has a linked account."
+          )
+        }
+        await assignUserToRole(token, editingEntity.id, userId)
+        showSuccessAlert(
+          selected?.name
+            ? `Assigned ${selected.name} to this role.`
+            : "Role assigned to user."
+        )
+        // Reload from GET /api/roles/{roleId}/users so the list stays accurate.
+        setMembersRefreshKey((key) => key + 1)
+      }
+      setMemberToAdd("")
+    } catch (errorObject) {
+      const message =
+        errorObject instanceof Error ? errorObject.message : "Failed to assign to user."
+      showErrorAlert(message)
+    } finally {
+      setMembersBusy(false)
+    }
+  }
+
+  const requestRevokeMember = (
+    membershipId: string,
+    userId?: string | null,
+    displayName?: string
+  ) => {
+    if (!token || !editingEntity) return
+    if (editingEntity.resource !== "permissions" && editingEntity.resource !== "roles") return
+    setRevokeConfirm({
+      membershipId,
+      userId: userId ?? null,
+      displayName: displayName?.trim() || "this person",
+    })
+  }
+
+  const handleConfirmRevokeMember = async () => {
+    if (!token || !editingEntity || !revokeConfirm) return
+    if (editingEntity.resource !== "permissions" && editingEntity.resource !== "roles") return
+
+    const { membershipId, userId, displayName: personLabel } = revokeConfirm
+    setMembersBusy(true)
+    try {
+      if (editingEntity.resource === "permissions") {
+        await revokePermissionFromCurrentCompanyUser(token, membershipId, editingEntity.id)
+        showSuccessAlert("Permission removed from user.")
+        setAssignedMemberIds((prev) => {
+          const next = new Set(prev)
+          next.delete(String(membershipId))
+          return next
+        })
+      } else {
+        // DELETE /api/roles/{roleId}/users/{userId}
+        let resolvedUserId = userId
+        if (!resolvedUserId) {
+          const companyUser = memberCompanyUsers.find(
+            (row) => companyUserMembershipId(row) === membershipId
+          )
+          resolvedUserId = companyUser
+            ? resolveRoleAssignUserId(companyUser)
+            : membershipId
+        }
+        if (!resolvedUserId) {
+          throw new Error("Could not resolve user_id for this assignment.")
+        }
+        await revokeUserFromRole(token, editingEntity.id, resolvedUserId)
+        showSuccessAlert(`Removed ${personLabel} from this role.`)
+        setMembersRefreshKey((key) => key + 1)
+      }
+      setRevokeConfirm(null)
+    } catch (errorObject) {
+      const message =
+        errorObject instanceof Error ? errorObject.message : "Failed to remove assignment."
+      showErrorAlert(message)
+    } finally {
+      setMembersBusy(false)
+    }
+  }
+
+  const handleRolePermissionsChange = async (nextNames: string[]) => {
+    if (!token || !editingEntity || editingEntity.resource !== "roles") {
+      return
+    }
+
+    const previous = new Set(displayedRolePermissionNames)
+    const next = new Set(nextNames)
+    const toAdd = nextNames.filter((name) => !previous.has(name))
+    const toRemove = displayedRolePermissionNames.filter((name) => !next.has(name))
+
+    if (toAdd.length === 0 && toRemove.length === 0) {
+      return
+    }
+
+    // Optimistic UI update
+    setEditingRolePermissionNames(nextNames)
+    setRolePermissionNamesFromApi(nextNames)
+    setMembersBusy(true)
+
+    try {
+      for (const name of toAdd) {
+        const option = permissionOptions.find((entry) => entry.name === name)
+        const permissionId = option?.id
+        if (!permissionId) {
+          throw new Error(`Unknown permission: ${name}`)
+        }
+        await assignPermissionToRole(token, editingEntity.id, permissionId)
+      }
+      for (const name of toRemove) {
+        const option = permissionOptions.find((entry) => entry.name === name)
+        const permissionId = option?.id
+        if (!permissionId) {
+          throw new Error(`Unknown permission: ${name}`)
+        }
+        await revokePermissionFromRole(token, editingEntity.id, permissionId)
+      }
+      setInitialEditingRolePermissionNames(nextNames)
+      if (toAdd.length > 0 || toRemove.length > 0) {
+        showSuccessAlert(
+          toAdd.length > 0 && toRemove.length === 0
+            ? "Permission assigned to role."
+            : toRemove.length > 0 && toAdd.length === 0
+              ? "Permission removed from role."
+              : "Role permissions updated."
+        )
+      }
+    } catch (errorObject) {
+      // Revert on failure
+      setEditingRolePermissionNames(Array.from(previous))
+      setRolePermissionNamesFromApi(Array.from(previous))
+      const message =
+        errorObject instanceof Error ? errorObject.message : "Failed to update role permissions."
+      showErrorAlert(message)
+    } finally {
+      setMembersBusy(false)
+    }
+  }
 
   return (
     <div className="w-full flex-col justify-start gap-4">
       <div className="flex flex-col gap-2 px-3 lg:px-4">
-        <div className="flex items-center justify-end gap-3">
-          {canCreateResource ? (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {isAccessControlResource ? (
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+              <div className="relative min-w-0 max-w-sm flex-1">
+                <Input
+                  value={accessControlSearch}
+                  onChange={(event) => setAccessControlSearch(event.target.value)}
+                  placeholder={
+                    activeResource === "permissions"
+                      ? "Search permissions by name, key, or description…"
+                      : "Search roles by name, key, or description…"
+                  }
+                  className="h-9 w-full pr-16"
+                  autoComplete="off"
+                />
+                {accessControlSearch.trim() ? (
+                  <button
+                    type="button"
+                    className="absolute top-1/2 right-2 -translate-y-1/2 rounded px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+                    onClick={() => setAccessControlSearch("")}
+                  >
+                    Clear
+                  </button>
+                ) : null}
+              </div>
+              <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-700">
+                {filteredAccessControlRows.length}
+                {filteredAccessControlRows.length !== rows.length
+                  ? ` of ${rows.length}`
+                  : ""}{" "}
+                {RESOURCE_LABELS[activeResource].toLowerCase()}
+              </Badge>
+            </div>
+          ) : (
+            <div />
+          )}
+          {canCreateResource && isAccessControlResource ? (
             <Drawer>
               <DrawerTrigger asChild>
                 <Button variant="outline" size="sm">
                   <PlusIcon data-icon="inline-start" />
-                  <span>Create</span>
+                  <span>
+                    {activeResource === "roles" ? "Create role" : "Create permission"}
+                  </span>
                 </Button>
               </DrawerTrigger>
               <DrawerContent>
                 <DrawerHeader>
-                  <DrawerTitle>Create {RESOURCE_LABELS[activeResource].slice(0, -1)}</DrawerTitle>
+                  <DrawerTitle>
+                    Create {activeResource === "roles" ? "Role" : "Permission"}
+                  </DrawerTitle>
+                  <DrawerDescription>
+                    {activeResource === "roles"
+                      ? "Create a company role. You can assign permissions after creation."
+                      : "Create a permission in the catalog."}
+                  </DrawerDescription>
+                </DrawerHeader>
+                <div className="grid gap-3 px-4 pb-2">
+                  <div className="space-y-1.5">
+                    <Label>Name (key)</Label>
+                    <Input
+                      value={roleForm.name}
+                      onChange={(event) =>
+                        setRoleForm((prev) => ({ ...prev, name: event.target.value }))
+                      }
+                      placeholder={activeResource === "roles" ? "hr_manager" : "employees:read"}
+                      className="font-mono text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Display name</Label>
+                    <Input
+                      value={roleForm.display_name}
+                      onChange={(event) =>
+                        setRoleForm((prev) => ({ ...prev, display_name: event.target.value }))
+                      }
+                      placeholder={activeResource === "roles" ? "HR Manager" : "Read employees"}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Description</Label>
+                    <Input
+                      value={roleForm.description}
+                      onChange={(event) =>
+                        setRoleForm((prev) => ({ ...prev, description: event.target.value }))
+                      }
+                      placeholder="Optional description"
+                    />
+                  </div>
+                  {activeResource === "roles" ? (
+                    <div className="max-h-64 overflow-y-auto rounded-lg border border-border/60 p-2">
+                      <PermissionPicker
+                        options={permissionOptions}
+                        selectedNames={rolePermissionNames}
+                        onChange={setRolePermissionNames}
+                      />
+                    </div>
+                  ) : null}
+                </div>
+                <DrawerFooter>
+                  <Button onClick={() => void handleCreate()} disabled={loading}>
+                    Create
+                  </Button>
+                  <DrawerClose asChild>
+                    <Button variant="outline">Cancel</Button>
+                  </DrawerClose>
+                </DrawerFooter>
+              </DrawerContent>
+            </Drawer>
+          ) : null}
+
+          {canCreateResource && !isAccessControlResource ? (
+            <Drawer>
+              <DrawerTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <PlusIcon data-icon="inline-start" />
+                  <span>
+                    Create {RESOURCE_LABELS[activeResource].slice(0, -1).toLowerCase()}
+                  </span>
+                </Button>
+              </DrawerTrigger>
+              <DrawerContent>
+                <DrawerHeader>
+                  <DrawerTitle>
+                    Create {RESOURCE_LABELS[activeResource].slice(0, -1)}
+                  </DrawerTitle>
                   <DrawerDescription>Fill in the details and submit.</DrawerDescription>
                 </DrawerHeader>
                 <div className="grid gap-3 px-4 pb-2 md:grid-cols-2">
@@ -816,92 +2064,6 @@ export function DataTable({
                           </button>
                         ))}
                       </div>
-                    </div>
-                  </>
-                ) : null}
-
-                {activeResource === "roles" ? (
-                  <>
-                    <div className="space-y-1">
-                      <Label>Name</Label>
-                      <Input
-                        value={roleForm.name}
-                        onChange={(event) =>
-                          setRoleForm((prev) => ({ ...prev, name: event.target.value }))
-                        }
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label>Display Name</Label>
-                      <Input
-                        value={roleForm.display_name}
-                        onChange={(event) =>
-                          setRoleForm((prev) => ({ ...prev, display_name: event.target.value }))
-                        }
-                      />
-                    </div>
-                    <div className="space-y-1 md:col-span-2">
-                      <Label>Description</Label>
-                      <Input
-                        value={roleForm.description}
-                        onChange={(event) =>
-                          setRoleForm((prev) => ({ ...prev, description: event.target.value }))
-                        }
-                      />
-                    </div>
-                    <div className="space-y-2 md:col-span-2">
-                      <Label>Assign Permissions</Label>
-                      <div className="flex flex-wrap gap-2">
-                        {permissionOptions.map((permission) => (
-                          <button
-                            key={permission.name}
-                            type="button"
-                            onClick={() =>
-                              togglePermissionName(rolePermissionNames, permission.name, setRolePermissionNames)
-                            }
-                            className={cn(
-                              "rounded-md border px-2 py-1 text-sm",
-                              rolePermissionNames.includes(permission.name)
-                                ? "border-primary bg-primary text-primary-foreground"
-                                : "border-border bg-background"
-                            )}
-                          >
-                            {permission.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </>
-                ) : null}
-
-                {activeResource === "permissions" ? (
-                  <>
-                    <div className="space-y-1">
-                      <Label>Permission Name</Label>
-                      <Input
-                        value={roleForm.name}
-                        onChange={(event) =>
-                          setRoleForm((prev) => ({ ...prev, name: event.target.value }))
-                        }
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label>Display Name</Label>
-                      <Input
-                        value={roleForm.display_name}
-                        onChange={(event) =>
-                          setRoleForm((prev) => ({ ...prev, display_name: event.target.value }))
-                        }
-                      />
-                    </div>
-                    <div className="space-y-1 md:col-span-2">
-                      <Label>Description</Label>
-                      <Input
-                        value={roleForm.description}
-                        onChange={(event) =>
-                          setRoleForm((prev) => ({ ...prev, description: event.target.value }))
-                        }
-                      />
                     </div>
                   </>
                 ) : null}
@@ -1082,160 +2244,32 @@ export function DataTable({
 
       <div className="relative flex flex-col gap-3 overflow-auto px-3 lg:px-4">
           {isAccessControlResource ? (
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <div className="space-y-2">
               {!token ? (
                 <div className="rounded-lg border border-dashed border-slate-300 bg-white/80 p-6 text-sm text-muted-foreground">
                   Sign in to load data.
-                </div>
-              ) : loading ? (
-                <div className="rounded-lg border border-dashed border-slate-300 bg-white/80 p-6 text-sm text-muted-foreground">
-                  Loading {RESOURCE_LABELS[activeResource].toLowerCase()}...
                 </div>
               ) : error ? (
                 <div className="rounded-lg border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700">
                   {error}
                 </div>
-              ) : rows.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-slate-300 bg-white/80 p-6 text-sm text-muted-foreground">
-                  No records found.
-                </div>
               ) : (
-                rows.map((row, index) => {
-                  const rowId = getRowId(row, index + 1)
-                  const rowLabel = stringifyValue(row.name ?? row.display_name ?? row.email ?? rowId)
-                  const permissionNames =
-                    activeResource === "roles" ? rolePermissionNamesFromRecord(row) : []
-                  const permissionName =
-                    activeResource === "permissions"
-                      ? asPermissionName(row.name) ?? asPermissionName(row.display_name) ?? ""
-                      : ""
-                  const openRowEditor = () => {
-                    const nextEntityForm = toEntityForm(row)
-                    const nextRolePermissions =
-                      activeResource === "roles" ? rolePermissionNamesFromRecord(row) : []
-                    setEditingEntity({ resource: activeResource, id: rowId, label: rowLabel })
-                    setEditingEntityForm(nextEntityForm)
-                    setInitialEditingEntityForm(nextEntityForm)
-                    setEditingRolePermissionNames(nextRolePermissions)
-                    setInitialEditingRolePermissionNames(nextRolePermissions)
-                  }
-
-                  return (
-                    <div
-                      key={`${rowId}`}
-                      role="button"
-                      tabIndex={0}
-                      onClick={openRowEditor}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault()
-                          openRowEditor()
-                        }
-                      }}
-                      className="group rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-sm transition-colors duration-200 hover:border-slate-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-slate-300"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <h3 className="text-[1.05rem] font-semibold leading-6 text-slate-900">
-                            {activeResource === "roles" ? roleLabel(row) : permissionLabel(row)}
-                          </h3>
-                          <p className="mt-1 truncate text-xs font-medium tracking-[0.18em] text-slate-500">
-                            {activeResource === "roles"
-                              ? (typeof row.name === "string" && row.name.trim()) || "ROLE"
-                              : permissionName || "PERMISSION"}
-                          </p>
-                        </div>
-
-                        <div onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger
-                              render={<Button variant="ghost" size="icon" className="size-8 rounded-full" />}
-                            >
-                              <EllipsisVerticalIcon />
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-52">
-                            <DropdownMenuItem
-                              onClick={() => {
-                                void navigator.clipboard
-                                  .writeText(JSON.stringify(row, null, 2))
-                                  .then(() => {
-                                    showSuccessAlert("Record details copied.")
-                                  })
-                                  .catch(() => {
-                                    showErrorAlert("Clipboard access was denied.")
-                                  })
-                              }}
-                            >
-                              <CopyIcon />
-                              Copy Details
-                            </DropdownMenuItem>
-
-                            {isEditableResource(activeResource) ? (
-                              <DropdownMenuItem
-                                onClick={() => {
-                                  openRowEditor()
-                                }}
-                              >
-                                <PencilIcon />
-                                Open Details
-                              </DropdownMenuItem>
-                            ) : null}
-
-                            {isEditableResource(activeResource) ? <DropdownMenuSeparator /> : null}
-                            {isEditableResource(activeResource) ? (
-                              <DropdownMenuItem
-                                onClick={() => {
-                                  setEditingEntity({ resource: activeResource, id: rowId, label: rowLabel })
-                                  setEditingEntityForm(toEntityForm(row))
-                                  if (activeResource === "roles") {
-                                    setEditingRolePermissionNames(rolePermissionNamesFromRecord(row))
-                                  } else {
-                                    setEditingRolePermissionNames([])
-                                  }
-                                }}
-                              >
-                                <PencilIcon />
-                                Edit Record
-                              </DropdownMenuItem>
-                            ) : null}
-                            {isEditableResource(activeResource) ? (
-                              <DropdownMenuItem
-                                variant="destructive"
-                                onClick={() => void handleDelete(rowId)}
-                              >
-                                <Trash2Icon />
-                                Delete
-                              </DropdownMenuItem>
-                            ) : null}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      </div>
-
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        {activeResource === "roles" ? (
-                          <>
-                            <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-700">
-                              {permissionNames.length} permissions
-                            </Badge>
-                            <Badge variant="secondary" className="bg-slate-100 text-slate-700">
-                              {typeof row.is_system_generated === "boolean" && row.is_system_generated ? "System role" : "Custom role"}
-                            </Badge>
-                          </>
-                        ) : (
-                          <>
-                            <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-700">
-                              {permissionScope(permissionName)}
-                            </Badge>
-                            <Badge variant="secondary" className="bg-slate-100 text-slate-700">
-                              {typeof row.is_system_generated === "boolean" && row.is_system_generated ? "System permission" : "Custom permission"}
-                            </Badge>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })
+                <ResizableTable
+                  title={RESOURCE_LABELS[activeResource]}
+                  data={accessControlTableRows}
+                  columns={accessControlColumns}
+                  getRowId={(row) => row.__id}
+                  onRowSelect={(_id, row) => {
+                    if (row?.__source) {
+                      openAccessControlRow(row.__source)
+                    }
+                  }}
+                  loading={loading}
+                  itemsPerPage={20}
+                  showExport={false}
+                  enableAnimations={false}
+                  storageKey={`access-control-${activeResource}`}
+                />
               )}
             </div>
           ) : null}
@@ -1344,8 +2378,11 @@ export function DataTable({
                                     </DropdownMenuItem>
                                   ) : null}
 
-                                  {isEditableResource(activeResource) ? <DropdownMenuSeparator /> : null}
-                                  {isEditableResource(activeResource) ? (
+                                  {isEditableResource(activeResource) &&
+                                  (canUpdateResource || canDeleteResource) ? (
+                                    <DropdownMenuSeparator />
+                                  ) : null}
+                                  {isEditableResource(activeResource) && canDeleteResource ? (
                                     <DropdownMenuItem
                                       variant="destructive"
                                       onClick={() => void handleDelete(rowId)}
@@ -1401,12 +2438,7 @@ export function DataTable({
                 </div>
               ) : null}
             </>
-          ) : (
-            <div className="flex items-center justify-between px-1 text-sm text-muted-foreground">
-              <div>{rows.length} {RESOURCE_LABELS[activeResource].toLowerCase()} loaded</div>
-              <Badge variant="outline">{activeResource}</Badge>
-            </div>
-          )}
+          ) : null}
       </div>
 
       <Drawer open={Boolean(editingUser)} onOpenChange={(open) => !open && setEditingUser(null)}>
@@ -1543,7 +2575,7 @@ export function DataTable({
         </DrawerContent>
       </Drawer>
 
-      <Drawer
+      <Sheet
         open={Boolean(editingEntity)}
         onOpenChange={(open) => {
           if (!open) {
@@ -1554,115 +2586,500 @@ export function DataTable({
           }
         }}
       >
-        <DrawerContent>
-          <DrawerHeader className="md:flex-row md:items-start md:justify-between md:text-left">
-            <div className="space-y-1">
-              <DrawerTitle>Edit {editingEntity?.label ?? "record"}</DrawerTitle>
-              <DrawerDescription>Update the selected record details.</DrawerDescription>
+        <SheetContent
+          side="right"
+          className="flex w-full flex-col gap-0 overflow-hidden bg-background p-0 data-[side=right]:w-full sm:data-[side=right]:max-w-none sm:data-[side=right]:w-[min(100vw-1rem,34rem)]"
+        >
+          <SheetHeader className="shrink-0 space-y-3 px-6 pb-0 pt-5 text-left">
+            <div className="pr-8">
+              <SheetTitle className="text-xl font-semibold tracking-tight text-foreground">
+                {editingEntity?.label ?? "Details"}
+              </SheetTitle>
+              <SheetDescription className="mt-1 text-sm text-muted-foreground">
+                {editingEntity?.resource === "roles"
+                  ? "Review role details, assigned people, and included permissions."
+                  : "Review this permission and manage direct user grants."}
+              </SheetDescription>
             </div>
-            <Button
-              onClick={handleSaveEntityEdit}
-              disabled={loading || !editingEntity || !isEditingEntityDirty}
-              className="mt-2 md:mt-0"
-            >
-              {isEditingEntityDirty ? "Save Changes" : "Saved"}
-            </Button>
-          </DrawerHeader>
-          <div className="grid gap-3 px-4 pb-2 md:grid-cols-2">
-            <div className="space-y-1">
-              <Label>Name</Label>
-              <Input
-                value={editingEntityForm.name}
-                onChange={(event) =>
-                  setEditingEntityForm((prev) => ({ ...prev, name: event.target.value }))
-                }
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>Display Name</Label>
-              <Input
-                value={editingEntityForm.display_name}
-                onChange={(event) =>
-                  setEditingEntityForm((prev) => ({ ...prev, display_name: event.target.value }))
-                }
-              />
-            </div>
-            <div className="space-y-1 md:col-span-2">
-              <Label>Description</Label>
-              <Input
-                value={editingEntityForm.description}
-                onChange={(event) =>
-                  setEditingEntityForm((prev) => ({ ...prev, description: event.target.value }))
-                }
-              />
-            </div>
-            {editingEntity?.resource === "roles" ? (
-              <div className="space-y-2 md:col-span-2">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <Label>Assigned Permissions</Label>
-                  <span
-                    className={cn(
-                      "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium",
-                      isEditingEntityDirty
-                        ? "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
-                        : "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
-                    )}
-                  >
-                    {isEditingEntityDirty ? "Not saved yet" : "All changes saved"}
+            <DetailTabs
+              tabs={
+                editingEntity?.resource === "roles"
+                  ? [
+                      { id: "general", label: "General" },
+                      { id: "assigned", label: "Assigned" },
+                      { id: "permissions", label: "Permissions" },
+                    ]
+                  : [
+                      { id: "general", label: "General" },
+                      { id: "assigned", label: "Assigned" },
+                    ]
+              }
+              value={detailSheetTab}
+              onChange={setDetailSheetTab}
+            />
+          </SheetHeader>
+
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-6 py-4">
+            {detailSheetTab === "general" ? (
+              <div className="space-y-4 overflow-y-auto">
+                {canUpdateResource ? (
+                  <>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="entity-display-name">Display name</Label>
+                      <Input
+                        id="entity-display-name"
+                        value={editingEntityForm.display_name}
+                        onChange={(event) =>
+                          setEditingEntityForm((prev) => ({
+                            ...prev,
+                            display_name: event.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="entity-name">
+                        {editingEntity?.resource === "roles" ? "Name (key)" : "Name"}
+                      </Label>
+                      <Input
+                        id="entity-name"
+                        value={editingEntityForm.name}
+                        onChange={(event) =>
+                          setEditingEntityForm((prev) => ({
+                            ...prev,
+                            name: event.target.value,
+                          }))
+                        }
+                        className="font-mono text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="entity-description">Description</Label>
+                      <Input
+                        id="entity-description"
+                        value={editingEntityForm.description}
+                        onChange={(event) =>
+                          setEditingEntityForm((prev) => ({
+                            ...prev,
+                            description: event.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        Display name
+                      </p>
+                      <p className="text-sm font-medium text-foreground">
+                        {editingEntityForm.display_name || editingEntity?.label || "—"}
+                      </p>
+                    </div>
+                    {editingEntity?.resource === "roles" ? (
+                      <div className="space-y-1">
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                          Name
+                        </p>
+                        <p className="font-mono text-sm text-foreground">
+                          {editingEntityForm.name || "—"}
+                        </p>
+                      </div>
+                    ) : null}
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        Description
+                      </p>
+                      <p className="text-sm leading-relaxed text-foreground">
+                        {editingEntityForm.description || "No description provided."}
+                      </p>
+                    </div>
+                  </>
+                )}
+                {editingEntity?.resource === "roles" ? (
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      Permissions included
+                    </p>
+                    <p className="text-sm text-foreground">
+                      {displayedRolePermissionNames.length} permission
+                      {displayedRolePermissionNames.length === 1 ? "" : "s"}
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            {detailSheetTab === "assigned" ? (
+              <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-hidden">
+                <div className="flex shrink-0 items-center gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-foreground">
+                      {editingEntity?.resource === "roles"
+                        ? "Assigned people"
+                        : "Assigned people"}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {editingEntity?.resource === "roles"
+                        ? "People who currently have this role."
+                        : "People with this permission assigned directly."}
+                    </p>
+                  </div>
+                  <span className="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-600">
+                    {membersLoading
+                      ? "…"
+                      : `${
+                          editingEntity?.resource === "roles"
+                            ? roleAssignedUsers.length
+                            : assignedMemberIds.size
+                        } assigned`}
                   </span>
-                </div>
-                <p className="text-xs leading-5 text-slate-500">
-                  {isEditingEntityDirty
-                    ? "Permission changes are only local for now. Click Save Changes to apply them."
-                    : "The permissions below match what is currently saved for this role."}
-                </p>
-                <div className="grid max-h-80 gap-2 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50/70 p-3 md:grid-cols-2">
-                  {permissionOptions.map((permission) => (
-                    <button
-                      key={permission.name}
+                  {canManageAssignments && editingEntity?.resource === "roles" ? (
+                    <Button
                       type="button"
-                      onClick={() =>
-                        togglePermissionName(
-                          editingRolePermissionNames,
-                          permission.name,
-                          setEditingRolePermissionNames
-                        )
-                      }
-                      className={cn(
-                        "flex items-start justify-between gap-3 rounded-lg border px-3 py-2 text-left text-sm transition-colors",
-                        editingRolePermissionNames.includes(permission.name)
-                          ? "border-blue-200 bg-blue-50 text-slate-900"
-                          : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
-                      )}
+                      size="sm"
+                      className="h-8 shrink-0"
+                      disabled={membersLoading || membersBusy}
+                      onClick={() => {
+                        setMemberToAdd("")
+                        setAssignPickerQuery("")
+                        setPeopleDialogOpen(true)
+                      }}
                     >
-                      <span className="min-w-0">
-                        <span className="block truncate font-medium">{permission.label}</span>
-                        <span className="mt-0.5 block truncate text-xs text-slate-500">{permission.name}</span>
-                      </span>
-                      <span
-                        className={cn(
-                          "mt-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full border px-1.5 text-[11px] font-medium",
-                          editingRolePermissionNames.includes(permission.name)
-                            ? "border-blue-200 bg-white text-blue-700"
-                            : "border-slate-200 bg-slate-50 text-slate-500"
-                        )}
-                      >
-                        {editingRolePermissionNames.includes(permission.name) ? "On" : "Off"}
-                      </span>
-                    </button>
-                  ))}
+                      <UserPlusIcon className="size-3.5" data-icon="inline-start" />
+                      Add
+                    </Button>
+                  ) : null}
+                </div>
+
+                <Input
+                  value={memberSearch}
+                  onChange={(event) => setMemberSearch(event.target.value)}
+                  placeholder="Search assigned people…"
+                  className="h-8 shrink-0 text-xs"
+                />
+
+                <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-border/60">
+                  {membersLoading ? (
+                    <SectionLoader
+                      label={
+                        editingEntity?.resource === "roles"
+                          ? "Loading assigned people…"
+                          : "Loading permission assignments…"
+                      }
+                    />
+                  ) : membersError ? (
+                    <p className="px-3 py-8 text-center text-sm text-rose-600">{membersError}</p>
+                  ) : assignedMembers.length === 0 ? (
+                    <div className="flex flex-col items-center gap-2 px-3 py-8 text-center">
+                      <UsersIcon className="size-5 text-muted-foreground/60" />
+                      <p className="text-xs text-muted-foreground">
+                        {editingEntity?.resource === "roles"
+                          ? roleAssignedUsers.length === 0 && !memberSearch.trim()
+                            ? "No one is assigned this role yet."
+                            : "No people match your search."
+                          : assignedMemberIds.size === 0
+                            ? "No one has this permission assigned directly."
+                            : "No people match your search."}
+                      </p>
+                      {canManageAssignments &&
+                      editingEntity?.resource === "roles" &&
+                      roleAssignedUsers.length === 0 &&
+                      !memberSearch.trim() ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="mt-1 h-8"
+                          onClick={() => setPeopleDialogOpen(true)}
+                        >
+                          <UserPlusIcon className="size-3.5" data-icon="inline-start" />
+                          Add person
+                        </Button>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <ul className="divide-y divide-border/50">
+                      {assignedMembers.map((user) => (
+                        <li
+                          key={`${user.membershipId}-${user.userId ?? "x"}`}
+                          className="flex items-center gap-2.5 px-2.5 py-2"
+                        >
+                          <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
+                            {user.name
+                              .split(/\s+/)
+                              .slice(0, 2)
+                              .map((part) => part[0]?.toUpperCase() ?? "")
+                              .join("") || "?"}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-xs font-medium text-foreground">
+                              {user.name}
+                            </p>
+                            <p className="truncate text-[10px] text-muted-foreground">
+                              {user.email}
+                            </p>
+                          </div>
+                          {canManageAssignments ? (
+                            <button
+                              type="button"
+                              className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-rose-600 transition-colors hover:bg-rose-50"
+                              title={`Remove ${user.name}`}
+                              aria-label={`Remove ${user.name}`}
+                              disabled={membersBusy}
+                              onClick={() =>
+                                requestRevokeMember(
+                                  user.membershipId,
+                                  user.userId,
+                                  user.name
+                                )
+                              }
+                            >
+                              <UserMinusIcon className="size-3.5" />
+                            </button>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            ) : null}
+
+            {detailSheetTab === "permissions" && editingEntity?.resource === "roles" ? (
+              <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+                <p className="shrink-0 text-sm text-muted-foreground">
+                  {canManageAssignments
+                    ? "Toggle permissions to assign or revoke them on this role immediately."
+                    : "Permissions currently included in this role."}
+                </p>
+                <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+                  {membersLoading || rolePermissionsLoading ? (
+                    <SectionLoader label="Loading role permissions…" />
+                  ) : canManageAssignments ? (
+                    <PermissionPicker
+                      options={permissionOptions}
+                      selectedNames={displayedRolePermissionNames}
+                      onChange={(next) => {
+                        void handleRolePermissionsChange(next)
+                      }}
+                      className={cn(membersBusy ? "pointer-events-none opacity-70" : "")}
+                    />
+                  ) : (
+                    <MicrosoftPermissionList
+                      options={permissionOptions}
+                      selectedNames={displayedRolePermissionNames}
+                      emptyLabel="No permissions are included in this role yet."
+                    />
+                  )}
                 </div>
               </div>
             ) : null}
           </div>
-          <Separator className="my-1" />
-          <DrawerFooter>
-            <DrawerClose asChild>
-              <Button variant="outline">Cancel</Button>
-            </DrawerClose>
-          </DrawerFooter>
-        </DrawerContent>
-      </Drawer>
+
+          <SheetFooter className="shrink-0 border-t border-border/70 px-6 py-3">
+            {canUpdateResource && detailSheetTab === "general" && isEditingEntityDirty ? (
+              <Button
+                type="button"
+                disabled={loading || membersBusy}
+                onClick={() => void handleSaveEntityEdit()}
+              >
+                Save changes
+              </Button>
+            ) : null}
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setEditingEntity(null)
+                setInitialEditingEntityForm(EMPTY_ENTITY_FORM)
+                setEditingRolePermissionNames([])
+                setInitialEditingRolePermissionNames([])
+                setRolePermissionNamesFromApi(null)
+              }}
+            >
+              Close
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+
+      <AlertDialog
+        open={Boolean(revokeConfirm)}
+        onOpenChange={(open) => {
+          if (!open && !membersBusy) {
+            setRevokeConfirm(null)
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {editingEntity?.resource === "roles"
+                ? "Remove from role?"
+                : "Remove permission?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {editingEntity?.resource === "roles"
+                ? `Remove ${revokeConfirm?.displayName ?? "this person"} from this role? They will lose permissions granted only through this role.`
+                : `Remove ${revokeConfirm?.displayName ?? "this person"}'s direct permission grant?`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={membersBusy} />
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={membersBusy}
+              onClick={() => void handleConfirmRevokeMember()}
+            >
+              {membersBusy ? (
+                <>
+                  <Loader2Icon className="size-3.5 animate-spin" data-icon="inline-start" />
+                  Removing…
+                </>
+              ) : (
+                "Remove"
+              )}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Add-person dialog only (assigned list stays on the Assigned tab) */}
+      <Dialog
+        open={peopleDialogOpen && editingEntity?.resource === "roles"}
+        onOpenChange={(open) => {
+          setPeopleDialogOpen(open)
+          if (!open) {
+            setMemberToAdd("")
+            setAssignPickerQuery("")
+          }
+        }}
+      >
+        <DialogPopup
+          className="flex max-h-[min(90vh,32rem)] w-[min(96vw,28rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[28rem]"
+          from="center"
+        >
+          <DialogHeader className="shrink-0 space-y-1 border-b border-border/60 px-5 py-4 text-left">
+            <DialogTitle className="text-base">Add person</DialogTitle>
+            <DialogDescription className="text-xs">
+              {editingEntity?.label
+                ? `Search and assign someone to “${editingEntity.label}”.`
+                : "Search and assign someone to this role."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-hidden px-5 py-3">
+            <Input
+              value={assignPickerQuery}
+              onChange={(event) => setAssignPickerQuery(event.target.value)}
+              placeholder={
+                availableMembers.length === 0
+                  ? "Everyone is already assigned"
+                  : "Search people to assign…"
+              }
+              className="h-8 shrink-0 text-xs"
+              disabled={membersBusy || membersLoading || availableMembers.length === 0}
+              autoFocus
+            />
+            {selectedMemberToAdd ? (
+              <p className="shrink-0 text-[11px] text-muted-foreground">
+                Selected:{" "}
+                <span className="font-medium text-foreground">
+                  {selectedMemberToAdd.label}
+                </span>
+              </p>
+            ) : null}
+            <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-border/60 bg-background">
+              {membersLoading ? (
+                <p className="px-3 py-6 text-center text-xs text-muted-foreground">
+                  Loading people…
+                </p>
+              ) : availableMembers.length === 0 ? (
+                <p className="px-3 py-6 text-center text-xs text-muted-foreground">
+                  Everyone is already assigned.
+                </p>
+              ) : filteredAssignableMembers.length === 0 ? (
+                <p className="px-3 py-6 text-center text-xs text-muted-foreground">
+                  No people match “{assignPickerQuery.trim()}”.
+                </p>
+              ) : (
+                <ul className="divide-y divide-border/50">
+                  {filteredAssignableMembers.map((user) => {
+                    const selected = user.membershipId === memberToAdd
+                    return (
+                      <li key={user.membershipId}>
+                        <button
+                          type="button"
+                          disabled={membersBusy}
+                          onClick={() => setMemberToAdd(user.membershipId)}
+                          className={cn(
+                            "flex w-full items-start gap-2 px-2.5 py-2 text-left transition-colors",
+                            selected ? "bg-primary/10 text-foreground" : "hover:bg-muted/50"
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              "mt-0.5 flex size-3.5 shrink-0 items-center justify-center rounded-full border",
+                              selected
+                                ? "border-primary bg-primary text-primary-foreground"
+                                : "border-border"
+                            )}
+                          >
+                            {selected ? (
+                              <CheckIcon className="size-2" strokeWidth={3} />
+                            ) : null}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-xs font-medium">
+                              {user.name}
+                            </span>
+                            <span className="block truncate text-[10px] text-muted-foreground">
+                              {user.email !== "—"
+                                ? user.email
+                                : `ID ${user.userId ?? user.membershipId}`}
+                            </span>
+                          </span>
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter className="shrink-0 border-t border-border/60 px-5 py-3">
+            <DialogClose
+              render={
+                <Button type="button" variant="outline" size="sm">
+                  Cancel
+                </Button>
+              }
+            />
+            <Button
+              type="button"
+              size="sm"
+              disabled={!memberToAdd || membersBusy || membersLoading}
+              onClick={() => void handleAssignMember()}
+            >
+              {membersBusy ? (
+                <>
+                  <Loader2Icon className="size-3.5 animate-spin" data-icon="inline-start" />
+                  Assigning…
+                </>
+              ) : (
+                <>
+                  <UserPlusIcon className="size-3.5" data-icon="inline-start" />
+                  Assign
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
     </div>
   )
 }

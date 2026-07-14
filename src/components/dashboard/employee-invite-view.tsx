@@ -1,6 +1,14 @@
 "use client"
 
 import * as React from "react"
+import {
+  InfoIcon,
+  Loader2Icon,
+  MailIcon,
+  PhoneIcon,
+  RotateCcwIcon,
+  UserPlus2Icon,
+} from "lucide-react"
 import { toast } from "sonner"
 
 import {
@@ -11,11 +19,14 @@ import {
   listOnboardingWorkflows,
   listPositions,
   type AdminRecord,
+  type CreateEmployeePayload,
 } from "@/lib/admin-api"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import { showErrorAlert } from "@/lib/error-alert"
 import { showSuccessAlert } from "@/lib/success-alert"
+import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -25,8 +36,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Card, CardContent } from "@/components/ui/card"
-import { DatePickerPresets } from "@/components/ui/date-picker-presets"
+import { Skeleton } from "@/components/ui/skeleton"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 
@@ -38,7 +54,7 @@ const EMPLOYMENT_TYPES = [
   { value: "intern", label: "Intern" },
   { value: "consultant", label: "Consultant" },
   { value: "temporary", label: "Temporary" },
-]
+] as const
 
 type LookupOption = {
   id: number
@@ -61,26 +77,46 @@ function readStoredToken(): string {
   }
 }
 
+function getId(record: AdminRecord): number | null {
+  const candidates = ["id", "value", "employee_id", "employeeId", "branch_id", "department_id", "position_id"]
+  for (const k of candidates) {
+    const v = record[k]
+    if (typeof v === "number" && Number.isFinite(v)) return v
+    if (typeof v === "string" && v.trim() && !Number.isNaN(Number(v))) return Number(v)
+  }
+  return null
+}
+
 function getName(record: AdminRecord, ...keys: string[]): string {
   for (const k of keys) {
     const v = record[k]
     if (typeof v === "string" && v.trim()) return v.trim()
   }
-  if (record.name && typeof record.name === "string") return record.name.trim()
-  const first = typeof record.first_name === "string" ? record.first_name : ""
-  const last = typeof record.last_name === "string" ? record.last_name : ""
-  const full = `${first} ${last}`.trim()
-  return full || "—"
-}
-
-function getId(record: AdminRecord): number | null {
-  const candidates = ["id", "value", "employee_id", "branch_id", "department_id", "position_id"]
-  for (const k of candidates) {
+  for (const k of ["fullName", "full_name", "displayName", "display_name", "name"]) {
     const v = record[k]
-    if (typeof v === "number") return v
-    if (typeof v === "string" && v.trim() && !Number.isNaN(Number(v))) return Number(v)
+    if (typeof v === "string" && v.trim()) return v.trim()
   }
-  return null
+  const first =
+    (typeof record.first_name === "string" && record.first_name) ||
+    (typeof record.firstName === "string" && record.firstName) ||
+    ""
+  const middle =
+    (typeof record.middle_name === "string" && record.middle_name) ||
+    (typeof record.middleName === "string" && record.middleName) ||
+    ""
+  const last =
+    (typeof record.last_name === "string" && record.last_name) ||
+    (typeof record.lastName === "string" && record.lastName) ||
+    ""
+  const full = [first, middle, last].filter(Boolean).join(" ").trim()
+  if (full) return full
+  const employeeNo =
+    (typeof record.employeeNo === "string" && record.employeeNo.trim()) ||
+    (typeof record.employee_no === "string" && record.employee_no.trim()) ||
+    ""
+  if (employeeNo) return employeeNo
+  const id = getId(record)
+  return id !== null ? `Employee #${id}` : "—"
 }
 
 function readRelatedId(record: AdminRecord, keys: string[]) {
@@ -103,15 +139,69 @@ function readRelatedId(record: AdminRecord, keys: string[]) {
 }
 
 function getSelectedLabel(options: LookupOption[], id: number | null, fallback: string) {
-  if (id === null) {
-    return fallback
-  }
+  if (id === null) return fallback
   return options.find((option) => option.id === id)?.label ?? fallback
+}
+
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+}
+
+function toLookupOptions(
+  rows: AdminRecord[],
+  labelKeys: string[],
+  branchKeys: string[],
+  departmentKeys: string[]
+): LookupOption[] {
+  return rows
+    .map<LookupOption | null>((row) => {
+      const id = getId(row)
+      if (id === null) return null
+      return {
+        id,
+        label: getName(row, ...labelKeys),
+        branchId: readRelatedId(row, branchKeys),
+        departmentId: readRelatedId(row, departmentKeys),
+      }
+    })
+    .filter((option): option is LookupOption => option !== null)
+}
+
+function FieldShell({
+  label,
+  htmlFor,
+  required,
+  children,
+  className,
+}: {
+  label: string
+  htmlFor?: string
+  required?: boolean
+  children: React.ReactNode
+  className?: string
+}) {
+  return (
+    <div className={cn("flex min-w-0 flex-col gap-1.5", className)}>
+      <Label htmlFor={htmlFor} className="text-sm font-medium text-foreground">
+        {label}
+        {required ? <span className="text-destructive"> *</span> : null}
+      </Label>
+      {children}
+    </div>
+  )
+}
+
+function SectionHeader({ title }: { title: string }) {
+  return (
+    <h3 className="text-sm font-semibold tracking-tight text-foreground">{title}</h3>
+  )
 }
 
 export function EmployeeInviteView() {
   const [firstName, setFirstName] = React.useState("")
   const [lastName, setLastName] = React.useState("")
+  const [email, setEmail] = React.useState("")
+  const [phone, setPhone] = React.useState("")
   const [branchId, setBranchId] = React.useState<number | null>(null)
   const [departmentId, setDepartmentId] = React.useState<number | null>(null)
   const [positionId, setPositionId] = React.useState<number | null>(null)
@@ -149,10 +239,21 @@ export function EmployeeInviteView() {
       try {
         const [br, de, po, wo, em] = await Promise.allSettled([
           listBranches(token, { page: 1, limit: 100, sortBy: "name", sortOrder: "ASC" }),
-          listDepartments(token, { page: 1, limit: 100, sortBy: "name", sortOrder: "ASC" }),
-          listPositions(token, { page: 1, limit: 100, sortBy: "name", sortOrder: "ASC" }),
-          listOnboardingWorkflows(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
-          listEmployees(token, { page: 1, limit: 200, sortBy: "first_name", sortOrder: "ASC", employment_status: "active" }),
+          listDepartments(token, { page: 1, limit: 200, sortBy: "name", sortOrder: "ASC" }),
+          listPositions(token, { page: 1, limit: 200, sortBy: "name", sortOrder: "ASC" }),
+          listOnboardingWorkflows(token, {
+            page: 1,
+            limit: 100,
+            sortBy: "created_at",
+            sortOrder: "DESC",
+          }),
+          listEmployees(token, {
+            page: 1,
+            limit: 200,
+            sortBy: "first_name",
+            sortOrder: "ASC",
+            employment_status: "active",
+          }),
         ])
         if (cancelled) return
 
@@ -200,145 +301,128 @@ export function EmployeeInviteView() {
         if (!cancelled) setLoading(false)
       }
     }
-    load()
-    return () => { cancelled = true }
+    void load()
+    return () => {
+      cancelled = true
+    }
   }, [token])
 
   const branchOptions = React.useMemo(
-    () =>
-      branches
-        .map<LookupOption | null>((branch) => {
-          const id = getId(branch)
-          return id !== null ? { id, label: getName(branch, "branch_name", "name"), branchId: null, departmentId: null } : null
-        })
-        .filter((option): option is LookupOption => option !== null),
+    () => toLookupOptions(branches, ["branch_name", "branchName", "name"], [], []),
     [branches]
   )
+
   const allDepartmentOptions = React.useMemo(
     () =>
-      departments
-        .map<LookupOption | null>((department) => {
-          const id = getId(department)
-          if (id === null) {
-            return null
-          }
-          return {
-            id,
-            label: getName(department, "department_name", "name"),
-            branchId: readRelatedId(department, ["branch_id", "primary_branch_id", "branch"]) ?? null,
-            departmentId: null,
-          }
-        })
-        .filter((option): option is LookupOption => option !== null),
+      toLookupOptions(
+        departments,
+        ["department_name", "departmentName", "name"],
+        ["branch_id", "branchId", "primary_branch_id", "primaryBranchId", "branch"],
+        []
+      ),
     [departments]
   )
+
+  // Strict cascade: departments only for the selected branch (no “show all” fallback).
   const departmentOptions = React.useMemo(() => {
-    if (branchId === null) {
-      return allDepartmentOptions
-    }
-    const filtered = allDepartmentOptions.filter(
-      (option) => option.branchId === null || option.branchId === branchId
-    )
-    return filtered.length > 0 ? filtered : allDepartmentOptions
+    if (branchId === null) return []
+    return allDepartmentOptions.filter((option) => option.branchId === branchId)
   }, [allDepartmentOptions, branchId])
+
   const allPositionOptions = React.useMemo(
     () =>
-      positions
-        .map<LookupOption | null>((position) => {
-          const id = getId(position)
-          if (id === null) {
-            return null
-          }
-          return {
-            id,
-            label: getName(position, "position_name", "name", "title"),
-            branchId: readRelatedId(position, ["branch_id", "primary_branch_id", "branch"]) ?? null,
-            departmentId:
-              readRelatedId(position, ["department_id", "primary_department_id", "department"]) ?? null,
-          }
-        })
-        .filter((option): option is LookupOption => option !== null),
+      toLookupOptions(
+        positions,
+        ["position_name", "positionName", "name", "title"],
+        ["branch_id", "branchId", "primary_branch_id", "primaryBranchId", "branch"],
+        ["department_id", "departmentId", "primary_department_id", "primaryDepartmentId", "department"]
+      ),
     [positions]
   )
+
   const positionOptions = React.useMemo(() => {
-    const filtered = allPositionOptions.filter((option) => {
-      const matchesBranch = branchId === null || option.branchId === null || option.branchId === branchId
-      const matchesDepartment =
-        departmentId === null || option.departmentId === null || option.departmentId === departmentId
-      return matchesBranch && matchesDepartment
-    })
-    return filtered.length > 0 ? filtered : allPositionOptions
+    if (departmentId === null) return []
+    const byDepartment = allPositionOptions.filter((option) => option.departmentId === departmentId)
+    if (byDepartment.length > 0) return byDepartment
+    // Positions with no department set still constrained by branch when possible.
+    return allPositionOptions.filter(
+      (option) =>
+        option.departmentId === null &&
+        (option.branchId === null || option.branchId === branchId)
+    )
   }, [allPositionOptions, branchId, departmentId])
+
   const allEmployeeOptions = React.useMemo(
     () =>
-      employees
-        .map<LookupOption | null>((employee) => {
-          const id = getId(employee)
-          if (id === null) {
-            return null
-          }
-          return {
-            id,
-            label: getName(employee, "full_name", "name", "first_name"),
-            branchId:
-              readRelatedId(employee, ["primary_branch_id", "branch_id", "primary_branch", "branch"]) ?? null,
-            departmentId:
-              readRelatedId(employee, [
-                "primary_department_id",
-                "department_id",
-                "primary_department",
-                "department",
-              ]) ?? null,
-          }
-        })
-        .filter((option): option is LookupOption => option !== null),
+      toLookupOptions(
+        employees,
+        ["fullName", "full_name", "displayName", "display_name", "name", "firstName", "first_name"],
+        ["primary_branch_id", "branch_id", "primaryBranchId", "primary_branch", "branch"],
+        [
+          "primary_department_id",
+          "department_id",
+          "primaryDepartmentId",
+          "departmentId",
+          "primary_department",
+          "department",
+        ]
+      ),
     [employees]
   )
+
   const employeeOptions = React.useMemo(() => {
-    const filtered = allEmployeeOptions.filter((option) => {
-      const matchesDepartment =
-        departmentId === null || option.departmentId === null || option.departmentId === departmentId
-      return matchesDepartment
-    })
+    if (departmentId === null) return allEmployeeOptions
+    const filtered = allEmployeeOptions.filter(
+      (option) => option.departmentId === null || option.departmentId === departmentId
+    )
     return filtered.length > 0 ? filtered : allEmployeeOptions
   }, [allEmployeeOptions, departmentId])
+
   const workflowOptions = React.useMemo(
-    () =>
-      workflows
-        .map<LookupOption | null>((workflow) => {
-          const id = getId(workflow)
-          return id !== null ? { id, label: getName(workflow, "name", "title", "workflow_name"), branchId: null, departmentId: null } : null
-        })
-        .filter((option): option is LookupOption => option !== null),
+    () => toLookupOptions(workflows, ["name", "title", "workflow_name", "workflowName"], [], []),
     [workflows]
   )
 
-  React.useEffect(() => {
-    if (branchId === null) {
-      return
-    }
-    if (!departmentOptions.some((option) => option.id === departmentId)) {
-      setDepartmentId(null)
-    }
-  }, [branchId, departmentId, departmentOptions])
+  const handleBranchChange = (value: string | null) => {
+    const next = value ? Number(value) : null
+    setBranchId(Number.isFinite(next as number) ? next : null)
+    setDepartmentId(null)
+    setPositionId(null)
+    setReportsToId(null)
+  }
 
-  React.useEffect(() => {
-    if (departmentId === null) {
-      return
-    }
-    if (!positionOptions.some((option) => option.id === positionId)) {
-      setPositionId(null)
-    }
-    if (!employeeOptions.some((option) => option.id === reportsToId)) {
-      setReportsToId(null)
-    }
-  }, [departmentId, employeeOptions, positionId, positionOptions, reportsToId])
+  const handleDepartmentChange = (value: string | null) => {
+    const next = value ? Number(value) : null
+    setDepartmentId(Number.isFinite(next as number) ? next : null)
+    setPositionId(null)
+    setReportsToId(null)
+  }
+
+  const handlePositionChange = (value: string | null) => {
+    const next = value ? Number(value) : null
+    setPositionId(Number.isFinite(next as number) ? next : null)
+  }
 
   React.useEffect(() => {
     if (employmentType !== "probation" && probationEndDate) {
       setProbationEndDate("")
     }
   }, [employmentType, probationEndDate])
+
+  const resetForm = () => {
+    setFirstName("")
+    setLastName("")
+    setEmail("")
+    setPhone("")
+    setBranchId(null)
+    setDepartmentId(null)
+    setPositionId(null)
+    setReportsToId(null)
+    setEmploymentType("full_time")
+    setHireDate("")
+    setProbationEndDate("")
+    setWorkflowId(null)
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -350,8 +434,30 @@ export function EmployeeInviteView() {
       toast.error("First name and last name are required.")
       return
     }
-    if (!branchId || !departmentId || !positionId) {
-      toast.error("Branch, Department and Position are required.")
+    const normalizedEmail = email.trim().toLowerCase()
+    const normalizedPhone = phone.trim()
+    if (!normalizedEmail) {
+      toast.error("Email is required.")
+      return
+    }
+    if (!isValidEmail(normalizedEmail)) {
+      toast.error("Enter a valid email address.")
+      return
+    }
+    if (!normalizedPhone) {
+      toast.error("Phone number is required.")
+      return
+    }
+    if (!branchId) {
+      toast.error("Please select a branch first.")
+      return
+    }
+    if (!departmentId) {
+      toast.error("Please select a department for the selected branch.")
+      return
+    }
+    if (!positionId) {
+      toast.error("Please select a position.")
       return
     }
     if (!workflowId) {
@@ -359,22 +465,29 @@ export function EmployeeInviteView() {
       return
     }
 
-    const payload: any = {
+    const payload: CreateEmployeePayload = {
       employee_no: "",
       primary_branch_id: branchId,
       primary_department_id: departmentId,
       primary_position_id: positionId,
-      primary_designation_id: positionId, // fallback same as position if no designation separate
       position_id: positionId,
       employment_status: "onboarding",
-      employment_type: employmentType,
+      employment_type: employmentType as CreateEmployeePayload["employment_type"],
       reports_to: reportsToId ?? undefined,
       first_name: firstName.trim(),
       last_name: lastName.trim(),
       hire_date: hireDate || undefined,
       probation_end_date: employmentType === "probation" ? probationEndDate || undefined : undefined,
       departments: [{ is_primary: true, department_id: departmentId }],
-      contacts: [],
+      contacts: [
+        {
+          contact_type: "work",
+          is_primary: true,
+          email: normalizedEmail,
+          phone_number: normalizedPhone,
+          notes: "Created from recruitment invite.",
+        },
+      ],
       addresses: [],
       relatives: [],
       identifications: [],
@@ -392,33 +505,25 @@ export function EmployeeInviteView() {
         planned_completion_date: undefined,
         provisioning: {
           role_ids: [],
-          branch_access_ids: [],
+          branch_access_ids: branchId ? [branchId] : [],
           attendance_mode: "shift",
-          shift_assignment: null,
-          timetable_assignment: null,
-          device_assignment: null,
         },
       },
-      metadata: { source: "invite" },
+      metadata: {
+        source: "invite",
+        branch_name: getSelectedLabel(branchOptions, branchId, ""),
+        department_name: getSelectedLabel(departmentOptions, departmentId, ""),
+        position_name: getSelectedLabel(positionOptions, positionId, ""),
+      },
     }
 
     setSubmitting(true)
     try {
-      const res = await createEmployeeProfile(token, payload)
+      await createEmployeeProfile(token, payload)
       showSuccessAlert("Employee invite created successfully. Onboarding started.")
-      // reset form
-      setFirstName("")
-      setLastName("")
-      setBranchId(null)
-      setDepartmentId(null)
-      setPositionId(null)
-      setReportsToId(null)
-      setEmploymentType("full_time")
-      setHireDate("")
-      setProbationEndDate("")
-      setWorkflowId(null)
-    } catch (err: any) {
-      const msg = err?.message || "Failed to create employee invite."
+      resetForm()
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to create employee invite."
       showErrorAlert(msg)
       toast.error(msg)
     } finally {
@@ -426,170 +531,306 @@ export function EmployeeInviteView() {
     }
   }
 
+  const departmentDisabled = branchId === null || loading
+  const positionDisabled = departmentId === null || loading
+
   return (
-    <div className="flex flex-col gap-4">
-      <Card>
-        <CardContent className="pt-6">
-          {error && <div className="mb-3 rounded border border-red-200 bg-red-50 p-2 text-sm text-red-700">{error}</div>}
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {loading ? (
-              <div className="flex justify-end">
-                <p className="text-xs text-muted-foreground">
-                  Loading reference data…
-                </p>
-              </div>
-            ) : null}
+    <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 pb-8">
+      {error ? (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {error}
+        </div>
+      ) : null}
 
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div>
-                  <Label htmlFor="first_name">First Name *</Label>
-                  <Input id="first_name" value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="First name" required />
-                </div>
-                <div>
-                  <Label htmlFor="last_name">Last Name *</Label>
-                  <Input id="last_name" value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Last name" required />
-                </div>
-
-                <div>
-                  <Label>Branch *</Label>
-                  <Select value={branchId ? String(branchId) : ""} onValueChange={(v) => setBranchId(Number(v))}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select branch">
-                        {getSelectedLabel(branchOptions, branchId, "Select branch")}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {branchOptions.length === 0 && <div className="px-2 py-1 text-xs text-muted-foreground">No branches found</div>}
-                      {branchOptions.map((o) => (
-                        <SelectItem key={o.id} value={String(o.id)}>{o.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <Label>Department *</Label>
-                  <Select value={departmentId ? String(departmentId) : ""} onValueChange={(v) => setDepartmentId(Number(v))}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select department">
-                        {getSelectedLabel(departmentOptions, departmentId, "Select department")}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {departmentOptions.length === 0 && <div className="px-2 py-1 text-xs text-muted-foreground">No departments found</div>}
-                      {departmentOptions.map((o) => (
-                        <SelectItem key={o.id} value={String(o.id)}>{o.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <Label>Position *</Label>
-                  <Select value={positionId ? String(positionId) : ""} onValueChange={(v) => setPositionId(Number(v))}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select position">
-                        {getSelectedLabel(positionOptions, positionId, "Select position")}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {positionOptions.length === 0 && <div className="px-2 py-1 text-xs text-muted-foreground">No positions found</div>}
-                      {positionOptions.map((o) => (
-                        <SelectItem key={o.id} value={String(o.id)}>{o.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <Label>Reports To</Label>
-                  <Select value={reportsToId ? String(reportsToId) : ""} onValueChange={(v) => setReportsToId(v ? Number(v) : null)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select manager (optional)">
-                        {getSelectedLabel(employeeOptions, reportsToId, "Select manager (optional)")}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {employeeOptions.map((o) => (
-                        <SelectItem key={o.id} value={String(o.id)}>{o.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <Label>Employment Type *</Label>
-                  <Select value={employmentType} onValueChange={(v) => setEmploymentType(v || "full_time")}>
-                    <SelectTrigger>
-                      <SelectValue>
-                        {EMPLOYMENT_TYPES.find((type) => type.value === employmentType)?.label ?? "Employment Type"}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {EMPLOYMENT_TYPES.map((et) => (
-                        <SelectItem key={et.value} value={et.value}>{et.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <Label>Onboarding Workflow *</Label>
-                  <Select value={workflowId ? String(workflowId) : ""} onValueChange={(v) => setWorkflowId(Number(v))}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select workflow">
-                        {getSelectedLabel(workflowOptions, workflowId, "Select workflow")}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {workflowOptions.length === 0 && <div className="px-2 py-1 text-xs text-muted-foreground">No workflows found</div>}
-                      {workflowOptions.map((o) => (
-                        <SelectItem key={o.id} value={String(o.id)}>{o.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <Label>Hire Date</Label>
-                  <DatePickerPresets
-                    value={hireDate}
-                    onChange={setHireDate}
-                    placeholder="Select hire date"
+      <form onSubmit={handleSubmit} className="flex flex-col gap-8">
+        <section className="flex flex-col gap-4">
+          <SectionHeader title="Personal details" />
+          {loading ? (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              {Array.from({ length: 4 }).map((_, index) => (
+                <Skeleton key={index} className="h-16 w-full" />
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <FieldShell label="First name" htmlFor="first_name" required>
+                <Input
+                  id="first_name"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  placeholder="First name"
+                  autoComplete="given-name"
+                  required
+                />
+              </FieldShell>
+              <FieldShell label="Last name" htmlFor="last_name" required>
+                <Input
+                  id="last_name"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  placeholder="Last name"
+                  autoComplete="family-name"
+                  required
+                />
+              </FieldShell>
+              <FieldShell label="Work email" htmlFor="email" required>
+                <div className="relative">
+                  <MailIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="name@company.com"
+                    autoComplete="email"
+                    className="pl-9"
+                    required
                   />
                 </div>
+              </FieldShell>
+              <FieldShell label="Phone number" htmlFor="phone" required>
+                <div className="relative">
+                  <PhoneIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="phone"
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="+255 7XX XXX XXX"
+                    autoComplete="tel"
+                    className="pl-9"
+                    required
+                  />
+                </div>
+              </FieldShell>
+            </div>
+          )}
+        </section>
 
-                {employmentType === "probation" ? (
-                  <div>
-                    <Label>Probation End Date</Label>
-                    <DatePickerPresets
-                      value={probationEndDate}
-                      onChange={setProbationEndDate}
-                      placeholder="Select probation end date"
-                    />
-                  </div>
-                ) : null}
-              </div>
+        <section className="flex flex-col gap-4">
+          <SectionHeader title="Work assignment" />
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <FieldShell label="Branch" required>
+              <Select
+                value={branchId != null ? String(branchId) : null}
+                onValueChange={handleBranchChange}
+                disabled={loading}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select branch">
+                    {getSelectedLabel(branchOptions, branchId, "Select branch")}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {branchOptions.length === 0 ? (
+                    <div className="px-2 py-2 text-xs text-muted-foreground">No branches found</div>
+                  ) : null}
+                  {branchOptions.map((option) => (
+                    <SelectItem key={option.id} value={String(option.id)}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FieldShell>
 
-              <div className="flex gap-3 pt-2">
-                <Button type="submit" disabled={submitting || loading}>
-                  {submitting ? "Creating Invite..." : "Create Employee & Start Onboarding"}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setFirstName(""); setLastName(""); setBranchId(null); setDepartmentId(null); setPositionId(null);
-                    setReportsToId(null); setEmploymentType("full_time"); setHireDate(""); setProbationEndDate(""); setWorkflowId(null);
-                  }}
-                  disabled={submitting}
-                >
-                  Clear
-                </Button>
-              </div>
-          </form>
-        </CardContent>
-      </Card>
+            <FieldShell label="Department" required>
+              <Select
+                value={departmentId != null ? String(departmentId) : null}
+                onValueChange={handleDepartmentChange}
+                disabled={departmentDisabled}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue
+                    placeholder={branchId === null ? "Select branch first" : "Select department"}
+                  >
+                    {branchId === null
+                      ? "Select branch first"
+                      : getSelectedLabel(departmentOptions, departmentId, "Select department")}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {departmentOptions.length === 0 ? (
+                    <div className="px-2 py-2 text-xs text-muted-foreground">
+                      {branchId === null
+                        ? "Select a branch first"
+                        : "No departments for this branch"}
+                    </div>
+                  ) : null}
+                  {departmentOptions.map((option) => (
+                    <SelectItem key={option.id} value={String(option.id)}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FieldShell>
+
+            <FieldShell label="Position" required>
+              <Select
+                value={positionId != null ? String(positionId) : null}
+                onValueChange={handlePositionChange}
+                disabled={positionDisabled}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue
+                    placeholder={
+                      departmentId === null ? "Select department first" : "Select position"
+                    }
+                  >
+                    {departmentId === null
+                      ? "Select department first"
+                      : getSelectedLabel(positionOptions, positionId, "Select position")}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {positionOptions.length === 0 ? (
+                    <div className="px-2 py-2 text-xs text-muted-foreground">
+                      {departmentId === null
+                        ? "Select a department first"
+                        : "No positions for this department"}
+                    </div>
+                  ) : null}
+                  {positionOptions.map((option) => (
+                    <SelectItem key={option.id} value={String(option.id)}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FieldShell>
+
+            <FieldShell label="Reports to">
+              <Select
+                value={reportsToId != null ? String(reportsToId) : null}
+                onValueChange={(value) => setReportsToId(value ? Number(value) : null)}
+                disabled={loading}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select manager (optional)">
+                    {getSelectedLabel(employeeOptions, reportsToId, "Select manager (optional)")}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {employeeOptions.length === 0 ? (
+                    <div className="px-2 py-2 text-xs text-muted-foreground">
+                      {loading ? "Loading employees…" : "No employees found"}
+                    </div>
+                  ) : null}
+                  {employeeOptions.map((option) => (
+                    <SelectItem key={option.id} value={String(option.id)}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FieldShell>
+          </div>
+        </section>
+
+        <section className="flex flex-col gap-4">
+          <SectionHeader title="Employment & onboarding" />
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <FieldShell label="Employment type" required>
+              <Select
+                value={employmentType}
+                onValueChange={(value) => setEmploymentType(value || "full_time")}
+                disabled={loading}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue>
+                    {EMPLOYMENT_TYPES.find((type) => type.value === employmentType)?.label ??
+                      "Employment type"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {EMPLOYMENT_TYPES.map((type) => (
+                    <SelectItem key={type.value} value={type.value}>
+                      {type.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FieldShell>
+
+            <FieldShell label="Onboarding workflow" required>
+              <Select
+                value={workflowId != null ? String(workflowId) : null}
+                onValueChange={(value) => setWorkflowId(value ? Number(value) : null)}
+                disabled={loading}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select workflow">
+                    {getSelectedLabel(workflowOptions, workflowId, "Select workflow")}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {workflowOptions.length === 0 ? (
+                    <div className="px-2 py-2 text-xs text-muted-foreground">No workflows found</div>
+                  ) : null}
+                  {workflowOptions.map((option) => (
+                    <SelectItem key={option.id} value={String(option.id)}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FieldShell>
+
+            <FieldShell label="Hire date">
+              <DatePickerPresets
+                value={hireDate}
+                onChange={setHireDate}
+                placeholder="Select hire date"
+              />
+            </FieldShell>
+
+            {employmentType === "probation" ? (
+              <FieldShell label="Probation end date">
+                <DatePickerPresets
+                  value={probationEndDate}
+                  onChange={setProbationEndDate}
+                  placeholder="Select probation end date"
+                />
+              </FieldShell>
+            ) : null}
+          </div>
+        </section>
+
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger
+                type="button"
+                className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                aria-label="About this action"
+              >
+                <InfoIcon className="size-4" />
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-xs text-left">
+                Submitting creates the employee profile and starts the selected onboarding workflow.
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          <Button type="button" variant="outline" onClick={resetForm} disabled={submitting}>
+            <RotateCcwIcon data-icon="inline-start" />
+            Reset
+          </Button>
+          <Button type="submit" size="lg" disabled={submitting || loading}>
+            {submitting ? (
+              <>
+                <Loader2Icon data-icon="inline-start" className="animate-spin" />
+                Creating…
+              </>
+            ) : (
+              <>
+                <UserPlus2Icon data-icon="inline-start" />
+                Invite & start onboarding
+              </>
+            )}
+          </Button>
+        </div>
+      </form>
     </div>
   )
 }

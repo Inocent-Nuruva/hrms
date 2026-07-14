@@ -1,16 +1,17 @@
 import { redirect } from "next/navigation"
 
 import { EmployeesListView } from "@/components/dashboard/employees-list-view"
-import { EmployeeInviteView } from "@/components/dashboard/employee-invite-view"
 import { EmployeeRegistrationView } from "@/components/dashboard/employee-registration-view"
 import { OnboardingView } from "@/components/dashboard/onboarding-view"
 import { OffboardingView } from "@/components/dashboard/offboarding-view"
+import { HrProfileUpdateApprovalsView } from "@/components/dashboard/hr-profile-update-approvals-view"
+
 const ALLOWED_VIEWS = new Set([
   "all",
   "registration",
-  "invite",
   "offboarding",
   "onboarding",
+  "profile-update-approvals",
   "attendance",
 ])
 
@@ -34,6 +35,10 @@ export default async function EmployeesViewPage({
     redirect("/dashboard/departments")
   }
 
+  if (normalized === "invite") {
+    redirect("/dashboard/employees/registration")
+  }
+
   if (!ALLOWED_VIEWS.has(normalized)) {
     redirect("/dashboard/employees")
   }
@@ -51,16 +56,16 @@ export default async function EmployeesViewPage({
     return <EmployeeRegistrationView />
   }
 
-  if (normalized === "invite") {
-    return <EmployeeInviteView />
-  }
-
   if (normalized === "onboarding") {
     return <OnboardingView />
   }
 
   if (normalized === "offboarding") {
     return <OffboardingView />
+  }
+
+  if (normalized === "profile-update-approvals") {
+    return <HrProfileUpdateApprovalsView />
   }
 
   return null

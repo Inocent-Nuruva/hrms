@@ -52,21 +52,9 @@ import {
   type AdminRecord,
   type EmployeeProfileSection,
 } from "@/lib/admin-api"
+import { hasDashboardAdminIdentity } from "@/lib/dashboard-identity"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import { asRecord, readString } from "@/utils/token-utils"
-
-const ADMIN_ROLE_KEYS = new Set([
-  "admin",
-  "administrator",
-  "super_admin",
-  "super-admin",
-  "company_admin",
-  "company-admin",
-  "hr_admin",
-  "hr-admin",
-  "owner",
-  "root",
-])
 
 type DashboardRole = {
   id: number
@@ -396,90 +384,11 @@ function isEmployeeDashboardData(value: unknown): value is EmployeeDashboardData
   return Boolean(user && employee)
 }
 
-function decodeJwtPayload(token: string) {
-  const parts = token.split(".")
-  if (parts.length !== 3 || !parts[1]) {
-    return null
-  }
-
-  try {
-    const normalized = parts[1].replace(/-/g, "+").replace(/_/g, "/")
-    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=")
-    return asRecord(JSON.parse(atob(padded)))
-  } catch {
-    return null
-  }
-}
-
-function collectRoleLabels(record: Record<string, unknown> | null) {
-  if (!record) {
-    return [] as string[]
-  }
-
-  const labels = new Set<string>()
-  const push = (value: unknown) => {
-    if (typeof value === "string" && value.trim()) {
-      labels.add(value.trim().toLowerCase())
-      return
-    }
-    const nested = asRecord(value)
-    if (!nested) {
-      return
-    }
-    const nestedLabel = readString(nested, ["name", "role", "key", "code", "slug", "type", "user_type"])
-    if (nestedLabel) {
-      labels.add(nestedLabel.toLowerCase())
-    }
-  }
-
-  push(record.role)
-  push(record.user_type)
-  push(record.type)
-
-  for (const key of ["roles", "authorities", "userRole", "user_role"]) {
-    const value = record[key]
-    if (Array.isArray(value)) {
-      value.forEach((entry) => push(entry))
-      continue
-    }
-    push(value)
-  }
-
-  return Array.from(labels)
-}
-
 function isAdminIdentity() {
   if (typeof window === "undefined") {
     return true
   }
-
-  let storedUser: Record<string, unknown> | null = null
-  const rawUser = window.localStorage.getItem(AUTH_STORAGE_KEYS.user)
-  if (rawUser) {
-    try {
-      storedUser = asRecord(JSON.parse(rawUser))
-    } catch {
-      storedUser = null
-    }
-  }
-
-  const rawTokens = window.localStorage.getItem(AUTH_STORAGE_KEYS.tokens)
-  let tokenPayload: Record<string, unknown> | null = null
-  if (rawTokens) {
-    try {
-      const parsed = JSON.parse(rawTokens) as Record<string, unknown>
-      const accessToken =
-        (typeof parsed.accessToken === "string" && parsed.accessToken.trim()) ||
-        (typeof parsed.access_token === "string" && parsed.access_token.trim()) ||
-        ""
-      tokenPayload = accessToken ? decodeJwtPayload(accessToken) : null
-    } catch {
-      tokenPayload = null
-    }
-  }
-
-  const labels = [...collectRoleLabels(storedUser), ...collectRoleLabels(tokenPayload)]
-  return labels.some((role) => ADMIN_ROLE_KEYS.has(role))
+  return hasDashboardAdminIdentity()
 }
 
 function formatDate(value?: string | null) {

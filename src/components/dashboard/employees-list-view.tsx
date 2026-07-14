@@ -14,10 +14,15 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
+import {
+  EmployeeAccessRemovalDialog,
+  type EmployeeAccessRemovalTarget,
+} from "@/components/dashboard/employee-access-removal-dialog"
 import { listEmployees, type AdminRecord, type EmployeesQueryParams } from "@/lib/admin-api"
 import { useDebouncedValue } from "@/hooks/use-debounced-value"
 import { useRenderDiagnostics } from "@/hooks/use-render-diagnostics"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
+import { Trash2 } from "lucide-react"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 const EMPLOYEE_STATUS_REFRESH_KEY = "hrms.employees.status.updatedAt"
@@ -52,22 +57,22 @@ function readStoredToken() {
     return ""
   }
 
-  const direct = window.localStorage.getItem(TOKEN_STORAGE_KEY)?.trim() ?? ""
-  if (direct) {
-    return direct
-  }
-
+  // Prefer session tokens bag (same order as branches/departments) so restricted
+  // company users don't hit a stale legacy access-token key.
   const authTokensRaw = window.localStorage.getItem(AUTH_STORAGE_KEYS.tokens)
-  if (!authTokensRaw) {
-    return ""
+  if (authTokensRaw) {
+    try {
+      const parsed = JSON.parse(authTokensRaw) as { accessToken?: string; access_token?: string }
+      const accessToken = (parsed.accessToken ?? parsed.access_token ?? "").trim()
+      if (accessToken) {
+        return accessToken
+      }
+    } catch {
+      // Fall through to legacy key.
+    }
   }
 
-  try {
-    const parsed = JSON.parse(authTokensRaw) as { accessToken?: string; access_token?: string }
-    return (parsed.accessToken ?? parsed.access_token ?? "").trim()
-  } catch {
-    return ""
-  }
+  return window.localStorage.getItem(TOKEN_STORAGE_KEY)?.trim() ?? ""
 }
 
 function readString(row: AdminRecord, keys: string[]) {
@@ -206,6 +211,8 @@ export function EmployeesListView() {
   const [totalPages, setTotalPages] = React.useState<number | null>(null)
   const [total, setTotal] = React.useState<number | null>(null)
   const [missingDialog, setMissingDialog] = React.useState<{ employeeNo: string; missing: Array<{ key: string; label: string }> } | null>(null)
+  const [removalOpen, setRemovalOpen] = React.useState(false)
+  const [removalTarget, setRemovalTarget] = React.useState<EmployeeAccessRemovalTarget | null>(null)
   const debouncedSearch = useDebouncedValue(query.search, 350)
   const lastFetchAtRef = React.useRef(0)
 
@@ -332,6 +339,25 @@ export function EmployeesListView() {
     router.push(employeeProfileHref(employeeNo, missingItemKey))
   }
 
+  const openRemovalDialog = React.useCallback((row: AdminRecord) => {
+    const idRaw = row.id ?? row.employee_id ?? row.employeeId
+    const employeeId =
+      typeof idRaw === "number" && Number.isFinite(idRaw)
+        ? idRaw
+        : typeof idRaw === "string" && idRaw.trim()
+          ? Number(idRaw)
+          : null
+    if (employeeId === null || !Number.isFinite(employeeId)) {
+      return
+    }
+    setRemovalTarget({
+      employeeId,
+      employeeName: employeeDisplayName(row),
+      employeeNo: readString(row, ["employee_no", "employeeNo", "user_no", "employee_number", "employeeNumber"]),
+    })
+    setRemovalOpen(true)
+  }, [])
+
   const handleEmployeeSelect = (employeeId: string) => {
     const matched = rows.find((r) => {
       const id = String(r.id ?? r.employee_id ?? r.employee_no ?? r.employeeNo ?? "")
@@ -405,47 +431,69 @@ export function EmployeesListView() {
     {
       key: "status",
       label: "Status",
-      defaultWidth: 70,
+      defaultWidth: 130,
       sortable: true,
       render: (row: AdminRecord) => {
-        const s = (readString(row, ["employment_status", "employmentStatus", "status"]) || "active").toLowerCase()
-        const display = s.charAt(0).toUpperCase() + s.slice(1).replace("-", " ")
-        const isActive = s === "active" || s === "onboarding"
+        const s = (readString(row, ["employment_status", "employmentStatus", "status"]) || "active")
+          .toLowerCase()
+          .trim()
+        const display = s
+          ? s.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+          : "Unknown"
+        const tone =
+          s === "active" || s === "onboarding"
+            ? "text-emerald-600"
+            : s === "pending"
+              ? "text-amber-600"
+              : s === "inactive" || s === "terminated" || s === "offboarding"
+                ? "text-rose-600"
+                : "text-slate-600"
+        const dot =
+          s === "active" || s === "onboarding"
+            ? "bg-emerald-500"
+            : s === "pending"
+              ? "bg-amber-500"
+              : s === "inactive" || s === "terminated" || s === "offboarding"
+                ? "bg-rose-500"
+                : "bg-slate-400"
         return (
-          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-xs rounded ${isActive ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+          <span
+            className={`inline-flex items-center gap-1.5 text-xs font-semibold whitespace-nowrap ${tone}`}
+            title={display}
+          >
+            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${dot}`} />
             {display}
           </span>
         )
       }
     },
-  ], [])
+    {
+      key: "actions",
+      label: "Actions",
+      defaultWidth: 80,
+      sortable: false,
+      render: (row: AdminRecord) => (
+        <button
+          type="button"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-rose-200 text-rose-600 hover:bg-rose-50"
+          title="Remove / disable access"
+          aria-label="Remove or disable access"
+          onClick={(event) => {
+            event.stopPropagation()
+            openRemovalDialog(row)
+          }}
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      ),
+    },
+  ], [openRemovalDialog])
 
   return (
-    <div>
-      <div className="mb-4 flex flex-wrap items-end gap-3">
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Status</label>
-          <select
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm"
-            value={query.employment_status}
-            onChange={(event) => {
-              setPage(1)
-              setQuery((previous) => ({
-                ...previous,
-                employment_status: event.target.value as typeof previous.employment_status,
-              }))
-            }}
-          >
-            <option value="">All</option>
-            <option value="onboarding">Onboarding</option>
-            <option value="active">Active</option>
-            <option value="suspended">Suspended</option>
-            <option value="terminated">Terminated</option>
-            <option value="exited">Exited</option>
-          </select>
-        </div>
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-1.5">
         <SearchToggleField
-          className="min-w-[220px]"
+          className="min-w-0"
           placeholder="Search name, email, phone, user_no"
           value={query.search}
           onChange={(value) => {
@@ -453,9 +501,28 @@ export function EmployeesListView() {
             setQuery((previous) => ({ ...previous, search: value }))
           }}
         />
+        <select
+          className="h-8 min-w-[8.5rem] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
+          value={query.employment_status}
+          onChange={(event) => {
+            setPage(1)
+            setQuery((previous) => ({
+              ...previous,
+              employment_status: event.target.value as typeof previous.employment_status,
+            }))
+          }}
+          aria-label="Filter employment status"
+        >
+          <option value="">All statuses</option>
+          <option value="onboarding">Onboarding</option>
+          <option value="active">Active</option>
+          <option value="suspended">Suspended</option>
+          <option value="terminated">Terminated</option>
+          <option value="exited">Exited</option>
+        </select>
       </div>
 
-      {error ? <p className="mb-3 text-sm text-rose-600">{error}</p> : null}
+      {error ? <p className="text-sm text-rose-600">{error}</p> : null}
 
       <ResizableTable
         title="Employees"
@@ -467,6 +534,18 @@ export function EmployeesListView() {
         loading={loading}
         storageKey="employees"
         enableAnimations={false}
+      />
+
+      <EmployeeAccessRemovalDialog
+        open={removalOpen}
+        target={removalTarget}
+        onOpenChange={(open) => {
+          setRemovalOpen(open)
+          if (!open) setRemovalTarget(null)
+        }}
+        onCompleted={() => {
+          void fetchEmployees()
+        }}
       />
 
       <AlertDialog

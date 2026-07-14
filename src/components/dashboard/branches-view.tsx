@@ -20,6 +20,7 @@ import {
   type AdminRecord,
   type BranchesQueryParams,
 } from "@/lib/admin-api"
+import { canPerformPermission, normalizePermissionLabels } from "@/components/app-sidebar"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import {
   AlertDialog,
@@ -86,22 +87,81 @@ function readStoredToken() {
     return ""
   }
 
-  const direct = window.localStorage.getItem(TOKEN_STORAGE_KEY)?.trim() ?? ""
-  if (direct) {
-    return direct
+  const authTokensRaw = window.localStorage.getItem(AUTH_STORAGE_KEYS.tokens)
+  if (authTokensRaw) {
+    try {
+      const parsed = JSON.parse(authTokensRaw) as { accessToken?: string; access_token?: string }
+      const accessToken = (parsed.accessToken ?? parsed.access_token ?? "").trim()
+      if (accessToken) {
+        return accessToken
+      }
+    } catch {
+      // Fall back to legacy key below.
+    }
   }
 
-  const authTokensRaw = window.localStorage.getItem(AUTH_STORAGE_KEYS.tokens)
-  if (!authTokensRaw) {
-    return ""
+  return window.localStorage.getItem(TOKEN_STORAGE_KEY)?.trim() ?? ""
+}
+
+function collectPermissionNames(value: unknown, sink: Set<string>) {
+  if (typeof value === "string" && value.trim()) {
+    sink.add(value.trim())
+    return
+  }
+
+  if (Array.isArray(value)) {
+    value.forEach((entry) => collectPermissionNames(entry, sink))
+    return
+  }
+
+  if (typeof value !== "object" || value === null) {
+    return
+  }
+
+  const record = value as Record<string, unknown>
+  for (const key of ["permissions", "authorities", "actions", "scopes", "data", "items", "results", "user"]) {
+    collectPermissionNames(record[key], sink)
+  }
+}
+
+function readActorPermissions() {
+  if (typeof window === "undefined") {
+    return [] as string[]
+  }
+
+  const names = new Set<string>()
+
+  try {
+    const raw = window.sessionStorage.getItem("hrms.dashboard.actorPermissions")
+    if (raw) {
+      const parsed = JSON.parse(raw) as unknown
+      if (Array.isArray(parsed)) {
+        return normalizePermissionLabels(parsed.filter((entry) => typeof entry === "string"))
+      }
+    }
+  } catch {
+    // Fall back to local payloads.
   }
 
   try {
-    const parsed = JSON.parse(authTokensRaw) as { accessToken?: string; access_token?: string }
-    return (parsed.accessToken ?? parsed.access_token ?? "").trim()
+    const rawUser = window.localStorage.getItem(AUTH_STORAGE_KEYS.user)
+    if (rawUser) {
+      collectPermissionNames(JSON.parse(rawUser), names)
+    }
   } catch {
-    return ""
+    // ignore malformed stored user
   }
+
+  try {
+    const rawTokens = window.localStorage.getItem(AUTH_STORAGE_KEYS.tokens)
+    if (rawTokens) {
+      collectPermissionNames(JSON.parse(rawTokens), names)
+    }
+  } catch {
+    // ignore malformed stored tokens
+  }
+
+  return normalizePermissionLabels(Array.from(names))
 }
 
 function readString(row: AdminRecord, keys: string[]) {
@@ -204,6 +264,10 @@ function accessRowUserId(row: AdminRecord) {
 }
 
 export function BranchesView() {
+  // Permissions come from browser storage — always start empty so SSR and the
+  // first client paint match, then hydrate from session/local storage after mount.
+  const [actorPermissions, setActorPermissions] = React.useState<string[]>([])
+  const [permissionsReady, setPermissionsReady] = React.useState(false)
   const [query, setQuery] = React.useState(DEFAULT_QUERY)
   const [rows, setRows] = React.useState<AdminRecord[]>([])
   const [loading, setLoading] = React.useState(false)
@@ -228,6 +292,11 @@ export function BranchesView() {
   const [accessPickerOpen, setAccessPickerOpen] = React.useState(false)
   const [pendingDelete, setPendingDelete] = React.useState<AdminRecord | null>(null)
   const debouncedSearch = useDebouncedValue(query.search, 350)
+
+  React.useEffect(() => {
+    setActorPermissions(readActorPermissions())
+    setPermissionsReady(true)
+  }, [])
 
   const cityOptions = React.useMemo(() => {
     const selectedCountry = form.country.trim().toLowerCase()
@@ -329,6 +398,14 @@ export function BranchesView() {
       setError("Authentication required. Please log in again.")
       return
     }
+    if (editingId === null && !canCreateBranches) {
+      setError("You do not have permission to create branches.")
+      return
+    }
+    if (editingId !== null && !canUpdateBranches) {
+      setError("You do not have permission to update branches.")
+      return
+    }
 
     const payload: AdminRecord = {
       name: form.name.trim(),
@@ -363,6 +440,10 @@ export function BranchesView() {
     if (!token || id === null) {
       return
     }
+    if (!canDeleteBranches) {
+      setError("You do not have permission to delete branches.")
+      return
+    }
     setSaving(true)
     setError(null)
     try {
@@ -379,6 +460,10 @@ export function BranchesView() {
     const token = readStoredToken()
     const id = readNumber(row, ["id"])
     if (!token || id === null) {
+      return
+    }
+    if (!canManageBranchAccess) {
+      setError("You do not have permission to manage branch access.")
       return
     }
     setAccessBranch(row)
@@ -427,6 +512,10 @@ export function BranchesView() {
       setAccessError("Please choose at least one valid user before granting branch access.")
       return
     }
+    if (!canManageBranchAccess) {
+      setAccessError("You do not have permission to manage branch access.")
+      return
+    }
     setSaving(true)
     setAccessError(null)
     try {
@@ -447,6 +536,10 @@ export function BranchesView() {
     const token = readStoredToken()
     const branchId = readNumber(accessBranch ?? {}, ["id"])
     if (!token || branchId === null) {
+      return
+    }
+    if (!canManageBranchAccess) {
+      setAccessError("You do not have permission to manage branch access.")
       return
     }
     setSaving(true)
@@ -473,15 +566,21 @@ export function BranchesView() {
     return id !== null && !assignedUserIds.has(id)
   })
 
-  const filteredSelectableUsers = React.useMemo(() => {
-    const queryText = accessUserQuery.trim().toLowerCase()
-    if (!queryText) {
-      return selectableUsers.slice(0, 8)
-    }
-    return selectableUsers
-      .filter((user) => `${readNumber(user, ["id", "user_id"]) ?? ""} ${userLabel(user)}`.toLowerCase().includes(queryText))
-      .slice(0, 8)
-  }, [accessUserQuery, selectableUsers])
+  const queryText = accessUserQuery.trim().toLowerCase()
+  const filteredSelectableUsers = (!queryText
+    ? selectableUsers.slice(0, 8)
+    : selectableUsers
+        .filter((user) => `${readNumber(user, ["id", "user_id"]) ?? ""} ${userLabel(user)}`.toLowerCase().includes(queryText))
+        .slice(0, 8))
+
+  const canCreateBranches =
+    permissionsReady && canPerformPermission(actorPermissions, "branches:create")
+  const canUpdateBranches =
+    permissionsReady && canPerformPermission(actorPermissions, "branches:update")
+  const canDeleteBranches =
+    permissionsReady && canPerformPermission(actorPermissions, "branches:delete")
+  const canManageBranchAccess =
+    permissionsReady && canPerformPermission(actorPermissions, "branches:manage-access")
 
   const accessColumns: Column<AdminRecord>[] = [
     {
@@ -505,21 +604,23 @@ export function BranchesView() {
         const userId = accessRowUserId(row)
         return (
           <div className="flex justify-end gap-1 pr-1" onClick={(event) => event.stopPropagation()}>
-            <button
-              type="button"
-              className="admin-table-icon-button"
-              data-variant="danger"
-              disabled={saving || userId === null}
-              onClick={() => {
-                if (userId !== null) {
-                  void revokeAccess(userId)
-                }
-              }}
-              aria-label="Revoke branch access"
-              title="Revoke branch access"
-            >
-              <Trash2 className="size-4" />
-            </button>
+            {canManageBranchAccess ? (
+              <button
+                type="button"
+                className="admin-table-icon-button"
+                data-variant="danger"
+                disabled={saving || userId === null}
+                onClick={() => {
+                  if (userId !== null) {
+                    void revokeAccess(userId)
+                  }
+                }}
+                aria-label="Revoke branch access"
+                title="Revoke branch access"
+              >
+                <Trash2 className="size-4" />
+              </button>
+            ) : null}
           </div>
         )
       },
@@ -541,39 +642,45 @@ export function BranchesView() {
         const id = readNumber(row, ["id"])
         return (
           <div className="flex justify-end gap-1 pr-1" onClick={(e) => e.stopPropagation()}>
-            <button
-              type="button"
-              className="admin-table-icon-button"
-              onClick={() => {
-                fillFormFromRow(row)
-                setEditingId(id)
-                setOpenForm(true)
-              }}
-              aria-label="Edit branch"
-              title="Edit branch"
-            >
-              <Pencil className="size-4" />
-            </button>
-            <button
-              type="button"
-              className="admin-table-icon-button"
-              onClick={() => void openBranchAccess(row)}
-              aria-label="Branch access"
-              title="Branch access"
-            >
-              <KeyRound className="size-4" />
-            </button>
-            <button
-              type="button"
-              className="admin-table-icon-button"
-              data-variant="danger"
-              disabled={saving}
-              onClick={() => setPendingDelete(row)}
-              aria-label="Delete branch"
-              title="Delete branch"
-            >
-              <Trash2 className="size-4" />
-            </button>
+            {canUpdateBranches ? (
+              <button
+                type="button"
+                className="admin-table-icon-button"
+                onClick={() => {
+                  fillFormFromRow(row)
+                  setEditingId(id)
+                  setOpenForm(true)
+                }}
+                aria-label="Edit branch"
+                title="Edit branch"
+              >
+                <Pencil className="size-4" />
+              </button>
+            ) : null}
+            {canManageBranchAccess ? (
+              <button
+                type="button"
+                className="admin-table-icon-button"
+                onClick={() => void openBranchAccess(row)}
+                aria-label="Branch access"
+                title="Branch access"
+              >
+                <KeyRound className="size-4" />
+              </button>
+            ) : null}
+            {canDeleteBranches ? (
+              <button
+                type="button"
+                className="admin-table-icon-button"
+                data-variant="danger"
+                disabled={saving}
+                onClick={() => setPendingDelete(row)}
+                aria-label="Delete branch"
+                title="Delete branch"
+              >
+                <Trash2 className="size-4" />
+              </button>
+            ) : null}
           </div>
         )
       },
@@ -581,58 +688,10 @@ export function BranchesView() {
   ]
 
   return (
-    <div>
-      <div className="mb-5 flex items-start justify-between gap-3">
-        <div>
-          <h2 className="text-[2rem] font-semibold leading-none tracking-[-0.03em] text-slate-900">
-            Branch Management
-          </h2>
-          <p className="mt-2 text-sm text-slate-500">Branches</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--primary)] text-white transition hover:brightness-95 disabled:opacity-60"
-            onClick={() => {
-              setEditingId(null)
-              setForm(emptyForm())
-              setOpenForm(true)
-            }}
-            aria-label="Add branch"
-            title="Add branch"
-          >
-            <Plus className="size-5" />
-          </button>
-          <button
-            type="button"
-            className="inline-flex h-12 w-12 items-center justify-center rounded-xl border border-slate-300 bg-white text-primary transition hover:bg-slate-50 disabled:opacity-60"
-            onClick={() => void fetchBranches()}
-            disabled={loading}
-            aria-label="Refresh"
-            title="Refresh"
-          >
-            <RefreshCw className={`size-5 text-primary ${loading ? "animate-spin" : ""}`} />
-          </button>
-        </div>
-      </div>
-      <div className="mb-4 flex flex-wrap items-end gap-3">
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Status</label>
-          <select
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm"
-            value={query.status}
-            onChange={(event) => {
-              setPage(1)
-              setQuery((previous) => ({ ...previous, status: event.target.value }))
-            }}
-          >
-            <option value="">All</option>
-            <option value="active">active</option>
-            <option value="inactive">inactive</option>
-          </select>
-        </div>
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-1.5">
         <SearchToggleField
-          className="min-w-[220px]"
+          className="min-w-0"
           placeholder="Search branch"
           value={query.search}
           onChange={(value) => {
@@ -640,9 +699,50 @@ export function BranchesView() {
             setQuery((previous) => ({ ...previous, search: value }))
           }}
         />
+        <select
+          className="h-8 min-w-[8rem] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
+          value={query.status}
+          onChange={(event) => {
+            setPage(1)
+            setQuery((previous) => ({ ...previous, status: event.target.value }))
+          }}
+          aria-label="Filter branch status"
+        >
+          <option value="">All statuses</option>
+          <option value="active">active</option>
+          <option value="inactive">inactive</option>
+        </select>
+        <div className="ml-auto flex items-center gap-1.5">
+          {canCreateBranches ? (
+            <button
+              type="button"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[var(--primary)] px-2.5 text-xs font-semibold text-white transition hover:brightness-95 disabled:opacity-60"
+              onClick={() => {
+                setEditingId(null)
+                setForm(emptyForm())
+                setOpenForm(true)
+              }}
+              aria-label="Add branch"
+              title="Add branch"
+            >
+              <Plus className="size-3.5" />
+              Add Branch
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 bg-white text-primary transition hover:bg-slate-50 disabled:opacity-60"
+            onClick={() => void fetchBranches()}
+            disabled={loading}
+            aria-label="Refresh"
+            title="Refresh"
+          >
+            <RefreshCw className={`size-3.5 text-primary ${loading ? "animate-spin" : ""}`} />
+          </button>
+        </div>
       </div>
 
-      {error ? <p className="mb-3 text-sm text-rose-600">{error}</p> : null}
+      {error ? <p className="text-sm text-rose-600">{error}</p> : null}
 
       <ResizableTable
         title="Branch"

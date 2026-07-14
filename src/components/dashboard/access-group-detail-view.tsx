@@ -23,9 +23,12 @@ import {
   listAccessGroupDoors,
   listAccessGroupEmployees,
   removeAccessGroupDoor,
-  removeAccessGroupEmployee,
   type AdminRecord,
 } from "@/lib/admin-api"
+import {
+  EmployeeAccessRemovalDialog,
+  type EmployeeAccessRemovalTarget,
+} from "@/components/dashboard/employee-access-removal-dialog"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
@@ -165,10 +168,8 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
   const [assignEmployeeSearch, setAssignEmployeeSearch] = React.useState("")
   const [assignEmployeeError, setAssignEmployeeError] = React.useState<string | null>(null)
   const [assigningEmployee, setAssigningEmployee] = React.useState(false)
-  const [employeePendingRemoval, setEmployeePendingRemoval] = React.useState<AdminRecord | null>(null)
-  const [removeEmployeeOpen, setRemoveEmployeeOpen] = React.useState(false)
-  const [removeEmployeeError, setRemoveEmployeeError] = React.useState<string | null>(null)
-  const [removingEmployeeId, setRemovingEmployeeId] = React.useState("")
+  const [removalOpen, setRemovalOpen] = React.useState(false)
+  const [removalTarget, setRemovalTarget] = React.useState<EmployeeAccessRemovalTarget | null>(null)
   const [activeTab, setActiveTab] = React.useState<"details" | "doors" | "employees">("details")
   const [doorSearch, setDoorSearch] = React.useState("")
   const [employeeSearch, setEmployeeSearch] = React.useState("")
@@ -636,50 +637,32 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
   }
 
   const requestRemoveEmployee = (employee: AdminRecord) => {
-    setEmployeePendingRemoval(employee)
-    setRemoveEmployeeError(null)
-    setRemoveEmployeeOpen(true)
-  }
-
-  const onRemoveEmployee = async () => {
-    const token = readStoredToken()
-    if (!token) {
-      setRemoveEmployeeError("Authentication required. Please log in again.")
-      return
-    }
-
-    if (!employeePendingRemoval) {
-      setRemoveEmployeeError("Select an employee to remove.")
-      return
-    }
-
-    const employeeId = readNumberFromRecord(employeePendingRemoval, [
+    const employeeId = readNumberFromRecord(employee, [
       "resolved_employee_id",
       "employee_id",
       "employeeId",
       "id",
     ])
     if (employeeId === null) {
-      setRemoveEmployeeError("This employee does not have a valid id.")
+      setError("This employee does not have a valid id.")
       return
     }
-
-    setRemovingEmployeeId(String(employeeId))
-    setRemoveEmployeeError(null)
-    try {
-      await removeAccessGroupEmployee(token, groupId, employeeId)
-      setMessage("Employee removed from group.")
-      setError(null)
-      setRemoveEmployeeOpen(false)
-      setEmployeePendingRemoval(null)
-      await fetchGroupData()
-    } catch (errorObject) {
-      setRemoveEmployeeError(
-        errorObject instanceof Error ? errorObject.message : "Failed to remove employee."
-      )
-    } finally {
-      setRemovingEmployeeId("")
-    }
+    setRemovalTarget({
+      employeeId,
+      employeeName:
+        readStringFromRecord(employee, ["employee_name", "full_name", "name"]) ??
+        `Employee #${employeeId}`,
+      employeeNo:
+        readStringFromRecord(employee, [
+          "resolved_employee_no",
+          "employee_no",
+          "employee_number",
+          "employeeNumber",
+        ]) ?? null,
+      preferredGroupId: groupId,
+      preferredGroupLabel: groupName,
+    })
+    setRemovalOpen(true)
   }
 
   return (
@@ -1283,94 +1266,17 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
         </DialogPopup>
       </Dialog>
 
-      <Dialog
-        open={removeEmployeeOpen}
+      <EmployeeAccessRemovalDialog
+        open={removalOpen}
+        target={removalTarget}
         onOpenChange={(open) => {
-          setRemoveEmployeeOpen(open)
-          if (!open) {
-            setRemoveEmployeeError(null)
-            setEmployeePendingRemoval(null)
-          }
+          setRemovalOpen(open)
+          if (!open) setRemovalTarget(null)
         }}
-      >
-        <DialogPopup className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Remove Assigned Employee</DialogTitle>
-            <DialogDescription>
-              Confirm that you want to remove this employee from the access group.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-2">
-            {removeEmployeeError ? <p className="text-sm text-red-600">{removeEmployeeError}</p> : null}
-            <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-              <p className="font-medium text-slate-900">
-                {readStringFromRecord(employeePendingRemoval ?? {}, ["employee_name"]) ?? "Selected employee"}
-              </p>
-              <p className="mt-1 text-slate-500">
-                Employee No:{" "}
-                {readStringFromRecord(employeePendingRemoval ?? {}, [
-                  "resolved_employee_no",
-                  "employee_no",
-                  "employee_number",
-                  "employeeNumber",
-                ]) ?? "-"}
-              </p>
-              <p className="text-slate-500">
-                Access Group:{" "}
-                {readStringFromRecord(employeePendingRemoval ?? {}, [
-                  "access_group_name",
-                  "accessGroupName",
-                  "group_name",
-                  "groupName",
-                ]) ?? groupName}
-              </p>
-            </div>
-          </div>
-          <DialogFooter>
-            <button
-              type="button"
-              className="rounded-md border border-slate-300 px-3 py-1.5 text-sm"
-              onClick={() => {
-                setRemoveEmployeeOpen(false)
-                setRemoveEmployeeError(null)
-                setEmployeePendingRemoval(null)
-              }}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="rounded-md bg-red-600 px-3 py-1.5 text-sm text-white disabled:opacity-50"
-              onClick={() => void onRemoveEmployee()}
-              disabled={
-                !employeePendingRemoval ||
-                removingEmployeeId ===
-                  String(
-                    readNumberFromRecord(employeePendingRemoval ?? {}, [
-                      "resolved_employee_id",
-                      "employee_id",
-                      "employeeId",
-                      "id",
-                    ]) ?? ""
-                  )
-              }
-            >
-              {removingEmployeeId &&
-              removingEmployeeId ===
-                String(
-                  readNumberFromRecord(employeePendingRemoval ?? {}, [
-                    "resolved_employee_id",
-                    "employee_id",
-                    "employeeId",
-                    "id",
-                  ]) ?? ""
-                )
-                ? "Removing..."
-                : "Remove Employee"}
-            </button>
-          </DialogFooter>
-        </DialogPopup>
-      </Dialog>
+        onCompleted={() => {
+          void fetchGroupData()
+        }}
+      />
     </div>
   )
 }

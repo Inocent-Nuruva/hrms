@@ -286,14 +286,54 @@ function formatDateTime(value: unknown) {
   if (Number.isNaN(parsed.getTime())) {
     return value
   }
-  return parsed.toLocaleString()
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(parsed)
 }
 
-function SummaryRow({ label, value }: { label: string; value: string }) {
+function formatLabelValue(value: string) {
+  if (!value || value === "-") return "-"
+  return value
+    .replace(/[_-]+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase())
+}
+
+function statusTone(status: string) {
+  const normalized = status.trim().toLowerCase()
+  if (["active", "confirmed", "employed", "onboarding"].includes(normalized)) {
+    return "text-emerald-600 dark:text-emerald-400"
+  }
+  if (["pending", "probation", "suspended"].includes(normalized)) {
+    return "text-amber-600 dark:text-amber-400"
+  }
+  if (["terminated", "exited", "inactive"].includes(normalized)) {
+    return "text-rose-600 dark:text-rose-400"
+  }
+  return "text-foreground"
+}
+
+function SummaryField({
+  label,
+  value,
+  children,
+}: {
+  label: string
+  value?: string
+  children?: React.ReactNode
+}) {
   return (
-    <div className="flex items-center gap-2 border-b border-slate-100 py-2 text-sm last:border-b-0 dark:border-slate-700/70">
-      <span className="min-w-36 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">{label}</span>
-      <span className="text-slate-900 dark:text-slate-100">{value}</span>
+    <div className="flex min-w-0 flex-col gap-1 py-1">
+      <dt className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+        {label}
+      </dt>
+      <dd className="truncate text-sm font-medium text-foreground">
+        {children ?? value ?? "-"}
+      </dd>
     </div>
   )
 }
@@ -1762,22 +1802,76 @@ export function EmployeeProfilePage({
       </div>
 
       <div className="px-4 py-4">
-        <div className="grid gap-x-8 md:grid-cols-2">
-          <div>
-            <SummaryRow label="Employee No" value={readString(employee, ["employee_no", "employeeNo", "user_no", "employee_number", "employeeNumber"])} />
-            <SummaryRow label="Status" value={readString(employee, ["employment_status", "employmentStatus", "status"])} />
-            <SummaryRow label="Employment Type" value={readString(employee, ["employment_type", "employmentType"])} />
-            <SummaryRow label="Hire Date" value={formatProfileDate(employee.hire_date ?? employee.hireDate)} />
-            <SummaryRow label="Branch" value={readString(employee, ["branch_name", "branchName"]) !== "-" ? readString(employee, ["branch_name", "branchName"]) : readNestedString(employee.primary_branch ?? employee.branch, ["name", "branch_name", "branchName"])} />
-          </div>
-          <div>
-            <SummaryRow label="Department" value={readString(employee, ["department_name", "departmentName"]) !== "-" ? readString(employee, ["department_name", "departmentName"]) : readNestedString(employee.primary_department ?? employee.department, ["name", "department_name", "departmentName"])} />
-            <SummaryRow label="Position" value={readString(employee, ["position_name", "positionName"]) !== "-" ? readString(employee, ["position_name", "positionName"]) : readNestedString(employee.primary_position ?? employee.position, ["name", "position_name", "positionName"])} />
-            <SummaryRow label="Manager" value={readString(employee, ["manager_name", "managerName"]) !== "-" ? readString(employee, ["manager_name", "managerName"]) : employeeDisplayName(asRecord(employee.manager) ?? {})} />
-            <SummaryRow label="Last Updated" value={formatDateTime(employee.updated_at ?? employee.updatedAt)} />
-            <SummaryRow label="Employee Id" value={String(employee.id ?? "-")} />
-          </div>
-        </div>
+        {(() => {
+          const employeeNo = readString(employee, [
+            "employee_no",
+            "employeeNo",
+            "user_no",
+            "employee_number",
+            "employeeNumber",
+          ])
+          const statusRaw = readString(employee, [
+            "employment_status",
+            "employmentStatus",
+            "status",
+          ])
+          const employmentType = formatLabelValue(
+            readString(employee, ["employment_type", "employmentType"])
+          )
+          const branch =
+            readString(employee, ["branch_name", "branchName"]) !== "-"
+              ? readString(employee, ["branch_name", "branchName"])
+              : readNestedString(employee.primary_branch ?? employee.branch, [
+                  "name",
+                  "branch_name",
+                  "branchName",
+                ])
+          const department =
+            readString(employee, ["department_name", "departmentName"]) !== "-"
+              ? readString(employee, ["department_name", "departmentName"])
+              : readNestedString(employee.primary_department ?? employee.department, [
+                  "name",
+                  "department_name",
+                  "departmentName",
+                ])
+          const position =
+            readString(employee, ["position_name", "positionName"]) !== "-"
+              ? readString(employee, ["position_name", "positionName"])
+              : readNestedString(employee.primary_position ?? employee.position, [
+                  "name",
+                  "position_name",
+                  "positionName",
+                ])
+          const manager =
+            readString(employee, ["manager_name", "managerName"]) !== "-"
+              ? readString(employee, ["manager_name", "managerName"])
+              : employeeDisplayName(asRecord(employee.manager) ?? {})
+
+          return (
+            <dl className="grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-3 lg:grid-cols-5">
+              <SummaryField label="Employee No" value={employeeNo} />
+              <SummaryField label="Status">
+                <span className={cn("text-sm font-medium", statusTone(statusRaw))}>
+                  {formatLabelValue(statusRaw)}
+                </span>
+              </SummaryField>
+              <SummaryField label="Employment Type" value={employmentType} />
+              <SummaryField
+                label="Hire Date"
+                value={formatProfileDate(employee.hire_date ?? employee.hireDate)}
+              />
+              <SummaryField label="Branch" value={branch} />
+              <SummaryField label="Department" value={department} />
+              <SummaryField label="Position" value={position} />
+              <SummaryField label="Manager" value={manager} />
+              <SummaryField
+                label="Last Updated"
+                value={formatDateTime(employee.updated_at ?? employee.updatedAt)}
+              />
+              <SummaryField label="Employee Id" value={String(employee.id ?? "-")} />
+            </dl>
+          )
+        })()}
       </div>
 
       <div className="divide-y divide-border">

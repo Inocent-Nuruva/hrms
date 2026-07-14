@@ -66,7 +66,7 @@ export interface UsersQueryParams {
 }
 
 export interface EmployeesQueryParams extends UsersQueryParams {
-  employment_status?: "onboarding" | "active" | "suspended" | "terminated" | "exited"
+  employment_status?: "onboarding" | "pending" | "active" | "suspended" | "terminated" | "exited"
   branch_id?: number
   department_id?: number
   position_id?: number
@@ -151,8 +151,16 @@ export interface AttendanceQueryParams extends UsersQueryParams {
   from_date?: string
   to_date?: string
   organization_id?: number
+  branch_id?: number
+  department_id?: number
+  shift_id?: number
+  timetable_id?: number
   status?: string
   attendance_status?: string
+}
+
+export interface AttendanceReportDownloadParams extends AttendanceQueryParams {
+  format: "xlsx" | "csv" | "pdf"
 }
 
 export interface MyAttendanceHistoryQueryParams extends UsersQueryParams {
@@ -189,6 +197,11 @@ export interface SelfServiceRequestQueryParams extends UsersQueryParams {
   status?: string
   date_from?: string
   date_to?: string
+}
+
+export interface NotificationQueryParams extends UsersQueryParams {
+  status?: "UNREAD" | "READ"
+  type?: string
 }
 
 export interface TeamAttendanceQueryParams extends UsersQueryParams {
@@ -486,12 +499,57 @@ function asArray(value: unknown): AdminRecord[] | null {
   if (!Array.isArray(value)) {
     return null
   }
-  return value.filter((entry) => typeof entry === "object" && entry !== null) as AdminRecord[]
+  // Empty array is a valid empty collection.
+  if (value.length === 0) {
+    return []
+  }
+  const records = value.filter(
+    (entry) => typeof entry === "object" && entry !== null && !Array.isArray(entry)
+  ) as AdminRecord[]
+  // Non-empty arrays of primitives (permission strings, ids, etc.) are not record lists.
+  if (records.length === 0) {
+    return null
+  }
+  return records
 }
+
+const PREFERRED_LIST_KEYS = [
+  "data",
+  "items",
+  "results",
+  "records",
+  "rows",
+  "list",
+  "users",
+  "role_users",
+  "roleUsers",
+  "employees",
+  "branches",
+  "departments",
+  "positions",
+  "designations",
+  "roles",
+  "permissions",
+  "companies",
+] as const
+
+const SKIP_NESTED_KEYS = new Set([
+  "meta",
+  "pagination",
+  "links",
+  "errors",
+  "error",
+  "message",
+  "messages",
+  "permissions", // often actor permission strings on envelopes; list endpoint still uses preferred keys first
+  "roles",
+  "authorities",
+  "scopes",
+])
 
 function getRecordArrays(record: AdminRecord | null) {
   if (!record) {
-    return []
+    return [] as AdminRecord[][]
   }
 
   return Object.values(record)
@@ -501,12 +559,17 @@ function getRecordArrays(record: AdminRecord | null) {
 
 function getNestedRecords(record: AdminRecord | null) {
   if (!record) {
-    return []
+    return [] as AdminRecord[]
   }
 
-  return Object.values(record)
-    .map((value) => asRecord(value))
-    .filter((value): value is AdminRecord => value !== null)
+  return Object.entries(record)
+    .filter(([key, value]) => {
+      if (SKIP_NESTED_KEYS.has(key)) {
+        return false
+      }
+      return typeof value === "object" && value !== null && !Array.isArray(value)
+    })
+    .map(([, value]) => value as AdminRecord)
 }
 
 function extractListFromRecord(record: AdminRecord | null): AdminRecord[] | null {
@@ -514,32 +577,31 @@ function extractListFromRecord(record: AdminRecord | null): AdminRecord[] | null
     return null
   }
 
-  const directListCandidates = [
-    record.data,
-    record.items,
-    record.results,
-    record.records,
-    record.users,
-    record.rows,
-    record.list,
-  ]
+  let emptyPreferred: AdminRecord[] | null = null
 
-  for (const candidate of directListCandidates) {
-    const list = asArray(candidate)
-    if (list) {
+  // 1) Preferred collection keys first (including empty arrays — those are real empties).
+  for (const key of PREFERRED_LIST_KEYS) {
+    if (!(key in record)) {
+      continue
+    }
+    const list = asArray(record[key])
+    if (list === null) {
+      continue
+    }
+    if (list.length > 0) {
       return list
+    }
+    if (emptyPreferred === null) {
+      emptyPreferred = list
     }
   }
 
-  for (const list of getRecordArrays(record)) {
-    return list
-  }
-
+  // 2) Nested envelopes (data/result/...) before random sibling empty arrays.
   const nestedCandidates = [
     asRecord(record.data),
     asRecord(record.result),
-    asRecord(record.pagination),
-    asRecord(record.meta),
+    asRecord(record.payload),
+    asRecord(record.response),
     ...getNestedRecords(record),
   ]
 
@@ -548,12 +610,23 @@ function extractListFromRecord(record: AdminRecord | null): AdminRecord[] | null
       continue
     }
     const nestedList = extractListFromRecord(nested)
-    if (nestedList) {
+    if (nestedList && nestedList.length > 0) {
       return nestedList
+    }
+    if (nestedList && nestedList.length === 0 && emptyPreferred === null) {
+      emptyPreferred = nestedList
     }
   }
 
-  return null
+  // 3) Any other non-empty record array on the object.
+  for (const list of getRecordArrays(record)) {
+    if (list.length > 0) {
+      return list
+    }
+  }
+
+  // 4) Genuine empty collection under a preferred key / nested envelope.
+  return emptyPreferred
 }
 
 function readNumber(value: unknown): number | null {
@@ -613,6 +686,88 @@ function buildUsersQuery(params: UsersQueryParams) {
   if (params.search && params.search.trim()) {
     searchParams.set("search", params.search.trim())
   }
+  const query = searchParams.toString()
+  return query ? `?${query}` : ""
+}
+
+function buildNotificationsQuery(params: NotificationQueryParams) {
+  const searchParams = new URLSearchParams()
+  if (typeof params.page === "number" && params.page > 0) {
+    searchParams.set("page", String(params.page))
+  }
+  if (typeof params.limit === "number" && params.limit > 0) {
+    searchParams.set("limit", String(params.limit))
+  }
+  if (params.sortBy && params.sortBy.trim()) {
+    searchParams.set("sortBy", params.sortBy.trim())
+  }
+  if (params.sortOrder === "ASC" || params.sortOrder === "DESC") {
+    searchParams.set("sortOrder", params.sortOrder)
+  }
+  if (params.search && params.search.trim()) {
+    searchParams.set("search", params.search.trim())
+  }
+  if (params.status) {
+    searchParams.set("status", params.status)
+  }
+  if (params.type && params.type.trim()) {
+    searchParams.set("type", params.type.trim())
+  }
+  const query = searchParams.toString()
+  return query ? `?${query}` : ""
+}
+
+function buildAttendanceReportQuery(params: AttendanceReportDownloadParams) {
+  const searchParams = new URLSearchParams()
+  if (typeof params.page === "number" && params.page > 0) {
+    searchParams.set("page", String(params.page))
+  }
+  if (typeof params.limit === "number" && params.limit > 0) {
+    searchParams.set("limit", String(params.limit))
+  }
+  if (params.sortBy && params.sortBy.trim()) {
+    searchParams.set("sortBy", params.sortBy.trim())
+  }
+  if (params.sortOrder === "ASC" || params.sortOrder === "DESC") {
+    searchParams.set("sortOrder", params.sortOrder)
+  }
+  if (params.search && params.search.trim()) {
+    searchParams.set("search", params.search.trim())
+  }
+  if (typeof params.employee_id === "number" && params.employee_id > 0) {
+    searchParams.set("employee_id", String(params.employee_id))
+  }
+  if (params.employee_no && params.employee_no.trim()) {
+    searchParams.set("employee_no", params.employee_no.trim())
+  }
+  if (params.from_date && params.from_date.trim()) {
+    searchParams.set("from_date", params.from_date.trim())
+  }
+  if (params.to_date && params.to_date.trim()) {
+    searchParams.set("to_date", params.to_date.trim())
+  }
+  if (typeof params.branch_id === "number" && params.branch_id > 0) {
+    searchParams.set("branch_id", String(params.branch_id))
+  }
+  if (typeof params.department_id === "number" && params.department_id > 0) {
+    searchParams.set("department_id", String(params.department_id))
+  }
+  if (typeof params.organization_id === "number" && params.organization_id > 0) {
+    searchParams.set("organization_id", String(params.organization_id))
+  }
+  if (typeof params.shift_id === "number" && params.shift_id > 0) {
+    searchParams.set("shift_id", String(params.shift_id))
+  }
+  if (typeof params.timetable_id === "number" && params.timetable_id > 0) {
+    searchParams.set("timetable_id", String(params.timetable_id))
+  }
+  if (params.status && params.status.trim()) {
+    searchParams.set("status", params.status.trim())
+  }
+  if (params.attendance_status && params.attendance_status.trim()) {
+    searchParams.set("attendance_status", params.attendance_status.trim())
+  }
+  searchParams.set("format", params.format)
   const query = searchParams.toString()
   return query ? `?${query}` : ""
 }
@@ -1548,6 +1703,62 @@ export async function listUsers(
   return { rows, ...pagination }
 }
 
+export async function listNotifications(
+  token: string,
+  params: NotificationQueryParams = {},
+  options: ListRequestOptions = {}
+): Promise<PaginatedUsersResult> {
+  const fallbackPage = params.page && params.page > 0 ? params.page : 1
+  const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20
+  const query = buildNotificationsQuery(params)
+  const payload = await adminRequest<unknown>(`/api/notifications${query}`, {
+    token,
+    signal: options.signal,
+    cacheTtlMs: options.cacheTtlMs,
+    dedupe: options.dedupe,
+  })
+  const rows = normalizeList(payload)
+  const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit)
+  return { rows, ...pagination }
+}
+
+export async function getUnreadNotificationsCount(token: string) {
+  const payload = await adminRequest<unknown>("/api/notifications/unread-count", { token })
+  const record = asRecord(payload)
+  if (!record) {
+    return 0
+  }
+  return (
+    readNumber(record.unread_count) ??
+    readNumber(record.unreadCount) ??
+    readNumber(record.count) ??
+    readNumber(record.total) ??
+    0
+  )
+}
+
+export async function markNotificationAsRead(token: string, id: string | number) {
+  return adminRequest<unknown>(`/api/notifications/${id}/read`, {
+    method: "PATCH",
+    token,
+  })
+}
+
+export async function markAllNotificationsAsRead(token: string) {
+  return adminRequest<unknown>("/api/notifications/read-all", {
+    method: "PATCH",
+    token,
+  })
+}
+
+export async function createTestNotification(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/notifications/test", {
+    method: "POST",
+    token,
+    body: data,
+  })
+}
+
 export async function listEmployees(
   token: string,
   params: EmployeesQueryParams = {},
@@ -1938,11 +2149,132 @@ export async function processAttendanceRange(token: string, data: AdminRecord) {
   })
 }
 
+export async function downloadAttendanceReport(
+  token: string,
+  params: AttendanceReportDownloadParams
+): Promise<{ blob: Blob; filename: string; contentType: string | null }> {
+  const query = buildAttendanceReportQuery(params)
+  const response = await fetch(buildUrl(`/api/attendance/reports/download${query}`), {
+    method: "GET",
+    headers: {
+      accept: "*/*",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    cache: "no-store",
+  })
+
+  if (!response.ok) {
+    const text = await response.text()
+    let payload: unknown = null
+    if (text) {
+      try {
+        payload = JSON.parse(text) as unknown
+      } catch {
+        payload = { message: text }
+      }
+    }
+    const error = new Error(extractMessage(payload, response.status)) as Error & {
+      status?: number
+      payload?: unknown
+    }
+    error.status = response.status
+    error.payload = payload
+    throw error
+  }
+
+  const blob = await response.blob()
+  const disposition = response.headers.get("content-disposition") ?? ""
+  const filenameMatch = disposition.match(/filename\*=UTF-8''([^;]+)|filename=\"?([^\";]+)\"?/i)
+  const rawFilename = filenameMatch?.[1] ?? filenameMatch?.[2] ?? `attendance-report.${params.format}`
+  const filename = decodeURIComponent(rawFilename)
+
+  return {
+    blob,
+    filename,
+    contentType: response.headers.get("content-type"),
+  }
+}
+
 export async function listAttendanceUnmatchedLogs(
   token: string,
   params: AttendanceQueryParams = {}
 ) {
   return listAllAttendanceCollection("/api/attendance/processing/unmatched-logs", token, params)
+}
+
+function buildAttendanceBusinessTripsQuery(params: AttendanceQueryParams) {
+  const searchParams = new URLSearchParams()
+  if (typeof params.page === "number" && params.page > 0) {
+    searchParams.set("page", String(params.page))
+  }
+  if (typeof params.limit === "number" && params.limit > 0) {
+    searchParams.set("limit", String(params.limit))
+  }
+  if (params.sortBy && params.sortBy.trim()) {
+    searchParams.set("sortBy", params.sortBy.trim())
+  }
+  if (params.sortOrder === "ASC" || params.sortOrder === "DESC") {
+    searchParams.set("sortOrder", params.sortOrder)
+  }
+  if (params.search && params.search.trim()) {
+    searchParams.set("search", params.search.trim())
+  }
+  if (typeof params.employee_id === "number" && params.employee_id > 0) {
+    searchParams.set("employee_id", String(params.employee_id))
+  }
+  if (params.status && params.status.trim()) {
+    searchParams.set("status", params.status.trim())
+  }
+  if (params.from_date && params.from_date.trim()) {
+    searchParams.set("from_date", params.from_date.trim())
+  }
+  if (params.to_date && params.to_date.trim()) {
+    searchParams.set("to_date", params.to_date.trim())
+  }
+  const query = searchParams.toString()
+  return query ? `?${query}` : ""
+}
+
+export async function listAttendanceBusinessTrips(
+  token: string,
+  params: AttendanceQueryParams = {}
+): Promise<PaginatedUsersResult> {
+  const fallbackPage = params.page && params.page > 0 ? params.page : 1
+  const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20
+  const query = buildAttendanceBusinessTripsQuery(params)
+  const payload = await adminRequest<unknown>(`/api/attendance/business-trips${query}`, {
+    token,
+  })
+  const rows = normalizeList(payload)
+  const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit)
+  return { rows, ...pagination }
+}
+
+export async function getAttendanceBusinessTrip(token: string, id: string | number) {
+  const payload = await adminRequest<unknown>(`/api/attendance/business-trips/${id}`, {
+    token,
+  })
+  return normalizeSingle(payload)
+}
+
+export async function createAttendanceBusinessTrip(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/attendance/business-trips", {
+    method: "POST",
+    token,
+    body: data,
+  })
+}
+
+export async function updateAttendanceBusinessTrip(
+  token: string,
+  id: string | number,
+  data: AdminRecord
+) {
+  return adminRequest<unknown>(`/api/attendance/business-trips/${id}`, {
+    method: "PATCH",
+    token,
+    body: data,
+  })
 }
 
 export async function createAttendanceMobilePunchCheckIn(token: string, data: AdminRecord) {
@@ -2052,7 +2384,13 @@ export async function getAttendanceResourceById(
   id: string | number
 ) {
   const payload = await adminRequest<unknown>(`${attendanceResourcePath(resource)}/${id}`, { token })
-  return normalizeSingle(payload)
+  // Prefer normalized entity, but keep envelope fields if normalize drops them.
+  const single = normalizeSingle(payload)
+  const root = asRecord(payload)
+  if (single && root) {
+    return { ...root, ...single }
+  }
+  return single ?? root
 }
 
 export async function createAttendanceResource(
@@ -2532,6 +2870,14 @@ export async function assignEmployeeDevices(
         : {}),
     },
   })
+}
+
+/** List devices currently assigned to an employee (access-control). */
+export async function listEmployeeDevices(token: string, employeeId: string | number) {
+  const payload = await adminRequest<unknown>(`/api/access-control/employees/${employeeId}/devices`, {
+    token,
+  })
+  return normalizeList(payload)
 }
 
 export async function getEmployeeAccessCredentials(_token: string, _employeeId: string | number) {
@@ -3181,7 +3527,29 @@ export function getLeaveRequestPdfUrl(id: string | number) {
   return buildUrl(`/api/leave/requests/${id}/pdf`)
 }
 
-export async function createOnboardingWorkflow(token: string, data: AdminRecord) {
+export type OnboardingWorkflowStepPayload = {
+  is_required: boolean
+  name: string
+  description: string
+  step_type: string
+  assigned_role_id?: number
+  assigned_user_id?: number
+  due_days: number
+  step_order?: number
+}
+
+export type CreateOnboardingWorkflowPayload = {
+  is_default?: boolean
+  status?: string
+  name: string
+  description?: string
+  steps?: OnboardingWorkflowStepPayload[]
+}
+
+export async function createOnboardingWorkflow(
+  token: string,
+  data: CreateOnboardingWorkflowPayload | AdminRecord
+) {
   return adminRequest<unknown>("/api/onboarding/workflows", {
     method: "POST",
     token,
@@ -3191,7 +3559,40 @@ export async function createOnboardingWorkflow(token: string, data: AdminRecord)
 
 export async function getOnboardingWorkflow(token: string, id: string | number) {
   const payload = await adminRequest<unknown>(`/api/onboarding/workflows/${id}`, { token })
-  return normalizeSingle(payload)
+  const single = normalizeSingle(payload)
+  const root = asRecord(payload)
+
+  // Prefer the normalized record, but re-attach step arrays that may live on the envelope
+  // (e.g. { data: { name, … }, steps: [...] } or { workflow: {…}, steps: [...] }).
+  if (single) {
+    const rootSteps =
+      root?.steps ??
+      root?.workflow_steps ??
+      root?.workflowSteps ??
+      asRecord(root?.data)?.steps ??
+      asRecord(root?.data)?.workflow_steps ??
+      asRecord(root?.result)?.steps ??
+      asRecord(root?.result)?.workflow_steps
+
+    if (
+      rootSteps &&
+      !single.steps &&
+      !single.workflow_steps &&
+      !single.workflowSteps
+    ) {
+      return { ...single, steps: rootSteps }
+    }
+    return single
+  }
+
+  return root
+}
+
+export async function listOnboardingWorkflowSteps(token: string, workflowId: string | number) {
+  const payload = await adminRequest<unknown>(`/api/onboarding/workflows/${workflowId}/steps`, {
+    token,
+  })
+  return normalizeList(payload)
 }
 
 export async function patchOnboardingWorkflow(
@@ -3216,7 +3617,7 @@ export async function deleteOnboardingWorkflow(token: string, id: string | numbe
 export async function createOnboardingWorkflowStep(
   token: string,
   workflowId: string | number,
-  data: AdminRecord
+  data: OnboardingWorkflowStepPayload | AdminRecord
 ) {
   return adminRequest<unknown>(`/api/onboarding/workflows/${workflowId}/steps`, {
     method: "POST",
@@ -3229,7 +3630,7 @@ export async function patchOnboardingWorkflowStep(
   token: string,
   workflowId: string | number,
   stepId: string | number,
-  data: AdminRecord
+  data: Partial<OnboardingWorkflowStepPayload> | AdminRecord
 ) {
   return adminRequest<unknown>(`/api/onboarding/workflows/${workflowId}/steps/${stepId}`, {
     method: "PATCH",
@@ -3921,7 +4322,7 @@ export async function getHrProfileUpdateApprovalRequest(token: string, id: strin
 export async function approveHrProfileUpdateRequest(
   token: string,
   id: string | number,
-  data: AdminRecord
+  data: AdminRecord = {}
 ) {
   return adminRequest<unknown>(`/api/hr/self-service/approvals/profile-updates/${id}/approve`, {
     method: "POST",
@@ -3933,13 +4334,87 @@ export async function approveHrProfileUpdateRequest(
 export async function rejectHrProfileUpdateRequest(
   token: string,
   id: string | number,
-  data: AdminRecord
+  data: AdminRecord = {}
 ) {
   return adminRequest<unknown>(`/api/hr/self-service/approvals/profile-updates/${id}/reject`, {
     method: "POST",
     token,
     body: data,
   })
+}
+
+export async function listHrAttendanceCorrectionApprovalRequests(
+  token: string,
+  params: SelfServiceRequestQueryParams & { employee_id?: number } = {}
+): Promise<PaginatedUsersResult> {
+  const fallbackPage = params.page && params.page > 0 ? params.page : 1
+  const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20
+  const query = new URLSearchParams()
+
+  query.set("page", String(fallbackPage))
+  query.set("limit", String(fallbackLimit))
+
+  if (params.employee_id !== undefined) {
+    query.set("employee_id", String(params.employee_id))
+  }
+  if (params.status) {
+    query.set("status", params.status)
+  }
+  if (params.date_from) {
+    query.set("from_date", params.date_from)
+  }
+  if (params.date_to) {
+    query.set("to_date", params.date_to)
+  }
+
+  const payload = await adminRequest<unknown>(
+    `/api/hr/self-service/approvals/attendance-corrections?${query.toString()}`,
+    { token }
+  )
+  const rows = normalizeList(payload)
+  const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit)
+  return { rows, ...pagination }
+}
+
+export async function getHrAttendanceCorrectionApprovalRequest(
+  token: string,
+  id: string | number
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/hr/self-service/approvals/attendance-corrections/${id}`,
+    { token }
+  )
+  return normalizeSingle(payload)
+}
+
+export async function approveHrAttendanceCorrectionRequest(
+  token: string,
+  id: string | number,
+  data: AdminRecord = {}
+) {
+  return adminRequest<unknown>(
+    `/api/hr/self-service/approvals/attendance-corrections/${id}/approve`,
+    {
+      method: "POST",
+      token,
+      body: data,
+    }
+  )
+}
+
+export async function rejectHrAttendanceCorrectionRequest(
+  token: string,
+  id: string | number,
+  data: AdminRecord = {}
+) {
+  return adminRequest<unknown>(
+    `/api/hr/self-service/approvals/attendance-corrections/${id}/reject`,
+    {
+      method: "POST",
+      token,
+      body: data,
+    }
+  )
 }
 
 export async function listMyTeamAttendance(
@@ -3957,9 +4432,49 @@ export async function listMyTeamAttendance(
 
 export async function listCurrentCompanyUsers(
   token: string,
-  params: UsersQueryParams = {}
+  params: UsersQueryParams = {},
+  options: ListRequestOptions = {}
 ): Promise<PaginatedUsersResult> {
-  return listGenericCollection("/api/companies/current/users", token, params)
+  const fallbackPage = params.page && params.page > 0 ? params.page : 1
+  const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20
+  const query = buildUsersQuery(params)
+  const payload = await adminRequest<unknown>(`/api/companies/current/users${query}`, {
+    token,
+    signal: options.signal,
+    cacheTtlMs: options.cacheTtlMs,
+    dedupe: options.dedupe,
+  })
+  const rows = normalizeList(payload)
+  const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit)
+  return { rows, ...pagination }
+}
+
+/** Page through company users (max 100 per page) for assignment UIs. */
+export async function listAllCurrentCompanyUsers(
+  token: string,
+  options: { maxPages?: number; signal?: AbortSignal } = {}
+): Promise<AdminRecord[]> {
+  const maxPages = options.maxPages && options.maxPages > 0 ? options.maxPages : 15
+  const collected: AdminRecord[] = []
+  let page = 1
+  while (page <= maxPages) {
+    const result = await listCurrentCompanyUsers(
+      token,
+      { page, limit: 100, sortBy: "created_at", sortOrder: "ASC" },
+      { signal: options.signal, dedupe: false }
+    )
+    collected.push(...result.rows)
+    const reachedEnd =
+      result.rows.length === 0 ||
+      result.rows.length < 100 ||
+      (typeof result.totalPages === "number" && page >= result.totalPages) ||
+      (typeof result.total === "number" && collected.length >= result.total)
+    if (reachedEnd) {
+      break
+    }
+    page += 1
+  }
+  return collected
 }
 
 export async function createCurrentCompanyUser(token: string, data: AdminRecord) {
@@ -4126,6 +4641,103 @@ export async function deleteResource(
 export async function getRoleById(id: string | number, token: string) {
   const payload = await adminRequest<unknown>(`/api/roles/${id}`, { token })
   return normalizeSingle(payload)
+}
+
+export async function updateRoleById(
+  id: string | number,
+  token: string,
+  data: AdminRecord
+) {
+  return adminRequest<unknown>(`/api/roles/${id}`, {
+    method: "PATCH",
+    token,
+    body: data,
+  })
+}
+
+export async function deleteRoleById(id: string | number, token: string) {
+  return adminRequest<unknown>(`/api/roles/${id}`, {
+    method: "DELETE",
+    token,
+  })
+}
+
+export async function listRolePermissions(
+  token: string,
+  roleId: string | number
+): Promise<AdminRecord[]> {
+  const payload = await adminRequest<unknown>(`/api/roles/${roleId}/permissions`, {
+    token,
+  })
+  return normalizeList(payload)
+}
+
+export async function assignPermissionToRole(
+  token: string,
+  roleId: string | number,
+  permissionId: string | number
+) {
+  return adminRequest<unknown>(`/api/roles/${roleId}/permissions`, {
+    method: "POST",
+    token,
+    body: { permission_id: Number(permissionId) },
+  })
+}
+
+export async function revokePermissionFromRole(
+  token: string,
+  roleId: string | number,
+  permissionId: string | number
+) {
+  return adminRequest<unknown>(`/api/roles/${roleId}/permissions/${permissionId}`, {
+    method: "DELETE",
+    token,
+  })
+}
+
+export async function listRoleUsers(
+  token: string,
+  roleId: string | number,
+  params: UsersQueryParams = {}
+): Promise<PaginatedUsersResult> {
+  const fallbackPage = params.page && params.page > 0 ? params.page : 1
+  const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 100
+  const query = buildUsersQuery({
+    page: fallbackPage,
+    limit: fallbackLimit,
+    sortBy: params.sortBy,
+    sortOrder: params.sortOrder,
+    search: params.search,
+  })
+  const payload = await adminRequest<unknown>(`/api/roles/${roleId}/users${query}`, {
+    token,
+  })
+  const rows = normalizeList(payload)
+  const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit)
+  return { rows, ...pagination }
+}
+
+export async function assignUserToRole(
+  token: string,
+  roleId: string | number,
+  userId: string | number
+) {
+  return adminRequest<unknown>(`/api/roles/${roleId}/users`, {
+    method: "POST",
+    token,
+    body: { user_id: Number(userId) },
+  })
+}
+
+export async function revokeUserFromRole(
+  token: string,
+  roleId: string | number,
+  userId: string | number
+) {
+  return adminRequest<unknown>(`/api/roles/${roleId}/users/${userId}`, {
+    method: "DELETE",
+    token,
+  })
 }
 
 export async function createPermission(token: string, data: AdminRecord) {

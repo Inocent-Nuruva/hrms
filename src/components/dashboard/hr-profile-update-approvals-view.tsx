@@ -229,8 +229,13 @@ function getEmployeeLabel(row: AdminRecord | null) {
     readString(nestedEmployee, ["full_name", "name"], "") ||
     readString(nestedUser, ["full_name", "name"], "")
 
+  const employeeNo =
+    readString(row, ["employee_no", "employeeNo", "user_no"], "") ||
+    readString(nestedEmployee, ["employee_no", "employeeNo", "user_no"], "") ||
+    readString(nestedUser, ["employee_no", "employeeNo", "user_no"], "")
+
   if (explicit) {
-    return explicit
+    return employeeNo ? `${explicit} (${employeeNo})` : explicit
   }
 
   const firstName =
@@ -243,10 +248,15 @@ function getEmployeeLabel(row: AdminRecord | null) {
     readString(nestedUser, ["last_name"], "")
 
   if (firstName || lastName) {
-    return [firstName, lastName].filter(Boolean).join(" ")
+    const fullName = [firstName, lastName].filter(Boolean).join(" ")
+    return employeeNo ? `${fullName} (${employeeNo})` : fullName
   }
 
-  const employeeId = readNumber(row, ["employee_id", "employee_no", "user_id"])
+  if (employeeNo) {
+    return employeeNo
+  }
+
+  const employeeId = readNumber(row, ["employee_id", "user_id"])
   return employeeId === null ? "Employee" : `Employee #${employeeId}`
 }
 
@@ -458,6 +468,9 @@ export function HrProfileUpdateApprovalsView() {
     },
   ], [loadRequestDetail, selectedRequestId])
 
+  const selectedRequestIdRef = React.useRef(selectedRequestId)
+  selectedRequestIdRef.current = selectedRequestId
+
   const loadRequests = React.useCallback(async () => {
     const token = readStoredToken()
     if (!token) {
@@ -483,8 +496,12 @@ export function HrProfileUpdateApprovalsView() {
       })
       setRequests(result.rows)
 
+      // Use a ref so selection preservation does not re-create this callback
+      // (and re-trigger the load effect) every time the user opens a row.
       const currentSelection =
-        result.rows.find((row) => getRequestId(row) === selectedRequestId) ?? result.rows[0] ?? null
+        result.rows.find((row) => getRequestId(row) === selectedRequestIdRef.current) ??
+        result.rows[0] ??
+        null
 
       if (!currentSelection) {
         setSelectedRequestId("")
@@ -505,7 +522,7 @@ export function HrProfileUpdateApprovalsView() {
     } finally {
       setLoading(false)
     }
-  }, [dateFrom, dateTo, loadRequestDetail, selectedRequestId, statusFilter])
+  }, [dateFrom, dateTo, loadRequestDetail, statusFilter])
 
   React.useEffect(() => {
     void loadRequests()
@@ -538,22 +555,23 @@ export function HrProfileUpdateApprovalsView() {
     setError(null)
     setFeedback(null)
     try {
+      const body = {
+        comment: note || (action === "approve" ? "Approved by HR" : "Rejected by HR"),
+        metadata: {
+          reviewed_from: "HR_PORTAL",
+        },
+      }
+
       if (action === "approve") {
-        await approveHrProfileUpdateRequest(token, requestId, {
-          approve: true,
-          comments: note || "Approved by HR",
-        })
+        await approveHrProfileUpdateRequest(token, requestId, body)
       } else {
-        await rejectHrProfileUpdateRequest(token, requestId, {
-          comments: note || "Rejected by HR",
-          reason: note || "Rejected by HR",
-        })
+        await rejectHrProfileUpdateRequest(token, requestId, body)
       }
 
       const successMessage =
         action === "approve"
-          ? "Profile update request approved successfully."
-          : "Profile update request rejected successfully."
+          ? "Profile update approved and applied to the employee record."
+          : "Profile update request rejected."
       setFeedback(successMessage)
       setDecisionComment("")
       showSuccessAlert(successMessage)
@@ -577,86 +595,61 @@ export function HrProfileUpdateApprovalsView() {
   )
 
   return (
-    <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>Profile Update Approvals</CardTitle>
-          <CardDescription>
-            Review employee self-service profile changes, filter the queue, and approve or reject each request with HR notes.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-700">
-            {requests.length} request{requests.length === 1 ? "" : "s"}
-          </Badge>
-          <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">
-            {pendingCount} awaiting review
-          </Badge>
-          <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
-            {requests.filter((row) => String(row.status ?? "").toLowerCase() === "approved").length} approved
-          </Badge>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Filters</CardTitle>
-          <CardDescription>Filter by current approval status and request date range.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-4">
-          <div className="space-y-1">
-            <p className="text-xs font-medium text-slate-600">Status</p>
-            <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value ?? "all")}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="All statuses" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All statuses</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="submitted">Submitted</SelectItem>
-                <SelectItem value="approved">Approved</SelectItem>
-                <SelectItem value="rejected">Rejected</SelectItem>
-                <SelectItem value="cancelled">Cancelled</SelectItem>
-                <SelectItem value="draft">Draft</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <p className="text-xs font-medium text-slate-600">From date</p>
-            <DatePickerPresets value={dateFrom} onChange={setDateFrom} placeholder="From date" />
-          </div>
-          <div className="space-y-1">
-            <p className="text-xs font-medium text-slate-600">To date</p>
-            <DatePickerPresets value={dateTo} onChange={setDateTo} placeholder="To date" />
-          </div>
-          <div className="flex items-end gap-2">
-            <button
-              type="button"
-              className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700"
-              onClick={() => {
-                setStatusFilter("all")
-                setDateFrom("")
-                setDateTo("")
-                setFeedback(null)
-              }}
-            >
-              Reset
-            </button>
-            <button
-              type="button"
-              className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white"
-              onClick={() => void loadRequests()}
-              disabled={loading}
-            >
-              <RefreshCw className={cn("h-4 w-4", loading ? "animate-spin" : "")} />
-              Refresh
-            </button>
-          </div>
-        </CardContent>
-      </Card>
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <h2 className="mr-1 shrink-0 text-sm font-semibold text-slate-900">Profile Update Approvals</h2>
+        <Badge variant="outline" className="border-slate-200 bg-slate-50 text-xs text-slate-700">
+          {requests.length} total
+        </Badge>
+        <Badge variant="outline" className="border-amber-200 bg-amber-50 text-xs text-amber-700">
+          {pendingCount} pending
+        </Badge>
+        <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value ?? "all")}>
+          <SelectTrigger className="h-8 w-auto min-w-[8rem] text-xs">
+            <SelectValue placeholder="All statuses" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All statuses</SelectItem>
+            <SelectItem value="submitted">Submitted</SelectItem>
+            <SelectItem value="draft">Draft</SelectItem>
+            <SelectItem value="approved">Approved</SelectItem>
+            <SelectItem value="rejected">Rejected</SelectItem>
+            <SelectItem value="cancelled">Cancelled</SelectItem>
+          </SelectContent>
+        </Select>
+        <div className="min-w-[8.5rem]">
+          <DatePickerPresets value={dateFrom} onChange={setDateFrom} placeholder="From" className="h-8 px-2 text-xs" />
+        </div>
+        <div className="min-w-[8.5rem]">
+          <DatePickerPresets value={dateTo} onChange={setDateTo} placeholder="To" className="h-8 px-2 text-xs" />
+        </div>
+        <div className="ml-auto flex flex-wrap items-center gap-1.5">
+          <button
+            type="button"
+            className="inline-flex h-8 items-center rounded-md border border-slate-300 px-2.5 text-xs font-medium text-slate-700"
+            onClick={() => {
+              setStatusFilter("all")
+              setDateFrom("")
+              setDateTo("")
+              setFeedback(null)
+            }}
+          >
+            Reset
+          </button>
+          <button
+            type="button"
+            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-slate-900 px-2.5 text-xs font-semibold text-white"
+            onClick={() => void loadRequests()}
+            disabled={loading}
+          >
+            <RefreshCw className={cn("h-3.5 w-3.5", loading ? "animate-spin" : "")} />
+            Refresh
+          </button>
+        </div>
+      </div>
 
       {error ? (
-        <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+        <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
           {error}
         </div>
       ) : null}
@@ -788,6 +781,7 @@ export function HrProfileUpdateApprovalsView() {
                     disabled={statusMeta.terminal || actionLoading !== null}
                   />
                   <p className="text-xs text-slate-500">
+                    Approving applies the requested changes to the employee record.
                     Rejections should include a clear reason so the employee knows what to fix.
                   </p>
                 </div>
