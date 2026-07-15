@@ -3,7 +3,7 @@ name: Deploy HRMS UAT Frontend
 on:
   push:
     branches:
-      - uat
+      - master
 
   workflow_dispatch:
 

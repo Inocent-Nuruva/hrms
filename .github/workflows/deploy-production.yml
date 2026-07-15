@@ -3,7 +3,7 @@ name: Deploy HRMS Production Frontend
 on:
   push:
     branches:
-      - main
+      - master
 
   workflow_dispatch:
 

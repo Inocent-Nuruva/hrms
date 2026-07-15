@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 APP_DIR="/opt/apps/hrms/prod/frontend"
 ECOSYSTEM_FILE="/opt/apps/hrms/ecosystem.config.js"
-BRANCH="main"
+BRANCH="master"
 
 WEB_PM2_NAME="hrms-prod-web"
 APP_PORT="8880"
