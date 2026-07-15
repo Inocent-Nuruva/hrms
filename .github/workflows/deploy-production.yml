@@ -1,0 +1,31 @@
+name: Deploy HRMS Production Frontend
+
+on:
+  push:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hrms-production-frontend-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy Production Frontend
+    runs-on:
+      - self-hosted
+
+    steps:
+      - name: Deploy production frontend
+        run: |
+          cd /opt/apps/hrms/prod/frontend
+          git config --global --add safe.directory /opt/apps/hrms/prod/frontend || true
+          git fetch origin main
+          git reset --hard "$GITHUB_SHA"
+          chmod +x scripts/deploy-production.sh
+          bash scripts/deploy-production.sh

@@ -1,0 +1,31 @@
+name: Deploy HRMS UAT Frontend
+
+on:
+  push:
+    branches:
+      - uat
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hrms-uat-frontend-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy UAT Frontend
+    runs-on:
+      - self-hosted
+
+    steps:
+      - name: Deploy UAT frontend
+        run: |
+          cd /opt/apps/hrms/uat/frontend
+          git config --global --add safe.directory /opt/apps/hrms/uat/frontend || true
+          git fetch origin uat
+          git reset --hard "$GITHUB_SHA"
+          chmod +x scripts/deploy-uat.sh
+          bash scripts/deploy-uat.sh

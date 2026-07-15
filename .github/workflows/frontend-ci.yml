@@ -1,0 +1,44 @@
+name: HRMS Frontend CI
+
+on:
+  pull_request:
+    branches:
+      - main
+      - uat
+
+  push:
+    branches:
+      - main
+      - uat
+
+permissions:
+  contents: read
+
+jobs:
+  frontend-ci:
+    name: Build and Test HRMS Frontend
+    runs-on:
+      - self-hosted
+
+    steps:
+      - name: Go to frontend project
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          echo "Workspace: $(pwd)"
+
+      - name: Checkout frontend repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        run: |
+          node -v
+          npm -v
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run lint
+        run: npm run lint
+
+      - name: Build frontend
+        run: npm run build
