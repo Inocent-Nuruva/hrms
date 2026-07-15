@@ -4,8 +4,6 @@ import * as React from "react"
 import { usePathname, useRouter } from "next/navigation"
 
 import { AppSidebar } from "@/components/app-sidebar"
-import { canAccessDashboardRoute } from "@/components/app-sidebar"
-import { hasAdminDashboardAccess } from "@/components/app-sidebar"
 import { DataTable } from "@/components/data-table"
 import { AccountSettingsPanel } from "@/components/dashboard/account-settings-panel"
 import { SiteHeader } from "@/components/site-header"
@@ -40,6 +38,13 @@ import {
   type AdminResourceKey,
   type UsersQueryParams,
 } from "@/lib/admin-api"
+import {
+  buildDashboardActorSnapshotFromSources,
+  canAccessDashboardRoute,
+  clearDashboardActorSnapshot,
+  persistDashboardAccessToken,
+  publishDashboardActorSnapshot,
+} from "@/lib/dashboard-permissions"
 import { authService } from "@/services/authService"
 import { asRecord, isLikelyRefreshToken, readString } from "@/utils/token-utils"
 import { AUTH_STORAGE_KEYS, ROUTES } from "@/utils/constants"
@@ -308,8 +313,10 @@ export default function AdminDashboardView({
 
     if (preferredToken) {
       window.localStorage.setItem(TOKEN_STORAGE_KEY, preferredToken)
+      persistDashboardAccessToken(preferredToken)
     } else {
       window.localStorage.removeItem(TOKEN_STORAGE_KEY)
+      clearDashboardActorSnapshot()
     }
 
     return {
@@ -326,6 +333,7 @@ export default function AdminDashboardView({
     window.localStorage.removeItem(AUTH_STORAGE_KEYS.tokens)
     window.localStorage.removeItem(AUTH_STORAGE_KEYS.user)
     window.sessionStorage.removeItem(LEGACY_TOKEN_STORAGE_KEY)
+    clearDashboardActorSnapshot()
   }, [])
 
   const persistSessionTokens = React.useCallback((nextAccessToken: string, nextRefreshToken: string) => {
@@ -340,6 +348,7 @@ export default function AdminDashboardView({
         refreshToken: nextRefreshToken,
       })
     )
+    persistDashboardAccessToken(nextAccessToken)
   }, [])
 
   const hydrateTokenFromStorage = React.useCallback(() => {
@@ -631,12 +640,16 @@ export default function AdminDashboardView({
     companyName: string | null
     tokenCompanyName: string | null
     permissionLabels: string[]
+    rawUser: AdminRecord | null
+    tokenPayload: AdminRecord | null
   }>({
     adminName: null,
     adminEmail: null,
     companyName: null,
     tokenCompanyName: null,
     permissionLabels: [],
+    rawUser: null,
+    tokenPayload: null,
   })
   const [identityReady, setIdentityReady] = React.useState(false)
 
@@ -648,6 +661,7 @@ export default function AdminDashboardView({
     let adminName: string | null = null
     let adminEmail: string | null = null
     let companyName: string | null = null
+    let parsedUser: AdminRecord | null = null
     const permissionLabels = new Set<string>()
 
     const rawUser = window.localStorage.getItem(AUTH_STORAGE_KEYS.user)
@@ -655,6 +669,7 @@ export default function AdminDashboardView({
       try {
         const parsed = JSON.parse(rawUser) as unknown
         const root = asRecord(parsed)
+        parsedUser = root
         const companyCandidates = [
           root,
           asRecord(root?.company),
@@ -710,6 +725,8 @@ export default function AdminDashboardView({
       companyName,
       tokenCompanyName,
       permissionLabels: Array.from(permissionLabels),
+      rawUser: parsedUser,
+      tokenPayload: payload,
     })
     setIdentityReady(true)
   }, [resolveStoredTokens])
@@ -731,24 +748,31 @@ export default function AdminDashboardView({
     clientIdentity.companyName ??
     clientIdentity.tokenCompanyName ??
     null
-  const permissionLabels = React.useMemo(() => {
-    const merged = new Set<string>(clientIdentity.permissionLabels)
-    resolvePermissionLabels(currentAdmin).forEach((entry) => merged.add(entry))
-    return Array.from(merged)
-  }, [clientIdentity.permissionLabels, currentAdmin])
-  const identityIsAdmin = hasAdminDashboardAccess(permissionLabels)
-  const accessMode = identityIsAdmin ? "admin" : "employee"
-  const effectivePermissionLabels = permissionLabels
+  const actorSnapshot = React.useMemo(
+    () =>
+      buildDashboardActorSnapshotFromSources(
+        currentAdmin,
+        clientIdentity.rawUser,
+        clientIdentity.tokenPayload,
+        clientIdentity.permissionLabels
+      ),
+    [
+      clientIdentity.permissionLabels,
+      clientIdentity.rawUser,
+      clientIdentity.tokenPayload,
+      currentAdmin,
+    ]
+  )
+  const accessMode = actorSnapshot.accessMode
+  const effectivePermissionLabels = actorSnapshot.permissionLabels
 
-  // Publish access mode + actor permissions for feature pages (offboarding, access control, etc.).
-  if (typeof window !== "undefined" && identityReady) {
-    window.sessionStorage.setItem("hrms.dashboard.accessMode", accessMode)
-    window.sessionStorage.setItem("hrms.dashboard.isAdmin", identityIsAdmin ? "1" : "0")
-    window.sessionStorage.setItem(
-      "hrms.dashboard.actorPermissions",
-      JSON.stringify(effectivePermissionLabels)
-    )
-  }
+  React.useEffect(() => {
+    if (!identityReady) {
+      return
+    }
+
+    publishDashboardActorSnapshot(actorSnapshot)
+  }, [actorSnapshot, identityReady])
 
   React.useEffect(() => {
     if (typeof window === "undefined") {

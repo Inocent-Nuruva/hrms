@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useRouter } from "next/navigation"
 import { PencilIcon, PlusIcon, RefreshCwIcon, Trash2Icon } from "lucide-react"
 import {
   Dialog,
@@ -24,6 +25,8 @@ import {
   type AdminRecord,
   updateAccessControlResourceById,
 } from "@/lib/admin-api"
+import { canPerformPermission } from "@/lib/dashboard-permissions"
+import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 
 type AccessControlSectionKey = "doors" | "templates" | "organizations" | "groups"
@@ -47,67 +50,11 @@ const ROUTE_TO_RESOURCE: Record<AccessControlSectionKey, AccessControlResourceKe
   groups: "groups",
 }
 
-/** Maps UI section to API permission prefix used by /api/permissions. */
 const SECTION_PERMISSION_PREFIX: Record<AccessControlSectionKey, string> = {
   doors: "access_doors",
   templates: "access_schedule_templates",
   organizations: "access_organizations",
   groups: "access_groups",
-}
-
-function readActorPermissionNames(): string[] {
-  if (typeof window === "undefined") return []
-  const names = new Set<string>()
-  try {
-    const raw = window.sessionStorage.getItem("hrms.dashboard.actorPermissions")
-    if (raw) {
-      const parsed = JSON.parse(raw) as unknown
-      if (Array.isArray(parsed)) {
-        parsed.forEach((entry) => {
-          if (typeof entry === "string" && entry.trim()) names.add(entry.trim().toLowerCase())
-        })
-      }
-    }
-  } catch {
-    // ignore
-  }
-  // Fallback: JWT permissions
-  try {
-    const token =
-      window.localStorage.getItem("hrms.admin.accessToken")?.trim() ||
-      (() => {
-        const raw = window.localStorage.getItem("auth_tokens") || window.localStorage.getItem("hrms.auth.tokens")
-        if (!raw) return ""
-        const parsed = JSON.parse(raw) as { accessToken?: string; access_token?: string }
-        return (parsed.accessToken ?? parsed.access_token ?? "").trim()
-      })()
-    if (token) {
-      const parts = token.split(".")
-      if (parts[1]) {
-        const payload = JSON.parse(
-          atob(parts[1].replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(parts[1].length / 4) * 4, "="))
-        ) as { permissions?: unknown }
-        if (Array.isArray(payload.permissions)) {
-          payload.permissions.forEach((entry) => {
-            if (typeof entry === "string") names.add(entry.toLowerCase())
-          })
-        }
-      }
-    }
-  } catch {
-    // ignore
-  }
-  return Array.from(names)
-}
-
-function canAccessControlAction(
-  section: AccessControlSectionKey,
-  action: "create" | "update" | "delete" | "read"
-) {
-  const perms = readActorPermissionNames()
-  if (perms.length === 0) return false
-  const required = `${SECTION_PERMISSION_PREFIX[section]}:${action}`.toLowerCase()
-  return perms.some((entry) => entry.replace(/\./g, ":") === required)
 }
 
 const SECTION_TITLES: Record<AccessControlSectionKey, string> = {
@@ -714,6 +661,8 @@ export function AccessControlManagementView({
   section: string
   moduleTitle?: string
 }) {
+  const actor = useDashboardActor()
+  const router = useRouter()
   const activeSection = (Object.keys(ROUTE_TO_RESOURCE).includes(section) ? section : "doors") as AccessControlSectionKey
   const resource = ROUTE_TO_RESOURCE[activeSection]
   const fields = React.useMemo(() => SECTION_FIELDS[activeSection], [activeSection])
@@ -1050,9 +999,15 @@ export function AccessControlManagementView({
     setFormError(null)
   }
 
-  const canCreate = canAccessControlAction(activeSection, "create")
-  const canUpdate = canAccessControlAction(activeSection, "update")
-  const canDelete = canAccessControlAction(activeSection, "delete")
+  const canCreate =
+    actor.ready &&
+    canPerformPermission(actor.permissionLabels, `${SECTION_PERMISSION_PREFIX[activeSection]}:create`)
+  const canUpdate =
+    actor.ready &&
+    canPerformPermission(actor.permissionLabels, `${SECTION_PERMISSION_PREFIX[activeSection]}:update`)
+  const canDelete =
+    actor.ready &&
+    canPerformPermission(actor.permissionLabels, `${SECTION_PERMISSION_PREFIX[activeSection]}:delete`)
 
   return (
     <div className="space-y-2">

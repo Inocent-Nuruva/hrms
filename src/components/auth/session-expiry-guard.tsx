@@ -3,6 +3,7 @@
 import * as React from "react"
 
 import { clearStoredSession, persistSessionTokens, readJwtExpiry, readStoredSessionTokens, redirectToLogin } from "@/lib/session-client"
+import { publishDashboardActorSnapshotFromBrowserStorage } from "@/lib/dashboard-permissions"
 import { authService } from "@/services/authService"
 import { ROUTES } from "@/utils/constants"
 
@@ -39,6 +40,8 @@ export function SessionExpiryGuard() {
       }
       return
     }
+
+    publishDashboardActorSnapshotFromBrowserStorage(accessToken)
 
     const accessExpiry = readJwtExpiry(accessToken)
     if (accessExpiry === null || accessExpiry - Date.now() > ACCESS_TOKEN_REFRESH_WINDOW_MS) {

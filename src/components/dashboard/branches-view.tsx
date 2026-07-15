@@ -20,7 +20,8 @@ import {
   type AdminRecord,
   type BranchesQueryParams,
 } from "@/lib/admin-api"
-import { canPerformPermission, normalizePermissionLabels } from "@/components/app-sidebar"
+import { canPerformPermission } from "@/components/app-sidebar"
+import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import {
   AlertDialog,
@@ -101,67 +102,6 @@ function readStoredToken() {
   }
 
   return window.localStorage.getItem(TOKEN_STORAGE_KEY)?.trim() ?? ""
-}
-
-function collectPermissionNames(value: unknown, sink: Set<string>) {
-  if (typeof value === "string" && value.trim()) {
-    sink.add(value.trim())
-    return
-  }
-
-  if (Array.isArray(value)) {
-    value.forEach((entry) => collectPermissionNames(entry, sink))
-    return
-  }
-
-  if (typeof value !== "object" || value === null) {
-    return
-  }
-
-  const record = value as Record<string, unknown>
-  for (const key of ["permissions", "authorities", "actions", "scopes", "data", "items", "results", "user"]) {
-    collectPermissionNames(record[key], sink)
-  }
-}
-
-function readActorPermissions() {
-  if (typeof window === "undefined") {
-    return [] as string[]
-  }
-
-  const names = new Set<string>()
-
-  try {
-    const raw = window.sessionStorage.getItem("hrms.dashboard.actorPermissions")
-    if (raw) {
-      const parsed = JSON.parse(raw) as unknown
-      if (Array.isArray(parsed)) {
-        return normalizePermissionLabels(parsed.filter((entry) => typeof entry === "string"))
-      }
-    }
-  } catch {
-    // Fall back to local payloads.
-  }
-
-  try {
-    const rawUser = window.localStorage.getItem(AUTH_STORAGE_KEYS.user)
-    if (rawUser) {
-      collectPermissionNames(JSON.parse(rawUser), names)
-    }
-  } catch {
-    // ignore malformed stored user
-  }
-
-  try {
-    const rawTokens = window.localStorage.getItem(AUTH_STORAGE_KEYS.tokens)
-    if (rawTokens) {
-      collectPermissionNames(JSON.parse(rawTokens), names)
-    }
-  } catch {
-    // ignore malformed stored tokens
-  }
-
-  return normalizePermissionLabels(Array.from(names))
 }
 
 function readString(row: AdminRecord, keys: string[]) {
@@ -264,10 +204,9 @@ function accessRowUserId(row: AdminRecord) {
 }
 
 export function BranchesView() {
-  // Permissions come from browser storage — always start empty so SSR and the
-  // first client paint match, then hydrate from session/local storage after mount.
-  const [actorPermissions, setActorPermissions] = React.useState<string[]>([])
-  const [permissionsReady, setPermissionsReady] = React.useState(false)
+  const actor = useDashboardActor()
+  const actorPermissions = actor.permissionLabels
+  const permissionsReady = actor.ready
   const [query, setQuery] = React.useState(DEFAULT_QUERY)
   const [rows, setRows] = React.useState<AdminRecord[]>([])
   const [loading, setLoading] = React.useState(false)
@@ -292,11 +231,6 @@ export function BranchesView() {
   const [accessPickerOpen, setAccessPickerOpen] = React.useState(false)
   const [pendingDelete, setPendingDelete] = React.useState<AdminRecord | null>(null)
   const debouncedSearch = useDebouncedValue(query.search, 350)
-
-  React.useEffect(() => {
-    setActorPermissions(readActorPermissions())
-    setPermissionsReady(true)
-  }, [])
 
   const cityOptions = React.useMemo(() => {
     const selectedCountry = form.country.trim().toLowerCase()

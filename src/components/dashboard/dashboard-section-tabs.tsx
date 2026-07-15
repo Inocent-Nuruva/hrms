@@ -4,10 +4,8 @@ import * as React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 
-import {
-  canAccessDashboardRoute,
-  normalizePermissionLabels,
-} from "@/components/app-sidebar"
+import { canAccessDashboardRoute } from "@/components/app-sidebar"
+import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { Tabs2 } from "@/components/ui/tabs-2"
 import { cn } from "@/lib/utils"
 import type { DashboardSectionTabGroup } from "@/lib/dashboard-sections"
@@ -27,62 +25,28 @@ export function DashboardSectionTabs({
 }: DashboardSectionTabsProps) {
   const pathname = usePathname()
   const currentPath = pathname ?? ""
-  const [permissionLabels, setPermissionLabels] = React.useState<string[] | null>(null)
+  const actor = useDashboardActor()
   const stickyClassName = "sticky top-(--header-height) z-40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80"
 
-  React.useEffect(() => {
-    if (typeof window === "undefined") {
-      return
-    }
-
-    const rawPermissions = window.sessionStorage.getItem("hrms.dashboard.actorPermissions")
-    if (!rawPermissions) {
-      setPermissionLabels([])
-      return
-    }
-
-    try {
-      const parsed = JSON.parse(rawPermissions)
-      setPermissionLabels(
-        Array.isArray(parsed) ? normalizePermissionLabels(parsed.filter((entry) => typeof entry === "string")) : []
-      )
-    } catch {
-      setPermissionLabels([])
-    }
-  }, [])
-
   const filteredGroups = React.useMemo(() => {
-    if (permissionLabels === null) {
+    if (!actor.ready) {
       return []
     }
-
-    // Hide HR-only routes (e.g. business trips) when the session is employee mode.
-    const accessMode =
-      typeof window !== "undefined"
-        ? window.sessionStorage.getItem("hrms.dashboard.accessMode")
-        : null
-    const isEmployeeSession = accessMode === "employee"
 
     return groups
       .map((group) => ({
         ...group,
-        items: group.items.filter((item) => {
-          if (
-            isEmployeeSession &&
-            item.url.includes("/business-trips")
-          ) {
-            return false
-          }
-          return canAccessDashboardRoute(item.url, permissionLabels)
-        }),
+        items: group.items.filter((item) =>
+          canAccessDashboardRoute(item.url, actor.permissionLabels)
+        ),
       }))
       .filter((group) => group.items.length > 0)
-  }, [groups, permissionLabels])
+  }, [actor.permissionLabels, actor.ready, groups])
 
   const hasGroupedTabs =
     filteredGroups.length > 1 && filteredGroups.every((group) => Boolean(group.title))
 
-  if (permissionLabels === null || filteredGroups.length === 0) {
+  if (!actor.ready || filteredGroups.length === 0) {
     return null
   }
 

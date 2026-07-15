@@ -18,7 +18,8 @@ import {
   type AdminRecord,
   type PositionsQueryParams,
 } from "@/lib/admin-api"
-import { canPerformPermission, normalizePermissionLabels } from "@/components/app-sidebar"
+import { canPerformPermission } from "@/components/app-sidebar"
+import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import {
   AlertDialog,
@@ -79,59 +80,6 @@ function readStoredToken() {
   }
 
   return window.localStorage.getItem(TOKEN_STORAGE_KEY)?.trim() ?? ""
-}
-
-function collectPermissionNames(value: unknown, sink: Set<string>) {
-  if (typeof value === "string" && value.trim()) {
-    sink.add(value.trim())
-    return
-  }
-
-  if (Array.isArray(value)) {
-    value.forEach((entry) => collectPermissionNames(entry, sink))
-    return
-  }
-
-  if (typeof value !== "object" || value === null) {
-    return
-  }
-
-  const record = value as Record<string, unknown>
-  for (const key of ["permissions", "authorities", "actions", "scopes", "data", "items", "results", "user"]) {
-    collectPermissionNames(record[key], sink)
-  }
-}
-
-function readActorPermissions() {
-  if (typeof window === "undefined") {
-    return [] as string[]
-  }
-
-  const names = new Set<string>()
-
-  try {
-    const raw = window.sessionStorage.getItem("hrms.dashboard.actorPermissions")
-    if (raw) {
-      const parsed = JSON.parse(raw) as unknown
-      if (Array.isArray(parsed)) {
-        return normalizePermissionLabels(parsed.filter((entry) => typeof entry === "string"))
-      }
-    }
-  } catch {
-    // Fall through to local payload inspection.
-  }
-
-  for (const key of [AUTH_STORAGE_KEYS.user, AUTH_STORAGE_KEYS.tokens, "hrms.admin.user"]) {
-    try {
-      const raw = window.localStorage.getItem(key)
-      if (!raw) continue
-      collectPermissionNames(JSON.parse(raw) as unknown, names)
-    } catch {
-      // Ignore malformed local storage entries.
-    }
-  }
-
-  return normalizePermissionLabels(Array.from(names))
 }
 
 function readString(row: AdminRecord, keys: string[]) {
@@ -196,9 +144,9 @@ function emptyForm(): PositionForm {
 }
 
 export function PositionsView() {
-  // Browser storage only — keep empty until after mount to avoid SSR hydration mismatch.
-  const [actorPermissions, setActorPermissions] = React.useState<string[]>([])
-  const [permissionsReady, setPermissionsReady] = React.useState(false)
+  const actor = useDashboardActor()
+  const actorPermissions = actor.permissionLabels
+  const permissionsReady = actor.ready
   const canCreatePositions = React.useMemo(
     () => permissionsReady && canPerformPermission(actorPermissions, "positions:create"),
     [actorPermissions, permissionsReady]
@@ -228,11 +176,6 @@ export function PositionsView() {
   const [editingId, setEditingId] = React.useState<number | null>(null)
   const [pendingDelete, setPendingDelete] = React.useState<AdminRecord | null>(null)
   const debouncedSearch = useDebouncedValue(query.search, 350)
-
-  React.useEffect(() => {
-    setActorPermissions(readActorPermissions())
-    setPermissionsReady(true)
-  }, [])
 
   const normalizedQuery = React.useMemo(
     () => ({

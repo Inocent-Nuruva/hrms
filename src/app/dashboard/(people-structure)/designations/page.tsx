@@ -1,5 +1,5 @@
-import { DesignationsView } from "@/components/dashboard/designations-view"
+import { redirect } from "next/navigation"
 
 export default function DesignationsPage() {
-  return <DesignationsView />
+  redirect("/dashboard/positions")
 }

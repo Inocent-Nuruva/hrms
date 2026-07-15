@@ -27,6 +27,7 @@ import {
   submitOffboardingRequest,
   type AdminRecord,
 } from "@/lib/admin-api"
+import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import { asRecord, isLikelyRefreshToken, readString as readTokenString } from "@/utils/token-utils"
 import { showErrorAlert } from "@/lib/error-alert"
@@ -108,112 +109,6 @@ function readNumber(row: AdminRecord, keys: string[]) {
   return null
 }
 
-function decodeJwtPayload(token: string): Record<string, unknown> | null {
-  const parts = token.split(".")
-  if (parts.length !== 3 || !parts[1]) return null
-  try {
-    const normalized = parts[1].replace(/-/g, "+").replace(/_/g, "/")
-    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=")
-    return JSON.parse(atob(padded)) as Record<string, unknown>
-  } catch {
-    return null
-  }
-}
-
-// Keep in sync with admin-dashboard-view ADMIN_ROLE_KEYS.
-const OFFBOARDING_ADMIN_ROLES = new Set([
-  "admin",
-  "administrator",
-  "super_admin",
-  "super-admin",
-  "company_admin",
-  "company-admin",
-  "hr_admin",
-  "hr-admin",
-  "owner",
-  "root",
-])
-
-function normalizeRoleLabel(value: unknown): string | null {
-  if (typeof value === "string" && value.trim()) {
-    return value.toLowerCase().trim()
-  }
-  if (value && typeof value === "object") {
-    const record = value as Record<string, unknown>
-    for (const key of ["name", "role", "key", "code", "slug", "type", "user_type", "display_name"]) {
-      const nested = record[key]
-      if (typeof nested === "string" && nested.trim()) {
-        return nested.toLowerCase().trim()
-      }
-    }
-  }
-  return null
-}
-
-function collectRoleLabelsFromUnknown(root: unknown): string[] {
-  const labels = new Set<string>()
-  const push = (value: unknown) => {
-    const role = normalizeRoleLabel(value)
-    if (role) labels.add(role)
-  }
-
-  if (!root || typeof root !== "object") return []
-  const record = root as Record<string, unknown>
-  push(record.role)
-  push(record.user_type)
-  push(record.userType)
-  push(record.type)
-
-  for (const key of ["roles", "authorities", "userRole", "user_role"]) {
-    const candidate = record[key]
-    if (Array.isArray(candidate)) {
-      candidate.forEach(push)
-    } else {
-      push(candidate)
-    }
-  }
-  return Array.from(labels)
-}
-
-function isAdminRoleLabel(role: string) {
-  const normalized = role.toLowerCase().trim()
-  if (OFFBOARDING_ADMIN_ROLES.has(normalized)) return true
-  const underscored = normalized.replace(/[\s-]+/g, "_")
-  return OFFBOARDING_ADMIN_ROLES.has(underscored)
-}
-
-/**
- * Create offboarding request/workflow is admin-only.
- * Employee dashboard mode never gets create actions.
- */
-function canManageOffboarding(token: string) {
-  if (typeof window !== "undefined") {
-    const accessMode = window.sessionStorage.getItem("hrms.dashboard.accessMode")
-    const isAdminFlag = window.sessionStorage.getItem("hrms.dashboard.isAdmin")
-    // Hard stop: employee shell never shows create, regardless of JWT noise.
-    if (accessMode === "employee" || isAdminFlag === "0") {
-      return false
-    }
-  }
-
-  const roleLabels = new Set<string>()
-  const payload = token ? decodeJwtPayload(token) : null
-  collectRoleLabelsFromUnknown(payload).forEach((role) => roleLabels.add(role))
-
-  if (typeof window !== "undefined") {
-    try {
-      const rawUser = window.localStorage.getItem(AUTH_STORAGE_KEYS.user)
-      if (rawUser) {
-        collectRoleLabelsFromUnknown(JSON.parse(rawUser)).forEach((role) => roleLabels.add(role))
-      }
-    } catch {
-      // ignore malformed stored user
-    }
-  }
-
-  return [...roleLabels].some(isAdminRoleLabel)
-}
-
 function StatusDot({ status }: { status: string }) {
   const normalized = status.trim().toLowerCase()
   const label =
@@ -269,6 +164,7 @@ type Tab = "requests" | "workflows"
 type OffboardingLookupKey = "employees" | "branches" | "departments" | "workflows"
 
 export function OffboardingView() {
+  const actor = useDashboardActor()
   const [tab, setTab] = React.useState<Tab>("requests")
   const [canManage, setCanManage] = React.useState(false)
   const [loading, setLoading] = React.useState(false)
@@ -474,23 +370,8 @@ export function OffboardingView() {
   }, [tab, selectedWorkflowId])
 
   React.useEffect(() => {
-    const syncManageAccess = () => {
-      const token = readStoredToken()
-      setCanManage(canManageOffboarding(token))
-    }
-    syncManageAccess()
-    // Re-check shortly after mount in case parent dashboard identity resolves later.
-    const timer = window.setTimeout(syncManageAccess, 50)
-    const timer2 = window.setTimeout(syncManageAccess, 250)
-    window.addEventListener("storage", syncManageAccess)
-    window.addEventListener("focus", syncManageAccess)
-    return () => {
-      window.clearTimeout(timer)
-      window.clearTimeout(timer2)
-      window.removeEventListener("storage", syncManageAccess)
-      window.removeEventListener("focus", syncManageAccess)
-    }
-  }, [])
+    setCanManage(actor.ready && actor.isAdmin)
+  }, [actor.isAdmin, actor.ready])
 
   React.useEffect(() => {
     if (loadedTabs[tab]) return

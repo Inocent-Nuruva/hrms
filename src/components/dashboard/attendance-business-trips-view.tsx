@@ -35,6 +35,7 @@ import {
   updateAttendanceBusinessTrip,
   type AdminRecord,
 } from "@/lib/admin-api"
+import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { showErrorAlert } from "@/lib/error-alert"
 import { showSuccessAlert } from "@/lib/success-alert"
 import { cn } from "@/lib/utils"
@@ -359,6 +360,7 @@ function ToolbarButton({
 
 export function AttendanceBusinessTripsView() {
   const router = useRouter()
+  const actor = useDashboardActor()
   const [trips, setTrips] = React.useState<AdminRecord[]>([])
   const [employees, setEmployees] = React.useState<AdminRecord[]>([])
   const [selectedTripId, setSelectedTripId] = React.useState("")
@@ -382,19 +384,16 @@ export function AttendanceBusinessTripsView() {
 
   // HR/admin only — never show business trips on employee (user) side.
   React.useEffect(() => {
-    if (typeof window === "undefined") {
+    if (!actor.ready) {
       return
     }
-    const accessMode = window.sessionStorage.getItem("hrms.dashboard.accessMode")
-    const isAdminFlag = window.sessionStorage.getItem("hrms.dashboard.isAdmin")
-    const isAdmin = accessMode === "admin" || isAdminFlag === "1"
-    if (!isAdmin) {
+    if (!actor.isAdmin) {
       setAllowed(false)
       router.replace("/dashboard/me/leave/requests")
       return
     }
     setAllowed(true)
-  }, [router])
+  }, [actor.isAdmin, actor.ready, router])
 
   const employeeOptions = React.useMemo(() => buildEmployeeOptions(employees), [employees])
 

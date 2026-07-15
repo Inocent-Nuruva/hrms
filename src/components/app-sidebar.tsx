@@ -20,6 +20,16 @@ import { Search } from "@/components/animate-ui/icons/search"
 import { MessageCircleQuestion } from "@/components/animate-ui/icons/message-circle-question"
 import { Kanban } from "@/components/animate-ui/icons/kanban"
 import type { AdminResourceKey } from "@/lib/admin-api"
+import {
+  canAccessDashboardRoute,
+  normalizePermissionLabels,
+} from "@/lib/dashboard-permissions"
+export {
+  canAccessDashboardRoute,
+  canPerformPermission,
+  normalizePermissionLabels,
+  hasAdminDashboardAccess,
+} from "@/lib/dashboard-permissions"
 
 const IUsers = <UsersRound size={48} animation="path-loop" />
 const ILeave = <Route size={48} animation="path-loop" />
@@ -44,24 +54,6 @@ type SidebarData = {
   navMain: SidebarNavItem[]
   navSecondary: Array<{ title: string; url: string; icon: React.ReactNode }>
 }
-
-const ADMIN_DASHBOARD_LANDING_ROUTES = [
-  "/dashboard/branches",
-  "/dashboard/departments",
-  "/dashboard/employees/all",
-  "/dashboard/employees/onboarding",
-  "/dashboard/employees/profile-update-approvals",
-  "/dashboard/employees/offboarding",
-  "/dashboard/leave-management/types",
-  "/dashboard/leave-management/requests",
-  "/dashboard/leave-management/balances",
-  "/dashboard/attendance/daily-summaries",
-  "/dashboard/attendance/settings",
-  "/dashboard/attendance/shifts",
-  "/dashboard/access-control",
-  "/dashboard/positions",
-  "/dashboard/designations",
-]
 
 const adminData: SidebarData = {
   navMain: [
@@ -111,7 +103,6 @@ const adminData: SidebarData = {
     {
       title: "Positions",
       url: "/dashboard/positions",
-      matchUrls: ["/dashboard/designations"],
       icon: IUsers,
     },
     {
@@ -188,7 +179,6 @@ const adminSearchIndex = [
   { title: "Departments", url: "/dashboard/departments", section: "Organization", keywords: ["department", "org"] },
   { title: "Branches", url: "/dashboard/branches", section: "Organization", keywords: ["branch", "location"] },
   { title: "Positions", url: "/dashboard/positions", section: "Organization", keywords: ["position", "job title"] },
-  { title: "Designations", url: "/dashboard/designations", section: "Organization", keywords: ["designation", "grade", "hierarchy"] },
   { title: "Recruitment", url: "/dashboard/operations/recruitment", section: "Operations", keywords: ["hiring", "talent"] },
   { title: "Reports", url: "/dashboard/operations/reports", section: "Operations", keywords: ["attendance", "download", "xlsx", "csv", "pdf"] },
   { title: "Access Control / Roles", url: "/dashboard/access-control/roles", section: "Access Control", keywords: ["role", "access", "authorization"] },
@@ -269,197 +259,6 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
   onSelectResource?: (resource: AdminResourceKey) => void
 }
 
-const ATTENDANCE_ROUTE_PERMISSIONS = [
-  "attendance_policies:read",
-  "attendance_devices:read",
-  "attendance_checkpoints:read",
-  "attendance_holiday_groups:read",
-  "attendance_geofences:read",
-  "attendance_wifi_networks:read",
-  "attendance_mobile_punches:read",
-  "attendance_holidays:read",
-  "attendance_device_sync_logs:read",
-  "attendance_summaries:read",
-  "attendance_processing:read",
-  "attendance_recalculation:execute",
-  "shifts:read",
-  "shift_breaks:read",
-  "shift_assignments:read",
-  "shift_schedules:read",
-  "shift_rotation_groups:read",
-  "shift_rotation_rules:read",
-  "timetables:read",
-  "timetable_days:read",
-  "timetable_holiday_rules:read",
-  "timetable_rotations:read",
-  "timetable_rotation_rules:read",
-  "employee_timetables:read",
-  "self_service_requests:approve",
-]
-
-export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, string[]> = {
-  "/dashboard/me/profile": [],
-  "/dashboard/me/organization": [],
-  "/dashboard/me/promotion": [],
-  "/dashboard/me/leave": [],
-  "/dashboard/me/leave/requests": [],
-  "/dashboard/me/leave/balances": [],
-  "/dashboard/me/leave/holidays": [],
-  "/dashboard/me/leave/policies": [],
-  "/dashboard/attendance/today": [],
-  "/dashboard/attendance/punch-action": [],
-  "/dashboard/attendance/punch-history": [],
-  "/dashboard/attendance/attendance-history": [],
-  "/dashboard/attendance/schedule-preview": [],
-  "/dashboard/attendance/corrections": [],
-  "/dashboard/employees": [
-    "employees:read",
-    "employees:create",
-    "company_users:create",
-    "users:create",
-    "offboarding_requests:read",
-    "offboarding_workflows:read",
-    "onboarding_requests:read",
-    "onboarding_workflows:read",
-    "self_service_requests:approve",
-  ],
-  "/dashboard/employees/all": ["employees:read"],
-  "/dashboard/employees/registration": ["employees:create", "company_users:create", "users:create", "create_company_user"],
-  "/dashboard/employees/offboarding": ["offboarding_requests:read", "offboarding_workflows:read"],
-  "/dashboard/employees/onboarding": ["onboarding_requests:read", "onboarding_workflows:read"],
-  "/dashboard/employees/profile": ["employees:read"],
-  "/dashboard/employees/profile/": ["employees:read"],
-  "/dashboard/employees/profile-update-approvals": ["self_service_requests:approve"],
-  "/dashboard/attendance": ATTENDANCE_ROUTE_PERMISSIONS,
-  "/dashboard/attendance/settings": ["attendance_policies:read"],
-  "/dashboard/attendance/policies": ["attendance_policies:read"],
-  "/dashboard/attendance/devices": ["attendance_devices:read"],
-  "/dashboard/attendance/checkpoints": ["attendance_checkpoints:read"],
-  "/dashboard/attendance/holiday-groups": ["attendance_holiday_groups:read"],
-  "/dashboard/attendance/geofences": ["attendance_geofences:read"],
-  "/dashboard/attendance/wifi-networks": ["attendance_wifi_networks:read"],
-  "/dashboard/attendance/mobile-punches": ["attendance_mobile_punches:read"],
-  "/dashboard/attendance/holidays": ["attendance_holidays:read"],
-  "/dashboard/attendance/device-sync-logs": ["attendance_device_sync_logs:read"],
-  "/dashboard/attendance/daily-summaries": ["attendance_summaries:read"],
-  "/dashboard/attendance/recalculation-jobs": ["attendance_processing:read", "attendance_recalculation:execute"],
-  "/dashboard/attendance/unmatched-logs": ["attendance_processing:read"],
-  "/dashboard/attendance/shifts": ["shifts:read"],
-  "/dashboard/attendance/shift-breaks": ["shift_breaks:read"],
-  "/dashboard/attendance/shift-assignments": ["shift_assignments:read"],
-  "/dashboard/attendance/shift-schedules": ["shift_schedules:read"],
-  "/dashboard/attendance/shift-rotation-groups": ["shift_rotation_groups:read"],
-  "/dashboard/attendance/shift-rotation-rules": ["shift_rotation_rules:read"],
-  "/dashboard/attendance/correction-requests": ["self_service_requests:approve"],
-  "/dashboard/attendance/timetables": ["timetables:read"],
-  "/dashboard/attendance/timetable-days": ["timetable_days:read"],
-  "/dashboard/attendance/timetable-holiday-rules": ["timetable_holiday_rules:read"],
-  "/dashboard/attendance/timetable-rotations": ["timetable_rotations:read"],
-  "/dashboard/attendance/timetable-rotation-rules": ["timetable_rotation_rules:read"],
-  "/dashboard/attendance/employee-timetables": ["employee_timetables:read"],
-  "/dashboard/departments": ["departments:read"],
-  "/dashboard/branches": ["branches:read"],
-  "/dashboard/positions": ["positions:read", "designations:read"],
-  "/dashboard/designations": ["designations:read"],
-  "/dashboard/leave-management": [
-    "leave_types:read",
-    "leave_requests:read",
-    "leave_balances:read",
-    "leave-balances.view",
-    "leave-balances.manage",
-    "holidays:read",
-    "attendance_holidays:read",
-    "leave_policies:read",
-    "leave_workflows:read",
-    "attendance_business_trips:read",
-    "attendance_business_trips:create",
-    "attendance_business_trips:update",
-  ],
-  "/dashboard/leave-management/types": ["leave_types:read"],
-  "/dashboard/leave-management/requests": ["leave_requests:read"],
-  "/dashboard/leave-management/balances": ["leave_balances:read", "leave-balances.view", "leave-balances.manage"],
-  // HR/admin only — not employee self-service (no view_company_data fallback).
-  "/dashboard/leave-management/business-trips": [
-    "attendance_business_trips:read",
-    "attendance_business_trips:create",
-    "attendance_business_trips:update",
-  ],
-  "/dashboard/leave-management/holidays": ["holidays:read", "attendance_holidays:read"],
-  "/dashboard/leave-management/policies": ["leave_policies:read"],
-  "/dashboard/leave-management/workflows": ["leave_workflows:read"],
-  "/dashboard/operations/promotion": [],
-  "/dashboard/operations/recruitment": ["view_company_data"],
-  "/dashboard/operations/payroll": [],
-  "/dashboard/operations/reports": ["view_company_data"],
-  "/dashboard/access-control": ["attendance_devices:read", "access_doors:read", "access_schedule_templates:read", "access_organizations:read", "access_groups:read", "roles:read", "permissions:read"],
-  "/dashboard/access-control/devices": ["attendance_devices:read"],
-  "/dashboard/access-control/doors": ["access_doors:read"],
-  "/dashboard/access-control/templates": ["access_schedule_templates:read"],
-  "/dashboard/access-control/organizations": ["access_organizations:read"],
-  "/dashboard/access-control/groups": ["access_groups:read"],
-  "/dashboard/access-control/roles": ["roles:read"],
-  "/dashboard/access-control/permissions": ["permissions:read"],
-  "/dashboard/roles": ["roles:read"],
-  "/dashboard/permissions": ["permissions:read"],
-}
-
-export function normalizePermissionLabels(permissionLabels: string[]) {
-  return permissionLabels
-    .map((label) => label.trim().toLowerCase())
-    .filter((label) => label.length > 0)
-}
-
-function canonicalizePermissionLabel(label: string) {
-  return label.trim().toLowerCase().replace(/\./g, ":")
-}
-
-function resolveRequiredPermissions(url: string) {
-  const exactMatch = DASHBOARD_ROUTE_PERMISSIONS[url]
-  if (exactMatch) {
-    return exactMatch
-  }
-
-  const matchedEntry = Object.entries(DASHBOARD_ROUTE_PERMISSIONS)
-    .sort(([left], [right]) => right.length - left.length)
-    .find(([route]) => url === route || url.startsWith(`${route}/`))
-
-  return matchedEntry?.[1]
-}
-
-export function canAccessDashboardRoute(url: string, normalizedPermissions: string[]) {
-  const requiredPermissions = resolveRequiredPermissions(url)
-  if (!requiredPermissions || requiredPermissions.length === 0) {
-    return true
-  }
-  if (normalizedPermissions.length === 0) {
-    return false
-  }
-  return requiredPermissions.some((required) => {
-    const need = canonicalizePermissionLabel(required)
-    return normalizedPermissions.some(
-      (entry) => canonicalizePermissionLabel(entry) === need
-    )
-  })
-}
-
-/** Action-level gate used by feature UIs (create/update/delete). */
-export function canPerformPermission(
-  normalizedPermissions: string[],
-  required: string
-) {
-  if (normalizedPermissions.length === 0) return false
-  const need = canonicalizePermissionLabel(required)
-  return normalizedPermissions.some(
-    (entry) => canonicalizePermissionLabel(entry) === need
-  )
-}
-
-export function hasAdminDashboardAccess(normalizedPermissions: string[]) {
-  return ADMIN_DASHBOARD_LANDING_ROUTES.some((route) =>
-    canAccessDashboardRoute(route, normalizedPermissions)
-  )
-}
-
 function filterNavByPermissions(
   navMain: SidebarNavItem[],
   normalizedPermissions: string[]
@@ -507,9 +306,10 @@ export function AppSidebar({
     () => normalizePermissionLabels(permissionLabels),
     [permissionLabels]
   )
+  const resolvedAccessMode = accessMode
 
   const navData = React.useMemo(() => {
-    if (accessMode === "employee") {
+    if (resolvedAccessMode === "employee") {
       return {
         ...employeeData,
         navMain: filterNavByPermissions(employeeData.navMain, normalizedPermissions),
@@ -519,14 +319,14 @@ export function AppSidebar({
       ...adminData,
       navMain: filterNavByPermissions(adminData.navMain, normalizedPermissions),
     }
-  }, [accessMode, normalizedPermissions])
+  }, [normalizedPermissions, resolvedAccessMode])
 
   const searchIndex = React.useMemo(() => {
-    if (accessMode === "employee") {
+    if (resolvedAccessMode === "employee") {
       return filterAdminSearchByPermissions(employeeSearchIndex, normalizedPermissions)
     }
     return filterAdminSearchByPermissions(adminSearchIndex, normalizedPermissions)
-  }, [accessMode, normalizedPermissions])
+  }, [normalizedPermissions, resolvedAccessMode])
 
   return (
     <Sidebar collapsible="offcanvas" {...props}>

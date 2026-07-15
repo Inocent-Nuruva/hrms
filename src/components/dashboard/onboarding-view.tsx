@@ -4,7 +4,8 @@ import * as React from "react"
 import { HorizontalScrollContainer } from "@/components/common/horizontal-scroll-container"
 import { SearchToggleField } from "@/components/common/search-toggle-field"
 import { Ban, CheckCheck, CircleHelp, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react"
-import { canPerformPermission, normalizePermissionLabels } from "@/components/app-sidebar"
+import { canPerformPermission } from "@/components/app-sidebar"
+import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 
 import { cn } from "@/lib/utils"
 import { useDebouncedValue } from "@/hooks/use-debounced-value"
@@ -123,59 +124,6 @@ function readStoredToken() {
   }
 
   return window.localStorage.getItem(TOKEN_STORAGE_KEY)?.trim() ?? ""
-}
-
-function collectPermissionNames(value: unknown, sink: Set<string>) {
-  if (typeof value === "string" && value.trim()) {
-    sink.add(value.trim())
-    return
-  }
-
-  if (Array.isArray(value)) {
-    value.forEach((entry) => collectPermissionNames(entry, sink))
-    return
-  }
-
-  if (typeof value !== "object" || value === null) {
-    return
-  }
-
-  const record = value as Record<string, unknown>
-  for (const key of ["permissions", "authorities", "actions", "scopes", "data", "items", "results", "user"]) {
-    collectPermissionNames(record[key], sink)
-  }
-}
-
-function readActorPermissions() {
-  if (typeof window === "undefined") {
-    return [] as string[]
-  }
-
-  const names = new Set<string>()
-
-  try {
-    const raw = window.sessionStorage.getItem("hrms.dashboard.actorPermissions")
-    if (raw) {
-      const parsed = JSON.parse(raw) as unknown
-      if (Array.isArray(parsed)) {
-        return normalizePermissionLabels(parsed.filter((entry) => typeof entry === "string"))
-      }
-    }
-  } catch {
-    // Fall through to local payload inspection.
-  }
-
-  for (const key of [AUTH_STORAGE_KEYS.user, AUTH_STORAGE_KEYS.tokens, "hrms.admin.user"]) {
-    try {
-      const raw = window.localStorage.getItem(key)
-      if (!raw) continue
-      collectPermissionNames(JSON.parse(raw) as unknown, names)
-    } catch {
-      // Ignore malformed local storage entries.
-    }
-  }
-
-  return normalizePermissionLabels(Array.from(names))
 }
 
 function readString(row: AdminRecord, keys: string[]) {
@@ -868,7 +816,8 @@ function MultiSelectChecklist({
 }
 
 export function OnboardingView() {
-  const actorPermissions = React.useMemo(() => readActorPermissions(), [])
+  const actor = useDashboardActor()
+  const actorPermissions = actor.permissionLabels
   const canCreateOnboardingRequests = React.useMemo(
     () => canPerformPermission(actorPermissions, "onboarding_requests:create"),
     [actorPermissions]

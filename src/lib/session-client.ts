@@ -1,6 +1,11 @@
 "use client"
 
 import { AUTH_STORAGE_KEYS, ROUTES } from "@/utils/constants"
+import {
+  clearDashboardActorSnapshot,
+  persistDashboardAccessToken,
+  publishDashboardActorSnapshotFromBrowserStorage,
+} from "@/lib/dashboard-permissions"
 
 const ACCESS_TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 const LEGACY_SESSION_TOKEN_KEY = "ess_auth_token"
@@ -86,6 +91,8 @@ export function persistSessionTokens(accessToken: string, refreshToken: string) 
       refreshToken,
     })
   )
+  persistDashboardAccessToken(accessToken)
+  publishDashboardActorSnapshotFromBrowserStorage(accessToken)
 }
 
 export function clearStoredSession() {
@@ -97,6 +104,7 @@ export function clearStoredSession() {
   window.localStorage.removeItem(AUTH_STORAGE_KEYS.tokens)
   window.localStorage.removeItem(AUTH_STORAGE_KEYS.user)
   window.sessionStorage.removeItem(LEGACY_SESSION_TOKEN_KEY)
+  clearDashboardActorSnapshot()
 }
 
 export function readJwtExpiry(token: string) {

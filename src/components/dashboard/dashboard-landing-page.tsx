@@ -1,9 +1,7 @@
 "use client"
 
-import * as React from "react"
-
 import { EmployeeHomeDashboard } from "@/components/dashboard/employee-home-dashboard"
-import { getDashboardAccessModeFromBrowser } from "@/lib/dashboard-identity"
+import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 
 /**
  * `/dashboard` children:
@@ -14,26 +12,9 @@ import { getDashboardAccessModeFromBrowser } from "@/lib/dashboard-identity"
  * AdminDashboardView publishes into sessionStorage after identity resolves.
  */
 export function DashboardLandingPage() {
-  const [accessMode, setAccessMode] = React.useState<"admin" | "employee" | null>(
-    () => (typeof window === "undefined" ? null : getDashboardAccessModeFromBrowser())
-  )
+  const actor = useDashboardActor()
 
-  React.useEffect(() => {
-    const sync = () => setAccessMode(getDashboardAccessModeFromBrowser())
-    sync()
-
-    // Same-tab sessionStorage writes do not fire `storage` events; poll briefly
-    // while the dashboard shell finishes identity resolution.
-    const intervalId = window.setInterval(sync, 250)
-    const stopId = window.setTimeout(() => window.clearInterval(intervalId), 4000)
-
-    return () => {
-      window.clearInterval(intervalId)
-      window.clearTimeout(stopId)
-    }
-  }, [])
-
-  if (accessMode !== "employee") {
+  if (!actor.ready || actor.accessMode !== "employee") {
     return null
   }
 

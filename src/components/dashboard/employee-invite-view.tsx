@@ -12,6 +12,7 @@ import {
 import { toast } from "sonner"
 
 import {
+  createOnboardingRequest,
   createEmployeeProfile,
   listBranches,
   listDepartments,
@@ -20,6 +21,7 @@ import {
   listPositions,
   type AdminRecord,
   type CreateEmployeePayload,
+  type CreateEmployeeResponse,
 } from "@/lib/admin-api"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import { showErrorAlert } from "@/lib/error-alert"
@@ -46,15 +48,22 @@ import {
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 
-const EMPLOYMENT_TYPES = [
+const GENDER_OPTIONS = [
+  { value: "male", label: "Male" },
+  { value: "female", label: "Female" },
+] as const
+
+const EMPLOYMENT_TYPES: ReadonlyArray<{
+  value: NonNullable<CreateEmployeePayload["employment_type"]>
+  label: string
+}> = [
   { value: "full_time", label: "Full Time" },
   { value: "part_time", label: "Part Time" },
   { value: "contract", label: "Contract" },
-  { value: "probation", label: "Probation" },
   { value: "intern", label: "Intern" },
   { value: "consultant", label: "Consultant" },
   { value: "temporary", label: "Temporary" },
-] as const
+]
 
 type LookupOption = {
   id: number
@@ -200,6 +209,7 @@ function SectionHeader({ title }: { title: string }) {
 export function EmployeeInviteView() {
   const [firstName, setFirstName] = React.useState("")
   const [lastName, setLastName] = React.useState("")
+  const [gender, setGender] = React.useState("")
   const [email, setEmail] = React.useState("")
   const [phone, setPhone] = React.useState("")
   const [branchId, setBranchId] = React.useState<number | null>(null)
@@ -208,7 +218,6 @@ export function EmployeeInviteView() {
   const [reportsToId, setReportsToId] = React.useState<number | null>(null)
   const [employmentType, setEmploymentType] = React.useState<string>("full_time")
   const [hireDate, setHireDate] = React.useState<string>("")
-  const [probationEndDate, setProbationEndDate] = React.useState<string>("")
   const [workflowId, setWorkflowId] = React.useState<number | null>(null)
 
   const [branches, setBranches] = React.useState<AdminRecord[]>([])
@@ -403,15 +412,10 @@ export function EmployeeInviteView() {
     setPositionId(Number.isFinite(next as number) ? next : null)
   }
 
-  React.useEffect(() => {
-    if (employmentType !== "probation" && probationEndDate) {
-      setProbationEndDate("")
-    }
-  }, [employmentType, probationEndDate])
-
   const resetForm = () => {
     setFirstName("")
     setLastName("")
+    setGender("")
     setEmail("")
     setPhone("")
     setBranchId(null)
@@ -420,7 +424,6 @@ export function EmployeeInviteView() {
     setReportsToId(null)
     setEmploymentType("full_time")
     setHireDate("")
-    setProbationEndDate("")
     setWorkflowId(null)
   }
 
@@ -448,6 +451,10 @@ export function EmployeeInviteView() {
       toast.error("Phone number is required.")
       return
     }
+    if (!gender) {
+      toast.error("Please select a gender.")
+      return
+    }
     if (!branchId) {
       toast.error("Please select a branch first.")
       return
@@ -465,11 +472,24 @@ export function EmployeeInviteView() {
       return
     }
 
+    const selectedPosition = positions.find((row) => getId(row) === positionId) ?? null
+    const designationId = selectedPosition
+      ? readRelatedId(selectedPosition, [
+          "primary_designation_id",
+          "designation_id",
+          "primaryDesignationId",
+          "designationId",
+          "designation",
+        ]) ?? undefined
+      : undefined
+
     const payload: CreateEmployeePayload = {
-      employee_no: "",
+      employee_no: undefined,
+      gender,
       primary_branch_id: branchId,
       primary_department_id: departmentId,
       primary_position_id: positionId,
+      primary_designation_id: designationId,
       position_id: positionId,
       employment_status: "onboarding",
       employment_type: employmentType as CreateEmployeePayload["employment_type"],
@@ -477,7 +497,6 @@ export function EmployeeInviteView() {
       first_name: firstName.trim(),
       last_name: lastName.trim(),
       hire_date: hireDate || undefined,
-      probation_end_date: employmentType === "probation" ? probationEndDate || undefined : undefined,
       departments: [{ is_primary: true, department_id: departmentId }],
       contacts: [
         {
@@ -495,22 +514,9 @@ export function EmployeeInviteView() {
       academic_qualifications: [],
       professional_qualifications: [],
       experience_details: [],
-      onboarding: {
-        auto_start: true,
-        submit: true,
-        workflow_id: workflowId,
-        title: `Onboarding for ${firstName.trim()} ${lastName.trim()}`.trim(),
-        description: "",
-        planned_start_date: hireDate || undefined,
-        planned_completion_date: undefined,
-        provisioning: {
-          role_ids: [],
-          branch_access_ids: branchId ? [branchId] : [],
-          attendance_mode: "shift",
-        },
-      },
       metadata: {
         source: "invite",
+        registration_mode: "send_invite",
         branch_name: getSelectedLabel(branchOptions, branchId, ""),
         department_name: getSelectedLabel(departmentOptions, departmentId, ""),
         position_name: getSelectedLabel(positionOptions, positionId, ""),
@@ -518,14 +524,69 @@ export function EmployeeInviteView() {
     }
 
     setSubmitting(true)
+    let createdEmployee: CreateEmployeeResponse | null = null
     try {
-      await createEmployeeProfile(token, payload)
+      createdEmployee = await createEmployeeProfile(token, payload)
+      const employeeId = getId(createdEmployee)
+
+      if (employeeId === null) {
+        throw new Error("Employee was created but no employee id was returned for onboarding.")
+      }
+
+      // Recruitment invite starts onboarding through the dedicated onboarding requests API.
+      await createOnboardingRequest(token, {
+        employee_id: employeeId,
+        workflow_id: workflowId,
+        submit: true,
+        title: `Onboarding for ${firstName.trim()} ${lastName.trim()}`.trim(),
+        planned_start_date: hireDate || undefined,
+      })
+
       showSuccessAlert("Employee invite created successfully. Onboarding started.")
       resetForm()
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to create employee invite."
-      showErrorAlert(msg)
-      toast.error(msg)
+      const status =
+        typeof err === "object" && err !== null && "status" in err && typeof err.status === "number"
+          ? err.status
+          : null
+      if (process.env.NODE_ENV !== "production") {
+        const errorPayload =
+          typeof err === "object" && err !== null && "payload" in err
+            ? (err as { payload?: unknown }).payload
+            : undefined
+        console.error(
+          "[recruitment-invite] submit failed",
+          JSON.stringify(
+            {
+              status,
+              message: msg,
+              employeeCreatePayload: payload,
+              onboardingRequestPayload: createdEmployee
+                ? {
+                    employee_id: getId(createdEmployee),
+                    workflow_id: workflowId,
+                    submit: true,
+                    title: `Onboarding for ${firstName.trim()} ${lastName.trim()}`.trim(),
+                    planned_start_date: hireDate || undefined,
+                  }
+                : null,
+              errorPayload,
+            },
+            null,
+            2
+          )
+        )
+      }
+      const message = createdEmployee
+        ? status
+          ? `Employee invite was created, but onboarding could not be started (${status}). ${msg}`
+          : `Employee invite was created, but onboarding could not be started. ${msg}`
+        : status
+          ? `Failed to create employee invite (${status}). ${msg}`
+          : `Failed to create employee invite. ${msg}`
+      showErrorAlert(message)
+      toast.error(message)
     } finally {
       setSubmitting(false)
     }
@@ -602,6 +663,23 @@ export function EmployeeInviteView() {
                     required
                   />
                 </div>
+              </FieldShell>
+              <FieldShell label="Gender" required>
+                <Select value={gender || null} onValueChange={(value) => setGender(value ?? "")}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select gender">
+                      {GENDER_OPTIONS.find((option) => option.value === gender)?.label ??
+                        "Select gender"}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {GENDER_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </FieldShell>
             </div>
           )}
@@ -784,16 +862,6 @@ export function EmployeeInviteView() {
                 placeholder="Select hire date"
               />
             </FieldShell>
-
-            {employmentType === "probation" ? (
-              <FieldShell label="Probation end date">
-                <DatePickerPresets
-                  value={probationEndDate}
-                  onChange={setProbationEndDate}
-                  placeholder="Select probation end date"
-                />
-              </FieldShell>
-            ) : null}
           </div>
         </section>
 

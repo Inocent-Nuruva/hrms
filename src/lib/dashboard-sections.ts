@@ -97,7 +97,6 @@ export const positionsSectionTabGroups: DashboardSectionTabGroup[] = [
   {
     items: [
       { title: "Positions", url: "/dashboard/positions" },
-      { title: "Designations", url: "/dashboard/designations" },
     ],
   },
 ]

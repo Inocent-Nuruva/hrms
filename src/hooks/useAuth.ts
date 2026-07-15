@@ -2,6 +2,11 @@ import { useState } from "react";
 import { authService } from "@/services/authService";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { AUTH_STORAGE_KEYS } from "@/utils/constants";
+import {
+  clearStoredSession,
+  persistSessionTokens,
+} from "@/lib/session-client";
+import { publishDashboardActorSnapshotFromSources } from "@/lib/dashboard-permissions";
 import type {
   AuthTokens,
   AuthUser,
@@ -33,17 +38,16 @@ export function useAuth() {
   const clearSession = () => {
     clearStoredTokens();
     clearStoredUser();
-    if (typeof window !== "undefined") {
-      window.localStorage.removeItem("hrms.admin.accessToken");
-      window.sessionStorage.removeItem("ess_auth_token");
-    }
+    clearStoredSession();
   };
 
   const saveSession = (tokens: AuthTokens, user?: AuthUser) => {
+    persistSessionTokens(tokens.accessToken, tokens.refreshToken);
     setStoredTokens(tokens);
     if (user) {
       setStoredUser(user);
     }
+    publishDashboardActorSnapshotFromSources(user ?? null, tokens, tokens.accessToken);
     setError(null);
   };
 
@@ -97,6 +101,7 @@ export function useAuth() {
     try {
       const user = await authService.getCurrentUser(accessToken);
       setStoredUser(user);
+      publishDashboardActorSnapshotFromSources(user, storedTokens, accessToken);
       return user;
     } catch {
       clearSession();
