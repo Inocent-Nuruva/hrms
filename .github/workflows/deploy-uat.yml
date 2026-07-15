@@ -3,7 +3,7 @@ name: Deploy HRMS UAT Frontend
 on:
   push:
     branches:
-      - master
+      - uat
 
   workflow_dispatch:
 
@@ -19,13 +19,24 @@ jobs:
     name: Deploy UAT Frontend
     runs-on:
       - self-hosted
+      - Linux
+      - X64
+      - hrms-frontend-runner-selfhosted
 
     steps:
+      - name: Show runner info
+        run: |
+          echo "Runner user: $(whoami)"
+          echo "Runner host: $(hostname)"
+
       - name: Deploy UAT frontend
         run: |
           cd /opt/apps/hrms/uat/frontend
+
           git config --global --add safe.directory /opt/apps/hrms/uat/frontend || true
+
           git fetch origin uat
-          git reset --hard "$GITHUB_SHA"
+          git reset --hard origin/uat
+
           chmod +x scripts/deploy-uat.sh
           bash scripts/deploy-uat.sh

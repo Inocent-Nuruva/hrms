@@ -19,13 +19,24 @@ jobs:
     name: Deploy Production Frontend
     runs-on:
       - self-hosted
+      - Linux
+      - X64
+      - hrms-frontend-runner-selfhosted
 
     steps:
+      - name: Show runner info
+        run: |
+          echo "Runner user: $(whoami)"
+          echo "Runner host: $(hostname)"
+
       - name: Deploy production frontend
         run: |
           cd /opt/apps/hrms/prod/frontend
+
           git config --global --add safe.directory /opt/apps/hrms/prod/frontend || true
-          git fetch origin main
-          git reset --hard "$GITHUB_SHA"
+
+          git fetch origin master
+          git reset --hard origin/master
+
           chmod +x scripts/deploy-production.sh
           bash scripts/deploy-production.sh

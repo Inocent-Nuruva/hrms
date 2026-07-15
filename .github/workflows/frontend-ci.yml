@@ -3,12 +3,12 @@ name: HRMS Frontend CI
 on:
   pull_request:
     branches:
-      - main
+      - master
       - uat
 
   push:
     branches:
-      - main
+      - master
       - uat
 
 permissions:
@@ -19,18 +19,19 @@ jobs:
     name: Build and Test HRMS Frontend
     runs-on:
       - self-hosted
+      - Linux
+      - X64
+      - hrms-frontend-runner-selfhosted
 
     steps:
-      - name: Go to frontend project
-        run: |
-          cd "$GITHUB_WORKSPACE"
-          echo "Workspace: $(pwd)"
-
       - name: Checkout frontend repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Show runner info
         run: |
+          echo "Runner user: $(whoami)"
+          echo "Runner host: $(hostname)"
+          echo "Workspace: $(pwd)"
           node -v
           npm -v
 
