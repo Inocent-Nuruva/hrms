@@ -11,7 +11,6 @@ import { Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BadgeCheck, BellRing, BriefcaseBusiness, Building2, CreditCard, Fingerprint, Mail, Phone, UserRound } from 'lucide-react-native';
 
-import { api } from '../lib/api';
 import { COLORS } from '../lib/config';
 import {
   getNotificationSoundPreference,
@@ -123,10 +122,10 @@ export function ProfileScreen({ auth }: Props) {
         error instanceof Error ? error.message : `Unable to configure ${biometricLabel.toLowerCase()} sign in right now.`
       );
     }
-  }, [auth, biometricLabel]);
+  }, [auth, biometricLabel, toast]);
 
   const onChangeNotificationSound = React.useCallback(
-    async (next: string) => {
+    async (_next: string) => {
       const choice = 'device-default';
       setNotificationSound(choice);
 
@@ -372,21 +371,6 @@ function readString(value: unknown, keys: string[], fallback = '') {
     if (typeof candidate === 'string' && candidate.trim()) return candidate.trim();
   }
   return fallback;
-}
-
-function readNumber(value: unknown, keys: string[]) {
-  if (!value) return null;
-  if (typeof value !== 'object') return null;
-  const record = value as MobileRecord;
-  for (const key of keys) {
-    const candidate = record[key];
-    if (typeof candidate === 'number' && Number.isFinite(candidate)) return candidate;
-    if (typeof candidate === 'string' && candidate.trim()) {
-      const parsed = Number(candidate);
-      if (Number.isFinite(parsed)) return parsed;
-    }
-  }
-  return null;
 }
 
 function formatDate(value: unknown) {

@@ -7,10 +7,7 @@ import {
   CalendarIcon,
   ClockIcon,
   Loader2,
-  MailIcon,
-  MapPinIcon,
   PencilIcon,
-  PhoneIcon,
   UserIcon,
   UsersIcon,
 } from "lucide-react"
@@ -97,25 +94,6 @@ function readString(row: AdminRecord | null, keys: string[], fallback = "-") {
 }
 
 function readNumber(row: AdminRecord | null, keys: string[]) {
-  if (!row) {
-    return null
-  }
-  for (const key of keys) {
-    const value = row[key]
-    if (typeof value === "number" && Number.isFinite(value)) {
-      return value
-    }
-    if (typeof value === "string" && value.trim()) {
-      const parsed = Number(value)
-      if (Number.isFinite(parsed)) {
-        return parsed
-      }
-    }
-  }
-  return null
-}
-
-function readNumberFromRecord(row: AdminRecord | null, keys: string[]) {
   if (!row) {
     return null
   }
@@ -499,33 +477,6 @@ function readNestedEmployeeId(currentUser: AdminRecord | null) {
   return null
 }
 
-function resolveLoggedInUserId(currentUser: AdminRecord | null, token: string) {
-  const tokenPayload = decodeJwtPayload(token)
-  const tokenCandidates: Array<unknown> = [
-    tokenPayload?.sub,
-    tokenPayload?.user_id,
-    tokenPayload?.id,
-    asRecord(tokenPayload?.user)?.id,
-  ]
-  for (const candidate of tokenCandidates) {
-    const value = readNumberish(candidate)
-    if (value !== null) {
-      return value
-    }
-  }
-
-  const nestedUser = asRecord(currentUser?.user)
-  const memberships = Array.isArray(currentUser?.memberships) ? currentUser.memberships : []
-  const firstMembership = asRecord(memberships[0])
-  const membershipUser = asRecord(firstMembership?.user)
-
-  return (
-    readNumberFromRecord(nestedUser, ["id", "user_id"]) ??
-    readNumberFromRecord(membershipUser, ["id", "user_id"]) ??
-    readNumberFromRecord(currentUser, ["user_id", "id"])
-  )
-}
-
 function resolveBranchNameFromEmployee(employee: AdminRecord | null) {
   if (!employee) {
     return ""
@@ -905,27 +856,6 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   )
 }
 
-function EmptyStateRow({ text }: { text: string }) {
-  return <p className="text-sm text-muted-foreground">{text}</p>
-}
-
-function CleanInfoRows({
-  rows,
-}: {
-  rows: Array<{
-    label: string
-    value: string
-  }>
-}) {
-  return (
-    <div className="divide-y divide-border/70 text-sm">
-      {rows.map((row, index) => (
-        <InfoRow key={`${row.label}-${index}`} label={row.label} value={row.value} />
-      ))}
-    </div>
-  )
-}
-
 // Doodles / decorative backgrounds (from reference, for visual interest on stat and info cards)
 function DoodleSprites() {
   return (
@@ -1048,104 +978,6 @@ function resolveManagerDisplay(employee: AdminRecord | null) {
     employeeNo: readString(manager, ["employee_no"], "") || readString(managerUser, ["user_no"], "-"),
   }
 }
-
-function resolveEmploymentStatusTone(status: string) {
-  const normalized = status.trim().toLowerCase()
-  if (!normalized || normalized === "-") {
-    return "outline" as const
-  }
-  if (["active", "confirmed", "employed"].includes(normalized)) {
-    return "default" as const
-  }
-  if (["probation", "pending", "on_leave", "on leave"].includes(normalized)) {
-    return "secondary" as const
-  }
-  if (["inactive", "terminated", "resigned", "exited"].includes(normalized)) {
-    return "destructive" as const
-  }
-  return "outline" as const
-}
-
-function SectionEditButton({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon"
-      className="size-7 text-muted-foreground transition hover:bg-muted hover:text-primary"
-      aria-label={`Edit ${label}`}
-      onClick={onClick}
-    >
-      <PencilIcon className="size-3.5" />
-    </Button>
-  )
-}
-
-function SectionHeading({ title, onEdit }: { title: string; onEdit?: () => void }) {
-  return (
-    <div className="flex items-center justify-between gap-2 pb-1">
-      <h3 className="text-base font-semibold tracking-tight text-foreground">{title}</h3>
-      {onEdit ? <SectionEditButton label={title} onClick={onEdit} /> : null}
-    </div>
-  )
-}
-
-function SummarySectionCard({
-  children,
-  className,
-}: {
-  children: React.ReactNode
-  className?: string
-}) {
-  return (
-    <div className={cn("rounded-xl border bg-card p-4 shadow-sm md:p-5", className)}>
-      {children}
-    </div>
-  )
-}
-
-
-
-function RequestStatusList({
-  title,
-  emptyText,
-  rows,
-}: {
-  title: string
-  emptyText: string
-  rows: AdminRecord[]
-}) {
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base">{title}</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3 pt-0">
-        {rows.length === 0 ? <EmptyStateRow text={emptyText} /> : null}
-        {rows.map((row, index) => {
-          const titleText =
-            readString(row, ["title", "request_no", "leave_no", "reference_no", "reference"], "") ||
-            readString(row, ["reason", "request_type", "change_type"], "Request")
-          const createdAt =
-            formatDateTime(row.created_at) !== "-" ? formatDateTime(row.created_at) : formatDate(row.date)
-          return (
-            <div key={String(row.id ?? index)} className="rounded-md border border-slate-200 p-3">
-              <div className="flex items-start justify-between gap-3">
-                <p className="font-medium text-slate-900">{titleText}</p>
-                <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-slate-600">
-                  {readString(row, ["status"], "draft")}
-                </span>
-              </div>
-              <p className="mt-1 text-sm text-slate-600">{createdAt}</p>
-            </div>
-          )
-        })}
-      </CardContent>
-    </Card>
-  )
-}
-
-
 
 type EditableUserField =
   | "first_name"
@@ -1488,8 +1320,6 @@ function ProfileSummaryTab({
   attendanceTodayRecord,
   dashboardActions,
   dashboardLeave,
-  employmentStatus,
-  scheduleDays,
   correctionRequests,
   profileUpdateRequests,
   openSectionEditor,
@@ -1683,6 +1513,7 @@ function ProfileSummaryTab({
           <div className="relative z-10">
             <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Check Out</p>
             <p className="mt-1.5 text-[17px] font-semibold tracking-[-0.01em] text-foreground">{checkOutValue}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">{checkOutHint}</p>
           </div>
         </div>
 

@@ -384,16 +384,6 @@ function readBooleanFromRecord(row: AdminRecord, keys: string[]) {
   return null
 }
 
-function prettifyLabel(value: string) {
-  return value
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .replaceAll("_", " ")
-    .replaceAll("-", " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .replace(/\b\w/g, (char) => char.toUpperCase())
-}
-
 function formatDateTime(value: string) {
   const parsed = Date.parse(value)
   if (!Number.isFinite(parsed)) {

@@ -11,7 +11,7 @@ import { useRouter } from 'expo-router';
 import { Clock3, Navigation, ShieldCheck } from 'lucide-react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { api, normalizeList, buildMobilePunchPayload, formatAttendancePunchError, readMobilePunchContext } from '../lib/api';
+import { api, normalizeList, buildMobilePunchPayload, formatAttendancePunchError } from '../lib/api';
 import { COLORS } from '../lib/config';
 import { MobileTopBar } from '../components/layout/MobileTopBar';
 import { ScreenTransition } from '../components/ui/screen-transition';
@@ -283,17 +283,6 @@ function readBoolean(value: unknown, keys: string[]) {
   }
 
   return false;
-}
-
-function readInitials(value: string) {
-  const clean = value.trim();
-  if (!clean) return 'IN';
-  return clean
-    .split(' ')
-    .map((part) => part[0])
-    .join('')
-    .slice(0, 2)
-    .toUpperCase();
 }
 
 function formatTime(value: string) {

@@ -30,7 +30,7 @@ export function ErrorAlertOverlay() {
 
   React.useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null
-    let hideTimer: ReturnType<typeof setTimeout> | null = null
+    const hideTimer: ReturnType<typeof setTimeout> | null = null
 
     const onError = (event: Event) => {
       const custom = event as CustomEvent<ErrorDetail>

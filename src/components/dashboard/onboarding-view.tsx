@@ -925,7 +925,7 @@ export function OnboardingView() {
   const [workflows, setWorkflows] = React.useState<AdminRecord[]>([])
   const debouncedRequestSearch = useDebouncedValue(requestSearch, 350)
   const debouncedWorkflowSearch = useDebouncedValue(workflowSearch, 350)
-  const [loadedTabs, setLoadedTabs] = React.useState<Record<OnboardingTab, boolean>>({
+  const [, setLoadedTabs] = React.useState<Record<OnboardingTab, boolean>>({
     requests: false,
     workflows: false,
   })
@@ -2574,7 +2574,6 @@ export function OnboardingView() {
             <TableBody>
               {filteredRequests.map((row, index) => {
                 const requestId = readNumber(row, ["id", "request_id"])
-                const employeeId = readNumber(row, ["employee_id"])
                 const requestStatus = String(
                   readString(row, ["status", "request_status", "onboarding_status", "workflow_status"])
                 ).toLowerCase()

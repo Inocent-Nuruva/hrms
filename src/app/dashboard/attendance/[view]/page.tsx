@@ -43,14 +43,6 @@ const ALLOWED_VIEWS = new Set([
   "employee-timetables",
 ])
 
-const MY_ATTENDANCE_VIEWS = new Set([
-  "today",
-  "punch-history",
-  "attendance-history",
-  "schedule-preview",
-  "corrections",
-])
-
 const ACCESS_CONTROL_ATTENDANCE_VIEWS = new Set([
   "devices",
   "doors",

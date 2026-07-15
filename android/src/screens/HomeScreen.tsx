@@ -143,13 +143,6 @@ export function HomeScreen({ auth, onTabChange }: Props) {
     auth.user?.fullName?.trim().split(/\s+/)[0] ||
     employeeName.trim().split(/\s+/)[0] ||
     'Employee';
-  const initials = employeeName
-    .split(' ')
-    .map((part) => part[0])
-    .join('')
-    .slice(0, 2)
-    .toUpperCase();
-
   const today = new Date();
   const todayLabel = today.toLocaleDateString(undefined, {
     day: '2-digit',
@@ -176,7 +169,7 @@ export function HomeScreen({ auth, onTabChange }: Props) {
   const totalDays = daysInMonth(today);
   const absentDays = Math.max(totalDays - workedDays - holidayCount, 0);
   const remainingTime = getRemainingWorkTime(currentTime);
-  const approvedLeavesThisMonth = (requestsQuery.data || []).filter((item: any) => {
+  const approvedLeavesThisMonth = (requestsQuery.data || []).filter((item: MobileRecord) => {
     const status = String(item?.status || '').toLowerCase();
     const isApproved = status.includes('approve') || status.includes('used') || status.includes('complete') || status.includes('taken');
     if (!isApproved) return false;

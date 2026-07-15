@@ -8,16 +8,12 @@ import { Plus, RefreshCw } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 import {
-  addOffboardingDocument,
   approveOffboardingRequest,
   cancelOffboardingRequest,
   completeOffboardingRequest,
-  createOffboardingClearance,
   createOffboardingRequest,
-  createOffboardingTask,
   createOffboardingWorkflow,
   createOffboardingWorkflowStep,
-  deleteOffboardingWorkflow,
   getOffboardingApprovals,
   getOffboardingAuditLogs,
   getOffboardingProgress,
@@ -280,8 +276,8 @@ export function OffboardingView() {
   const [error, setError] = React.useState<string | null>(null)
 
   const [employees, setEmployees] = React.useState<AdminRecord[]>([])
-  const [branches, setBranches] = React.useState<AdminRecord[]>([])
-  const [departments, setDepartments] = React.useState<AdminRecord[]>([])
+  const [, setBranches] = React.useState<AdminRecord[]>([])
+  const [, setDepartments] = React.useState<AdminRecord[]>([])
 
   const [requests, setRequests] = React.useState<AdminRecord[]>([])
   const [workflows, setWorkflows] = React.useState<AdminRecord[]>([])
@@ -350,33 +346,6 @@ export function OffboardingView() {
     action_type: "recommend",
     is_required: "true",
     expected_duration_days: "1",
-  })
-
-  const [taskForm, setTaskForm] = React.useState({
-    request_id: "",
-    title: "",
-    description: "",
-    task_type: "hr",
-    priority: "medium",
-    assigned_to_company_user_id: "",
-    due_date: "",
-  })
-
-  const [clearanceForm, setClearanceForm] = React.useState({
-    request_id: "",
-    clearance_type: "laptop",
-    status: "pending",
-    remarks: "",
-  })
-
-  const [documentForm, setDocumentForm] = React.useState({
-    request_id: "",
-    title: "",
-    description: "",
-    file_name: "",
-    original_file_name: "",
-    file_path: "",
-    document_type: "",
   })
 
   const employeeLabel = (employee: AdminRecord) => {
@@ -469,6 +438,9 @@ export function OffboardingView() {
   }, [loadLookups])
 
   const reloadAll = React.useCallback(async (targetTab: Tab = tab, force = false) => {
+    // `force` is accepted for API symmetry with loadLookups/ensureLookups callers;
+    // this function always refetches regardless.
+    void force
     const token = readStoredToken()
     if (!token) {
       const msg = "Authentication required. Please log in again."
@@ -499,7 +471,7 @@ export function OffboardingView() {
     } finally {
       setLoading(false)
     }
-  }, [tab])
+  }, [tab, selectedWorkflowId])
 
   React.useEffect(() => {
     const syncManageAccess = () => {
@@ -720,94 +692,6 @@ export function OffboardingView() {
       await reloadAll("workflows", true)
     } catch (errorObject) {
       showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to add workflow step.")
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  async function submitTaskForm() {
-    const token = readStoredToken()
-    if (!token) return
-    if (!taskForm.request_id) {
-      showErrorAlert("Please select a request before adding a task.")
-      return
-    }
-    if (!taskForm.title.trim()) {
-      showErrorAlert("Task title is required.")
-      return
-    }
-    setSaving(true)
-    try {
-      await createOffboardingTask(token, taskForm.request_id, {
-        title: taskForm.title.trim(),
-        description: taskForm.description.trim(),
-        task_type: taskForm.task_type,
-        priority: taskForm.priority,
-        assigned_to_company_user_id: taskForm.assigned_to_company_user_id ? Number(taskForm.assigned_to_company_user_id) : undefined,
-        due_date: taskForm.due_date || undefined,
-        metadata: {},
-      })
-      showSuccessAlert("Task created.")
-    } catch (errorObject) {
-      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to create task.")
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  async function submitClearanceForm() {
-    const token = readStoredToken()
-    if (!token) return
-    if (!clearanceForm.request_id) {
-      showErrorAlert("Please select a request before adding a clearance.")
-      return
-    }
-    setSaving(true)
-    try {
-      await createOffboardingClearance(token, clearanceForm.request_id, {
-        clearance_type: clearanceForm.clearance_type,
-        status: clearanceForm.status,
-        remarks: clearanceForm.remarks,
-      })
-      showSuccessAlert("Clearance added.")
-    } catch (errorObject) {
-      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to add clearance.")
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  async function submitDocumentForm() {
-    const token = readStoredToken()
-    if (!token) return
-    if (!documentForm.request_id) {
-      showErrorAlert("Please select a request before adding a document.")
-      return
-    }
-    if (!documentForm.title.trim()) {
-      showErrorAlert("Document title is required.")
-      return
-    }
-    if (!documentForm.file_path.trim()) {
-      showErrorAlert("File path is required.")
-      return
-    }
-    setSaving(true)
-    try {
-      await addOffboardingDocument(token, documentForm.request_id, {
-        title: documentForm.title,
-        description: documentForm.description,
-        file_name: documentForm.file_name,
-        original_file_name: documentForm.original_file_name,
-        file_path: documentForm.file_path,
-        document_type: documentForm.document_type,
-        mime_type: "application/octet-stream",
-        file_extension: "bin",
-        file_size: "0",
-      })
-      showSuccessAlert("Document added.")
-    } catch (errorObject) {
-      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to add document.")
     } finally {
       setSaving(false)
     }
@@ -1084,6 +968,7 @@ export function OffboardingView() {
                   className="min-h-20 rounded-md border border-input px-3 py-2 text-sm"
                   placeholder="Reason for leaving"
                   value={requestForm.reason}
+                  onInput={autoResizeTextarea}
                   onChange={(event) =>
                     setRequestForm((prev) => ({ ...prev, reason: event.target.value }))
                   }
@@ -1667,6 +1552,60 @@ export function OffboardingView() {
             </div>
           ) : null}
           <DialogFooter>
+            {canManage && selectedRequest ? (
+              <>
+                {readString(selectedRequest, ["status"]).toLowerCase() === "draft" ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={saving}
+                    onClick={() => void runRequestAction(selectedRequest, "submit")}
+                  >
+                    Submit
+                  </Button>
+                ) : null}
+                {readString(selectedRequest, ["status"]).toLowerCase() === "submitted" ? (
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={saving}
+                      onClick={() => void runRequestAction(selectedRequest, "approve")}
+                    >
+                      Approve
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={saving}
+                      onClick={() => void runRequestAction(selectedRequest, "reject")}
+                    >
+                      Reject
+                    </Button>
+                  </>
+                ) : null}
+                {["draft", "submitted", "approved"].includes(readString(selectedRequest, ["status"]).toLowerCase()) ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={saving}
+                    onClick={() => void runRequestAction(selectedRequest, "cancel")}
+                  >
+                    Cancel
+                  </Button>
+                ) : null}
+                {readString(selectedRequest, ["status"]).toLowerCase() === "approved" ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={saving}
+                    onClick={() => void runRequestAction(selectedRequest, "complete")}
+                  >
+                    Complete
+                  </Button>
+                ) : null}
+              </>
+            ) : null}
             <Button type="button" variant="outline" onClick={() => setRequestDetailsOpen(false)}>
               Close
             </Button>

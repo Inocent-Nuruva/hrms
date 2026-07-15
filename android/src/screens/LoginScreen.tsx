@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { TouchableScale } from '../components/ui/touchable-scale';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Eye, EyeOff, Fingerprint, ShieldCheck, Sparkles } from 'lucide-react-native';
+import { Eye, EyeOff, Fingerprint, ShieldCheck } from 'lucide-react-native';
 
 import { COLORS } from '../lib/config';
 import { Button } from '../components/ui/button';

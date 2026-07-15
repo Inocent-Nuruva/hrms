@@ -11,14 +11,12 @@ import * as Location from 'expo-location';
 import { useQuery } from '@tanstack/react-query';
 import { MapPin } from 'lucide-react-native';
 
-import { api, normalizeList, readMobilePunchContext } from '../lib/api';
+import { readMobilePunchContext } from '../lib/api';
 import { COLORS } from '../lib/config';
 import { MobileTopBar } from '../components/layout/MobileTopBar';
 import { ScreenTransition } from '../components/ui/screen-transition';
 import type { UseAuthReturn } from '../hooks/useAuth';
 import { useThemePreference } from '../hooks/useThemePreference';
-
-type MobileRecord = Record<string, unknown>;
 
 interface Props {
   auth: UseAuthReturn;
@@ -27,7 +25,6 @@ interface Props {
 export function MyLocationScreen({ auth }: Props) {
   const { isDark } = useThemePreference();
   const backgroundColor = isDark ? COLORS.backgroundDark : COLORS.background;
-  const panelColor = isDark ? COLORS.surfaceDark : COLORS.surface;
   const textColor = isDark ? COLORS.onSurfaceDark : COLORS.onSurface;
   const mutedColor = isDark ? COLORS.onSurfaceVariantDark : COLORS.onSurfaceVariant;
   const lineColor = isDark ? COLORS.outlineDark : COLORS.outline;
@@ -341,25 +338,3 @@ const styles = StyleSheet.create({
   },
 });
 
-function asRecord(value: unknown): MobileRecord | null {
-  return value && typeof value === 'object' ? (value as MobileRecord) : null;
-}
-
-function readString(value: unknown, keys: string[]) {
-  const record = asRecord(value);
-  if (!record) return '';
-  for (const key of keys) {
-    const candidate = record[key];
-    if (typeof candidate === 'string' && candidate.trim()) return candidate.trim();
-  }
-  return '';
-}
-
-function formatTime(value: string) {
-  if (!value) return '--:--';
-  try {
-    return new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  } catch {
-    return '--:--';
-  }
-}

@@ -20,6 +20,17 @@ type SlotProps<T extends HTMLElement = HTMLElement> = {
   children?: any;
 } & DOMMotionProps<T>;
 
+const motionComponentCache = new Map<React.ElementType, React.ElementType>();
+
+function getOrCreateMotionComponent(type: React.ElementType): React.ElementType {
+  let cached = motionComponentCache.get(type);
+  if (!cached) {
+    cached = motion.create(type) as React.ElementType;
+    motionComponentCache.set(type, cached);
+  }
+  return cached;
+}
+
 function mergeRefs<T>(
   ...refs: (React.Ref<T> | undefined)[]
 ): React.RefCallback<T> {
@@ -68,13 +79,9 @@ function Slot<T extends HTMLElement = HTMLElement>({
     children.type !== null &&
     isMotionComponent(children.type);
 
-  const Base = React.useMemo(
-    () =>
-      isAlreadyMotion
-        ? (children.type as React.ElementType)
-        : motion.create(children.type as React.ElementType),
-    [isAlreadyMotion, children.type],
-  );
+  const Base = isAlreadyMotion
+    ? (children.type as React.ElementType)
+    : getOrCreateMotionComponent(children.type as React.ElementType);
 
   if (!React.isValidElement(children)) return null;
 
@@ -82,9 +89,10 @@ function Slot<T extends HTMLElement = HTMLElement>({
 
   const mergedProps = mergeProps(childProps, props);
 
-  return (
-    <Base {...mergedProps} ref={mergeRefs(childRef as React.Ref<T>, ref)} />
-  );
+  return React.createElement(Base, {
+    ...mergedProps,
+    ref: mergeRefs(childRef as React.Ref<T>, ref),
+  });
 }
 
 export {

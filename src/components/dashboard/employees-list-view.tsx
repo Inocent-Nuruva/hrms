@@ -85,13 +85,6 @@ function readString(row: AdminRecord, keys: string[]) {
   return "-"
 }
 
-function asRecordArray(value: unknown): AdminRecord[] {
-  if (!Array.isArray(value)) {
-    return []
-  }
-  return value.filter((entry) => typeof entry === "object" && entry !== null) as AdminRecord[]
-}
-
 function asRecord(value: unknown): AdminRecord | null {
   return typeof value === "object" && value !== null ? (value as AdminRecord) : null
 }
@@ -130,19 +123,6 @@ function employeeDisplayName(row: AdminRecord) {
   return [first, middle, last].filter((part) => part !== "-").join(" ").trim() || "-"
 }
 
-const REQUIRED_PROFILE_ITEMS: Array<{ key: string; label: string }> = [
-  { key: "contacts", label: "Contacts" },
-  { key: "addresses", label: "Addresses" },
-  { key: "relatives", label: "Relatives" },
-  { key: "identifications", label: "Identifications" },
-  { key: "bank_accounts", label: "Bank Accounts" },
-  { key: "departments", label: "Departments" },
-  { key: "academic_qualifications", label: "Academic Qualifications" },
-  { key: "professional_qualifications", label: "Professional Qualifications" },
-  { key: "experience_details", label: "Experience Details" },
-  { key: "documents", label: "Documents" },
-]
-
 function employeeProfileHref(employeeNo: string, missingItemKey?: string) {
   const params = new URLSearchParams()
   if (missingItemKey) {
@@ -151,10 +131,6 @@ function employeeProfileHref(employeeNo: string, missingItemKey?: string) {
   const query = params.toString()
   const basePath = `/dashboard/employees/profile/${encodeURIComponent(employeeNo)}`
   return query ? `${basePath}?${query}` : basePath
-}
-
-function missingProfileItems(row: AdminRecord) {
-  return REQUIRED_PROFILE_ITEMS.filter((item) => asRecordArray(row[item.key]).length === 0)
 }
 
 function readSnapshot(cacheKey: string) {
@@ -208,8 +184,8 @@ export function EmployeesListView() {
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [page, setPage] = React.useState(1)
-  const [totalPages, setTotalPages] = React.useState<number | null>(null)
-  const [total, setTotal] = React.useState<number | null>(null)
+  const [, setTotalPages] = React.useState<number | null>(null)
+  const [, setTotal] = React.useState<number | null>(null)
   const [missingDialog, setMissingDialog] = React.useState<{ employeeNo: string; missing: Array<{ key: string; label: string }> } | null>(null)
   const [removalOpen, setRemovalOpen] = React.useState(false)
   const [removalTarget, setRemovalTarget] = React.useState<EmployeeAccessRemovalTarget | null>(null)
@@ -328,9 +304,6 @@ export function EmployeesListView() {
     }
   }, [fetchEmployees])
 
-  const canGoPrevious = page > 1 && !loading
-  const canGoNext = !loading && (totalPages === null || page < totalPages)
-
   const openEmployeeDetails = (row: AdminRecord, missingItemKey?: string) => {
     const employeeNo = readString(row, ["employee_no", "employeeNo", "user_no", "employee_number", "employeeNumber"])
     if (employeeNo === "-") {
@@ -357,16 +330,6 @@ export function EmployeesListView() {
     })
     setRemovalOpen(true)
   }, [])
-
-  const handleEmployeeSelect = (employeeId: string) => {
-    const matched = rows.find((r) => {
-      const id = String(r.id ?? r.employee_id ?? r.employee_no ?? r.employeeNo ?? "")
-      return id === employeeId
-    })
-    if (matched) {
-      openEmployeeDetails(matched)
-    }
-  }
 
   const employeeColumns = React.useMemo<Column<AdminRecord>[]>(() => [
     {

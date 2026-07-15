@@ -48,9 +48,13 @@ export function Calendar({
   onSelect,
   fromYear,
   toYear,
-  mode: _mode,
-  captionLayout: _captionLayout,
+  mode,
+  captionLayout,
 }: CalendarProps) {
+  // `mode` and `captionLayout` are accepted for API compatibility with callers
+  // (e.g. shadcn-style usages) but have no effect on this HeroUI-backed calendar.
+  void mode
+  void captionLayout
   const value = React.useMemo(() => toCalendarValue(selected), [selected])
   const minValue = React.useMemo(
     () => (typeof fromYear === "number" ? toCalendarValue(new Date(fromYear, 0, 1)) : undefined),

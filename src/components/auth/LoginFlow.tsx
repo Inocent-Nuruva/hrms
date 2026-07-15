@@ -21,7 +21,6 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [isDone, setIsDone] = useState(false);
-  const [isHoveringSubmit, setIsHoveringSubmit] = useState(false);
   const [inputsMounted, setInputsMounted] = useState(false);
   const { login, isLoading } = useAuth();
 

@@ -9,8 +9,8 @@ export function ScreenTransition({
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
 }) {
-  const opacity = React.useRef(new Animated.Value(0)).current;
-  const translateY = React.useRef(new Animated.Value(12)).current;
+  const [opacity] = React.useState(() => new Animated.Value(0));
+  const [translateY] = React.useState(() => new Animated.Value(12));
 
   useFocusEffect(
     React.useCallback(() => {

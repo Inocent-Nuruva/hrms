@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { Tabs, useRouter, useRootNavigationState } from 'expo-router';
 import { CalendarDays, Clock3, House, UserRound } from 'lucide-react-native';
-import { ActivityIndicator, Animated, Pressable, View, StyleSheet, type GestureResponderEvent } from 'react-native';
+import { ActivityIndicator, Animated, Pressable, View, StyleSheet, type GestureResponderEvent, type StyleProp, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../hooks/useAuth';
 import { COLORS } from '../../lib/config';
@@ -12,7 +12,7 @@ interface AnimatedTabBarButtonProps {
   children?: React.ReactNode;
   onLongPress?: ((event: GestureResponderEvent) => void) | null;
   onPress?: ((event: GestureResponderEvent) => void) | null;
-  style?: any;
+  style?: StyleProp<ViewStyle>;
 }
 
 export default function TabLayout() {
@@ -118,8 +118,8 @@ function AnimatedTabBarButton({
   ...rest
 }: AnimatedTabBarButtonProps) {
   const selected = Boolean(accessibilityState?.selected);
-  const scale = React.useRef(new Animated.Value(selected ? 1.04 : 1)).current;
-  const translateY = React.useRef(new Animated.Value(selected ? -2 : 0)).current;
+  const [scale] = React.useState(() => new Animated.Value(selected ? 1.04 : 1));
+  const [translateY] = React.useState(() => new Animated.Value(selected ? -2 : 0));
 
   useEffect(() => {
     Animated.parallel([

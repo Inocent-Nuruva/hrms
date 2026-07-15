@@ -81,7 +81,7 @@ export function LeaveScreen({ auth, requestId }: Props) {
   });
 
   const totalRemainingDays = React.useMemo(() => {
-    return (balancesQuery.data || []).reduce((acc: number, bal: any) => {
+    return (balancesQuery.data || []).reduce((acc: number, bal: MobileRecord) => {
       const rec = asRecord(bal);
       const val = readNumberOrString(rec, ['remaining', 'balance']) || 0;
       return acc + (typeof val === 'number' ? val : Number(val) || 0);

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
-import { motion, useReducedMotion, AnimatePresence } from "framer-motion";
+import { motion, useReducedMotion, AnimatePresence, type Variants } from "framer-motion";
 import { Download, ChevronDown } from "lucide-react";
 import { Resizable } from "react-resizable";
 import "react-resizable/css/styles.css";
@@ -22,7 +22,7 @@ export interface Employee {
   avatar?: string;
 }
 
-export interface Column<T = any> {
+export interface Column<T = Record<string, unknown>> {
   key: string;
   label: string;
   defaultWidth?: number;
@@ -55,7 +55,7 @@ function isMeaningfulTableValue(value: React.ReactNode): boolean {
   return React.isValidElement(value);
 }
 
-interface ResizableTableProps<T = any> {
+interface ResizableTableProps<T = Record<string, unknown>> {
   title?: string;
   data?: T[];
   columns?: Column<T>[];
@@ -77,7 +77,7 @@ interface ResizableTableProps<T = any> {
 
 type SortOrder = "asc" | "desc";
 
-export function ResizableTable<T = any>({
+export function ResizableTable<T = Record<string, unknown>>({
   title = "Item",
   data,
   columns,
@@ -118,19 +118,19 @@ export function ResizableTable<T = any>({
   // Normalize data
   // IMPORTANT: Always respect explicitly passed data (even empty array) so real pages
   // don't flash fake demo employees like "Sarah Chen".
-  const tableData: any[] = useMemo(() => {
+  const tableData: T[] = useMemo(() => {
     if (Array.isArray(data)) return data;
-    if (Array.isArray(employees)) return employees;
+    if (Array.isArray(employees)) return employees as unknown as T[];
     return []; // safe default - no fake demo data in production tables
   }, [data, employees]);
 
   // Normalize columns (auto-generate for legacy employee-like data if needed)
-  const tableColumns: Column<any>[] = useMemo(() => {
+  const tableColumns: Column<T>[] = useMemo(() => {
     if (columns && columns.length > 0) {
       return columns;
     }
     // Legacy / auto detection
-    const sample = tableData[0] || {};
+    const sample = (tableData[0] || {}) as Record<string, unknown>;
     const hasEmployeeShape = !!(sample.name || sample.email || sample.department);
 
     if (hasEmployeeShape || employees) {
@@ -158,7 +158,7 @@ export function ResizableTable<T = any>({
     }));
   }, [columns, tableData, employees, title]);
 
-  const visibleTableColumns: Column<any>[] = useMemo(() => {
+  const visibleTableColumns: Column<T>[] = useMemo(() => {
     if (tableData.length === 0) {
       return tableColumns;
     }
@@ -173,8 +173,8 @@ export function ResizableTable<T = any>({
       }
 
       return tableData.some((item) => {
-        const value = col.render ? col.render(item) : item?.[col.key];
-        return isMeaningfulTableValue(value);
+        const value = col.render ? col.render(item) : (item as Record<string, unknown>)?.[col.key];
+        return isMeaningfulTableValue(value as React.ReactNode);
       });
     });
   }, [columns, tableColumns, tableData]);
@@ -245,7 +245,7 @@ export function ResizableTable<T = any>({
   }, [columnWidths, visibleTableColumns, containerWidth, showCheckboxes]);
 
   // Unified display widths for both headers and content cells (ensures they match exactly per column)
-  const getColumnWidth = (col: Column<any> | string) => {
+  const getColumnWidth = (col: Column<T> | string) => {
     const key = typeof col === 'string' ? col : col.key;
     return displayWidths[key] ?? columnWidths[key] ?? (typeof col === 'string' ? 36 : col.defaultWidth ?? 105);
   };
@@ -262,8 +262,6 @@ export function ResizableTable<T = any>({
   }, [visibleTableColumns, showCheckboxes]);
 
 
-
-  const ITEMS_PER_PAGE = itemsPerPage;
 
   useEffect(() => {
     setMounted(true);
@@ -287,14 +285,15 @@ export function ResizableTable<T = any>({
     };
   }, []);
 
-  const getRowIdentifier = (item: any, index: number): string => {
+  const getRowIdentifier = (item: T, index: number): string => {
     if (getRowId) return getRowId(item, index);
+    const record = item as Record<string, unknown>;
     return String(
-      item?.id ?? item?.employee_id ?? item?.user_id ?? item?.employeeNo ?? item?.no ?? item?.key ?? index
+      record?.id ?? record?.employee_id ?? record?.user_id ?? record?.employeeNo ?? record?.no ?? record?.key ?? index
     );
   };
 
-  const handleRowSelect = (rowId: string, item?: any) => {
+  const handleRowSelect = (rowId: string, item?: T) => {
     setSelectedIds((prev) => {
       if (prev.includes(rowId)) {
         return prev.filter((id) => id !== rowId);
@@ -344,13 +343,15 @@ export function ResizableTable<T = any>({
     if (!sortField) return tableData;
 
     return [...tableData].sort((a, b) => {
-      let aVal: any = a?.[sortField];
-      let bVal: any = b?.[sortField];
+      const recordA = a as Record<string, unknown>;
+      const recordB = b as Record<string, unknown>;
+      let aVal: unknown = recordA?.[sortField];
+      let bVal: unknown = recordB?.[sortField];
 
       const lowerField = sortField.toLowerCase();
       if (lowerField.includes("date") || lowerField.includes("time") || lowerField === "hiredate") {
-        aVal = aVal ? new Date(aVal).getTime() : 0;
-        bVal = bVal ? new Date(bVal).getTime() : 0;
+        aVal = aVal ? new Date(aVal as string | number | Date).getTime() : 0;
+        bVal = bVal ? new Date(bVal as string | number | Date).getTime() : 0;
       } else if (typeof aVal === "string" && typeof bVal === "string") {
         aVal = aVal.toLowerCase();
         bVal = bVal.toLowerCase();
@@ -359,24 +360,29 @@ export function ResizableTable<T = any>({
       if (aVal == null) return 1;
       if (bVal == null) return -1;
 
-      if (aVal < bVal) return sortOrder === "asc" ? -1 : 1;
-      if (aVal > bVal) return sortOrder === "asc" ? 1 : -1;
+      const left = aVal as string | number;
+      const right = bVal as string | number;
+      if (left < right) return sortOrder === "asc" ? -1 : 1;
+      if (left > right) return sortOrder === "asc" ? 1 : -1;
       return 0;
     });
   }, [tableData, sortField, sortOrder]);
 
   const paginatedData = useMemo(() => {
-    const startIdx = (currentPage - 1) * ITEMS_PER_PAGE;
-    return sortedData.slice(startIdx, startIdx + ITEMS_PER_PAGE);
+    const startIdx = (currentPage - 1) * itemsPerPage;
+    return sortedData.slice(startIdx, startIdx + itemsPerPage);
+    // itemsPerPage intentionally omitted: including it breaks the React Compiler's
+    // preserve-manual-memoization check (see react-hooks/preserve-manual-memoization).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sortedData, currentPage]);
 
-  const totalPages = Math.ceil(sortedData.length / ITEMS_PER_PAGE);
+  const totalPages = Math.ceil(sortedData.length / itemsPerPage);
   const loadingSkeletonRows = useMemo(
     () =>
       Array.from({
-        length: Math.min(ITEMS_PER_PAGE, 6),
+        length: Math.min(itemsPerPage, 6),
       }),
-    [ITEMS_PER_PAGE]
+    [itemsPerPage]
   );
 
   const getStatusColor = (status: string) => {
@@ -473,13 +479,14 @@ export function ResizableTable<T = any>({
     }
   };
 
-  const getExportValue = (item: any, col: Column<any>) => {
+  const getExportValue = (item: T, col: Column<T>) => {
+    const record = item as Record<string, unknown>;
     if (col.render) {
       // Best effort: use raw when render is custom
-      const raw = item?.[col.key];
+      const raw = record?.[col.key];
       return raw != null ? raw : "";
     }
-    const v = item?.[col.key];
+    const v = record?.[col.key];
     if (v == null) return "";
     if (typeof v === "object") return JSON.stringify(v);
     return v;
@@ -513,7 +520,7 @@ export function ResizableTable<T = any>({
 
   const shouldAnimate = enableAnimations && !shouldReduceMotion;
 
-  const containerVariants = {
+  const containerVariants: Variants = {
     visible: {
       transition: {
         staggerChildren: 0.03,
@@ -522,7 +529,7 @@ export function ResizableTable<T = any>({
     },
   };
 
-  const rowVariants = {
+  const rowVariants: Variants = {
     hidden: { opacity: 0, y: 12, scale: 0.985, filter: "blur(3px)" },
     visible: {
       opacity: 1,
@@ -535,11 +542,11 @@ export function ResizableTable<T = any>({
   };
 
   // Cell renderer helper
-  const renderCell = (col: Column<any>, item: any, index: number) => {
+  const renderCell = (col: Column<T>, item: T) => {
     if (col.render) {
       return col.render(item);
     }
-    const raw = item?.[col.key];
+    const raw = (item as Record<string, unknown>)?.[col.key];
     const keyLower = col.key.toLowerCase();
 
     if (col.key === "status" || keyLower === "status" || keyLower.includes("status")) {
@@ -574,7 +581,7 @@ export function ResizableTable<T = any>({
           className="text-blue-500 hover:text-blue-600 truncate text-xs"
           onClick={(e) => e.stopPropagation()}
         >
-          {raw}
+          {String(raw)}
         </a>
       );
     }
@@ -725,7 +732,7 @@ export function ResizableTable<T = any>({
             <AnimatePresence mode="wait">
               <motion.div
                 key={`page-${currentPage}`}
-                variants={(shouldAnimate ? containerVariants : undefined) as any}
+                variants={shouldAnimate ? containerVariants : undefined}
                 initial={shouldAnimate ? "hidden" : false}
                 animate="visible"
               >
@@ -734,7 +741,7 @@ export function ResizableTable<T = any>({
                   const isSelected = selectedIds.includes(rowId);
 
                   return (
-                    <motion.div key={rowId} variants={(shouldAnimate ? rowVariants : undefined) as any}>
+                    <motion.div key={rowId} variants={shouldAnimate ? rowVariants : undefined}>
                       <div
                         className={`py-1 group relative transition-all duration-150 border-b border-border flex cursor-pointer w-full ${
                           isSelected ? "bg-muted/30" : "bg-muted/5 hover:bg-muted/20"
@@ -778,7 +785,7 @@ export function ResizableTable<T = any>({
                               }
                             }}
                           >
-                            {renderCell(col, item, index)}
+                            {renderCell(col, item)}
                           </div>
                           )
                         })}

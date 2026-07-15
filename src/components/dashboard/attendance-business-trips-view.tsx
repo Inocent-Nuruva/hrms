@@ -418,7 +418,9 @@ export function AttendanceBusinessTripsView() {
     Boolean(activeTrip) && ["draft", "submitted"].includes(String(activeTrip?.status ?? "").toLowerCase())
 
   const selectedTripIdRef = React.useRef(selectedTripId)
-  selectedTripIdRef.current = selectedTripId
+  React.useEffect(() => {
+    selectedTripIdRef.current = selectedTripId
+  }, [selectedTripId])
 
   const loadTripDetail = React.useCallback(async (tripId: string) => {
     const token = readStoredToken()

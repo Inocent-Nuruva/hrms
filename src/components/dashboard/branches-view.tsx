@@ -274,8 +274,8 @@ export function BranchesView() {
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [page, setPage] = React.useState(1)
-  const [totalPages, setTotalPages] = React.useState<number | null>(null)
-  const [total, setTotal] = React.useState<number | null>(null)
+  const [, setTotalPages] = React.useState<number | null>(null)
+  const [, setTotal] = React.useState<number | null>(null)
 
   const [openForm, setOpenForm] = React.useState(false)
   const [form, setForm] = React.useState<BranchForm>(emptyForm())
@@ -370,9 +370,6 @@ export function BranchesView() {
     void fetchBranches(controller.signal)
     return () => controller.abort()
   }, [fetchBranches])
-
-  const canGoPrevious = page > 1 && !loading
-  const canGoNext = !loading && (totalPages === null || page < totalPages)
 
   const queueAccessUser = React.useCallback((id: number) => {
     setAccessUserIds((previous) => (previous.includes(id) ? previous : [...previous, id]))

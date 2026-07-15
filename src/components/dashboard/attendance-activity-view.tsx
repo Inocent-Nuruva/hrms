@@ -25,8 +25,6 @@ import {
 import {
   cancelMyAttendanceCorrectionRequest,
   createMyAttendanceCorrectionRequest,
-  createMyAttendanceCheckIn,
-  createMyAttendanceCheckOut,
   downloadAttendanceReport,
   getMyAttendanceSchedule,
   getMyAttendanceToday,
@@ -399,75 +397,6 @@ function asRecordValue(value: unknown): AdminRecord | null {
   return null
 }
 
-function formatBooleanLabel(value: unknown) {
-  if (typeof value === "boolean") {
-    return value ? "Yes" : "No"
-  }
-  if (typeof value === "string") {
-    const normalized = value.trim().toLowerCase()
-    if (normalized === "true") return "Yes"
-    if (normalized === "false") return "No"
-  }
-  return stringifyValue(value)
-}
-
-function extractAttendanceFlags(record: AdminRecord | null) {
-  if (!record) {
-    return []
-  }
-
-  const sources = [
-    asRecordValue(record.flags),
-    asRecordValue(record.action_flags),
-    asRecordValue(asRecordValue(record.summary)?.flags),
-    asRecordValue(asRecordValue(record.summary)?.action_flags),
-  ].filter((value): value is AdminRecord => Boolean(value))
-
-  const preferredOrder = [
-    "hasApprovedLeave",
-    "leaveStatus",
-    "hasApprovedBusinessTrip",
-    "isHoliday",
-    "isOffDay",
-    "isWeekend",
-    "can_check_in",
-    "can_check_out",
-  ]
-
-  const seen = new Set<string>()
-  const entries: Array<{ key: string; label: string; value: string }> = []
-
-  preferredOrder.forEach((key) => {
-    for (const source of sources) {
-      if (!(key in source) || seen.has(key)) {
-        continue
-      }
-      entries.push({
-        key,
-        label: prettifyLabel(key),
-        value: formatBooleanLabel(source[key]),
-      })
-      seen.add(key)
-    }
-  })
-
-  sources.forEach((source) => {
-    Object.entries(source).forEach(([key, value]) => {
-      if (seen.has(key) || value === null || value === undefined || stringifyValue(value) === "-") {
-        return
-      }
-      entries.push({
-        key,
-        label: prettifyLabel(key),
-        value: formatBooleanLabel(value),
-      })
-      seen.add(key)
-    })
-  })
-
-  return entries
-}
-
 function toIsoDateTime(dateValue: string, timeValue: string) {
   if (!dateValue.trim() || !timeValue.trim()) {
     return undefined
@@ -539,10 +468,6 @@ function TodayOverview({ record }: { record: AdminRecord | null }) {
     ? (record.summary as AdminRecord)
     : (record || {})
 
-  const status = (
-    readWithFallback(record, ["punch_state", "processing_state"], null) ||
-    readWithFallback(effective, ["attendance_status", "status", "summary_status", "state"], null)
-  ) ?? "Pending"
   const scheduleStart = formatOptionalValue(
     readWithFallback(record, ["schedule_start_at", "schedule_start_time", "shift_start_at", "start_time"], effective),
     "Not set"
@@ -564,61 +489,6 @@ function TodayOverview({ record }: { record: AdminRecord | null }) {
   const shift = readWithFallback(record, ["shift_name", "schedule_name", "timetable_name"], effective) || ""
   const lateness = readWithFallback(record, ["late_minutes", "lateness_minutes", "minutes_late"], effective) ?? "0"
   const overtime = readWithFallback(record, ["overtime_minutes", "overtime_hours", "extra_time"], effective) ?? "0"
-  const attendanceFlags = extractAttendanceFlags(record)
-
-  const hiddenKeys = new Set([
-    "attendance_status",
-    "status",
-    "summary_status",
-    "state",
-    "schedule_start_at",
-    "schedule_start_time",
-    "shift_start_at",
-    "start_time",
-    "schedule_end_at",
-    "schedule_end_time",
-    "shift_end_at",
-    "end_time",
-    "first_check_in_at",
-    "first_punch_at",
-    "check_in_at",
-    "clock_in_at",
-    "last_check_out_at",
-    "last_punch_at",
-    "check_out_at",
-    "clock_out_at",
-    "worked_hours",
-    "worked_duration",
-    "total_worked_hours",
-    "hours_worked",
-    "branch_name",
-    "branch",
-    "location_name",
-    "site_name",
-    "shift_name",
-    "schedule_name",
-    "timetable_name",
-    "late_minutes",
-    "lateness_minutes",
-    "minutes_late",
-    "overtime_minutes",
-    "overtime_hours",
-    "extra_time",
-    "date",
-    "summary",
-    "punches",
-    "punch_state",
-    "processing_state",
-    "first_punch",
-    "last_punch",
-    "action_flags",
-    "flags",
-  ])
-
-  const extraEntries = Object.entries(record).filter(
-    ([key, value]) => !hiddenKeys.has(key) && value !== null && value !== undefined && stringifyValue(value) !== "-"
-  )
-  const compactExtraEntries = extraEntries.slice(0, 6)
 
   return (
     <div className="space-y-4">

@@ -16,7 +16,7 @@ interface AuthState {
   isAuthenticated: boolean;
   hasStoredSession: boolean;
   user: AuthUser | null;
-  employee: any | null;
+  employee: AnyRecord | null;
   error: string | null;
   requiresOtp: boolean;
   tempToken: string | null;
@@ -90,7 +90,7 @@ function useProvideAuth() {
       const finalUser: AuthUser = user || {
         id: 'me',
         fullName: empName || 'Employee',
-        email: (user as any)?.email || (employee as any)?.email || '',
+        email: user?.email || (employee?.email as string | undefined) || '',
       };
 
       // Persist lightly
@@ -114,7 +114,7 @@ function useProvideAuth() {
         biometricSupported: biometricStatus.supported,
         biometricTypeLabel: biometricStatus.label,
       });
-    } catch (e: unknown) {
+    } catch (_e: unknown) {
       // Invalid token probably
       await clearTokens();
       setState({
@@ -148,7 +148,7 @@ function useProvideAuth() {
       const userFromResponse = (res?.user as AnyRecord) || ((res?.data as AnyRecord)?.user as AnyRecord) || {};
       const requiresOtp = !!(
         res?.requires_2fa ||
-        (userFromResponse as any)?.requires_2fa ||
+        userFromResponse?.requires_2fa ||
         res?.requiresOtp ||
         res?.requires_otp ||
         res?.temp_token ||
@@ -181,7 +181,6 @@ function useProvideAuth() {
 
       // Direct login success (tokens + user) per spec examples
       const tokens = extractTokens(res);
-      const user = extractUser(res);
 
       if (tokens) {
         await saveTokens(tokens);

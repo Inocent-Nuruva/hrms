@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { useRouter } from "next/navigation"
 import { PencilIcon, PlusIcon, RefreshCwIcon, Trash2Icon } from "lucide-react"
 import {
   Dialog,
@@ -715,7 +714,6 @@ export function AccessControlManagementView({
   section: string
   moduleTitle?: string
 }) {
-  const router = useRouter()
   const activeSection = (Object.keys(ROUTE_TO_RESOURCE).includes(section) ? section : "doors") as AccessControlSectionKey
   const resource = ROUTE_TO_RESOURCE[activeSection]
   const fields = React.useMemo(() => SECTION_FIELDS[activeSection], [activeSection])
@@ -1095,12 +1093,50 @@ export function AccessControlManagementView({
       <ResizableTable
         title={title}
         data={rows || []}
-        columns={columns.map((c: string) => ({
-          key: c,
-          label: prettifyLabel ? prettifyLabel(c) : c.replace(/_/g,' ').slice(0,12),
-          defaultWidth: 65,
-          sortable: true,
-        }))}
+        columns={[
+          ...columns.map((c: string) => ({
+            key: c,
+            label: prettifyLabel ? prettifyLabel(c) : c.replace(/_/g,' ').slice(0,12),
+            defaultWidth: 65,
+            sortable: true,
+            render: (row: AdminRecord) => resolveDisplayValue(row, c),
+          })),
+          ...(canUpdate || canDelete
+            ? [
+                {
+                  key: "actions",
+                  label: "Actions",
+                  defaultWidth: 55,
+                  sortable: false,
+                  render: (row: AdminRecord) => (
+                    <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+                      {canUpdate ? (
+                        <button
+                          type="button"
+                          className="admin-table-icon-button"
+                          aria-label="Edit"
+                          onClick={() => openEditDialog(row, rows.indexOf(row))}
+                        >
+                          <PencilIcon className="h-3.5 w-3.5" />
+                        </button>
+                      ) : null}
+                      {canDelete ? (
+                        <button
+                          type="button"
+                          className="admin-table-icon-button"
+                          data-variant="danger"
+                          aria-label="Delete"
+                          onClick={() => openDeleteDialog(row, rows.indexOf(row))}
+                        >
+                          <Trash2Icon className="h-3.5 w-3.5" />
+                        </button>
+                      ) : null}
+                    </div>
+                  ),
+                },
+              ]
+            : []),
+        ]}
         itemsPerPage={20}
         loading={loading}
         storageKey={`access-${activeSection}`}

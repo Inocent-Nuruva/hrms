@@ -2,11 +2,10 @@
 
 import * as React from "react"
 
-import { ResizableTable, type Column } from "@/components/ui/resizable-table"
+import { ResizableTable } from "@/components/ui/resizable-table"
 import { Textarea } from "@/components/ui/textarea"
 import {
   Check,
-  Copy,
   Download,
   MoreHorizontal,
   Pencil,
@@ -875,7 +874,6 @@ export function LeaveManagementView({
   const [currentActor, setCurrentActor] = React.useState<LeaveActor | null>(null)
   const [cancelReason, setCancelReason] = React.useState("Cancelled by admin")
   const [selectedWorkflowId, setSelectedWorkflowId] = React.useState("")
-  const [copiedLeaveId, setCopiedLeaveId] = React.useState("")
   const [holidayImportCountry, setHolidayImportCountry] = React.useState<HolidayImportCountryCode>("TZ")
   const [holidayImportYear, setHolidayImportYear] = React.useState(String(new Date().getFullYear()))
   const [holidayImportCatalog, setHolidayImportCatalog] = React.useState<ImportableHoliday[]>([])
@@ -3568,7 +3566,48 @@ export function LeaveManagementView({
             {refreshButton}
           </div>
 
-          <ResizableTable title="Leave Policies" data={policies} itemsPerPage={15} loading={loading} storageKey="leave-policies" />
+          <ResizableTable
+            title="Leave Policies"
+            data={policies}
+            itemsPerPage={15}
+            loading={loading}
+            storageKey="leave-policies"
+            onRowSelect={(_, row) => {
+              if (row) openPolicyPreview(row)
+            }}
+            columns={[
+              { key: "name", label: "Name", defaultWidth: 140, sortable: true },
+              { key: "accrual_method", label: "Accrual", defaultWidth: 90, sortable: true },
+              { key: "status", label: "Status", defaultWidth: 80, sortable: true },
+              {
+                key: "actions",
+                label: "Actions",
+                defaultWidth: 90,
+                sortable: false,
+                render: (row) => (
+                  <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      className="admin-table-icon-button"
+                      aria-label="Edit"
+                      onClick={() => loadPolicyIntoForm(row)}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      className="admin-table-icon-button"
+                      aria-label="Toggle status"
+                      disabled={saving}
+                      onClick={() => void togglePolicyStatus(row)}
+                    >
+                      <RefreshCw className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ),
+              },
+            ]}
+          />
 
           <Sheet open={policySheetOpen} onOpenChange={setPolicySheetOpen}>
             <SheetContent side="right" className="w-full overflow-y-auto data-[side=right]:w-full sm:data-[side=right]:w-1/2 data-[side=right]:sm:max-w-none">
@@ -3724,8 +3763,48 @@ export function LeaveManagementView({
           </div>
 
           <div className="space-y-2">
-            <ResizableTable title="Leave Policies" data={policies} itemsPerPage={15} loading={loading} storageKey="leave-policies" />
-            <ResizableTable title="Leave Workflows" data={workflows} itemsPerPage={15} loading={loading} storageKey="leave-workflows" />
+            <ResizableTable
+              title="Leave Workflows"
+              data={workflows}
+              itemsPerPage={15}
+              loading={loading}
+              storageKey="leave-workflows"
+              onRowSelect={(_, row) => {
+                if (row) void openEditWorkflowSheet(row)
+              }}
+              columns={[
+                { key: "name", label: "Name", defaultWidth: 140, sortable: true },
+                { key: "status", label: "Status", defaultWidth: 80, sortable: true },
+                { key: "is_default", label: "Default", defaultWidth: 70, sortable: true },
+                {
+                  key: "actions",
+                  label: "Actions",
+                  defaultWidth: 90,
+                  sortable: false,
+                  render: (row) => (
+                    <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        className="admin-table-icon-button"
+                        aria-label="Edit"
+                        onClick={() => void openEditWorkflowSheet(row)}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        className="admin-table-icon-button"
+                        aria-label="Toggle status"
+                        disabled={saving}
+                        onClick={() => void toggleWorkflowStatus(row)}
+                      >
+                        <RefreshCw className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ),
+                },
+              ]}
+            />
           </div>
 
           <Sheet open={workflowSheetOpen} onOpenChange={setWorkflowSheetOpen}>

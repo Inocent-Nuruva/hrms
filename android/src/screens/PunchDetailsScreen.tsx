@@ -34,7 +34,6 @@ export function PunchDetailsScreen({ auth }: Props) {
   const panelColor = isDark ? COLORS.surfaceDark : COLORS.surface;
   const textColor = isDark ? COLORS.onSurfaceDark : COLORS.onSurface;
   const mutedColor = isDark ? COLORS.onSurfaceVariantDark : COLORS.onSurfaceVariant;
-  const lineColor = isDark ? COLORS.outlineDark : COLORS.outline;
 
   const punchesQuery = useQuery({
     queryKey: ['mobilePunchDetails'],

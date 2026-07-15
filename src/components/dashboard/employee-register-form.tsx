@@ -2919,7 +2919,13 @@ export function EmployeeRegisterForm() {
         primary_designation_id: selectedDesignationId ?? undefined,
         position_id: selectedPositionId ?? undefined,
         employment_status: "onboarding",
-        employment_type: (form.employmentType || "full_time") as any,
+        employment_type: (form.employmentType || "full_time") as
+          | "full_time"
+          | "part_time"
+          | "contract"
+          | "intern"
+          | "consultant"
+          | "temporary",
         reports_to: selectedReportsToId ?? undefined,
         first_name: form.firstName.trim(),
         middle_name: form.middleName.trim(),

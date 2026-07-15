@@ -24,7 +24,7 @@ const CHANNEL_IDS: Record<NotificationSoundPreference, string> = {
   'device-default': 'hrms-alerts-device-default',
 };
 
-export function getNotificationChannelId(preference: NotificationSoundPreference) {
+export function getNotificationChannelId(_preference: NotificationSoundPreference) {
   return CHANNEL_IDS['device-default'];
 }
 
@@ -33,7 +33,7 @@ export async function getNotificationSoundPreference(): Promise<NotificationSoun
   return 'device-default';
 }
 
-export async function saveNotificationSoundPreference(preference: NotificationSoundPreference) {
+export async function saveNotificationSoundPreference(_preference: NotificationSoundPreference) {
   await SecureStore.setItemAsync(STORAGE_KEY, 'device-default');
   await ensureNotificationChannelsAsync();
 }

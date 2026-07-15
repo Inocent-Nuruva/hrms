@@ -1059,9 +1059,9 @@ export function EmployeeHomeDashboard() {
           throw new Error(`Failed to load address dataset (${response.status})`)
         }
 
-        const payload: any = await response.json()
+        const payload: PublicCountryStateResponse = await response.json()
         if (!Array.isArray(payload?.data)) {
-          throw new Error(payload?.error || payload?.msg || "Failed to load address dataset.")
+          throw new Error(payload?.msg || "Failed to load address dataset.")
         }
 
         if (!cancelled) {
@@ -1085,7 +1085,7 @@ export function EmployeeHomeDashboard() {
     return () => {
       cancelled = true
     }
-  }, [fillingItemKey, showOnboardingDialog])
+  }, [fillingItemKey, showOnboardingDialog, publicCountryStates.length, publicLocationLoading])
 
   const selectedAddressCountry = React.useMemo(() => {
     if (fillingItemKey !== "addresses") {

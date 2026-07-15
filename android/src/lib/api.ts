@@ -95,7 +95,7 @@ function extractErrorMessage(value: unknown): string {
   return '';
 }
 
-export function formatAttendancePunchError(error: unknown, action: 'check-in' | 'check-out') {
+export function formatAttendancePunchError(error: unknown, _action: 'check-in' | 'check-out') {
   const baseFallback = 'Attendance action could not be completed right now. Please try again.';
 
   if (!(error instanceof Error)) {

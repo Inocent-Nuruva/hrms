@@ -1,6 +1,5 @@
 import React from 'react';
 import {
-  Alert,
   Animated,
   Easing,
   Modal,
@@ -65,10 +64,10 @@ export function MobileTopBar({
     y: number;
     bg: string;
   }>(null);
-  const themeAnim = React.useRef(new Animated.Value(0)).current;
-  const themeOpacity = React.useRef(new Animated.Value(1)).current;
+  const [themeAnim] = React.useState(() => new Animated.Value(0));
+  const [themeOpacity] = React.useState(() => new Animated.Value(1));
 
-  const slideAnim = React.useRef(new Animated.Value(-400)).current;
+  const [slideAnim] = React.useState(() => new Animated.Value(-400));
 
   const drawerWidth = React.useMemo(() => Math.max(screenWidth * 0.62, 230), [screenWidth]);
 

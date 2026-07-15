@@ -183,8 +183,8 @@ export function DepartmentsView() {
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [page, setPage] = React.useState(1)
-  const [totalPages, setTotalPages] = React.useState<number | null>(null)
-  const [total, setTotal] = React.useState<number | null>(null)
+  const [, setTotalPages] = React.useState<number | null>(null)
+  const [, setTotal] = React.useState<number | null>(null)
 
   const [openCreate, setOpenCreate] = React.useState(false)
   const [form, setForm] = React.useState<DepartmentForm>(emptyForm())
@@ -286,9 +286,6 @@ export function DepartmentsView() {
       .then((result) => setAllDepartments(result.rows))
       .catch(() => setAllDepartments([]))
   }, [])
-
-  const canGoPrevious = page > 1 && !loading
-  const canGoNext = !loading && (totalPages === null || page < totalPages)
 
   function fillFormFromRow(row: AdminRecord) {
     setForm({

@@ -9,14 +9,13 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
-import { Calendar, Clock3, ChevronLeft, ChevronRight } from 'lucide-react-native';
+import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { LoadingIndicator } from '../components/ui/loading-indicator';
 import { useRouter } from 'expo-router';
 
 import { api, normalizeList } from '../lib/api';
 import { COLORS } from '../lib/config';
 import { MobileTopBar } from '../components/layout/MobileTopBar';
-import { ScreenTransition } from '../components/ui/screen-transition';
 import type { UseAuthReturn } from '../hooks/useAuth';
 import { useThemePreference } from '../hooks/useThemePreference';
 
@@ -53,8 +52,8 @@ export function MyAttendanceScreen({ auth }: Props) {
         sortBy: 'attendanceDate',
         sortOrder: 'DESC',
       });
-      const data = (res as any).data || normalizeList(res);
-      return data as any[];
+      const data = (res as MobileRecord).data || normalizeList(res);
+      return data as MobileRecord[];
     },
     enabled: auth.isAuthenticated,
   });
@@ -68,7 +67,7 @@ export function MyAttendanceScreen({ auth }: Props) {
     .filter((item): item is MobileRecord => Boolean(item))
     .filter((item) => readString(item, ['attendanceDate', 'attendance_date']) === selectedDate);
 
-  const selectedRecord = dateRecords[0] || (todayQuery.data as any) || null;
+  const selectedRecord = dateRecords[0] || (todayQuery.data as MobileRecord | null) || null;
 
   const checkIn = readString(selectedRecord, ['checkInAt', 'check_in_at', 'first_punch', 'firstCheckInAt', 'first_punch_at']);
   const checkOut = readString(selectedRecord, ['checkOutAt', 'check_out_at', 'last_punch', 'lastCheckOutAt', 'last_punch_at']);
@@ -167,7 +166,7 @@ export function MyAttendanceScreen({ auth }: Props) {
                     <Text style={[styles.emptyText, { color: mutedColor }]}>No records for this date.</Text>
                   </View>
                 ) : (
-                  punchesList.map((record: any, index: number) => {
+                  punchesList.map((record: MobileRecord, index: number) => {
                     const date = readString(record, ['attendanceDate', 'attendance_date']);
                     const checkInTime = formatTime(readString(record, ['checkInAt', 'check_in_at']));
                     const checkOutTime = formatTime(readString(record, ['checkOutAt', 'check_out_at']));
@@ -220,15 +219,6 @@ function formatTime(value: string) {
     return new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   } catch {
     return '--:--';
-  }
-}
-
-function formatDate(value: string) {
-  if (!value) return '';
-  try {
-    return new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  } catch {
-    return '';
   }
 }
 

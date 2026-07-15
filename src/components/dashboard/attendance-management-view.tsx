@@ -1618,7 +1618,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
   const [deviceBranchFilter, setDeviceBranchFilter] = React.useState("all")
   const [deviceVendorFilter, setDeviceVendorFilter] = React.useState("all")
   const [deviceIntegrationFilter, setDeviceIntegrationFilter] = React.useState("all")
-  const [focusedDeviceFingerprint, setFocusedDeviceFingerprint] = React.useState<{
+  const [, setFocusedDeviceFingerprint] = React.useState<{
     code?: string
     serial?: string
     model?: string
@@ -2616,10 +2616,19 @@ export function AttendanceManagementView({ section }: { section: string }) {
             sortable: true,
           })),
           ...(showDeviceContextColumn ? [{ key: "related_device", label: "Device", defaultWidth: 75 }] : []),
-          ...(supportsEditDelete ? [{ key: "actions", label: "Actions", defaultWidth: 55, sortable: false, render: (row: any) => (
+          ...(supportsEditDelete ? [{ key: "actions", label: "Actions", defaultWidth: 55, sortable: false, render: (row: AdminRecord) => (
             <div className="flex justify-end gap-1" onClick={e=>e.stopPropagation()}>
-              <button className="admin-table-icon-button" onClick={() => openEditDialog(row)}>Edit</button>
-              <button className="admin-table-icon-button" data-variant="danger" onClick={() => openDeleteDialog(row)}>Del</button>
+              {activeSection === "policies" && !row.is_active ? (
+                <button
+                  className="admin-table-icon-button"
+                  disabled={activatingId === String(row.id)}
+                  onClick={() => void onActivatePolicy(row)}
+                >
+                  {activatingId === String(row.id) ? "Activating…" : "Activate"}
+                </button>
+              ) : null}
+              <button className="admin-table-icon-button" aria-label="Edit" onClick={() => openEditDialog(row)}><PencilIcon className="h-3.5 w-3.5" /></button>
+              <button className="admin-table-icon-button" data-variant="danger" aria-label="Delete" onClick={() => openDeleteDialog(row)}><Trash2Icon className="h-3.5 w-3.5" /></button>
             </div>
           ) }] : []),
         ]}

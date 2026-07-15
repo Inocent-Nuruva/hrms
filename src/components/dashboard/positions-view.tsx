@@ -220,8 +220,8 @@ export function PositionsView() {
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [page, setPage] = React.useState(1)
-  const [totalPages, setTotalPages] = React.useState<number | null>(null)
-  const [total, setTotal] = React.useState<number | null>(null)
+  const [, setTotalPages] = React.useState<number | null>(null)
+  const [, setTotal] = React.useState<number | null>(null)
 
   const [openForm, setOpenForm] = React.useState(false)
   const [form, setForm] = React.useState<PositionForm>(emptyForm())
@@ -312,9 +312,6 @@ export function PositionsView() {
         setDesignations([])
       })
   }, [])
-
-  const canGoPrevious = page > 1 && !loading
-  const canGoNext = !loading && (totalPages === null || page < totalPages)
 
   function fillFormFromRow(row: AdminRecord) {
     setForm({

@@ -110,16 +110,6 @@ function useAnimateIconContext() {
   return context;
 }
 
-function composeEventHandlers<E extends React.SyntheticEvent<unknown>>(
-  theirs?: (event: E) => void,
-  ours?: (event: E) => void,
-) {
-  return (event: E) => {
-    theirs?.(event);
-    ours?.(event);
-  };
-}
-
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyProps = Record<string, any>;
 
@@ -375,31 +365,43 @@ function AnimateIcon({
     React.isValidElement(children) ? (children as React.ReactElement).props : {}
   ) as AnyProps;
 
-  const handleMouseEnter = composeEventHandlers<React.MouseEvent<HTMLElement>>(
-    childProps.onMouseEnter,
-    () => {
+  const {
+    onMouseEnter: childOnMouseEnter,
+    onMouseLeave: childOnMouseLeave,
+    onPointerDown: childOnPointerDown,
+    onPointerUp: childOnPointerUp,
+  } = childProps;
+
+  const handleMouseEnter = React.useCallback(
+    (event: React.MouseEvent<HTMLElement>) => {
+      childOnMouseEnter?.(event);
       if (animateOnHover) startAnimation(animateOnHover);
     },
+    [childOnMouseEnter, animateOnHover, startAnimation],
   );
 
-  const handleMouseLeave = composeEventHandlers<React.MouseEvent<HTMLElement>>(
-    childProps.onMouseLeave,
-    () => {
+  const handleMouseLeave = React.useCallback(
+    (event: React.MouseEvent<HTMLElement>) => {
+      childOnMouseLeave?.(event);
       if (animateOnHover || animateOnTap) stopAnimation();
     },
+    [childOnMouseLeave, animateOnHover, animateOnTap, stopAnimation],
   );
 
-  const handlePointerDown = composeEventHandlers<
-    React.PointerEvent<HTMLElement>
-  >(childProps.onPointerDown, () => {
-    if (animateOnTap) startAnimation(animateOnTap);
-  });
+  const handlePointerDown = React.useCallback(
+    (event: React.PointerEvent<HTMLElement>) => {
+      childOnPointerDown?.(event);
+      if (animateOnTap) startAnimation(animateOnTap);
+    },
+    [childOnPointerDown, animateOnTap, startAnimation],
+  );
 
-  const handlePointerUp = composeEventHandlers<React.PointerEvent<HTMLElement>>(
-    childProps.onPointerUp,
-    () => {
+  const handlePointerUp = React.useCallback(
+    (event: React.PointerEvent<HTMLElement>) => {
+      childOnPointerUp?.(event);
       if (animateOnTap) stopAnimation();
     },
+    [childOnPointerUp, animateOnTap, stopAnimation],
   );
 
   const content = asChild ? (

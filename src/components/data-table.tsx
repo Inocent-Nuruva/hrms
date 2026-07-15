@@ -7,7 +7,6 @@ import { showSuccessAlert } from "@/lib/success-alert"
 
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -60,7 +59,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Separator } from "@/components/ui/separator"
 import { SearchToggleField } from "@/components/common/search-toggle-field"
 import {
   Table,
@@ -853,7 +851,7 @@ export function DataTable({
   const [editingEntityForm, setEditingEntityForm] = React.useState<BasicEntityForm>(EMPTY_ENTITY_FORM)
   const [initialEditingEntityForm, setInitialEditingEntityForm] = React.useState<BasicEntityForm>(EMPTY_ENTITY_FORM)
   const [editingRolePermissionNames, setEditingRolePermissionNames] = React.useState<string[]>([])
-  const [initialEditingRolePermissionNames, setInitialEditingRolePermissionNames] = React.useState<string[]>([])
+  const [, setInitialEditingRolePermissionNames] = React.useState<string[]>([])
   const [accessControlSearch, setAccessControlSearch] = React.useState("")
   const [detailSheetTab, setDetailSheetTab] = React.useState<DetailSheetTab>("general")
   const [memberCompanyUsers, setMemberCompanyUsers] = React.useState<AdminRecord[]>([])
@@ -1043,18 +1041,6 @@ export function DataTable({
     onChange([...roleIds, roleId])
   }
 
-  const togglePermissionName = (
-    selectedPermissionNames: string[],
-    permissionName: string,
-    onChange: (next: string[]) => void
-  ) => {
-    if (selectedPermissionNames.includes(permissionName)) {
-      onChange(selectedPermissionNames.filter((name) => name !== permissionName))
-      return
-    }
-    onChange([...selectedPermissionNames, permissionName])
-  }
-
   const handleCreate = async () => {
     if (!token) {
       toast.error("Your session expired. Please sign in again.")
@@ -1204,23 +1190,26 @@ export function DataTable({
     }
   }
 
-  const handleDelete = async (rowId: string | number) => {
-    if (!token) {
-      toast.error("Your session expired. Please sign in again.")
-      return
-    }
-    if (!isEditableResource(activeResource)) {
-      return
-    }
+  const handleDelete = React.useCallback(
+    async (rowId: string | number) => {
+      if (!token) {
+        toast.error("Your session expired. Please sign in again.")
+        return
+      }
+      if (!isEditableResource(activeResource)) {
+        return
+      }
 
-    try {
-      await onDelete(activeResource, rowId)
-      showSuccessAlert(`${RESOURCE_LABELS[activeResource]} deleted.`)
-    } catch (errorObject) {
-      const message = errorObject instanceof Error ? errorObject.message : "Delete failed."
-      toast.error(message)
-    }
-  }
+      try {
+        await onDelete(activeResource, rowId)
+        showSuccessAlert(`${RESOURCE_LABELS[activeResource]} deleted.`)
+      } catch (errorObject) {
+        const message = errorObject instanceof Error ? errorObject.message : "Delete failed."
+        toast.error(message)
+      }
+    },
+    [token, activeResource, onDelete]
+  )
 
   const accessControlColumns = React.useMemo((): Column<AccessControlTableRow>[] => {
     const actionsColumn: Column<AccessControlTableRow> = {
@@ -1353,7 +1342,7 @@ export function DataTable({
       },
       actionsColumn,
     ]
-  }, [activeResource, canDeleteResource, openAccessControlRow])
+  }, [activeResource, canDeleteResource, openAccessControlRow, handleDelete])
 
   const handleSetPassword = async () => {
     if (!token || !targetPasswordUser) {
@@ -1418,6 +1407,9 @@ export function DataTable({
     setAssignPickerQuery("")
     setRoleAssignedUsers([])
     setPeopleDialogOpen(false)
+    // Intentionally keyed on id/resource (not the whole editingEntity object) so that
+    // in-place label updates don't reset the detail sheet's tab/search/picker state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editingEntity?.id, editingEntity?.resource])
 
   React.useEffect(() => {
