@@ -1907,6 +1907,58 @@ function looksLikeEmployeeRecord(value: AdminRecord | null) {
   )
 }
 
+/** Detect Excel/ZIP/binary bodies that must never be shown as UI error text. */
+function looksLikeBinaryPayload(text: string): boolean {
+  if (!text) return false
+  // XLSX / ZIP local file header
+  if (text.startsWith("PK") || text.includes("[Content_Types].xml")) {
+    return true
+  }
+  const sample = text.slice(0, 800)
+  let nonPrintable = 0
+  for (let i = 0; i < sample.length; i += 1) {
+    const code = sample.charCodeAt(i)
+    if (code === 0 || (code < 9) || (code > 13 && code < 32)) {
+      nonPrintable += 1
+    }
+  }
+  return sample.length > 0 && nonPrintable / sample.length > 0.04
+}
+
+function isBinaryContentType(contentType: string | null): boolean {
+  if (!contentType) return false
+  return /(?:excel|spreadsheet|ms-excel|octet-stream|zip|application\/vnd\.|multipart\/form-data)/i.test(
+    contentType
+  )
+}
+
+function sanitizeHumanMessage(text: string, fallback: string): string {
+  const trimmed = text.trim()
+  if (!trimmed) return fallback
+  if (looksLikeBinaryPayload(trimmed)) return fallback
+  // Cap length so accidental HTML/log dumps don't flood the UI
+  return trimmed.length > 400 ? `${trimmed.slice(0, 400)}…` : trimmed
+}
+
+function parseResponseBodyText(text: string, contentType: string | null): unknown {
+  if (!text) return null
+
+  if (isBinaryContentType(contentType) || looksLikeBinaryPayload(text)) {
+    return {
+      message: "The server returned a file instead of a status. Try again, or download the report if available.",
+      _binaryResponse: true,
+    }
+  }
+
+  try {
+    return JSON.parse(text) as unknown
+  } catch {
+    return {
+      message: sanitizeHumanMessage(text, "Unexpected response from server."),
+    }
+  }
+}
+
 function extractMessage(payload: unknown, status: number) {
   const record = asRecord(payload)
   if (!record) {
@@ -1914,23 +1966,24 @@ function extractMessage(payload: unknown, status: number) {
   }
   const candidate = record.message
   if (typeof candidate === "string" && candidate.trim()) {
-    return candidate
+    return sanitizeHumanMessage(candidate, `Request failed with status ${status}`)
   }
   if (Array.isArray(candidate)) {
     const normalized = candidate
       .filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
-      .map((entry) => entry.trim())
+      .map((entry) => sanitizeHumanMessage(entry, ""))
+      .filter(Boolean)
     if (normalized.length > 0) {
       return normalized.join(". ")
     }
   }
   const errorCandidate = record.error
   if (typeof errorCandidate === "string" && errorCandidate.trim()) {
-    return errorCandidate.trim()
+    return sanitizeHumanMessage(errorCandidate, `Request failed with status ${status}`)
   }
   const detailCandidate = record.details
   if (typeof detailCandidate === "string" && detailCandidate.trim()) {
-    return detailCandidate.trim()
+    return sanitizeHumanMessage(detailCandidate, `Request failed with status ${status}`)
   }
   return `Request failed with status ${status}`
 }
@@ -1987,15 +2040,9 @@ async function adminRequest<T>(path: string, options: AdminRequestOptions = {}):
       signal,
     })
 
+    const contentType = response.headers.get("content-type")
     const text = await response.text()
-    let payload: unknown = null
-    if (text) {
-      try {
-        payload = JSON.parse(text) as unknown
-      } catch {
-        payload = { message: text }
-      }
-    }
+    const payload = parseResponseBodyText(text, contentType)
 
     if (!response.ok) {
       const error = new Error(extractMessage(payload, response.status)) as Error & {
@@ -2207,15 +2254,19 @@ async function submitEmployeeImportRequest(
 
   invalidateAdminGetCache()
 
-  const text = await response.text()
-  let payload: unknown = null
-  if (text) {
-    try {
-      payload = JSON.parse(text) as unknown
-    } catch {
-      payload = { message: text }
+  const contentType = response.headers.get("content-type")
+  // Import endpoints must return JSON status. Binary/xlsx is never a valid status body.
+  if (isBinaryContentType(contentType)) {
+    // Drain body so the connection can close cleanly.
+    await response.arrayBuffer().catch(() => undefined)
+    if (!response.ok) {
+      throw new Error("Import failed. The server returned an error file instead of a status.")
     }
+    throw new Error("Unexpected file response from import. Expected a status summary.")
   }
+
+  const text = await response.text()
+  const payload = parseResponseBodyText(text, contentType)
 
   if (!response.ok) {
     const error = new Error(extractMessage(payload, response.status)) as Error & {
@@ -2225,6 +2276,16 @@ async function submitEmployeeImportRequest(
     error.status = response.status
     error.payload = payload
     throw error
+  }
+
+  // Successful HTTP but body is binary disguised as text → reject for UI safety.
+  const record = asRecord(payload)
+  if (record?._binaryResponse === true) {
+    throw new Error(
+      typeof record.message === "string"
+        ? record.message
+        : "Unexpected file response from import. Expected a status summary."
+    )
   }
 
   return asRecord(payload) ?? normalizeSingle(payload)
@@ -2257,11 +2318,142 @@ export async function confirmEmployeeImport(token: string, data: EmployeeImportC
   return asRecord(payload) ?? normalizeSingle(payload)
 }
 
-export async function getEmployeeImportResult(token: string, batchId: string) {
-  const payload = await adminRequest<unknown>(`/api/employees/import/${encodeURIComponent(batchId)}/result`, {
-    token,
-  })
-  return asRecord(payload) ?? normalizeSingle(payload)
+export type EmployeeImportResultResponse =
+  | {
+      type: "json"
+      payload: AdminRecord | null
+    }
+  | {
+      type: "file"
+      blob: Blob
+      filename: string
+      contentType: string | null
+    }
+
+function filenameFromContentDisposition(disposition: string | null, fallback: string) {
+  const value = disposition ?? ""
+  const filenameMatch = value.match(/filename\*=UTF-8''([^;]+)|filename=\"?([^\";]+)\"?/i)
+  const rawFilename = filenameMatch?.[1] ?? filenameMatch?.[2] ?? fallback
+  try {
+    return decodeURIComponent(rawFilename)
+  } catch {
+    return rawFilename
+  }
+}
+
+function isZipOrXlsxMagic(bytes: Uint8Array) {
+  // ZIP / XLSX local file header: PK\x03\x04 (or empty PK\x05\x06)
+  return bytes.length >= 2 && bytes[0] === 0x50 && bytes[1] === 0x4b
+}
+
+/**
+ * Import "result" may be either:
+ * - JSON status/summary for the batch, or
+ * - an Excel/binary error/result report (common when rows failed).
+ */
+export async function getEmployeeImportResult(
+  token: string,
+  batchId: string
+): Promise<EmployeeImportResultResponse> {
+  const response = await fetch(
+    buildUrl(`/api/employees/import/${encodeURIComponent(batchId)}/result`),
+    {
+      method: "GET",
+      headers: {
+        accept:
+          "application/json, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/octet-stream, */*",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      cache: "no-store",
+    }
+  )
+
+  const contentType = response.headers.get("content-type")
+  const buffer = await response.arrayBuffer()
+  const bytes = new Uint8Array(buffer)
+  const looksLikeFile =
+    isBinaryContentType(contentType) || isZipOrXlsxMagic(bytes)
+
+  if (!response.ok) {
+    if (looksLikeFile && buffer.byteLength > 0) {
+      // Some APIs return an error workbook with a non-2xx status.
+      return {
+        type: "file",
+        blob: new Blob([buffer], {
+          type: contentType || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        }),
+        filename: filenameFromContentDisposition(
+          response.headers.get("content-disposition"),
+          `employee-import-result-${batchId}.xlsx`
+        ),
+        contentType,
+      }
+    }
+
+    const text = new TextDecoder().decode(buffer)
+    const payload = parseResponseBodyText(text, contentType)
+    const error = new Error(extractMessage(payload, response.status)) as Error & {
+      status?: number
+      payload?: unknown
+    }
+    error.status = response.status
+    error.payload = payload
+    throw error
+  }
+
+  if (looksLikeFile) {
+    return {
+      type: "file",
+      blob: new Blob([buffer], {
+        type: contentType || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      }),
+      filename: filenameFromContentDisposition(
+        response.headers.get("content-disposition"),
+        `employee-import-result-${batchId}.xlsx`
+      ),
+      contentType,
+    }
+  }
+
+  const text = new TextDecoder().decode(buffer)
+  const payload = parseResponseBodyText(text, contentType)
+  const record = asRecord(payload)
+
+  if (record?._binaryResponse === true) {
+    // Body looked binary after text decode; re-wrap original bytes as a file.
+    return {
+      type: "file",
+      blob: new Blob([buffer], {
+        type: contentType || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      }),
+      filename: filenameFromContentDisposition(
+        response.headers.get("content-disposition"),
+        `employee-import-result-${batchId}.xlsx`
+      ),
+      contentType,
+    }
+  }
+
+  return {
+    type: "json",
+    payload: record ?? normalizeSingle(payload),
+  }
+}
+
+/** Download the import result report (Excel) for a batch when the API returns a file. */
+export async function downloadEmployeeImportResult(
+  token: string,
+  batchId: string
+): Promise<{ blob: Blob; filename: string; contentType: string | null }> {
+  const result = await getEmployeeImportResult(token, batchId)
+  if (result.type === "file") {
+    return {
+      blob: result.blob,
+      filename: result.filename,
+      contentType: result.contentType,
+    }
+  }
+  throw new Error("Import result is a status response, not a downloadable file.")
 }
 
 export async function listEmployeeImportHistory(

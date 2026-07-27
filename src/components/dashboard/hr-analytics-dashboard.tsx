@@ -36,6 +36,11 @@ import {
   listOffboardingRequests,
   type AdminRecord,
 } from "@/lib/admin-api"
+import {
+  clearDashboardFromLoginFlag,
+  consumeDashboardWarmCache,
+  type DashboardWarmSnapshot,
+} from "@/lib/dashboard-warm-cache"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
@@ -566,32 +571,67 @@ const ALL_SLICES: DashboardSlice[] = [
 const emptySliceState = (): Record<DashboardSlice, boolean> =>
   Object.fromEntries(ALL_SLICES.map((s) => [s, false])) as Record<DashboardSlice, boolean>
 
+const readySliceState = (): Record<DashboardSlice, boolean> =>
+  Object.fromEntries(ALL_SLICES.map((s) => [s, true])) as Record<DashboardSlice, boolean>
+
+function readInitialWarmSnapshot(): DashboardWarmSnapshot | null {
+  if (typeof window === "undefined") return null
+  return consumeDashboardWarmCache()
+}
+
 export default function HrAnalyticsDashboard({
   refreshKey = 0,
   companyName,
   adminRolesLabel,
 }: HrAnalyticsDashboardProps) {
   const router = useRouter()
+  const warmRef = React.useRef<DashboardWarmSnapshot | null | undefined>(undefined)
+  if (warmRef.current === undefined) {
+    warmRef.current = readInitialWarmSnapshot()
+  }
+  const warm = warmRef.current
+
   /** True while any request is in flight (refresh icon only). */
-  const [loading, setLoading] = React.useState(true)
+  const [loading, setLoading] = React.useState(() => !warm)
   /** Per-slice: true only until that slice has completed its first successful/failed load. */
-  const [sliceReady, setSliceReady] = React.useState(emptySliceState)
+  const [sliceReady, setSliceReady] = React.useState(() => (warm ? readySliceState() : emptySliceState()))
   const [error, setError] = React.useState<string | null>(null)
 
-  const [fromDate, setFromDate] = React.useState(() => formatInputDate(shiftDays(new Date(), -30)))
-  const [toDate, setToDate] = React.useState(() => formatInputDate(new Date()))
+  const [fromDate, setFromDate] = React.useState(
+    () => warm?.fromDate ?? formatInputDate(shiftDays(new Date(), -30))
+  )
+  const [toDate, setToDate] = React.useState(
+    () => warm?.toDate ?? formatInputDate(new Date())
+  )
 
-  const [employees, setEmployees] = React.useState<AdminRecord[]>([])
-  const [employeesTotal, setEmployeesTotal] = React.useState<number | null>(null)
-  const [departments, setDepartments] = React.useState<AdminRecord[]>([])
-  const [departmentHeadcounts, setDepartmentHeadcounts] = React.useState<Array<[string, number]>>([])
-  const [leaveRequests, setLeaveRequests] = React.useState<AdminRecord[]>([])
-  const [attendanceSummaries, setAttendanceSummaries] = React.useState<AdminRecord[]>([])
-  const [onboardingRequests, setOnboardingRequests] = React.useState<AdminRecord[]>([])
-  const [offboardingRequests, setOffboardingRequests] = React.useState<AdminRecord[]>([])
+  const [employees, setEmployees] = React.useState<AdminRecord[]>(() => warm?.employees ?? [])
+  const [employeesTotal, setEmployeesTotal] = React.useState<number | null>(
+    () => warm?.employeesTotal ?? null
+  )
+  const [departments, setDepartments] = React.useState<AdminRecord[]>(() => warm?.departments ?? [])
+  const [departmentHeadcounts, setDepartmentHeadcounts] = React.useState<Array<[string, number]>>(
+    () =>
+      warm
+        ? buildDepartmentHeadcounts(warm.departments, warm.employees)
+        : []
+  )
+  const [leaveRequests, setLeaveRequests] = React.useState<AdminRecord[]>(
+    () => warm?.leaveRequests ?? []
+  )
+  const [attendanceSummaries, setAttendanceSummaries] = React.useState<AdminRecord[]>(
+    () => warm?.attendanceSummaries ?? []
+  )
+  const [onboardingRequests, setOnboardingRequests] = React.useState<AdminRecord[]>(
+    () => warm?.onboardingRequests ?? []
+  )
+  const [offboardingRequests, setOffboardingRequests] = React.useState<AdminRecord[]>(
+    () => warm?.offboardingRequests ?? []
+  )
 
   const employeesRef = React.useRef(employees)
   const departmentsRef = React.useRef(departments)
+  const hydratedFromWarmRef = React.useRef(Boolean(warm))
+  const firstFetchRef = React.useRef(true)
 
   React.useEffect(() => {
     employeesRef.current = employees
@@ -601,11 +641,19 @@ export default function HrAnalyticsDashboard({
     departmentsRef.current = departments
   }, [departments])
 
+  React.useEffect(() => {
+    // One-shot: clear post-login shell flag after overview mounts with data.
+    if (hydratedFromWarmRef.current) {
+      clearDashboardFromLoginFlag()
+    }
+  }, [])
+
   const markReady = React.useCallback((slice: DashboardSlice) => {
     setSliceReady((prev) => (prev[slice] ? prev : { ...prev, [slice]: true }))
   }, [])
 
-  const fetchAll = React.useCallback(async () => {
+  const fetchAll = React.useCallback(async (options?: { silent?: boolean }) => {
+    const silent = Boolean(options?.silent)
     const token = readStoredToken()
     if (!token) {
       setError("No active session. Please sign in again.")
@@ -617,12 +665,14 @@ export default function HrAnalyticsDashboard({
       setOffboardingRequests([])
       setEmployeesTotal(null)
       setDepartmentHeadcounts([])
-      setSliceReady(Object.fromEntries(ALL_SLICES.map((s) => [s, true])) as Record<DashboardSlice, boolean>)
+      setSliceReady(readySliceState())
       setLoading(false)
       return
     }
 
-    setLoading(true)
+    if (!silent) {
+      setLoading(true)
+    }
     setError(null)
 
     const from_date = fromDate.trim() || undefined
@@ -693,7 +743,10 @@ export default function HrAnalyticsDashboard({
   }, [fromDate, toDate, markReady])
 
   React.useEffect(() => {
-    void fetchAll()
+    // First mount after login: revalidate quietly so we don't flash skeletons again.
+    const silent = firstFetchRef.current && hydratedFromWarmRef.current
+    firstFetchRef.current = false
+    void fetchAll({ silent })
   }, [fetchAll])
 
   React.useEffect(() => {

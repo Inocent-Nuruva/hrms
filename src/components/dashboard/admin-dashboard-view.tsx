@@ -14,17 +14,29 @@ const HrAnalyticsDashboard = dynamic(
   () => import("@/components/dashboard/hr-analytics-dashboard"),
   {
     ssr: false,
-    loading: () => (
-      <div className="grid gap-x-4 gap-y-2 px-4 pt-2 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-7 lg:px-6">
-        {Array.from({ length: 7 }, (_, i) => (
-          <div key={i} className="min-w-0 space-y-1.5 border-b border-border pb-2">
-            <div className="h-3 w-16 animate-pulse rounded bg-muted" />
-            <div className="h-8 w-14 animate-pulse rounded bg-muted" />
-            <div className="h-3 w-24 animate-pulse rounded bg-muted" />
-          </div>
-        ))}
-      </div>
-    ),
+    loading: () => {
+      // After login we already showed a loader on the sign-in screen — skip a second skeleton flash.
+      if (typeof window !== "undefined") {
+        try {
+          if (window.sessionStorage.getItem("hrms.dashboard.fromLogin") === "1") {
+            return null
+          }
+        } catch {
+          // ignore
+        }
+      }
+      return (
+        <div className="grid gap-x-4 gap-y-2 px-4 pt-2 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-7 lg:px-6">
+          {Array.from({ length: 7 }, (_, i) => (
+            <div key={i} className="min-w-0 space-y-1.5 border-b border-border pb-2">
+              <div className="h-3 w-16 animate-pulse rounded bg-muted" />
+              <div className="h-8 w-14 animate-pulse rounded bg-muted" />
+              <div className="h-3 w-24 animate-pulse rounded bg-muted" />
+            </div>
+          ))}
+        </div>
+      )
+    },
   }
 )
 import {

@@ -719,6 +719,89 @@ table.min-w-full > tbody > tr > td {
     blobIn 1.2s ease forwards;
 }
 
+/* BorderBeam — spinning ring light along the card edge */
+@keyframes border-beam-spin {
+  from {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
+
+.border-beam__glow {
+  will-change: transform;
+}
+
+/* Login security scan loader */
+@keyframes security-scan-beam {
+  0% {
+    top: 8%;
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  92% {
+    opacity: 1;
+  }
+  100% {
+    top: 82%;
+    opacity: 0;
+  }
+}
+
+@keyframes security-scan-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  50% {
+    transform: scale(1.06);
+    opacity: 0.15;
+  }
+}
+
+@keyframes security-scan-shield {
+  0%,
+  100% {
+    opacity: 0.85;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.04);
+  }
+}
+
+.security-scan__beam {
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    color-mix(in srgb, var(--primary) 18%, transparent) 35%,
+    color-mix(in srgb, var(--primary) 75%, white) 50%,
+    color-mix(in srgb, var(--primary) 18%, transparent) 65%,
+    transparent 100%
+  );
+  box-shadow: 0 0 12px color-mix(in srgb, var(--primary) 45%, transparent);
+  animation: security-scan-beam 1.8s ease-in-out infinite;
+  will-change: top, opacity;
+}
+
+.security-scan__pulse {
+  animation: security-scan-pulse 2.2s ease-in-out infinite;
+}
+
+.security-scan__pulse--delayed {
+  animation-delay: 0.55s;
+}
+
+.security-scan__shield {
+  animation: security-scan-shield 1.8s ease-in-out infinite;
+}
+
+
 @theme inline {
   --font-heading: var(--font-heading-family);
   --font-sans: var(--font-body);

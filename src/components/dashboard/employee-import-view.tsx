@@ -3,11 +3,13 @@
 import * as React from "react"
 import {
   DownloadIcon,
+  FileSpreadsheetIcon,
   FileSearchIcon,
   Loader2Icon,
   RefreshCcwIcon,
   SendIcon,
   UploadIcon,
+  XIcon,
 } from "lucide-react"
 
 import {
@@ -19,32 +21,34 @@ import {
   startEmployeeImport,
   type AdminRecord,
   type EmployeeImportMode,
+  type EmployeeImportResultResponse,
 } from "@/lib/admin-api"
 import { subscribeToDashboardActorSnapshot } from "@/lib/dashboard-permissions"
 import { readStoredSessionTokens } from "@/lib/session-client"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
-const IMPORT_MODES: Array<{ value: EmployeeImportMode; label: string; description: string }> = [
+const IMPORT_MODES: Array<{ value: EmployeeImportMode; label: string; hint: string }> = [
   {
     value: "CREATE_ONLY",
-    label: "Create Only",
-    description: "Adds only new employees and leaves existing records untouched.",
+    label: "Add new only",
+    hint: "Skip people who already exist",
   },
   {
     value: "UPDATE_EXIST",
-    label: "Update Existing",
-    description: "Updates matching employees without creating brand-new records.",
+    label: "Update existing only",
+    hint: "Change current records, no new hires",
   },
   {
     value: "CREATE_OR_UPDATE",
-    label: "Create Or Update",
-    description: "Creates missing employees and updates the ones already in the system.",
+    label: "Add & update",
+    hint: "New people plus updates",
   },
 ]
 
@@ -99,6 +103,8 @@ type BatchDetails = {
   completedAt: string
   overview: ImportOverview
   issues: ImportIssue[]
+  /** When the /result endpoint returns an Excel report instead of JSON status. */
+  resultReport: { blob: Blob; filename: string } | null
 }
 
 type HistorySummary = {
@@ -257,16 +263,109 @@ function formatModeLabel(value: string) {
 
 function buildOverview(records: AdminRecord[]): ImportOverview {
   return {
-    totalRows: readNumberFromCandidates(records, ["total_rows", "totalRows", "row_count", "rowCount"]),
-    validRows: readNumberFromCandidates(records, ["valid_rows", "validRows"]),
-    invalidRows: readNumberFromCandidates(records, ["invalid_rows", "invalidRows"]),
-    newRows: readNumberFromCandidates(records, ["new_rows", "newRows", "created_rows", "createdRows"]),
-    updatedRows: readNumberFromCandidates(records, ["updated_rows", "updatedRows"]),
-    skippedRows: readNumberFromCandidates(records, ["skipped_rows", "skippedRows"]),
-    processedRows: readNumberFromCandidates(records, ["processed_rows", "processedRows"]),
-    successRows: readNumberFromCandidates(records, ["success_rows", "successRows", "successful_rows", "successfulRows"]),
-    failedRows: readNumberFromCandidates(records, ["failed_rows_count", "failedRowsCount", "failed_rows", "failedRows"]),
+    totalRows: readNumberFromCandidates(records, [
+      "total_rows",
+      "totalRows",
+      "row_count",
+      "rowCount",
+      "total",
+      "rows_total",
+      "rowsTotal",
+      "records_total",
+      "recordsTotal",
+    ]),
+    validRows: readNumberFromCandidates(records, [
+      "valid_rows",
+      "validRows",
+      "valid_count",
+      "validCount",
+    ]),
+    invalidRows: readNumberFromCandidates(records, [
+      "invalid_rows",
+      "invalidRows",
+      "invalid_count",
+      "invalidCount",
+    ]),
+    newRows: readNumberFromCandidates(records, [
+      "new_rows",
+      "newRows",
+      "created_rows",
+      "createdRows",
+      "created_count",
+      "createdCount",
+      "inserted_rows",
+      "insertedRows",
+    ]),
+    updatedRows: readNumberFromCandidates(records, [
+      "updated_rows",
+      "updatedRows",
+      "updated_count",
+      "updatedCount",
+    ]),
+    skippedRows: readNumberFromCandidates(records, [
+      "skipped_rows",
+      "skippedRows",
+      "skipped_count",
+      "skippedCount",
+    ]),
+    processedRows: readNumberFromCandidates(records, [
+      "processed_rows",
+      "processedRows",
+      "processed_count",
+      "processedCount",
+    ]),
+    successRows: readNumberFromCandidates(records, [
+      "success_rows",
+      "successRows",
+      "successful_rows",
+      "successfulRows",
+      "success_count",
+      "successCount",
+      "succeeded",
+      "successful",
+    ]),
+    // Prefer *count keys so an array named failed_rows is not misread as a number.
+    failedRows: readNumberFromCandidates(records, [
+      "failed_rows_count",
+      "failedRowsCount",
+      "failure_count",
+      "failureCount",
+      "failed_count",
+      "failedCount",
+      "error_count",
+      "errorCount",
+      "errors_count",
+      "errorsCount",
+      "failed_rows",
+      "failedRows",
+      "failed",
+    ]),
   }
+}
+
+function looksLikeBinaryMessage(text: string): boolean {
+  if (!text) return false
+  if (text.startsWith("PK") || text.includes("[Content_Types].xml") || text.includes("xl/worksheets")) {
+    return true
+  }
+  const sample = text.slice(0, 400)
+  let nonPrintable = 0
+  for (let i = 0; i < sample.length; i += 1) {
+    const code = sample.charCodeAt(i)
+    if (code === 0 || (code < 9) || (code > 13 && code < 32)) {
+      nonPrintable += 1
+    }
+  }
+  return sample.length > 40 && nonPrintable / sample.length > 0.04
+}
+
+function sanitizeIssueText(text: string): string {
+  const trimmed = text.trim()
+  if (!trimmed) return ""
+  if (looksLikeBinaryMessage(trimmed)) {
+    return ""
+  }
+  return trimmed.length > 300 ? `${trimmed.slice(0, 300)}…` : trimmed
 }
 
 function extractIssueMessage(record: AdminRecord | null): string {
@@ -274,10 +373,16 @@ function extractIssueMessage(record: AdminRecord | null): string {
     return ""
   }
 
-  const direct =
+  // Never treat a binary/file payload marker as a row issue.
+  if (record._binaryResponse === true) {
+    return ""
+  }
+
+  const direct = sanitizeIssueText(
     readString(record, ["message", "error", "reason", "detail", "description"], "") ||
-    readStringArray(record.messages).join("; ") ||
-    readStringArray(record.errors).join("; ")
+      readStringArray(record.messages).join("; ") ||
+      readStringArray(record.errors).join("; ")
+  )
 
   if (direct) {
     return direct
@@ -287,6 +392,8 @@ function extractIssueMessage(record: AdminRecord | null): string {
   if (fieldErrors) {
     const parts = Object.entries(fieldErrors).flatMap(([field, value]) => {
       const messages = readStringArray(value)
+        .map((entry) => sanitizeIssueText(entry))
+        .filter(Boolean)
       if (messages.length > 0) {
         return [`${field}: ${messages.join(", ")}`]
       }
@@ -305,8 +412,16 @@ function extractIssueMessage(record: AdminRecord | null): string {
   return ""
 }
 
-function normalizeIssue(row: AdminRecord): ImportIssue {
-  const messages = extractIssueMessage(row) || "Row failed validation."
+function normalizeIssue(row: AdminRecord): ImportIssue | null {
+  const messages = extractIssueMessage(row)
+  if (!messages) {
+    // Skip empty / binary garbage issues entirely.
+    const hasStructured =
+      readNumber(row, ["row_number", "rowNumber", "row", "index", "line_number", "lineNumber"]) !== null
+    if (!hasStructured) {
+      return null
+    }
+  }
   const rowNumber =
     readNumber(row, ["row_number", "rowNumber", "row", "index", "line_number", "lineNumber"]) ?? null
   const employeeLabel =
@@ -321,7 +436,7 @@ function normalizeIssue(row: AdminRecord): ImportIssue {
     rowLabel: rowNumber !== null ? `Row ${rowNumber}` : "—",
     employeeLabel,
     fieldLabel,
-    message: messages,
+    message: messages || "Row failed validation.",
   }
 }
 
@@ -338,12 +453,15 @@ function extractIssues(root: AdminRecord | null, records: AdminRecord[]): Import
         if (issues.length >= 25) {
           return issues
         }
-        issues.push(normalizeIssue(row))
+        const issue = normalizeIssue(row)
+        if (issue) {
+          issues.push(issue)
+        }
       }
     }
   }
 
-  if (issues.length === 0 && root) {
+  if (issues.length === 0 && root && root._binaryResponse !== true) {
     const rootMessage = extractIssueMessage(root)
     if (rootMessage) {
       issues.push({
@@ -358,8 +476,16 @@ function extractIssues(root: AdminRecord | null, records: AdminRecord[]): Import
   return issues
 }
 
+function isUsableImportPayload(payload: AdminRecord | null): boolean {
+  if (!payload) return false
+  if (payload._binaryResponse === true) return false
+  const message = typeof payload.message === "string" ? payload.message : ""
+  if (message && looksLikeBinaryMessage(message)) return false
+  return true
+}
+
 function extractPreviewDetails(payload: AdminRecord | null): PreviewDetails | null {
-  if (!payload) {
+  if (!isUsableImportPayload(payload)) {
     return null
   }
   const records = collectRecords(payload)
@@ -373,35 +499,132 @@ function extractPreviewDetails(payload: AdminRecord | null): PreviewDetails | nu
   }
 }
 
-function extractBatchDetails(payload: AdminRecord | null): BatchDetails | null {
-  if (!payload) {
+function extractBatchDetails(
+  payload: AdminRecord | null,
+  options?: { fallbackBatchId?: string; resultReport?: BatchDetails["resultReport"] }
+): BatchDetails | null {
+  if (!isUsableImportPayload(payload)) {
     return null
   }
   const records = collectRecords(payload)
+  // Require at least one recognizable import field so binary-as-JSON stubs don't become "Last import".
+  const batchId =
+    readStringFromCandidates(records, [
+      "batch_id",
+      "batchId",
+      "import_batch_id",
+      "importBatchId",
+      "job_id",
+      "jobId",
+      "import_id",
+      "importId",
+      "uuid",
+      "id",
+    ]) || (options?.fallbackBatchId?.trim() ?? "")
+  const status = readStringFromCandidates(records, [
+    "status",
+    "state",
+    "import_status",
+    "importStatus",
+    "job_status",
+    "jobStatus",
+    "batch_status",
+    "batchStatus",
+  ])
+  const overview = buildOverview(records)
+  const hasOverviewNumber = Object.values(overview).some((value) => value !== null)
+  const issues = extractIssues(payload, records)
+  if (!batchId && !status && !hasOverviewNumber && issues.length === 0) {
+    return null
+  }
   return {
     payload,
-    batchId: readStringFromCandidates(records, ["batch_id", "batchId", "id"]),
+    batchId,
     importMode: readStringFromCandidates(records, ["import_mode", "importMode", "mode"]),
-    status: readStringFromCandidates(records, ["status", "state"]),
-    processValidRowsOnly: readBooleanFromCandidates(records, ["process_valid_rows_only", "processValidRowsOnly"]),
+    status,
+    processValidRowsOnly: readBooleanFromCandidates(records, [
+      "process_valid_rows_only",
+      "processValidRowsOnly",
+    ]),
     createdAt: readStringFromCandidates(records, ["created_at", "createdAt"]),
     updatedAt: readStringFromCandidates(records, ["updated_at", "updatedAt"]),
-    completedAt: readStringFromCandidates(records, ["completed_at", "completedAt", "finished_at", "finishedAt"]),
-    overview: buildOverview(records),
-    issues: extractIssues(payload, records),
+    completedAt: readStringFromCandidates(records, [
+      "completed_at",
+      "completedAt",
+      "finished_at",
+      "finishedAt",
+    ]),
+    overview,
+    issues,
+    resultReport: options?.resultReport ?? null,
+  }
+}
+
+function batchDetailsFromHistorySummary(
+  summary: HistorySummary,
+  resultReport: BatchDetails["resultReport"] = null
+): BatchDetails | null {
+  if (!summary.batchId || summary.batchId === "—") {
+    return null
+  }
+  return {
+    payload: null,
+    batchId: summary.batchId,
+    importMode: summary.mode === "—" ? "" : summary.mode,
+    status: summary.status === "—" ? "" : summary.status,
+    processValidRowsOnly: null,
+    createdAt: summary.createdAt === "—" ? "" : summary.createdAt,
+    updatedAt: "",
+    completedAt: "",
+    overview: {
+      totalRows: summary.totalRows,
+      validRows: summary.validRows,
+      invalidRows: summary.invalidRows,
+      newRows: null,
+      updatedRows: null,
+      skippedRows: null,
+      processedRows: null,
+      successRows: null,
+      failedRows: null,
+    },
+    issues: [],
+    resultReport,
   }
 }
 
 function extractHistorySummary(row: AdminRecord): HistorySummary {
   const records = collectRecords(row)
   return {
-    batchId: readStringFromCandidates(records, ["batch_id", "batchId", "id"], "—"),
+    batchId: readStringFromCandidates(
+      records,
+      ["batch_id", "batchId", "import_batch_id", "importBatchId", "job_id", "jobId", "import_id", "importId", "uuid", "id"],
+      "—"
+    ),
     mode: readStringFromCandidates(records, ["import_mode", "importMode", "mode"], "—"),
-    status: readStringFromCandidates(records, ["status", "state"], "—"),
-    createdAt: readStringFromCandidates(records, ["created_at", "createdAt", "generated_at", "generatedAt"], "—"),
-    totalRows: readNumberFromCandidates(records, ["total_rows", "totalRows", "row_count", "rowCount"]),
-    validRows: readNumberFromCandidates(records, ["valid_rows", "validRows"]),
-    invalidRows: readNumberFromCandidates(records, ["invalid_rows", "invalidRows"]),
+    status: readStringFromCandidates(
+      records,
+      ["status", "state", "import_status", "importStatus", "job_status", "jobStatus"],
+      "—"
+    ),
+    createdAt: readStringFromCandidates(
+      records,
+      ["created_at", "createdAt", "generated_at", "generatedAt"],
+      "—"
+    ),
+    totalRows: readNumberFromCandidates(records, [
+      "total_rows",
+      "totalRows",
+      "row_count",
+      "rowCount",
+      "total",
+    ]),
+    validRows: readNumberFromCandidates(records, ["valid_rows", "validRows", "valid_count", "validCount"]),
+    invalidRows: readNumberFromCandidates(records, [
+      "invalid_rows",
+      "invalidRows",
+      "invalid_count",
+      "invalidCount",
+    ]),
   }
 }
 
@@ -425,47 +648,134 @@ function isSupportedEmployeeImportFile(file: File | null) {
   return normalizedName.endsWith(".xlsx")
 }
 
-function StatusBadge({ value }: { value: string }) {
-  const normalized = value.trim().toLowerCase()
-  const variant =
-    normalized === "completed" || normalized === "success" || normalized === "successful"
-      ? "default"
-      : normalized === "failed" || normalized === "error" || normalized === "rejected"
-        ? "destructive"
-        : "outline"
+function formatStatusLabel(value: string) {
+  const trimmed = value.trim()
+  if (!trimmed || trimmed === "—") return "Unknown"
+  return trimmed.replace(/[_-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
 
-  return <Badge variant={variant}>{value || "Unknown"}</Badge>
+/** Colored text + dot (no chip/badge) — matches employees list status style. */
+function StatusText({ value }: { value: string }) {
+  const normalized = value.trim().toLowerCase()
+  const display = formatStatusLabel(value)
+
+  const tone =
+    normalized.includes("complete") ||
+    normalized.includes("success") ||
+    normalized === "done"
+      ? "text-emerald-600 dark:text-emerald-400"
+      : normalized.includes("fail") ||
+          normalized.includes("error") ||
+          normalized.includes("reject") ||
+          normalized.includes("cancel")
+        ? "text-rose-600 dark:text-rose-400"
+        : normalized.includes("process") ||
+            normalized.includes("run") ||
+            normalized.includes("progress") ||
+            normalized.includes("import")
+          ? "text-sky-600 dark:text-sky-400"
+          : normalized.includes("pend") ||
+              normalized.includes("wait") ||
+              normalized.includes("queue") ||
+              normalized.includes("draft")
+            ? "text-amber-600 dark:text-amber-400"
+            : "text-slate-600 dark:text-slate-300"
+
+  const dot =
+    normalized.includes("complete") ||
+    normalized.includes("success") ||
+    normalized === "done"
+      ? "bg-emerald-500"
+      : normalized.includes("fail") ||
+          normalized.includes("error") ||
+          normalized.includes("reject") ||
+          normalized.includes("cancel")
+        ? "bg-rose-500"
+        : normalized.includes("process") ||
+            normalized.includes("run") ||
+            normalized.includes("progress") ||
+            normalized.includes("import")
+          ? "bg-sky-500"
+          : normalized.includes("pend") ||
+              normalized.includes("wait") ||
+              normalized.includes("queue") ||
+              normalized.includes("draft")
+            ? "bg-amber-500"
+            : "bg-slate-400"
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 text-xs font-semibold whitespace-nowrap ${tone}`}
+      title={display}
+    >
+      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${dot}`} />
+      {display}
+    </span>
+  )
+}
+
+type HistoryTableRow = HistorySummary & {
+  id: string
+}
+
+function statusFilterKey(status: string) {
+  return status.trim().toLowerCase()
 }
 
 function OverviewGrid({ overview }: { overview: ImportOverview }) {
-  const items = [
-    { label: "Total Rows", value: overview.totalRows },
-    { label: "Valid Rows", value: overview.validRows },
-    { label: "Invalid Rows", value: overview.invalidRows },
-    { label: "New Rows", value: overview.newRows },
-    { label: "Updated Rows", value: overview.updatedRows },
-    { label: "Skipped Rows", value: overview.skippedRows },
-    { label: "Processed Rows", value: overview.processedRows },
-    { label: "Succeeded", value: overview.successRows },
-    { label: "Failed", value: overview.failedRows },
+  // Keep only the clearest numbers for a non-technical user.
+  const primary = [
+    { label: "In file", value: overview.totalRows, tone: "default" as const },
+    { label: "Ready", value: overview.validRows ?? overview.successRows, tone: "good" as const },
+    {
+      label: "Needs fix",
+      value: overview.invalidRows ?? overview.failedRows,
+      tone: "bad" as const,
+    },
   ].filter((item) => item.value !== null)
 
-  if (items.length === 0) {
+  const secondary = [
+    { label: "New", value: overview.newRows },
+    { label: "Updated", value: overview.updatedRows },
+    { label: "Skipped", value: overview.skippedRows },
+  ].filter((item) => item.value !== null)
+
+  if (primary.length === 0 && secondary.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-border/70 bg-muted/20 px-3 py-6 text-sm text-muted-foreground">
-        Summary details are not available for this response yet.
-      </div>
+      <p className="text-sm text-muted-foreground">No summary yet.</p>
     )
   }
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-      {items.map((item) => (
-        <div key={item.label} className="rounded-xl border border-border/70 bg-muted/20 px-3 py-3">
-          <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">{item.label}</div>
-          <div className="mt-1 text-2xl font-semibold text-foreground">{item.value}</div>
+    <div className="space-y-2">
+      {primary.length > 0 ? (
+        <div className="grid grid-cols-3 gap-2">
+          {primary.map((item) => (
+            <div
+              key={item.label}
+              className={`rounded-lg border px-2.5 py-2 ${
+                item.tone === "good"
+                  ? "border-emerald-200/80 bg-emerald-50/70 dark:border-emerald-900/50 dark:bg-emerald-950/30"
+                  : item.tone === "bad"
+                    ? "border-destructive/25 bg-destructive/5"
+                    : "border-border/70 bg-muted/20"
+              }`}
+            >
+              <div className="text-[11px] text-muted-foreground">{item.label}</div>
+              <div className="text-xl font-semibold tabular-nums text-foreground">{item.value}</div>
+            </div>
+          ))}
         </div>
-      ))}
+      ) : null}
+      {secondary.length > 0 ? (
+        <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+          {secondary.map((item) => (
+            <span key={item.label}>
+              {item.label}: <span className="font-medium text-foreground">{item.value}</span>
+            </span>
+          ))}
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -478,34 +788,35 @@ function IssueTable({
   emptyMessage: string
 }) {
   if (issues.length === 0) {
-    return (
-      <div className="rounded-lg border border-dashed border-border/70 bg-muted/20 px-3 py-6 text-sm text-muted-foreground">
-        {emptyMessage}
-      </div>
-    )
+    return <p className="text-sm text-muted-foreground">{emptyMessage}</p>
   }
 
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Row</TableHead>
-          <TableHead>Employee</TableHead>
-          <TableHead>Field</TableHead>
-          <TableHead>Issue</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {issues.map((issue, index) => (
-          <TableRow key={`${issue.rowLabel}-${issue.employeeLabel}-${index}`}>
-            <TableCell>{issue.rowLabel}</TableCell>
-            <TableCell>{issue.employeeLabel}</TableCell>
-            <TableCell>{issue.fieldLabel}</TableCell>
-            <TableCell className="max-w-xl whitespace-normal break-words">{issue.message}</TableCell>
+    <div className="max-h-56 overflow-auto rounded-lg border border-border/70">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="h-8 w-16">Row</TableHead>
+            <TableHead className="h-8">Who</TableHead>
+            <TableHead className="h-8">Problem</TableHead>
           </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+        </TableHeader>
+        <TableBody>
+          {issues.map((issue, index) => (
+            <TableRow key={`${issue.rowLabel}-${issue.employeeLabel}-${index}`}>
+              <TableCell className="py-1.5 text-xs">{issue.rowLabel}</TableCell>
+              <TableCell className="py-1.5 text-xs">{issue.employeeLabel}</TableCell>
+              <TableCell className="max-w-md whitespace-normal break-words py-1.5 text-xs">
+                {issue.fieldLabel !== "—" ? (
+                  <span className="text-muted-foreground">{issue.fieldLabel}: </span>
+                ) : null}
+                {issue.message}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   )
 }
 
@@ -523,8 +834,9 @@ export function EmployeeImportView() {
 
   const [historyRows, setHistoryRows] = React.useState<AdminRecord[]>([])
   const [historyPage, setHistoryPage] = React.useState(1)
-  const [historyLimit] = React.useState(10)
+  const [historyLimit] = React.useState(20)
   const [historyTotal, setHistoryTotal] = React.useState<number | null>(null)
+  const [historyStatusFilter, setHistoryStatusFilter] = React.useState("")
 
   const [loadingHistory, setLoadingHistory] = React.useState(false)
   const [previewing, setPreviewing] = React.useState(false)
@@ -605,19 +917,130 @@ export function EmployeeImportView() {
       setCheckingResult(true)
       setError(null)
       setMessage(null)
+
+      const historyFallback = () => {
+        const historyRow = historyRows.find((row) => {
+          const summary = extractHistorySummary(row)
+          return summary.batchId === normalizedBatchId
+        })
+        return historyRow ? batchDetailsFromHistorySummary(extractHistorySummary(historyRow)) : null
+      }
+
+      const keepExistingIfSameBatch = () => {
+        // Do not wipe a good start/confirm/history summary just because /result is unreadable.
+        setLatestBatch((current) => {
+          if (current?.batchId && current.batchId === normalizedBatchId) {
+            return current
+          }
+          return historyFallback() ?? current
+        })
+      }
+
       try {
-        const response = await getEmployeeImportResult(token, normalizedBatchId)
-        const details = extractBatchDetails(response)
+        const response: EmployeeImportResultResponse = await getEmployeeImportResult(
+          token,
+          normalizedBatchId
+        )
+
+        if (response.type === "file") {
+          const report = { blob: response.blob, filename: response.filename }
+          const fromHistory = historyFallback()
+          const details: BatchDetails = fromHistory
+            ? { ...fromHistory, resultReport: report }
+            : {
+                payload: null,
+                batchId: normalizedBatchId,
+                importMode: "",
+                status: "Completed",
+                processValidRowsOnly: null,
+                createdAt: "",
+                updatedAt: "",
+                completedAt: "",
+                overview: {
+                  totalRows: null,
+                  validRows: null,
+                  invalidRows: null,
+                  newRows: null,
+                  updatedRows: null,
+                  skippedRows: null,
+                  processedRows: null,
+                  successRows: null,
+                  failedRows: null,
+                },
+                issues: [],
+                resultReport: report,
+              }
+
+          setLatestBatch((current) => {
+            if (current?.batchId === normalizedBatchId) {
+              return {
+                ...current,
+                resultReport: report,
+                // Prefer non-empty fields from existing start/confirm payload.
+                status: current.status || details.status,
+                importMode: current.importMode || details.importMode,
+                overview: {
+                  totalRows: current.overview.totalRows ?? details.overview.totalRows,
+                  validRows: current.overview.validRows ?? details.overview.validRows,
+                  invalidRows: current.overview.invalidRows ?? details.overview.invalidRows,
+                  newRows: current.overview.newRows ?? details.overview.newRows,
+                  updatedRows: current.overview.updatedRows ?? details.overview.updatedRows,
+                  skippedRows: current.overview.skippedRows ?? details.overview.skippedRows,
+                  processedRows: current.overview.processedRows ?? details.overview.processedRows,
+                  successRows: current.overview.successRows ?? details.overview.successRows,
+                  failedRows: current.overview.failedRows ?? details.overview.failedRows,
+                },
+              }
+            }
+            return details
+          })
+          setInspectedBatchId(normalizedBatchId)
+          setMessage(
+            successMessage ??
+              "Import finished. Download the Excel result report to review row-level details."
+          )
+          return
+        }
+
+        const details = extractBatchDetails(response.payload, {
+          fallbackBatchId: normalizedBatchId,
+        })
+        if (!details) {
+          keepExistingIfSameBatch()
+          const fallback = historyFallback()
+          if (fallback) {
+            setLatestBatch(fallback)
+            setInspectedBatchId(normalizedBatchId)
+            setMessage(successMessage ?? "Showing summary from import history.")
+            return
+          }
+          setError(
+            "Could not read import status as JSON. If the import finished, check Past imports or export employees to verify the data."
+          )
+          return
+        }
         setLatestBatch(details)
         setInspectedBatchId(normalizedBatchId)
-        setMessage(successMessage ?? "Import result loaded successfully.")
+        setMessage(successMessage ?? "Import details loaded.")
       } catch (resultError) {
-        setError(resultError instanceof Error ? resultError.message : "Failed to fetch employee import result.")
+        keepExistingIfSameBatch()
+        const fallback = historyFallback()
+        if (fallback) {
+          setLatestBatch(fallback)
+          setInspectedBatchId(normalizedBatchId)
+          setMessage(successMessage ?? "Showing summary from import history.")
+          return
+        }
+        setError(
+          resultError instanceof Error
+            ? resultError.message
+            : "Failed to fetch employee import result."
+        )
       } finally {
         setCheckingResult(false)
       }
     },
-    [token]
+    [historyRows, token]
   )
 
   const handleFileSelection = React.useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
@@ -625,6 +1048,7 @@ export function EmployeeImportView() {
     if (!isSupportedEmployeeImportFile(nextFile)) {
       setSelectedFile(null)
       setPreviewDetails(null)
+      setLatestBatch(null)
       if (fileInputRef.current) {
         fileInputRef.current.value = ""
       }
@@ -635,6 +1059,7 @@ export function EmployeeImportView() {
 
     setSelectedFile(nextFile)
     setPreviewDetails(null)
+    setLatestBatch(null)
     setError((currentError) =>
       currentError === "Excel file is required." || currentError === "Only .xlsx employee import files are supported."
         ? null
@@ -665,9 +1090,9 @@ export function EmployeeImportView() {
       )
       const details = extractPreviewDetails(response)
       setPreviewDetails(details)
-      setMessage("Preview generated successfully. Review the summary below before confirming.")
+      setMessage("File checked. Review the results below.")
     } catch (previewError) {
-      setError(previewError instanceof Error ? previewError.message : "Failed to generate import preview.")
+      setError(previewError instanceof Error ? previewError.message : "Could not check this file.")
     } finally {
       setPreviewing(false)
     }
@@ -694,18 +1119,25 @@ export function EmployeeImportView() {
         selectedFile.name
       )
       const details = extractBatchDetails(response)
+      if (!details) {
+        setLatestBatch(null)
+        setError("Import started, but the server did not return a usable status. Check Past imports.")
+        void loadHistory()
+        return
+      }
       setLatestBatch(details)
-      const nextBatchId = details?.batchId ?? ""
+      const nextBatchId = details.batchId ?? ""
       if (nextBatchId) {
         setInspectedBatchId(nextBatchId)
       }
-      setMessage("Employee import started successfully.")
+      setMessage("Import started.")
       void loadHistory()
       if (nextBatchId) {
-        void inspectBatch(nextBatchId, "Employee import started successfully. Latest batch details have been loaded.")
+        void inspectBatch(nextBatchId, "Import started.")
       }
     } catch (importError) {
-      setError(importError instanceof Error ? importError.message : "Failed to start employee import.")
+      setLatestBatch(null)
+      setError(importError instanceof Error ? importError.message : "Could not start import.")
     } finally {
       setImporting(false)
     }
@@ -733,13 +1165,13 @@ export function EmployeeImportView() {
       if (nextBatchId) {
         setInspectedBatchId(nextBatchId)
       }
-      setMessage("Preview confirmed successfully.")
+      setMessage("Import confirmed.")
       void loadHistory()
       if (nextBatchId) {
-        void inspectBatch(nextBatchId, "Preview confirmed successfully. Latest batch details have been loaded.")
+        void inspectBatch(nextBatchId, "Import confirmed.")
       }
     } catch (confirmError) {
-      setError(confirmError instanceof Error ? confirmError.message : "Failed to confirm employee import.")
+      setError(confirmError instanceof Error ? confirmError.message : "Could not confirm import.")
     } finally {
       setConfirming(false)
     }
@@ -753,9 +1185,9 @@ export function EmployeeImportView() {
     try {
       const result = await downloadEmployeeImportTemplate(token)
       downloadBlob(result.blob, result.filename)
-      setMessage(`Template downloaded as ${result.filename}.`)
+      setMessage("Template downloaded.")
     } catch (downloadError) {
-      setError(downloadError instanceof Error ? downloadError.message : "Failed to download employee import template.")
+      setError(downloadError instanceof Error ? downloadError.message : "Could not download template.")
     } finally {
       setDownloadingTemplate(false)
     }
@@ -763,136 +1195,294 @@ export function EmployeeImportView() {
 
   const selectedMode = IMPORT_MODES.find((mode) => mode.value === importMode)
   const latestBatchId = latestBatch?.batchId || inspectedBatchId
+  const hasPreview = Boolean(previewDetails)
+  const hasBatch = Boolean(latestBatch)
+
+  const historyTableRows = React.useMemo<HistoryTableRow[]>(() => {
+    return historyRows.map((row, index) => {
+      const summary = extractHistorySummary(row)
+      return {
+        ...summary,
+        id: summary.batchId && summary.batchId !== "—" ? summary.batchId : `import-row-${index}`,
+      }
+    })
+  }, [historyRows])
+
+  const historyStatusOptions = React.useMemo(() => {
+    const keys = new Map<string, string>()
+    for (const row of historyTableRows) {
+      const raw = row.status?.trim()
+      if (!raw || raw === "—") continue
+      const key = statusFilterKey(raw)
+      if (!keys.has(key)) {
+        keys.set(key, formatStatusLabel(raw))
+      }
+    }
+    return Array.from(keys.entries())
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label))
+  }, [historyTableRows])
+
+  const filteredHistoryRows = React.useMemo(() => {
+    if (!historyStatusFilter) return historyTableRows
+    return historyTableRows.filter(
+      (row) => statusFilterKey(row.status || "") === historyStatusFilter
+    )
+  }, [historyStatusFilter, historyTableRows])
+
+  const historyColumns = React.useMemo<Column<HistoryTableRow>[]>(
+    () => [
+      {
+        key: "createdAt",
+        label: "When",
+        defaultWidth: 160,
+        sortable: true,
+        render: (row) => (
+          <span className="text-xs text-foreground">{formatDateTime(row.createdAt)}</span>
+        ),
+      },
+      {
+        key: "mode",
+        label: "Type",
+        defaultWidth: 130,
+        sortable: true,
+        render: (row) => (
+          <span className="text-xs text-foreground">{formatModeLabel(row.mode)}</span>
+        ),
+      },
+      {
+        key: "status",
+        label: "Status",
+        defaultWidth: 130,
+        sortable: true,
+        render: (row) => <StatusText value={row.status || "Unknown"} />,
+      },
+      {
+        key: "totalRows",
+        label: "Rows",
+        defaultWidth: 110,
+        sortable: true,
+        render: (row) => (
+          <span className="text-xs tabular-nums text-foreground">
+            {row.totalRows !== null ? row.totalRows : "—"}
+            {row.invalidRows !== null && row.invalidRows > 0 ? (
+              <span className="text-rose-600 dark:text-rose-400"> · {row.invalidRows} fix</span>
+            ) : null}
+          </span>
+        ),
+      },
+      {
+        key: "actions",
+        label: "Actions",
+        defaultWidth: 90,
+        sortable: false,
+        render: (row) => (
+          <button
+            type="button"
+            className="text-xs font-medium text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-50 disabled:no-underline"
+            disabled={checkingResult || !token || !row.batchId || row.batchId === "—"}
+            onClick={(event) => {
+              event.stopPropagation()
+              void inspectBatch(row.batchId, "Import details loaded.")
+            }}
+          >
+            View
+          </button>
+        ),
+      },
+    ],
+    [checkingResult, inspectBatch, token]
+  )
+
+  const clearSelectedFile = React.useCallback(() => {
+    setSelectedFile(null)
+    setPreviewDetails(null)
+    setLatestBatch(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""
+    }
+  }, [])
 
   return (
-    <div className="flex min-w-0 flex-col gap-4">
+    <div className="flex min-w-0 flex-col gap-3">
       <Card className="min-w-0">
-        <CardHeader>
-          <CardTitle>Employee Import</CardTitle>
-          <CardDescription>Upload one file, review the preview, confirm when ready, and inspect the latest batch here.</CardDescription>
+        <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0 pb-3">
+          <div className="min-w-0 space-y-1">
+            <CardTitle className="text-base">Bulk import</CardTitle>
+            <CardDescription>
+              Upload one Excel file to add or update many employees at once.
+            </CardDescription>
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="shrink-0"
+            onClick={handleTemplateDownload}
+            disabled={downloadingTemplate || !token}
+          >
+            {downloadingTemplate ? (
+              <Loader2Icon className="size-3.5 animate-spin" />
+            ) : (
+              <DownloadIcon className="size-3.5" />
+            )}
+            Template
+          </Button>
         </CardHeader>
-        <CardContent className="space-y-5">
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="employee-import-file">Excel file</Label>
-                <input
-                  ref={fileInputRef}
-                  id="employee-import-file"
-                  type="file"
-                  accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                  className="hidden"
-                  onChange={handleFileSelection}
-                />
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()}>
-                    Choose File
+
+        <CardContent className="space-y-4">
+          <input
+            ref={fileInputRef}
+            id="employee-import-file"
+            type="file"
+            accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            className="hidden"
+            onChange={handleFileSelection}
+          />
+
+          {/* File picker — primary focus */}
+          <div
+            className={
+              selectedFile
+                ? "rounded-xl border border-border bg-muted/10 px-4 py-3"
+                : "rounded-xl border border-dashed border-border/80 bg-muted/10 px-4 py-5"
+            }
+          >
+            {selectedFile ? (
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <FileSpreadsheetIcon className="size-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{selectedFile.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {(selectedFile.size / 1024).toFixed(1)} KB · ready to check or import
+                    </p>
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    Change
                   </Button>
-                  {selectedFile ? (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className="text-muted-foreground"
-                      onClick={() => {
-                        setSelectedFile(null)
-                        setPreviewDetails(null)
-                        if (fileInputRef.current) {
-                          fileInputRef.current.value = ""
-                        }
-                      }}
-                    >
-                      Remove
-                    </Button>
-                  ) : null}
-                </div>
-                <p className="text-sm text-muted-foreground">{selectedFile ? selectedFile.name : "No file selected."}</p>
-                <p className="text-xs text-muted-foreground">Use the provided Excel template and upload a `.xlsx` file.</p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="employee-import-mode">Import mode</Label>
-                <Select value={importMode} onValueChange={(value) => setImportMode(value as EmployeeImportMode)}>
-                  <SelectTrigger id="employee-import-mode">
-                    <SelectValue placeholder="Select import mode" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {IMPORT_MODES.map((mode) => (
-                      <SelectItem key={mode.value} value={mode.value}>
-                        {mode.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">{selectedMode?.description}</p>
-              </div>
-
-              <div className="flex items-start gap-3 rounded-lg border border-border/70 bg-muted/30 px-3 py-3">
-                <Checkbox
-                  checked={processValidRowsOnly}
-                  onCheckedChange={(checked) => setProcessValidRowsOnly(checked === true)}
-                  aria-label="Process valid rows only"
-                  className="mt-0.5"
-                />
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-foreground">Process valid rows only</p>
-                  <p className="text-xs text-muted-foreground">Continue with valid records even if some rows need correction.</p>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="text-muted-foreground"
+                    onClick={clearSelectedFile}
+                    aria-label="Clear selected file"
+                  >
+                    <XIcon className="size-3.5" />
+                    Clear
+                  </Button>
                 </div>
               </div>
-
-              <div className="flex flex-wrap gap-2">
-                <Button type="button" onClick={handlePreview} disabled={previewing || importing || !token}>
-                  {previewing ? <Loader2Icon className="size-4 animate-spin" /> : <UploadIcon className="size-4" />}
-                  Preview Import
-                </Button>
-                <Button type="button" variant="outline" onClick={handleImport} disabled={importing || previewing || !token}>
-                  {importing ? <Loader2Icon className="size-4 animate-spin" /> : <UploadIcon className="size-4" />}
-                  Start Import Now
-                </Button>
+            ) : (
+              <div className="flex flex-col items-center gap-3 text-center sm:flex-row sm:text-left">
+                <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                  <UploadIcon className="size-5" />
+                </div>
+                <div className="min-w-0 flex-1 space-y-0.5">
+                  <p className="text-sm font-medium">Choose an Excel file</p>
+                  <p className="text-xs text-muted-foreground">
+                    Use the template for the correct columns. Accepts .xlsx only.
+                  </p>
+                </div>
                 <Button
                   type="button"
-                  variant="outline"
-                  onClick={handleTemplateDownload}
-                  disabled={downloadingTemplate || !token}
+                  size="sm"
+                  className="shrink-0"
+                  onClick={() => fileInputRef.current?.click()}
                 >
-                  {downloadingTemplate ? <Loader2Icon className="size-4 animate-spin" /> : <DownloadIcon className="size-4" />}
-                  Download Template
+                  <UploadIcon className="size-3.5" />
+                  Select file
                 </Button>
               </div>
+            )}
+          </div>
+
+          {/* Options */}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="employee-import-mode" className="text-sm font-medium">
+                Import mode
+              </Label>
+              <Select
+                value={importMode}
+                onValueChange={(value) => setImportMode(value as EmployeeImportMode)}
+              >
+                <SelectTrigger id="employee-import-mode" className="h-9 w-full">
+                  <SelectValue placeholder="Choose mode">
+                    {selectedMode?.label}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {IMPORT_MODES.map((mode) => (
+                    <SelectItem key={mode.value} value={mode.value}>
+                      {mode.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">{selectedMode?.hint}</p>
             </div>
 
-            <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
-              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Guided Flow</div>
-              <div className="mt-4 space-y-4">
-                <div className="rounded-xl border border-border/70 bg-background/80 px-3 py-3">
-                  <div className="text-sm font-medium text-foreground">1. Upload and validate</div>
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    Select the template-filled file, choose the mode, and generate a preview.
-                  </div>
-                </div>
-                <div className="rounded-xl border border-border/70 bg-background/80 px-3 py-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div>
-                      <div className="text-sm font-medium text-foreground">2. Review preview</div>
-                      <div className="mt-1 text-xs text-muted-foreground">
-                        The latest preview token stays attached to this screen, so confirmation is one click.
-                      </div>
-                    </div>
-                    <Badge variant={previewDetails ? "default" : "outline"}>{previewDetails ? "Ready" : "Waiting"}</Badge>
-                  </div>
-                </div>
-                <div className="rounded-xl border border-border/70 bg-background/80 px-3 py-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div>
-                      <div className="text-sm font-medium text-foreground">3. Track latest batch</div>
-                      <div className="mt-1 text-xs text-muted-foreground">
-                        Load result details here or inspect any previous batch from history.
-                      </div>
-                    </div>
-                    <Badge variant={latestBatchId ? "default" : "outline"}>{latestBatchId ? "Active" : "Idle"}</Badge>
-                  </div>
-                </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="employee-import-skip-bad-rows" className="text-sm font-medium">
+                Skip bad rows
+              </Label>
+              <div className="flex h-9 items-center">
+                <Switch
+                  id="employee-import-skip-bad-rows"
+                  checked={processValidRowsOnly}
+                  onCheckedChange={(checked) => setProcessValidRowsOnly(checked)}
+                  aria-label="Skip bad rows"
+                />
               </div>
+              <p className="text-xs text-muted-foreground">
+                Import valid rows even if some fail
+              </p>
             </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex flex-wrap items-center gap-2 border-t border-border/60 pt-3">
+            <Button
+              type="button"
+              size="sm"
+              onClick={handlePreview}
+              disabled={previewing || importing || !token || !selectedFile}
+            >
+              {previewing ? (
+                <Loader2Icon className="size-3.5 animate-spin" />
+              ) : (
+                <FileSearchIcon className="size-3.5" />
+              )}
+              Check file
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={handleImport}
+              disabled={importing || previewing || !token || !selectedFile}
+            >
+              {importing ? (
+                <Loader2Icon className="size-3.5 animate-spin" />
+              ) : (
+                <UploadIcon className="size-3.5" />
+              )}
+              Import now
+            </Button>
+            {!selectedFile ? (
+              <span className="text-xs text-muted-foreground">Select a file to continue</span>
+            ) : null}
           </div>
 
           {message ? (
@@ -909,183 +1499,199 @@ export function EmployeeImportView() {
         </CardContent>
       </Card>
 
-      <Card className="min-w-0">
-        <CardHeader>
-          <CardTitle>Preview Review</CardTitle>
-          <CardDescription>Check the summary and invalid rows from your latest preview before confirming.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {previewDetails ? (
-            <>
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="outline">{formatModeLabel(previewDetails.importMode || importMode)}</Badge>
-                <Badge variant="outline">
-                  {previewDetails.processValidRowsOnly === false ? "Block invalid rows" : "Process valid rows only"}
-                </Badge>
-                {previewDetails.previewToken ? (
-                  <Badge variant="secondary" className="font-mono">
-                    {previewDetails.previewToken}
-                  </Badge>
+      {/* Results — only when something is ready */}
+      {(hasPreview || hasBatch) && (
+        <div className="grid min-w-0 gap-3 lg:grid-cols-2">
+          {hasPreview ? (
+            <Card className="min-w-0">
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between gap-2">
+                  <CardTitle className="text-base">File check</CardTitle>
+                  <Badge variant="outline">{formatModeLabel(previewDetails!.importMode || importMode)}</Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <OverviewGrid overview={previewDetails!.overview} />
+
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={handleConfirm}
+                    disabled={confirming || !token || !previewDetails!.previewToken}
+                  >
+                    {confirming ? <Loader2Icon className="size-3.5 animate-spin" /> : <SendIcon className="size-3.5" />}
+                    Confirm &amp; import
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={handleImport}
+                    disabled={importing || previewing || !token}
+                  >
+                    {importing ? <Loader2Icon className="size-3.5 animate-spin" /> : <UploadIcon className="size-3.5" />}
+                    Import without confirm
+                  </Button>
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="text-sm font-medium">Rows to fix</div>
+                  <IssueTable issues={previewDetails!.issues} emptyMessage="No problems found." />
+                </div>
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {hasBatch ? (
+            <Card className="min-w-0">
+              <CardHeader className="pb-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <CardTitle className="text-base">Last import</CardTitle>
+                  <div className="flex items-center gap-1.5">
+                    <StatusText value={latestBatch!.status || "Unknown"} />
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2"
+                      onClick={() => void inspectBatch(latestBatchId)}
+                      disabled={checkingResult || !token || !latestBatchId}
+                    >
+                      {checkingResult ? (
+                        <Loader2Icon className="size-3.5 animate-spin" />
+                      ) : (
+                        <RefreshCcwIcon className="size-3.5" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
+                <CardDescription className="text-xs">
+                  {formatDateTime(latestBatch!.completedAt || latestBatch!.updatedAt || latestBatch!.createdAt)}
+                  {" · "}
+                  {formatModeLabel(latestBatch!.importMode)}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <OverviewGrid overview={latestBatch!.overview} />
+
+                {latestBatch!.resultReport ? (
+                  <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/70 bg-muted/15 px-3 py-2">
+                    <FileSpreadsheetIcon className="size-4 shrink-0 text-primary" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">{latestBatch!.resultReport.filename}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Server returned an Excel result report for this batch
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        const report = latestBatch?.resultReport
+                        if (!report) return
+                        downloadBlob(report.blob, report.filename)
+                      }}
+                    >
+                      <DownloadIcon className="size-3.5" />
+                      Download report
+                    </Button>
+                  </div>
+                ) : latestBatchId ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={checkingResult || !token}
+                    onClick={() => void inspectBatch(latestBatchId, "Import details refreshed.")}
+                  >
+                    {checkingResult ? (
+                      <Loader2Icon className="size-3.5 animate-spin" />
+                    ) : (
+                      <DownloadIcon className="size-3.5" />
+                    )}
+                    Fetch result report
+                  </Button>
                 ) : null}
-              </div>
 
-              <OverviewGrid overview={previewDetails.overview} />
+                <div className="space-y-1.5">
+                  <div className="text-sm font-medium">Issues</div>
+                  <IssueTable issues={latestBatch!.issues} emptyMessage="No issues." />
+                </div>
+              </CardContent>
+            </Card>
+          ) : null}
+        </div>
+      )}
 
-              <div className="flex flex-wrap gap-2">
-                <Button type="button" onClick={handleConfirm} disabled={confirming || !token || !previewDetails.previewToken}>
-                  {confirming ? <Loader2Icon className="size-4 animate-spin" /> : <SendIcon className="size-4" />}
-                  Confirm Latest Preview
-                </Button>
-                <Button type="button" variant="outline" onClick={handleImport} disabled={importing || previewing || !token}>
-                  {importing ? <Loader2Icon className="size-4 animate-spin" /> : <UploadIcon className="size-4" />}
-                  Skip Confirmation and Start Import
-                </Button>
+      <div className="min-w-0 space-y-2">
+        <ResizableTable
+          title="Past imports"
+          data={filteredHistoryRows}
+          columns={historyColumns}
+          loading={loadingHistory}
+          storageKey="employee-import-history"
+          itemsPerPage={historyLimit}
+          showCheckboxes={false}
+          enableAnimations={false}
+          getRowId={(row) => row.id}
+          onRowSelect={(id) => {
+            if (!id || id.startsWith("import-row-")) return
+            void inspectBatch(id, "Import details loaded.")
+          }}
+          toolbarStart={
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-foreground">Past imports</div>
+              <div className="text-xs text-muted-foreground">
+                {typeof historyTotal === "number" ? `${historyTotal} total` : "Recent uploads"}
+                {historyStatusFilter
+                  ? ` · ${filteredHistoryRows.length} shown`
+                  : ""}
               </div>
-
-              <div className="space-y-2">
-                <div className="text-sm font-medium text-foreground">Invalid Row Details</div>
-                <IssueTable issues={previewDetails.issues} emptyMessage="No invalid row details were returned in this preview." />
-              </div>
-            </>
-          ) : (
-            <div className="rounded-lg border border-dashed border-border/70 bg-muted/20 px-3 py-6 text-sm text-muted-foreground">
-              Generate a preview to see row counts, validation errors, and the confirm action here.
             </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card className="min-w-0">
-        <CardHeader>
-          <CardTitle>Latest Batch</CardTitle>
-          <CardDescription>Inspect the newest import batch or reload the currently selected one.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void inspectBatch(latestBatchId)}
-              disabled={checkingResult || !token || !latestBatchId}
-            >
-              {checkingResult ? <Loader2Icon className="size-4 animate-spin" /> : <FileSearchIcon className="size-4" />}
-              Refresh Latest Batch
-            </Button>
-            {latestBatchId ? <Badge variant="secondary" className="font-mono">{latestBatchId}</Badge> : null}
-          </div>
-
-          {latestBatch ? (
+          }
+          toolbarActions={
             <>
-              <div className="flex flex-wrap items-center gap-2">
-                <StatusBadge value={latestBatch.status || "Unknown"} />
-                <Badge variant="outline">{formatModeLabel(latestBatch.importMode)}</Badge>
-                <Badge variant="outline">
-                  {latestBatch.processValidRowsOnly === false ? "Block invalid rows" : "Process valid rows only"}
-                </Badge>
-              </div>
-
-              <div className="grid gap-3 md:grid-cols-3">
-                <div className="rounded-xl border border-border/70 bg-muted/20 px-3 py-3">
-                  <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Created</div>
-                  <div className="mt-1 text-sm font-medium text-foreground">{formatDateTime(latestBatch.createdAt)}</div>
-                </div>
-                <div className="rounded-xl border border-border/70 bg-muted/20 px-3 py-3">
-                  <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Updated</div>
-                  <div className="mt-1 text-sm font-medium text-foreground">{formatDateTime(latestBatch.updatedAt)}</div>
-                </div>
-                <div className="rounded-xl border border-border/70 bg-muted/20 px-3 py-3">
-                  <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Completed</div>
-                  <div className="mt-1 text-sm font-medium text-foreground">{formatDateTime(latestBatch.completedAt)}</div>
-                </div>
-              </div>
-
-              <OverviewGrid overview={latestBatch.overview} />
-
-              <div className="space-y-2">
-                <div className="text-sm font-medium text-foreground">Batch Result Details</div>
-                <IssueTable issues={latestBatch.issues} emptyMessage="No row-level issues were returned for this batch." />
-              </div>
+              <select
+                className="h-8 min-w-[8.5rem] rounded-md border border-border bg-background px-2 text-xs text-foreground"
+                value={historyStatusFilter}
+                onChange={(event) => setHistoryStatusFilter(event.target.value)}
+                aria-label="Filter by status"
+              >
+                <option value="">All statuses</option>
+                {historyStatusOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8"
+                onClick={() => void loadHistory()}
+                disabled={loadingHistory || !token}
+              >
+                {loadingHistory ? (
+                  <Loader2Icon className="size-3.5 animate-spin" />
+                ) : (
+                  <RefreshCcwIcon className="size-3.5" />
+                )}
+                Refresh
+              </Button>
             </>
-          ) : (
-            <div className="rounded-lg border border-dashed border-border/70 bg-muted/20 px-3 py-6 text-sm text-muted-foreground">
-              Start an import, confirm the latest preview, or inspect a batch from history to load detailed results here.
-            </div>
-          )}
-        </CardContent>
-      </Card>
+          }
+        />
 
-      <Card className="min-w-0">
-        <CardHeader>
-          <CardTitle>Import History</CardTitle>
-          <CardDescription>Recent employee imports with direct inspect actions.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <Button type="button" variant="outline" onClick={() => void loadHistory()} disabled={loadingHistory || !token}>
-              {loadingHistory ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCcwIcon className="size-4" />}
-              Refresh History
-            </Button>
-            <div className="text-xs text-muted-foreground">
-              Page {historyPage}
-              {typeof historyTotal === "number" ? ` • Total ${historyTotal}` : ""}
-            </div>
-          </div>
-
-          {historyRows.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-border/70 bg-muted/20 px-3 py-6 text-sm text-muted-foreground">
-              No employee import history found yet.
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Batch</TableHead>
-                  <TableHead>Mode</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Rows</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead className="text-right">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {historyRows.map((row, index) => {
-                  const summary = extractHistorySummary(row)
-                  const isActive = summary.batchId !== "—" && summary.batchId === latestBatchId
-
-                  return (
-                    <TableRow key={`${summary.batchId || "batch"}-${index}`} className={isActive ? "bg-muted/30" : undefined}>
-                      <TableCell className="font-mono text-xs">{summary.batchId || "—"}</TableCell>
-                      <TableCell>{formatModeLabel(summary.mode)}</TableCell>
-                      <TableCell>
-                        <StatusBadge value={summary.status || "Unknown"} />
-                      </TableCell>
-                      <TableCell>
-                        {summary.totalRows !== null ? `${summary.totalRows} total` : "—"}
-                        {summary.validRows !== null ? ` • ${summary.validRows} valid` : ""}
-                        {summary.invalidRows !== null ? ` • ${summary.invalidRows} invalid` : ""}
-                      </TableCell>
-                      <TableCell>{formatDateTime(summary.createdAt)}</TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          disabled={checkingResult || !token || !summary.batchId || summary.batchId === "—"}
-                          onClick={() => void inspectBatch(summary.batchId, "Selected batch details loaded successfully.")}
-                        >
-                          Inspect
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
-          )}
-
+        {(historyPage > 1 ||
+          (historyTotal !== null && historyPage * historyLimit < historyTotal) ||
+          historyRows.length >= historyLimit) && (
           <div className="flex flex-wrap gap-2">
             <Button
               type="button"
+              size="sm"
               variant="outline"
               disabled={historyPage <= 1 || loadingHistory}
               onClick={() => setHistoryPage((current) => Math.max(1, current - 1))}
@@ -1094,15 +1700,19 @@ export function EmployeeImportView() {
             </Button>
             <Button
               type="button"
+              size="sm"
               variant="outline"
-              disabled={loadingHistory || (historyTotal !== null && historyPage * historyLimit >= historyTotal)}
+              disabled={
+                loadingHistory ||
+                (historyTotal !== null && historyPage * historyLimit >= historyTotal)
+              }
               onClick={() => setHistoryPage((current) => current + 1)}
             >
               Next
             </Button>
           </div>
-        </CardContent>
-      </Card>
+        )}
+      </div>
     </div>
   )
 }

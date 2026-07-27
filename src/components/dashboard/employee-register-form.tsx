@@ -14,7 +14,6 @@ import {
   PencilIcon,
   PlusIcon,
   Trash2Icon,
-  UserPlus2Icon,
 } from "lucide-react"
 
 import {
@@ -1710,6 +1709,39 @@ export function EmployeeRegisterForm() {
     currentStepIndex < REGISTER_STEP_ORDER.length - 1
       ? visibleRegisterSteps[currentVisibleStepIndex + 1] ?? null
       : null
+  const stepProgress =
+    currentVisibleStepIndex >= 0
+      ? Math.round(
+          ((currentVisibleStepIndex + 1) / Math.max(visibleRegisterSteps.length, 1)) * 100
+        )
+      : 0
+  const [animatedStepProgress, setAnimatedStepProgress] = React.useState(stepProgress)
+  const animatedStepProgressRef = React.useRef(stepProgress)
+
+  React.useEffect(() => {
+    const start = animatedStepProgressRef.current
+    const target = stepProgress
+    if (start === target) return
+
+    const startTime = performance.now()
+    const durationMs = 420
+    let frameId = 0
+
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - startTime) / durationMs)
+      const eased = 1 - (1 - t) ** 3
+      const next = Math.round(start + (target - start) * eased)
+      animatedStepProgressRef.current = next
+      setAnimatedStepProgress(next)
+      if (t < 1) {
+        frameId = requestAnimationFrame(tick)
+      }
+    }
+
+    frameId = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(frameId)
+  }, [stepProgress])
+
   const isDraftBankMobileMoney = draftBankAccount.paymentMode === "mobile_money"
 
   const isRegisterStepFilled = React.useCallback(
@@ -3077,11 +3109,6 @@ export function EmployeeRegisterForm() {
     )
   }
 
-  const stepProgress =
-    currentVisibleStepIndex >= 0
-      ? ((currentVisibleStepIndex + 1) / Math.max(visibleRegisterSteps.length, 1)) * 100
-      : 0
-
   return (
     <div className="space-y-2">
       <div className="animate-card-entrance overflow-visible rounded-xl border border-slate-200/80 bg-white">
@@ -3099,12 +3126,8 @@ export function EmployeeRegisterForm() {
           }}
         >
           <div className="space-y-1.5 border-b border-slate-200 px-3 pt-3 pb-0 sm:px-4">
-            <div className="flex flex-wrap items-center justify-between gap-1.5">
-              <h2 className="flex items-center gap-1.5 text-sm font-semibold tracking-tight text-slate-900">
-                <UserPlus2Icon className="size-3.5 text-primary" />
-                {isRegisteringOthers ? "Employee Registration" : "Self Registration"}
-              </h2>
-              {!isInviteMode ? (
+            {!isInviteMode ? (
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-[11px] font-medium text-slate-500">
                   Step {Math.max(currentVisibleStepIndex + 1, 1)} of {visibleRegisterSteps.length}
                   <span className="mx-1.5 text-slate-300">·</span>
@@ -3112,15 +3135,13 @@ export function EmployeeRegisterForm() {
                     {REGISTER_STEP_LABELS[currentStep] ?? "Details"}
                   </span>
                 </p>
-              ) : null}
-            </div>
-
-            {!isInviteMode ? (
-              <div className="h-1 overflow-hidden rounded-full bg-slate-100">
-                <div
-                  className="h-full rounded-full bg-[var(--primary)] transition-all duration-300 ease-out"
-                  style={{ width: `${stepProgress}%` }}
-                />
+                <p
+                  key={stepProgress}
+                  className="text-sm font-semibold tabular-nums tracking-tight text-[var(--primary)] animate-fade-up"
+                  aria-label={`Registration progress ${animatedStepProgress} percent`}
+                >
+                  {animatedStepProgress}%
+                </p>
               </div>
             ) : null}
 

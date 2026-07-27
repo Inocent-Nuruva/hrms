@@ -1,12 +1,16 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { showSuccessAlert } from "@/lib/success-alert";
 import { showErrorAlert } from "@/lib/error-alert";
 import { EyeIcon, EyeOffIcon } from "lucide-react";
 
 import { Checkbox } from "@/components/ui/checkbox";
+import { SecurityScanLoader } from "@/components/ui/security-scan-loader";
 import { useAuth } from "@/hooks/useAuth";
+import {
+  markDashboardFromLogin,
+  prefetchDashboardWarmCache,
+} from "@/lib/dashboard-warm-cache";
 import { AUTH_STORAGE_KEYS } from "@/utils/constants";
 
 interface LoginFlowProps {
@@ -92,13 +96,26 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
         }
       }
 
+      // Hide form; keep loader only here while dashboard data is prefetched.
       setIsDone(true);
-      showSuccessAlert("Login successful! Redirecting…", "Success");
+      markDashboardFromLogin();
+
+      const accessToken = response.tokens.accessToken;
+      try {
+        // Cap wait so a slow network still opens the app; snapshot is best-effort.
+        await Promise.race([
+          prefetchDashboardWarmCache(accessToken),
+          new Promise<void>((resolve) => {
+            window.setTimeout(resolve, 10_000);
+          }),
+        ]);
+      } catch {
+        // Still redirect — dashboard will load normally if warm cache failed.
+      }
+
       const redirect = "/dashboard";
-      setTimeout(() => {
-        if (onSuccess) onSuccess(redirect);
-        else window.location.href = redirect;
-      }, 1800);
+      if (onSuccess) onSuccess(redirect);
+      else window.location.href = redirect;
     } catch (err) {
       const message = err instanceof Error ? err.message : "Login failed. Please try again.";
       setLoginError(message);
@@ -111,101 +128,118 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
     void handleLogin();
   };
 
+  if (isDone) {
+    return (
+      <div
+        className="flex min-h-[180px] w-full flex-col items-center justify-center gap-3 py-4"
+        role="status"
+        aria-live="polite"
+        aria-busy="true"
+      >
+        <SecurityScanLoader />
+        <div className="space-y-1 text-center">
+          <p className="text-xs font-medium text-foreground">Checking your access…</p>
+          <p className="text-[10px] text-muted-foreground">
+            Verifying permissions and signing you in securely
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="w-full">
-      {!isDone ? (
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <div
-            className="space-y-1"
-            style={{
-              opacity: inputsMounted ? 1 : 0,
-              transform: inputsMounted ? "translateY(0)" : "translateY(8px)",
-              transition: "opacity 220ms ease, transform 220ms ease",
-              transitionDelay: "60ms",
+      <form onSubmit={handleSubmit} className="space-y-3">
+        <div
+          className="space-y-1"
+          style={{
+            opacity: inputsMounted ? 1 : 0,
+            transform: inputsMounted ? "translateY(0)" : "translateY(8px)",
+            transition: "opacity 220ms ease, transform 220ms ease",
+            transitionDelay: "60ms",
+          }}
+        >
+          <label className="text-[10px] font-medium text-foreground">Email</label>
+          <input
+            type="email"
+            value={email}
+            autoComplete="username"
+            onChange={(event) => {
+              setEmail(event.target.value);
+              if (loginError) setLoginError(null);
             }}
-          >
-            <label className="text-[10px] font-medium text-foreground">Email</label>
+            placeholder="admin@company.com"
+            className="flex h-8 w-full rounded-md border border-input bg-background px-2.5 py-1 text-xs text-foreground ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 dark:placeholder:text-muted-foreground/70"
+          />
+        </div>
+
+        <div
+          className="space-y-1"
+          style={{
+            opacity: inputsMounted ? 1 : 0,
+            transform: inputsMounted ? "translateY(0)" : "translateY(8px)",
+            transition: "opacity 220ms ease, transform 220ms ease",
+            transitionDelay: "140ms",
+          }}
+        >
+          <label className="text-[10px] font-medium text-foreground">Password</label>
+          <div className="relative">
             <input
-              type="email"
-              value={email}
-              autoComplete="username"
+              type={showPassword ? "text" : "password"}
+              value={password}
+              autoComplete="current-password"
               onChange={(event) => {
-                setEmail(event.target.value);
+                setPassword(event.target.value);
                 if (loginError) setLoginError(null);
               }}
-              placeholder="admin@company.com"
-              className="flex h-8 w-full rounded-md border border-input bg-background px-2.5 py-1 text-xs text-foreground ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 dark:placeholder:text-muted-foreground/70"
+              placeholder="Enter password"
+              className="flex h-8 w-full rounded-md border border-input bg-background px-2.5 py-1 pr-9 text-xs text-foreground ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 dark:placeholder:text-muted-foreground/70"
             />
+            <button
+              type="button"
+              aria-label={showPassword ? "Hide password" : "Show password"}
+              onClick={() => setShowPassword((current) => !current)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
+            >
+              {showPassword ? <EyeOffIcon size={14} /> : <EyeIcon size={14} />}
+            </button>
           </div>
+        </div>
 
-          <div
-            className="space-y-1"
-            style={{
-              opacity: inputsMounted ? 1 : 0,
-              transform: inputsMounted ? "translateY(0)" : "translateY(8px)",
-              transition: "opacity 220ms ease, transform 220ms ease",
-              transitionDelay: "140ms",
-            }}
-          >
-            <label className="text-[10px] font-medium text-foreground">Password</label>
-            <div className="relative">
-              <input
-                type={showPassword ? "text" : "password"}
-                value={password}
-                autoComplete="current-password"
-                onChange={(event) => {
-                  setPassword(event.target.value);
-                  if (loginError) setLoginError(null);
-                }}
-                placeholder="Enter password"
-                className="flex h-8 w-full rounded-md border border-input bg-background px-2.5 py-1 pr-9 text-xs text-foreground ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 dark:placeholder:text-muted-foreground/70"
-              />
-              <button
-                type="button"
-                aria-label={showPassword ? "Hide password" : "Show password"}
-                onClick={() => setShowPassword((current) => !current)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
-              >
-                {showPassword ? <EyeOffIcon size={14} /> : <EyeIcon size={14} />}
-              </button>
-            </div>
+        {loginError && (
+          <div className="rounded-md border border-destructive/30 bg-destructive/10 px-2.5 py-1.5 text-[10px] text-destructive dark:border-destructive/40 dark:bg-destructive/15">
+            {loginError}
           </div>
+        )}
 
-          {loginError && (
-            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-2.5 py-1.5 text-[10px] text-destructive dark:border-destructive/40 dark:bg-destructive/15">
-              {loginError}
-            </div>
-          )}
-
-          <div className="flex items-center justify-between text-[10px]">
-            <label className="flex cursor-pointer items-center gap-1 text-muted-foreground">
-              <Checkbox
-                checked={rememberMe}
-                onCheckedChange={(checked) => {
-                  const nextValue = Boolean(checked);
-                  setRememberMe(nextValue);
-                  if (typeof window !== "undefined") {
-                    window.localStorage.setItem(AUTH_STORAGE_KEYS.rememberMe, String(nextValue));
-                    if (!nextValue) {
-                      window.localStorage.removeItem(AUTH_STORAGE_KEYS.rememberedEmail);
-                    }
+        <div className="flex items-center justify-between text-[10px]">
+          <label className="flex cursor-pointer items-center gap-1 text-muted-foreground">
+            <Checkbox
+              checked={rememberMe}
+              onCheckedChange={(checked) => {
+                const nextValue = Boolean(checked);
+                setRememberMe(nextValue);
+                if (typeof window !== "undefined") {
+                  window.localStorage.setItem(AUTH_STORAGE_KEYS.rememberMe, String(nextValue));
+                  if (!nextValue) {
+                    window.localStorage.removeItem(AUTH_STORAGE_KEYS.rememberedEmail);
                   }
-                }}
-                className="data-checked:border-primary data-checked:bg-primary focus-visible:ring-primary/50"
-              />
-              Remember me
-            </label>
-          </div>
+                }
+              }}
+              className="data-checked:border-primary data-checked:bg-primary focus-visible:ring-primary/50"
+            />
+            Remember me
+          </label>
+        </div>
 
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="inline-flex h-8 w-full items-center justify-center rounded-md bg-primary px-3 text-[10px] font-semibold text-primary-foreground transition-all hover:bg-[var(--brand-blue-dark)] active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-70"
-          >
-            {isLoading ? "Signing in..." : "Sign In"}
-          </button>
-        </form>
-      ) : null}
+        <button
+          type="submit"
+          disabled={isLoading}
+          className="inline-flex h-8 w-full items-center justify-center rounded-md bg-primary px-3 text-[10px] font-semibold text-primary-foreground transition-all hover:bg-[var(--brand-blue-dark)] active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-70"
+        >
+          {isLoading ? "Signing in..." : "Sign In"}
+        </button>
+      </form>
     </div>
   );
 }
