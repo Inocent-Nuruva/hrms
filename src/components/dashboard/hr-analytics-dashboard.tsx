@@ -592,8 +592,14 @@ export default function HrAnalyticsDashboard({
 
   const employeesRef = React.useRef(employees)
   const departmentsRef = React.useRef(departments)
-  employeesRef.current = employees
-  departmentsRef.current = departments
+
+  React.useEffect(() => {
+    employeesRef.current = employees
+  }, [employees])
+
+  React.useEffect(() => {
+    departmentsRef.current = departments
+  }, [departments])
 
   const markReady = React.useCallback((slice: DashboardSlice) => {
     setSliceReady((prev) => (prev[slice] ? prev : { ...prev, [slice]: true }))

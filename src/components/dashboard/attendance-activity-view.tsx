@@ -2015,7 +2015,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
     }
   }, [activeSection])
 
-  const fetchSectionData = React.useCallback(async (force = false) => {
+  const loadSectionData = React.useCallback(async () => {
     const token = readStoredToken()
     if (!token) {
       setRows([])
@@ -2025,22 +2025,6 @@ export function AttendanceActivityView({ section }: { section: string }) {
       setLoading(false)
       setError("Authentication required. Please log in again.")
       return
-    }
-
-    const requestKey = JSON.stringify({
-      activeSection,
-      historyFilters,
-      dailySummaryFilters: appliedDailySummaryFilters,
-      hasAppliedDailySummaryFilters,
-    })
-
-    if (!force) {
-      const now = Date.now()
-      if (lastFetchKeyRef.current === requestKey && now - lastFetchAtRef.current < 1500) {
-        return
-      }
-      lastFetchKeyRef.current = requestKey
-      lastFetchAtRef.current = now
     }
 
     setLoading(true)
@@ -2155,6 +2139,26 @@ export function AttendanceActivityView({ section }: { section: string }) {
     }
   }, [activeSection, appliedDailySummaryFilters, branches, config.title, employees, hasAppliedDailySummaryFilters, historyFilters])
 
+  const fetchSectionData = React.useCallback(async (force = false) => {
+    const requestKey = JSON.stringify({
+      activeSection,
+      historyFilters,
+      dailySummaryFilters: appliedDailySummaryFilters,
+      hasAppliedDailySummaryFilters,
+    })
+
+    if (!force) {
+      const now = Date.now()
+      if (lastFetchKeyRef.current === requestKey && now - lastFetchAtRef.current < 1500) {
+        return
+      }
+      lastFetchKeyRef.current = requestKey
+      lastFetchAtRef.current = now
+    }
+
+    await loadSectionData()
+  }, [activeSection, appliedDailySummaryFilters, hasAppliedDailySummaryFilters, historyFilters, loadSectionData])
+
   React.useEffect(() => {
     void fetchSectionData()
   }, [fetchSectionData])
@@ -2178,7 +2182,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
       await runPendingAttendanceProcessingJobs(token)
       setMessage("Pending recalculation jobs started successfully.")
       setError(null)
-      await fetchSectionData(true)
+      await loadSectionData()
     } catch (errorObject) {
       setError(formatLoadError(errorObject, "Could not run pending jobs."))
     } finally {
@@ -2288,45 +2292,48 @@ export function AttendanceActivityView({ section }: { section: string }) {
     }
   }
 
-  const updateCorrectionRequestStatus = async (id: string | number, action: "submit" | "cancel") => {
-    const token = readStoredToken()
-    if (!token) {
-      setError("Authentication required. Please log in again.")
-      return
-    }
-
-    setCorrectionBusy(true)
-    setError(null)
-    setMessage(null)
-
-    try {
-      if (action === "submit") {
-        const submittedRequest = await submitMyAttendanceCorrectionRequest(token, id)
-        void notifySubmittedRequestApprovers({
-          kind: "attendance_correction_request",
-          token,
-          request: submittedRequest ?? { id },
-          loadRequest: () => getMyAttendanceCorrectionRequest(token, id),
-        })
-        setMessage("Attendance correction request submitted.")
-      } else {
-        await cancelMyAttendanceCorrectionRequest(token, id)
-        setMessage("Attendance correction request cancelled.")
+  const updateCorrectionRequestStatus = React.useCallback(
+    async (id: string | number, action: "submit" | "cancel") => {
+      const token = readStoredToken()
+      if (!token) {
+        setError("Authentication required. Please log in again.")
+        return
       }
-      await fetchSectionData(true)
-    } catch (errorObject) {
-      setError(
-        formatLoadError(
-          errorObject,
-          action === "submit"
-            ? "Could not submit the attendance correction request."
-            : "Could not cancel the attendance correction request."
+
+      setCorrectionBusy(true)
+      setError(null)
+      setMessage(null)
+
+      try {
+        if (action === "submit") {
+          const submittedRequest = await submitMyAttendanceCorrectionRequest(token, id)
+          void notifySubmittedRequestApprovers({
+            kind: "attendance_correction_request",
+            token,
+            request: submittedRequest ?? { id },
+            loadRequest: () => getMyAttendanceCorrectionRequest(token, id),
+          })
+          setMessage("Attendance correction request submitted.")
+        } else {
+          await cancelMyAttendanceCorrectionRequest(token, id)
+          setMessage("Attendance correction request cancelled.")
+        }
+        await loadSectionData()
+      } catch (errorObject) {
+        setError(
+          formatLoadError(
+            errorObject,
+            action === "submit"
+              ? "Could not submit the attendance correction request."
+              : "Could not cancel the attendance correction request."
+          )
         )
-      )
-    } finally {
-      setCorrectionBusy(false)
-    }
-  }
+      } finally {
+        setCorrectionBusy(false)
+      }
+    },
+    [loadSectionData]
+  )
 
   const exportDailySummaryReport = async (format: "xlsx" | "csv" | "pdf") => {
     const token = readStoredToken()
