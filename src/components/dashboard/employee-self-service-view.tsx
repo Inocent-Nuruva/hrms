@@ -3433,7 +3433,7 @@ export function EmployeeSelfServiceProfileView() {
         readString(employee, ["email"], ""),
       city:
         readString(employee, ["city"], "") ||
-        readString(asRecord(employee?.addresses?.[0]), ["city"], ""),
+        readString(asRecordList(employee?.addresses)[0] ?? null, ["city"], ""),
       password: "",
       user_no:
         readString(currentUser, ["user_no", "employee_no"], "") ||

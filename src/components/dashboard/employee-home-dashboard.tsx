@@ -283,30 +283,26 @@ function resolveManagerDetails(manager: DashboardManager | null | undefined) {
   const userRecord = asRecord(companyUser?.user)
 
   const name =
-    [readString(managerRecord, ["first_name"], ""), readString(managerRecord, ["last_name"], "")]
+    [readString(managerRecord, ["first_name"]), readString(managerRecord, ["last_name"])]
       .filter(Boolean)
       .join(" ")
       .trim() ||
-    [readString(userRecord, ["first_name"], ""), readString(userRecord, ["last_name"], "")]
+    [readString(userRecord, ["first_name"]), readString(userRecord, ["last_name"])]
       .filter(Boolean)
       .join(" ")
       .trim() ||
     "Not assigned"
 
   const employeeNo =
-    readString(managerRecord, ["employee_no"], "") ||
-    readString(companyUser, ["employee_no", "employee_number", "employee_code"], "") ||
-    readString(userRecord, ["employee_no", "employee_number", "employee_code", "user_no"], "")
+    readString(managerRecord, ["employee_no"]) ||
+    readString(companyUser, ["employee_no", "employee_number", "employee_code"]) ||
+    readString(userRecord, ["employee_no", "employee_number", "employee_code", "user_no"])
 
   const email =
-    readString(managerRecord, ["email"], "") ||
-    readString(companyUser, ["email"], "") ||
-    readString(userRecord, ["email"], "")
+    readString(managerRecord, ["email"]) || readString(companyUser, ["email"]) || readString(userRecord, ["email"])
 
   const phone =
-    readString(managerRecord, ["phone"], "") ||
-    readString(companyUser, ["phone"], "") ||
-    readString(userRecord, ["phone"], "")
+    readString(managerRecord, ["phone"]) || readString(companyUser, ["phone"]) || readString(userRecord, ["phone"])
 
   return {
     name,
