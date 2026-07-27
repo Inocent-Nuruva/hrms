@@ -1790,27 +1790,27 @@ function extractUsersPagination(payload: unknown, fallbackPage: number, fallback
     fallbackPage
 
   const limit =
-    readNumberFromRecord(root, ["limit", "perPage", "pageSize", "per_page"]) ??
-    readNumberFromRecord(rootResult, ["limit", "perPage", "pageSize", "per_page"]) ??
-    readNumberFromRecord(rootMeta, ["limit", "perPage", "pageSize", "per_page"]) ??
-    readNumberFromRecord(rootDataMeta, ["limit", "perPage", "pageSize", "per_page"]) ??
-    readNumberFromRecord(rootResultMeta, ["limit", "perPage", "pageSize", "per_page"]) ??
-    readNumberFromRecord(rootPagination, ["limit", "perPage", "pageSize", "per_page"]) ??
-    readNumberFromRecord(rootDataPagination, ["limit", "perPage", "pageSize", "per_page"]) ??
-    readNumberFromRecord(rootResultPagination, ["limit", "perPage", "pageSize", "per_page"]) ??
-    readNumberFromRecord(rootData, ["limit", "perPage", "pageSize", "per_page"]) ??
+    readNumberFromRecord(root, ["limit", "perPage", "pageSize", "per_page", "itemsPerPage", "items_per_page"]) ??
+    readNumberFromRecord(rootResult, ["limit", "perPage", "pageSize", "per_page", "itemsPerPage", "items_per_page"]) ??
+    readNumberFromRecord(rootMeta, ["limit", "perPage", "pageSize", "per_page", "itemsPerPage", "items_per_page"]) ??
+    readNumberFromRecord(rootDataMeta, ["limit", "perPage", "pageSize", "per_page", "itemsPerPage", "items_per_page"]) ??
+    readNumberFromRecord(rootResultMeta, ["limit", "perPage", "pageSize", "per_page", "itemsPerPage", "items_per_page"]) ??
+    readNumberFromRecord(rootPagination, ["limit", "perPage", "pageSize", "per_page", "itemsPerPage", "items_per_page"]) ??
+    readNumberFromRecord(rootDataPagination, ["limit", "perPage", "pageSize", "per_page", "itemsPerPage", "items_per_page"]) ??
+    readNumberFromRecord(rootResultPagination, ["limit", "perPage", "pageSize", "per_page", "itemsPerPage", "items_per_page"]) ??
+    readNumberFromRecord(rootData, ["limit", "perPage", "pageSize", "per_page", "itemsPerPage", "items_per_page"]) ??
     fallbackLimit
 
   const total =
-    readNumberFromRecord(root, ["total", "totalItems", "count"]) ??
-    readNumberFromRecord(rootResult, ["total", "totalItems", "count"]) ??
-    readNumberFromRecord(rootMeta, ["total", "totalItems", "count"]) ??
-    readNumberFromRecord(rootDataMeta, ["total", "totalItems", "count"]) ??
-    readNumberFromRecord(rootResultMeta, ["total", "totalItems", "count"]) ??
-    readNumberFromRecord(rootPagination, ["total", "totalItems", "count"]) ??
-    readNumberFromRecord(rootDataPagination, ["total", "totalItems", "count"]) ??
-    readNumberFromRecord(rootResultPagination, ["total", "totalItems", "count"]) ??
-    readNumberFromRecord(rootData, ["total", "totalItems", "count"])
+    readNumberFromRecord(root, ["total", "totalItems", "total_items", "count"]) ??
+    readNumberFromRecord(rootResult, ["total", "totalItems", "total_items", "count"]) ??
+    readNumberFromRecord(rootMeta, ["total", "totalItems", "total_items", "count"]) ??
+    readNumberFromRecord(rootDataMeta, ["total", "totalItems", "total_items", "count"]) ??
+    readNumberFromRecord(rootResultMeta, ["total", "totalItems", "total_items", "count"]) ??
+    readNumberFromRecord(rootPagination, ["total", "totalItems", "total_items", "count"]) ??
+    readNumberFromRecord(rootDataPagination, ["total", "totalItems", "total_items", "count"]) ??
+    readNumberFromRecord(rootResultPagination, ["total", "totalItems", "total_items", "count"]) ??
+    readNumberFromRecord(rootData, ["total", "totalItems", "total_items", "count"])
 
   const totalPages =
     readNumberFromRecord(root, ["totalPages", "pageCount", "total_pages"]) ??

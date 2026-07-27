@@ -157,6 +157,8 @@ type DashboardEmployee = {
   last_name?: string
   preferred_name?: string | null
   profile_photo_url?: string | null
+  gender?: string | null
+  sex?: string | null
   employment_status?: string
   employment_type?: string
   hire_date?: string | null
@@ -632,12 +634,120 @@ function buildLeaveTypeLabelMap(leaveTypes: AdminRecord[] | undefined): Map<stri
   return labels
 }
 
+function buildLeaveTypeMetaMap(
+  leaveTypes: AdminRecord[] | undefined
+): Map<string, AdminRecord> {
+  const map = new Map<string, AdminRecord>()
+  if (!Array.isArray(leaveTypes)) return map
+  for (const row of leaveTypes) {
+    const id =
+      readNumericish(row, ["id", "leave_type_id", "leaveTypeId", "type_id", "typeId"]) ??
+      readNumericish(asRecord(row.leave_type), ["id", "leave_type_id"])
+    if (id === null) continue
+    map.set(String(id), row)
+  }
+  return map
+}
+
+/** Normalize gender values from employee or leave-type restriction fields. */
+function normalizeGender(value: unknown): "male" | "female" | "any" | null {
+  if (value == null) return null
+  const raw = String(value).trim().toLowerCase().replace(/[_\s-]+/g, "")
+  if (!raw) return null
+  if (raw === "any" || raw === "all" || raw === "both" || raw === "none" || raw === "unrestricted") {
+    return "any"
+  }
+  if (raw === "m" || raw === "male" || raw === "man" || raw === "masculine") return "male"
+  if (raw === "f" || raw === "female" || raw === "woman" || raw === "feminine") return "female"
+  if (raw.includes("female") || raw.includes("woman")) return "female"
+  if (raw.includes("male") || raw.includes("man")) return "male"
+  return null
+}
+
+function readEmployeeGender(employee: AdminRecord | DashboardEmployee | null | undefined): "male" | "female" | null {
+  if (!employee) return null
+  const record = asRecord(employee) ?? (employee as AdminRecord)
+  const direct = normalizeGender(
+    record.gender ??
+      record.sex ??
+      record.Gender ??
+      record.Sex ??
+      asRecord(record.personal_details)?.gender ??
+      asRecord(record.personalDetails)?.gender ??
+      asRecord(record.profile)?.gender
+  )
+  if (direct === "male" || direct === "female") return direct
+  return null
+}
+
+/**
+ * Resolve who a leave type is restricted to.
+ * Uses leave type gender_restriction when present; falls back to name heuristics
+ * (maternity → female, paternity → male).
+ */
+function resolveLeaveTypeGenderRestriction(
+  typeName: string,
+  leaveTypeRecord: AdminRecord | null,
+  leaveTypeMeta: AdminRecord | null
+): "male" | "female" | "any" {
+  const candidates = [
+    leaveTypeRecord,
+    leaveTypeMeta,
+    asRecord(leaveTypeMeta?.leave_type),
+    asRecord(leaveTypeMeta?.leaveType),
+  ]
+  for (const source of candidates) {
+    if (!source) continue
+    const restriction = normalizeGender(
+      source.gender_restriction ??
+        source.genderRestriction ??
+        source.gender ??
+        source.applicable_gender ??
+        source.applicableGender ??
+        source.sex_restriction ??
+        source.sexRestriction
+    )
+    if (restriction === "male" || restriction === "female" || restriction === "any") {
+      return restriction
+    }
+  }
+
+  const name = typeName.toLowerCase()
+  if (
+    name.includes("maternity") ||
+    name.includes("pregnancy") ||
+    name.includes("maternal") ||
+    name.includes("childbirth") ||
+    name.includes("antenatal") ||
+    name.includes("prenatal")
+  ) {
+    return "female"
+  }
+  if (name.includes("paternity") || name.includes("paternal")) {
+    return "male"
+  }
+  return "any"
+}
+
+function isLeaveTypeVisibleForGender(
+  restriction: "male" | "female" | "any",
+  employeeGender: "male" | "female" | null
+): boolean {
+  if (restriction === "any") return true
+  // If employee gender is unknown, keep gender-specific types visible to avoid hiding data wrongly.
+  if (!employeeGender) return true
+  return restriction === employeeGender
+}
+
 function extractLeaveSummaries(
   balances: AdminRecord[] | undefined,
-  leaveTypes?: AdminRecord[]
+  leaveTypes?: AdminRecord[],
+  employee?: AdminRecord | DashboardEmployee | null
 ): LeaveBalanceSummary[] {
   if (!Array.isArray(balances) || balances.length === 0) return []
   const leaveTypeLabels = buildLeaveTypeLabelMap(leaveTypes)
+  const leaveTypeMeta = buildLeaveTypeMetaMap(leaveTypes)
+  const employeeGender = readEmployeeGender(employee)
 
   return balances
     .map((b) => {
@@ -686,15 +796,29 @@ function extractLeaveSummaries(
         available = allocatedRaw - (usedRaw ?? 0) - (pendingRaw ?? 0)
       }
 
+      const resolvedName = typeName.trim() || "Leave"
+      const genderRestriction = resolveLeaveTypeGenderRestriction(
+        resolvedName,
+        leaveTypeRecord,
+        leaveTypeId !== null ? leaveTypeMeta.get(String(leaveTypeId)) ?? null : null
+      )
+
       return {
-        typeName: typeName.trim() || "Leave",
+        typeName: resolvedName,
         available: formatBalanceNumber(available),
         used: usedRaw != null ? formatBalanceNumber(usedRaw) : undefined,
         allocated: allocatedRaw != null ? formatBalanceNumber(allocatedRaw) : undefined,
+        genderRestriction,
       }
     })
     .filter((row) => !(row.typeName === "Leave" && row.available === "—"))
-    .slice(0, 4)
+    .filter((row) => isLeaveTypeVisibleForGender(row.genderRestriction, employeeGender))
+    .map(({ typeName, available, used, allocated }) => ({
+      typeName,
+      available,
+      used,
+      allocated,
+    }))
 }
 
 function formatPunchState(state: string | null | undefined): string {
@@ -1280,37 +1404,6 @@ function getAttendanceStatus(
   }
 }
 
-const ATTENDANCE_BAR: Record<AttendanceTone, string> = {
-  present: "bg-emerald-500",
-  absent: "bg-rose-500",
-  late: "bg-amber-500",
-  leave: "bg-sky-500",
-  half: "bg-orange-500",
-  holiday: "bg-violet-500",
-  off: "bg-slate-400",
-  pending: "bg-blue-500",
-  neutral: "bg-primary",
-}
-
-function DetailField({
-  label,
-  value,
-}: {
-  label: string
-  value: React.ReactNode
-}) {
-  return (
-    <div className="flex items-start justify-between gap-3 px-3 py-2">
-      <span className="shrink-0 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-        {label}
-      </span>
-      <span className="min-w-0 text-right text-sm font-medium text-foreground break-words">
-        {value}
-      </span>
-    </div>
-  )
-}
-
 function QuickActionLink({
   href,
   title,
@@ -1323,13 +1416,13 @@ function QuickActionLink({
   return (
     <Link
       href={href}
-      className="group flex items-center gap-2.5 rounded-lg border border-white/25 bg-white/10 px-3 py-2.5 text-white no-underline transition-colors hover:bg-white/18 hover:no-underline"
+      className="group flex items-center gap-1.5 rounded-md border border-white/25 bg-white/10 px-2 py-1.5 text-white no-underline transition-colors hover:bg-white/18 hover:no-underline"
     >
-      <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-white/15 text-white [&_svg]:size-4">
+      <span className="flex size-6 shrink-0 items-center justify-center rounded bg-white/15 text-white [&_svg]:size-3">
         {icon}
       </span>
-      <span className="min-w-0 flex-1 text-sm font-semibold leading-tight">{title}</span>
-      <span className="text-xs font-medium text-white/75 transition-transform group-hover:translate-x-0.5">
+      <span className="min-w-0 flex-1 truncate text-xs font-semibold leading-tight">{title}</span>
+      <span className="text-[10px] font-medium text-white/75 transition-transform group-hover:translate-x-0.5">
         →
       </span>
     </Link>
@@ -1355,14 +1448,14 @@ function DashboardSection({
     <section className={cn("overflow-hidden rounded-lg border border-border bg-card", className)}>
       <div className="flex">
         <div className={cn("w-1 shrink-0", barClassName)} />
-        <div className="flex min-w-0 flex-1 items-center justify-between gap-2 px-3 py-2.5">
-          <div className="min-w-0">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-x-2 gap-y-1.5 px-3 py-2.5">
+          <div className="min-w-0 flex-1 basis-[10rem]">
             <h2 className="text-sm font-semibold text-foreground">{title}</h2>
             {subtitle ? (
               <p className="truncate text-[11px] text-muted-foreground">{subtitle}</p>
             ) : null}
           </div>
-          {action}
+          {action ? <div className="ml-auto shrink-0">{action}</div> : null}
         </div>
       </div>
       <div className="border-t border-border/70">{children}</div>
@@ -1460,7 +1553,11 @@ export function EmployeeDashboardView({
     readString(asRecord(dashboardData.employee), ["employment_status", "status"]) || "Active"
 
   const att = getAttendanceStatus(attendanceToday, attendancePunchesToday)
-  const leaveSummaries = extractLeaveSummaries(leaveBalances, leaveTypes)
+  const leaveSummaries = extractLeaveSummaries(
+    leaveBalances,
+    leaveTypes,
+    asRecord(dashboardData.employee)
+  )
   const totalLeaveDays = leaveSummaries.reduce((sum, item) => {
     const n = Number(String(item.available).replace(/[^\d.-]/g, ""))
     return sum + (Number.isFinite(n) ? n : 0)
@@ -1499,14 +1596,15 @@ export function EmployeeDashboardView({
       label: "Leave left",
       value: leaveSummaries.length > 0 ? String(totalLeaveDays) : "—",
       className: "bg-background",
-      valueClassName: "text-foreground",
+      valueClassName:
+        leaveSummaries.length > 0 ? "text-primary" : "text-muted-foreground",
     },
     {
       key: "types",
       label: "Leave types",
       value: String(leaveSummaries.length),
       className: "bg-background",
-      valueClassName: "text-foreground",
+      valueClassName: leaveSummaries.length > 0 ? "text-primary" : "text-muted-foreground",
     },
   ]
 
@@ -1519,35 +1617,70 @@ export function EmployeeDashboardView({
     >
       <DoodleSprites />
 
-      {/* Greeting — name with animated sparkles */}
-      <motion.div variants={dashboardItem} className="min-w-0">
-        <motion.p
-          className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground"
-          initial={{ opacity: 0, x: -8 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.3 }}
-        >
-          {todayLabel}
-        </motion.p>
-        <h1 className="mt-0.5 text-xl font-semibold tracking-tight text-foreground md:text-2xl">
-          <motion.span
-            className="inline-block"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.35, ease: "easeOut" }}
+      {/* Greeting + day snapshot on the right */}
+      <motion.div
+        variants={dashboardItem}
+        className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
+      >
+        <div className="min-w-0 max-w-full">
+          <motion.p
+            className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground"
+            initial={{ opacity: 0, x: -8 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.3 }}
           >
-            {greetingForNow()},
-          </motion.span>{" "}
-          <AnimatedGreetingName name={preferredName} />
-        </h1>
-        <motion.p
-          className="mt-0.5 text-sm text-muted-foreground"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.35, duration: 0.35 }}
-        >
-          Here&apos;s your day at a glance.
-        </motion.p>
+            {todayLabel}
+          </motion.p>
+          <h1 className="mt-0.5 break-words text-xl font-semibold tracking-tight text-foreground md:text-2xl">
+            <motion.span
+              className="inline-block"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.35, ease: "easeOut" }}
+            >
+              {greetingForNow()},
+            </motion.span>{" "}
+            <AnimatedGreetingName name={preferredName} />
+          </h1>
+          <motion.p
+            className="mt-0.5 text-sm text-muted-foreground"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.35, duration: 0.35 }}
+          >
+            Here&apos;s your day at a glance.
+          </motion.p>
+        </div>
+
+        <div className="w-full max-w-full min-w-0 overflow-x-auto overscroll-x-contain sm:w-auto sm:max-w-[min(100%,36rem)] sm:shrink-0">
+          <div className="inline-flex min-w-full flex-nowrap items-stretch rounded-lg border border-border sm:min-w-0">
+            {snapshotChips.map((chip, index, arr) => (
+              <motion.div
+                key={chip.key}
+                className={cn(
+                  "flex min-w-[4.75rem] flex-1 flex-col justify-center px-2 py-2 sm:min-w-[5.25rem] sm:flex-none sm:px-2.5",
+                  chip.className,
+                  index < arr.length - 1 ? "border-r border-border/60" : null
+                )}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.32 + index * 0.05, duration: 0.28 }}
+              >
+                <span className="truncate text-[9px] font-semibold uppercase tracking-wide opacity-80 sm:text-[10px]">
+                  {chip.label}
+                </span>
+                <span
+                  className={cn(
+                    "truncate text-xs font-semibold tabular-nums leading-tight capitalize sm:text-sm",
+                    chip.valueClassName
+                  )}
+                >
+                  {chip.value}
+                </span>
+              </motion.div>
+            ))}
+          </div>
+        </div>
       </motion.div>
 
       {/* Hero — primary card with labeled identity */}
@@ -1558,52 +1691,49 @@ export function EmployeeDashboardView({
       >
         <Doodle name="doodle-circles" />
         <div className="relative z-10 space-y-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="flex min-w-0 items-start gap-3">
-              <motion.div
-                initial={{ opacity: 0, scale: 0.85 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ type: "spring", stiffness: 320, damping: 20, delay: 0.12 }}
-              >
-                <Avatar className="size-14 shrink-0 ring-2 ring-white/30 md:size-16">
-                  {employeeProfilePhotoUrl ? (
-                    <AvatarImage src={employeeProfilePhotoUrl} alt={fullName} />
-                  ) : null}
-                  <AvatarFallback className="bg-white/20 text-lg font-semibold text-white">
-                    {initialsFor(fullName)}
-                  </AvatarFallback>
-                </Avatar>
-              </motion.div>
-              <div className="min-w-0 space-y-0.5">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-xl font-semibold tracking-tight text-white md:text-2xl">
-                    {fullName}
-                  </h2>
-                  <span className="inline-flex items-center rounded-full border border-white/30 bg-white/20 px-2 py-0.5 text-[11px] font-semibold capitalize text-white">
-                    {employmentStatus}
-                  </span>
-                </div>
-                <p className="text-sm font-medium text-white/95">{positionLabel}</p>
+          <div className="flex min-w-0 items-start gap-3">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.85 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ type: "spring", stiffness: 320, damping: 20, delay: 0.12 }}
+            >
+              <Avatar className="size-14 shrink-0 ring-2 ring-white/30 md:size-16">
+                {employeeProfilePhotoUrl ? (
+                  <AvatarImage src={employeeProfilePhotoUrl} alt={fullName} />
+                ) : null}
+                <AvatarFallback className="bg-white/20 text-lg font-semibold text-white">
+                  {initialsFor(fullName)}
+                </AvatarFallback>
+              </Avatar>
+            </motion.div>
+            <div className="min-w-0 space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-xl font-semibold tracking-tight text-white md:text-2xl">
+                  {fullName}
+                </h2>
+                <span className="inline-flex items-center rounded-full border border-white/30 bg-white/20 px-2 py-0.5 text-[11px] font-semibold capitalize text-white">
+                  {employmentStatus}
+                </span>
               </div>
+              <Link href={profileHref} className="inline-block no-underline hover:no-underline">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 px-2.5 text-xs border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+                >
+                  View full profile
+                </Button>
+              </Link>
             </div>
-            <Link href={profileHref} className="shrink-0 no-underline hover:no-underline">
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8 border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white"
-              >
-                View full profile
-              </Button>
-            </Link>
           </div>
 
-          <div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3 lg:grid-cols-5">
+          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 sm:grid-cols-3 lg:grid-cols-5">
             {[
               { label: "Employee no.", value: employeeNo },
+              { label: "Position", value: positionLabel },
               { label: "Department", value: departmentLabel },
               { label: "Branch", value: branchLabel },
               { label: "Joined", value: hireDateLabel },
-              { label: "Tenure", value: tenure },
             ].map((field, index) => (
               <motion.div
                 key={field.label}
@@ -1612,10 +1742,10 @@ export function EmployeeDashboardView({
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 + index * 0.05, duration: 0.3 }}
               >
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-white/55">
+                <p className="text-[9px] font-semibold uppercase tracking-wide text-white/50">
                   {field.label}
                 </p>
-                <p className="truncate text-sm font-semibold text-white">{field.value}</p>
+                <p className="truncate text-xs font-semibold text-white">{field.value}</p>
               </motion.div>
             ))}
           </div>
@@ -1645,107 +1775,58 @@ export function EmployeeDashboardView({
         </div>
       </motion.div>
 
-      {/* Snapshot chips */}
-      <motion.div
-        variants={dashboardItem}
-        className="inline-flex max-w-full flex-nowrap items-stretch overflow-x-auto rounded-lg border border-border"
-      >
-        {snapshotChips.map((chip, index, arr) => (
-          <motion.div
-            key={chip.key}
-            className={cn(
-              "flex min-w-[5.5rem] shrink-0 flex-col justify-center px-3 py-2",
-              chip.className,
-              index < arr.length - 1 ? "border-r border-border/60" : null
-            )}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.32 + index * 0.05, duration: 0.28 }}
-          >
-            <span className="truncate text-[10px] font-semibold uppercase tracking-wide opacity-80">
-              {chip.label}
-            </span>
-            <span
-              className={cn(
-                "truncate text-base font-semibold tabular-nums leading-tight capitalize",
-                chip.valueClassName
-              )}
-            >
-              {chip.value}
-            </span>
-          </motion.div>
-        ))}
-      </motion.div>
-
-      {/* Today attendance detail row */}
-      <motion.div
-        variants={dashboardItem}
-        className="divide-y divide-border overflow-hidden rounded-lg border border-border"
-      >
-        <div className="flex bg-background">
-          <div className={cn("w-1 shrink-0", ATTENDANCE_BAR[att.tone])} />
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3 px-3 py-2.5 sm:flex-nowrap">
-            <div className="w-[7.5rem] shrink-0">
-              <div className="text-xs font-semibold text-foreground">Attendance</div>
-              <div
-                className={cn(
-                  "mt-0.5 text-[11px] font-semibold capitalize",
-                  ATTENDANCE_TONE_STYLES[att.tone].label
-                )}
+      {/* Leave balances — full width */}
+      <motion.div variants={dashboardItem}>
+        <DashboardSection
+          title="Leave balances"
+          subtitle="Available days by type"
+          action={
+            <div className="flex max-w-full flex-wrap items-center justify-end gap-1.5">
+              <Link
+                href={leaveBalancesHref}
+                className="shrink-0 text-xs font-medium text-primary no-underline hover:underline"
               >
-                {att.label}
-              </div>
+                View all
+              </Link>
+              <Link href={leaveRequestHref} className="shrink-0 no-underline hover:no-underline">
+                <Button size="sm" className="h-7 px-2 text-[11px] bg-primary !text-white hover:bg-primary/90 sm:px-2.5 sm:text-xs">
+                  Request time off
+                </Button>
+              </Link>
             </div>
-            <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
-              <div className="min-w-0 flex-1">
-                <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                  Check in
-                </div>
-                <div
-                  className={cn(
-                    "text-base font-semibold tabular-nums leading-tight sm:text-lg",
-                    att.checkIn === "—" ? "text-muted-foreground/45" : "text-primary"
-                  )}
+          }
+        >
+          {leaveSummaries.length > 0 ? (
+            <div className="flex flex-nowrap gap-2 overflow-x-auto overscroll-x-contain px-3 py-3 [-webkit-overflow-scrolling:touch]">
+              {leaveSummaries.map((item, idx) => (
+                <motion.div
+                  key={`${item.typeName}-${idx}`}
+                  className="flex min-w-[6.25rem] flex-1 flex-col items-center justify-center rounded-xl bg-muted/40 px-1.5 py-2.5 text-center sm:min-w-[7.5rem] sm:px-2 sm:py-3"
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.4 + idx * 0.05, duration: 0.25 }}
                 >
-                  {att.checkIn}
-                </div>
-              </div>
-              <div className="text-muted-foreground/40" aria-hidden>
-                →
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                  Check out
-                </div>
-                <div
-                  className={cn(
-                    "text-base font-semibold tabular-nums leading-tight sm:text-lg",
-                    att.checkOut === "—" ? "text-muted-foreground/45" : "text-primary"
-                  )}
-                >
-                  {att.checkOut}
-                </div>
-              </div>
-              <div className="hidden min-w-[8rem] shrink-0 text-right sm:block">
-                <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                  Note
-                </div>
-                <div className="truncate text-sm font-medium text-foreground">{att.hint}</div>
-              </div>
+                  <p className="line-clamp-2 min-h-[1.4rem] w-full text-[9px] font-medium leading-tight text-muted-foreground">
+                    {item.typeName}
+                  </p>
+                  <p className="mt-1 text-base font-semibold tabular-nums leading-none text-primary">
+                    {item.available}
+                  </p>
+                  <p className="mt-0.5 text-[8px] text-muted-foreground">days left</p>
+                </motion.div>
+              ))}
             </div>
-            <Link
-              href={attendanceHref}
-              className="shrink-0 text-xs font-medium text-primary no-underline hover:underline"
-            >
-              Open
-            </Link>
-          </div>
-        </div>
+          ) : (
+            <div className="px-3 py-4 text-sm text-muted-foreground">
+              No leave balance information available yet.
+            </div>
+          )}
+        </DashboardSection>
       </motion.div>
 
-      {/* Manager + Leave + Employment */}
-      <div className="grid gap-3 lg:grid-cols-12">
-        <motion.div variants={dashboardItem} className="lg:col-span-5">
+      {/* Manager (left) + Employment (right) — same card design */}
+      <div className="grid gap-3 lg:grid-cols-2">
+        <motion.div variants={dashboardItem}>
           <DashboardSection title="Your manager" subtitle="Reporting line" barClassName="bg-primary">
             <div className="flex items-start gap-3 px-3 py-3">
               <Avatar className="size-11 shrink-0 ring-1 ring-border">
@@ -1779,10 +1860,10 @@ export function EmployeeDashboardView({
                     {managerDetails.phone ? (
                       <a
                         href={`tel:${managerDetails.phone.replace(/\s+/g, "")}`}
-                        className="flex items-center gap-1.5 text-xs tabular-nums text-muted-foreground no-underline hover:text-primary hover:underline"
+                        className="flex min-w-0 items-center gap-1.5 text-xs tabular-nums text-muted-foreground no-underline hover:text-primary hover:underline"
                       >
                         <PhoneIcon className="size-3 shrink-0 text-primary" />
-                        <span>{managerDetails.phone}</span>
+                        <span className="truncate">{managerDetails.phone}</span>
                       </a>
                     ) : null}
                   </div>
@@ -1794,73 +1875,28 @@ export function EmployeeDashboardView({
           </DashboardSection>
         </motion.div>
 
-        <motion.div variants={dashboardItem} className="lg:col-span-7">
-          <DashboardSection
-            title="Leave balances"
-            subtitle="Available days by type"
-            action={
-              <Link
-                href={leaveBalancesHref}
-                className="text-xs font-medium text-primary no-underline hover:underline"
-              >
-                View all
-              </Link>
-            }
-          >
-            {leaveSummaries.length > 0 ? (
-              <div className="divide-y divide-border/70">
-                {leaveSummaries.map((item, idx) => (
-                  <motion.div
-                    key={`${item.typeName}-${idx}`}
-                    className="flex items-center justify-between gap-3 px-3 py-2.5"
-                    initial={{ opacity: 0, x: 8 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.45 + idx * 0.06, duration: 0.28 }}
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-foreground">{item.typeName}</p>
-                      {item.used != null || item.allocated != null ? (
-                        <p className="mt-0.5 text-[11px] text-muted-foreground">
-                          {item.allocated != null ? `${item.allocated} allocated` : null}
-                          {item.allocated != null && item.used != null ? " · " : null}
-                          {item.used != null ? `${item.used} used` : null}
-                        </p>
-                      ) : null}
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <p className="text-base font-semibold tabular-nums leading-none text-primary">
-                        {item.available}
-                      </p>
-                      <p className="mt-0.5 text-[10px] text-muted-foreground">days left</p>
-                    </div>
-                  </motion.div>
-                ))}
+        <motion.div variants={dashboardItem}>
+          <DashboardSection title="Employment" barClassName="bg-primary">
+            <div className="min-w-0 space-y-1.5 px-3 py-3">
+              <p className="truncate text-sm font-semibold text-foreground">{fullName}</p>
+              <div className="flex flex-col gap-1">
+                <p className="flex min-w-0 items-start gap-1.5 text-xs text-muted-foreground">
+                  <Briefcase className="mt-0.5 size-3 shrink-0 text-primary" />
+                  <span className="min-w-0 capitalize">{employmentStatus}</span>
+                </p>
+                {hireDateLabel && hireDateLabel !== "—" ? (
+                  <p className="flex min-w-0 items-start gap-1.5 text-xs text-muted-foreground">
+                    <CalendarIcon className="mt-0.5 size-3 shrink-0 text-primary" />
+                    <span className="min-w-0">Joined {hireDateLabel}</span>
+                  </p>
+                ) : null}
+                {tenure && tenure !== "—" ? (
+                  <p className="flex min-w-0 items-start gap-1.5 text-xs text-muted-foreground">
+                    <ClockIcon className="mt-0.5 size-3 shrink-0 text-primary" />
+                    <span className="min-w-0">{tenure}</span>
+                  </p>
+                ) : null}
               </div>
-            ) : (
-              <div className="px-3 py-4 text-sm text-muted-foreground">
-                No leave balance information available yet.
-              </div>
-            )}
-            <div className="border-t border-border/70 px-3 py-2.5">
-              <Link href={leaveRequestHref} className="block no-underline hover:no-underline">
-                <Button size="sm" className="h-8 w-full bg-primary !text-white hover:bg-primary/90">
-                  Request time off
-                </Button>
-              </Link>
-            </div>
-          </DashboardSection>
-        </motion.div>
-
-        <motion.div variants={dashboardItem} className="lg:col-span-12">
-          <DashboardSection title="Employment" subtitle="Your placement at a glance">
-            <div className="grid sm:grid-cols-2 lg:grid-cols-4">
-              <DetailField
-                label="Employee no."
-                value={<span className="font-mono text-[13px]">{employeeNo}</span>}
-              />
-              <DetailField label="Position" value={positionLabel} />
-              <DetailField label="Department" value={departmentLabel} />
-              <DetailField label="Location" value={branchLabel} />
             </div>
           </DashboardSection>
         </motion.div>

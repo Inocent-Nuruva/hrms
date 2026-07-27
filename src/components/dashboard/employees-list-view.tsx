@@ -184,8 +184,8 @@ export function EmployeesListView() {
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [page, setPage] = React.useState(1)
-  const [, setTotalPages] = React.useState<number | null>(null)
-  const [, setTotal] = React.useState<number | null>(null)
+  const [totalPages, setTotalPages] = React.useState<number | null>(null)
+  const [total, setTotal] = React.useState<number | null>(null)
   const [missingDialog, setMissingDialog] = React.useState<{ employeeNo: string; missing: Array<{ key: string; label: string }> } | null>(null)
   const [removalOpen, setRemovalOpen] = React.useState(false)
   const [removalTarget, setRemovalTarget] = React.useState<EmployeeAccessRemovalTarget | null>(null)
@@ -497,6 +497,11 @@ export function EmployeesListView() {
         loading={loading}
         storageKey="employees"
         enableAnimations={false}
+        itemsPerPage={query.limit}
+        page={page}
+        totalPages={totalPages}
+        totalItems={total}
+        onPageChange={setPage}
       />
 
       <EmployeeAccessRemovalDialog

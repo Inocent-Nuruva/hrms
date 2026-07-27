@@ -25,6 +25,7 @@ import {
   cancelMyProfileUpdateRequest,
   getMyAttendanceAssignments,
   getMyAttendanceOverview,
+  getMyAttendanceToday,
   getMyDashboard,
   getMyStatus,
   createMyLeaveRequest,
@@ -36,6 +37,7 @@ import {
   listDepartments,
   listEmployees,
   listMyAttendanceCorrectionRequests,
+  listMyAttendancePunches,
   listMyLeaveBalances,
   listLeavePolicies,
   listMyLeaveRequests,
@@ -167,25 +169,305 @@ function formatTimeValue(value: unknown) {
   }).format(date)
 }
 
-function formatAttendancePunchValue(value: unknown) {
-  if (typeof value !== "string" || !value.trim()) {
-    return "-"
+/** Coerce API punch times (ISO, HH:mm, unix ms/s, nested objects) to a display clock. */
+function coerceAttendancePunchValue(value: unknown): string {
+  if (value == null || value === "" || value === "-" || value === "—") {
+    return ""
   }
 
-  const trimmed = value.trim()
-  if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(trimmed)) {
-    return formatTimeValue(trimmed)
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const ms = value > 1e12 ? value : value > 1e9 ? value * 1000 : NaN
+    if (Number.isFinite(ms)) {
+      return new Intl.DateTimeFormat("en-GB", {
+        hour: "numeric",
+        minute: "2-digit",
+      }).format(new Date(ms))
+    }
+    return ""
   }
 
-  const parsed = new Date(trimmed)
-  if (!Number.isNaN(parsed.getTime())) {
-    return new Intl.DateTimeFormat("en-GB", {
-      hour: "numeric",
-      minute: "2-digit",
-    }).format(parsed)
+  if (typeof value === "string") {
+    const trimmed = value.trim()
+    if (!trimmed || trimmed === "-" || trimmed === "—") {
+      return ""
+    }
+    if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(trimmed)) {
+      return formatTimeValue(trimmed)
+    }
+    const parsed = new Date(trimmed)
+    if (!Number.isNaN(parsed.getTime())) {
+      return new Intl.DateTimeFormat("en-GB", {
+        hour: "numeric",
+        minute: "2-digit",
+      }).format(parsed)
+    }
+    return trimmed
   }
 
-  return trimmed
+  const record = asRecord(value)
+  if (record) {
+    return (
+      coerceAttendancePunchValue(record.punched_at) ||
+      coerceAttendancePunchValue(record.punchedAt) ||
+      coerceAttendancePunchValue(record.punch_time) ||
+      coerceAttendancePunchValue(record.punchTime) ||
+      coerceAttendancePunchValue(record.punch_at) ||
+      coerceAttendancePunchValue(record.punchAt) ||
+      coerceAttendancePunchValue(record.time) ||
+      coerceAttendancePunchValue(record.at) ||
+      coerceAttendancePunchValue(record.timestamp) ||
+      coerceAttendancePunchValue(record.datetime) ||
+      coerceAttendancePunchValue(record.created_at) ||
+      coerceAttendancePunchValue(record.createdAt)
+    )
+  }
+
+  return ""
+}
+
+function readAttendanceTimeValue(
+  record: AdminRecord | null | undefined,
+  keys: string[],
+  fallbackRecord?: AdminRecord | null | undefined
+) {
+  if (record) {
+    for (const key of keys) {
+      const formatted = coerceAttendancePunchValue(record[key])
+      if (formatted) return formatted
+    }
+  }
+  if (fallbackRecord) {
+    for (const key of keys) {
+      const formatted = coerceAttendancePunchValue(fallbackRecord[key])
+      if (formatted) return formatted
+    }
+  }
+  return ""
+}
+
+const PROFILE_CHECK_IN_KEYS = [
+  "checkInAt",
+  "check_in_at",
+  "firstCheckInAt",
+  "first_check_in_at",
+  "first_punch",
+  "first_punch_at",
+  "firstPunchAt",
+  "check_in_time",
+  "checkInTime",
+  "check_in",
+  "checkIn",
+  "clock_in_at",
+  "clockInAt",
+  "clock_in",
+  "clockIn",
+  "in_time",
+  "inTime",
+  "actual_check_in_at",
+  "actualCheckInAt",
+]
+
+const PROFILE_CHECK_OUT_KEYS = [
+  "checkOutAt",
+  "check_out_at",
+  "lastCheckOutAt",
+  "last_check_out_at",
+  "last_punch",
+  "last_punch_at",
+  "lastPunchAt",
+  "check_out_time",
+  "checkOutTime",
+  "check_out",
+  "checkOut",
+  "clock_out_at",
+  "clockOutAt",
+  "clock_out",
+  "clockOut",
+  "out_time",
+  "outTime",
+  "actual_check_out_at",
+  "actualCheckOutAt",
+]
+
+function profilePunchType(row: AdminRecord): "CHECK_IN" | "CHECK_OUT" | "" {
+  const raw = String(
+    row.punch_type ??
+      row.punchType ??
+      row.type ??
+      row.direction ??
+      row.event_type ??
+      row.eventType ??
+      row.in_out ??
+      row.inOut ??
+      ""
+  )
+    .trim()
+    .toUpperCase()
+    .replace(/[\s-]+/g, "_")
+
+  if (!raw) return ""
+  if (raw.includes("OUT") || raw === "CHECKOUT" || raw.endsWith("_OUT")) return "CHECK_OUT"
+  if (raw.includes("IN") || raw === "CHECKIN" || raw.endsWith("_IN")) return "CHECK_IN"
+  return ""
+}
+
+function profilePunchSortKey(row: AdminRecord): number {
+  const candidates = [
+    row.punched_at,
+    row.punchedAt,
+    row.punch_time,
+    row.punchTime,
+    row.punch_at,
+    row.punchAt,
+    row.timestamp,
+    row.created_at,
+    row.createdAt,
+    row.time,
+    row.at,
+  ]
+  for (const value of candidates) {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value > 1e12 ? value : value > 1e9 ? value * 1000 : value
+    }
+    if (typeof value === "string" && value.trim()) {
+      const parsed = Date.parse(value)
+      if (!Number.isNaN(parsed)) return parsed
+      const match = value.trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/)
+      if (match) {
+        return Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3] || 0)
+      }
+    }
+  }
+  return 0
+}
+
+function profilePunchTimeRaw(row: AdminRecord): string {
+  return (
+    coerceAttendancePunchValue(row.punched_at) ||
+    coerceAttendancePunchValue(row.punchedAt) ||
+    coerceAttendancePunchValue(row.punch_time) ||
+    coerceAttendancePunchValue(row.punchTime) ||
+    coerceAttendancePunchValue(row.punch_at) ||
+    coerceAttendancePunchValue(row.punchAt) ||
+    coerceAttendancePunchValue(row.time) ||
+    coerceAttendancePunchValue(row.at) ||
+    coerceAttendancePunchValue(row.timestamp) ||
+    coerceAttendancePunchValue(row.created_at) ||
+    coerceAttendancePunchValue(row.createdAt)
+  )
+}
+
+/** First check-in / last check-out from punch history (dashboard source of truth). */
+function punchTimesFromHistory(punches: AdminRecord[] | undefined): { first: string; last: string } {
+  if (!Array.isArray(punches) || punches.length === 0) {
+    return { first: "", last: "" }
+  }
+
+  const sorted = [...punches].sort((a, b) => profilePunchSortKey(a) - profilePunchSortKey(b))
+  const checkIns = sorted.filter((row) => profilePunchType(row) === "CHECK_IN")
+  const checkOuts = sorted.filter((row) => profilePunchType(row) === "CHECK_OUT")
+
+  let first = checkIns.length > 0 ? profilePunchTimeRaw(checkIns[0]!) : ""
+  let last = checkOuts.length > 0 ? profilePunchTimeRaw(checkOuts[checkOuts.length - 1]!) : ""
+
+  if (!first || !last) {
+    const allTimes = sorted.map(profilePunchTimeRaw).filter(Boolean)
+    if (!first && allTimes.length > 0) first = allTimes[0] ?? ""
+    if (!last && allTimes.length > 1) last = allTimes[allTimes.length - 1] ?? ""
+  }
+
+  if (first && last && first === last && sorted.length === 1) {
+    last = ""
+  }
+
+  return { first, last }
+}
+
+function localDateIso(date = new Date()): string {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, "0")
+  const d = String(date.getDate()).padStart(2, "0")
+  return `${y}-${m}-${d}`
+}
+
+function isPunchOnLocalDate(row: AdminRecord, dateIso: string): boolean {
+  const candidates = [
+    row.attendance_date,
+    row.attendanceDate,
+    row.work_date,
+    row.workDate,
+    row.date,
+    row.punched_at,
+    row.punchedAt,
+    row.created_at,
+    row.createdAt,
+  ]
+  for (const value of candidates) {
+    if (typeof value !== "string" || !value.trim()) continue
+    if (value.slice(0, 10) === dateIso) return true
+    const parsed = new Date(value)
+    if (!Number.isNaN(parsed.getTime())) {
+      if (localDateIso(parsed) === dateIso) return true
+    }
+  }
+  return false
+}
+
+function resolveTodayPunchTimes(
+  today: AdminRecord | null | undefined,
+  punchesToday?: AdminRecord[]
+): { first: string; last: string } {
+  const summary = today
+    ? asRecord(today.summary) ??
+      asRecord(today.daily_summary) ??
+      asRecord(today.dailySummary) ??
+      asRecord(today.attendance)
+    : null
+
+  const fromHistory = punchTimesFromHistory(punchesToday)
+
+  let first =
+    fromHistory.first ||
+    readAttendanceTimeValue(today, PROFILE_CHECK_IN_KEYS, summary)
+
+  let last =
+    fromHistory.last ||
+    readAttendanceTimeValue(today, PROFILE_CHECK_OUT_KEYS, summary)
+
+  // Nested punch lists on the today payload (same as dashboard home).
+  if (today && (!first || !last)) {
+    const listCandidates = [
+      today.punches,
+      today.punch_logs,
+      today.punchLogs,
+      today.events,
+      today.attendance_logs,
+      today.attendanceLogs,
+      summary?.punches,
+      summary?.punch_logs,
+      summary?.events,
+    ]
+    for (const candidate of listCandidates) {
+      if (!Array.isArray(candidate) || candidate.length === 0) continue
+      const nested = punchTimesFromHistory(
+        candidate
+          .map((entry) => asRecord(entry))
+          .filter((entry): entry is AdminRecord => entry !== null)
+      )
+      if (!first && nested.first) first = nested.first
+      if (!last && nested.last) last = nested.last
+      if (first && last) break
+    }
+  }
+
+  if (first && last && first === last) {
+    const onlyOneHistory = Array.isArray(punchesToday) && punchesToday.length === 1
+    if (onlyOneHistory) {
+      last = ""
+    }
+  }
+
+  return { first, last }
 }
 
 function formatMinutesDuration(value: unknown) {
@@ -2830,6 +3112,7 @@ type ProfileSummaryTabProps = {
   currentUser: AdminRecord | null
   employee: AdminRecord | null
   attendanceTodayRecord: AdminRecord | null
+  attendancePunchesToday?: AdminRecord[]
   dashboardLeave: AdminRecord | null
   employmentStatus: AdminRecord | null
   scheduleDays: AdminRecord[]
@@ -2940,6 +3223,7 @@ function ProfileSummaryTab({
   currentUser,
   employee,
   attendanceTodayRecord,
+  attendancePunchesToday = [],
   dashboardLeave,
   correctionRequests,
   profileUpdateRequests,
@@ -3001,46 +3285,10 @@ function ProfileSummaryTab({
     readString(currentUser, ["phone", "phone_number"], "-")
   const empId = readString(employee, ["id", "employee_id", "employeeId"], "-")
 
-  const firstPunchRaw = readAttendanceValue(
-    attendanceTodayRecord,
-    [
-      "first_punch",
-      "first_check_in_at",
-      "firstCheckInAt",
-      "first_punch_at",
-      "firstPunchAt",
-      "check_in_at",
-      "checkInAt",
-      "check_in",
-      "checkIn",
-      "clock_in_at",
-      "clockInAt",
-      "check_in_time",
-      "checkInTime",
-    ],
-    attendanceTodaySummary
-  )
-  const lastPunchRaw = readAttendanceValue(
-    attendanceTodayRecord,
-    [
-      "last_punch",
-      "last_check_out_at",
-      "lastCheckOutAt",
-      "last_punch_at",
-      "lastPunchAt",
-      "check_out_at",
-      "checkOutAt",
-      "check_out",
-      "checkOut",
-      "clock_out_at",
-      "clockOutAt",
-      "check_out_time",
-      "checkOutTime",
-    ],
-    attendanceTodaySummary
-  )
-  const firstPunch = formatAttendancePunchValue(firstPunchRaw)
-  const lastPunch = formatAttendancePunchValue(lastPunchRaw)
+  // Same sources as the employee dashboard: today payload + punch history.
+  const punchTimes = resolveTodayPunchTimes(attendanceTodayRecord, attendancePunchesToday)
+  const firstPunch = punchTimes.first || "—"
+  const lastPunch = punchTimes.last || "—"
   const punchState = resolveProfileAttendanceState(rawPunchState, firstPunch, lastPunch)
   const punchTone = profilePunchStatusTone(punchState)
   const todayDateLabel = formatDate(attendanceTodayRecord?.date) || "Today"
@@ -3378,6 +3626,8 @@ export function EmployeeSelfServiceProfileView() {
   const [dashboardOverview, setDashboardOverview] = React.useState<AdminRecord | null>(null)
   const [employmentStatus, setEmploymentStatus] = React.useState<AdminRecord | null>(null)
   const [attendanceOverview, setAttendanceOverview] = React.useState<AdminRecord | null>(null)
+  const [attendanceTodayDirect, setAttendanceTodayDirect] = React.useState<AdminRecord | null>(null)
+  const [attendancePunchesToday, setAttendancePunchesToday] = React.useState<AdminRecord[]>([])
   const [attendanceAssignments, setAttendanceAssignments] = React.useState<AdminRecord | null>(null)
   const [teamAttendance, setTeamAttendance] = React.useState<AdminRecord[]>([])
   const [correctionRequests, setCorrectionRequests] = React.useState<AdminRecord[]>([])
@@ -3691,6 +3941,8 @@ export function EmployeeSelfServiceProfileView() {
       setDashboardOverview(null)
       setEmploymentStatus(null)
       setAttendanceOverview(null)
+      setAttendanceTodayDirect(null)
+      setAttendancePunchesToday([])
       setAttendanceAssignments(null)
       setTeamAttendance([])
       setCorrectionRequests([])
@@ -3699,11 +3951,15 @@ export function EmployeeSelfServiceProfileView() {
     }
 
     let cancelled = false
+    const todayIso = localDateIso()
 
     void Promise.allSettled([
       getMyDashboard(token),
       getMyStatus(token),
       getMyAttendanceOverview(token, { page: 1, limit: 20, sortBy: "created_at", sortOrder: "DESC" }),
+      // Same endpoints the employee dashboard uses for check-in / check-out times.
+      getMyAttendanceToday(token),
+      listMyAttendancePunches(token, { page: 1, limit: 50, sortBy: "created_at", sortOrder: "DESC" }),
       getMyAttendanceAssignments(token),
       listMyTeamAttendance(token, { page: 1, limit: 5 }),
       listMyAttendanceCorrectionRequests(token, { page: 1, limit: 5, sortBy: "created_at", sortOrder: "DESC" }),
@@ -3717,6 +3973,8 @@ export function EmployeeSelfServiceProfileView() {
         dashboardResult,
         statusResult,
         overviewResult,
+        todayResult,
+        punchesResult,
         assignmentsResult,
         teamResult,
         correctionsResult,
@@ -3726,6 +3984,18 @@ export function EmployeeSelfServiceProfileView() {
       setDashboardOverview(dashboardResult.status === "fulfilled" ? asRecord(dashboardResult.value) : null)
       setEmploymentStatus(statusResult.status === "fulfilled" ? asRecord(statusResult.value) : null)
       setAttendanceOverview(overviewResult.status === "fulfilled" ? asRecord(overviewResult.value) : null)
+      setAttendanceTodayDirect(
+        todayResult.status === "fulfilled" ? asRecord(todayResult.value) : null
+      )
+
+      if (punchesResult.status === "fulfilled") {
+        const allPunches = punchesResult.value.rows
+        const todayPunches = allPunches.filter((row) => isPunchOnLocalDate(row, todayIso))
+        setAttendancePunchesToday(todayPunches.length > 0 ? todayPunches : allPunches)
+      } else {
+        setAttendancePunchesToday([])
+      }
+
       setAttendanceAssignments(assignmentsResult.status === "fulfilled" ? asRecord(assignmentsResult.value) : null)
       setTeamAttendance(teamResult.status === "fulfilled" ? teamResult.value.rows : [])
 
@@ -3749,10 +4019,12 @@ export function EmployeeSelfServiceProfileView() {
 
   const attendanceTodayRecord = React.useMemo(
     () =>
+      // Prefer dedicated /me/attendance/today (same as dashboard home).
+      attendanceTodayDirect ??
       asRecord(attendanceOverview?.today) ??
       asRecord(dashboardOverview?.attendance_today) ??
       asRecord(dashboardOverview?.attendance_overview),
-    [attendanceOverview, dashboardOverview]
+    [attendanceOverview, attendanceTodayDirect, dashboardOverview]
   )
   const dashboardLeave = React.useMemo(() => asRecord(dashboardOverview?.leave), [dashboardOverview])
   const scheduleDays = React.useMemo(
@@ -3823,6 +4095,7 @@ export function EmployeeSelfServiceProfileView() {
               currentUser={currentUser}
               employee={employee}
               attendanceTodayRecord={attendanceTodayRecord}
+              attendancePunchesToday={attendancePunchesToday}
               dashboardLeave={dashboardLeave}
               employmentStatus={employmentStatus}
               scheduleDays={scheduleDays}

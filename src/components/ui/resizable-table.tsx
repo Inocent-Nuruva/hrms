@@ -28,6 +28,296 @@ export interface Column<T = Record<string, unknown>> {
   defaultWidth?: number;
   sortable?: boolean;
   render?: (item: T) => React.ReactNode;
+  /** Optional explicit sort value. Prefer this when `key` does not match the API field. */
+  sortValue?: (item: T) => unknown;
+}
+
+/** Common column-key → API field aliases (camelCase + snake_case). */
+const SORT_FIELD_ALIASES: Record<string, string[]> = {
+  name: [
+    "fullName",
+    "full_name",
+    "displayName",
+    "display_name",
+    "employeeName",
+    "employee_name",
+    "name",
+  ],
+  employee_no: [
+    "employeeNo",
+    "employee_no",
+    "employee_number",
+    "employeeNumber",
+    "user_no",
+    "userNo",
+  ],
+  department: [
+    "departmentName",
+    "department_name",
+    "department",
+    "dept",
+    "deptName",
+  ],
+  position: [
+    "positionName",
+    "position_name",
+    "position",
+    "title",
+    "jobTitle",
+    "job_title",
+  ],
+  status: [
+    "employmentStatus",
+    "employment_status",
+    "status",
+    "state",
+  ],
+  hiredate: [
+    "hireDate",
+    "hire_date",
+    "hired_at",
+    "hiredAt",
+    "joined_at",
+    "joinedAt",
+    "join_date",
+    "joinDate",
+    "created_at",
+    "createdAt",
+  ],
+  email: ["email", "workEmail", "work_email", "userEmail", "user_email"],
+  phone: ["phone", "mobile", "phoneNumber", "phone_number", "mobileNumber", "mobile_number"],
+  branch: ["branchName", "branch_name", "branch", "location", "locationName", "location_name"],
+  manager: ["managerName", "manager_name", "manager", "reportsTo", "reports_to"],
+};
+
+function snakeToCamel(value: string) {
+  return value.replace(/_([a-z])/g, (_, char: string) => char.toUpperCase());
+}
+
+function camelToSnake(value: string) {
+  return value.replace(/[A-Z]/g, (char) => `_${char.toLowerCase()}`);
+}
+
+function isEmptySortValue(value: unknown): boolean {
+  return value === null || value === undefined || value === "" || value === "-" || value === "—";
+}
+
+function readNestedRecordName(value: unknown): string | null {
+  if (typeof value === "string" && value.trim()) {
+    return value.trim();
+  }
+  if (typeof value !== "object" || value === null) {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  for (const key of [
+    "name",
+    "fullName",
+    "full_name",
+    "departmentName",
+    "department_name",
+    "positionName",
+    "position_name",
+    "branchName",
+    "branch_name",
+    "title",
+    "label",
+  ]) {
+    const nested = record[key];
+    if (typeof nested === "string" && nested.trim()) {
+      return nested.trim();
+    }
+  }
+  return null;
+}
+
+function extractTextFromNode(node: React.ReactNode): string {
+  if (node == null || typeof node === "boolean") {
+    return "";
+  }
+  if (typeof node === "string" || typeof node === "number") {
+    return String(node);
+  }
+  if (Array.isArray(node)) {
+    return node.map(extractTextFromNode).filter(Boolean).join(" ");
+  }
+  if (React.isValidElement(node)) {
+    const props = node.props as { children?: React.ReactNode; title?: string };
+    if (typeof props.title === "string" && props.title.trim()) {
+      return props.title.trim();
+    }
+    return extractTextFromNode(props.children);
+  }
+  return "";
+}
+
+function buildSortCandidateKeys(columnKey: string): string[] {
+  const keys: string[] = [];
+  const seen = new Set<string>();
+  const push = (key: string) => {
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    keys.push(key);
+  };
+
+  push(columnKey);
+  push(snakeToCamel(columnKey));
+  push(camelToSnake(columnKey));
+
+  const lower = columnKey.toLowerCase().replace(/[-_\s]/g, "");
+  const aliases = SORT_FIELD_ALIASES[columnKey] ?? SORT_FIELD_ALIASES[lower] ?? [];
+  for (const alias of aliases) {
+    push(alias);
+    push(snakeToCamel(alias));
+    push(camelToSnake(alias));
+  }
+
+  return keys;
+}
+
+function readRecordField(record: Record<string, unknown>, keys: string[]): unknown {
+  for (const key of keys) {
+    if (!(key in record)) continue;
+    const value = record[key];
+    if (!isEmptySortValue(value)) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function composePersonName(record: Record<string, unknown>): string | null {
+  const first = record.firstName ?? record.first_name ?? record.preferredName ?? record.preferred_name;
+  const middle = record.middleName ?? record.middle_name;
+  const last = record.lastName ?? record.last_name;
+  const parts = [first, middle, last]
+    .filter((part): part is string => typeof part === "string" && part.trim().length > 0)
+    .map((part) => part.trim());
+  return parts.length > 0 ? parts.join(" ") : null;
+}
+
+function resolveSortValue<T>(item: T, column: Column<T> | undefined, columnKey: string): unknown {
+  if (column?.sortValue) {
+    return column.sortValue(item);
+  }
+
+  const record =
+    typeof item === "object" && item !== null ? (item as Record<string, unknown>) : null;
+  if (!record) {
+    return null;
+  }
+
+  const candidateKeys = buildSortCandidateKeys(columnKey);
+  const direct = readRecordField(record, candidateKeys);
+  if (!isEmptySortValue(direct)) {
+    // Nested relation object → use its display name when present.
+    if (typeof direct === "object") {
+      return readNestedRecordName(direct) ?? direct;
+    }
+    return direct;
+  }
+
+  const lowerKey = columnKey.toLowerCase();
+
+  // Nested relation fields commonly used by HRMS APIs.
+  const relationNeedle = lowerKey.includes("department")
+    ? "department"
+    : lowerKey.includes("position")
+      ? "position"
+      : lowerKey.includes("branch")
+        ? "branch"
+        : lowerKey.includes("manager")
+          ? "manager"
+          : null;
+
+  if (relationNeedle) {
+    const nestedKeys = [
+      `primary_${relationNeedle}`,
+      `primary${relationNeedle.charAt(0).toUpperCase()}${relationNeedle.slice(1)}`,
+      relationNeedle,
+    ];
+    for (const nestedKey of nestedKeys) {
+      const nestedName = readNestedRecordName(record[nestedKey]);
+      if (nestedName) return nestedName;
+    }
+  }
+
+  if (lowerKey === "name" || lowerKey.endsWith("_name") || lowerKey.endsWith("name")) {
+    const composed = composePersonName(record);
+    if (composed) return composed;
+  }
+
+  // Last resort: text content from custom cell render (e.g. status chips with title).
+  if (column?.render) {
+    try {
+      const rendered = column.render(item);
+      if (typeof rendered === "string" || typeof rendered === "number") {
+        return rendered;
+      }
+      const text = extractTextFromNode(rendered).trim();
+      if (text && text !== "-" && text !== "—") {
+        return text;
+      }
+    } catch {
+      // Ignore render errors during sort.
+    }
+  }
+
+  return null;
+}
+
+function normalizeComparable(value: unknown, columnKey: string): string | number | null {
+  if (isEmptySortValue(value)) {
+    return null;
+  }
+
+  const lowerKey = columnKey.toLowerCase();
+  const isDateField =
+    lowerKey.includes("date") ||
+    lowerKey.includes("time") ||
+    lowerKey.includes("hired") ||
+    lowerKey.includes("joined") ||
+    lowerKey === "hiredate";
+
+  if (isDateField) {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+    const parsed = new Date(String(value));
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed.getTime();
+    }
+  }
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "boolean") {
+    return value ? 1 : 0;
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    // Numeric strings (ids, codes with leading zeros kept as strings for natural-ish compare)
+    const asNumber = Number(trimmed);
+    if (trimmed !== "" && Number.isFinite(asNumber) && /^-?\d+(\.\d+)?$/.test(trimmed)) {
+      // Prefer numeric compare for pure numbers, but keep employee codes with letters as text.
+      if (!/[a-z]/i.test(trimmed)) {
+        return asNumber;
+      }
+    }
+    return trimmed.toLowerCase();
+  }
+
+  if (typeof value === "object") {
+    const nestedName = readNestedRecordName(value);
+    if (nestedName) {
+      return nestedName.toLowerCase();
+    }
+  }
+
+  return String(value).toLowerCase();
 }
 
 function isMeaningfulTableValue(value: React.ReactNode): boolean {
@@ -78,6 +368,15 @@ interface ResizableTableProps<T = Record<string, unknown>> {
   itemsPerPage?: number;
   loading?: boolean;
   showCheckboxes?: boolean;
+  /**
+   * Server-driven pagination: when `onPageChange` is set, the table does not
+   * slice `data` client-side. Pass the current page (1-based), total pages,
+   * and total items from the API meta so Prev/Next fetch the next server page.
+   */
+  page?: number;
+  totalPages?: number | null;
+  totalItems?: number | null;
+  onPageChange?: (page: number) => void;
   /** When false, hides the table toolbar Export dropdown. Default true. */
   showExport?: boolean;
   /** When false, hides the Sort control. Default true. */
@@ -137,6 +436,10 @@ export function ResizableTable<T = Record<string, unknown>>({
   itemsPerPage = 10,
   loading = false,
   showCheckboxes = false,
+  page: controlledPage,
+  totalPages: controlledTotalPages,
+  totalItems: controlledTotalItems,
+  onPageChange,
   showExport = true,
   showSort = true,
   showToolbar = true,
@@ -149,6 +452,7 @@ export function ResizableTable<T = Record<string, unknown>>({
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [mounted, setMounted] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const isServerPagination = typeof onPageChange === "function";
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
   const [hiddenColumns, setHiddenColumns] = useState<string[]>(hiddenColumnKeys);
@@ -435,41 +739,71 @@ export function ResizableTable<T = Record<string, unknown>>({
   const sortedData = useMemo(() => {
     if (!sortField) return tableData;
 
+    const sortColumn = tableColumns.find((col) => col.key === sortField);
+
     return [...tableData].sort((a, b) => {
-      const recordA = a as Record<string, unknown>;
-      const recordB = b as Record<string, unknown>;
-      let aVal: unknown = recordA?.[sortField];
-      let bVal: unknown = recordB?.[sortField];
+      const aVal = normalizeComparable(resolveSortValue(a, sortColumn, sortField), sortField);
+      const bVal = normalizeComparable(resolveSortValue(b, sortColumn, sortField), sortField);
 
-      const lowerField = sortField.toLowerCase();
-      if (lowerField.includes("date") || lowerField.includes("time") || lowerField === "hiredate") {
-        aVal = aVal ? new Date(aVal as string | number | Date).getTime() : 0;
-        bVal = bVal ? new Date(bVal as string | number | Date).getTime() : 0;
-      } else if (typeof aVal === "string" && typeof bVal === "string") {
-        aVal = aVal.toLowerCase();
-        bVal = bVal.toLowerCase();
-      }
-
+      if (aVal == null && bVal == null) return 0;
       if (aVal == null) return 1;
       if (bVal == null) return -1;
 
-      const left = aVal as string | number;
-      const right = bVal as string | number;
-      if (left < right) return sortOrder === "asc" ? -1 : 1;
-      if (left > right) return sortOrder === "asc" ? 1 : -1;
-      return 0;
+      if (typeof aVal === "number" && typeof bVal === "number") {
+        if (aVal < bVal) return sortOrder === "asc" ? -1 : 1;
+        if (aVal > bVal) return sortOrder === "asc" ? 1 : -1;
+        return 0;
+      }
+
+      const left = String(aVal);
+      const right = String(bVal);
+      const compared = left.localeCompare(right, undefined, {
+        numeric: true,
+        sensitivity: "base",
+      });
+      return sortOrder === "asc" ? compared : -compared;
     });
-  }, [tableData, sortField, sortOrder]);
+  }, [tableData, sortField, sortOrder, tableColumns]);
+
+  const activePage = isServerPagination
+    ? Math.max(1, controlledPage ?? 1)
+    : currentPage;
 
   const paginatedData = useMemo(() => {
+    // Server already returned one page of rows — do not re-slice client-side.
+    if (isServerPagination) {
+      return sortedData;
+    }
     const startIdx = (currentPage - 1) * itemsPerPage;
     return sortedData.slice(startIdx, startIdx + itemsPerPage);
-    // itemsPerPage intentionally omitted: including it breaks the React Compiler's
-    // preserve-manual-memoization check (see react-hooks/preserve-manual-memoization).
+    // itemsPerPage / isServerPagination intentionally omitted: including them
+    // breaks the React Compiler's preserve-manual-memoization check.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sortedData, currentPage]);
+  }, [sortedData, currentPage, isServerPagination]);
 
-  const totalPages = Math.ceil(sortedData.length / itemsPerPage);
+  const totalPages = isServerPagination
+    ? Math.max(
+        1,
+        controlledTotalPages ??
+          (controlledTotalItems != null && itemsPerPage > 0
+            ? Math.ceil(controlledTotalItems / itemsPerPage)
+            : 1)
+      )
+    : Math.ceil(sortedData.length / itemsPerPage);
+
+  const totalCountLabel = isServerPagination
+    ? controlledTotalItems ?? sortedData.length
+    : sortedData.length;
+
+  const goToPage = (nextPage: number) => {
+    const clamped = Math.max(1, Math.min(totalPages, nextPage));
+    if (isServerPagination) {
+      onPageChange?.(clamped);
+      return;
+    }
+    setCurrentPage(clamped);
+  };
+
   const loadingSkeletonRows = useMemo(
     () =>
       Array.from({
@@ -859,6 +1193,8 @@ export function ResizableTable<T = Record<string, unknown>>({
 
               {visibleTableColumns.map((col) => {
                 const isActions = col.key === "actions" || col.key === "act"
+                const canSort = !isActions && col.sortable !== false
+                const isActiveSort = sortField === col.key
                 return (
                 <Resizable
                   key={col.key}
@@ -872,11 +1208,31 @@ export function ResizableTable<T = Record<string, unknown>>({
                   <div
                     className={cn(
                       "relative flex flex-shrink-0 items-center border-r border-border px-1.5 text-base",
-                      isActions ? "justify-end overflow-visible" : "overflow-hidden"
+                      isActions ? "justify-end overflow-visible" : "overflow-hidden",
+                      canSort && "cursor-pointer select-none hover:text-foreground"
                     )}
                     style={{ width: getColumnWidth(col) }}
+                    onClick={canSort ? () => handleSort(col.key) : undefined}
+                    onKeyDown={
+                      canSort
+                        ? (event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault()
+                              handleSort(col.key)
+                            }
+                          }
+                        : undefined
+                    }
+                    role={canSort ? "button" : undefined}
+                    tabIndex={canSort ? 0 : undefined}
+                    title={canSort ? `Sort by ${col.label}` : undefined}
                   >
                     <span className="truncate">{col.label}</span>
+                    {isActiveSort ? (
+                      <span className="ml-1 shrink-0 text-[10px] text-primary" aria-hidden>
+                        {sortOrder === "asc" ? "↑" : "↓"}
+                      </span>
+                    ) : null}
                   </div>
                 </Resizable>
                 )
@@ -886,7 +1242,7 @@ export function ResizableTable<T = Record<string, unknown>>({
             {/* Rows */}
             <AnimatePresence mode="wait">
               <motion.div
-                key={`page-${currentPage}`}
+                key={`page-${activePage}`}
                 variants={shouldAnimate ? containerVariants : undefined}
                 initial={shouldAnimate ? "hidden" : false}
                 animate="visible"
@@ -982,20 +1338,23 @@ export function ResizableTable<T = Record<string, unknown>>({
       {totalPages > 1 && (
         <div className="mt-1 flex items-center justify-between px-1 text-xs">
           <div className="text-muted-foreground/70">
-            Page {currentPage} of {totalPages} • {sortedData.length} {title.toLowerCase()}s
+            Page {activePage} of {totalPages} • {totalCountLabel} {title.toLowerCase()}
+            {totalCountLabel === 1 ? "" : "s"}
           </div>
 
           <div className="flex gap-1">
             <button
-              onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-              disabled={currentPage === 1}
+              type="button"
+              onClick={() => goToPage(activePage - 1)}
+              disabled={activePage === 1 || loading}
               className="px-1.5 py-0.5 bg-background border border-border/50 text-foreground hover:bg-muted/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors rounded text-xs"
             >
               Prev
             </button>
             <button
-              onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
-              disabled={currentPage === totalPages}
+              type="button"
+              onClick={() => goToPage(activePage + 1)}
+              disabled={activePage === totalPages || loading}
               className="px-1.5 py-0.5 bg-background border border-border/50 text-foreground hover:bg-muted/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors rounded text-xs"
             >
               Next
