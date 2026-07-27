@@ -1117,7 +1117,6 @@ table.min-w-full > tbody > tr > td {
 .app-sidebar-surface,
 [data-sidebar="sidebar"][data-slot="sidebar-inner"],
 [data-sidebar="sidebar"][data-mobile="true"] {
-  position: relative;
   isolation: isolate;
   overflow: hidden;
   border-right: none !important;
@@ -1134,6 +1133,23 @@ table.min-w-full > tbody > tr > td {
     ) !important;
   background-repeat: no-repeat;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+/* Desktop inner shell only — never override the mobile sheet's fixed positioning */
+.app-sidebar-surface:not([data-mobile="true"]),
+[data-sidebar="sidebar"][data-slot="sidebar-inner"] {
+  position: relative;
+}
+
+/* Keep mobile drawer pinned to the viewport (same visual design as desktop) */
+[data-sidebar="sidebar"][data-mobile="true"] {
+  position: fixed !important;
+  inset-block: 0;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  height: 100dvh;
+  max-height: 100dvh;
 }
 
 .app-sidebar-surface::before,

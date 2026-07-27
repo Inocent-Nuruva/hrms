@@ -18,6 +18,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from "@/components/ui/sidebar"
 
 type SecondaryItem = {
@@ -70,6 +71,7 @@ export function NavSecondary({
 } & React.ComponentPropsWithoutRef<typeof SidebarGroup>) {
   const pathname = usePathname()
   const router = useRouter()
+  const { isMobile, setOpenMobile } = useSidebar()
   const [query, setQuery] = React.useState("")
   const [isSearchOpen, setIsSearchOpen] = React.useState(false)
   const [hoveredLink, setHoveredLink] = React.useState<string | null>(null)
@@ -174,7 +176,10 @@ export function NavSecondary({
     setQuery("")
     setActiveIndex(0)
     router.push(url)
-  }, [persistRecentItem, router, searchableItems])
+    if (isMobile) {
+      setOpenMobile(false)
+    }
+  }, [isMobile, persistRecentItem, router, searchableItems, setOpenMobile])
 
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -340,6 +345,11 @@ export function NavSecondary({
                   render={<Link href={item.url} />}
                   isActive={pathname === item.url}
                   className="h-8 min-h-8 rounded-lg px-2 py-1.5 text-[0.8125rem] font-medium leading-none !text-foreground data-active:!bg-primary/10 dark:data-active:!bg-[#262626] data-active:!text-[var(--sidebar-active-link-color)] data-active:[&_svg]:!text-[var(--sidebar-active-link-color)] [&_svg]:!size-[1.125rem] [&_svg]:!text-[var(--sidebar-icon-color)]"
+                  onClick={() => {
+                    if (isMobile) {
+                      setOpenMobile(false)
+                    }
+                  }}
                   onMouseEnter={() => setHoveredLink(item.title)}
                   onMouseLeave={() => setHoveredLink((value) => (value === item.title ? null : value))}
                 >

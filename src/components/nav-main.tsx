@@ -11,6 +11,7 @@ import {
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
+  useSidebar,
 } from "@/components/ui/sidebar"
 import type { AdminResourceKey } from "@/lib/admin-api"
 import { ChevronDownIcon } from "lucide-react"
@@ -68,7 +69,18 @@ export function NavMain({
   const OPEN_GROUPS_STORAGE_KEY = "hrms.sidebar.open-groups.v1"
   const router = useRouter()
   const pathname = usePathname()
+  const { isMobile, setOpenMobile } = useSidebar()
   const currentPath = pathname ?? ""
+
+  const navigateTo = React.useCallback(
+    (url: string) => {
+      router.push(url)
+      if (isMobile) {
+        setOpenMobile(false)
+      }
+    },
+    [isMobile, router, setOpenMobile]
+  )
 
   const defaultOpenGroups = React.useMemo(
     () =>
@@ -214,7 +226,7 @@ export function NavMain({
           isActive={!node.disabled && nodeContainsCurrentPath(node, currentPath)}
           onClick={() => {
             if (!node.disabled && node.url) {
-              router.push(node.url)
+              navigateTo(node.url)
             }
           }}
         >
@@ -234,7 +246,7 @@ export function NavMain({
               className={`${SIDEBAR_ITEM_BASE} min-w-0 flex-1 bg-transparent ${SIDEBAR_ITEM_ACTIVE} ${SIDEBAR_ITEM_ICON}`}
               isActive={currentPath === "/dashboard"}
               onClick={() => {
-                router.push("/dashboard")
+                navigateTo("/dashboard")
               }}
               onMouseEnter={() => setHoveredLink("__dashboard")}
               onMouseLeave={() => setHoveredLink((value) => (value === "__dashboard" ? null : value))}
@@ -260,12 +272,12 @@ export function NavMain({
                       [item.title]: !isOpen,
                     }))
                     if (!isOpen && item.url && !nodeContainsCurrentPath(item, currentPath)) {
-                      router.push(item.url)
+                      navigateTo(item.url)
                     }
                     return
                   }
                   if (item.url) {
-                    router.push(item.url)
+                    navigateTo(item.url)
                   }
                 }}
                 onMouseEnter={() => setHoveredLink(item.title)}
@@ -313,7 +325,7 @@ export function NavMain({
                 onClick={() => {
                   if (!item.items) {
                     if (item.url) {
-                      router.push(item.url)
+                      navigateTo(item.url)
                     }
                     return
                   }

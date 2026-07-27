@@ -1264,30 +1264,7 @@ function readProfileUpdateRequestId(row: AdminRecord | null | undefined) {
   return readNumber(row, ["id", "request_id", "profile_update_request_id", "profileUpdateRequestId"])
 }
 
-const DOODLE_VARIANTS = ["doodle-circles", "doodle-curves", "doodle-grass"] as const
-
-function pickDoodle(index: number) {
-  return DOODLE_VARIANTS[index % DOODLE_VARIANTS.length]
-}
-
-function SummaryPrimaryCard({
-  children,
-  doodle = "doodle-circles",
-  className = "",
-}: {
-  children: React.ReactNode
-  doodle?: (typeof DOODLE_VARIANTS)[number]
-  className?: string
-}) {
-  return (
-    <div
-      className={cn("relative overflow-hidden rounded-2xl border border-white/15 bg-primary p-4 !text-white", className)}
-    >
-      <Doodle name={doodle} className="text-white/30" />
-      <div className="relative z-10">{children}</div>
-    </div>
-  )
-}
+type DoodleVariant = "doodle-circles" | "doodle-curves" | "doodle-grass"
 
 function AssignmentField({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -1369,7 +1346,7 @@ function SelfServiceSectionCard({
   subtitle?: string
   action?: React.ReactNode
   /** @deprecated kept for call-site compatibility */
-  doodle?: (typeof DOODLE_VARIANTS)[number]
+  doodle?: DoodleVariant
   barClassName?: string
 }) {
   return (

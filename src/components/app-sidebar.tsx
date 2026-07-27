@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { usePathname } from "next/navigation"
 
 import { NavMain } from "@/components/nav-main"
 import { NavSecondary } from "@/components/nav-secondary"
@@ -10,6 +11,7 @@ import {
   SidebarContent,
   SidebarFooter,
   SidebarRail,
+  useSidebar,
 } from "@/components/ui/sidebar"
 import { UsersRound } from "@/components/animate-ui/icons/users-round"
 import { Route } from "@/components/animate-ui/icons/route"
@@ -327,11 +329,20 @@ export function AppSidebar({
   onSelectResource,
   ...props
 }: AppSidebarProps) {
+  const pathname = usePathname()
+  const { isMobile, setOpenMobile } = useSidebar()
   const normalizedPermissions = React.useMemo(
     () => normalizePermissionLabels(permissionLabels),
     [permissionLabels]
   )
   const resolvedAccessMode = accessMode
+
+  // Close the mobile drawer after any navigation (link click or programmatic push).
+  React.useEffect(() => {
+    if (isMobile) {
+      setOpenMobile(false)
+    }
+  }, [pathname, isMobile, setOpenMobile])
 
   const navData = React.useMemo(() => {
     if (resolvedAccessMode === "employee") {

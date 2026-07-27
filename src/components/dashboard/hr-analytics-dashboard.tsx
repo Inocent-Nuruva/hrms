@@ -585,47 +585,39 @@ export default function HrAnalyticsDashboard({
   adminRolesLabel,
 }: HrAnalyticsDashboardProps) {
   const router = useRouter()
-  const warmRef = React.useRef<DashboardWarmSnapshot | null | undefined>(undefined)
-  if (warmRef.current === undefined) {
-    warmRef.current = readInitialWarmSnapshot()
-  }
-  const warm = warmRef.current
+  // Lazy state (not a ref) so initial warm cache can seed UI without reading refs during render.
+  const [warm] = React.useState<DashboardWarmSnapshot | null>(readInitialWarmSnapshot)
 
   /** True while any request is in flight (refresh icon only). */
-  const [loading, setLoading] = React.useState(() => !warm)
+  const [loading, setLoading] = React.useState(!warm)
   /** Per-slice: true only until that slice has completed its first successful/failed load. */
-  const [sliceReady, setSliceReady] = React.useState(() => (warm ? readySliceState() : emptySliceState()))
+  const [sliceReady, setSliceReady] = React.useState(warm ? readySliceState() : emptySliceState())
   const [error, setError] = React.useState<string | null>(null)
 
   const [fromDate, setFromDate] = React.useState(
-    () => warm?.fromDate ?? formatInputDate(shiftDays(new Date(), -30))
+    warm?.fromDate ?? formatInputDate(shiftDays(new Date(), -30))
   )
-  const [toDate, setToDate] = React.useState(
-    () => warm?.toDate ?? formatInputDate(new Date())
-  )
+  const [toDate, setToDate] = React.useState(warm?.toDate ?? formatInputDate(new Date()))
 
-  const [employees, setEmployees] = React.useState<AdminRecord[]>(() => warm?.employees ?? [])
+  const [employees, setEmployees] = React.useState<AdminRecord[]>(warm?.employees ?? [])
   const [employeesTotal, setEmployeesTotal] = React.useState<number | null>(
-    () => warm?.employeesTotal ?? null
+    warm?.employeesTotal ?? null
   )
-  const [departments, setDepartments] = React.useState<AdminRecord[]>(() => warm?.departments ?? [])
+  const [departments, setDepartments] = React.useState<AdminRecord[]>(warm?.departments ?? [])
   const [departmentHeadcounts, setDepartmentHeadcounts] = React.useState<Array<[string, number]>>(
-    () =>
-      warm
-        ? buildDepartmentHeadcounts(warm.departments, warm.employees)
-        : []
+    warm ? buildDepartmentHeadcounts(warm.departments, warm.employees) : []
   )
   const [leaveRequests, setLeaveRequests] = React.useState<AdminRecord[]>(
-    () => warm?.leaveRequests ?? []
+    warm?.leaveRequests ?? []
   )
   const [attendanceSummaries, setAttendanceSummaries] = React.useState<AdminRecord[]>(
-    () => warm?.attendanceSummaries ?? []
+    warm?.attendanceSummaries ?? []
   )
   const [onboardingRequests, setOnboardingRequests] = React.useState<AdminRecord[]>(
-    () => warm?.onboardingRequests ?? []
+    warm?.onboardingRequests ?? []
   )
   const [offboardingRequests, setOffboardingRequests] = React.useState<AdminRecord[]>(
-    () => warm?.offboardingRequests ?? []
+    warm?.offboardingRequests ?? []
   )
 
   const employeesRef = React.useRef(employees)

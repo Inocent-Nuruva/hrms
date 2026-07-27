@@ -35,10 +35,17 @@ export function NavUser({
     avatar: string
   }
 }) {
-  const { isMobile } = useSidebar()
+  const { isMobile, setOpenMobile } = useSidebar()
   const router = useRouter()
   const { logout } = useAuth()
   const [isLoggingOut, setIsLoggingOut] = useState(false)
+
+  const navigateAndClose = (url: string) => {
+    router.push(url)
+    if (isMobile) {
+      setOpenMobile(false)
+    }
+  }
   const initials =
     user.name
       .split(" ")
@@ -53,6 +60,9 @@ export function NavUser({
     }
 
     setIsLoggingOut(true)
+    if (isMobile) {
+      setOpenMobile(false)
+    }
     await logout()
     router.replace(ROUTES.login)
   }
@@ -105,7 +115,7 @@ export function NavUser({
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem onClick={() => router.push("/dashboard/settings")}>
+              <DropdownMenuItem onClick={() => navigateAndClose("/dashboard/settings")}>
                 <CircleUserRoundIcon
                 />
                 Account
