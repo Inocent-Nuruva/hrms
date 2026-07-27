@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { useRouter } from "next/navigation"
 import { PencilIcon, PlusIcon, RefreshCwIcon, Trash2Icon } from "lucide-react"
 import {
   Dialog,
@@ -28,6 +27,7 @@ import {
 import { canPerformPermission } from "@/lib/dashboard-permissions"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
+import { readStoredCompanyName } from "@/components/dashboard/admin-view-shared"
 
 type AccessControlSectionKey = "doors" | "templates" | "organizations" | "groups"
 type FieldType = "text" | "number" | "boolean" | "select" | "json"
@@ -420,6 +420,8 @@ function resolveVisibleColumns(rows: AdminRecord[]) {
     "deviceId",
     "branch_id",
     "branchId",
+    "company_id",
+    "companyId",
     "created_at",
     "updated_at",
   ]
@@ -428,6 +430,16 @@ function resolveVisibleColumns(rows: AdminRecord[]) {
   const ordered = preferred.filter((key) => keySet.has(key))
   const extras = Array.from(keySet).filter((key) => !ordered.includes(key)).sort((a, b) => a.localeCompare(b))
   return [...ordered, ...extras].slice(0, 8)
+}
+
+function getAccessControlColumnLabel(key: string) {
+  if (key === "company_id" || key === "companyId") return "Company"
+  if (key === "branch_id" || key === "branchId") return "Branch"
+  if (key === "device_id" || key === "deviceId") return "Device"
+  if (key === "department_id" || key === "departmentId") return "Department"
+  if (key === "parent_id" || key === "parentId") return "Parent Organization"
+
+  return prettifyLabel ? prettifyLabel(key) : key.replace(/_/g, " ").slice(0, 12)
 }
 
 function resolveRowId(row: AdminRecord, fallbackIndex: number) {
@@ -662,7 +674,9 @@ export function AccessControlManagementView({
   moduleTitle?: string
 }) {
   const actor = useDashboardActor()
-  const router = useRouter()
+  const [currentCompanyName, setCurrentCompanyName] = React.useState<string | null>(() =>
+    readStoredCompanyName()
+  )
   const activeSection = (Object.keys(ROUTE_TO_RESOURCE).includes(section) ? section : "doors") as AccessControlSectionKey
   const resource = ROUTE_TO_RESOURCE[activeSection]
   const fields = React.useMemo(() => SECTION_FIELDS[activeSection], [activeSection])
@@ -824,6 +838,10 @@ export function AccessControlManagementView({
     void fetchRows()
   }, [fetchRows])
 
+  React.useEffect(() => {
+    setCurrentCompanyName(readStoredCompanyName())
+  }, [])
+
   const columns = React.useMemo(() => resolveVisibleColumns(rows), [rows])
   const branchNameById = React.useMemo(
     () =>
@@ -858,6 +876,18 @@ export function AccessControlManagementView({
 
   const resolveDisplayValue = React.useCallback(
     (row: AdminRecord, column: string) => {
+      const companyId =
+        column === "company_id" || column === "companyId"
+          ? readNumberFromRecord(row, [column])
+          : null
+      if (companyId !== null) {
+        return (
+          currentCompanyName ??
+          readStringFromRecord(row, ["company_name", "companyName", "name", "display_name"]) ??
+          `Company ${companyId}`
+        )
+      }
+
       const branchId =
         column === "branch_id" || column === "branchId"
           ? readNumberFromRecord(row, [column])
@@ -892,7 +922,7 @@ export function AccessControlManagementView({
 
       return stringifyValue(row[column])
     },
-    [branchNameById, departmentNameById, deviceNameById, organizationNameById]
+    [branchNameById, currentCompanyName, departmentNameById, deviceNameById, organizationNameById]
   )
 
   const onCreate = async () => {
@@ -1010,38 +1040,7 @@ export function AccessControlManagementView({
     canPerformPermission(actor.permissionLabels, `${SECTION_PERMISSION_PREFIX[activeSection]}:delete`)
 
   return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap items-center gap-1.5">
-        <div className="min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{moduleTitle}</p>
-          <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
-        </div>
-        <div className="ml-auto flex flex-wrap items-center gap-1.5">
-          {canCreate ? (
-          <button
-            type="button"
-            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[var(--primary)] px-2.5 text-xs font-semibold text-white transition hover:brightness-95"
-            onClick={() => setCreateOpen(true)}
-            aria-label={`Create ${title}`}
-            title="Create"
-          >
-            <PlusIcon className="h-3.5 w-3.5" />
-            Create
-          </button>
-          ) : null}
-          <button
-            type="button"
-            onClick={() => void fetchRows()}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 text-primary hover:bg-slate-50"
-            disabled={loading}
-            aria-label="Refresh"
-            title="Refresh"
-          >
-            <RefreshCwIcon className={`h-3.5 w-3.5 text-primary ${loading ? "animate-spin" : ""}`} />
-          </button>
-        </div>
-      </div>
-
+    <div className="w-full space-y-2">
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
       {message ? <p className="text-sm text-green-700">{message}</p> : null}
 
@@ -1051,7 +1050,7 @@ export function AccessControlManagementView({
         columns={[
           ...columns.map((c: string) => ({
             key: c,
-            label: prettifyLabel ? prettifyLabel(c) : c.replace(/_/g,' ').slice(0,12),
+            label: getAccessControlColumnLabel(c),
             defaultWidth: 65,
             sortable: true,
             render: (row: AdminRecord) => resolveDisplayValue(row, c),
@@ -1094,7 +1093,46 @@ export function AccessControlManagementView({
         ]}
         itemsPerPage={20}
         loading={loading}
+        showExport={false}
+        enableColumnVisibility
+        hiddenColumnKeys={["id"]}
         storageKey={`access-${activeSection}`}
+        toolbarStart={
+          <div className="min-w-0 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+              {moduleTitle}
+            </span>
+            <h2 className="truncate text-lg font-semibold tracking-tight text-foreground sm:text-xl">
+              {title}
+            </h2>
+          </div>
+        }
+        toolbarActions={
+          <>
+            {canCreate ? (
+              <button
+                type="button"
+                className="inline-flex h-8 items-center justify-center gap-1 rounded-lg bg-primary px-2.5 text-xs font-semibold !text-white transition hover:brightness-95"
+                onClick={() => setCreateOpen(true)}
+                aria-label={`Create ${title}`}
+                title="Create"
+              >
+                <PlusIcon className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Create</span>
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => void fetchRows()}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border text-foreground transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={loading}
+              aria-label="Refresh"
+              title="Refresh"
+            >
+              <RefreshCwIcon className={`h-3.5 w-3.5 text-primary ${loading ? "animate-spin" : ""}`} />
+            </button>
+          </>
+        }
       />
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
@@ -1139,7 +1177,7 @@ export function AccessControlManagementView({
             <button
               type="button"
               onClick={() => void onCreate()}
-              className="rounded-md bg-[var(--primary)] px-3 py-1.5 text-sm text-white transition hover:brightness-95"
+              className="rounded-md bg-[var(--primary)] px-3 py-1.5 text-sm !text-white transition hover:brightness-95"
             >
               Create
             </button>

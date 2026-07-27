@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { motion } from "framer-motion"
 import {
   BriefcaseIcon,
   Building2Icon,
@@ -18,10 +19,10 @@ import { Sparkles } from "@/components/animate-ui/icons/sparkles"
 
 import { LumaSpin } from "@/components/ui/luma-spin"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
 
 import {
+  cancelMyProfileUpdateRequest,
   getMyAttendanceAssignments,
   getMyAttendanceOverview,
   getMyDashboard,
@@ -40,16 +41,25 @@ import {
   listMyLeaveRequests,
   listLeaveTypes,
   createMyProfileUpdateRequest,
+  getMyProfileUpdateRequest,
   listMyProfileUpdateRequests,
   listMyTeamAttendance,
   submitMyProfileUpdateRequest,
   cancelMyLeaveRequest,
+  getMyLeaveRequest,
   submitMyLeaveRequest,
+  uploadMyProfilePhoto,
   type AdminRecord,
 } from "@/lib/admin-api"
-import { API_BASE_URL, AUTH_STORAGE_KEYS } from "@/utils/constants"
+import {
+  ensureMyProfilePhotoUrl,
+  setMyProfilePhotoUrl,
+  useMyProfilePhoto,
+} from "@/lib/my-profile-photo"
+import { AUTH_STORAGE_KEYS, resolveApiBaseUrl } from "@/utils/constants"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -64,6 +74,8 @@ import {
   DialogPopup,
   DialogTitle,
 } from "@/components/animate-ui/components/base/dialog"
+import { LeaveWorkflowDialog } from "@/components/leave/leave-workflow-progress"
+import { notifySubmittedRequestApprovers } from "@/lib/request-notifications"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 
@@ -155,6 +167,27 @@ function formatTimeValue(value: unknown) {
   }).format(date)
 }
 
+function formatAttendancePunchValue(value: unknown) {
+  if (typeof value !== "string" || !value.trim()) {
+    return "-"
+  }
+
+  const trimmed = value.trim()
+  if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(trimmed)) {
+    return formatTimeValue(trimmed)
+  }
+
+  const parsed = new Date(trimmed)
+  if (!Number.isNaN(parsed.getTime())) {
+    return new Intl.DateTimeFormat("en-GB", {
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(parsed)
+  }
+
+  return trimmed
+}
+
 function formatMinutesDuration(value: unknown) {
   const minutes = readNumberish(value)
   if (minutes === null) {
@@ -189,54 +222,236 @@ function formatDayValue(value: unknown) {
   return Number.isInteger(numeric) ? String(numeric) : numeric.toFixed(1)
 }
 
+function readAttendanceValue(
+  record: AdminRecord | null | undefined,
+  keys: string[],
+  fallbackRecord?: AdminRecord | null | undefined,
+  fallback = ""
+) {
+  const direct = readString(record ?? null, keys, "")
+  if (direct) {
+    return direct
+  }
+  const next = readString(fallbackRecord ?? null, keys, "")
+  if (next) {
+    return next
+  }
+  return fallback
+}
+
+function resolveProfileAttendanceState(rawState: string, firstPunch: string, lastPunch: string) {
+  const normalized = formatPunchState(rawState)
+  const lower = normalized.trim().toLowerCase()
+  const hasFirstPunch = firstPunch !== "-"
+  const hasLastPunch = lastPunch !== "-"
+
+  if (hasLastPunch && (lower === "not checked in" || lower === "no activity")) {
+    return "Checked out"
+  }
+
+  if (hasFirstPunch && !hasLastPunch && (lower === "not checked in" || lower === "no activity")) {
+    return "Checked in"
+  }
+
+  return normalized
+}
+
+function formatLeaveBalanceValue(value: unknown) {
+  const numeric = readNumberish(value)
+  if (numeric === null) {
+    return null
+  }
+  return numeric.toFixed(2)
+}
+
+function findBalanceAvailableDays(row: AdminRecord | null) {
+  if (!row) {
+    return null
+  }
+  return readNumberish(
+    row.available_days ??
+      row.availableDays ??
+      row.available ??
+      row.remaining_days ??
+      row.remainingDays ??
+      row.remaining ??
+      row.balance ??
+      row.current_balance ??
+      row.currentBalance
+  )
+}
+
+function readLeaveTypeId(row: AdminRecord | null) {
+  if (!row) {
+    return null
+  }
+  const nestedLeaveType =
+    asRecord(row.leave_type) ?? asRecord(row.leaveType) ?? asRecord(row.type) ?? asRecord(row.leave)
+  return (
+    readNumberish(row.leave_type_id ?? row.leaveTypeId ?? row.type_id ?? row.typeId) ??
+    readNumberish(nestedLeaveType?.id ?? nestedLeaveType?.leave_type_id ?? nestedLeaveType?.leaveTypeId)
+  )
+}
+
+function countInclusiveLeaveDays(startDate: string, endDate: string) {
+  if (!startDate || !endDate) {
+    return null
+  }
+
+  const start = new Date(`${startDate}T00:00:00Z`)
+  const end = new Date(`${endDate}T00:00:00Z`)
+  const startTime = start.getTime()
+  const endTime = end.getTime()
+  if (Number.isNaN(startTime) || Number.isNaN(endTime) || endTime < startTime) {
+    return null
+  }
+
+  return Math.floor((endTime - startTime) / 86_400_000) + 1
+}
+
+function readRequestedLeaveDays(row: AdminRecord | null) {
+  if (!row) {
+    return null
+  }
+
+  const explicitDays = readNumberish(
+    row.days ?? row.total_days ?? row.totalDays ?? row.number_of_days ?? row.numberOfDays ?? row.duration_days
+  )
+  if (explicitDays !== null) {
+    return explicitDays
+  }
+
+  const startDate = readString(row, ["start_date"], "")
+  const endDate = readString(row, ["end_date"], "")
+  return countInclusiveLeaveDays(startDate, endDate)
+}
+
+function buildLeaveBalanceSubmissionError(availableDays: number | null) {
+  const normalizedAvailable = availableDays !== null ? availableDays.toFixed(2) : null
+
+  if (normalizedAvailable !== null && Number(normalizedAvailable) < 0) {
+    return `This leave type is already overdrawn (${normalizedAvailable} day(s) available). New submitted requests are blocked until HR adjusts the balance or the leave policy allows negative balances.`
+  }
+
+  if (normalizedAvailable !== null) {
+    return `This request exceeds the available balance for the selected leave type (${normalizedAvailable} day(s) left).`
+  }
+
+  return "This request exceeds the available balance for the selected leave type."
+}
+
+function validateLeaveSubmissionBalance({
+  availableDays,
+  requestedDays,
+}: {
+  availableDays: number | null
+  requestedDays: number | null
+}) {
+  if (availableDays === null) {
+    return null
+  }
+
+  if (availableDays < 0) {
+    return buildLeaveBalanceSubmissionError(availableDays)
+  }
+
+  if (requestedDays !== null && requestedDays > availableDays) {
+    return buildLeaveBalanceSubmissionError(availableDays)
+  }
+
+  return null
+}
+
+function formatLeaveRequestError(errorObject: unknown, availableDays: number | null) {
+  const fallback = errorObject instanceof Error ? errorObject.message : "Failed to submit leave request."
+  if (!(errorObject instanceof Error)) {
+    return fallback
+  }
+
+  const message = errorObject.message.trim()
+  if (!/insufficient leave balance/i.test(message)) {
+    return fallback
+  }
+
+  const parsedAvailable = message.match(/available:\s*(-?\d+(?:\.\d+)?)\s*day/i)
+  const parsedDays = parsedAvailable ? Number(parsedAvailable[1]) : availableDays
+  const normalizedAvailable = Number.isFinite(parsedDays) ? Number(parsedDays) : availableDays
+
+  return buildLeaveBalanceSubmissionError(normalizedAvailable ?? null)
+}
+
 function resolveLeaveStatusMeta(value: unknown) {
   const raw = typeof value === "string" ? value.trim() : ""
-  const normalized = raw.toLowerCase()
+  const normalized = raw.toLowerCase().replace(/[\s-]+/g, "_")
 
   if (normalized === "draft") {
     return {
+      key: "draft" as const,
       label: "Draft",
-      badgeClassName: "border-white/30 bg-white/15 text-white",
+      badgeClassName: "bg-slate-500/12 text-slate-700 dark:text-slate-300",
       helperText: "Saved as draft",
+      textClassName: "text-slate-700 dark:text-slate-300",
+      barClassName: "bg-slate-400",
+      chipClassName: "bg-slate-500/10 text-slate-700 dark:text-slate-300",
     }
   }
 
   if (["pending", "submitted", "in_review", "under_review"].includes(normalized)) {
     return {
-      label: raw || "Pending",
-      badgeClassName: "border-emerald-200/40 bg-emerald-300/20 text-white",
-      helperText: "Submitted",
+      key: "pending" as const,
+      label: raw.replace(/_/g, " ") || "Pending",
+      badgeClassName: "bg-amber-500/12 text-amber-800 dark:text-amber-300",
+      helperText: "Awaiting review",
+      textClassName: "text-amber-700 dark:text-amber-300",
+      barClassName: "bg-amber-500",
+      chipClassName: "bg-amber-500/10 text-amber-800 dark:text-amber-300",
     }
   }
 
-  if (normalized === "approved") {
+  if (normalized === "approved" || normalized === "completed") {
     return {
-      label: "Approved",
-      badgeClassName: "border-sky-200/40 bg-sky-300/20 text-white",
-      helperText: "Submitted",
+      key: "approved" as const,
+      label: normalized === "completed" ? "Completed" : "Approved",
+      badgeClassName: "bg-emerald-500/12 text-emerald-700 dark:text-emerald-300",
+      helperText: "Approved",
+      textClassName: "text-emerald-700 dark:text-emerald-300",
+      barClassName: "bg-emerald-500",
+      chipClassName: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
     }
   }
 
   if (normalized === "rejected") {
     return {
+      key: "rejected" as const,
       label: "Rejected",
-      badgeClassName: "border-rose-200/40 bg-rose-300/20 text-white",
-      helperText: "Submitted",
+      badgeClassName: "bg-rose-500/12 text-rose-700 dark:text-rose-300",
+      helperText: "Rejected",
+      textClassName: "text-rose-700 dark:text-rose-300",
+      barClassName: "bg-rose-500",
+      chipClassName: "bg-rose-500/10 text-rose-700 dark:text-rose-300",
     }
   }
 
   if (normalized === "cancelled") {
     return {
+      key: "cancelled" as const,
       label: "Cancelled",
-      badgeClassName: "border-slate-200/40 bg-slate-200/20 text-white",
-      helperText: "No longer active",
+      badgeClassName: "bg-muted text-muted-foreground",
+      helperText: "Cancelled",
+      textClassName: "text-muted-foreground",
+      barClassName: "bg-slate-300 dark:bg-slate-600",
+      chipClassName: "bg-muted text-muted-foreground",
     }
   }
 
   return {
-    label: raw || "Pending",
-    badgeClassName: "border-white/30 bg-white/15 text-white",
-    helperText: raw ? "Submitted" : "",
+    key: "other" as const,
+    label: raw.replace(/_/g, " ") || "Pending",
+    badgeClassName: "bg-primary/10 text-primary",
+    helperText: raw ? "In progress" : "",
+    textClassName: "text-primary",
+    barClassName: "bg-primary",
+    chipClassName: "bg-primary/10 text-primary",
   }
 }
 
@@ -658,7 +873,8 @@ function enrichEmployeeFromAssignments(employee: AdminRecord | null) {
 
 async function fetchEmployeeFromUrl(token: string, employeeUrl: string) {
   const path = employeeUrl.startsWith("/") ? employeeUrl : `/${employeeUrl}`
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const baseUrl = resolveApiBaseUrl()
+  const response = await fetch(baseUrl ? `${baseUrl}${path}` : path, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -953,7 +1169,15 @@ function resolveEmployeeNumber(currentUser: AdminRecord | null, employee: AdminR
   )
 }
 
-function resolveProfilePhotoUrl(currentUser: AdminRecord | null, employee: AdminRecord | null) {
+function resolveProfilePhotoUrl(
+  currentUser: AdminRecord | null,
+  employee: AdminRecord | null,
+  preferredUrl?: string | null
+) {
+  const preferred = typeof preferredUrl === "string" ? preferredUrl.trim() : ""
+  if (preferred) {
+    return preferred
+  }
   return (
     readString(employee, ["profile_photo_url"], "") ||
     readString(asRecord(employee?.company_user), ["profile_photo_url"], "") ||
@@ -984,6 +1208,7 @@ type EditableUserField =
   | "last_name"
   | "phone"
   | "email"
+  | "city"
   | "password"
   | "user_no"
   | "status"
@@ -993,6 +1218,13 @@ type SectionEditorState = {
   key: string
   title: string
   fields: EditableUserField[]
+}
+
+function getEditableFieldLabel(field: EditableUserField) {
+  if (field === "profile_photo_url") {
+    return "Profile picture"
+  }
+  return field.replaceAll("_", " ")
 }
 
 type ApiErrorWithPayload = Error & {
@@ -1025,8 +1257,14 @@ function formatApiErrorLines(errorObject: unknown, fallback: string) {
   return [fallback]
 }
 
+function readProfileUpdateRequestId(row: AdminRecord | null | undefined) {
+  if (!row) {
+    return null
+  }
+  return readNumber(row, ["id", "request_id", "profile_update_request_id", "profileUpdateRequestId"])
+}
+
 const DOODLE_VARIANTS = ["doodle-circles", "doodle-curves", "doodle-grass"] as const
-const PALE_PRIMARY = "color-mix(in srgb, var(--primary) 18%, white)"
 
 function pickDoodle(index: number) {
   return DOODLE_VARIANTS[index % DOODLE_VARIANTS.length]
@@ -1043,7 +1281,7 @@ function SummaryPrimaryCard({
 }) {
   return (
     <div
-      className={cn("relative overflow-hidden rounded-2xl border border-white/15 bg-primary p-4 text-primary-foreground", className)}
+      className={cn("relative overflow-hidden rounded-2xl border border-white/15 bg-primary p-4 !text-white", className)}
     >
       <Doodle name={doodle} className="text-white/30" />
       <div className="relative z-10">{children}</div>
@@ -1051,54 +1289,41 @@ function SummaryPrimaryCard({
   )
 }
 
-function AssignmentField({ label, value, inverse = false }: { label: string; value: string; inverse?: boolean }) {
+function AssignmentField({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div>
-      <p className={cn("text-[10px] font-semibold uppercase tracking-[0.16em]", inverse ? "text-white/70" : "text-muted-foreground")}>
+    <div className="flex items-start justify-between gap-3 px-3 py-2 sm:flex-col sm:items-stretch sm:justify-start sm:gap-0.5 sm:px-0 sm:py-0">
+      <span className="shrink-0 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
         {label}
-      </p>
-      <p className={cn("mt-0.5 text-sm font-medium", inverse ? "text-white" : "text-foreground")}>{value}</p>
+      </span>
+      <span className="min-w-0 text-right text-sm font-medium text-foreground break-words sm:text-left">
+        {value}
+      </span>
     </div>
   )
 }
 
-function AssignmentStatCard({
-  label,
-  value,
-  doodle = "doodle-circles",
+function AssignmentBadge({
+  children,
+  tone = "primary",
 }: {
-  label: string
-  value: string
-  doodle?: (typeof DOODLE_VARIANTS)[number]
+  children: React.ReactNode
+  tone?: "primary" | "success" | "muted" | "amber" | "violet"
 }) {
-  return (
-    <div className="relative overflow-hidden rounded-2xl px-1 py-1">
-      <Doodle name={doodle} className="text-primary/14" />
-      <div className="relative z-10">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{label}</p>
-        <p className="mt-1.5 text-[24px] font-semibold tracking-[-0.02em] text-primary">{value}</p>
-      </div>
-    </div>
-  )
-}
-
-function EmptyAssignmentCard({ message, doodle = "doodle-curves" }: { message: string; doodle?: (typeof DOODLE_VARIANTS)[number] }) {
-  return (
-    <div className="relative overflow-hidden rounded-2xl px-5 py-3.5">
-      <Doodle name={doodle} className="text-primary/14" />
-      <p className="relative z-10 text-sm text-muted-foreground">{message}</p>
-    </div>
-  )
-}
-
-function AssignmentBadge({ children, inverse = false }: { children: React.ReactNode; inverse?: boolean }) {
+  const toneClass =
+    tone === "success"
+      ? "bg-emerald-500/12 text-emerald-700 dark:text-emerald-300"
+      : tone === "amber"
+        ? "bg-amber-500/12 text-amber-800 dark:text-amber-300"
+        : tone === "violet"
+          ? "bg-violet-500/12 text-violet-700 dark:text-violet-300"
+          : tone === "muted"
+            ? "bg-muted text-muted-foreground"
+            : "bg-primary/10 text-primary"
   return (
     <span
       className={cn(
-        "rounded-full px-2.5 py-1 text-[10px] font-medium uppercase tracking-wide",
-        inverse
-          ? "border border-white/20 bg-white/10 text-white"
-          : "border border-primary/20 bg-primary/10 text-primary",
+        "inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+        toneClass
       )}
     >
       {children}
@@ -1106,41 +1331,347 @@ function AssignmentBadge({ children, inverse = false }: { children: React.ReactN
   )
 }
 
+function EmptyAssignmentState({ message }: { message: string }) {
+  return (
+    <div className="px-3 py-4 text-sm text-muted-foreground">{message}</div>
+  )
+}
+
+const assignmentsStagger = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: { staggerChildren: 0.06, delayChildren: 0.04 },
+  },
+}
+
+const assignmentsItem = {
+  hidden: { opacity: 0, y: 10, scale: 0.99 },
+  show: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: { type: "spring" as const, stiffness: 380, damping: 28, mass: 0.7 },
+  },
+}
+
 function SelfServiceSectionCard({
   title,
   children,
-  doodle = "doodle-circles",
+  count,
+  subtitle,
+  action,
+  barClassName = "bg-primary",
 }: {
   title: string
   children: React.ReactNode
+  count?: number
+  subtitle?: string
+  action?: React.ReactNode
+  /** @deprecated kept for call-site compatibility */
   doodle?: (typeof DOODLE_VARIANTS)[number]
+  barClassName?: string
 }) {
   return (
-    <SummaryPrimaryCard doodle={doodle}>
-      <div className="space-y-3">
-        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-white/75">{title}</div>
-        {children}
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <div className="flex">
+        <div className={cn("w-1 shrink-0", barClassName)} />
+        <div className="flex min-w-0 flex-1 items-center justify-between gap-2 px-3 py-2.5">
+          <div className="min-w-0">
+            <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+            {subtitle ? (
+              <p className="truncate text-[11px] text-muted-foreground">{subtitle}</p>
+            ) : null}
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            {typeof count === "number" ? (
+              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-primary">
+                {count}
+              </span>
+            ) : null}
+            {action}
+          </div>
+        </div>
       </div>
-    </SummaryPrimaryCard>
+      <div className="divide-y divide-border/70 border-t border-border/70">{children}</div>
+    </div>
+  )
+}
+
+function ProfileDataField({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="mt-0.5 text-sm font-medium text-foreground break-words">{value}</p>
+    </div>
+  )
+}
+
+function ProfileDataItem({
+  title,
+  badge,
+  fields,
+  barClassName = "bg-primary",
+}: {
+  title?: string
+  badge?: React.ReactNode
+  fields: Array<{ label: string; value: React.ReactNode }>
+  barClassName?: string
+}) {
+  return (
+    <div className="flex">
+      <div className={cn("w-1 shrink-0 self-stretch", barClassName)} />
+      <div className="min-w-0 flex-1 px-3 py-3">
+        {title || badge ? (
+          <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
+            {title ? <p className="text-sm font-semibold text-foreground">{title}</p> : <span />}
+            {badge}
+          </div>
+        ) : null}
+        <div className="grid gap-2.5 sm:grid-cols-2">{fields.map((field) => (
+          <ProfileDataField key={field.label} label={field.label} value={field.value} />
+        ))}</div>
+      </div>
+    </div>
+  )
+}
+
+function ProfileEmptyRow({ message }: { message: string }) {
+  return <div className="px-3 py-4 text-sm text-muted-foreground">{message}</div>
+}
+
+function requestStatusTone(status: string) {
+  const key = status.toLowerCase()
+  if (key.includes("approv") || key.includes("complete") || key === "done") {
+    return {
+      bar: "bg-emerald-500",
+      badge: "bg-emerald-500/12 text-emerald-700 dark:text-emerald-300",
+    }
+  }
+  if (key.includes("reject") || key.includes("cancel") || key.includes("denied")) {
+    return {
+      bar: "bg-rose-500",
+      badge: "bg-rose-500/12 text-rose-700 dark:text-rose-300",
+    }
+  }
+  if (key.includes("pend") || key.includes("submit") || key.includes("review") || key.includes("progress")) {
+    return {
+      bar: "bg-amber-500",
+      badge: "bg-amber-500/12 text-amber-800 dark:text-amber-300",
+    }
+  }
+  if (key.includes("draft")) {
+    return {
+      bar: "bg-slate-400",
+      badge: "bg-muted text-muted-foreground",
+    }
+  }
+  return {
+    bar: "bg-primary",
+    badge: "bg-primary/10 text-primary",
+  }
+}
+
+function ProfileRequestRow({
+  title,
+  status,
+  dateLabel,
+  detail,
+}: {
+  title: string
+  status: string
+  dateLabel: string
+  detail?: string
+}) {
+  const tone = requestStatusTone(status)
+  return (
+    <div className="flex bg-background">
+      <div className={cn("w-1 shrink-0", tone.bar)} />
+      <div className="flex min-w-0 flex-1 items-start justify-between gap-3 px-3 py-2.5">
+        <div className="min-w-0 space-y-0.5">
+          <p className="truncate text-sm font-semibold text-foreground">{title}</p>
+          <p className="text-[11px] text-muted-foreground">{dateLabel}</p>
+          {detail ? <p className="text-xs text-muted-foreground line-clamp-2">{detail}</p> : null}
+        </div>
+        <span
+          className={cn(
+            "inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+            tone.badge
+          )}
+        >
+          {status}
+        </span>
+      </div>
+    </div>
+  )
+}
+
+const profileTabStagger = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: { staggerChildren: 0.06, delayChildren: 0.04 },
+  },
+}
+
+const profileTabItem = {
+  hidden: { opacity: 0, y: 10, scale: 0.99 },
+  show: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: { type: "spring" as const, stiffness: 380, damping: 28, mass: 0.7 },
+  },
+}
+
+const SELF_SERVICE_SECTION_TAB_LABELS: Record<string, string> = {
+  contacts: "Contacts",
+  documents: "Documents",
+  addresses: "Addresses",
+  relatives: "Relatives",
+  identifications: "IDs",
+  bank_accounts: "Banks",
+  departments: "Depts",
+  academic_qualifications: "Academic",
+  professional_qualifications: "Professional",
+  experience_details: "Experience",
+  company_user: "User",
+}
+
+function SelfServiceProfileSectionTabs({
+  sections,
+}: {
+  sections: Array<{
+    id: string
+    title: string
+    count: number
+    content: React.ReactNode
+  }>
+}) {
+  const [activeId, setActiveId] = React.useState(sections[0]?.id ?? "")
+  const active = sections.find((section) => section.id === activeId) ?? sections[0]
+
+  React.useEffect(() => {
+    if (!sections.some((section) => section.id === activeId) && sections[0]) {
+      setActiveId(sections[0].id)
+    }
+  }, [activeId, sections])
+
+  if (!active) return null
+
+  return (
+    <div className="space-y-3">
+      <div className="glass-scrollbar overflow-x-auto" role="tablist" aria-label="Personal profile sections">
+        <div className="inline-flex min-w-full items-center gap-1 border-b border-border/80">
+          {sections.map((section) => {
+            const isActive = section.id === active.id
+            const tabLabel = SELF_SERVICE_SECTION_TAB_LABELS[section.id] ?? section.title
+            return (
+              <button
+                key={section.id}
+                type="button"
+                role="tab"
+                title={`${section.title} (${section.count})`}
+                aria-label={`${section.title}, ${section.count} items`}
+                aria-selected={isActive}
+                onClick={() => setActiveId(section.id)}
+                className={cn(
+                  "border-b-2 px-1.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors duration-200",
+                  isActive
+                    ? "border-[var(--primary)] text-[var(--primary)]"
+                    : "border-transparent text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
+                )}
+              >
+                {tabLabel}
+                <span
+                  className={cn(
+                    "ml-1 tabular-nums opacity-70",
+                    section.count === 0 && !isActive
+                      ? "text-rose-600 opacity-100 dark:text-rose-400"
+                      : null
+                  )}
+                >
+                  {section.count}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+      <motion.div
+        key={active.id}
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.28, ease: "easeOut" }}
+      >
+        {active.content}
+      </motion.div>
+    </div>
   )
 }
 
 function AssignmentSection({
   title,
+  subtitle,
   icon: Icon,
+  count,
+  children,
+  barClassName = "bg-primary",
+}: {
+  title: string
+  subtitle?: string
+  icon?: React.ComponentType<{ className?: string }>
+  count?: number
+  children: React.ReactNode
+  barClassName?: string
+}) {
+  return (
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <div className="flex">
+        <div className={cn("w-1 shrink-0", barClassName)} />
+        <div className="flex min-w-0 flex-1 items-center justify-between gap-2 px-3 py-2.5">
+          <div className="flex min-w-0 items-center gap-2">
+            {Icon ? <Icon className="size-4 shrink-0 text-primary" /> : null}
+            <div className="min-w-0">
+              <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+              {subtitle ? (
+                <p className="truncate text-[11px] text-muted-foreground">{subtitle}</p>
+              ) : null}
+            </div>
+          </div>
+          {typeof count === "number" ? (
+            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-primary">
+              {count}
+            </span>
+          ) : null}
+        </div>
+      </div>
+      <div className="border-t border-border/70">{children}</div>
+    </div>
+  )
+}
+
+function AssignmentItemCard({
+  title,
+  badge,
+  barClassName = "bg-primary",
   children,
 }: {
   title: string
-  icon?: React.ComponentType<{ className?: string }>
+  badge?: React.ReactNode
+  barClassName?: string
   children: React.ReactNode
 }) {
   return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-2">
-        {Icon ? <Icon className="size-4 text-primary" /> : null}
-        <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-muted-foreground">{title}</h3>
+    <div className="flex border-b border-border/70 last:border-b-0">
+      <div className={cn("w-1 shrink-0 self-stretch", barClassName)} />
+      <div className="min-w-0 flex-1 px-3 py-3">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <p className="text-sm font-semibold text-foreground">{title}</p>
+          {badge}
+        </div>
+        <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{children}</div>
       </div>
-      {children}
     </div>
   )
 }
@@ -1153,151 +1684,1168 @@ type ProfileAssignmentsTabProps = {
 
 function ProfileAssignmentsTab({ employee, assignmentSummaryRows, scheduleDays }: ProfileAssignmentsTabProps) {
   const departments = Array.isArray(employee.departments) ? employee.departments : []
-  const positionAssignments = Array.isArray(employee.position_assignments) ? employee.position_assignments : []
-  const designationAssignments = Array.isArray(employee.designation_assignments) ? employee.designation_assignments : []
+  const positionAssignments = Array.isArray(employee.position_assignments)
+    ? employee.position_assignments
+    : []
+  const designationAssignments = Array.isArray(employee.designation_assignments)
+    ? employee.designation_assignments
+    : []
+  const previewDays = scheduleDays.slice(0, 7)
+  const offDaysCount = previewDays.filter(
+    (day) => day.is_off_day === true || day.is_off_day === "true"
+  ).length
+
+  const snapshotChips = [
+    { key: "dept", label: "Departments", value: String(departments.length) },
+    { key: "pos", label: "Positions", value: String(positionAssignments.length) },
+    { key: "des", label: "Designations", value: String(designationAssignments.length) },
+    { key: "sched", label: "Schedule days", value: String(previewDays.length) },
+    {
+      key: "off",
+      label: "Off days",
+      value: String(offDaysCount),
+      highlight: offDaysCount > 0,
+    },
+  ]
 
   return (
-    <div className="space-y-4">
-      <div className="grid gap-4 md:grid-cols-2">
-        <AssignmentSection title="Department" icon={Building2Icon}>
-          {departments.length ? (
-            <div className="space-y-2">
-              {departments.map((entry, index) => {
+    <motion.div
+      className="space-y-4"
+      variants={assignmentsStagger}
+      initial="hidden"
+      animate="show"
+    >
+      {/* Snapshot chips */}
+      <motion.div
+        variants={assignmentsItem}
+        className="inline-flex max-w-full flex-nowrap items-stretch overflow-x-auto rounded-lg border border-border"
+      >
+        {snapshotChips.map((chip, index, arr) => (
+          <div
+            key={chip.key}
+            className={cn(
+              "flex min-w-[5.5rem] shrink-0 flex-col justify-center px-3 py-2",
+              chip.highlight ? "bg-violet-500/10" : "bg-background",
+              index < arr.length - 1 ? "border-r border-border/60" : null
+            )}
+          >
+            <span className="truncate text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              {chip.label}
+            </span>
+            <span
+              className={cn(
+                "text-base font-semibold tabular-nums leading-tight",
+                chip.highlight
+                  ? "text-violet-700 dark:text-violet-300"
+                  : "text-primary"
+              )}
+            >
+              {chip.value}
+            </span>
+          </div>
+        ))}
+      </motion.div>
+
+      <div className="grid gap-3 lg:grid-cols-2">
+        <motion.div variants={assignmentsItem}>
+          <AssignmentSection
+            title="Department"
+            subtitle="Your org placement"
+            icon={Building2Icon}
+            count={departments.length}
+          >
+            {departments.length ? (
+              departments.map((entry, index) => {
                 const record = asRecord(entry)
                 const department = asRecord(record?.department)
                 const branch = asRecord(department?.branch)
-                const departmentName = readString(department, ["name", "department_name"], "Department")
-                return (
-                  <SummaryPrimaryCard key={`department-${index}`} doodle={pickDoodle(index)}>
-                    <div className="flex items-start justify-between gap-3">
-                      <p className="text-base font-semibold tracking-tight text-white">{departmentName}</p>
-                      {formatUnknownValue(record?.is_primary) === "Yes" ? (
-                        <AssignmentBadge inverse>Primary</AssignmentBadge>
-                      ) : null}
-                    </div>
-                    <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                      <AssignmentField label="Code" value={readString(department, ["code"], "-")} inverse />
-                      <AssignmentField label="Branch" value={readString(branch, ["name", "branch_name"], "-")} inverse />
-                      <AssignmentField label="Status" value={readString(department, ["status"], "-")} inverse />
-                    </div>
-                  </SummaryPrimaryCard>
+                const departmentName = readString(
+                  department,
+                  ["name", "department_name"],
+                  "Department"
                 )
-              })}
-            </div>
-          ) : (
-            <EmptyAssignmentCard message="No department assigned." />
-          )}
-        </AssignmentSection>
+                const isPrimary = formatUnknownValue(record?.is_primary) === "Yes"
+                return (
+                  <AssignmentItemCard
+                    key={`department-${index}`}
+                    title={departmentName}
+                    barClassName={isPrimary ? "bg-primary" : "bg-slate-300 dark:bg-slate-600"}
+                    badge={isPrimary ? <AssignmentBadge tone="success">Primary</AssignmentBadge> : null}
+                  >
+                    <AssignmentField label="Code" value={readString(department, ["code"], "—")} />
+                    <AssignmentField
+                      label="Branch"
+                      value={readString(branch, ["name", "branch_name"], "—")}
+                    />
+                    <AssignmentField
+                      label="Status"
+                      value={readString(department, ["status"], "—")}
+                    />
+                  </AssignmentItemCard>
+                )
+              })
+            ) : (
+              <EmptyAssignmentState message="No department assigned." />
+            )}
+          </AssignmentSection>
+        </motion.div>
 
-        <AssignmentSection title="Position" icon={BriefcaseIcon}>
-          {positionAssignments.length ? (
-            <div className="space-y-2">
-              {positionAssignments.map((entry, index) => {
+        <motion.div variants={assignmentsItem}>
+          <AssignmentSection
+            title="Position"
+            subtitle="Role assignment"
+            icon={BriefcaseIcon}
+            count={positionAssignments.length}
+          >
+            {positionAssignments.length ? (
+              positionAssignments.map((entry, index) => {
                 const record = asRecord(entry)
                 const position = asRecord(record?.position)
                 const designation = asRecord(record?.designation)
                 const positionName = readString(position, ["name", "position_name"], "Position")
+                const status = readString(record, ["status"], "active")
+                const isActive = status.toLowerCase() === "active"
                 return (
-                  <SummaryPrimaryCard key={`position-assignment-${index}`} doodle={pickDoodle(index + 1)}>
-                    <div className="flex items-start justify-between gap-3">
-                      <p className="text-base font-semibold tracking-tight text-white">{positionName}</p>
-                      <AssignmentBadge inverse>{readString(record, ["status"], "active")}</AssignmentBadge>
+                  <AssignmentItemCard
+                    key={`position-assignment-${index}`}
+                    title={positionName}
+                    barClassName={isActive ? "bg-emerald-500" : "bg-primary"}
+                    badge={
+                      <AssignmentBadge tone={isActive ? "success" : "muted"}>
+                        {status}
+                      </AssignmentBadge>
+                    }
+                  >
+                    <AssignmentField
+                      label="Designation"
+                      value={readString(designation, ["name", "designation_name"], "—")}
+                    />
+                    <AssignmentField
+                      label="Type"
+                      value={readString(record, ["assignment_type"], "—")}
+                    />
+                    <AssignmentField
+                      label="Primary"
+                      value={formatUnknownValue(record?.is_primary)}
+                    />
+                    <AssignmentField label="Start" value={formatDate(record?.start_date)} />
+                    <AssignmentField label="End" value={formatDate(record?.end_date)} />
+                    <AssignmentField label="Notes" value={readString(record, ["notes"], "—")} />
+                  </AssignmentItemCard>
+                )
+              })
+            ) : (
+              <EmptyAssignmentState message="No position assigned." />
+            )}
+          </AssignmentSection>
+        </motion.div>
+      </div>
+
+      <motion.div variants={assignmentsItem}>
+        <AssignmentSection
+          title="Designation"
+          subtitle="Current and historical titles"
+          icon={BriefcaseIcon}
+          count={designationAssignments.length}
+        >
+          {designationAssignments.length ? (
+            designationAssignments.map((entry, index) => {
+              const record = asRecord(entry)
+              const designation = asRecord(record?.designation)
+              const designationName = readString(
+                designation,
+                ["name", "designation_name"],
+                "Designation"
+              )
+              const isCurrent = formatUnknownValue(record?.is_current) === "Yes"
+              return (
+                <AssignmentItemCard
+                  key={`designation-assignment-${index}`}
+                  title={designationName}
+                  barClassName={isCurrent ? "bg-sky-500" : "bg-slate-300 dark:bg-slate-600"}
+                  badge={
+                    isCurrent ? <AssignmentBadge tone="primary">Current</AssignmentBadge> : null
+                  }
+                >
+                  <AssignmentField label="Code" value={readString(designation, ["code"], "—")} />
+                  <AssignmentField label="Start" value={formatDate(record?.start_date)} />
+                  <AssignmentField label="End" value={formatDate(record?.end_date)} />
+                  <AssignmentField label="Remarks" value={readString(record, ["remarks"], "—")} />
+                </AssignmentItemCard>
+              )
+            })
+          ) : (
+            <EmptyAssignmentState message="No designation assigned." />
+          )}
+        </AssignmentSection>
+      </motion.div>
+
+      <motion.div variants={assignmentsItem}>
+        <AssignmentSection
+          title="Attendance assignment"
+          subtitle="Shifts, timetables, and overrides"
+          icon={ClockIcon}
+          count={assignmentSummaryRows.length}
+        >
+          {assignmentSummaryRows.length ? (
+            <div className="inline-flex max-w-full flex-nowrap items-stretch overflow-x-auto">
+              {assignmentSummaryRows.map((row, index, arr) => (
+                <div
+                  key={row.label}
+                  className={cn(
+                    "flex min-w-[7rem] shrink-0 flex-col justify-center px-3 py-2.5",
+                    index < arr.length - 1 ? "border-r border-border/60" : null
+                  )}
+                >
+                  <span className="truncate text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    {row.label}
+                  </span>
+                  <span className="mt-0.5 truncate text-base font-semibold tabular-nums text-primary">
+                    {row.value}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyAssignmentState message="No attendance assignment summary is available yet." />
+          )}
+        </AssignmentSection>
+      </motion.div>
+
+      <motion.div variants={assignmentsItem}>
+        <AssignmentSection
+          title="Upcoming schedule"
+          subtitle="Next published work days"
+          icon={CalendarIcon}
+          count={previewDays.length}
+          barClassName="bg-sky-500"
+        >
+          {previewDays.length ? (
+            <div className="divide-y divide-border/70">
+              {previewDays.map((day, index) => {
+                const shift = asRecord(day.shift)
+                const timetable = asRecord(day.timetable)
+                const isOffDay = day.is_off_day === true || day.is_off_day === "true"
+                const shiftName = isOffDay
+                  ? "Off Day"
+                  : readString(shift, ["name", "code"], "—")
+                const startTime =
+                  !shift || isOffDay ? "—" : formatTimeValue(shift.start_time)
+                const endTime =
+                  !shift || isOffDay ? "—" : formatTimeValue(shift.end_time)
+                const expectedWork = isOffDay
+                  ? "—"
+                  : formatMinutesDuration(shift?.expected_work_minutes)
+                const source = readString(day, ["source"], "—")
+                const timetableName = readString(timetable, ["name", "code"], "—")
+
+                return (
+                  <motion.div
+                    key={String(day.date ?? index)}
+                    className="flex bg-background"
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.28 + index * 0.05, duration: 0.28 }}
+                  >
+                    <div
+                      className={cn(
+                        "w-1 shrink-0",
+                        isOffDay ? "bg-violet-500" : "bg-primary"
+                      )}
+                    />
+                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3 px-3 py-2.5 sm:flex-nowrap">
+                      <div className="w-[7.5rem] shrink-0">
+                        <div className="text-xs font-semibold text-foreground">
+                          {formatDate(day.date)}
+                        </div>
+                        <div
+                          className={cn(
+                            "mt-0.5 text-[11px] font-semibold",
+                            isOffDay
+                              ? "text-violet-700 dark:text-violet-300"
+                              : "text-muted-foreground"
+                          )}
+                        >
+                          {shiftName}
+                        </div>
+                      </div>
+                      <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                            Start
+                          </div>
+                          <div
+                            className={cn(
+                              "text-base font-semibold tabular-nums leading-tight sm:text-lg",
+                              startTime === "—"
+                                ? "text-muted-foreground/45"
+                                : "text-primary"
+                            )}
+                          >
+                            {startTime}
+                          </div>
+                        </div>
+                        <div className="text-muted-foreground/40" aria-hidden>
+                          →
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                            End
+                          </div>
+                          <div
+                            className={cn(
+                              "text-base font-semibold tabular-nums leading-tight sm:text-lg",
+                              endTime === "—"
+                                ? "text-muted-foreground/45"
+                                : "text-primary"
+                            )}
+                          >
+                            {endTime}
+                          </div>
+                        </div>
+                        <div className="hidden min-w-[5.5rem] shrink-0 text-right sm:block">
+                          <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                            Work
+                          </div>
+                          <div className="text-sm font-semibold tabular-nums text-foreground">
+                            {expectedWork}
+                          </div>
+                        </div>
+                        <div className="hidden min-w-[6rem] shrink-0 text-right md:block">
+                          <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                            Timetable
+                          </div>
+                          <div className="truncate text-sm font-medium text-foreground">
+                            {timetableName}
+                          </div>
+                        </div>
+                      </div>
+                      {isOffDay ? (
+                        <AssignmentBadge tone="violet">Off</AssignmentBadge>
+                      ) : source !== "—" ? (
+                        <span className="hidden text-[11px] text-muted-foreground lg:inline">
+                          {source}
+                        </span>
+                      ) : null}
                     </div>
-                    <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                      <AssignmentField label="Designation" value={readString(designation, ["name", "designation_name"], "-")} inverse />
-                      <AssignmentField label="Assignment Type" value={readString(record, ["assignment_type"], "-")} inverse />
-                      <AssignmentField label="Primary" value={formatUnknownValue(record?.is_primary)} inverse />
-                      <AssignmentField label="Start Date" value={formatDate(record?.start_date)} inverse />
-                      <AssignmentField label="End Date" value={formatDate(record?.end_date)} inverse />
-                      <AssignmentField label="Notes" value={readString(record, ["notes"], "-")} inverse />
-                    </div>
-                  </SummaryPrimaryCard>
+                  </motion.div>
                 )
               })}
             </div>
           ) : (
-            <EmptyAssignmentCard message="No position assigned." doodle="doodle-grass" />
+            <EmptyAssignmentState message="No schedule preview has been published yet." />
           )}
         </AssignmentSection>
+      </motion.div>
+    </motion.div>
+  )
+}
+
+function asRecordList(value: unknown): AdminRecord[] {
+  if (!Array.isArray(value)) return []
+  return value.map((entry) => asRecord(entry)).filter((entry): entry is AdminRecord => entry !== null)
+}
+
+function ProfilePersonalTab({ employee }: { employee: AdminRecord }) {
+  const contacts = asRecordList(employee.contacts)
+  const addresses = asRecordList(employee.addresses)
+  const relatives = asRecordList(employee.relatives)
+
+  return (
+    <motion.div className="space-y-4" variants={profileTabStagger} initial="hidden" animate="show">
+      <motion.div
+        variants={profileTabItem}
+        className="inline-flex max-w-full flex-nowrap items-stretch overflow-x-auto rounded-lg border border-border"
+      >
+        {[
+          { label: "Contacts", value: contacts.length },
+          { label: "Addresses", value: addresses.length },
+          { label: "Relatives", value: relatives.length },
+        ].map((chip, index, arr) => (
+          <div
+            key={chip.label}
+            className={cn(
+              "flex min-w-[5.5rem] shrink-0 flex-col justify-center bg-background px-3 py-2",
+              index < arr.length - 1 ? "border-r border-border/60" : null
+            )}
+          >
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              {chip.label}
+            </span>
+            <span className="text-base font-semibold tabular-nums text-primary">{chip.value}</span>
+          </div>
+        ))}
+      </motion.div>
+
+      <motion.div variants={profileTabItem}>
+        <SelfServiceProfileSectionTabs
+          sections={[
+            {
+              id: "contacts",
+              title: "Contacts",
+              count: contacts.length,
+              content: (
+                <SelfServiceSectionCard title="Contacts" count={contacts.length} subtitle="Phone and email">
+                  {contacts.length ? (
+                    contacts.map((record, index) => {
+                      const isPrimary = formatUnknownValue(record.is_primary) === "Yes"
+                      return (
+                        <ProfileDataItem
+                          key={`contact-${index}`}
+                          title={readString(record, ["contact_type"], "Contact")}
+                          barClassName={isPrimary ? "bg-primary" : "bg-slate-300 dark:bg-slate-600"}
+                          badge={
+                            isPrimary ? (
+                              <AssignmentBadge tone="success">Primary</AssignmentBadge>
+                            ) : null
+                          }
+                          fields={[
+                            {
+                              label: "Phone",
+                              value: readString(record, ["phone_number", "phone"], "—"),
+                            },
+                            { label: "Email", value: readString(record, ["email"], "—") },
+                            {
+                              label: "Verified",
+                              value: formatUnknownValue(record.is_verified),
+                            },
+                            { label: "Notes", value: readString(record, ["notes"], "—") },
+                          ]}
+                        />
+                      )
+                    })
+                  ) : (
+                    <ProfileEmptyRow message="No contacts available." />
+                  )}
+                </SelfServiceSectionCard>
+              ),
+            },
+            {
+              id: "addresses",
+              title: "Addresses",
+              count: addresses.length,
+              content: (
+                <SelfServiceSectionCard title="Addresses" count={addresses.length} subtitle="Home and work">
+                  {addresses.length ? (
+                    addresses.map((record, index) => (
+                      <ProfileDataItem
+                        key={`address-${index}`}
+                        title={readString(record, ["address_type", "type"], "Address")}
+                        fields={[
+                          {
+                            label: "Address",
+                            value: readString(record, ["address_line", "address"], "—"),
+                          },
+                          { label: "City", value: readString(record, ["city"], "—") },
+                          { label: "Country", value: readString(record, ["country"], "—") },
+                          {
+                            label: "State / region",
+                            value: readString(record, ["state", "region", "province"], "—"),
+                          },
+                        ]}
+                      />
+                    ))
+                  ) : (
+                    <ProfileEmptyRow message="No addresses available." />
+                  )}
+                </SelfServiceSectionCard>
+              ),
+            },
+            {
+              id: "relatives",
+              title: "Relatives",
+              count: relatives.length,
+              content: (
+                <SelfServiceSectionCard
+                  title="Relatives"
+                  count={relatives.length}
+                  subtitle="Emergency contacts"
+                >
+                  {relatives.length ? (
+                    relatives.map((record, index) => (
+                      <ProfileDataItem
+                        key={`relative-${index}`}
+                        title={readString(record, ["name", "full_name"], "Relative")}
+                        fields={[
+                          {
+                            label: "Relationship",
+                            value: readString(record, ["relationship"], "—"),
+                          },
+                          {
+                            label: "Phone",
+                            value: readString(record, ["phone_number", "phone"], "—"),
+                          },
+                          { label: "Email", value: readString(record, ["email"], "—") },
+                        ]}
+                      />
+                    ))
+                  ) : (
+                    <ProfileEmptyRow message="No relatives available." />
+                  )}
+                </SelfServiceSectionCard>
+              ),
+            },
+          ]}
+        />
+      </motion.div>
+    </motion.div>
+  )
+}
+
+function ProfileRecordsTab({
+  employee,
+  correctionRequests,
+  profileUpdateRequests,
+  teamAttendance,
+}: {
+  employee: AdminRecord | null
+  correctionRequests: AdminRecord[]
+  profileUpdateRequests: AdminRecord[]
+  teamAttendance: AdminRecord[]
+}) {
+  const identifications = asRecordList(employee?.identifications)
+  const bankAccounts = asRecordList(employee?.bank_accounts)
+  const academic = asRecordList(employee?.academic_qualifications)
+  const professional = asRecordList(employee?.professional_qualifications)
+  const experience = asRecordList(employee?.experience_details)
+  const documents = asRecordList(employee?.documents)
+
+  const pendingCorrections = correctionRequests.filter((row) => {
+    const status = readString(row, ["status"], "").toLowerCase()
+    return status && !status.includes("cancel") && !status.includes("reject") && status !== "approved"
+  }).length
+
+  return (
+    <motion.div className="space-y-4" variants={profileTabStagger} initial="hidden" animate="show">
+      <motion.div
+        variants={profileTabItem}
+        className="inline-flex max-w-full flex-nowrap items-stretch overflow-x-auto rounded-lg border border-border"
+      >
+        {[
+          {
+            label: "Corrections",
+            value: String(correctionRequests.length),
+            highlight: pendingCorrections > 0,
+          },
+          {
+            label: "Profile updates",
+            value: String(profileUpdateRequests.length),
+            highlight: false,
+          },
+          { label: "Team today", value: String(teamAttendance.length), highlight: false },
+          { label: "IDs", value: String(identifications.length), highlight: false },
+          { label: "Documents", value: String(documents.length), highlight: false },
+        ].map((chip, index, arr) => (
+          <div
+            key={chip.label}
+            className={cn(
+              "flex min-w-[5.5rem] shrink-0 flex-col justify-center px-3 py-2",
+              chip.highlight ? "bg-amber-500/10" : "bg-background",
+              index < arr.length - 1 ? "border-r border-border/60" : null
+            )}
+          >
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              {chip.label}
+            </span>
+            <span
+              className={cn(
+                "text-base font-semibold tabular-nums",
+                chip.highlight ? "text-amber-700 dark:text-amber-300" : "text-primary"
+              )}
+            >
+              {chip.value}
+            </span>
+          </div>
+        ))}
+      </motion.div>
+
+      <div className="grid gap-3 lg:grid-cols-2">
+        <motion.div variants={profileTabItem}>
+          <SelfServiceSectionCard
+            title="Attendance corrections"
+            count={correctionRequests.length}
+            subtitle="Your correction requests"
+            barClassName="bg-amber-500"
+          >
+            {correctionRequests.length === 0 ? (
+              <ProfileEmptyRow message="No attendance correction requests found." />
+            ) : (
+              correctionRequests.map((row, index) => {
+                const titleText =
+                  readString(row, ["title", "request_no", "leave_no", "reference_no", "reference"], "") ||
+                  readString(row, ["reason", "request_type", "change_type"], "Correction request")
+                const createdAt =
+                  formatDateTime(row.created_at) !== "-"
+                    ? formatDateTime(row.created_at)
+                    : formatDate(row.date)
+                return (
+                  <ProfileRequestRow
+                    key={String(row.id ?? index)}
+                    title={titleText}
+                    status={readString(row, ["status"], "draft")}
+                    dateLabel={createdAt}
+                  />
+                )
+              })
+            )}
+          </SelfServiceSectionCard>
+        </motion.div>
+
+        <motion.div variants={profileTabItem}>
+          <SelfServiceSectionCard
+            title="Profile update requests"
+            count={profileUpdateRequests.length}
+            subtitle="Recent change requests"
+            barClassName="bg-sky-500"
+          >
+            {profileUpdateRequests.length === 0 ? (
+              <ProfileEmptyRow message="No profile update requests found." />
+            ) : (
+              profileUpdateRequests.map((row, index) => {
+                const titleText =
+                  readString(row, ["title", "request_no", "leave_no", "reference_no", "reference"], "") ||
+                  readString(row, ["reason", "request_type", "change_type"], "Profile update")
+                const createdAt =
+                  formatDateTime(row.created_at) !== "-"
+                    ? formatDateTime(row.created_at)
+                    : formatDate(row.date)
+                return (
+                  <ProfileRequestRow
+                    key={String(row.id ?? index)}
+                    title={titleText}
+                    status={readString(row, ["status"], "draft")}
+                    dateLabel={createdAt}
+                    detail={readString(row, ["reason"], "") || undefined}
+                  />
+                )
+              })
+            )}
+          </SelfServiceSectionCard>
+        </motion.div>
       </div>
 
-      <AssignmentSection title="Designation" icon={BriefcaseIcon}>
-        {designationAssignments.length ? (
-          <div className="space-y-2">
-            {designationAssignments.map((entry, index) => {
-              const record = asRecord(entry)
-              const designation = asRecord(record?.designation)
-              const designationName = readString(designation, ["name", "designation_name"], "Designation")
+      <motion.div variants={profileTabItem}>
+        <SelfServiceSectionCard
+          title="Direct reports today"
+          count={teamAttendance.length}
+          subtitle="Team attendance snapshot"
+        >
+          {teamAttendance.length === 0 ? (
+            <ProfileEmptyRow message="No team attendance rows were returned for your account." />
+          ) : (
+            teamAttendance.map((row, index) => {
+              const nestedEmployee = asRecord(row.employee)
+              const employeeLabel =
+                readString(row, ["employee_name", "full_name", "name"], "") ||
+                readString(nestedEmployee, ["full_name", "name"], "") ||
+                [
+                  readString(nestedEmployee, ["first_name"], ""),
+                  readString(nestedEmployee, ["last_name"], ""),
+                ]
+                  .filter(Boolean)
+                  .join(" ") ||
+                "Direct report"
+              const status = readString(row, ["status", "attendance_status"], "—")
+              const checkIn = formatUnknownValue(row.check_in_at ?? row.first_punch_at)
               return (
-                <SummaryPrimaryCard key={`designation-assignment-${index}`} doodle={pickDoodle(index + 2)}>
-                  <div className="flex items-start justify-between gap-3">
-                    <p className="text-base font-semibold tracking-tight text-white">{designationName}</p>
-                    {formatUnknownValue(record?.is_current) === "Yes" ? (
-                      <AssignmentBadge inverse>Current</AssignmentBadge>
-                    ) : null}
-                  </div>
-                  <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                    <AssignmentField label="Code" value={readString(designation, ["code"], "-")} inverse />
-                    <AssignmentField label="Start Date" value={formatDate(record?.start_date)} inverse />
-                    <AssignmentField label="End Date" value={formatDate(record?.end_date)} inverse />
-                    <AssignmentField label="Remarks" value={readString(record, ["remarks"], "-")} inverse />
-                  </div>
-                </SummaryPrimaryCard>
+                <ProfileDataItem
+                  key={String(row.id ?? index)}
+                  title={employeeLabel}
+                  barClassName={
+                    status.toLowerCase().includes("absent")
+                      ? "bg-rose-500"
+                      : status.toLowerCase().includes("late")
+                        ? "bg-amber-500"
+                        : "bg-emerald-500"
+                  }
+                  badge={
+                    status !== "—" ? (
+                      <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        {status}
+                      </span>
+                    ) : null
+                  }
+                  fields={[
+                    {
+                      label: "Date",
+                      value: formatDate(row.date ?? row.attendance_date),
+                    },
+                    { label: "Check in", value: checkIn },
+                  ]}
+                />
               )
-            })}
-          </div>
-        ) : (
-          <EmptyAssignmentCard message="No designation assigned." doodle="doodle-circles" />
-        )}
-      </AssignmentSection>
+            })
+          )}
+        </SelfServiceSectionCard>
+      </motion.div>
 
-      <AssignmentSection title="Attendance Assignment Summary" icon={ClockIcon}>
-        {assignmentSummaryRows.length ? (
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {assignmentSummaryRows.map((row, index) => (
-              <AssignmentStatCard key={row.label} label={row.label} value={row.value} doodle={pickDoodle(index)} />
+      {employee ? (
+        <motion.div variants={profileTabItem}>
+          <SelfServiceProfileSectionTabs
+            sections={[
+              {
+                id: "identifications",
+                title: "Identifications",
+                count: identifications.length,
+                content: (
+                  <SelfServiceSectionCard title="Identifications" count={identifications.length}>
+                    {identifications.length ? (
+                      identifications.map((record, index) => (
+                        <ProfileDataItem
+                          key={`identification-${index}`}
+                          title={readString(record, ["identification_type", "type"], "ID")}
+                          fields={[
+                            {
+                              label: "Number",
+                              value: readString(record, ["number", "id_number"], "—"),
+                            },
+                            { label: "Issue date", value: formatDate(record.issue_date) },
+                            { label: "Expiry date", value: formatDate(record.expiry_date) },
+                          ]}
+                        />
+                      ))
+                    ) : (
+                      <ProfileEmptyRow message="No identifications available." />
+                    )}
+                  </SelfServiceSectionCard>
+                ),
+              },
+              {
+                id: "bank_accounts",
+                title: "Bank Accounts",
+                count: bankAccounts.length,
+                content: (
+                  <SelfServiceSectionCard title="Bank Accounts" count={bankAccounts.length}>
+                    {bankAccounts.length ? (
+                      bankAccounts.map((record, index) => (
+                        <ProfileDataItem
+                          key={`bank-${index}`}
+                          title={readString(record, ["bank_name"], "Bank account")}
+                          fields={[
+                            {
+                              label: "Account name",
+                              value: readString(record, ["account_name"], "—"),
+                            },
+                            {
+                              label: "Account number",
+                              value: readString(record, ["account_number"], "—"),
+                            },
+                            { label: "Currency", value: readString(record, ["currency"], "—") },
+                          ]}
+                        />
+                      ))
+                    ) : (
+                      <ProfileEmptyRow message="No bank accounts available." />
+                    )}
+                  </SelfServiceSectionCard>
+                ),
+              },
+              {
+                id: "academic_qualifications",
+                title: "Academic Qualifications",
+                count: academic.length,
+                content: (
+                  <SelfServiceSectionCard title="Academic Qualifications" count={academic.length}>
+                    {academic.length ? (
+                      academic.map((record, index) => (
+                        <ProfileDataItem
+                          key={`academic-${index}`}
+                          title={readString(record, ["qualification", "name"], "Qualification")}
+                          fields={[
+                            {
+                              label: "Institution",
+                              value: readString(record, ["institution"], "—"),
+                            },
+                            { label: "Year", value: readString(record, ["year"], "—") },
+                          ]}
+                        />
+                      ))
+                    ) : (
+                      <ProfileEmptyRow message="No academic qualifications available." />
+                    )}
+                  </SelfServiceSectionCard>
+                ),
+              },
+              {
+                id: "professional_qualifications",
+                title: "Professional Qualifications",
+                count: professional.length,
+                content: (
+                  <SelfServiceSectionCard
+                    title="Professional Qualifications"
+                    count={professional.length}
+                  >
+                    {professional.length ? (
+                      professional.map((record, index) => (
+                        <ProfileDataItem
+                          key={`professional-${index}`}
+                          title={readString(record, ["qualification", "name"], "Qualification")}
+                          fields={[
+                            {
+                              label: "Issuer",
+                              value: readString(record, ["issuer", "institution"], "—"),
+                            },
+                            { label: "Year", value: readString(record, ["year"], "—") },
+                          ]}
+                        />
+                      ))
+                    ) : (
+                      <ProfileEmptyRow message="No professional qualifications available." />
+                    )}
+                  </SelfServiceSectionCard>
+                ),
+              },
+              {
+                id: "experience_details",
+                title: "Experience Details",
+                count: experience.length,
+                content: (
+                  <SelfServiceSectionCard title="Experience Details" count={experience.length}>
+                    {experience.length ? (
+                      experience.map((record, index) => (
+                        <ProfileDataItem
+                          key={`experience-${index}`}
+                          title={readString(record, ["company_name", "company"], "Experience")}
+                          fields={[
+                            {
+                              label: "Role",
+                              value: readString(record, ["role", "position"], "—"),
+                            },
+                            { label: "Start", value: formatDate(record.start_date) },
+                            { label: "End", value: formatDate(record.end_date) },
+                          ]}
+                        />
+                      ))
+                    ) : (
+                      <ProfileEmptyRow message="No experience details available." />
+                    )}
+                  </SelfServiceSectionCard>
+                ),
+              },
+              {
+                id: "documents",
+                title: "Documents",
+                count: documents.length,
+                content: (
+                  <SelfServiceSectionCard title="Documents" count={documents.length}>
+                    {documents.length ? (
+                      documents.map((record, index) => {
+                        const status = readString(record, ["status"], "—")
+                        return (
+                          <ProfileDataItem
+                            key={`document-${index}`}
+                            title={readString(record, ["title", "name"], "Document")}
+                            badge={
+                              status !== "—" ? (
+                                <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                  {status}
+                                </span>
+                              ) : null
+                            }
+                            fields={[
+                              {
+                                label: "Type",
+                                value: readString(record, ["document_type", "type"], "—"),
+                              },
+                              { label: "Uploaded", value: formatDate(record.created_at) },
+                            ]}
+                          />
+                        )
+                      })
+                    ) : (
+                      <ProfileEmptyRow message="No documents available." />
+                    )}
+                  </SelfServiceSectionCard>
+                ),
+              },
+            ]}
+          />
+        </motion.div>
+      ) : null}
+    </motion.div>
+  )
+}
+
+function ProfileUpdatesTab({
+  profileUpdateRequests,
+  openSectionEditor,
+  onSubmitRequest,
+  onCancelRequest,
+  loading,
+}: {
+  profileUpdateRequests: AdminRecord[]
+  openSectionEditor: (key: string, title: string, fields: EditableUserField[]) => void
+  onSubmitRequest: (id: number | string) => Promise<void>
+  onCancelRequest: (id: number | string) => Promise<void>
+  loading: boolean
+}) {
+  const statusCounts = React.useMemo(() => {
+    let pending = 0
+    let approved = 0
+    let other = 0
+    for (const row of profileUpdateRequests) {
+      const status = readString(row, ["status"], "").toLowerCase()
+      if (status.includes("approv") || status.includes("complete")) approved += 1
+      else if (
+        status.includes("pend") ||
+        status.includes("submit") ||
+        status.includes("review") ||
+        status.includes("draft")
+      ) {
+        pending += 1
+      } else {
+        other += 1
+      }
+    }
+    return { pending, approved, other, total: profileUpdateRequests.length }
+  }, [profileUpdateRequests])
+
+  const updateActions = [
+    {
+      key: "personal-details",
+      title: "Personal details",
+      description: "Name, email, phone, and city",
+      fields: ["first_name", "last_name", "email", "phone", "city"] as EditableUserField[],
+      label: "Personal Details",
+    },
+    {
+      key: "contact-details",
+      title: "Contact details",
+      description: "Email, phone, and city",
+      fields: ["email", "phone", "city"] as EditableUserField[],
+      label: "Contact Details",
+    },
+    {
+      key: "profile-photo",
+      title: "Profile photo",
+      description: "Change your picture",
+      fields: ["profile_photo_url"] as EditableUserField[],
+      label: "Profile Picture",
+    },
+    {
+      key: "password",
+      title: "Password",
+      description: "Update sign-in password",
+      fields: ["password"] as EditableUserField[],
+      label: "Password",
+    },
+  ]
+
+  return (
+    <motion.div className="space-y-4" variants={profileTabStagger} initial="hidden" animate="show">
+      {/* Primary actions */}
+      <motion.div
+        variants={profileTabItem}
+        className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+      >
+        <div className="min-w-0">
+          <h2 className="text-base font-semibold text-foreground">Update requests</h2>
+          <p className="text-sm text-muted-foreground">
+            Submit a change for HR approval, or track requests you already sent.
+          </p>
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          className="h-9 shrink-0 bg-primary !text-white hover:bg-primary/90"
+          onClick={() =>
+            openSectionEditor("personal-details", "Personal Details", [
+              "first_name",
+              "last_name",
+              "email",
+              "phone",
+              "city",
+            ])
+          }
+        >
+          <PencilIcon className="mr-1.5 size-3.5" />
+          Request update
+        </Button>
+      </motion.div>
+
+      <motion.div
+        variants={profileTabItem}
+        className="inline-flex max-w-full flex-nowrap items-stretch overflow-x-auto rounded-lg border border-border"
+      >
+        {[
+          { label: "All", value: String(statusCounts.total), className: "text-primary" },
+          {
+            label: "Open",
+            value: String(statusCounts.pending),
+            className:
+              statusCounts.pending > 0
+                ? "text-amber-700 dark:text-amber-300"
+                : "text-foreground",
+          },
+          {
+            label: "Approved",
+            value: String(statusCounts.approved),
+            className: "text-emerald-700 dark:text-emerald-300",
+          },
+          { label: "Other", value: String(statusCounts.other), className: "text-foreground" },
+        ].map((chip, index, arr) => (
+          <div
+            key={chip.label}
+            className={cn(
+              "flex min-w-[5.5rem] shrink-0 flex-col justify-center bg-background px-3 py-2",
+              index < arr.length - 1 ? "border-r border-border/60" : null
+            )}
+          >
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              {chip.label}
+            </span>
+            <span className={cn("text-base font-semibold tabular-nums", chip.className)}>
+              {chip.value}
+            </span>
+          </div>
+        ))}
+      </motion.div>
+
+      {/* Quick update types */}
+      <motion.div variants={profileTabItem}>
+        <div className="overflow-hidden rounded-lg border border-border bg-card">
+          <div className="flex">
+            <div className="w-1 shrink-0 bg-primary" />
+            <div className="min-w-0 flex-1 px-3 py-2.5">
+              <h3 className="text-sm font-semibold text-foreground">What do you want to change?</h3>
+              <p className="text-[11px] text-muted-foreground">
+                Each request is sent to HR for approval.
+              </p>
+            </div>
+          </div>
+          <div className="grid gap-0 border-t border-border/70 sm:grid-cols-2">
+            {updateActions.map((action) => (
+              <button
+                key={action.key}
+                type="button"
+                onClick={() => openSectionEditor(action.key, action.label, action.fields)}
+                className="flex items-center gap-3 border-b border-border/70 px-3 py-3 text-left transition-colors hover:bg-muted/40 sm:odd:border-r sm:[&:nth-last-child(-n+2)]:border-b-0"
+              >
+                <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                  <PencilIcon className="size-3.5" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-semibold text-foreground">{action.title}</span>
+                  <span className="block text-[11px] text-muted-foreground">{action.description}</span>
+                </span>
+                <span className="text-xs font-medium text-primary">Request →</span>
+              </button>
             ))}
           </div>
-        ) : (
-          <EmptyAssignmentCard message="No attendance assignment summary is available yet." doodle="doodle-grass" />
-        )}
-      </AssignmentSection>
+        </div>
+      </motion.div>
 
-      <AssignmentSection title="Upcoming Schedule Preview" icon={CalendarIcon}>
-        {scheduleDays.length ? (
-          <div className="space-y-2">
-            {scheduleDays.slice(0, 5).map((day, index) => {
-              const shift = asRecord(day.shift)
-              const timetable = asRecord(day.timetable)
-              const isOffDay = day.is_off_day === true || day.is_off_day === "true"
-              const shiftName = isOffDay ? "Off Day" : readString(shift, ["name", "code"], "-")
-              const timeRange = !shift || isOffDay
-                ? "—"
-                : `${formatTimeValue(shift.start_time)} to ${formatTimeValue(shift.end_time)}`
-              const expectedWork = isOffDay ? "—" : formatMinutesDuration(shift?.expected_work_minutes)
-
+      <motion.div variants={profileTabItem}>
+        <SelfServiceSectionCard
+          title="Your requests"
+          count={profileUpdateRequests.length}
+          subtitle="History of submitted profile changes"
+          action={
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 px-2 text-xs"
+              onClick={() =>
+                openSectionEditor("personal-details", "Personal Details", [
+                  "first_name",
+                  "last_name",
+                  "email",
+                  "phone",
+                  "city",
+                ])
+              }
+            >
+              <PencilIcon className="mr-1 size-3.5" />
+              New request
+            </Button>
+          }
+        >
+          {profileUpdateRequests.length === 0 ? (
+            <div className="space-y-3 px-3 py-5 text-center">
+              <p className="text-sm text-muted-foreground">
+                You have not submitted any profile update requests yet.
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                className="h-9 bg-primary !text-white hover:bg-primary/90"
+                onClick={() =>
+                  openSectionEditor("personal-details", "Personal Details", [
+                    "first_name",
+                    "last_name",
+                    "email",
+                    "phone",
+                    "city",
+                  ])
+                }
+              >
+                <PencilIcon className="mr-1.5 size-3.5" />
+                Request an update
+              </Button>
+            </div>
+          ) : (
+            profileUpdateRequests.map((row, index) => {
+              const requestId = readProfileUpdateRequestId(row)
+              const status = readString(row, ["status"], "draft").toLowerCase()
+              const titleText =
+                readString(row, ["title", "request_no", "reference_no", "reference"], "") ||
+                readString(row, ["reason", "request_type", "change_type"], "Profile update")
+              const createdAt =
+                formatDateTime(row.created_at) !== "-"
+                  ? formatDateTime(row.created_at)
+                  : formatDate(row.date)
+              const canSubmit = requestId !== null && status === "draft"
+              const canCancel = requestId !== null && status !== "cancelled" && status !== "approved" && status !== "rejected"
               return (
-                <SummaryPrimaryCard key={String(day.date ?? index)} doodle={pickDoodle(index + 3)}>
-                  <div className="flex items-start justify-between gap-3">
-                    <p className="text-base font-semibold tracking-tight text-white">{formatDate(day.date)}</p>
-                    {isOffDay ? <AssignmentBadge inverse>Off Day</AssignmentBadge> : null}
+                <motion.div
+                  key={String(requestId ?? row.id ?? index)}
+                  initial={{ opacity: 0, x: 8 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.08 + index * 0.04, duration: 0.25 }}
+                >
+                  <div className="overflow-hidden">
+                    <ProfileRequestRow
+                      title={titleText}
+                      status={readString(row, ["status"], "draft")}
+                      dateLabel={createdAt}
+                      detail={readString(row, ["reason"], "") || undefined}
+                    />
+                    {canSubmit || canCancel ? (
+                      <div className="flex flex-wrap gap-1.5 border-t border-border/70 bg-background px-3 py-2">
+                        {canSubmit ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="h-7 bg-primary px-2 text-[10px] font-semibold uppercase tracking-wide !text-white"
+                            disabled={loading}
+                            onClick={() => void onSubmitRequest(requestId)}
+                          >
+                            Submit
+                          </Button>
+                        ) : null}
+                        {canCancel ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-7 border-rose-300 px-2 text-[10px] font-semibold uppercase tracking-wide text-rose-700 hover:bg-rose-50 hover:text-rose-700"
+                            disabled={loading}
+                            onClick={() => void onCancelRequest(requestId)}
+                          >
+                            Cancel
+                          </Button>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
-                  <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                    <AssignmentField label="Shift" value={shiftName} inverse />
-                    <AssignmentField label="Time" value={timeRange} inverse />
-                    <AssignmentField label="Source" value={readString(day, ["source"], "-")} inverse />
-                    <AssignmentField label="Timetable" value={readString(timetable, ["name", "code"], "-")} inverse />
-                    <AssignmentField label="Expected Work" value={expectedWork} inverse />
-                  </div>
-                </SummaryPrimaryCard>
+                </motion.div>
               )
-            })}
-          </div>
-        ) : (
-          <EmptyAssignmentCard message="No schedule preview has been published yet." doodle="doodle-curves" />
-        )}
-      </AssignmentSection>
-    </div>
+            })
+          )}
+        </SelfServiceSectionCard>
+      </motion.div>
+    </motion.div>
   )
 }
 
@@ -1305,7 +2853,6 @@ type ProfileSummaryTabProps = {
   currentUser: AdminRecord | null
   employee: AdminRecord | null
   attendanceTodayRecord: AdminRecord | null
-  dashboardActions: AdminRecord | null
   dashboardLeave: AdminRecord | null
   employmentStatus: AdminRecord | null
   scheduleDays: AdminRecord[]
@@ -1314,19 +2861,117 @@ type ProfileSummaryTabProps = {
   openSectionEditor: (key: string, title: string, fields: EditableUserField[]) => void
 }
 
+function profilePunchStatusTone(punchState: string) {
+  const key = punchState.toLowerCase()
+  if (key.includes("checked out") || key === "present") {
+    return {
+      bar: "bg-emerald-500",
+      label: "text-emerald-700 dark:text-emerald-300",
+      chip: "bg-emerald-500/10 text-emerald-800 dark:text-emerald-200",
+    }
+  }
+  if (key.includes("checked in") || key.includes("on break")) {
+    return {
+      bar: "bg-sky-500",
+      label: "text-sky-700 dark:text-sky-300",
+      chip: "bg-sky-500/10 text-sky-800 dark:text-sky-200",
+    }
+  }
+  if (key.includes("late") || key.includes("half day")) {
+    return {
+      bar: "bg-amber-500",
+      label: "text-amber-700 dark:text-amber-300",
+      chip: "bg-amber-500/10 text-amber-800 dark:text-amber-200",
+    }
+  }
+  if (key.includes("absent")) {
+    return {
+      bar: "bg-rose-500",
+      label: "text-rose-700 dark:text-rose-300",
+      chip: "bg-rose-500/10 text-rose-800 dark:text-rose-200",
+    }
+  }
+  if (key.includes("leave") || key.includes("holiday") || key.includes("off")) {
+    return {
+      bar: "bg-violet-500",
+      label: "text-violet-700 dark:text-violet-300",
+      chip: "bg-violet-500/10 text-violet-800 dark:text-violet-200",
+    }
+  }
+  return {
+    bar: "bg-primary",
+    label: "text-primary",
+    chip: "bg-primary/10 text-primary",
+  }
+}
+
+function ProfileSummaryFieldRow({
+  label,
+  value,
+}: {
+  label: string
+  value: React.ReactNode
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3 px-3 py-2">
+      <span className="shrink-0 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </span>
+      <span className="min-w-0 text-right text-sm font-medium text-foreground break-words">{value}</span>
+    </div>
+  )
+}
+
+function ProfileSummarySection({
+  title,
+  subtitle,
+  icon: Icon,
+  action,
+  children,
+  barClassName = "bg-primary",
+}: {
+  title: string
+  subtitle?: string
+  icon: React.ComponentType<{ className?: string }>
+  action?: React.ReactNode
+  children: React.ReactNode
+  barClassName?: string
+}) {
+  return (
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <div className="flex">
+        <div className={cn("w-1 shrink-0", barClassName)} />
+        <div className="flex min-w-0 flex-1 items-center justify-between gap-2 border-r border-t border-primary/40 px-3 py-2.5">
+          <div className="flex min-w-0 items-center gap-2">
+            <Icon className="size-4 shrink-0 text-primary" />
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-foreground">{title}</div>
+              {subtitle ? (
+                <div className="truncate text-[11px] text-muted-foreground">{subtitle}</div>
+              ) : null}
+            </div>
+          </div>
+          {action}
+        </div>
+      </div>
+      <div className="divide-y divide-border/70 border-t border-border/70">{children}</div>
+    </div>
+  )
+}
+
 function ProfileSummaryTab({
   currentUser,
   employee,
   attendanceTodayRecord,
-  dashboardActions,
   dashboardLeave,
   correctionRequests,
   profileUpdateRequests,
   openSectionEditor,
 }: ProfileSummaryTabProps) {
+  const { url: myProfilePhotoUrl } = useMyProfilePhoto()
   const displayName = resolveDisplayName(currentUser, employee)
   const employeeNumber = resolveEmployeeNumber(currentUser, employee)
-  const profilePhotoUrl = resolveProfilePhotoUrl(currentUser, employee)
+  const profilePhotoUrl = resolveProfilePhotoUrl(currentUser, employee, myProfilePhotoUrl)
   const initials = displayName
     .split(" ")
     .filter(Boolean)
@@ -1334,6 +2979,8 @@ function ProfileSummaryTab({
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("")
   const employmentStatusLabel = readString(employee, ["employment_status", "status"], "Active")
+  const employmentTypeLabel = formatEmploymentType(employee?.employment_type)
+  const hireDateLabel = formatDate(employee?.hire_date)
   const positionLabel =
     readString(asRecord(employee?.primary_position), ["name", "position_name"], "") ||
     readString(asRecord(employee?.position), ["name", "position_name"], "") ||
@@ -1354,247 +3001,374 @@ function ProfileSummaryTab({
   const pendingProfileUpdates = profileUpdateRequests.filter(
     (row) => readString(row, ["status"], "").toLowerCase() !== "cancelled"
   ).length
-  const punchState = formatPunchState(readString(attendanceTodayRecord, ["punch_state", "status"], ""))
-  const processingState = formatProcessingState(readString(attendanceTodayRecord, ["processing_state"], ""))
+  const pendingLeave = readArray(dashboardLeave?.pending_requests).length
+  const leaveBalancesCount = readArray(dashboardLeave?.balances).length
+  const attendanceTodaySummary =
+    asRecord(attendanceTodayRecord?.summary) ??
+    asRecord(attendanceTodayRecord?.daily_summary) ??
+    asRecord(attendanceTodayRecord?.dailySummary) ??
+    asRecord(attendanceTodayRecord?.attendance) ??
+    null
+  const rawPunchState = readAttendanceValue(
+    attendanceTodayRecord,
+    ["punch_state", "punchState", "status"],
+    attendanceTodaySummary
+  )
+  const processingState = formatProcessingState(
+    readAttendanceValue(attendanceTodayRecord, ["processing_state", "processingState"], attendanceTodaySummary)
+  )
 
-  const email = readString(currentUser, ["email"], "-");
-  const phone = readString(employee, ["phone", "phone_number"], "") || readString(currentUser, ["phone", "phone_number"], "-");
-  const empId = readString(employee, ["id", "employee_id", "employeeId"], "-");
+  const email = readString(currentUser, ["email"], "-")
+  const phone =
+    readString(employee, ["phone", "phone_number"], "") ||
+    readString(currentUser, ["phone", "phone_number"], "-")
+  const empId = readString(employee, ["id", "employee_id", "employeeId"], "-")
 
-  // Project's own design, reference style only. Uniform system color via var(--primary) + doodles
-  const infoCards = [
-    {
-      icon: UserIcon,
-      label: "Personal",
-      title: "Contact",
-      items: [
-        `Email: ${email}`,
-        `Phone: ${phone}`,
-        `Employee ID: ${empId}`,
-      ],
-      stat1: "Email",
-      stat2: "Phone",
-      onEdit: () => openSectionEditor("contact-details", "Contact Details", ["first_name", "last_name", "email", "phone"]),
-      editLabel: "Edit Profile",
-    },
-    {
-      icon: Building2Icon,
-      label: "Work",
-      title: "Organization",
-      items: [
-        `Branch: ${branchLabel}`,
-        `Department: ${departmentLabel}`,
-        `Position: ${positionLabel}`,
-      ],
-      stat1: "Branch",
-      stat2: "Dept",
-    },
-    {
-      icon: UsersIcon,
-      label: "Team",
-      title: "Reporting",
-      items: [
-        `Reports To: ${manager.name || "-"}`,
-        `Manager No: ${manager.employeeNo || "-"}`,
-        `Full Name: ${displayName}`,
-      ],
-      stat1: "Manager",
-      stat2: "Reports",
-    },
-    {
-      icon: BriefcaseIcon,
-      label: "Status",
-      title: "Employment",
-      items: [
-        `Status: ${employmentStatusLabel}`,
-        `Type: ${formatEmploymentType(employee?.employment_type)}`,
-        `Hired: ${formatDate(employee?.hire_date)}`,
-      ],
-      stat1: "Active",
-      stat2: "Full-time",
-    },
-  ];
+  const firstPunchRaw = readAttendanceValue(
+    attendanceTodayRecord,
+    [
+      "first_punch",
+      "first_check_in_at",
+      "firstCheckInAt",
+      "first_punch_at",
+      "firstPunchAt",
+      "check_in_at",
+      "checkInAt",
+      "check_in",
+      "checkIn",
+      "clock_in_at",
+      "clockInAt",
+      "check_in_time",
+      "checkInTime",
+    ],
+    attendanceTodaySummary
+  )
+  const lastPunchRaw = readAttendanceValue(
+    attendanceTodayRecord,
+    [
+      "last_punch",
+      "last_check_out_at",
+      "lastCheckOutAt",
+      "last_punch_at",
+      "lastPunchAt",
+      "check_out_at",
+      "checkOutAt",
+      "check_out",
+      "checkOut",
+      "clock_out_at",
+      "clockOutAt",
+      "check_out_time",
+      "checkOutTime",
+    ],
+    attendanceTodaySummary
+  )
+  const firstPunch = formatAttendancePunchValue(firstPunchRaw)
+  const lastPunch = formatAttendancePunchValue(lastPunchRaw)
+  const punchState = resolveProfileAttendanceState(rawPunchState, firstPunch, lastPunch)
+  const punchTone = profilePunchStatusTone(punchState)
+  const todayDateLabel = formatDate(attendanceTodayRecord?.date) || "Today"
+  const openRequestsTotal = pendingLeave + pendingCorrections + pendingProfileUpdates
 
-  const checkInValue = formatUnknownValue(dashboardActions?.can_check_in);
-  const checkInHint = formatDate(attendanceTodayRecord?.date);
-  const checkOutValue = formatUnknownValue(dashboardActions?.can_check_out);
-  const checkOutHint = readString(attendanceTodayRecord, ["first_punch", "first_punch_at"], "") || undefined;
-  const leaveValue = String(readArray(dashboardLeave?.balances).length);
-  const leaveHint = `${readArray(dashboardLeave?.pending_requests).length} pending · ${pendingCorrections} corrections · ${pendingProfileUpdates} profile updates`;
   return (
-    <div className="space-y-6">
-      {/* Profile Header */}
-      <div 
-        className="relative overflow-hidden rounded-2xl p-5 md:p-6 text-white"
-        style={{ backgroundColor: 'var(--primary)' }}
+    <div className="space-y-4 animate-in fade-in-0 slide-in-from-bottom-1 duration-300">
+      {/* Profile header — primary background, compact meta */}
+      <div
+        className="relative overflow-hidden rounded-2xl p-4 text-white md:p-5"
+        style={{ backgroundColor: "var(--primary)" }}
       >
         <Doodle name="doodle-circles" />
-        <div className="relative z-10 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-            <Avatar className="size-16 ring-2 ring-white/30 md:size-20">
+        <div className="relative z-10 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-start gap-3 sm:items-center">
+            <Avatar className="size-14 shrink-0 ring-2 ring-white/30 md:size-16">
               {profilePhotoUrl ? <AvatarImage src={profilePhotoUrl} alt={displayName} /> : null}
-              <AvatarFallback className="bg-white/20 text-xl font-semibold text-white">
+              <AvatarFallback className="bg-white/20 text-lg font-semibold text-white">
                 {initials || "ME"}
               </AvatarFallback>
             </Avatar>
 
-            <div className="min-w-0 flex-1 space-y-1.5">
-              <div className="flex flex-wrap items-center gap-3">
-                <h1 className="text-2xl font-semibold tracking-tight text-white">{displayName}</h1>
-                <Badge className="text-xs bg-white/20 text-white hover:bg-white/30 border-white/30">
-                  {employmentStatusLabel}
-                </Badge>
+            <div className="min-w-0 space-y-2.5">
+              {/* Identity: who you are */}
+              <div className="min-w-0 space-y-0.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="text-xl font-semibold tracking-tight text-white md:text-2xl">
+                    {displayName}
+                  </h1>
+                  <span className="inline-flex items-center rounded-full border border-white/30 bg-white/20 px-2 py-0.5 text-[11px] font-semibold capitalize text-white">
+                    {employmentStatusLabel}
+                  </span>
+                </div>
+                <p className="text-sm font-medium text-white/95">{positionLabel}</p>
               </div>
 
-              <div className="text-sm text-white/80">
-                <span className="font-medium text-white">{employeeNumber}</span>
-                <span className="mx-1.5 text-white/50">•</span>
-                {positionLabel}
-                <span className="mx-1.5 text-white/50">•</span>
-                {departmentLabel}
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2 text-xs text-white/90">
-                <CalendarIcon className="size-3" />
-                Hired <span className="font-medium text-white">{formatDate(employee?.hire_date)}</span>
-                <span className="text-white/40">·</span>
-                <BriefcaseIcon className="size-3" />
-                <span className="font-medium text-white">{formatEmploymentType(employee?.employment_type)}</span>
+              {/* Labeled facts — avoids the old unlabeled · list */}
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3 lg:grid-cols-5">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-white/55">
+                    Employee no.
+                  </p>
+                  <p className="truncate text-sm font-semibold text-white">{employeeNumber}</p>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-white/55">
+                    Department
+                  </p>
+                  <p className="truncate text-sm font-semibold text-white">{departmentLabel}</p>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-white/55">
+                    Branch
+                  </p>
+                  <p className="truncate text-sm font-semibold text-white">{branchLabel}</p>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-white/55">
+                    Employment
+                  </p>
+                  <p className="truncate text-sm font-semibold text-white">{employmentTypeLabel}</p>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-white/55">
+                    Joined
+                  </p>
+                  <p className="truncate text-sm font-semibold text-white">{hireDateLabel}</p>
+                </div>
               </div>
             </div>
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="self-start border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white"
-            onClick={() => openSectionEditor("personal-details", "Personal Details", ["first_name", "last_name", "email", "phone"])}
-          >
-            <PencilIcon className="mr-1 size-3.5" />
-            Edit Profile
-          </Button>
-        </div>
-      </div>
 
-      {/* Status items on individual cards with pale system color + doodles */}
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {/* Today's Status */}
-        <div 
-          className="relative overflow-hidden rounded-2xl p-4 text-foreground" 
-          style={{ backgroundColor: PALE_PRIMARY, color: 'var(--primary)' }}
-        >
-          <Doodle name="doodle-circles" />
-          <div className="relative z-10">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Today&apos;s Status</p>
-            <p className="mt-1.5 text-[17px] font-semibold tracking-[-0.01em] text-foreground">{punchState}</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">{processingState}</p>
-          </div>
-        </div>
-
-        {/* Check In */}
-        <div 
-          className="relative overflow-hidden rounded-2xl p-4 text-foreground" 
-          style={{ backgroundColor: PALE_PRIMARY, color: 'var(--primary)' }}
-        >
-          <Doodle name="doodle-curves" />
-          <div className="relative z-10">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Check In</p>
-            <p className="mt-1.5 text-[17px] font-semibold tracking-[-0.01em] text-foreground">{checkInValue}</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">{checkInHint}</p>
-          </div>
-        </div>
-
-        {/* Check Out */}
-        <div 
-          className="relative overflow-hidden rounded-2xl p-4 text-foreground" 
-          style={{ backgroundColor: PALE_PRIMARY, color: 'var(--primary)' }}
-        >
-          <Doodle name="doodle-grass" />
-          <div className="relative z-10">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Check Out</p>
-            <p className="mt-1.5 text-[17px] font-semibold tracking-[-0.01em] text-foreground">{checkOutValue}</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">{checkOutHint}</p>
-          </div>
-        </div>
-
-        {/* Leave Balances */}
-        <div 
-          className="relative overflow-hidden rounded-2xl p-4 text-foreground" 
-          style={{ backgroundColor: PALE_PRIMARY, color: 'var(--primary)' }}
-        >
-          <Doodle name="doodle-circles" />
-          <div className="relative z-10">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Leave Balances</p>
-            <p className="mt-1.5 text-[17px] font-semibold tracking-[-0.01em] text-foreground">{leaveValue}</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">{leaveHint}</p>
-          </div>
-        </div>
-      </div>
-
-      {/* My Info cards - pale system color */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {infoCards.map((card, index) => {
-          const IconComp = card.icon;
-          return (
-            <div
-              key={index}
-              className="relative overflow-hidden rounded-2xl p-4 text-foreground flex flex-col min-h-[180px]"
-              style={{ backgroundColor: PALE_PRIMARY, color: 'var(--primary)' }}
+          <div className="flex flex-wrap items-center gap-2 sm:shrink-0 sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 px-2.5 text-xs border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+              onClick={() =>
+                openSectionEditor("personal-details", "Personal Details", [
+                  "first_name",
+                  "last_name",
+                  "email",
+                  "phone",
+                ])
+              }
             >
-              <Doodle name={index % 2 === 0 ? "doodle-circles" : "doodle-curves"} />
-              <div className="relative z-10">
-                {/* Header inspired by reference */}
-                <div className="flex items-start justify-between">
-                  <div className="text-xs font-medium uppercase tracking-[0.5px] text-muted-foreground">{card.label}</div>
-                  <div className="flex items-center gap-2">
-                    {card.onEdit ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 px-2 text-xs text-primary hover:bg-primary/10 hover:text-primary"
-                        onClick={card.onEdit}
-                      >
-                        <PencilIcon className="mr-1 size-3.5" />
-                        {card.editLabel ?? "Edit"}
-                      </Button>
-                    ) : null}
-                    <IconComp className="size-5 text-primary opacity-90" />
-                  </div>
+              <PencilIcon className="mr-1 size-3" />
+              Edit Profile
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 px-2.5 text-xs border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+              onClick={() =>
+                openSectionEditor("profile-photo", "Profile Picture", ["profile_photo_url"])
+              }
+            >
+              <PencilIcon className="mr-1 size-3" />
+              Change Photo
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Today's attendance detail row */}
+      <div className="divide-y divide-border overflow-hidden rounded-lg border border-border">
+        <div className="flex bg-background">
+          <div className={cn("w-1 shrink-0", punchTone.bar)} />
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3 px-3 py-2.5 sm:flex-nowrap">
+            <div className="w-[7.5rem] shrink-0">
+              <div className="text-xs font-semibold text-foreground">Today</div>
+              <div className={cn("mt-0.5 text-[11px] font-semibold capitalize", punchTone.label)}>
+                {punchState}
+              </div>
+            </div>
+            <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Check in
                 </div>
-
-                {/* Title */}
-                <div className="mt-2 text-lg font-semibold tracking-tight text-foreground">{card.title}</div>
-
-                {/* Items - all visible, project's readable style */}
-                <div className="mt-3 flex-1 space-y-1 text-sm leading-snug text-foreground opacity-95">
-                  {card.items.map((item, i) => (
-                    <div key={i}>{item}</div>
-                  ))}
+                <div
+                  className={cn(
+                    "text-base font-semibold tabular-nums leading-tight sm:text-lg",
+                    firstPunch === "—" ? "text-muted-foreground/45" : "text-primary"
+                  )}
+                >
+                  {firstPunch}
                 </div>
-
-                {/* Bottom stats row (reference style) */}
-                <div className="mt-4 flex items-center gap-4 text-xs text-muted-foreground border-t border-border/20 pt-3">
-                  <div className="flex items-center gap-1">
-                    <span className="font-medium">•</span> {card.stat1}
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <span className="font-medium">•</span> {card.stat2}
-                  </div>
-                  {card.label === "Personal" ? (
-                    <button
-                      type="button"
-                      className="ml-auto font-medium text-primary underline-offset-4 hover:underline"
-                      onClick={() => openSectionEditor("password", "Password", ["password"])}
-                    >
-                      Change Password
-                    </button>
-                  ) : null}
+              </div>
+              <div className="text-muted-foreground/40" aria-hidden>
+                →
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Check out
+                </div>
+                <div
+                  className={cn(
+                    "text-base font-semibold tabular-nums leading-tight sm:text-lg",
+                    lastPunch === "—" ? "text-muted-foreground/45" : "text-primary"
+                  )}
+                >
+                  {lastPunch}
+                </div>
+              </div>
+              <div className="hidden min-w-[6.5rem] shrink-0 text-right sm:block">
+                <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Processing
+                </div>
+                <div className="truncate text-sm font-medium text-foreground">
+                  {processingState || todayDateLabel}
                 </div>
               </div>
             </div>
-          );
-        })}
+          </div>
+        </div>
+
+        <div className="flex bg-background">
+          <div
+            className={cn(
+              "w-1 shrink-0",
+              "bg-primary"
+            )}
+          />
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-5 gap-y-2 px-3 py-2.5">
+            <div className="w-[7.5rem] shrink-0">
+              <div className="text-xs font-semibold text-foreground">Requests</div>
+              <div className="mt-0.5 text-[11px] text-muted-foreground">Open items</div>
+            </div>
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-5 gap-y-1">
+              <div>
+                <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Leave
+                </div>
+                <div className="text-sm font-semibold tabular-nums text-muted-foreground">
+                  {pendingLeave}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Corrections
+                </div>
+                <div className="text-sm font-semibold tabular-nums text-muted-foreground">
+                  {pendingCorrections}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Profile
+                </div>
+                <div className="text-sm font-semibold tabular-nums text-muted-foreground">
+                  {pendingProfileUpdates}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Leave types
+                </div>
+                <div className="text-sm font-semibold tabular-nums text-muted-foreground">
+                  {leaveBalancesCount}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Open requests
+                </div>
+                <div className="text-sm font-semibold tabular-nums text-muted-foreground">
+                  {openRequestsTotal}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* My info sections — compact bordered lists */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <ProfileSummarySection
+          title="Contact"
+          subtitle="Personal details"
+          icon={UserIcon}
+          action={
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs text-primary hover:bg-primary/10 hover:text-primary"
+              onClick={() =>
+                openSectionEditor("contact-details", "Contact Details", [
+                  "first_name",
+                  "last_name",
+                  "email",
+                  "phone",
+                ])
+              }
+            >
+              <PencilIcon className="mr-1 size-3.5" />
+              Edit
+            </Button>
+          }
+        >
+          <ProfileSummaryFieldRow label="Email" value={email} />
+          <ProfileSummaryFieldRow label="Phone" value={phone} />
+          <ProfileSummaryFieldRow label="Employee ID" value={empId} />
+          <div className="flex flex-wrap items-center gap-3 px-3 py-2">
+            <button
+              type="button"
+              className="text-xs font-medium text-primary underline-offset-4 hover:underline"
+              onClick={() => openSectionEditor("password", "Password", ["password"])}
+            >
+              Change Password
+            </button>
+            <button
+              type="button"
+              className="text-xs font-medium text-primary underline-offset-4 hover:underline"
+              onClick={() =>
+                openSectionEditor("profile-photo", "Profile Picture", ["profile_photo_url"])
+              }
+            >
+              Change Photo
+            </button>
+          </div>
+        </ProfileSummarySection>
+
+        <ProfileSummarySection
+          title="Organization"
+          subtitle="Work placement"
+          icon={Building2Icon}
+        >
+          <ProfileSummaryFieldRow label="Branch" value={branchLabel} />
+          <ProfileSummaryFieldRow label="Department" value={departmentLabel} />
+          <ProfileSummaryFieldRow label="Position" value={positionLabel} />
+        </ProfileSummarySection>
+
+        <ProfileSummarySection title="Reporting" subtitle="Manager chain" icon={UsersIcon}>
+          <ProfileSummaryFieldRow label="Reports to" value={manager.name || "—"} />
+          <ProfileSummaryFieldRow label="Manager no." value={manager.employeeNo || "—"} />
+          <ProfileSummaryFieldRow label="Full name" value={displayName} />
+        </ProfileSummarySection>
+
+        <ProfileSummarySection
+          title="Employment"
+          subtitle="Status & tenure"
+          icon={BriefcaseIcon}
+        >
+          <ProfileSummaryFieldRow
+            label="Status"
+            value={
+              <span
+                className={cn(
+                  "font-semibold",
+                  employmentStatusLabel.toLowerCase() === "active"
+                    ? "text-emerald-700 dark:text-emerald-300"
+                    : "text-foreground"
+                )}
+              >
+                {employmentStatusLabel}
+              </span>
+            }
+          />
+          <ProfileSummaryFieldRow label="Type" value={employmentTypeLabel} />
+          <ProfileSummaryFieldRow label="Hired" value={hireDateLabel} />
+        </ProfileSummarySection>
       </div>
     </div>
   )
@@ -1602,10 +3376,13 @@ function ProfileSummaryTab({
 
 
 export function EmployeeSelfServiceProfileView() {
-  const { loading, error, token, currentUser, employee } = useSelfEmployeeData()
+  const { loading, error, token, currentUser, employee, refresh } = useSelfEmployeeData()
+  const { url: myProfilePhotoUrl, refresh: refreshMyProfilePhoto } = useMyProfilePhoto(token)
   const searchParams = useSearchParams()
   const pathname = usePathname()
   const activeTab = (searchParams?.get("tab") as SelfProfileTab) || "summary"
+  const editTarget = searchParams?.get("edit") ?? ""
+  const autoOpenedEditTargetRef = React.useRef("")
   const [message, setMessage] = React.useState<string | null>(null)
   const tabs: Array<{ key: SelfProfileTab; label: string }> = [
     { key: "summary", label: "Summary" },
@@ -1618,6 +3395,9 @@ export function EmployeeSelfServiceProfileView() {
   const [sectionSaving, setSectionSaving] = React.useState(false)
   const [sectionError, setSectionError] = React.useState<string | null>(null)
   const [sectionErrorLines, setSectionErrorLines] = React.useState<string[]>([])
+  const [profilePhotoPreviewUrl, setProfilePhotoPreviewUrl] = React.useState("")
+  const [profilePhotoFileName, setProfilePhotoFileName] = React.useState("")
+  const [selectedProfilePhotoFile, setSelectedProfilePhotoFile] = React.useState<File | null>(null)
   const [dashboardOverview, setDashboardOverview] = React.useState<AdminRecord | null>(null)
   const [employmentStatus, setEmploymentStatus] = React.useState<AdminRecord | null>(null)
   const [attendanceOverview, setAttendanceOverview] = React.useState<AdminRecord | null>(null)
@@ -1630,11 +3410,13 @@ export function EmployeeSelfServiceProfileView() {
     last_name: "",
     phone: "",
     email: "",
+    city: "",
     password: "",
     user_no: "",
     status: "",
     profile_photo_url: "",
   })
+  const profilePhotoInputRef = React.useRef<HTMLInputElement | null>(null)
   const baseEditorValues = React.useMemo(
     () => ({
       first_name:
@@ -1649,20 +3431,26 @@ export function EmployeeSelfServiceProfileView() {
       email:
         readString(currentUser, ["email"], "") ||
         readString(employee, ["email"], ""),
+      city:
+        readString(employee, ["city"], "") ||
+        readString(asRecord(employee?.addresses?.[0]), ["city"], ""),
       password: "",
       user_no:
         readString(currentUser, ["user_no", "employee_no"], "") ||
         readString(employee, ["user_no", "employee_no", "employeeId"], ""),
       status: readString(currentUser, ["status"], "") || readString(employee, ["employment_status"], ""),
-      profile_photo_url: "",
+      profile_photo_url: resolveProfilePhotoUrl(currentUser, employee, myProfilePhotoUrl),
     }),
-    [currentUser, employee]
+    [currentUser, employee, myProfilePhotoUrl]
   )
 
   const openSectionEditor = React.useCallback(
     (key: string, title: string, fields: EditableUserField[]) => {
       setSectionError(null)
       setSectionErrorLines([])
+      setProfilePhotoPreviewUrl("")
+      setProfilePhotoFileName("")
+      setSelectedProfilePhotoFile(null)
       setSectionValues(baseEditorValues)
       setSectionEditor({ key, title, fields })
     },
@@ -1673,12 +3461,113 @@ export function EmployeeSelfServiceProfileView() {
     setSectionValues((previous) => ({ ...previous, [field]: value }))
   }, [])
 
+  const handleProfilePhotoSelected = React.useCallback((file: File | null) => {
+    if (!file) {
+      return
+    }
+
+    if (!file.type.startsWith("image/")) {
+      setSectionError("Please choose an image file.")
+      setSectionErrorLines([])
+      return
+    }
+
+    const maxBytes = 5 * 1024 * 1024
+    if (file.size > maxBytes) {
+      setSectionError("Please choose an image smaller than 5 MB.")
+      setSectionErrorLines([])
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = typeof reader.result === "string" ? reader.result : ""
+      if (!result) {
+      setSectionError("We couldn't read that image. Please try another file.")
+      setSectionErrorLines([])
+      return
+    }
+      setSectionError(null)
+      setSectionErrorLines([])
+      setSelectedProfilePhotoFile(file)
+      setProfilePhotoFileName(file.name)
+      setProfilePhotoPreviewUrl(result)
+      setSectionValues((previous) => ({
+        ...previous,
+        profile_photo_url: previous.profile_photo_url,
+      }))
+    }
+    reader.onerror = () => {
+      setSectionError("We couldn't read that image. Please try another file.")
+      setSectionErrorLines([])
+    }
+    reader.readAsDataURL(file)
+  }, [])
+
   const handleSectionSave = React.useCallback(async () => {
     if (!token || !sectionEditor) {
       setSectionError("Session expired. Please sign in again.")
       setSectionErrorLines([])
       return
     }
+
+    const isProfilePhotoSection =
+      sectionEditor.fields.length === 1 && sectionEditor.fields[0] === "profile_photo_url"
+
+    // Profile picture uses POST /api/me/profile/photo and applies immediately.
+    if (isProfilePhotoSection) {
+      if (!selectedProfilePhotoFile) {
+        setSectionError("Choose an image to upload as your profile picture.")
+        setSectionErrorLines([])
+        return
+      }
+
+      setSectionSaving(true)
+      setSectionError(null)
+      setSectionErrorLines([])
+      try {
+        const uploaded = await uploadMyProfilePhoto(token, selectedProfilePhotoFile)
+        const uploadedUrl =
+          readString(uploaded, ["profile_photo_url", "photo_url", "url", "avatar_url"], "") ||
+          readString(asRecord(uploaded?.user), ["profile_photo_url", "photo_url", "url", "avatar_url"], "") ||
+          readString(asRecord(uploaded?.employee), ["profile_photo_url", "photo_url", "url", "avatar_url"], "") ||
+          ""
+
+        if (uploadedUrl) {
+          setMyProfilePhotoUrl(uploadedUrl)
+        }
+
+        const canonicalUrl =
+          (await ensureMyProfilePhotoUrl(token, { force: true })) ||
+          uploadedUrl ||
+          profilePhotoPreviewUrl ||
+          null
+
+        if (canonicalUrl) {
+          setMyProfilePhotoUrl(canonicalUrl)
+          setSectionValues((previous) => ({
+            ...previous,
+            profile_photo_url: canonicalUrl,
+          }))
+        }
+
+        void refreshMyProfilePhoto()
+        setSectionEditor(null)
+        setSelectedProfilePhotoFile(null)
+        setProfilePhotoFileName("")
+        setProfilePhotoPreviewUrl("")
+        setMessage("Profile picture updated.")
+        await refresh()
+      } catch (errorObject) {
+        const lines = formatApiErrorLines(errorObject, "Failed to upload profile picture.")
+        setSectionError(lines[0] ?? "Failed to upload profile picture.")
+        setSectionErrorLines(lines)
+      } finally {
+        setSectionSaving(false)
+      }
+      return
+    }
+
     const requestedChanges: AdminRecord = {}
     for (const field of sectionEditor.fields) {
       const nextValue = sectionValues[field].trim()
@@ -1686,6 +3575,9 @@ export function EmployeeSelfServiceProfileView() {
         if (nextValue) {
           requestedChanges.password = nextValue
         }
+        continue
+      }
+      if (field === "profile_photo_url") {
         continue
       }
       if (nextValue) {
@@ -1708,16 +3600,35 @@ export function EmployeeSelfServiceProfileView() {
       }
 
       const createdRequest = asRecord(await createMyProfileUpdateRequest(token, requestPayload))
-      const requestId = readNumber(createdRequest, ["id", "request_id"])
+      const requestId = readProfileUpdateRequestId(createdRequest)
       if (requestId !== null) {
-        await submitMyProfileUpdateRequest(token, requestId)
+        try {
+          const submittedRequest = await submitMyProfileUpdateRequest(token, requestId)
+          void notifySubmittedRequestApprovers({
+            kind: "profile_update_request",
+            token,
+            request: submittedRequest ?? createdRequest,
+            loadRequest: () => getMyProfileUpdateRequest(token, requestId),
+          })
+          setMessage(`${sectionEditor.title} update submitted for HR approval.`)
+        } catch (errorObject) {
+          const status =
+            typeof errorObject === "object" && errorObject !== null && "status" in errorObject
+              ? Number((errorObject as { status?: number }).status)
+              : null
+          if (status === 404) {
+            setMessage(`${sectionEditor.title} update saved as a draft. Submit it from Update Requests.`)
+          } else {
+            throw errorObject
+          }
+        }
+      } else {
+        setMessage(`${sectionEditor.title} update saved as a draft.`)
       }
-
-      setMessage(`${sectionEditor.title} update submitted for HR approval.`)
       setSectionEditor(null)
       const profileUpdatesResult = await listMyProfileUpdateRequests(token, {
         page: 1,
-        limit: 5,
+        limit: 20,
       })
       setProfileUpdateRequests(profileUpdatesResult.rows)
     } catch (errorObject) {
@@ -1727,7 +3638,76 @@ export function EmployeeSelfServiceProfileView() {
     } finally {
       setSectionSaving(false)
     }
-  }, [sectionEditor, sectionValues, token])
+  }, [
+    profilePhotoPreviewUrl,
+    refresh,
+    refreshMyProfilePhoto,
+    sectionEditor,
+    sectionValues,
+    selectedProfilePhotoFile,
+    token,
+  ])
+
+  React.useEffect(() => {
+    if (
+      activeTab !== "summary" ||
+      editTarget !== "profile-photo" ||
+      sectionEditor ||
+      autoOpenedEditTargetRef.current === editTarget
+    ) {
+      return
+    }
+    autoOpenedEditTargetRef.current = editTarget
+    openSectionEditor("profile-photo", "Profile Picture", ["profile_photo_url"])
+  }, [activeTab, editTarget, openSectionEditor, sectionEditor])
+
+  const handleSubmitProfileUpdateRequest = React.useCallback(async (id: number | string) => {
+    if (!token) {
+      setMessage("Session expired. Please sign in again.")
+      return
+    }
+
+    setSectionSaving(true)
+    setMessage(null)
+    try {
+      const request = await submitMyProfileUpdateRequest(token, id)
+      void notifySubmittedRequestApprovers({
+        kind: "profile_update_request",
+        token,
+        request: asRecord(request) ?? {},
+        loadRequest: () => getMyProfileUpdateRequest(token, id),
+      })
+      const profileUpdatesResult = await listMyProfileUpdateRequests(token, { page: 1, limit: 20 })
+      setProfileUpdateRequests(profileUpdatesResult.rows)
+      setMessage("Profile update request submitted.")
+    } catch (errorObject) {
+      const lines = formatApiErrorLines(errorObject, "Failed to submit profile update request.")
+      setMessage(lines[0] ?? "Failed to submit profile update request.")
+    } finally {
+      setSectionSaving(false)
+    }
+  }, [token])
+
+  const handleCancelProfileUpdateRequest = React.useCallback(async (id: number | string) => {
+    if (!token) {
+      setMessage("Session expired. Please sign in again.")
+      return
+    }
+
+    setSectionSaving(true)
+    setMessage(null)
+    try {
+      await cancelMyProfileUpdateRequest(token, id)
+      const profileUpdatesResult = await listMyProfileUpdateRequests(token, { page: 1, limit: 20 })
+      setProfileUpdateRequests(profileUpdatesResult.rows)
+      setMessage("Profile update request cancelled.")
+    } catch (errorObject) {
+      const lines = formatApiErrorLines(errorObject, "Failed to cancel profile update request.")
+      setMessage(lines[0] ?? "Failed to cancel profile update request.")
+    } finally {
+      setSectionSaving(false)
+    }
+  }, [token])
 
   React.useEffect(() => {
     if (!token) {
@@ -1798,10 +3778,6 @@ export function EmployeeSelfServiceProfileView() {
     [attendanceOverview, dashboardOverview]
   )
   const dashboardLeave = React.useMemo(() => asRecord(dashboardOverview?.leave), [dashboardOverview])
-  const dashboardActions = React.useMemo(
-    () => asRecord(dashboardOverview?.action_flags) ?? asRecord(attendanceTodayRecord?.action_flags),
-    [attendanceTodayRecord, dashboardOverview]
-  )
   const scheduleDays = React.useMemo(
     () =>
       readArray(asRecord(dashboardOverview?.schedule_preview)?.days)
@@ -1858,6 +3834,11 @@ export function EmployeeSelfServiceProfileView() {
         </div>
       ) : null}
       {!loading && error ? <p className="text-sm text-red-600">{error}</p> : null}
+      {!loading && !error && !(currentUser || employee) ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          We signed you in, but we could not load your employee workspace yet. Refresh once, and if it still stays empty, check that your public app URL and API URL point to the same reachable backend.
+        </div>
+      ) : null}
       {!loading && !error && (currentUser || employee) ? (
         <div key={activeTab} className="grid gap-4 animate-in slide-in-from-right-2 fade-in-0 duration-300">
           {activeTab === "summary" ? (
@@ -1865,7 +3846,6 @@ export function EmployeeSelfServiceProfileView() {
               currentUser={currentUser}
               employee={employee}
               attendanceTodayRecord={attendanceTodayRecord}
-              dashboardActions={dashboardActions}
               dashboardLeave={dashboardLeave}
               employmentStatus={employmentStatus}
               scheduleDays={scheduleDays}
@@ -1883,524 +3863,29 @@ export function EmployeeSelfServiceProfileView() {
             />
           ) : null}
 
-              {activeTab === "personal" && employee ? (
-                <div className="space-y-5">
-                  {/* Contacts */}
-                  <SelfServiceSectionCard title="Contacts" doodle="doodle-circles">
-                    {Array.isArray(employee.contacts) && employee.contacts.length ? (
-                      employee.contacts.map((entry, index) => {
-                        const record = asRecord(entry)
-                        return (
-                          <div key={`contact-${index}`} className={index > 0 ? "mt-3 border-t border-white/15 pt-3" : ""}>
-                            <div className="grid gap-3 sm:grid-cols-2 text-xs">
-                              <div className="flex gap-2.5">
-                                <div>
-                                  <div className="text-white/70">Type</div>
-                                  <div className="font-medium text-white">{readString(record, ["contact_type"], "-")}</div>
-                                </div>
-                              </div>
-                              <div className="flex gap-2.5">
-                                <div>
-                                  <div className="text-white/70">Phone</div>
-                                  <div className="font-medium text-white">{readString(record, ["phone_number", "phone"], "-")}</div>
-                                </div>
-                              </div>
-                              <div className="flex gap-2.5">
-                                <div>
-                                  <div className="text-white/70">Email</div>
-                                  <div className="font-medium text-white">{readString(record, ["email"], "-")}</div>
-                                </div>
-                              </div>
-                              <div className="flex gap-2.5">
-                                <div>
-                                  <div className="text-white/70">Primary</div>
-                                  <div className="font-medium text-white">{formatUnknownValue(record?.is_primary)}</div>
-                                </div>
-                              </div>
-                              <div className="flex gap-2.5">
-                                <div>
-                                  <div className="text-white/70">Verified</div>
-                                  <div className="font-medium text-white">{formatUnknownValue(record?.is_verified)}</div>
-                                </div>
-                              </div>
-                              <div className="flex gap-2.5">
-                                <div>
-                                  <div className="text-white/70">Notes</div>
-                                  <div className="font-medium text-white">{readString(record, ["notes"], "-")}</div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        )
-                      })
-                    ) : (
-                      <div className="text-xs text-white/80">No contacts available.</div>
-                    )}
-                  </SelfServiceSectionCard>
+          {activeTab === "personal" && employee ? (
+            <ProfilePersonalTab employee={employee} />
+          ) : null}
 
-                  {/* Addresses */}
-                  <SelfServiceSectionCard title="Addresses" doodle="doodle-curves">
-                    {Array.isArray(employee.addresses) && employee.addresses.length ? (
-                      employee.addresses.map((entry, index) => {
-                        const record = asRecord(entry)
-                        return (
-                          <div key={`address-${index}`} className={index > 0 ? "mt-3 border-t border-white/15 pt-3" : ""}>
-                            <div className="grid gap-3 sm:grid-cols-2 text-xs">
-                              <div className="flex gap-2.5">
-                                <div>
-                                  <div className="text-white/70">Type</div>
-                                  <div className="font-medium text-white">{readString(record, ["address_type", "type"], "-")}</div>
-                                </div>
-                              </div>
-                              <div className="flex gap-2.5">
-                                <div>
-                                  <div className="text-white/70">Address</div>
-                                  <div className="font-medium text-white">{readString(record, ["address_line", "address"], "-")}</div>
-                                </div>
-                              </div>
-                              <div className="flex gap-2.5">
-                                <div>
-                                  <div className="text-white/70">City</div>
-                                  <div className="font-medium text-white">{readString(record, ["city"], "-")}</div>
-                                </div>
-                              </div>
-                              <div className="flex gap-2.5">
-                                <div>
-                                  <div className="text-white/70">Country</div>
-                                  <div className="font-medium text-white">{readString(record, ["country"], "-")}</div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        )
-                      })
-                    ) : (
-                      <div className="text-xs text-white/80">No addresses available.</div>
-                    )}
-                  </SelfServiceSectionCard>
+          {activeTab === "records" ? (
+            <ProfileRecordsTab
+              employee={employee}
+              correctionRequests={correctionRequests}
+              profileUpdateRequests={profileUpdateRequests}
+              teamAttendance={teamAttendance}
+            />
+          ) : null}
 
-                  {/* Relatives */}
-                  <SelfServiceSectionCard title="Relatives" doodle="doodle-grass">
-                    {Array.isArray(employee.relatives) && employee.relatives.length ? (
-                      employee.relatives.map((entry, index) => {
-                        const record = asRecord(entry)
-                        return (
-                          <div key={`relative-${index}`} className={index > 0 ? "mt-3 border-t border-white/15 pt-3" : ""}>
-                            <div className="grid gap-3 sm:grid-cols-2 text-xs">
-                              <div className="flex gap-2.5">
-                                <div>
-                                  <div className="text-white/70">Name</div>
-                                  <div className="font-medium text-white">{readString(record, ["name", "full_name"], "-")}</div>
-                                </div>
-                              </div>
-                              <div className="flex gap-2.5">
-                                <div>
-                                  <div className="text-white/70">Relationship</div>
-                                  <div className="font-medium text-white">{readString(record, ["relationship"], "-")}</div>
-                                </div>
-                              </div>
-                              <div className="flex gap-2.5">
-                                <div>
-                                  <div className="text-white/70">Phone</div>
-                                  <div className="font-medium text-white">{readString(record, ["phone_number", "phone"], "-")}</div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        )
-                      })
-                    ) : (
-                      <div className="text-xs text-white/80">No relatives available.</div>
-                    )}
-                  </SelfServiceSectionCard>
-                </div>
-              ) : null}
+          {activeTab === "updates" ? (
+            <ProfileUpdatesTab
+              profileUpdateRequests={profileUpdateRequests}
+              openSectionEditor={openSectionEditor}
+              onSubmitRequest={handleSubmitProfileUpdateRequest}
+              onCancelRequest={handleCancelProfileUpdateRequest}
+              loading={sectionSaving}
+            />
+          ) : null}
 
-              {activeTab === "records" ? (
-                <div className="space-y-5">
-                  {/* Attendance Correction Requests */}
-                  <SelfServiceSectionCard title="Attendance Correction Requests" doodle="doodle-circles">
-                    {correctionRequests.length === 0 ? (
-                      <div className="text-xs text-white/80">No attendance correction requests found.</div>
-                    ) : (
-                      correctionRequests.map((row, index) => {
-                        const titleText =
-                          readString(row, ["title", "request_no", "leave_no", "reference_no", "reference"], "") ||
-                          readString(row, ["reason", "request_type", "change_type"], "Request")
-                        const createdAt =
-                          formatDateTime(row.created_at) !== "-" ? formatDateTime(row.created_at) : formatDate(row.date)
-                        return (
-                          <div key={String(row.id ?? index)} className={index > 0 ? "mt-3 border-t border-white/15 pt-3" : ""}>
-                            <div className="flex items-start justify-between gap-3 text-xs">
-                              <p className="font-medium text-white">{titleText}</p>
-                              <span className="rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-white">
-                                {readString(row, ["status"], "draft")}
-                              </span>
-                            </div>
-                            <p className="mt-0.5 text-[10px] text-white/70">{createdAt}</p>
-                          </div>
-                        )
-                      })
-                    )}
-                  </SelfServiceSectionCard>
-
-                  {/* Profile Update Requests */}
-                  <SelfServiceSectionCard title="Profile Update Requests" doodle="doodle-curves">
-                    {profileUpdateRequests.length === 0 ? (
-                      <div className="text-xs text-white/80">No profile update requests found.</div>
-                    ) : (
-                      profileUpdateRequests.map((row, index) => {
-                        const titleText =
-                          readString(row, ["title", "request_no", "leave_no", "reference_no", "reference"], "") ||
-                          readString(row, ["reason", "request_type", "change_type"], "Request")
-                        const createdAt =
-                          formatDateTime(row.created_at) !== "-" ? formatDateTime(row.created_at) : formatDate(row.date)
-                        return (
-                          <div key={String(row.id ?? index)} className={index > 0 ? "mt-3 border-t border-white/15 pt-3" : ""}>
-                            <div className="flex items-start justify-between gap-3 text-xs">
-                              <p className="font-medium text-white">{titleText}</p>
-                              <span className="rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-white">
-                                {readString(row, ["status"], "draft")}
-                              </span>
-                            </div>
-                            <p className="mt-0.5 text-[10px] text-white/70">{createdAt}</p>
-                          </div>
-                        )
-                      })
-                    )}
-                  </SelfServiceSectionCard>
-
-                  {/* Direct Reports Today */}
-                  <SelfServiceSectionCard title="Direct Reports Today" doodle="doodle-grass">
-                    {teamAttendance.length === 0 ? (
-                      <div className="text-xs text-white/80">No team attendance rows were returned for your account.</div>
-                    ) : (
-                      teamAttendance.map((row, index) => {
-                        const nestedEmployee = asRecord(row.employee)
-                        const employeeLabel =
-                          readString(row, ["employee_name", "full_name", "name"], "") ||
-                          readString(nestedEmployee, ["full_name", "name"], "") ||
-                          [readString(nestedEmployee, ["first_name"], ""), readString(nestedEmployee, ["last_name"], "")]
-                            .filter(Boolean)
-                            .join(" ") ||
-                          "Direct report"
-                        return (
-                          <div key={String(row.id ?? index)} className={index > 0 ? "mt-2 border-t border-white/15 pt-2" : ""}>
-                            <div className="grid gap-3 sm:grid-cols-2 text-xs">
-                              <div className="flex gap-2.5">
-                                <div>
-                                  <div className="text-white/70">Employee</div>
-                                  <div className="font-medium text-white">{employeeLabel}</div>
-                                </div>
-                              </div>
-                              <div className="flex gap-2.5">
-                                <div>
-                                  <div className="text-white/70">Date</div>
-                                  <div className="font-medium text-white">{formatDate(row.date ?? row.attendance_date)}</div>
-                                </div>
-                              </div>
-                              <div className="flex gap-2.5">
-                                <div>
-                                  <div className="text-white/70">Status</div>
-                                  <div className="font-medium text-white">{readString(row, ["status", "attendance_status"], "-")}</div>
-                                </div>
-                              </div>
-                              <div className="flex gap-2.5">
-                                <div>
-                                  <div className="text-white/70">Check In</div>
-                                  <div className="font-medium text-white">{formatUnknownValue(row.check_in_at ?? row.first_punch_at)}</div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        )
-                      })
-                    )}
-                  </SelfServiceSectionCard>
-                </div>
-              ) : null}
-
-              {activeTab === "updates" ? (
-                <div className="space-y-5">
-                  <div>
-                    <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                      Profile Update Requests
-                    </div>
-                    {profileUpdateRequests.length === 0 ? (
-                      <div className="text-xs text-muted-foreground">No profile update requests found.</div>
-                    ) : (
-                      <div className="space-y-3">
-                      {profileUpdateRequests.map((row, index) => {
-                        const titleText =
-                          readString(row, ["title", "request_no", "reference_no", "reference"], "") ||
-                          readString(row, ["reason", "request_type", "change_type"], "Profile update")
-                        const createdAt =
-                          formatDateTime(row.created_at) !== "-" ? formatDateTime(row.created_at) : formatDate(row.date)
-                        const statusLabel = readString(row, ["status"], "draft")
-                        return (
-                          <div
-                            key={String(row.id ?? index)}
-                            className="relative overflow-hidden rounded-2xl border border-white/15 bg-primary p-4 text-primary-foreground"
-                          >
-                            <Doodle name={pickDoodle(index)} className="text-white/20" />
-                            <div className="relative z-10 flex items-start justify-between gap-3">
-                              <div className="space-y-2">
-                                <p className="text-base font-semibold tracking-tight text-white">{titleText}</p>
-                                <p className="text-xs text-white/70">{createdAt}</p>
-                                {readString(row, ["reason"], "") ? (
-                                  <p className="text-sm text-white/85">{readString(row, ["reason"], "")}</p>
-                                ) : null}
-                              </div>
-                              <span className="rounded-full border border-white/20 bg-white/10 px-2.5 py-1 text-[10px] font-medium uppercase tracking-wide text-white">
-                                {statusLabel}
-                              </span>
-                            </div>
-                          </div>
-                        )
-                      })}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : null}
-
-              {activeTab === "records" && employee ? (
-                <div className="space-y-5">
-                  {/* Identifications */}
-                  <SelfServiceSectionCard title="Identifications" doodle="doodle-circles">
-                    {Array.isArray(employee.identifications) && employee.identifications.length ? (
-                      employee.identifications.map((entry, index) => {
-                        const record = asRecord(entry)
-                        return (
-                          <div key={`identification-${index}`} className={index > 0 ? "mt-3 border-t border-white/15 pt-3" : ""}>
-                            <div className="grid gap-3 sm:grid-cols-2 text-xs">
-                              <div className="flex gap-2.5">
-                                <div>
-                                  <div className="text-white/70">Type</div>
-                                  <div className="font-medium text-white">{readString(record, ["identification_type", "type"], "-")}</div>
-                                </div>
-                              </div>
-                              <div className="flex gap-2.5">
-                                <div>
-                                  <div className="text-white/70">Number</div>
-                                  <div className="font-medium text-white">{readString(record, ["number", "id_number"], "-")}</div>
-                                </div>
-                              </div>
-                              <div className="flex gap-2.5">
-                                <div>
-                                  <div className="text-white/70">Issue Date</div>
-                                  <div className="font-medium text-white">{formatDate(record?.issue_date)}</div>
-                                </div>
-                              </div>
-                              <div className="flex gap-2.5">
-                                <div>
-                                  <div className="text-white/70">Expiry Date</div>
-                                  <div className="font-medium text-white">{formatDate(record?.expiry_date)}</div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        )
-                      })
-                    ) : (
-                      <div className="text-xs text-white/80">No identifications available.</div>
-                    )}
-                  </SelfServiceSectionCard>
-
-                  {/* Bank Accounts */}
-                  <SelfServiceSectionCard title="Bank Accounts" doodle="doodle-curves">
-                    {Array.isArray(employee.bank_accounts) && employee.bank_accounts.length ? (
-                      employee.bank_accounts.map((entry, index) => {
-                        const record = asRecord(entry)
-                        return (
-                          <div key={`bank-${index}`} className={index > 0 ? "mt-3 border-t border-white/15 pt-3" : ""}>
-                            <div className="grid gap-3 sm:grid-cols-2 text-xs">
-                              <div className="flex gap-2.5">
-                                <div>
-                                  <div className="text-white/70">Bank Name</div>
-                                  <div className="font-medium text-white">{readString(record, ["bank_name"], "-")}</div>
-                                </div>
-                              </div>
-                              <div className="flex gap-2.5">
-                                <div>
-                                  <div className="text-white/70">Account Name</div>
-                                  <div className="font-medium text-white">{readString(record, ["account_name"], "-")}</div>
-                                </div>
-                              </div>
-                              <div className="flex gap-2.5">
-                                <div>
-                                  <div className="text-white/70">Account Number</div>
-                                  <div className="font-medium text-white">{readString(record, ["account_number"], "-")}</div>
-                                </div>
-                              </div>
-                              <div className="flex gap-2.5">
-                                <div>
-                                  <div className="text-white/70">Currency</div>
-                                  <div className="font-medium text-white">{readString(record, ["currency"], "-")}</div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        )
-                      })
-                    ) : (
-                      <div className="text-xs text-white/80">No bank accounts available.</div>
-                    )}
-                  </SelfServiceSectionCard>
-
-                  {/* Academic Qualifications */}
-                  <SelfServiceSectionCard title="Academic Qualifications" doodle="doodle-grass">
-                    {Array.isArray(employee.academic_qualifications) && employee.academic_qualifications.length ? (
-                      employee.academic_qualifications.map((entry, index) => {
-                        const record = asRecord(entry)
-                        return (
-                          <div key={`academic-${index}`} className={index > 0 ? "mt-3 border-t border-white/15 pt-3" : ""}>
-                            <div className="grid gap-3 sm:grid-cols-2 text-xs">
-                              <div className="flex gap-2.5">
-                                <div>
-                                  <div className="text-white/70">Qualification</div>
-                                  <div className="font-medium text-white">{readString(record, ["qualification", "name"], "-")}</div>
-                                </div>
-                              </div>
-                              <div className="flex gap-2.5">
-                                <div>
-                                  <div className="text-white/70">Institution</div>
-                                  <div className="font-medium text-white">{readString(record, ["institution"], "-")}</div>
-                                </div>
-                              </div>
-                              <div className="flex gap-2.5">
-                                <div>
-                                  <div className="text-white/70">Year</div>
-                                  <div className="font-medium text-white">{readString(record, ["year"], "-")}</div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        )
-                      })
-                    ) : (
-                      <div className="text-xs text-white/80">No academic qualifications available.</div>
-                    )}
-                  </SelfServiceSectionCard>
-
-                  {/* Professional Qualifications */}
-                  <SelfServiceSectionCard title="Professional Qualifications" doodle="doodle-circles">
-                    {Array.isArray(employee.professional_qualifications) && employee.professional_qualifications.length ? (
-                      employee.professional_qualifications.map((entry, index) => {
-                        const record = asRecord(entry)
-                        return (
-                          <div key={`professional-${index}`} className={index > 0 ? "mt-3 border-t border-white/15 pt-3" : ""}>
-                            <div className="grid gap-3 sm:grid-cols-2 text-xs">
-                              <div className="flex gap-2.5">
-                                <div>
-                                  <div className="text-white/70">Qualification</div>
-                                  <div className="font-medium text-white">{readString(record, ["qualification", "name"], "-")}</div>
-                                </div>
-                              </div>
-                              <div className="flex gap-2.5">
-                                <div>
-                                  <div className="text-white/70">Issuer</div>
-                                  <div className="font-medium text-white">{readString(record, ["issuer", "institution"], "-")}</div>
-                                </div>
-                              </div>
-                              <div className="flex gap-2.5">
-                                <div>
-                                  <div className="text-white/70">Year</div>
-                                  <div className="font-medium text-white">{readString(record, ["year"], "-")}</div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        )
-                      })
-                    ) : (
-                      <div className="text-xs text-white/80">No professional qualifications available.</div>
-                    )}
-                  </SelfServiceSectionCard>
-
-                  {/* Experience Details */}
-                  <SelfServiceSectionCard title="Experience Details" doodle="doodle-curves">
-                    {Array.isArray(employee.experience_details) && employee.experience_details.length ? (
-                      employee.experience_details.map((entry, index) => {
-                        const record = asRecord(entry)
-                        return (
-                          <div key={`experience-${index}`} className={index > 0 ? "mt-3 border-t border-white/15 pt-3" : ""}>
-                            <div className="grid gap-3 sm:grid-cols-2 text-xs">
-                              <div className="flex gap-2.5">
-                                <div>
-                                  <div className="text-white/70">Company</div>
-                                  <div className="font-medium text-white">{readString(record, ["company_name", "company"], "-")}</div>
-                                </div>
-                              </div>
-                              <div className="flex gap-2.5">
-                                <div>
-                                  <div className="text-white/70">Role</div>
-                                  <div className="font-medium text-white">{readString(record, ["role", "position"], "-")}</div>
-                                </div>
-                              </div>
-                              <div className="flex gap-2.5">
-                                <div>
-                                  <div className="text-white/70">Start Date</div>
-                                  <div className="font-medium text-white">{formatDate(record?.start_date)}</div>
-                                </div>
-                              </div>
-                              <div className="flex gap-2.5">
-                                <div>
-                                  <div className="text-white/70">End Date</div>
-                                  <div className="font-medium text-white">{formatDate(record?.end_date)}</div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        )
-                      })
-                    ) : (
-                      <div className="text-xs text-white/80">No experience details available.</div>
-                    )}
-                  </SelfServiceSectionCard>
-
-                  {/* Documents */}
-                  <SelfServiceSectionCard title="Documents" doodle="doodle-grass">
-                    {Array.isArray(employee.documents) && employee.documents.length ? (
-                      employee.documents.map((entry, index) => {
-                        const record = asRecord(entry)
-                        return (
-                          <div key={`document-${index}`} className={index > 0 ? "mt-3 border-t border-white/15 pt-3" : ""}>
-                            <div className="grid gap-3 sm:grid-cols-2 text-xs">
-                              <div className="flex gap-2.5">
-                                <div>
-                                  <div className="text-white/70">Type</div>
-                                  <div className="font-medium text-white">{readString(record, ["document_type", "type"], "-")}</div>
-                                </div>
-                              </div>
-                              <div className="flex gap-2.5">
-                                <div>
-                                  <div className="text-white/70">Title</div>
-                                  <div className="font-medium text-white">{readString(record, ["title", "name"], "-")}</div>
-                                </div>
-                              </div>
-                              <div className="flex gap-2.5">
-                                <div>
-                                  <div className="text-white/70">Status</div>
-                                  <div className="font-medium text-white">{readString(record, ["status"], "-")}</div>
-                                </div>
-                              </div>
-                              <div className="flex gap-2.5">
-                                <div>
-                                  <div className="text-white/70">Uploaded At</div>
-                                  <div className="font-medium text-white">{formatDate(record?.created_at)}</div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        )
-                      })
-                    ) : (
-                      <div className="text-xs text-white/80">No documents available.</div>
-                    )}
-                  </SelfServiceSectionCard>
-                </div>
-              ) : null}
 
           </div>
         ) : null}
@@ -2412,13 +3897,61 @@ export function EmployeeSelfServiceProfileView() {
               <div className="grid gap-3">
                 {sectionEditor?.fields.map((field) => (
                   <div key={field} className="space-y-1">
-                    <Label className="text-xs uppercase tracking-wide text-slate-500">{field.replaceAll("_", " ")}</Label>
-                    <Input
-                      type={field === "password" ? "password" : "text"}
-                      value={sectionValues[field]}
-                      placeholder={field === "password" ? "Leave blank to keep current password" : undefined}
-                      onChange={(event) => handleSectionFieldChange(field, event.target.value)}
-                    />
+                    <Label className="text-xs uppercase tracking-wide text-slate-500">{getEditableFieldLabel(field)}</Label>
+                    {field === "profile_photo_url" ? (
+                      <div className="space-y-3 rounded-xl border border-border/70 bg-muted/20 p-3">
+                        <div className="flex items-center gap-3">
+                          <Avatar className="size-16 ring-1 ring-border" size="lg">
+                            {profilePhotoPreviewUrl || sectionValues.profile_photo_url ? (
+                              <AvatarImage
+                                src={profilePhotoPreviewUrl || sectionValues.profile_photo_url}
+                                alt="Selected profile picture"
+                              />
+                            ) : null}
+                            <AvatarFallback className="text-sm font-semibold">PP</AvatarFallback>
+                          </Avatar>
+                          <div className="space-y-1">
+                            <p className="text-sm font-medium text-foreground">
+                              {profilePhotoFileName || "No new image selected"}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Choose an image from your device. Your profile picture is updated as soon as you save.
+                            </p>
+                          </div>
+                        </div>
+                        <input
+                          ref={profilePhotoInputRef}
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(event) => {
+                            handleProfilePhotoSelected(event.target.files?.[0] ?? null)
+                            event.currentTarget.value = ""
+                          }}
+                        />
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => profilePhotoInputRef.current?.click()}
+                          >
+                            {profilePhotoFileName ? "Choose Another Image" : "Choose Image"}
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <Input
+                        type={field === "password" ? "password" : "text"}
+                        value={sectionValues[field]}
+                        placeholder={field === "password" ? "Leave blank to keep current password" : undefined}
+                        onChange={(event) => handleSectionFieldChange(field, event.target.value)}
+                      />
+                    )}
+                    {field === "profile_photo_url" ? (
+                      <p className="text-xs text-muted-foreground">
+                        Supported: common image formats like PNG and JPG, up to 5 MB.
+                      </p>
+                    ) : null}
                   </div>
                 ))}
                 {sectionError ? <p className="text-sm text-red-600">Request failed.</p> : null}
@@ -2434,9 +3967,20 @@ export function EmployeeSelfServiceProfileView() {
                 <Button type="button" variant="outline" onClick={() => setSectionEditor(null)} disabled={sectionSaving}>
                   Cancel
                 </Button>
-                <Button type="button" onClick={() => void handleSectionSave()} disabled={sectionSaving}>
+                <Button
+                  type="button"
+                  onClick={() => void handleSectionSave()}
+                  disabled={
+                    sectionSaving ||
+                    (sectionEditor?.fields.length === 1 &&
+                      sectionEditor.fields[0] === "profile_photo_url" &&
+                      !selectedProfilePhotoFile)
+                  }
+                >
                   {sectionSaving ? <Loader2 className="mr-1 size-4 animate-spin" /> : null}
-                  Save Changes
+                  {sectionEditor?.fields.length === 1 && sectionEditor.fields[0] === "profile_photo_url"
+                    ? "Upload Picture"
+                    : "Save Changes"}
                 </Button>
               </DialogFooter>
             </DialogPopup>
@@ -2548,6 +4092,15 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
   }
 
   const { loading: loadingProfile, error: profileError, token, employee } = useSelfEmployeeData()
+  const searchParams = useSearchParams()
+  const highlightedRequestId = React.useMemo(
+    () =>
+      searchParams?.get("highlight") ??
+      searchParams?.get("requestId") ??
+      searchParams?.get("request_id") ??
+      "",
+    [searchParams]
+  )
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [leaveTypesError, setLeaveTypesError] = React.useState<string | null>(null)
@@ -2565,6 +4118,10 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
   const [cancelDialogOpen, setCancelDialogOpen] = React.useState(false)
   const [requestToCancel, setRequestToCancel] = React.useState<number | string | null>(null)
   const [cancelReason, setCancelReason] = React.useState("")
+  const [workflowDialogOpen, setWorkflowDialogOpen] = React.useState(false)
+  const [workflowRequestId, setWorkflowRequestId] = React.useState<number | string | null>(null)
+  const [workflowRequestRow, setWorkflowRequestRow] = React.useState<AdminRecord | null>(null)
+  const [leaveRequestStatusFilter, setLeaveRequestStatusFilter] = React.useState<string | null>(null)
 
   const [requestForm, setRequestForm] = React.useState({
     leave_type_id: "",
@@ -2575,6 +4132,40 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
 
   const employeeId = readNumber(employee, ["id", "employee_id"])
   const activeTab = tab
+
+  const leaveRequestStatusCounts = React.useMemo(() => {
+    const counts = {
+      all: requests.length,
+      draft: 0,
+      pending: 0,
+      approved: 0,
+      rejected: 0,
+      cancelled: 0,
+    }
+    for (const row of requests) {
+      const meta = resolveLeaveStatusMeta(readString(row, ["status"], "pending"))
+      if (meta.key === "draft") counts.draft += 1
+      else if (meta.key === "pending") counts.pending += 1
+      else if (meta.key === "approved") counts.approved += 1
+      else if (meta.key === "rejected") counts.rejected += 1
+      else if (meta.key === "cancelled") counts.cancelled += 1
+    }
+    return counts
+  }, [requests])
+
+  const filteredLeaveRequests = React.useMemo(() => {
+    if (!leaveRequestStatusFilter) return requests
+    return requests.filter((row) => {
+      const meta = resolveLeaveStatusMeta(readString(row, ["status"], "pending"))
+      return meta.key === leaveRequestStatusFilter
+    })
+  }, [leaveRequestStatusFilter, requests])
+
+  const openLeaveWorkflowDialog = React.useCallback((id: number | string, row: AdminRecord | null) => {
+    setWorkflowRequestId(id)
+    setWorkflowRequestRow(row)
+    setWorkflowDialogOpen(true)
+  }, [])
 
   const availableLeaveTypes = React.useMemo(() => {
     const options = new Map<string, { id: string; label: string }>()
@@ -2668,6 +4259,48 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
     return availableLeaveTypes.find((item) => item.id === requestForm.leave_type_id)?.label ?? ""
   }, [availableLeaveTypes, requestForm.leave_type_id])
 
+  const selectedLeaveBalance = React.useMemo(() => {
+    if (!requestForm.leave_type_id) {
+      return null
+    }
+
+    const selectedTypeId = readNumberish(requestForm.leave_type_id)
+    if (selectedTypeId === null) {
+      return null
+    }
+
+    const matchedRow =
+      balances.find((row) => {
+        const rowTypeId = readLeaveTypeId(asRecord(row))
+        return rowTypeId !== null && rowTypeId === selectedTypeId
+      }) ?? null
+
+    if (!matchedRow) {
+      return null
+    }
+
+    const availableDays = findBalanceAvailableDays(matchedRow)
+    return {
+      availableDays,
+      formattedAvailable: formatLeaveBalanceValue(availableDays),
+      fiscalYear: readString(matchedRow, ["fiscal_year"], ""),
+    }
+  }, [balances, requestForm.leave_type_id])
+
+  const requestedLeaveDays = React.useMemo(
+    () => countInclusiveLeaveDays(requestForm.start_date, requestForm.end_date),
+    [requestForm.end_date, requestForm.start_date]
+  )
+
+  const leaveSubmissionBalanceError = React.useMemo(
+    () =>
+      validateLeaveSubmissionBalance({
+        availableDays: selectedLeaveBalance?.availableDays ?? null,
+        requestedDays: requestedLeaveDays,
+      }),
+    [requestedLeaveDays, selectedLeaveBalance?.availableDays]
+  )
+
   const readEndpointError = React.useCallback(
     (errorObject: unknown, fallbackMessage: string) => {
       const message = errorObject instanceof Error ? errorObject.message : fallbackMessage
@@ -2699,7 +4332,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
 
     try {
       if (activeTab === "requests") {
-        const [requestsResult, typesResult] = await Promise.allSettled([
+        const [requestsResult, typesResult, balancesResult] = await Promise.allSettled([
           listMyLeaveRequests(token, {
             page: 1,
             limit: 100,
@@ -2707,6 +4340,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
             sortOrder: "DESC",
           }),
           listLeaveTypes(token, { page: 1, limit: 100 }),
+          listMyLeaveBalances(token, { page: 1, limit: 100 }),
         ])
 
         if (requestsResult.status === "fulfilled") {
@@ -2721,6 +4355,16 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
         } else {
           setLeaveTypes([])
           setLeaveTypesError(readEndpointError(typesResult.reason, "Failed to load leave types."))
+        }
+
+        if (balancesResult.status === "fulfilled") {
+          setBalances(balancesResult.value.rows)
+          setLeaveBalancesFull(balancesResult.value)
+          setBalancesError(null)
+        } else {
+          setBalances([])
+          setLeaveBalancesFull(null)
+          setBalancesError(readEndpointError(balancesResult.reason, "Failed to load leave balances."))
         }
       }
 
@@ -2778,7 +4422,26 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
     void loadData()
   }, [loadData])
 
-  const onRequestLeave = async (submit: boolean) => {
+  const openedHighlightedRequestRef = React.useRef("")
+  React.useEffect(() => {
+    if (activeTab !== "requests" || !highlightedRequestId) {
+      return
+    }
+    if (openedHighlightedRequestRef.current === highlightedRequestId) {
+      return
+    }
+
+    const highlightedRow =
+      requests.find((row) =>
+        String(readNumber(row, ["id", "leave_request_id", "leaveRequestId"]) ?? "") ===
+        highlightedRequestId
+      ) ?? null
+
+    openedHighlightedRequestRef.current = highlightedRequestId
+    openLeaveWorkflowDialog(highlightedRequestId, highlightedRow ?? { id: highlightedRequestId })
+  }, [activeTab, highlightedRequestId, openLeaveWorkflowDialog, requests])
+
+  const onRequestLeave = React.useCallback(async (submit: boolean) => {
     if (!token || employeeId === null) {
       setMessage("Your profile is not ready for leave requests.")
       return
@@ -2789,8 +4452,18 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
       return
     }
 
+    if (new Date(`${requestForm.start_date}T00:00:00`).getTime() > new Date(`${requestForm.end_date}T00:00:00`).getTime()) {
+      setMessage("Start date cannot be after end date.")
+      return
+    }
+
     if (submit && !requestForm.reason.trim()) {
       setMessage("A reason is required before submitting the request.")
+      return
+    }
+
+    if (submit && leaveSubmissionBalanceError) {
+      setMessage(leaveSubmissionBalanceError)
       return
     }
 
@@ -2803,29 +4476,65 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
     setMessage(null)
 
     try {
-      await createMyLeaveRequest(token, {
+      // Create as draft only when explicitly requested. Submit sends submit:true so
+      // the API creates the request in the approval workflow, not as a draft.
+      const payload = await createMyLeaveRequest(token, {
         leave_type_id: Number(requestForm.leave_type_id),
-        start_date: requestForm.start_date ? `${requestForm.start_date}T00:00:00` : "",
-        end_date: requestForm.end_date ? `${requestForm.end_date}T00:00:00` : "",
-        reason: requestForm.reason.trim(),
-        submit,
+        start_date: requestForm.start_date,
+        end_date: requestForm.end_date,
+        reason: requestForm.reason.trim() || (submit ? "" : "Draft"),
+        submit: submit === true,
       })
+
+      // Some backends still create a draft even when submit:true — finish the flow.
+      if (submit) {
+        const created =
+          asRecord(payload) ??
+          asRecord(asRecord(payload)?.data) ??
+          asRecord(asRecord(payload)?.result) ??
+          asRecord(asRecord(payload)?.item)
+        const createdId =
+          readNumber(created, ["id", "leave_request_id", "leaveRequestId"]) ??
+          readNumber(asRecord(created?.leave_request), ["id"]) ??
+          readNumber(asRecord(created?.leaveRequest), ["id"])
+        const createdStatus = readString(created, ["status"], "").toLowerCase()
+
+        if (createdId !== null && (createdStatus === "draft" || createdStatus === "" || createdStatus === "-")) {
+          await submitMyLeaveRequest(token, createdId)
+        }
+        if (createdId !== null) {
+          void notifySubmittedRequestApprovers({
+            kind: "leave_request",
+            token,
+            request: payload,
+            loadRequest: () => getMyLeaveRequest(token, createdId),
+          })
+        }
+      }
+
       setRequestForm({ leave_type_id: "", start_date: "", end_date: "", reason: "" })
-      setMessage(submit ? "Leave request submitted." : "Leave request saved as a draft.")
+      setMessage(submit ? "Leave request submitted for approval." : "Leave request saved as a draft.")
       setRequestDialogOpen(false)
       await loadData()
     } catch (errorObject) {
-      const text =
-        errorObject instanceof Error
+      const text = submit
+        ? formatLeaveRequestError(errorObject, selectedLeaveBalance?.availableDays ?? null)
+        : errorObject instanceof Error
           ? errorObject.message
-          : submit
-            ? "Failed to submit leave request."
-            : "Failed to save draft."
+          : "Failed to save draft."
       setMessage(text)
     } finally {
       setLoading(false)
     }
-  }
+  }, [
+    availableLeaveTypes.length,
+    employeeId,
+    leaveSubmissionBalanceError,
+    loadData,
+    requestForm,
+    selectedLeaveBalance?.availableDays,
+    token,
+  ])
 
   const onCancelRequest = async (id: number | string, reason: string = "Cancelled by user") => {
     if (!token) return
@@ -2862,8 +4571,8 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
   const onDownloadPdf = async (id: number | string) => {
     if (!token) return
     try {
-      const base = API_BASE_URL || "http://192.168.1.30:8888"
-      const res = await fetch(`${base}/api/me/leave/requests/${id}/pdf`, {
+      const baseUrl = resolveApiBaseUrl()
+      const res = await fetch(`${baseUrl}/api/me/leave/requests/${id}/pdf`, {
         headers: { Authorization: `Bearer ${token}` },
       })
       if (!res.ok) throw new Error("Failed to generate PDF")
@@ -2884,14 +4593,40 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
 
   const onSubmitRequest = async (id: number | string) => {
     if (!token) return
+    const requestRow =
+      requests.find((row) => String(readNumber(row, ["id", "leave_request_id", "leaveRequestId"]) ?? "") === String(id)) ??
+      null
+    const requestLeaveTypeId = readLeaveTypeId(requestRow)
+    const requestBalanceRow =
+      requestLeaveTypeId === null
+        ? null
+        : (balances.find((row) => readLeaveTypeId(row) === requestLeaveTypeId) ?? null)
+    const availableDays = findBalanceAvailableDays(requestBalanceRow)
+    const requestedDays = readRequestedLeaveDays(requestRow)
+    const balanceError = validateLeaveSubmissionBalance({
+      availableDays,
+      requestedDays,
+    })
+
+    if (balanceError) {
+      setMessage(balanceError)
+      return
+    }
+
     setLoading(true)
     setMessage(null)
     try {
-      await submitMyLeaveRequest(token, id)
+      const submittedRequest = await submitMyLeaveRequest(token, id)
+      void notifySubmittedRequestApprovers({
+        kind: "leave_request",
+        token,
+        request: submittedRequest ?? { id },
+        loadRequest: () => getMyLeaveRequest(token, id),
+      })
       setMessage("Leave request submitted.")
       await loadData()
     } catch (errorObject) {
-      const text = errorObject instanceof Error ? errorObject.message : "Failed to submit request."
+      const text = formatLeaveRequestError(errorObject, availableDays)
       setMessage(text)
     } finally {
       setLoading(false)
@@ -2917,84 +4652,377 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
 
   let tabContent: React.ReactNode = null
   if (activeTab === "requests") {
+    const statusChips: Array<{
+      key: string | null
+      label: string
+      value: number
+      className: string
+      valueClassName: string
+    }> = [
+      {
+        key: null,
+        label: "All",
+        value: leaveRequestStatusCounts.all,
+        className: !leaveRequestStatusFilter ? "bg-primary/10" : "bg-background",
+        valueClassName: "text-primary",
+      },
+      {
+        key: "pending",
+        label: "Open",
+        value: leaveRequestStatusCounts.pending,
+        className:
+          leaveRequestStatusFilter === "pending" ? "bg-amber-500/15" : "bg-background",
+        valueClassName: "text-amber-700 dark:text-amber-300",
+      },
+      {
+        key: "draft",
+        label: "Draft",
+        value: leaveRequestStatusCounts.draft,
+        className:
+          leaveRequestStatusFilter === "draft" ? "bg-slate-500/15" : "bg-background",
+        valueClassName: "text-slate-700 dark:text-slate-300",
+      },
+      {
+        key: "approved",
+        label: "Approved",
+        value: leaveRequestStatusCounts.approved,
+        className:
+          leaveRequestStatusFilter === "approved" ? "bg-emerald-500/15" : "bg-background",
+        valueClassName: "text-emerald-700 dark:text-emerald-300",
+      },
+      {
+        key: "rejected",
+        label: "Rejected",
+        value: leaveRequestStatusCounts.rejected,
+        className:
+          leaveRequestStatusFilter === "rejected" ? "bg-rose-500/15" : "bg-background",
+        valueClassName: "text-rose-700 dark:text-rose-300",
+      },
+      {
+        key: "cancelled",
+        label: "Cancelled",
+        value: leaveRequestStatusCounts.cancelled,
+        className:
+          leaveRequestStatusFilter === "cancelled" ? "bg-muted" : "bg-background",
+        valueClassName: "text-muted-foreground",
+      },
+    ]
+
     tabContent = (
-      <section className="space-y-4 px-4 py-2 lg:px-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <h2 className="text-3xl font-semibold tracking-tight text-foreground">My Requests</h2>
-          {requests.length > 0 && (
-            <div className="flex gap-2">
-              <Button type="button" onClick={() => setRequestDialogOpen(true)} className="sm:hidden bg-primary text-white hover:bg-primary/90 !text-white">
-                New Leave Request
+      <motion.section
+        className="space-y-4 px-1 py-1 md:px-0"
+        variants={profileTabStagger}
+        initial="hidden"
+        animate="show"
+      >
+        <motion.div
+          variants={profileTabItem}
+          className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div className="min-w-0">
+            <h2 className="text-lg font-semibold tracking-tight text-foreground md:text-xl">
+              Leave requests
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              {requests.length === 0
+                ? "Request time off and track approval progress."
+                : leaveRequestStatusFilter
+                  ? `${filteredLeaveRequests.length} of ${requests.length} request${requests.length === 1 ? "" : "s"}`
+                  : `${requests.length} request${requests.length === 1 ? "" : "s"} on file`}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {leaveRequestStatusFilter ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-9"
+                onClick={() => setLeaveRequestStatusFilter(null)}
+              >
+                Clear filter
               </Button>
-              <Button type="button" onClick={() => setRequestDialogOpen(true)} className="hidden sm:inline-flex bg-primary text-white hover:bg-primary/90 !text-white">
-                New Leave Request
-              </Button>
-            </div>
-          )}
-        </div>
-        {requests.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <p className="text-sm text-muted-foreground">No leave requests found.</p>
+            ) : null}
             <Button
               type="button"
+              size="sm"
               onClick={() => setRequestDialogOpen(true)}
-              className="mt-6 bg-primary text-white hover:bg-primary/90 !text-white"
+              className="h-9 bg-primary px-3 !text-white hover:bg-primary/90"
             >
-              New Leave Request
+              <CalendarIcon className="mr-1.5 size-3.5" />
+              New request
             </Button>
           </div>
-        ) : (
-          <div className="space-y-2">
-            {requests.map((row, index) => {
+        </motion.div>
+
+        <motion.div
+          variants={profileTabItem}
+          className="inline-flex max-w-full flex-nowrap items-stretch overflow-x-auto rounded-lg border border-border"
+        >
+          {statusChips.map((chip, index, arr) => {
+            const isActive = leaveRequestStatusFilter === chip.key
+            return (
+              <button
+                key={chip.label}
+                type="button"
+                onClick={() =>
+                  setLeaveRequestStatusFilter((prev) =>
+                    chip.key === null ? null : prev === chip.key ? null : chip.key
+                  )
+                }
+                className={cn(
+                  "flex min-w-[5.25rem] shrink-0 cursor-pointer flex-col justify-center px-3 py-2 text-left transition-colors",
+                  chip.className,
+                  isActive || (chip.key === null && !leaveRequestStatusFilter)
+                    ? "ring-inset"
+                    : "hover:bg-muted/40",
+                  index < arr.length - 1 ? "border-r border-border/60" : null
+                )}
+              >
+                <span className="truncate text-[10px] font-semibold uppercase tracking-wide opacity-80">
+                  {chip.label}
+                </span>
+                <span
+                  className={cn(
+                    "text-base font-semibold tabular-nums leading-tight",
+                    chip.valueClassName
+                  )}
+                >
+                  {chip.value}
+                </span>
+              </button>
+            )
+          })}
+        </motion.div>
+
+        {loading && requests.length === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-3 py-10">
+            <LumaSpin />
+            <p className="text-sm text-muted-foreground">Loading leave requests…</p>
+          </div>
+        ) : null}
+
+        {!loading && requests.length === 0 ? (
+          <motion.div
+            variants={profileTabItem}
+            className="overflow-hidden rounded-lg border border-dashed border-border bg-card px-4 py-10 text-center"
+          >
+            <p className="text-sm font-medium text-foreground">No leave requests yet</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Submit a request when you need time off. Approvals show up here.
+            </p>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => setRequestDialogOpen(true)}
+              className="mt-4 h-9 bg-primary !text-white hover:bg-primary/90"
+            >
+              <CalendarIcon className="mr-1.5 size-3.5" />
+              New request
+            </Button>
+          </motion.div>
+        ) : null}
+
+        {!loading && requests.length > 0 && filteredLeaveRequests.length === 0 ? (
+          <motion.div
+            variants={profileTabItem}
+            className="rounded-lg border border-border bg-card px-4 py-8 text-center text-sm text-muted-foreground"
+          >
+            No requests match this filter.
+            <button
+              type="button"
+              className="ml-1 font-medium text-primary underline-offset-4 hover:underline"
+              onClick={() => setLeaveRequestStatusFilter(null)}
+            >
+              Show all
+            </button>
+          </motion.div>
+        ) : null}
+
+        {filteredLeaveRequests.length > 0 ? (
+          <motion.div
+            variants={profileTabItem}
+            className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card"
+          >
+            {filteredLeaveRequests.map((row, index) => {
               const id = readNumber(row, ["id"])
               const status = readString(row, ["status"], "pending").toLowerCase()
               const canCancel = ["pending", "draft"].includes(status)
               const statusMeta = resolveLeaveStatusMeta(status)
+              const leaveType =
+                readString(asRecord(row.leave_type), ["name", "display_name", "code"], "") ||
+                readString(row, ["leave_type_name"], "Leave")
+              const leaveNo = readString(row, ["leave_no", "request_no"], "")
+              const reason = readString(row, ["reason"], "")
+              const daysRaw =
+                readString(row, ["days", "total_days", "number_of_days", "duration_days"], "") ||
+                (readNumberish(row.days ?? row.total_days ?? row.number_of_days) !== null
+                  ? String(readNumberish(row.days ?? row.total_days ?? row.number_of_days))
+                  : "")
+              const daysLabel = daysRaw && daysRaw !== "-" ? daysRaw : "—"
+              const startLabel = formatDate(row.start_date)
+              const endLabel = formatDate(row.end_date)
+              const slipId =
+                leaveNo && leaveNo !== "-"
+                  ? leaveNo
+                  : id !== null
+                    ? `LR-${id}`
+                    : `REQ-${index + 1}`
+              const isHighlighted =
+                highlightedRequestId &&
+                (String(id) === String(highlightedRequestId) ||
+                  String(leaveNo) === String(highlightedRequestId))
+
               return (
-                <div key={String(row.id ?? index)} className="relative overflow-hidden rounded-2xl p-4 text-white" style={{ backgroundColor: 'var(--primary)' }}>
-                  <Doodle name="doodle-circles" />
-                  <div className="relative z-10">
-                    <div className="flex items-start justify-between gap-3">
-                      <p className="font-medium">{readString(row, ["leave_no", "request_no", "reason"], "Request")}</p>
-                      <Badge className={cn("border text-xs uppercase tracking-wide", statusMeta.badgeClassName)}>
-                        {statusMeta.label}
-                      </Badge>
+                <motion.article
+                  key={String(row.id ?? index)}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{
+                    type: "spring",
+                    stiffness: 380,
+                    damping: 28,
+                    delay: Math.min(index, 12) * 0.04,
+                  }}
+                  className={cn(
+                    "flex bg-background",
+                    isHighlighted ? "bg-primary/[0.04]" : null
+                  )}
+                >
+                  <div className={cn("w-1 shrink-0", statusMeta.barClassName)} />
+                  <div className="flex min-w-0 flex-1 flex-col gap-2.5 px-3 py-3">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="text-sm font-semibold text-foreground">{leaveType}</h3>
+                          <span
+                            className={cn(
+                              "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                              statusMeta.badgeClassName
+                            )}
+                          >
+                            {statusMeta.label}
+                          </span>
+                        </div>
+                        <p className="mt-0.5 text-[11px] text-muted-foreground">
+                          <span className="font-medium text-foreground/80">{slipId}</span>
+                          {statusMeta.helperText ? (
+                            <>
+                              <span className="mx-1 text-border">·</span>
+                              {statusMeta.helperText}
+                            </>
+                          ) : null}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          Days
+                        </p>
+                        <p className="text-lg font-semibold tabular-nums leading-none text-primary">
+                          {daysLabel}
+                        </p>
+                      </div>
                     </div>
-                    <p className="text-white/80">{formatDate(row.start_date)} to {formatDate(row.end_date)}</p>
-                    <p className="text-white/80">{statusMeta.helperText || `Status: ${readString(row, ["status"], "pending")}`}</p>
-                    <p className="text-white/80">Leave Type: {readString(asRecord(row.leave_type), ["name"], "-")}</p>
-                    <div className="mt-2 flex gap-2">
-                      {id && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => void onDownloadPdf(id)}
-                          disabled={loading}
-                          className="border-primary bg-primary text-white hover:bg-primary/90 hover:text-white"
+
+                    <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-4">
+                      <div className="min-w-[5.5rem]">
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                          From
+                        </p>
+                        <p
+                          className={cn(
+                            "text-base font-semibold tabular-nums leading-tight",
+                            startLabel === "-" ? "text-muted-foreground/50" : "text-primary"
+                          )}
                         >
-                          Download PDF
+                          {startLabel}
+                        </p>
+                      </div>
+                      <div className="hidden text-muted-foreground/40 sm:block" aria-hidden>
+                        →
+                      </div>
+                      <div className="min-w-[5.5rem]">
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                          To
+                        </p>
+                        <p
+                          className={cn(
+                            "text-base font-semibold tabular-nums leading-tight",
+                            endLabel === "-" ? "text-muted-foreground/50" : "text-primary"
+                          )}
+                        >
+                          {endLabel}
+                        </p>
+                      </div>
+                      {reason && reason !== "-" ? (
+                        <div className="min-w-0 flex-1 basis-full sm:basis-auto">
+                          <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                            Reason
+                          </p>
+                          <p className="truncate text-sm text-foreground">{reason}</p>
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {id ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 px-2 text-xs"
+                          disabled={loading}
+                          onClick={() => openLeaveWorkflowDialog(id, row)}
+                        >
+                          Workflow
                         </Button>
-                      )}
-                      {id && canCancel && (
-                        <Button variant="destructive" size="sm" onClick={() => openCancelDialog(id)} disabled={loading} className="!text-white">
-                          Cancel
+                      ) : null}
+                      {id ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 px-2 text-xs"
+                          disabled={loading}
+                          onClick={() => void onDownloadPdf(id)}
+                        >
+                          PDF
                         </Button>
-                      )}
-                      {id && status === "draft" && (
-                        <Button size="sm" onClick={() => void onSubmitRequest(id)} disabled={loading} className="bg-white/20 text-white hover:bg-white/30">
+                      ) : null}
+                      {id && status === "draft" ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="h-7 bg-primary px-2 text-xs !text-white hover:bg-primary/90"
+                          disabled={loading}
+                          onClick={() => void onSubmitRequest(id)}
+                        >
                           Submit
                         </Button>
-                      )}
+                      ) : null}
+                      {id && canCancel ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 border-rose-300 px-2 text-xs text-rose-700 hover:bg-rose-50 dark:border-rose-800 dark:text-rose-300 dark:hover:bg-rose-950/40"
+                          disabled={loading}
+                          onClick={() => openCancelDialog(id)}
+                        >
+                          {status === "draft" ? "Discard" : "Cancel"}
+                        </Button>
+                      ) : null}
                     </div>
                   </div>
-                </div>
+                </motion.article>
               )
             })}
-          </div>
-        )}
-        {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
-        {error ? <p className="text-sm text-red-600">{error}</p> : null}
-      </section>
+          </motion.div>
+        ) : null}
+
+        {message ? <p className="text-xs text-muted-foreground">{message}</p> : null}
+        {error ? <p className="text-xs text-red-600">{error}</p> : null}
+      </motion.section>
     )
   }
   if (activeTab === "balances") {
@@ -3168,7 +5196,9 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
         <DialogPopup className="sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>Request Leave</DialogTitle>
-            <DialogDescription>Save a draft or submit a new leave request without leaving this page.</DialogDescription>
+            <DialogDescription>
+              Submit for approval immediately, or save a draft to finish later.
+            </DialogDescription>
           </DialogHeader>
           <div className="grid gap-3">
             <div className="space-y-1">
@@ -3188,21 +5218,54 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
                 </SelectContent>
               </Select>
               {availableLeaveTypes.length === 0 && leaveTypesError ? <p className="text-xs text-slate-500">{leaveTypesError}</p> : null}
+              {selectedLeaveBalance?.formattedAvailable ? (
+                <p className={cn(
+                  "text-xs",
+                  selectedLeaveBalance.availableDays !== null && selectedLeaveBalance.availableDays < 0
+                    ? "text-rose-600"
+                    : "text-muted-foreground"
+                )}>
+                  Available balance: {selectedLeaveBalance.formattedAvailable} day(s)
+                  {selectedLeaveBalance.fiscalYear ? ` for ${selectedLeaveBalance.fiscalYear}` : ""}
+                  {selectedLeaveBalance.availableDays !== null && selectedLeaveBalance.availableDays < 0
+                    ? ". This leave type is already overdrawn, so submission may be blocked until HR adjusts the balance."
+                    : ""}
+                </p>
+              ) : null}
+              {requestedLeaveDays !== null && requestForm.start_date && requestForm.end_date ? (
+                <p className="text-xs text-muted-foreground">
+                  Requested duration: {requestedLeaveDays.toFixed(2)} day(s)
+                </p>
+              ) : null}
+              {leaveSubmissionBalanceError ? (
+                <p className="text-xs text-rose-600">{leaveSubmissionBalanceError}</p>
+              ) : null}
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1">
-                <Label>Start Date</Label>
-                <Input type="date" value={requestForm.start_date} onChange={(event) => setRequestForm((prev) => ({ ...prev, start_date: event.target.value }))} />
+                <Label htmlFor="leave-start-date">Start Date</Label>
+                <DatePickerPresets
+                  id="leave-start-date"
+                  value={requestForm.start_date}
+                  onChange={(value) => setRequestForm((prev) => ({ ...prev, start_date: value }))}
+                  placeholder="Pick start date"
+                />
               </div>
               <div className="space-y-1">
-                <Label>End Date</Label>
-                <Input type="date" value={requestForm.end_date} onChange={(event) => setRequestForm((prev) => ({ ...prev, end_date: event.target.value }))} />
+                <Label htmlFor="leave-end-date">End Date</Label>
+                <DatePickerPresets
+                  id="leave-end-date"
+                  value={requestForm.end_date}
+                  onChange={(value) => setRequestForm((prev) => ({ ...prev, end_date: value }))}
+                  placeholder="Pick end date"
+                />
               </div>
             </div>
             <div className="space-y-1">
-              <Label>Reason</Label>
+              <Label>Reason {requestForm.reason.trim() ? null : <span className="font-normal text-muted-foreground">(required to submit)</span>}</Label>
               <Textarea
                 className="min-h-24"
+                placeholder="Why are you taking leave?"
                 value={requestForm.reason}
                 onChange={(event) => setRequestForm((prev) => ({ ...prev, reason: event.target.value }))}
               />
@@ -3219,14 +5282,33 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
               onClick={() => void onRequestLeave(false)}
               disabled={loading || availableLeaveTypes.length === 0}
             >
-              Save Draft
+              {loading ? "Saving…" : "Save Draft"}
             </Button>
-            <Button type="button" onClick={() => void onRequestLeave(true)} disabled={loading || availableLeaveTypes.length === 0} className="bg-primary text-white hover:bg-primary/90 !text-white">
-              Submit Request
+            <Button
+              type="button"
+              onClick={() => void onRequestLeave(true)}
+              disabled={loading || availableLeaveTypes.length === 0 || Boolean(leaveSubmissionBalanceError)}
+              className="bg-primary !text-white hover:bg-primary/90"
+            >
+              {loading ? "Submitting…" : "Submit Request"}
             </Button>
           </DialogFooter>
         </DialogPopup>
       </Dialog>
+      <LeaveWorkflowDialog
+        open={workflowDialogOpen}
+        onOpenChange={(open) => {
+          setWorkflowDialogOpen(open)
+          if (!open) {
+            setWorkflowRequestId(null)
+            setWorkflowRequestRow(null)
+          }
+        }}
+        token={token}
+        requestId={workflowRequestId}
+        fallbackRow={workflowRequestRow}
+      />
+
       <Dialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
         <DialogPopup className="sm:max-w-lg">
           <DialogHeader>

@@ -1,7 +1,8 @@
 "use client"
 
 import * as React from "react"
-import { ChartColumnIcon, ChevronRightIcon, Loader2Icon } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { CalendarClockIcon, ChartColumnIcon, ChevronRightIcon, Loader2Icon } from "lucide-react"
 import { toast } from "sonner"
 
 import {
@@ -55,7 +56,7 @@ const STATUS_OPTIONS = [
   { value: "ON_LEAVE", label: "On leave" },
 ] as const
 
-type ReportId = "attendance-download"
+type ReportId = "attendance-download" | "scheduled-reporting"
 
 type ReportTone = "sky" | "emerald" | "amber" | "violet"
 
@@ -65,6 +66,7 @@ type ReportDefinition = {
   description: string
   tone: ReportTone
   icon: React.ReactNode
+  href?: string
 }
 
 type ReportGroup = {
@@ -110,6 +112,21 @@ const REPORT_GROUPS: ReportGroup[] = [
         description: "Download filtered attendance summaries as XLSX, CSV, or PDF.",
         tone: "sky",
         icon: <ChartColumnIcon className="size-5" />,
+      },
+    ],
+  },
+  {
+    id: "scheduled",
+    title: "Scheduled Reporting",
+    reports: [
+      {
+        id: "scheduled-reporting",
+        title: "Scheduled reporting",
+        description:
+          "Manage report templates, delivery schedules, SMTP settings, and execution history.",
+        tone: "violet",
+        icon: <CalendarClockIcon className="size-5" />,
+        href: "/dashboard/operations/scheduled-reporting",
       },
     ],
   },
@@ -741,6 +758,7 @@ function AttendanceReportDialog({
 }
 
 export function AttendanceReportView() {
+  const router = useRouter()
   const [activeReport, setActiveReport] = React.useState<ReportId | null>(null)
 
   return (
@@ -748,7 +766,7 @@ export function AttendanceReportView() {
       <div className="flex flex-col gap-1">
         <h1 className="text-xl font-semibold tracking-tight text-foreground">Reports</h1>
         <p className="text-sm text-muted-foreground">
-          Choose a report to configure filters and download.
+          Download on-demand reports or manage scheduled report delivery.
         </p>
       </div>
 
@@ -765,7 +783,13 @@ export function AttendanceReportView() {
                   <li key={report.id}>
                     <button
                       type="button"
-                      onClick={() => setActiveReport(report.id)}
+                      onClick={() => {
+                        if (report.href) {
+                          router.push(report.href)
+                          return
+                        }
+                        setActiveReport(report.id)
+                      }}
                       className={cn(
                         "group flex w-full items-start gap-3 rounded-2xl border p-4 text-left shadow-sm transition-all",
                         "hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",

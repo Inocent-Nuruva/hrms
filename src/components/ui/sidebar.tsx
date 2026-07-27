@@ -31,9 +31,9 @@ const SIDEBAR_WIDTH_MOBILE = "18rem"
 const SIDEBAR_WIDTH_ICON = "3rem"
 const SIDEBAR_KEYBOARD_SHORTCUT = "b"
 const SIDEBAR_WIDTH_STORAGE_KEY = "hrms.sidebar.width.v1"
-const SIDEBAR_DEFAULT_WIDTH_PX = 252
-const SIDEBAR_MIN_WIDTH_PX = 240
-const SIDEBAR_MAX_WIDTH_PX = 420
+const SIDEBAR_DEFAULT_WIDTH_PX = 236
+const SIDEBAR_MIN_WIDTH_PX = 220
+const SIDEBAR_MAX_WIDTH_PX = 380
 
 function readSidebarOpenState(defaultOpen: boolean) {
   if (typeof document === "undefined") {
@@ -235,7 +235,8 @@ function SidebarProvider({
           } as React.CSSProperties
         }
         className={cn(
-          "group/sidebar-wrapper flex min-h-svh w-full has-data-[variant=inset]:bg-sidebar",
+          // Fixed viewport shell so only the main content pane scrolls (no document + inner pair).
+          "group/sidebar-wrapper flex h-svh max-h-svh w-full overflow-hidden has-data-[variant=inset]:bg-sidebar",
           className
         )}
         {...props}
@@ -284,7 +285,7 @@ function Sidebar({
           data-sidebar="sidebar"
           data-slot="sidebar"
           data-mobile="true"
-          className="w-(--sidebar-width) bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden"
+          className="app-sidebar-surface w-(--sidebar-width) p-0 text-sidebar-foreground [&>button]:hidden"
           style={
             {
               "--sidebar-width": SIDEBAR_WIDTH_MOBILE,
@@ -329,9 +330,12 @@ function Sidebar({
         className={cn(
           "fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear data-[side=left]:left-0 data-[side=left]:group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)] data-[side=right]:right-0 data-[side=right]:group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)] md:flex",
           // Adjust the padding for floating and inset variants.
-          variant === "floating" || variant === "inset"
+          // Inset: no right padding/border so sidebar and main content join cleanly.
+          variant === "floating"
             ? "p-1.5 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(3))+2px)]"
-            : "group-data-[collapsible=icon]:w-(--sidebar-width-icon) group-data-[side=left]:border-r group-data-[side=right]:border-l",
+            : variant === "inset"
+              ? "pb-1.5 pl-1.5 pt-0 pr-0 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(3))+2px)]"
+            : "group-data-[collapsible=icon]:w-(--sidebar-width-icon)",
           className
         )}
         {...props}
@@ -339,7 +343,7 @@ function Sidebar({
         <div
           data-sidebar="sidebar"
           data-slot="sidebar-inner"
-          className="flex size-full flex-col bg-sidebar group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:shadow-sm group-data-[variant=floating]:ring-1 group-data-[variant=floating]:ring-sidebar-border"
+          className="app-sidebar-surface flex size-full flex-col group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:shadow-sm group-data-[variant=floating]:ring-1 group-data-[variant=floating]:ring-sidebar-border"
         >
           {children}
         </div>
@@ -435,7 +439,10 @@ function SidebarInset({ className, ...props }: React.ComponentProps<"main">) {
     <main
       data-slot="sidebar-inset"
       className={cn(
-        "relative flex w-full flex-1 flex-col bg-background md:peer-data-[variant=inset]:m-1.5 md:peer-data-[variant=inset]:ml-1 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:shadow-sm md:peer-data-[variant=inset]:peer-data-[state=collapsed]:ml-2",
+        // Flush to the browser top; soft outer frame only on right/bottom.
+        // Height accounts for inset margins so the page body never also scrolls.
+        // min-h-0 so nested overflow-y-auto scroll regions can size correctly.
+        "relative flex h-svh max-h-svh w-full min-h-0 flex-1 flex-col overflow-hidden bg-background md:peer-data-[variant=inset]:mt-0 md:peer-data-[variant=inset]:mb-1.5 md:peer-data-[variant=inset]:mr-1.5 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:h-[calc(100svh-0.375rem)] md:peer-data-[variant=inset]:max-h-[calc(100svh-0.375rem)] md:peer-data-[variant=inset]:rounded-br-xl md:peer-data-[variant=inset]:rounded-tr-none md:peer-data-[variant=inset]:rounded-l-none md:peer-data-[variant=inset]:shadow-sm md:peer-data-[variant=inset]:peer-data-[state=collapsed]:ml-1.5 md:peer-data-[variant=inset]:peer-data-[state=collapsed]:rounded-tl-xl md:peer-data-[variant=inset]:peer-data-[state=collapsed]:rounded-bl-xl",
         className
       )}
       {...props}

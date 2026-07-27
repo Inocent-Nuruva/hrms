@@ -55,6 +55,14 @@ function isMeaningfulTableValue(value: React.ReactNode): boolean {
   return React.isValidElement(value);
 }
 
+function areStringArraysEqual(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((value, index) => value === right[index]);
+}
+
 interface ResizableTableProps<T = Record<string, unknown>> {
   title?: string;
   data?: T[];
@@ -72,10 +80,48 @@ interface ResizableTableProps<T = Record<string, unknown>> {
   showCheckboxes?: boolean;
   /** When false, hides the table toolbar Export dropdown. Default true. */
   showExport?: boolean;
+  /** When false, hides the Sort control. Default true. */
+  showSort?: boolean;
+  /** When false, hides the entire toolbar row. Default true. */
+  showToolbar?: boolean;
+  /** Content on the left side of the toolbar (e.g. titles). */
+  toolbarStart?: React.ReactNode;
+  /** Extra actions rendered before Sort/Export (e.g. filter, refresh). */
+  toolbarActions?: React.ReactNode;
+  enableColumnVisibility?: boolean;
+  hiddenColumnKeys?: string[];
   storageKey?: string;
 }
 
 type SortOrder = "asc" | "desc";
+
+function buildInitialColumnWidths<T>(columns: Column<T>[], showCheckboxes: boolean): Record<string, number> {
+  const initial: Record<string, number> = showCheckboxes ? { checkbox: 36 } : {};
+  columns.forEach((col) => {
+    initial[col.key] = col.defaultWidth ?? 105;
+  });
+  return initial;
+}
+
+function mergePersistedColumnWidths(base: Record<string, number>, storageKey: string): Record<string, number> {
+  try {
+    const saved = localStorage.getItem(storageKey);
+    if (!saved) return base;
+
+    const parsed = JSON.parse(saved) as unknown;
+    if (!parsed || typeof parsed !== "object") return base;
+
+    const next = { ...base };
+    Object.entries(parsed as Record<string, unknown>).forEach(([key, value]) => {
+      if (typeof value === "number" && next[key] !== undefined) {
+        next[key] = Math.max(60, Math.min(500, value));
+      }
+    });
+    return next;
+  } catch {
+    return base;
+  }
+}
 
 export function ResizableTable<T = Record<string, unknown>>({
   title = "Item",
@@ -92,6 +138,12 @@ export function ResizableTable<T = Record<string, unknown>>({
   loading = false,
   showCheckboxes = false,
   showExport = true,
+  showSort = true,
+  showToolbar = true,
+  toolbarStart,
+  toolbarActions,
+  enableColumnVisibility = false,
+  hiddenColumnKeys = [],
   storageKey
 }: ResizableTableProps<T> = {}) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -99,6 +151,8 @@ export function ResizableTable<T = Record<string, unknown>>({
   const [currentPage, setCurrentPage] = useState(1);
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
+  const [hiddenColumns, setHiddenColumns] = useState<string[]>(hiddenColumnKeys);
+  const [showColumnsMenu, setShowColumnsMenu] = useState(false);
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
 
@@ -158,7 +212,7 @@ export function ResizableTable<T = Record<string, unknown>>({
     }));
   }, [columns, tableData, employees, title]);
 
-  const visibleTableColumns: Column<T>[] = useMemo(() => {
+  const candidateTableColumns: Column<T>[] = useMemo(() => {
     if (tableData.length === 0) {
       return tableColumns;
     }
@@ -179,6 +233,15 @@ export function ResizableTable<T = Record<string, unknown>>({
     });
   }, [columns, tableColumns, tableData]);
 
+  const visibleTableColumns: Column<T>[] = useMemo(() => {
+    if (!enableColumnVisibility || hiddenColumns.length === 0) {
+      return candidateTableColumns;
+    }
+
+    const nextColumns = candidateTableColumns.filter((col) => !hiddenColumns.includes(col.key));
+    return nextColumns.length > 0 ? nextColumns : candidateTableColumns;
+  }, [candidateTableColumns, enableColumnVisibility, hiddenColumns]);
+
   // Column keys for widths (optional checkbox + data columns)
   const allColumnKeys = useMemo(
     () =>
@@ -190,32 +253,37 @@ export function ResizableTable<T = Record<string, unknown>>({
 
   // Column widths state - initialize from columns
   const effectiveStorageKey = storageKey || (title ? `resizable-table:${title.toLowerCase().replace(/\s+/g, '-')}` : 'resizable-table:default');
+  const hiddenColumnsStorageKey = `${effectiveStorageKey}:hidden-columns`;
+  const tableColumnKeys = useMemo(() => tableColumns.map((column) => column.key), [tableColumns]);
+  const defaultHiddenColumnsKey = hiddenColumnKeys.join("|");
 
-  const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() => {
-    const initial: Record<string, number> = showCheckboxes ? { checkbox: 36 } : {};
-    visibleTableColumns.forEach((col) => {
-      initial[col.key] = col.defaultWidth ?? 105; // more compact default
-    });
-
-    // Load persisted widths if available
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem(effectiveStorageKey);
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (parsed && typeof parsed === 'object') {
-            Object.keys(parsed).forEach((k) => {
-              if (typeof parsed[k] === 'number' && initial[k] !== undefined) {
-                initial[k] = Math.max(60, Math.min(500, parsed[k]));
-              }
-            });
-          }
-        }
-      } catch {}
+  useEffect(() => {
+    if (!enableColumnVisibility) {
+      setHiddenColumns((prev) => (prev.length === 0 ? prev : []));
+      return;
     }
 
-    return initial;
-  });
+    let nextHiddenColumns = hiddenColumnKeys;
+
+    try {
+      const saved = localStorage.getItem(hiddenColumnsStorageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved) as unknown;
+        if (Array.isArray(parsed)) {
+          const allowedKeys = new Set(tableColumnKeys);
+          nextHiddenColumns = parsed.filter(
+            (key): key is string => typeof key === "string" && allowedKeys.has(key)
+          );
+        }
+      }
+    } catch {}
+
+    setHiddenColumns((prev) => (areStringArraysEqual(prev, nextHiddenColumns) ? prev : nextHiddenColumns));
+  }, [defaultHiddenColumnsKey, enableColumnVisibility, hiddenColumnKeys, hiddenColumnsStorageKey, tableColumnKeys]);
+
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() =>
+    buildInitialColumnWidths(visibleTableColumns, showCheckboxes)
+  );
 
   // Compute display widths: start from base/persisted, then proportionally expand
   // all growable columns if their sum < available container width. This makes the
@@ -261,7 +329,11 @@ export function ResizableTable<T = Record<string, unknown>>({
     });
   }, [visibleTableColumns, showCheckboxes]);
 
-
+  // Restore saved widths after hydration so SSR and the first client render match.
+  useEffect(() => {
+    const base = buildInitialColumnWidths(visibleTableColumns, showCheckboxes);
+    setColumnWidths(mergePersistedColumnWidths(base, effectiveStorageKey));
+  }, [effectiveStorageKey, visibleTableColumns, showCheckboxes]);
 
   useEffect(() => {
     setMounted(true);
@@ -337,6 +409,27 @@ export function ResizableTable<T = Record<string, unknown>>({
     setSortOrder("asc");
     setShowSortMenu(false);
     setCurrentPage(1);
+  };
+
+  const toggleColumnVisibility = (columnKey: string) => {
+    if (!enableColumnVisibility) {
+      return;
+    }
+
+    setHiddenColumns((prev) => {
+      const isHidden = prev.includes(columnKey);
+      const next = isHidden ? prev.filter((key) => key !== columnKey) : [...prev, columnKey];
+      const visibleCount = candidateTableColumns.filter((col) => !next.includes(col.key)).length;
+      if (visibleCount === 0) {
+        return prev;
+      }
+
+      try {
+        localStorage.setItem(hiddenColumnsStorageKey, JSON.stringify(next));
+      } catch {}
+
+      return next;
+    });
   };
 
   const sortedData = useMemo(() => {
@@ -591,99 +684,161 @@ export function ResizableTable<T = Record<string, unknown>>({
 
   const sortableColumns = visibleTableColumns.filter((c) => c.sortable !== false);
 
+  const toolbarButtonClass =
+    "inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-lg border border-border bg-background px-2 text-xs font-medium text-foreground transition hover:bg-muted";
+
   return (
     <div className={`w-full ${className}`}>
-      <div className="mb-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-        <div className="flex items-center gap-2" />
-
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Sort */}
-          <div className="relative">
-            <button
-              onClick={() => setShowSortMenu(!showSortMenu)}
-              className="px-2 py-1 bg-background border border-border/50 text-foreground text-xs hover:bg-muted/30 transition-colors flex items-center gap-1.5 rounded-md"
-            >
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-                <path d="M3 6L6 3L9 6M6 3V13M13 10L10 13L7 10M10 13V3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              Sort {sortField && <span className="ml-1 text-[8px] bg-primary text-primary-foreground rounded-sm px-1 py-0">1</span>}
-              <ChevronDown size={12} className="opacity-50" />
-            </button>
-
-            {showSortMenu && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={() => setShowSortMenu(false)} />
-                <div className="absolute right-0 mt-1 w-40 bg-background border border-border/50 shadow-lg rounded-md z-20 py-0.5 max-h-72 overflow-auto text-xs">
-                  <button
-                    type="button"
-                    onClick={clearSort}
-                    className={`w-full px-2 py-1 text-left hover:bg-muted/50 transition-colors ${sortField === null ? "bg-muted/30" : ""}`}
-                  >
-                    Default view
-                  </button>
-                  {sortableColumns.length > 0 ? (
-                    <>
-                      <div className="my-0.5 border-t border-border/40" />
-                      {sortableColumns.map((col) => (
-                        <button
-                          key={col.key}
-                          type="button"
-                          onClick={() => handleSort(col.key)}
-                          className={`w-full px-2 py-1 text-left hover:bg-muted/50 transition-colors ${sortField === col.key ? "bg-muted/30" : ""}`}
-                        >
-                          {col.label} {sortField === col.key && `(${sortOrder === "asc" ? "↑" : "↓"})`}
-                        </button>
-                      ))}
-                    </>
-                  ) : (
-                    <div className="px-2 py-1 text-muted-foreground">No sortable columns</div>
-                  )}
-                </div>
-              </>
-            )}
+      {showToolbar ? (
+        <div className="mb-2 flex flex-nowrap items-center justify-between gap-2">
+          <div className="min-w-0 flex flex-1 items-center gap-2 overflow-hidden">
+            {toolbarStart}
           </div>
 
-          {/* Export */}
-          {showExport ? (
-            <div className="relative">
-              <button
-                onClick={() => setShowExportMenu(!showExportMenu)}
-                className="px-2 py-1 bg-background border border-border/50 text-foreground text-xs hover:bg-muted/30 transition-colors flex items-center gap-1.5 rounded-md"
-              >
-                <Download size={12} />
-                Export
-                <ChevronDown size={12} className="opacity-50" />
-              </button>
+          <div className="flex shrink-0 items-center gap-1">
+            {toolbarActions}
 
-              {showExportMenu && (
-                <>
-                  <div className="fixed inset-0 z-10" onClick={() => setShowExportMenu(false)} />
-                  <div className="absolute right-0 mt-1 w-28 bg-background border border-border/50 shadow-lg rounded-md z-20 text-xs">
-                    <button
-                      onClick={() => {
-                        exportToCSV();
-                        setShowExportMenu(false);
-                      }}
-                      className="w-full px-2 py-1 text-left hover:bg-muted/50 transition-colors"
-                    >
-                      CSV
-                    </button>
-                    <button
-                      onClick={() => {
-                        exportToJSON();
-                        setShowExportMenu(false);
-                      }}
-                      className="w-full px-2 py-1 text-left hover:bg-muted/50 transition-colors border-t border-border/30"
-                    >
-                      JSON
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          ) : null}
+            {enableColumnVisibility ? (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowColumnsMenu(!showColumnsMenu)}
+                  className={toolbarButtonClass}
+                >
+                  Columns
+                  {hiddenColumns.length > 0 ? (
+                    <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold !text-white">
+                      {hiddenColumns.length}
+                    </span>
+                  ) : null}
+                  <ChevronDown size={12} className="opacity-50" />
+                </button>
+
+                {showColumnsMenu && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setShowColumnsMenu(false)} />
+                    <div className="absolute right-0 mt-1 w-48 bg-background border border-border/50 shadow-lg rounded-md z-20 py-1 max-h-80 overflow-auto text-xs">
+                      {candidateTableColumns.map((col) => {
+                        const checked = !hiddenColumns.includes(col.key);
+                        return (
+                          <label
+                            key={col.key}
+                            className="flex cursor-pointer items-center gap-2 px-2 py-1 hover:bg-muted/50 transition-colors"
+                          >
+                            <input
+                              type="checkbox"
+                              className="h-3.5 w-3.5 rounded border-border/40"
+                              checked={checked}
+                              onChange={() => toggleColumnVisibility(col.key)}
+                            />
+                            <span className="truncate">{col.label}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : null}
+
+            {showSort ? (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowSortMenu(!showSortMenu)}
+                  className={toolbarButtonClass}
+                  aria-label="Sort"
+                  title="Sort"
+                >
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className="text-primary">
+                    <path d="M3 6L6 3L9 6M6 3V13M13 10L10 13L7 10M10 13V3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  <span className="hidden sm:inline">Sort</span>
+                  {sortField ? (
+                    <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold !text-white">
+                      1
+                    </span>
+                  ) : null}
+                </button>
+
+                {showSortMenu && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setShowSortMenu(false)} />
+                    <div className="absolute right-0 mt-1 w-40 bg-background border border-border/50 shadow-lg rounded-md z-20 py-0.5 max-h-72 overflow-auto text-xs">
+                      <button
+                        type="button"
+                        onClick={clearSort}
+                        className={`w-full px-2 py-1 text-left hover:bg-muted/50 transition-colors ${sortField === null ? "bg-muted/30" : ""}`}
+                      >
+                        Default view
+                      </button>
+                      {sortableColumns.length > 0 ? (
+                        <>
+                          <div className="my-0.5 border-t border-border/40" />
+                          {sortableColumns.map((col) => (
+                            <button
+                              key={col.key}
+                              type="button"
+                              onClick={() => handleSort(col.key)}
+                              className={`w-full px-2 py-1 text-left hover:bg-muted/50 transition-colors ${sortField === col.key ? "bg-muted/30" : ""}`}
+                            >
+                              {col.label} {sortField === col.key && `(${sortOrder === "asc" ? "↑" : "↓"})`}
+                            </button>
+                          ))}
+                        </>
+                      ) : (
+                        <div className="px-2 py-1 text-muted-foreground">No sortable columns</div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : null}
+
+            {showExport ? (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowExportMenu(!showExportMenu)}
+                  className={toolbarButtonClass}
+                >
+                  <Download size={12} />
+                  <span className="hidden sm:inline">Export</span>
+                  <ChevronDown size={12} className="opacity-50" />
+                </button>
+
+                {showExportMenu && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setShowExportMenu(false)} />
+                    <div className="absolute right-0 mt-1 w-28 bg-background border border-border/50 shadow-lg rounded-md z-20 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          exportToCSV();
+                          setShowExportMenu(false);
+                        }}
+                        className="w-full px-2 py-1 text-left hover:bg-muted/50 transition-colors"
+                      >
+                        CSV
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          exportToJSON();
+                          setShowExportMenu(false);
+                        }}
+                        className="w-full px-2 py-1 text-left hover:bg-muted/50 transition-colors border-t border-border/30"
+                      >
+                        JSON
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : null}
+          </div>
         </div>
-      </div>
+      ) : null}
 
       <div className="bg-background border border-border/50 overflow-hidden rounded-lg relative">
         <div className="overflow-x-auto" ref={overflowRef}>

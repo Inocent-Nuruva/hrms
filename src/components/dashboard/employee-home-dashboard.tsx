@@ -2,14 +2,14 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { motion } from "framer-motion"
 import {
-  Building2Icon,
   CalendarIcon,
   CalendarClockIcon,
   ClockIcon,
   MailIcon,
-  MapPinIcon,
-  UserIcon,
+  PhoneIcon,
+  Sparkles,
   Users,
   MapPin,
   User,
@@ -45,7 +45,9 @@ import {
 import {
   getMyDashboard,
   getMyAttendanceToday,
+  listMyAttendancePunches,
   listMyLeaveBalances,
+  listLeaveTypes,
   createEmployeeSectionItem,
   createEmployeeDocument,
   patchEmployeeStatus,
@@ -53,6 +55,8 @@ import {
   type EmployeeProfileSection,
 } from "@/lib/admin-api"
 import { hasDashboardAdminIdentity } from "@/lib/dashboard-identity"
+import { useMyProfilePhoto } from "@/lib/my-profile-photo"
+import { cn } from "@/lib/utils"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import { asRecord, readString } from "@/utils/token-utils"
 
@@ -98,16 +102,19 @@ type DashboardManager = {
   employee_no?: string
   first_name?: string
   last_name?: string
+  profile_photo_url?: string | null
   company_user?: {
     id?: number
     company_id?: number
     user_id?: number
+    profile_photo_url?: string | null
     status?: string
     user?: {
       id?: number
       user_no?: string
       first_name?: string
       last_name?: string
+      profile_photo_url?: string | null
       phone?: string
       email?: string
       status?: string
@@ -168,6 +175,7 @@ type DashboardUser = {
   user_no: string
   first_name: string
   last_name: string
+  profile_photo_url?: string | null
   phone?: string
   email: string
   status: string
@@ -203,13 +211,16 @@ type EmployeeDashboardData = {
 type EmployeeDashboardViewProps = {
   dashboardData: EmployeeDashboardData
   attendanceToday?: AdminRecord | null
+  attendancePunchesToday?: AdminRecord[]
   leaveBalances?: AdminRecord[]
+  leaveTypes?: AdminRecord[]
 }
 
 type LeaveBalanceSummary = {
   typeName: string
-  available: number | string
-  used?: number | string
+  available: string
+  used?: string
+  allocated?: string
 }
 
 const REQUIRED_ONBOARDING_ITEMS: Array<{ key: string; label: string; description: string; icon: React.ReactNode }> = [
@@ -236,6 +247,150 @@ const SECTION_KEY_TO_API: Record<string, EmployeeProfileSection | "documents" | 
   professional_qualifications: "professional-qualifications",
   experience_details: "experience-details",
   documents: "documents",
+}
+
+function resolveDashboardProfilePhotoUrl(dashboardData: EmployeeDashboardData) {
+  const employeeRecord = asRecord(dashboardData.employee)
+  const companyUser = asRecord(employeeRecord?.company_user)
+  const companyUserUser = asRecord(companyUser?.user)
+  const userRecord = asRecord(dashboardData.user)
+
+  return (
+    readString(employeeRecord, ["profile_photo_url"]) ||
+    readString(companyUser, ["profile_photo_url"]) ||
+    readString(companyUserUser, ["profile_photo_url"]) ||
+    readString(userRecord, ["profile_photo_url"]) ||
+    undefined
+  )
+}
+
+function resolveManagerProfilePhotoUrl(manager: DashboardManager | null | undefined) {
+  const managerRecord = asRecord(manager)
+  const companyUser = asRecord(managerRecord?.company_user)
+  const userRecord = asRecord(companyUser?.user)
+
+  return (
+    readString(managerRecord, ["profile_photo_url"]) ||
+    readString(companyUser, ["profile_photo_url"]) ||
+    readString(userRecord, ["profile_photo_url"]) ||
+    undefined
+  )
+}
+
+function resolveManagerDetails(manager: DashboardManager | null | undefined) {
+  const managerRecord = asRecord(manager)
+  const companyUser = asRecord(managerRecord?.company_user)
+  const userRecord = asRecord(companyUser?.user)
+
+  const name =
+    [readString(managerRecord, ["first_name"], ""), readString(managerRecord, ["last_name"], "")]
+      .filter(Boolean)
+      .join(" ")
+      .trim() ||
+    [readString(userRecord, ["first_name"], ""), readString(userRecord, ["last_name"], "")]
+      .filter(Boolean)
+      .join(" ")
+      .trim() ||
+    "Not assigned"
+
+  const employeeNo =
+    readString(managerRecord, ["employee_no"], "") ||
+    readString(companyUser, ["employee_no", "employee_number", "employee_code"], "") ||
+    readString(userRecord, ["employee_no", "employee_number", "employee_code", "user_no"], "")
+
+  const email =
+    readString(managerRecord, ["email"], "") ||
+    readString(companyUser, ["email"], "") ||
+    readString(userRecord, ["email"], "")
+
+  const phone =
+    readString(managerRecord, ["phone"], "") ||
+    readString(companyUser, ["phone"], "") ||
+    readString(userRecord, ["phone"], "")
+
+  return {
+    name,
+    employeeNo,
+    email,
+    phone,
+    profilePhotoUrl: resolveManagerProfilePhotoUrl(manager),
+  }
+}
+
+function greetingForNow() {
+  const hour = new Date().getHours()
+  if (hour < 12) return "Good morning"
+  if (hour < 17) return "Good afternoon"
+  return "Good evening"
+}
+
+const dashboardStagger = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: { staggerChildren: 0.07, delayChildren: 0.05 },
+  },
+}
+
+const dashboardItem = {
+  hidden: { opacity: 0, y: 12, scale: 0.99 },
+  show: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: { type: "spring" as const, stiffness: 380, damping: 28, mass: 0.7 },
+  },
+}
+
+const NAME_SPARKLES = [
+  { top: "-18%", left: "-12%", size: 11, delay: 0, duration: 1.6 },
+  { top: "-22%", right: "-8%", size: 9, delay: 0.25, duration: 1.8 },
+  { top: "55%", right: "-18%", size: 8, delay: 0.45, duration: 1.5 },
+  { top: "70%", left: "-16%", size: 7, delay: 0.7, duration: 1.9 },
+  { top: "-8%", left: "42%", size: 6, delay: 0.15, duration: 1.4 },
+] as const
+
+function AnimatedGreetingName({ name }: { name: string }) {
+  return (
+    <span className="relative inline-flex items-center">
+      <motion.span
+        className="relative z-[1] bg-gradient-to-r from-primary via-primary to-primary/70 bg-clip-text text-transparent"
+        initial={{ opacity: 0, y: 8, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ type: "spring", stiffness: 320, damping: 22, delay: 0.18 }}
+      >
+        {name}
+      </motion.span>
+      {NAME_SPARKLES.map((spark, index) => (
+        <motion.span
+          key={index}
+          className="pointer-events-none absolute z-[2] text-primary"
+          style={{
+            top: spark.top,
+            left: "left" in spark ? spark.left : undefined,
+            right: "right" in spark ? spark.right : undefined,
+          }}
+          initial={{ opacity: 0, scale: 0 }}
+          animate={{
+            opacity: [0, 1, 0.85, 0],
+            scale: [0.4, 1.15, 0.9, 0.5],
+            rotate: [0, 18, -8, 12],
+            y: [4, -6, -2, 3],
+          }}
+          transition={{
+            duration: spark.duration,
+            delay: 0.35 + spark.delay,
+            repeat: Infinity,
+            repeatDelay: 1.1 + index * 0.15,
+            ease: "easeInOut",
+          }}
+          aria-hidden
+        >
+          <Sparkles style={{ width: spark.size, height: spark.size }} className="fill-primary/25" />
+        </motion.span>
+      ))}
+    </span>
+  )
 }
 
 interface OnboardingFormField {
@@ -432,24 +587,118 @@ function computeTenure(hireDate?: string | null): string {
   return `${months}m`
 }
 
-function extractLeaveSummaries(balances: AdminRecord[] | undefined): LeaveBalanceSummary[] {
-  if (!Array.isArray(balances) || balances.length === 0) return []
-  return balances.slice(0, 4).map((b) => {
-    const leaveTypeRecord = asRecord(b.leave_type)
-    const policyRecord = asRecord(b.policy)
-    const typeName =
-      readString(b, ["leave_type_name", "name", "type_name", "policy_name"]) ||
-      readString(leaveTypeRecord, ["name", "leave_type_name", "type_name", "code"]) ||
-      readString(policyRecord, ["name", "policy_name"]) ||
-      "Leave"
-    const available = b.available ?? b.balance ?? b.remaining ?? b.current_balance ?? "—"
-    const used = b.used ?? b.taken ?? undefined
-    return {
-      typeName: String(typeName),
-      available: typeof available === "number" ? available : String(available),
-      used: used != null ? (typeof used === "number" ? used : String(used)) : undefined,
+function formatBalanceNumber(value: unknown): string {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Number.isInteger(value) ? String(value) : value.toFixed(1).replace(/\.0$/, "")
+  }
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) {
+      return Number.isInteger(parsed) ? String(parsed) : parsed.toFixed(1).replace(/\.0$/, "")
     }
-  })
+    return value.trim()
+  }
+  return "—"
+}
+
+function readNumericish(record: AdminRecord | null | undefined, keys: string[]): number | null {
+  if (!record) return null
+  for (const key of keys) {
+    const value = record[key]
+    if (typeof value === "number" && Number.isFinite(value)) return value
+    if (typeof value === "string" && value.trim()) {
+      const parsed = Number(value)
+      if (Number.isFinite(parsed)) return parsed
+    }
+  }
+  return null
+}
+
+function buildLeaveTypeLabelMap(leaveTypes: AdminRecord[] | undefined): Map<string, string> {
+  const labels = new Map<string, string>()
+  if (!Array.isArray(leaveTypes)) return labels
+
+  for (const row of leaveTypes) {
+    const id =
+      readNumericish(row, ["id", "leave_type_id", "leaveTypeId", "type_id", "typeId"]) ??
+      readNumericish(asRecord(row.leave_type), ["id", "leave_type_id"])
+    if (id === null) continue
+
+    const nested = asRecord(row.leave_type) ?? asRecord(row.leaveType)
+    const label =
+      readString(row, ["name", "display_name", "displayName", "leave_type_name", "leaveTypeName", "type_name", "typeName", "title", "code"]) ||
+      readString(nested, ["name", "display_name", "displayName", "leave_type_name", "code", "title"]) ||
+      ""
+    if (label) {
+      labels.set(String(id), label)
+    }
+  }
+  return labels
+}
+
+function extractLeaveSummaries(
+  balances: AdminRecord[] | undefined,
+  leaveTypes?: AdminRecord[]
+): LeaveBalanceSummary[] {
+  if (!Array.isArray(balances) || balances.length === 0) return []
+  const leaveTypeLabels = buildLeaveTypeLabelMap(leaveTypes)
+
+  return balances
+    .map((b) => {
+      const leaveTypeRecord =
+        asRecord(b.leave_type) ?? asRecord(b.leaveType) ?? asRecord(b.type) ?? asRecord(b.leave)
+      const policyRecord = asRecord(b.policy) ?? asRecord(b.leave_policy) ?? asRecord(b.leavePolicy)
+
+      const leaveTypeId =
+        readNumericish(b, ["leave_type_id", "leaveTypeId", "type_id", "typeId"]) ??
+        readNumericish(leaveTypeRecord, ["id", "leave_type_id", "leaveTypeId"])
+
+      // Prefer explicit leave-type labels; avoid bare row.name (often employee/person name).
+      const typeName =
+        readString(b, ["leave_type_name", "leaveTypeName", "type_name", "typeName", "leave_type_code"]) ||
+        readString(leaveTypeRecord, ["name", "display_name", "displayName", "leave_type_name", "title", "code"]) ||
+        readString(policyRecord, ["name", "display_name", "displayName", "policy_name", "title"]) ||
+        (leaveTypeId !== null ? leaveTypeLabels.get(String(leaveTypeId)) : undefined) ||
+        (leaveTypeId !== null ? `Leave type #${leaveTypeId}` : "") ||
+        ""
+
+      const usedRaw = readNumericish(b, ["used_days", "usedDays", "used", "taken", "taken_days"])
+      const pendingRaw = readNumericish(b, ["pending_days", "pendingDays", "pending"])
+      const allocatedRaw = readNumericish(b, [
+        "allocated_days",
+        "allocatedDays",
+        "allocated",
+        "entitlement",
+        "entitlement_days",
+      ])
+      const availableRaw = readNumericish(b, [
+        "available_days",
+        "availableDays",
+        "available",
+        "remaining_days",
+        "remainingDays",
+        "remaining",
+        "balance",
+        "current_balance",
+        "currentBalance",
+        "days_available",
+        "daysAvailable",
+      ])
+
+      let available = availableRaw
+      if (available === null && allocatedRaw !== null) {
+        available = allocatedRaw - (usedRaw ?? 0) - (pendingRaw ?? 0)
+      }
+
+      return {
+        typeName: typeName.trim() || "Leave",
+        available: formatBalanceNumber(available),
+        used: usedRaw != null ? formatBalanceNumber(usedRaw) : undefined,
+        allocated: allocatedRaw != null ? formatBalanceNumber(allocatedRaw) : undefined,
+      }
+    })
+    .filter((row) => !(row.typeName === "Leave" && row.available === "—"))
+    .slice(0, 4)
 }
 
 function formatPunchState(state: string | null | undefined): string {
@@ -459,51 +708,669 @@ function formatPunchState(state: string | null | undefined): string {
     .replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
-function getAttendanceStatus(today: AdminRecord | null | undefined) {
-  if (!today) return { label: "No data", hint: "—" }
-  const state = readString(today, ["punch_state", "status", "state", "attendance_status"])
-  const proc = readString(today, ["processing_state"])
-  const first = readString(today, ["first_punch", "first_punch_at", "check_in"])
-  const last = readString(today, ["last_punch", "last_punch_at", "check_out"])
-  const label = formatPunchState(state)
-  let hint = first ? (last ? `In: ${first} • Out: ${last}` : `First: ${first}`) : "—"
-  if (proc) hint += ` (${proc.replace(/_/g, " ")})`
-  return { label, hint }
+function coerceTimeValue(value: unknown): string {
+  if (value == null || value === "" || value === "-") return ""
+  if (typeof value === "number" && Number.isFinite(value)) {
+    // Unix seconds / ms
+    const ms = value > 1e12 ? value : value > 1e9 ? value * 1000 : NaN
+    if (Number.isFinite(ms)) {
+      return new Date(ms).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
+    }
+    return ""
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim()
+    if (!trimmed || trimmed === "-") return ""
+    // Already a clock time (HH:mm or HH:mm:ss)
+    if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(trimmed)) {
+      return trimmed.slice(0, 5)
+    }
+    const date = new Date(trimmed)
+    if (!Number.isNaN(date.getTime())) {
+      return date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
+    }
+    return trimmed
+  }
+  // Nested object e.g. { punched_at, time, at }
+  const record = asRecord(value)
+  if (record) {
+    return (
+      coerceTimeValue(record.punched_at) ||
+      coerceTimeValue(record.punch_time) ||
+      coerceTimeValue(record.punch_at) ||
+      coerceTimeValue(record.time) ||
+      coerceTimeValue(record.at) ||
+      coerceTimeValue(record.timestamp) ||
+      coerceTimeValue(record.datetime) ||
+      coerceTimeValue(record.created_at)
+    )
+  }
+  return ""
 }
 
-function QuickActionCard({
+function readTimeFromRecord(record: AdminRecord | null | undefined, keys: string[]): string {
+  if (!record) return ""
+  for (const key of keys) {
+    const formatted = coerceTimeValue(record[key])
+    if (formatted) return formatted
+  }
+  return ""
+}
+
+// Align with Android HomeScreen / AttendanceScreen field order for /api/me/attendance/today
+const CHECK_IN_KEYS = [
+  "checkInAt",
+  "check_in_at",
+  "firstCheckInAt",
+  "first_check_in_at",
+  "first_punch",
+  "first_punch_at",
+  "check_in_time",
+  "checkInTime",
+  "check_in",
+  "checkIn",
+  "clock_in_at",
+  "clockInAt",
+  "clock_in",
+  "clockIn",
+  "in_time",
+  "inTime",
+  "actual_check_in_at",
+  "actualCheckInAt",
+]
+
+const CHECK_OUT_KEYS = [
+  "checkOutAt",
+  "check_out_at",
+  "lastCheckOutAt",
+  "last_check_out_at",
+  "last_punch",
+  "last_punch_at",
+  "check_out_time",
+  "checkOutTime",
+  "check_out",
+  "checkOut",
+  "clock_out_at",
+  "clockOutAt",
+  "clock_out",
+  "clockOut",
+  "out_time",
+  "outTime",
+  "actual_check_out_at",
+  "actualCheckOutAt",
+]
+
+function readPunchTimesFromList(value: unknown): { first: string; last: string } {
+  if (!Array.isArray(value) || value.length === 0) return { first: "", last: "" }
+  const times = value
+    .map((entry) => coerceTimeValue(entry) || readTimeFromRecord(asRecord(entry), ["punched_at", "punch_time", "punch_at", "time", "at", "timestamp", "created_at"]))
+    .filter(Boolean)
+  if (times.length === 0) return { first: "", last: "" }
+  return { first: times[0] ?? "", last: times[times.length - 1] ?? "" }
+}
+
+type AttendanceTone = "present" | "absent" | "late" | "leave" | "half" | "holiday" | "off" | "pending" | "neutral"
+
+const ATTENDANCE_TONE_STYLES: Record<
+  AttendanceTone,
+  { icon: string; label: string; hint: string }
+> = {
+  present: {
+    icon: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300",
+    label: "text-emerald-700 dark:text-emerald-300",
+    hint: "text-emerald-700/75 dark:text-emerald-300/75",
+  },
+  absent: {
+    icon: "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300",
+    label: "text-rose-700 dark:text-rose-300",
+    hint: "text-rose-700/75 dark:text-rose-300/75",
+  },
+  late: {
+    icon: "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300",
+    label: "text-amber-800 dark:text-amber-300",
+    hint: "text-amber-800/75 dark:text-amber-300/75",
+  },
+  leave: {
+    icon: "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-300",
+    label: "text-sky-700 dark:text-sky-300",
+    hint: "text-sky-700/75 dark:text-sky-300/75",
+  },
+  half: {
+    icon: "border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-900 dark:bg-orange-950/40 dark:text-orange-300",
+    label: "text-orange-700 dark:text-orange-300",
+    hint: "text-orange-700/75 dark:text-orange-300/75",
+  },
+  holiday: {
+    icon: "border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-300",
+    label: "text-violet-700 dark:text-violet-300",
+    hint: "text-violet-700/75 dark:text-violet-300/75",
+  },
+  off: {
+    icon: "border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-300",
+    label: "text-slate-600 dark:text-slate-300",
+    hint: "text-slate-600/75 dark:text-slate-300/75",
+  },
+  pending: {
+    icon: "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300",
+    label: "text-blue-700 dark:text-blue-300",
+    hint: "text-blue-700/75 dark:text-blue-300/75",
+  },
+  neutral: {
+    icon: "border-border bg-muted text-muted-foreground",
+    label: "text-foreground",
+    hint: "text-muted-foreground",
+  },
+}
+
+function normalizeAttendanceKey(value: string | null | undefined): string {
+  return (value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_")
+}
+
+function resolveAttendanceTone(state: string | null | undefined): AttendanceTone {
+  const normalized = normalizeAttendanceKey(state)
+  if (!normalized) return "neutral"
+
+  // Order matters: match exception states before broad present/leave tokens.
+  if (
+    normalized.includes("absent") ||
+    normalized.includes("no_show") ||
+    normalized.includes("noshow") ||
+    normalized.includes("reject")
+  ) {
+    return "absent"
+  }
+  if (
+    normalized.includes("early_departure") ||
+    normalized.includes("early_depart") ||
+    normalized.includes("early_leave") ||
+    normalized.includes("early_out") ||
+    normalized.includes("early_checkout") ||
+    normalized.includes("early_check_out") ||
+    normalized.includes("left_early") ||
+    normalized.includes("departed_early") ||
+    normalized.includes("late") ||
+    normalized.includes("missing_punch") ||
+    normalized.includes("undertime")
+  ) {
+    return "late"
+  }
+  if (normalized.includes("half")) {
+    return "half"
+  }
+  if (normalized.includes("holiday") || normalized.includes("public_holiday")) {
+    return "holiday"
+  }
+  if (
+    normalized.includes("off_day") ||
+    normalized.includes("offday") ||
+    normalized.includes("weekend") ||
+    normalized.includes("rest_day") ||
+    normalized === "off"
+  ) {
+    return "off"
+  }
+  if (
+    normalized.includes("on_leave") ||
+    normalized.includes("leave") ||
+    normalized.includes("vacation") ||
+    normalized.includes("sick")
+  ) {
+    return "leave"
+  }
+  if (
+    normalized.includes("pending") ||
+    normalized.includes("processing") ||
+    normalized.includes("draft") ||
+    normalized.includes("in_progress")
+  ) {
+    return "pending"
+  }
+  if (
+    normalized.includes("present") ||
+    normalized.includes("on_time") ||
+    normalized.includes("checked_in") ||
+    normalized.includes("checked_out") ||
+    normalized.includes("check_in") ||
+    normalized.includes("check_out") ||
+    normalized.includes("worked") ||
+    normalized.includes("complete") ||
+    normalized === "in" ||
+    normalized === "out"
+  ) {
+    return "present"
+  }
+  return "neutral"
+}
+
+function deepFindStringByKeyHint(
+  source: unknown,
+  keyHints: RegExp[],
+  depth = 0
+): string | undefined {
+  if (!source || depth > 4) return undefined
+  const record = asRecord(source)
+  if (!record) return undefined
+
+  for (const [key, value] of Object.entries(record)) {
+    if (!keyHints.some((re) => re.test(key))) continue
+    if (typeof value === "string" && value.trim()) return value.trim()
+    if (typeof value === "number" || typeof value === "boolean") return String(value)
+  }
+
+  for (const value of Object.values(record)) {
+    if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+      const nested = deepFindStringByKeyHint(value, keyHints, depth + 1)
+      if (nested) return nested
+    }
+  }
+  return undefined
+}
+
+function deepFindTimeByKeyHint(source: unknown, keyHints: RegExp[], depth = 0): string {
+  if (!source || depth > 4) return ""
+  const record = asRecord(source)
+  if (!record) return ""
+
+  for (const [key, value] of Object.entries(record)) {
+    if (!keyHints.some((re) => re.test(key))) continue
+    const formatted = coerceTimeValue(value)
+    if (formatted) return formatted
+  }
+
+  for (const value of Object.values(record)) {
+    if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+      const nested = deepFindTimeByKeyHint(value, keyHints, depth + 1)
+      if (nested) return nested
+    }
+  }
+  return ""
+}
+
+function pickAttendanceState(today: AdminRecord): string | undefined {
+  const summary =
+    asRecord(today.summary) ??
+    asRecord(today.daily_summary) ??
+    asRecord(today.dailySummary) ??
+    asRecord(today.attendance)
+
+  // Prefer day-level attendance status over raw punch_state ("in"/"out").
+  return (
+    readString(today, [
+      "attendance_status",
+      "attendanceStatus",
+      "day_status",
+      "dayStatus",
+      "summary_status",
+      "summaryStatus",
+      "work_status",
+      "workStatus",
+      "final_status",
+      "finalStatus",
+      "computed_status",
+      "computedStatus",
+    ]) ||
+    readString(summary, [
+      "attendance_status",
+      "attendanceStatus",
+      "day_status",
+      "dayStatus",
+      "status",
+      "state",
+      "final_status",
+      "finalStatus",
+    ]) ||
+    deepFindStringByKeyHint(today, [
+      /attendance_?status/i,
+      /day_?status/i,
+      /summary_?status/i,
+      /work_?status/i,
+      /final_?status/i,
+    ]) ||
+    readString(today, ["status", "state", "punch_state", "punchState"])
+  )
+}
+
+function punchTypeOf(row: AdminRecord): "CHECK_IN" | "CHECK_OUT" | "OTHER" {
+  const raw =
+    readString(row, ["punch_type", "punchType", "type", "direction", "in_out", "inOut", "event_type", "eventType"]) ||
+    ""
+  const normalized = normalizeAttendanceKey(raw)
+  // Check OUT before IN so values like "checked_out" don't match "out" wrongly after "in".
+  if (
+    normalized.includes("check_out") ||
+    normalized.includes("clock_out") ||
+    normalized === "out" ||
+    normalized === "co" ||
+    normalized === "o" ||
+    normalized.endsWith("_out") ||
+    normalized.includes("departure")
+  ) {
+    return "CHECK_OUT"
+  }
+  if (
+    normalized.includes("check_in") ||
+    normalized.includes("clock_in") ||
+    normalized === "in" ||
+    normalized === "ci" ||
+    normalized === "i" ||
+    normalized.endsWith("_in") ||
+    // Android treats punch types containing "in" as check-in (CHECK_IN, IN, …)
+    (normalized.includes("in") && !normalized.includes("out"))
+  ) {
+    return "CHECK_IN"
+  }
+  return "OTHER"
+}
+
+function punchTimeRaw(row: AdminRecord): string {
+  // Android uses punched_at / punchedAt first for /api/me/attendance/punches
+  return (
+    readTimeFromRecord(row, [
+      "punched_at",
+      "punchedAt",
+      "punch_time",
+      "punchTime",
+      "punch_at",
+      "punchAt",
+      "timestamp",
+      "datetime",
+      "event_time",
+      "eventTime",
+      "time",
+      "at",
+      "created_at",
+      "createdAt",
+    ]) || ""
+  )
+}
+
+function punchSortKey(row: AdminRecord): number {
+  const candidates = [
+    row.punched_at,
+    row.punchedAt,
+    row.punch_time,
+    row.punchTime,
+    row.punch_at,
+    row.punchAt,
+    row.timestamp,
+    row.datetime,
+    row.event_time,
+    row.eventTime,
+    row.time,
+    row.created_at,
+    row.createdAt,
+  ]
+  for (const value of candidates) {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value > 1e12 ? value : value > 1e9 ? value * 1000 : value
+    }
+    if (typeof value === "string" && value.trim()) {
+      const parsed = Date.parse(value)
+      if (!Number.isNaN(parsed)) return parsed
+      // HH:mm(:ss) → minutes for same-day ordering
+      const match = value.trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/)
+      if (match) {
+        return Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3] || 0)
+      }
+    }
+  }
+  return 0
+}
+
+/** Derive first check-in and last check-out from /api/me/attendance/punches rows. */
+function punchTimesFromHistory(punches: AdminRecord[] | undefined): { first: string; last: string } {
+  if (!Array.isArray(punches) || punches.length === 0) return { first: "", last: "" }
+
+  const sorted = [...punches].sort((a, b) => punchSortKey(a) - punchSortKey(b))
+  const checkIns = sorted.filter((row) => punchTypeOf(row) === "CHECK_IN")
+  const checkOuts = sorted.filter((row) => punchTypeOf(row) === "CHECK_OUT")
+
+  let first = ""
+  let last = ""
+
+  if (checkIns.length > 0) {
+    first = punchTimeRaw(checkIns[0]!)
+  }
+  if (checkOuts.length > 0) {
+    last = punchTimeRaw(checkOuts[checkOuts.length - 1]!)
+  }
+
+  // Untyped punches: use earliest as in, latest as out when there are 2+ events.
+  if (!first || !last) {
+    const allTimes = sorted.map(punchTimeRaw).filter(Boolean)
+    if (!first && allTimes.length > 0) first = allTimes[0] ?? ""
+    if (!last && allTimes.length > 1) last = allTimes[allTimes.length - 1] ?? ""
+  }
+
+  if (first && last && first === last && sorted.length === 1) {
+    last = ""
+  }
+
+  return { first, last }
+}
+
+function localDateIso(date = new Date()): string {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, "0")
+  const d = String(date.getDate()).padStart(2, "0")
+  return `${y}-${m}-${d}`
+}
+
+function getAttendanceStatus(
+  today: AdminRecord | null | undefined,
+  punchesToday?: AdminRecord[]
+): {
+  label: string
+  hint: string
+  tone: AttendanceTone
+  checkIn: string
+  checkOut: string
+} {
+  if (!today && (!punchesToday || punchesToday.length === 0)) {
+    return {
+      label: "No data",
+      hint: "Attendance not loaded yet",
+      tone: "neutral",
+      checkIn: "—",
+      checkOut: "—",
+    }
+  }
+
+  const summary = today
+    ? asRecord(today.summary) ?? asRecord(today.daily_summary) ?? asRecord(today.attendance)
+    : null
+  const state = today ? pickAttendanceState(today) : undefined
+  const tone = resolveAttendanceTone(state)
+  const proc = today
+    ? readString(today, ["processing_state", "processingState"]) ||
+      readString(summary, ["processing_state", "processingState"])
+    : undefined
+
+  // Punch history is the source of truth for actual clock times.
+  const fromHistory = punchTimesFromHistory(punchesToday)
+
+  let firstFmt =
+    fromHistory.first ||
+    (today ? readTimeFromRecord(today, CHECK_IN_KEYS) : "") ||
+    readTimeFromRecord(summary, CHECK_IN_KEYS) ||
+    (today
+      ? deepFindTimeByKeyHint(today, [
+          /first_?(check_?in|punch)/i,
+          /check_?in(_?at|_?time)?$/i,
+          /clock_?in/i,
+          /^in_?time$/i,
+        ])
+      : "")
+
+  let lastFmt =
+    fromHistory.last ||
+    (today ? readTimeFromRecord(today, CHECK_OUT_KEYS) : "") ||
+    readTimeFromRecord(summary, CHECK_OUT_KEYS) ||
+    (today
+      ? deepFindTimeByKeyHint(today, [
+          /last_?(check_?out|punch)/i,
+          /check_?out(_?at|_?time)?$/i,
+          /clock_?out/i,
+          /^out_?time$/i,
+        ])
+      : "")
+
+  // Nested lists on the today payload.
+  if (today && (!firstFmt || !lastFmt)) {
+    const listCandidates = [
+      today.punches,
+      today.punch_logs,
+      today.events,
+      today.attendance_logs,
+      summary?.punches,
+      summary?.punch_logs,
+      summary?.events,
+    ]
+    for (const candidate of listCandidates) {
+      const times = readPunchTimesFromList(candidate)
+      if (!firstFmt && times.first) firstFmt = times.first
+      if (!lastFmt && times.last) lastFmt = times.last
+      if (firstFmt && lastFmt) break
+    }
+  }
+
+  if (firstFmt && lastFmt && firstFmt === lastFmt) {
+    const onlyOneHistory = Array.isArray(punchesToday) && punchesToday.length === 1
+    const onlyOneNested = today
+      ? [today.punches, today.punch_logs, today.events, summary?.punches]
+          .filter(Array.isArray)
+          .some((list) => (list as unknown[]).length === 1)
+      : false
+    if (onlyOneHistory || onlyOneNested) {
+      lastFmt = ""
+    }
+  }
+
+  const label = formatPunchState(state) || (firstFmt ? "Active" : "No activity")
+  let hint: string
+  if (firstFmt && lastFmt) {
+    hint = `In ${firstFmt} · Out ${lastFmt}`
+  } else if (firstFmt) {
+    hint = `In ${firstFmt} · No check-out yet`
+  } else if (lastFmt) {
+    hint = `Out ${lastFmt}`
+  } else if (tone === "absent" || tone === "off" || tone === "holiday" || tone === "leave") {
+    hint =
+      tone === "absent"
+        ? "No punches recorded today"
+        : tone === "leave"
+          ? "On approved leave today"
+          : tone === "holiday"
+            ? "Public holiday"
+            : "Scheduled off day"
+  } else if (tone === "late" || tone === "present" || tone === "half") {
+    hint = "Punch times not available yet"
+  } else {
+    hint = "No punches recorded today"
+  }
+
+  if (proc) {
+    hint += ` · ${proc.replace(/_/g, " ")}`
+  }
+  return {
+    label,
+    hint,
+    tone,
+    checkIn: firstFmt || "—",
+    checkOut: lastFmt || "—",
+  }
+}
+
+const ATTENDANCE_BAR: Record<AttendanceTone, string> = {
+  present: "bg-emerald-500",
+  absent: "bg-rose-500",
+  late: "bg-amber-500",
+  leave: "bg-sky-500",
+  half: "bg-orange-500",
+  holiday: "bg-violet-500",
+  off: "bg-slate-400",
+  pending: "bg-blue-500",
+  neutral: "bg-primary",
+}
+
+function DetailField({
+  label,
+  value,
+}: {
+  label: string
+  value: React.ReactNode
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3 px-3 py-2">
+      <span className="shrink-0 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </span>
+      <span className="min-w-0 text-right text-sm font-medium text-foreground break-words">
+        {value}
+      </span>
+    </div>
+  )
+}
+
+function QuickActionLink({
   href,
   title,
   icon,
-  delay = 0,
-  mounted = true,
 }: {
   href: string
   title: string
   icon: React.ReactNode
-  delay?: number
-  mounted?: boolean
 }) {
   return (
     <Link
       href={href}
-      className="group flex items-center gap-2.5 rounded-xl border border-white/20 bg-white/10 p-3 transition-all duration-400 ease-out hover:bg-white/20 hover:border-white/40 hover:shadow-sm no-underline hover:no-underline text-white"
-      style={{ 
-        opacity: mounted ? 1 : 0, 
-        transform: mounted ? 'translateY(0)' : 'translateY(6px)',
-        transitionDelay: `${delay}ms`
-      }}
+      className="group flex items-center gap-2.5 rounded-lg border border-white/25 bg-white/10 px-3 py-2.5 text-white no-underline transition-colors hover:bg-white/18 hover:no-underline"
     >
-      <div className="shrink-0 text-white/90">
+      <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-white/15 text-white [&_svg]:size-4">
         {icon}
-      </div>
-      <div className="min-w-0 flex-1">
-        <h3 className="text-sm font-semibold leading-tight text-white no-underline">{title}</h3>
-      </div>
-      <div className="transition-transform group-hover:-translate-y-px">
-        <span className="text-xs font-medium text-white/80">Open →</span>
-      </div>
+      </span>
+      <span className="min-w-0 flex-1 text-sm font-semibold leading-tight">{title}</span>
+      <span className="text-xs font-medium text-white/75 transition-transform group-hover:translate-x-0.5">
+        →
+      </span>
     </Link>
+  )
+}
+
+function DashboardSection({
+  title,
+  subtitle,
+  action,
+  children,
+  barClassName = "bg-primary",
+  className,
+}: {
+  title: string
+  subtitle?: string
+  action?: React.ReactNode
+  children: React.ReactNode
+  barClassName?: string
+  className?: string
+}) {
+  return (
+    <section className={cn("overflow-hidden rounded-lg border border-border bg-card", className)}>
+      <div className="flex">
+        <div className={cn("w-1 shrink-0", barClassName)} />
+        <div className="flex min-w-0 flex-1 items-center justify-between gap-2 px-3 py-2.5">
+          <div className="min-w-0">
+            <h2 className="text-sm font-semibold text-foreground">{title}</h2>
+            {subtitle ? (
+              <p className="truncate text-[11px] text-muted-foreground">{subtitle}</p>
+            ) : null}
+          </div>
+          {action}
+        </div>
+      </div>
+      <div className="border-t border-border/70">{children}</div>
+    </section>
   )
 }
 
@@ -554,15 +1421,11 @@ function Doodle({ name = "doodle-circles" }: { name?: string }) {
 export function EmployeeDashboardView({
   dashboardData,
   attendanceToday,
+  attendancePunchesToday,
   leaveBalances,
+  leaveTypes,
 }: EmployeeDashboardViewProps) {
-  const [mounted, setMounted] = React.useState(false)
-
-  React.useEffect(() => {
-    setMounted(false)
-    const id = setTimeout(() => setMounted(true), 80)
-    return () => clearTimeout(id)
-  }, [dashboardData])
+  const { url: myProfilePhotoUrl } = useMyProfilePhoto()
 
   if (!isEmployeeDashboardData(dashboardData)) {
     return (
@@ -576,378 +1439,494 @@ export function EmployeeDashboardView({
     )
   }
 
-
-
   const fullName = `${dashboardData.user.first_name} ${dashboardData.user.last_name}`.trim()
-  const preferredName = dashboardData.employee.preferred_name?.trim() || dashboardData.user.first_name
+  const preferredName =
+    dashboardData.employee.preferred_name?.trim() || dashboardData.user.first_name
   const profileHref = "/dashboard/me/profile"
   const leaveBalancesHref = "/dashboard/me/leave/balances"
   const leaveRequestHref = "/dashboard/me/leave/requests"
   const attendanceHref = "/dashboard/attendance/today"
   const holidaysHref = "/dashboard/me/leave/holidays"
 
-  const managerUser = dashboardData.employee.manager?.company_user?.user
-  const managerName =
-    [dashboardData.employee.manager?.first_name, dashboardData.employee.manager?.last_name]
+  const employeeProfilePhotoUrl =
+    myProfilePhotoUrl || resolveDashboardProfilePhotoUrl(dashboardData) || undefined
+  const managerDetails = resolveManagerDetails(dashboardData.employee.manager)
+  const positionLabel = dashboardData.employee.primary_position?.name || "—"
+  const departmentLabel = dashboardData.employee.primary_department?.name || "—"
+  const branchLabel =
+    [dashboardData.employee.primary_branch?.name, dashboardData.employee.primary_branch?.city]
       .filter(Boolean)
-      .join(" ")
-      .trim() || "Not assigned"
-
+      .join(" · ") || "—"
+  const employeeNo = dashboardData.employee.employee_no || "—"
+  const hireDateLabel = formatDate(dashboardData.employee.hire_date)
   const tenure = computeTenure(dashboardData.employee.hire_date)
+  const employmentStatus =
+    readString(asRecord(dashboardData.employee), ["employment_status", "status"]) || "Active"
 
-  const att = getAttendanceStatus(attendanceToday)
-  const leaveSummaries = extractLeaveSummaries(leaveBalances)
-  const palePrimary = 'color-mix(in srgb, var(--primary) 18%, white)';
+  const att = getAttendanceStatus(attendanceToday, attendancePunchesToday)
+  const leaveSummaries = extractLeaveSummaries(leaveBalances, leaveTypes)
+  const totalLeaveDays = leaveSummaries.reduce((sum, item) => {
+    const n = Number(String(item.available).replace(/[^\d.-]/g, ""))
+    return sum + (Number.isFinite(n) ? n : 0)
+  }, 0)
+
+  const todayLabel = new Date().toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  })
+
+  const snapshotChips = [
+    {
+      key: "status",
+      label: "Today",
+      value: att.label,
+      className: ATTENDANCE_TONE_STYLES[att.tone].icon,
+      valueClassName: ATTENDANCE_TONE_STYLES[att.tone].label,
+    },
+    {
+      key: "in",
+      label: "Check in",
+      value: att.checkIn,
+      className: "bg-background",
+      valueClassName: att.checkIn === "—" ? "text-muted-foreground" : "text-primary",
+    },
+    {
+      key: "out",
+      label: "Check out",
+      value: att.checkOut,
+      className: "bg-background",
+      valueClassName: att.checkOut === "—" ? "text-muted-foreground" : "text-primary",
+    },
+    {
+      key: "leave",
+      label: "Leave left",
+      value: leaveSummaries.length > 0 ? String(totalLeaveDays) : "—",
+      className: "bg-background",
+      valueClassName: "text-foreground",
+    },
+    {
+      key: "types",
+      label: "Leave types",
+      value: String(leaveSummaries.length),
+      className: "bg-background",
+      valueClassName: "text-foreground",
+    },
+  ]
 
   return (
-    <div className="space-y-4">
+    <motion.div
+      className="space-y-4"
+      variants={dashboardStagger}
+      initial="hidden"
+      animate="show"
+    >
       <DoodleSprites />
 
-      {/* Greeting + quick context */}
-      <div 
-        className="flex flex-col gap-1 transition-all duration-500 ease-out"
-        style={{ 
-          opacity: mounted ? 1 : 0, 
-          transform: mounted ? 'translateY(0)' : 'translateY(6px)',
-          transitionDelay: '0ms'
-        }}
-      >
-        <h1 className="text-xl tracking-tight text-foreground">
-          {["Good", "to", "see", "you,"].map((word, index) => {
-            const delay = index * 80
-            return (
-              <span 
-                key={index} 
-                className="inline-block mr-1 transition-all duration-300"
-                style={{ 
-                  opacity: mounted ? 1 : 0, 
-                  transform: mounted ? 'translateY(0)' : 'translateY(6px)',
-                  transitionDelay: `${delay}ms`
-                }}
-              >
-                {word}
-              </span>
-            )
-          })}
-          <span 
-            className="font-semibold transition-all duration-300"
-            style={{ 
-              opacity: mounted ? 1 : 0, 
-              transitionDelay: '380ms'
-            }}
+      {/* Greeting — name with animated sparkles */}
+      <motion.div variants={dashboardItem} className="min-w-0">
+        <motion.p
+          className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground"
+          initial={{ opacity: 0, x: -8 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.3 }}
+        >
+          {todayLabel}
+        </motion.p>
+        <h1 className="mt-0.5 text-xl font-semibold tracking-tight text-foreground md:text-2xl">
+          <motion.span
+            className="inline-block"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, ease: "easeOut" }}
           >
-            {dashboardData.user.first_name}
-          </span>.
+            {greetingForNow()},
+          </motion.span>{" "}
+          <AnimatedGreetingName name={preferredName} />
         </h1>
-      </div>
+        <motion.p
+          className="mt-0.5 text-sm text-muted-foreground"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.35, duration: 0.35 }}
+        >
+          Here&apos;s your day at a glance.
+        </motion.p>
+      </motion.div>
 
-      {/* Quick actions - useful and clear - styled with same design */}
-      <div 
-        className="relative overflow-hidden rounded-2xl p-5 md:p-6 text-white transition-all duration-500 ease-out"
-        style={{ 
-          backgroundColor: 'var(--primary)',
-          opacity: mounted ? 1 : 0, 
-          transform: mounted ? 'translateY(0)' : 'translateY(8px)',
-          transitionDelay: '280ms'
-        }}
+      {/* Hero — primary card with labeled identity */}
+      <motion.div
+        variants={dashboardItem}
+        className="relative overflow-hidden rounded-2xl p-4 text-white md:p-5"
+        style={{ backgroundColor: "var(--primary)" }}
       >
         <Doodle name="doodle-circles" />
-        <div className="relative z-10">
-          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-3">
-              <Avatar className="size-12 ring-2 ring-white/30">
-                {dashboardData.employee.profile_photo_url ? (
-                  <AvatarImage src={dashboardData.employee.profile_photo_url} alt={fullName} />
-                ) : null}
-                <AvatarFallback className="text-lg bg-white/20 text-white">{initialsFor(fullName)}</AvatarFallback>
-              </Avatar>
-              <div className="min-w-0">
-                <div className="text-lg font-semibold tracking-tight text-white">{preferredName}</div>
-                <div className="text-xs text-white/70">{dashboardData.employee.employee_no}</div>
-                <div className="mt-0.5 text-xs text-white/70">
-                  {dashboardData.employee.primary_position?.name ?? "Position"} · {dashboardData.employee.primary_department?.name ?? "Department"}
+        <div className="relative z-10 space-y-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex min-w-0 items-start gap-3">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.85 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ type: "spring", stiffness: 320, damping: 20, delay: 0.12 }}
+              >
+                <Avatar className="size-14 shrink-0 ring-2 ring-white/30 md:size-16">
+                  {employeeProfilePhotoUrl ? (
+                    <AvatarImage src={employeeProfilePhotoUrl} alt={fullName} />
+                  ) : null}
+                  <AvatarFallback className="bg-white/20 text-lg font-semibold text-white">
+                    {initialsFor(fullName)}
+                  </AvatarFallback>
+                </Avatar>
+              </motion.div>
+              <div className="min-w-0 space-y-0.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-xl font-semibold tracking-tight text-white md:text-2xl">
+                    {fullName}
+                  </h2>
+                  <span className="inline-flex items-center rounded-full border border-white/30 bg-white/20 px-2 py-0.5 text-[11px] font-semibold capitalize text-white">
+                    {employmentStatus}
+                  </span>
                 </div>
+                <p className="text-sm font-medium text-white/95">{positionLabel}</p>
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2 text-xs text-white">
-              Hired <span className="font-medium text-white">{formatDate(dashboardData.employee.hire_date)}</span>
-              <span className="text-white/40">·</span>
-              Tenure <span className="font-medium text-white">{tenure}</span>
-              <Link href={profileHref} className="no-underline hover:no-underline ml-1">
-                <Button size="sm" variant="outline" className="h-8 px-3 border-white/30 bg-white/10 text-white hover:bg-white/25 hover:text-white focus-visible:text-white">View full profile</Button>
-              </Link>
-            </div>
+            <Link href={profileHref} className="shrink-0 no-underline hover:no-underline">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+              >
+                View full profile
+              </Button>
+            </Link>
           </div>
+
+          <div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3 lg:grid-cols-5">
+            {[
+              { label: "Employee no.", value: employeeNo },
+              { label: "Department", value: departmentLabel },
+              { label: "Branch", value: branchLabel },
+              { label: "Joined", value: hireDateLabel },
+              { label: "Tenure", value: tenure },
+            ].map((field, index) => (
+              <motion.div
+                key={field.label}
+                className="min-w-0"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 + index * 0.05, duration: 0.3 }}
+              >
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-white/55">
+                  {field.label}
+                </p>
+                <p className="truncate text-sm font-semibold text-white">{field.value}</p>
+              </motion.div>
+            ))}
+          </div>
+
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            <QuickActionCard
-              href={attendanceHref}
-              title="Attendance"
-              icon={<ClockIcon className="size-4" />}
-              delay={320}
-              mounted={mounted}
-            />
-            <QuickActionCard
-              href={leaveRequestHref}
-              title="Request leave"
-              icon={<CalendarClockIcon className="size-4" />}
-              delay={380}
-              mounted={mounted}
-            />
-            <QuickActionCard
-              href={leaveBalancesHref}
-              title="Leave balances"
-              icon={<CalendarIcon className="size-4" />}
-              delay={440}
-              mounted={mounted}
-            />
-            <QuickActionCard
-              href={holidaysHref}
-              title="Office holidays"
-              icon={<CalendarIcon className="size-4" />}
-              delay={500}
-              mounted={mounted}
-            />
+            {[
+              { href: attendanceHref, title: "Attendance", icon: <ClockIcon /> },
+              { href: leaveRequestHref, title: "Request leave", icon: <CalendarClockIcon /> },
+              { href: leaveBalancesHref, title: "Leave balances", icon: <CalendarIcon /> },
+              { href: holidaysHref, title: "Holidays", icon: <CalendarIcon /> },
+            ].map((action, index) => (
+              <motion.div
+                key={action.href}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{
+                  type: "spring",
+                  stiffness: 360,
+                  damping: 26,
+                  delay: 0.28 + index * 0.06,
+                }}
+              >
+                <QuickActionLink href={action.href} title={action.title} icon={action.icon} />
+              </motion.div>
+            ))}
           </div>
         </div>
-      </div>
+      </motion.div>
 
-      <div className="my-3 border-t border-border" />
-
-      {/* Main two-column content */}
-      <div 
-        className="grid gap-3 lg:grid-cols-12 transition-all duration-500 ease-out"
-        style={{ 
-          opacity: mounted ? 1 : 0, 
-          transform: mounted ? 'translateY(0)' : 'translateY(8px)',
-          transitionDelay: '420ms'
-        }}
+      {/* Snapshot chips */}
+      <motion.div
+        variants={dashboardItem}
+        className="inline-flex max-w-full flex-nowrap items-stretch overflow-x-auto rounded-lg border border-border"
       >
-        {/* Left: My details + Manager */}
-        <div className="lg:col-span-7 space-y-3">
-          <div 
-            className="relative overflow-hidden rounded-2xl p-4 transition-all duration-500 ease-out"
-            style={{ 
-              backgroundColor: palePrimary, 
-              color: 'var(--primary)',
-              opacity: mounted ? 1 : 0, 
-              transform: mounted ? 'translateY(0)' : 'translateY(6px)',
-              transitionDelay: '480ms'
-            }}
+        {snapshotChips.map((chip, index, arr) => (
+          <motion.div
+            key={chip.key}
+            className={cn(
+              "flex min-w-[5.5rem] shrink-0 flex-col justify-center px-3 py-2",
+              chip.className,
+              index < arr.length - 1 ? "border-r border-border/60" : null
+            )}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.32 + index * 0.05, duration: 0.28 }}
           >
-            <Doodle name="doodle-curves" />
-            <div className="relative z-10">
-              <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Employment details</div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div 
-                  className="flex gap-2.5 transition-all duration-400 ease-out"
-                  style={{ 
-                    opacity: mounted ? 1 : 0, 
-                    transform: mounted ? 'translateY(0)' : 'translateY(4px)',
-                    transitionDelay: '520ms'
-                  }}
-                >
-                  <UserIcon className="mt-0.5 size-3.5 shrink-0" />
-                  <div className="text-xs">
-                    <div className="text-muted-foreground">Employee number</div>
-                    <div className="font-medium text-foreground">{dashboardData.employee.employee_no}</div>
-                  </div>
-                </div>
-                <div 
-                  className="flex gap-2.5 transition-all duration-400 ease-out"
-                  style={{ 
-                    opacity: mounted ? 1 : 0, 
-                    transform: mounted ? 'translateY(0)' : 'translateY(4px)',
-                    transitionDelay: '560ms'
-                  }}
-                >
-                  <BriefcaseIcon />
-                  <div className="text-xs">
-                    <div className="text-muted-foreground">Position</div>
-                    <div className="font-medium text-foreground">{dashboardData.employee.primary_position?.name ?? "—"}</div>
-                  </div>
-                </div>
-                <div 
-                  className="flex gap-2.5 transition-all duration-400 ease-out"
-                  style={{ 
-                    opacity: mounted ? 1 : 0, 
-                    transform: mounted ? 'translateY(0)' : 'translateY(4px)',
-                    transitionDelay: '600ms'
-                  }}
-                >
-                  <Building2Icon className="mt-0.5 size-3.5 shrink-0" />
-                  <div className="text-xs">
-                    <div className="text-muted-foreground">Department</div>
-                    <div className="font-medium text-foreground">{dashboardData.employee.primary_department?.name ?? "—"}</div>
-                  </div>
-                </div>
-                <div 
-                  className="flex gap-2.5 transition-all duration-400 ease-out"
-                  style={{ 
-                    opacity: mounted ? 1 : 0, 
-                    transform: mounted ? 'translateY(0)' : 'translateY(4px)',
-                    transitionDelay: '640ms'
-                  }}
-                >
-                  <MapPinIcon className="mt-0.5 size-3.5 shrink-0" />
-                  <div className="text-xs">
-                    <div className="text-muted-foreground">Location</div>
-                    <div className="font-medium text-foreground">
-                      {[dashboardData.employee.primary_branch?.name, dashboardData.employee.primary_branch?.city]
-                        .filter(Boolean)
-                        .join(" · ") || "—"}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+            <span className="truncate text-[10px] font-semibold uppercase tracking-wide opacity-80">
+              {chip.label}
+            </span>
+            <span
+              className={cn(
+                "truncate text-base font-semibold tabular-nums leading-tight capitalize",
+                chip.valueClassName
+              )}
+            >
+              {chip.value}
+            </span>
+          </motion.div>
+        ))}
+      </motion.div>
 
-          <div 
-            className="my-3 border-t border-border transition-all duration-400 ease-out"
-            style={{ 
-              opacity: mounted ? 1 : 0,
-              transitionDelay: '680ms'
-            }}
-          />
-
-          {/* Reporting line */}
-          <div 
-            className="relative overflow-hidden rounded-2xl p-4 transition-all duration-500 ease-out"
-            style={{ 
-              backgroundColor: palePrimary, 
-              color: 'var(--primary)',
-              opacity: mounted ? 1 : 0, 
-              transform: mounted ? 'translateY(0)' : 'translateY(6px)',
-              transitionDelay: '700ms'
-            }}
-          >
-            <Doodle name="doodle-grass" />
-            <div className="relative z-10">
-              <div className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Reporting line</div>
-              <div className="text-xs">
-                <div className="font-medium text-foreground">{managerName}</div>
-                {dashboardData.employee.manager?.employee_no && (
-                  <div className="text-muted-foreground mt-0.5">{dashboardData.employee.manager.employee_no}</div>
+      {/* Today attendance detail row */}
+      <motion.div
+        variants={dashboardItem}
+        className="divide-y divide-border overflow-hidden rounded-lg border border-border"
+      >
+        <div className="flex bg-background">
+          <div className={cn("w-1 shrink-0", ATTENDANCE_BAR[att.tone])} />
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3 px-3 py-2.5 sm:flex-nowrap">
+            <div className="w-[7.5rem] shrink-0">
+              <div className="text-xs font-semibold text-foreground">Attendance</div>
+              <div
+                className={cn(
+                  "mt-0.5 text-[11px] font-semibold capitalize",
+                  ATTENDANCE_TONE_STYLES[att.tone].label
                 )}
-                <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-muted-foreground">
-                  {managerUser?.email && (
-                    <span className="inline-flex items-center gap-1">
-                      <MailIcon className="size-3" /> {managerUser.email}
-                    </span>
+              >
+                {att.label}
+              </div>
+            </div>
+            <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Check in
+                </div>
+                <div
+                  className={cn(
+                    "text-base font-semibold tabular-nums leading-tight sm:text-lg",
+                    att.checkIn === "—" ? "text-muted-foreground/45" : "text-primary"
                   )}
-                  {managerUser?.phone && (
-                    <span>{managerUser.phone}</span>
-                  )}
+                >
+                  {att.checkIn}
                 </div>
               </div>
-              <p className="mt-2 text-xs text-muted-foreground">Contact your manager for leave approvals and team questions.</p>
+              <div className="text-muted-foreground/40" aria-hidden>
+                →
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Check out
+                </div>
+                <div
+                  className={cn(
+                    "text-base font-semibold tabular-nums leading-tight sm:text-lg",
+                    att.checkOut === "—" ? "text-muted-foreground/45" : "text-primary"
+                  )}
+                >
+                  {att.checkOut}
+                </div>
+              </div>
+              <div className="hidden min-w-[8rem] shrink-0 text-right sm:block">
+                <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Note
+                </div>
+                <div className="truncate text-sm font-medium text-foreground">{att.hint}</div>
+              </div>
             </div>
+            <Link
+              href={attendanceHref}
+              className="shrink-0 text-xs font-medium text-primary no-underline hover:underline"
+            >
+              Open
+            </Link>
           </div>
         </div>
+      </motion.div>
 
-        {/* Right: Live widgets - no cards */}
-        <div 
-          className="lg:col-span-5 space-y-4 transition-all duration-500 ease-out"
-          style={{ 
-            opacity: mounted ? 1 : 0, 
-            transform: mounted ? 'translateY(0)' : 'translateY(8px)',
-            transitionDelay: '520ms'
-          }}
-        >
-          {/* Today’s attendance */}
-          <div 
-            className="transition-all duration-400 ease-out"
-            style={{ 
-              opacity: mounted ? 1 : 0, 
-              transform: mounted ? 'translateY(0)' : 'translateY(4px)',
-              transitionDelay: '560ms'
-            }}
-          >
-            <div className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Today’s attendance</div>
-            <div className="text-xs text-muted-foreground mb-1.5">Current punch state and times.</div>
-            <div className="relative overflow-hidden rounded-lg border border-white/20 p-3" style={{ backgroundColor: palePrimary, color: 'var(--primary)' }}>
-              <Doodle name="doodle-circles" />
-              <div className="relative z-10 flex items-center justify-between">
+      {/* Manager + Leave + Employment */}
+      <div className="grid gap-3 lg:grid-cols-12">
+        <motion.div variants={dashboardItem} className="lg:col-span-5">
+          <DashboardSection title="Your manager" subtitle="Reporting line" barClassName="bg-primary">
+            <div className="flex items-start gap-3 px-3 py-3">
+              <Avatar className="size-11 shrink-0 ring-1 ring-border">
+                {managerDetails.profilePhotoUrl ? (
+                  <AvatarImage src={managerDetails.profilePhotoUrl} alt={managerDetails.name} />
+                ) : null}
+                <AvatarFallback className="bg-primary/10 text-sm font-semibold text-primary">
+                  {initialsFor(managerDetails.name === "Not assigned" ? "NA" : managerDetails.name)}
+                </AvatarFallback>
+              </Avatar>
+              <div className="min-w-0 flex-1 space-y-1.5">
                 <div>
-                  <div className="text-xs font-semibold text-foreground">{att.label}</div>
-                  <div className="text-[10px] text-muted-foreground mt-0.5">{att.hint}</div>
+                  <p className="truncate text-sm font-semibold text-foreground">{managerDetails.name}</p>
+                  {managerDetails.employeeNo ? (
+                    <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
+                      {managerDetails.employeeNo}
+                    </p>
+                  ) : null}
                 </div>
-                <Link href={attendanceHref} className="no-underline hover:no-underline">
-                  <Button size="sm" variant="outline" className="h-8 border-white/30 text-foreground hover:bg-white/10">Open attendance</Button>
-                </Link>
-              </div>
-            </div>
-          </div>
-
-          <div 
-            className="my-3 border-t border-border transition-all duration-400 ease-out"
-            style={{ 
-              opacity: mounted ? 1 : 0,
-              transitionDelay: '600ms'
-            }}
-          />
-
-          {/* Leave balances */}
-          <div 
-            className="transition-all duration-400 ease-out"
-            style={{ 
-              opacity: mounted ? 1 : 0, 
-              transform: mounted ? 'translateY(0)' : 'translateY(4px)',
-              transitionDelay: '620ms'
-            }}
-          >
-            <div className="relative overflow-hidden rounded-2xl p-4" style={{ backgroundColor: palePrimary, color: 'var(--primary)' }}>
-              <Doodle name="doodle-grass" />
-              <div className="relative z-10">
-                <div className="flex items-center justify-between mb-1">
-                  <div>
-                    <div className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Leave balances</div>
-                    <div className="text-xs text-muted-foreground">Available days for your main leave types.</div>
-                  </div>
-                  <Link href={leaveBalancesHref} className="text-xs no-underline hover:no-underline">View all</Link>
-                </div>
-
-                {leaveSummaries.length > 0 ? (
-                  <div className="space-y-1 mt-1">
-                    {leaveSummaries.map((item, idx) => (
-                      <div key={idx} className="flex items-center justify-between rounded-lg border border-white/20 px-2.5 py-1.5 text-xs">
-                        <span className="font-medium text-foreground">{item.typeName}</span>
-                        <span className="tabular-nums text-foreground">
-                          {item.available} {item.used != null ? <span className="text-muted-foreground text-[10px]">({item.used} used)</span> : null}
-                        </span>
-                      </div>
-                    ))}
+                {managerDetails.email || managerDetails.phone ? (
+                  <div className="flex flex-col gap-1">
+                    {managerDetails.email ? (
+                      <a
+                        href={`mailto:${managerDetails.email}`}
+                        className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground no-underline hover:text-primary hover:underline"
+                      >
+                        <MailIcon className="size-3 shrink-0 text-primary" />
+                        <span className="truncate">{managerDetails.email}</span>
+                      </a>
+                    ) : null}
+                    {managerDetails.phone ? (
+                      <a
+                        href={`tel:${managerDetails.phone.replace(/\s+/g, "")}`}
+                        className="flex items-center gap-1.5 text-xs tabular-nums text-muted-foreground no-underline hover:text-primary hover:underline"
+                      >
+                        <PhoneIcon className="size-3 shrink-0 text-primary" />
+                        <span>{managerDetails.phone}</span>
+                      </a>
+                    ) : null}
                   </div>
                 ) : (
-                  <div className="rounded-lg border border-white/20 bg-white/10 p-2.5 text-xs text-muted-foreground mt-1.5">
-                    No leave balance information available yet.
-                  </div>
+                  <p className="text-xs text-muted-foreground">Contact details not available.</p>
                 )}
-
-                <div className="mt-2">
-                  <Link href={leaveRequestHref} className="no-underline hover:no-underline">
-                    <Button size="sm" variant="outline" className="h-8 w-full border-white/30 hover:bg-white/10">Request time off</Button>
-                  </Link>
-                </div>
               </div>
             </div>
-          </div>
-        </div>
-      </div>
+          </DashboardSection>
+        </motion.div>
 
-    </div>
+        <motion.div variants={dashboardItem} className="lg:col-span-7">
+          <DashboardSection
+            title="Leave balances"
+            subtitle="Available days by type"
+            action={
+              <Link
+                href={leaveBalancesHref}
+                className="text-xs font-medium text-primary no-underline hover:underline"
+              >
+                View all
+              </Link>
+            }
+          >
+            {leaveSummaries.length > 0 ? (
+              <div className="divide-y divide-border/70">
+                {leaveSummaries.map((item, idx) => (
+                  <motion.div
+                    key={`${item.typeName}-${idx}`}
+                    className="flex items-center justify-between gap-3 px-3 py-2.5"
+                    initial={{ opacity: 0, x: 8 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.45 + idx * 0.06, duration: 0.28 }}
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-foreground">{item.typeName}</p>
+                      {item.used != null || item.allocated != null ? (
+                        <p className="mt-0.5 text-[11px] text-muted-foreground">
+                          {item.allocated != null ? `${item.allocated} allocated` : null}
+                          {item.allocated != null && item.used != null ? " · " : null}
+                          {item.used != null ? `${item.used} used` : null}
+                        </p>
+                      ) : null}
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="text-base font-semibold tabular-nums leading-none text-primary">
+                        {item.available}
+                      </p>
+                      <p className="mt-0.5 text-[10px] text-muted-foreground">days left</p>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            ) : (
+              <div className="px-3 py-4 text-sm text-muted-foreground">
+                No leave balance information available yet.
+              </div>
+            )}
+            <div className="border-t border-border/70 px-3 py-2.5">
+              <Link href={leaveRequestHref} className="block no-underline hover:no-underline">
+                <Button size="sm" className="h-8 w-full bg-primary !text-white hover:bg-primary/90">
+                  Request time off
+                </Button>
+              </Link>
+            </div>
+          </DashboardSection>
+        </motion.div>
+
+        <motion.div variants={dashboardItem} className="lg:col-span-12">
+          <DashboardSection title="Employment" subtitle="Your placement at a glance">
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4">
+              <DetailField
+                label="Employee no."
+                value={<span className="font-mono text-[13px]">{employeeNo}</span>}
+              />
+              <DetailField label="Position" value={positionLabel} />
+              <DetailField label="Department" value={departmentLabel} />
+              <DetailField label="Location" value={branchLabel} />
+            </div>
+          </DashboardSection>
+        </motion.div>
+      </div>
+    </motion.div>
   )
 }
 
-// Local icon helper to avoid extra import noise
-function BriefcaseIcon() {
-  return <svg xmlns="http://www.w3.org/2000/svg" className="mt-0.5 size-4 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 13.5V8.25A2.25 2.25 0 0018.75 6h-3.379a1.5 1.5 0 01-1.06-.44l-1.122-1.12A1.5 1.5 0 0012.12 4H5.25A2.25 2.25 0 003 6.25v10.5A2.25 2.25 0 005.25 19h13.5" /></svg>
+function dateIsoFromUnknown(value: unknown): string | null {
+  if (typeof value === "string" && value.trim()) {
+    const trimmed = value.trim()
+    if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) return trimmed.slice(0, 10)
+    const parsed = new Date(trimmed)
+    if (!Number.isNaN(parsed.getTime())) return localDateIso(parsed)
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const ms = value > 1e12 ? value : value > 1e9 ? value * 1000 : NaN
+    if (Number.isFinite(ms)) return localDateIso(new Date(ms))
+  }
+  return null
+}
+
+function isPunchOnLocalDate(row: AdminRecord, dateIso: string): boolean {
+  // Prefer actual punch timestamp (Android uses punched_at).
+  const stampKeys = [
+    "punched_at",
+    "punchedAt",
+    "punch_time",
+    "punchTime",
+    "punch_at",
+    "punchAt",
+    "event_time",
+    "eventTime",
+    "timestamp",
+    "datetime",
+    "attendance_date",
+    "attendanceDate",
+    "work_date",
+    "workDate",
+    "date",
+    "created_at",
+    "createdAt",
+  ] as const
+
+  let sawDate = false
+  for (const key of stampKeys) {
+    if (!(key in row) || row[key] == null || row[key] === "") continue
+    const iso = dateIsoFromUnknown(row[key])
+    if (!iso) continue
+    sawDate = true
+    if (iso === dateIso) return true
+  }
+  // No usable date on the row → keep only if caller already date-filtered the request.
+  return !sawDate
 }
 
 export function EmployeeHomeDashboard() {
   const [dashboardData, setDashboardData] = React.useState<EmployeeDashboardData | null>(null)
   const [attendanceToday, setAttendanceToday] = React.useState<AdminRecord | null>(null)
+  const [attendancePunchesToday, setAttendancePunchesToday] = React.useState<AdminRecord[]>([])
   const [leaveBalances, setLeaveBalances] = React.useState<AdminRecord[]>([])
+  const [leaveTypes, setLeaveTypes] = React.useState<AdminRecord[]>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [isAdmin, setIsAdmin] = React.useState(true)
@@ -1005,18 +1984,52 @@ export function EmployeeHomeDashboard() {
 
     const load = async () => {
       try {
-        const [dash, attToday, leaves] = await Promise.all([
+        const todayIso = localDateIso()
+        const [dash, attToday, punchesResult, leaves, types] = await Promise.all([
           getMyDashboard(accessToken),
           getMyAttendanceToday(accessToken).catch(() => null),
+          // Match Android: load recent punches, then filter to today client-side.
+          // dateFrom/dateTo are still sent as a server hint when supported.
+          listMyAttendancePunches(accessToken, {
+            page: 1,
+            limit: 50,
+            sortBy: "created_at",
+            sortOrder: "DESC",
+            dateFrom: todayIso,
+            dateTo: todayIso,
+          })
+            .then((r) => r.rows || [])
+            .catch(() =>
+              // Fallback without date filters if the API rejects unknown query params.
+              listMyAttendancePunches(accessToken, {
+                page: 1,
+                limit: 50,
+                sortBy: "created_at",
+                sortOrder: "DESC",
+              })
+                .then((r) => r.rows || [])
+                .catch(() => [] as AdminRecord[])
+            ),
           listMyLeaveBalances(accessToken, { limit: 8 }).then((r) => r.rows || []).catch(() => []),
+          listLeaveTypes(accessToken, { page: 1, limit: 100 })
+            .then((r) => r.rows || [])
+            .catch(() => []),
         ])
 
         if (cancelled) return
 
         const validDash = isEmployeeDashboardData(dash) ? dash : null
+        const allPunches = punchesResult as AdminRecord[]
+        let punchesToday = allPunches.filter((row) => isPunchOnLocalDate(row, todayIso))
+        // If date filter wiped everything but we still got rows, retry client filter on full set.
+        if (punchesToday.length === 0 && allPunches.length > 0) {
+          punchesToday = allPunches.filter((row) => isPunchOnLocalDate(row, todayIso))
+        }
         setDashboardData(validDash)
         setAttendanceToday((attToday as AdminRecord) || null)
+        setAttendancePunchesToday(punchesToday)
         setLeaveBalances(leaves as AdminRecord[])
+        setLeaveTypes(types as AdminRecord[])
 
         if (!validDash) {
           setError("Your dashboard payload is incomplete right now. Please refresh and try again.")
@@ -1376,7 +2389,9 @@ export function EmployeeHomeDashboard() {
       <EmployeeDashboardView
         dashboardData={dashboardData}
         attendanceToday={attendanceToday}
+        attendancePunchesToday={attendancePunchesToday}
         leaveBalances={leaveBalances}
+        leaveTypes={leaveTypes}
       />
 
       <Dialog open={showOnboardingDialog} onOpenChange={(open) => { if (!open) handleCloseOnboardingDialog() }}>

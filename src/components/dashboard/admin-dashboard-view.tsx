@@ -15,8 +15,14 @@ const HrAnalyticsDashboard = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="px-4 py-8 text-sm text-slate-500">
-        Loading workforce analytics…
+      <div className="grid gap-x-4 gap-y-2 px-4 pt-2 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-7 lg:px-6">
+        {Array.from({ length: 7 }, (_, i) => (
+          <div key={i} className="min-w-0 space-y-1.5 border-b border-border pb-2">
+            <div className="h-3 w-16 animate-pulse rounded bg-muted" />
+            <div className="h-8 w-14 animate-pulse rounded bg-muted" />
+            <div className="h-3 w-24 animate-pulse rounded bg-muted" />
+          </div>
+        ))}
       </div>
     ),
   }
@@ -38,6 +44,7 @@ import {
   type AdminResourceKey,
   type UsersQueryParams,
 } from "@/lib/admin-api"
+import { useMyProfilePhoto } from "@/lib/my-profile-photo"
 import {
   buildDashboardActorSnapshotFromSources,
   canAccessDashboardRoute,
@@ -111,6 +118,80 @@ function getStringValue(record: AdminRecord | null, keys: string[]) {
     }
   }
   return null
+}
+
+function resolveUserAvatarUrl(...sources: Array<AdminRecord | null>) {
+  for (const source of sources) {
+    if (!source) {
+      continue
+    }
+
+    const direct = getStringValue(source, [
+      "profile_photo_url",
+      "photo_url",
+      "avatar_url",
+      "avatar",
+      "image_url",
+    ])
+    if (direct) {
+      return direct
+    }
+
+    const nestedCandidates = [
+      asRecord(source.user),
+      asRecord(source.company_user),
+      asRecord(asRecord(source.company_user)?.user),
+      asRecord(source.profile),
+    ]
+    for (const nested of nestedCandidates) {
+      const nestedValue = getStringValue(nested, [
+        "profile_photo_url",
+        "photo_url",
+        "avatar_url",
+        "avatar",
+        "image_url",
+      ])
+      if (nestedValue) {
+        return nestedValue
+      }
+    }
+  }
+
+  return null
+}
+
+function collectRoleNamesFromUnknown(value: unknown, sink: Set<string>) {
+  if (typeof value === "string" && value.trim()) {
+    sink.add(value.trim())
+    return
+  }
+
+  if (Array.isArray(value)) {
+    value.forEach((entry) => collectRoleNamesFromUnknown(entry, sink))
+    return
+  }
+
+  const record = asRecord(value)
+  if (!record) {
+    return
+  }
+
+  const directRole = readString(record, ["name", "display_name", "title", "role_name", "roleName"])
+  if (directRole) {
+    sink.add(directRole)
+  }
+
+  for (const key of ["role", "roles", "user_roles", "userRoles", "assigned_roles", "assignedRoles", "data", "items"]) {
+    collectRoleNamesFromUnknown(record[key], sink)
+  }
+}
+
+function formatRoleName(roleName: string) {
+  return roleName
+    .trim()
+    .replace(/[_-]+/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase())
 }
 
 function collectPermissionLabelsFromUnknown(value: unknown, sink: Set<string>) {
@@ -510,14 +591,15 @@ export default function AdminDashboardView({
     await loadData(accessToken)
   }, [loadData, resolveStoredTokens, token])
 
-  const handleHeaderRefresh = React.useCallback(() => {
+  const handleHeaderRefresh = React.useCallback(async () => {
     if (resolvedShowOverview) {
       setOverviewRefreshKey((k) => k + 1)
     }
     if (resolvedUseApis) {
-      void refreshCurrentResource()
+      await refreshCurrentResource()
     }
-  }, [resolvedShowOverview, resolvedUseApis, refreshCurrentResource])
+    router.refresh()
+  }, [resolvedShowOverview, resolvedUseApis, refreshCurrentResource, router])
 
   const handleCreate = async (resource: AdminResourceKey, payload: AdminRecord) => {
     const accessToken = resolveStoredTokens().accessToken
@@ -742,12 +824,35 @@ export default function AdminDashboardView({
     clientIdentity.adminName ??
     null
   const adminEmail = getStringValue(currentAdmin, ["email"]) ?? clientIdentity.adminEmail ?? null
+  const { url: myProfilePhotoUrl } = useMyProfilePhoto(token)
+  const adminAvatar =
+    myProfilePhotoUrl ||
+    resolveUserAvatarUrl(currentAdmin, clientIdentity.rawUser, clientIdentity.tokenPayload) ||
+    null
   const companyName =
     getStringValue(myCompany, ["company_name", "name", "display_name"]) ??
     getStringValue(currentAdmin, ["company_name", "companyName", "company"]) ??
     clientIdentity.companyName ??
     clientIdentity.tokenCompanyName ??
     null
+  const adminRolesLabel = React.useMemo(() => {
+    const roleNames = new Set<string>()
+    collectRoleNamesFromUnknown(currentAdmin?.role, roleNames)
+    collectRoleNamesFromUnknown(currentAdmin?.roles, roleNames)
+    collectRoleNamesFromUnknown(clientIdentity.rawUser?.role, roleNames)
+    collectRoleNamesFromUnknown(clientIdentity.rawUser?.roles, roleNames)
+    collectRoleNamesFromUnknown(clientIdentity.tokenPayload?.role, roleNames)
+    collectRoleNamesFromUnknown(clientIdentity.tokenPayload?.roles, roleNames)
+
+    const orderedNames = Array.from(roleNames)
+      .filter(Boolean)
+      .map((roleName) => formatRoleName(roleName))
+    if (orderedNames.length === 0) {
+      return null
+    }
+
+    return orderedNames.join(" • ")
+  }, [clientIdentity.rawUser, clientIdentity.tokenPayload, currentAdmin])
   const actorSnapshot = React.useMemo(
     () =>
       buildDashboardActorSnapshotFromSources(
@@ -826,24 +931,31 @@ export default function AdminDashboardView({
         variant="inset"
         userName={adminName}
         userEmail={adminEmail}
+        userAvatar={adminAvatar}
         accessMode={accessMode}
         permissionLabels={effectivePermissionLabels}
         activeResource={resolvedActiveResource}
         onSelectResource={navigateToResource}
       />
-      <SidebarInset>
+      <SidebarInset className="overflow-hidden">
+        {/* Header stays pinned; only this page body scrolls (single scrollbar). */}
         <SiteHeader
           onRefresh={handleHeaderRefresh}
           loading={loading}
           adminName={adminName}
           companyName={companyName}
         />
-        <div className="flex flex-1 flex-col">
-          <div className="@container/main flex flex-1 flex-col gap-2">
+        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain">
+          <div className="@container/main flex flex-col">
+            {/* Overview sits flush under the top bar (full width of the content pane). */}
+            {resolvedShowOverview && accessMode === "admin" ? (
+              <HrAnalyticsDashboard
+                refreshKey={overviewRefreshKey}
+                companyName={companyName}
+                adminRolesLabel={adminRolesLabel}
+              />
+            ) : null}
             <div className="flex flex-col gap-3 px-3 py-3 md:gap-4 md:px-4 md:py-4">
-              {resolvedShowOverview && accessMode === "admin" ? (
-                <HrAnalyticsDashboard refreshKey={overviewRefreshKey} companyName={companyName} />
-              ) : null}
               {children}
               {resolvedActiveResource && resolvedUseApis ? (
                 <DataTable
@@ -872,6 +984,11 @@ export default function AdminDashboardView({
                   token={token}
                   loading={loading}
                   onChangeMyPassword={handleChangeMyPassword}
+                  profilePhotoUrl={adminAvatar}
+                  displayName={adminName}
+                  profilePictureHref={
+                    accessMode === "employee" ? "/dashboard/me/profile?tab=summary&edit=profile-photo" : null
+                  }
                 />
               ) : null}
             </div>

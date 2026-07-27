@@ -24,12 +24,6 @@ import {
   canAccessDashboardRoute,
   normalizePermissionLabels,
 } from "@/lib/dashboard-permissions"
-export {
-  canAccessDashboardRoute,
-  canPerformPermission,
-  normalizePermissionLabels,
-  hasAdminDashboardAccess,
-} from "@/lib/dashboard-permissions"
 
 const IUsers = <UsersRound size={48} animation="path-loop" />
 const ILeave = <Route size={48} animation="path-loop" />
@@ -61,8 +55,14 @@ const adminData: SidebarData = {
       title: "Access Control",
       url: "/dashboard/access-control",
       matchUrls: [
+        "/dashboard/access-control",
         "/dashboard/access-control/roles",
         "/dashboard/access-control/permissions",
+        "/dashboard/access-control/devices",
+        "/dashboard/access-control/doors",
+        "/dashboard/access-control/templates",
+        "/dashboard/access-control/organizations",
+        "/dashboard/access-control/groups",
         "/dashboard/roles",
         "/dashboard/permissions",
       ],
@@ -87,6 +87,7 @@ const adminData: SidebarData = {
       title: "Employees",
       url: "/dashboard/employees",
       matchUrls: [
+        "/dashboard/employees",
         "/dashboard/employees/all",
         "/dashboard/employees/registration",
         "/dashboard/employees/offboarding",
@@ -98,6 +99,16 @@ const adminData: SidebarData = {
     {
       title: "Leave Management",
       url: "/dashboard/leave-management",
+      matchUrls: [
+        "/dashboard/leave-management",
+        "/dashboard/leave-management/types",
+        "/dashboard/leave-management/requests",
+        "/dashboard/leave-management/balances",
+        "/dashboard/leave-management/business-trips",
+        "/dashboard/leave-management/holidays",
+        "/dashboard/leave-management/policies",
+        "/dashboard/leave-management/workflows",
+      ],
       icon: ILeave,
     },
     {
@@ -113,6 +124,10 @@ const adminData: SidebarData = {
     {
       title: "Reports",
       url: "/dashboard/operations/reports",
+      matchUrls: [
+        "/dashboard/operations/reports",
+        "/dashboard/operations/scheduled-reporting",
+      ],
       icon: IUsers,
     },
   ],
@@ -141,7 +156,6 @@ const adminSearchIndex = [
   { title: "Employees / Profile Updates", url: "/dashboard/employees/profile-update-approvals", section: "Employees", keywords: ["employee", "profile", "changes", "approval"] },
   { title: "Employees / Offboarding", url: "/dashboard/employees/offboarding", section: "Employees", keywords: ["employee", "exit"] },
   { title: "Employees / Onboarding", url: "/dashboard/employees/onboarding", section: "Employees", keywords: ["employee", "workflow", "request", "approve"] },
-  { title: "Attendance / Attendance Setup / Settings", url: "/dashboard/attendance/settings", section: "Attendance Setup", keywords: ["attendance", "settings"] },
   { title: "Attendance / Attendance Setup / Policies", url: "/dashboard/attendance/policies", section: "Attendance Setup", keywords: ["attendance", "policies"] },
   { title: "Attendance / Attendance Setup / Holiday Groups", url: "/dashboard/attendance/holiday-groups", section: "Attendance Setup", keywords: ["attendance", "holiday groups", "calendar"] },
   { title: "Attendance / Attendance Setup / Holidays", url: "/dashboard/attendance/holidays", section: "Attendance Setup", keywords: ["attendance", "holidays"] },
@@ -180,7 +194,8 @@ const adminSearchIndex = [
   { title: "Branches", url: "/dashboard/branches", section: "Organization", keywords: ["branch", "location"] },
   { title: "Positions", url: "/dashboard/positions", section: "Organization", keywords: ["position", "job title"] },
   { title: "Recruitment", url: "/dashboard/operations/recruitment", section: "Operations", keywords: ["hiring", "talent"] },
-  { title: "Reports", url: "/dashboard/operations/reports", section: "Operations", keywords: ["attendance", "download", "xlsx", "csv", "pdf"] },
+  { title: "Reports", url: "/dashboard/operations/reports", section: "Operations", keywords: ["attendance", "download", "xlsx", "csv", "pdf", "scheduled", "smtp", "templates"] },
+  { title: "Scheduled Reporting", url: "/dashboard/operations/scheduled-reporting", section: "Operations", keywords: ["scheduled reporting", "templates", "schedules", "executions", "smtp"] },
   { title: "Access Control / Roles", url: "/dashboard/access-control/roles", section: "Access Control", keywords: ["role", "access", "authorization"] },
   { title: "Access Control / Permissions", url: "/dashboard/access-control/permissions", section: "Access Control", keywords: ["permission", "policy", "authorization"] },
   { title: "Settings", url: "/dashboard/settings", section: "General", keywords: ["preferences", "account"] },
@@ -195,7 +210,6 @@ const employeeData: SidebarData = {
       matchUrls: [
         "/dashboard/attendance/today",
         "/dashboard/attendance/punch-action",
-        "/dashboard/attendance/punch-history",
         "/dashboard/attendance/attendance-history",
         "/dashboard/attendance/schedule-preview",
         "/dashboard/attendance/corrections",
@@ -205,11 +219,18 @@ const employeeData: SidebarData = {
       title: "My Info",
       icon: IUsers,
       url: "/dashboard/me/profile",
+      matchUrls: ["/dashboard/me/profile", "/dashboard/me/organization", "/dashboard/me/promotion"],
     },
     {
       title: "My Leave",
       icon: ILeave,
-      url: "/dashboard/me/leave/balances",
+      url: "/dashboard/me/leave/requests",
+      matchUrls: [
+        "/dashboard/me/leave/requests",
+        "/dashboard/me/leave/balances",
+        "/dashboard/me/leave/holidays",
+        "/dashboard/me/leave/policies",
+      ],
     },
     {
       title: "Offboarding",
@@ -241,11 +262,13 @@ const employeeSearchIndex = [
   { title: "My Info", url: "/dashboard/me/profile", section: "Employees", keywords: ["profile", "my info", "account"] },
   { title: "My Attendance / Overview", url: "/dashboard/attendance/today", section: "Employees", keywords: ["attendance", "timesheet"] },
   { title: "My Attendance / Today", url: "/dashboard/attendance/today", section: "Employee Attendance", keywords: ["attendance", "today", "state"] },
-  { title: "My Attendance / Punch History", url: "/dashboard/attendance/punch-history", section: "Employee Attendance", keywords: ["attendance", "punch history"] },
-  { title: "My Attendance / Attendance History", url: "/dashboard/attendance/attendance-history", section: "Employee Attendance", keywords: ["attendance", "history"] },
+  { title: "My Attendance / Attendance History", url: "/dashboard/attendance/attendance-history", section: "Employee Attendance", keywords: ["attendance", "history", "punch"] },
   { title: "My Attendance / Schedule Preview", url: "/dashboard/attendance/schedule-preview", section: "Employee Attendance", keywords: ["attendance", "schedule preview"] },
   { title: "My Attendance / Correction Requests", url: "/dashboard/attendance/corrections", section: "Employee Attendance", keywords: ["attendance", "correction", "request"] },
-  { title: "My Leave", url: "/dashboard/me/leave/balances", section: "Leave", keywords: ["leave", "balance", "quota"] },
+  { title: "My Leave / Requests", url: "/dashboard/me/leave/requests", section: "Leave", keywords: ["leave", "request"] },
+  { title: "My Leave / Balances", url: "/dashboard/me/leave/balances", section: "Leave", keywords: ["leave", "balance", "quota"] },
+  { title: "My Leave / Holidays", url: "/dashboard/me/leave/holidays", section: "Leave", keywords: ["leave", "holiday"] },
+  { title: "My Leave / Policies", url: "/dashboard/me/leave/policies", section: "Leave", keywords: ["leave", "policy"] },
   { title: "Offboarding", url: "/dashboard/employees/offboarding", section: "Employees", keywords: ["employee", "exit"] },
   { title: "Settings", url: "/dashboard/settings", section: "General", keywords: ["preferences", "account"] },
 ]
@@ -253,6 +276,7 @@ const employeeSearchIndex = [
 interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
   userName?: string | null
   userEmail?: string | null
+  userAvatar?: string | null
   accessMode?: AppSidebarAccessMode
   permissionLabels?: string[]
   activeResource?: AdminResourceKey
@@ -296,6 +320,7 @@ function filterAdminSearchByPermissions(searchItems: SearchItem[], normalizedPer
 export function AppSidebar({
   userName,
   userEmail,
+  userAvatar,
   accessMode = "admin",
   permissionLabels = [],
   activeResource,
@@ -329,21 +354,37 @@ export function AppSidebar({
   }, [normalizedPermissions, resolvedAccessMode])
 
   return (
-    <Sidebar collapsible="offcanvas" {...props}>
-      <SidebarContent className="px-2 pt-3">
+    <Sidebar collapsible="offcanvas" className="app-sidebar" {...props}>
+      {/* Decorative ambient orbs (purely visual) */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
+      >
+        <div className="absolute -left-8 top-10 h-28 w-28 rounded-full bg-primary/[0.07] blur-2xl dark:bg-primary/15" />
+        <div className="absolute -right-10 bottom-24 h-36 w-36 rounded-full bg-primary/[0.06] blur-3xl dark:bg-primary/12" />
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/25 to-transparent" />
+      </div>
+
+      <SidebarContent className="relative z-[1] gap-2 px-2 pt-3">
+        <div className="mb-1 px-1">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-primary/70">
+            Navigation
+          </p>
+          <div className="mt-1.5 h-px w-10 rounded-full bg-gradient-to-r from-primary/50 to-transparent" />
+        </div>
         <NavMain
           items={navData.navMain}
           activeResource={activeResource}
           onSelectResource={onSelectResource}
         />
-        <NavSecondary items={navData.navSecondary} searchItems={searchIndex} className="mt-auto" />
+        <NavSecondary items={navData.navSecondary} searchItems={searchIndex} className="mt-auto pt-1" />
       </SidebarContent>
-      <SidebarFooter>
+      <SidebarFooter className="relative z-[1]">
         <NavUser
           user={{
             name: userName ?? "Admin",
             email: userEmail ?? "admin@hrms.local",
-            avatar: "/assets/alliance-logo.png",
+            avatar: userAvatar?.trim() || "/assets/alliance-logo.png",
           }}
         />
       </SidebarFooter>

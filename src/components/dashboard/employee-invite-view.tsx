@@ -14,6 +14,7 @@ import { toast } from "sonner"
 import {
   createOnboardingRequest,
   createEmployeeProfile,
+  getOnboardingRequest,
   listBranches,
   listDepartments,
   listEmployees,
@@ -45,6 +46,9 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { useDashboardActor } from "@/hooks/use-dashboard-actor"
+import { canPerformPermission } from "@/lib/dashboard-permissions"
+import { notifySubmittedRequestApprovers } from "@/lib/request-notifications"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 
@@ -87,7 +91,7 @@ function readStoredToken(): string {
 }
 
 function getId(record: AdminRecord): number | null {
-  const candidates = ["id", "value", "employee_id", "employeeId", "branch_id", "department_id", "position_id"]
+  const candidates = ["id", "value", "request_id", "requestId", "employee_id", "employeeId", "branch_id", "department_id", "position_id"]
   for (const k of candidates) {
     const v = record[k]
     if (typeof v === "number" && Number.isFinite(v)) return v
@@ -207,6 +211,7 @@ function SectionHeader({ title }: { title: string }) {
 }
 
 export function EmployeeInviteView() {
+  const actor = useDashboardActor()
   const [firstName, setFirstName] = React.useState("")
   const [lastName, setLastName] = React.useState("")
   const [gender, setGender] = React.useState("")
@@ -230,6 +235,10 @@ export function EmployeeInviteView() {
   const [submitting, setSubmitting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [token, setToken] = React.useState("")
+  const canReadOnboardingWorkflows = React.useMemo(
+    () => canPerformPermission(actor.permissionLabels, "onboarding_workflows:read"),
+    [actor.permissionLabels]
+  )
 
   React.useEffect(() => {
     setToken(readStoredToken())
@@ -240,22 +249,34 @@ export function EmployeeInviteView() {
       setError("Authentication token not found. Please log in again.")
       return
     }
+    if (!actor.ready) {
+      return
+    }
 
     let cancelled = false
     async function load() {
       setLoading(true)
       setError(null)
       try {
+        const workflowLookup = canReadOnboardingWorkflows
+          ? listOnboardingWorkflows(token, {
+              page: 1,
+              limit: 100,
+              sortBy: "created_at",
+              sortOrder: "DESC",
+            })
+          : Promise.resolve({
+              rows: [] as AdminRecord[],
+              page: 1,
+              limit: 0,
+              total: 0,
+              totalPages: 0,
+            })
         const [br, de, po, wo, em] = await Promise.allSettled([
           listBranches(token, { page: 1, limit: 100, sortBy: "name", sortOrder: "ASC" }),
           listDepartments(token, { page: 1, limit: 200, sortBy: "name", sortOrder: "ASC" }),
           listPositions(token, { page: 1, limit: 200, sortBy: "name", sortOrder: "ASC" }),
-          listOnboardingWorkflows(token, {
-            page: 1,
-            limit: 100,
-            sortBy: "created_at",
-            sortOrder: "DESC",
-          }),
+          workflowLookup,
           listEmployees(token, {
             page: 1,
             limit: 200,
@@ -293,7 +314,9 @@ export function EmployeeInviteView() {
           setWorkflows(wo.value.rows || [])
         } else {
           setWorkflows([])
-          failures.push("workflows")
+          if (canReadOnboardingWorkflows) {
+            failures.push("workflows")
+          }
         }
 
         if (em.status === "fulfilled") {
@@ -314,7 +337,7 @@ export function EmployeeInviteView() {
     return () => {
       cancelled = true
     }
-  }, [token])
+  }, [actor.ready, canReadOnboardingWorkflows, token])
 
   const branchOptions = React.useMemo(
     () => toLookupOptions(branches, ["branch_name", "branchName", "name"], [], []),
@@ -467,7 +490,7 @@ export function EmployeeInviteView() {
       toast.error("Please select a position.")
       return
     }
-    if (!workflowId) {
+    if (canReadOnboardingWorkflows && !workflowId) {
       toast.error("Please select an onboarding workflow.")
       return
     }
@@ -534,12 +557,27 @@ export function EmployeeInviteView() {
       }
 
       // Recruitment invite starts onboarding through the dedicated onboarding requests API.
-      await createOnboardingRequest(token, {
+      const onboardingRequest = await createOnboardingRequest(token, {
         employee_id: employeeId,
-        workflow_id: workflowId,
+        workflow_id: workflowId ?? undefined,
         submit: true,
         title: `Onboarding for ${firstName.trim()} ${lastName.trim()}`.trim(),
         planned_start_date: hireDate || undefined,
+      })
+      const onboardingRecord =
+        typeof onboardingRequest === "object" && onboardingRequest !== null
+          ? (onboardingRequest as AdminRecord)
+          : null
+      const onboardingRequestId = onboardingRecord ? getId(onboardingRecord) : null
+      void notifySubmittedRequestApprovers({
+        kind: "onboarding_request",
+        token,
+        request: onboardingRequest,
+        requesterName: `${firstName.trim()} ${lastName.trim()}`.trim(),
+        loadRequest:
+          onboardingRequestId === null
+            ? undefined
+            : () => getOnboardingRequest(token, onboardingRequestId),
       })
 
       showSuccessAlert("Employee invite created successfully. Onboarding started.")
@@ -565,7 +603,7 @@ export function EmployeeInviteView() {
               onboardingRequestPayload: createdEmployee
                 ? {
                     employee_id: getId(createdEmployee),
-                    workflow_id: workflowId,
+                    workflow_id: workflowId ?? undefined,
                     submit: true,
                     title: `Onboarding for ${firstName.trim()} ${lastName.trim()}`.trim(),
                     planned_start_date: hireDate || undefined,
@@ -831,20 +869,32 @@ export function EmployeeInviteView() {
               </Select>
             </FieldShell>
 
-            <FieldShell label="Onboarding workflow" required>
+            <FieldShell label="Onboarding workflow" required={canReadOnboardingWorkflows}>
               <Select
                 value={workflowId != null ? String(workflowId) : null}
                 onValueChange={(value) => setWorkflowId(value ? Number(value) : null)}
-                disabled={loading}
+                disabled={loading || !canReadOnboardingWorkflows}
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select workflow">
-                    {getSelectedLabel(workflowOptions, workflowId, "Select workflow")}
+                  <SelectValue
+                    placeholder={
+                      canReadOnboardingWorkflows
+                        ? "Select workflow"
+                        : "Workflow assigned automatically"
+                    }
+                  >
+                    {canReadOnboardingWorkflows
+                      ? getSelectedLabel(workflowOptions, workflowId, "Select workflow")
+                      : "Workflow assigned automatically"}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {workflowOptions.length === 0 ? (
-                    <div className="px-2 py-2 text-xs text-muted-foreground">No workflows found</div>
+                    <div className="px-2 py-2 text-xs text-muted-foreground">
+                      {canReadOnboardingWorkflows
+                        ? "No workflows found"
+                        : "Your role cannot view workflow templates."}
+                    </div>
                   ) : null}
                   {workflowOptions.map((option) => (
                     <SelectItem key={option.id} value={String(option.id)}>

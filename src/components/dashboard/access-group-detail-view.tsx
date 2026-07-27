@@ -721,7 +721,7 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
               type="button"
               className={`rounded-full px-4 py-2 text-sm transition ${
                 activeTab === tabKey
-                  ? "bg-slate-900 text-white"
+                  ? "bg-primary !text-white"
                   : "border border-slate-300 text-slate-700 hover:bg-slate-50"
               }`}
               onClick={() => setActiveTab(tabKey as "details" | "doors" | "employees")}
@@ -764,7 +764,7 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
               </div>
               <button
                 type="button"
-                className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-sm text-white disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm !text-white disabled:opacity-50"
                 onClick={() => setAssignOpen(true)}
               >
                 <PlusIcon className="h-4 w-4" />
@@ -865,7 +865,7 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
               </div>
               <button
                 type="button"
-                className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-sm text-white disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm !text-white disabled:opacity-50"
                 onClick={() => setAssignEmployeeOpen(true)}
               >
                 <PlusIcon className="h-4 w-4" />
@@ -1056,7 +1056,7 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
             </button>
             <button
               type="button"
-              className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+              className="rounded-md bg-primary px-3 py-1.5 text-sm !text-white disabled:opacity-50"
               onClick={() => void onAssignDoor()}
               disabled={assigning || !selectedDoorId || !selectedTemplateId}
             >
@@ -1256,7 +1256,7 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
             </button>
             <button
               type="button"
-              className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+              className="rounded-md bg-primary px-3 py-1.5 text-sm !text-white disabled:opacity-50"
               onClick={() => void onAssignEmployee()}
               disabled={assigningEmployee || !selectedEmployeeId}
             >

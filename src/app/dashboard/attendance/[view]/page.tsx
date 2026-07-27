@@ -24,7 +24,6 @@ const ALLOWED_VIEWS = new Set([
   "recalculation-jobs",
   "unmatched-logs",
   "today",
-  "punch-history",
   "attendance-history",
   "schedule-preview",
   "corrections",
@@ -71,7 +70,6 @@ const ACTIVITY_ATTENDANCE_VIEWS = new Set([
   "recalculation-jobs",
   "unmatched-logs",
   "today",
-  "punch-history",
   "attendance-history",
   "schedule-preview",
   "corrections",
@@ -96,6 +94,15 @@ export default async function AttendanceViewPage({ params, searchParams }: Atten
   // Business trips live under Leave Management now.
   if (normalized === "business-trips") {
     redirect("/dashboard/leave-management/business-trips")
+  }
+
+  // Punch history is covered by attendance history.
+  if (normalized === "punch-history") {
+    redirect("/dashboard/attendance/attendance-history")
+  }
+
+  if (normalized === "settings") {
+    redirect("/dashboard/attendance/policies")
   }
 
   if (!ALLOWED_VIEWS.has(normalized)) {

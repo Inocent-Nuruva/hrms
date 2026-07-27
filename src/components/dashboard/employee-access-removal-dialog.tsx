@@ -737,7 +737,7 @@ export function EmployeeAccessRemovalDialog({ open, target, onOpenChange, onComp
               </button>
               <button
                 type="button"
-                className="w-full rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50 sm:w-auto"
+                className="w-full rounded-md bg-primary px-3 py-1.5 text-sm font-medium !text-white disabled:opacity-50 sm:w-auto"
                 disabled={loading || !hasAnyAction}
                 onClick={() => {
                   setError(null)
@@ -775,7 +775,7 @@ export function EmployeeAccessRemovalDialog({ open, target, onOpenChange, onComp
           {step === "done" ? (
             <button
               type="button"
-              className="w-full rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-white sm:w-auto"
+              className="w-full rounded-md bg-primary px-3 py-1.5 text-sm font-medium !text-white sm:w-auto"
               onClick={() => onOpenChange(false)}
             >
               Done

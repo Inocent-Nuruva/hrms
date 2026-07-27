@@ -20,9 +20,9 @@ import {
   DialogPopup,
   DialogTitle,
 } from "@/components/animate-ui/components/base/dialog"
-import { TableScrollContainer } from "@/components/common/table-scroll-container"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { ResizableTable } from "@/components/ui/resizable-table"
 import { Textarea } from "@/components/ui/textarea"
 import {
   createShiftResource,
@@ -1884,6 +1884,79 @@ export function ScheduleManagementView({ section }: { section: string }) {
     [currentCompanyName, lookups]
   )
 
+  // Defined before tableColumns so the actions column can reference it safely.
+  const openEdit = React.useCallback(async (id: string) => {
+    const token = readStoredToken()
+    if (!token) {
+      setFormError("Authentication required. Please log in again.")
+      return
+    }
+
+    try {
+      const record = await getScheduleRow(token, activeSection, id)
+      if (!record) {
+        throw new Error("This record could not be loaded.")
+      }
+      setEditingId(id)
+      setEditRecord(record)
+      const initialEditState = buildEditValues(fields, record)
+      const initialEditDraftKey = buildFormDraftStorageKey(`schedule:${activeSection}:edit:${id}`)
+      setEditValues(readPersistedFormState(initialEditDraftKey, initialEditState))
+      setFormError(null)
+      setEditOpen(true)
+    } catch (errorObject) {
+      setFormError(formatLoadError(errorObject, "Could not load this record for editing."))
+    }
+  }, [activeSection, fields])
+
+  const tableColumns = React.useMemo(
+    () => [
+      ...columns.map((column) => ({
+        key: column,
+        label: prettifyLabel(column),
+        defaultWidth: column === "name" ? 180 : column === "status" ? 90 : 150,
+        sortable: true,
+        render: (row: AdminRecord) => resolveScheduleCellValue(column, row, lookupMaps),
+      })),
+      {
+        key: "actions",
+        label: "Actions",
+        defaultWidth: 82,
+        sortable: false,
+        render: (row: AdminRecord) => {
+          const rowId = String(resolveRowId(row, -1))
+          return (
+            <div className="flex justify-end gap-1" onClick={(event) => event.stopPropagation()}>
+              <button
+                className="admin-table-icon-button"
+                type="button"
+                aria-label="Edit"
+                onClick={() => {
+                  void openEdit(rowId)
+                }}
+              >
+                <PencilIcon className="h-3.5 w-3.5" />
+              </button>
+              <button
+                className="admin-table-icon-button"
+                data-variant="danger"
+                type="button"
+                aria-label="Delete"
+                onClick={() => {
+                  setDeletingId(rowId)
+                  setDeleteOpen(true)
+                }}
+              >
+                <Trash2Icon className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )
+        },
+      },
+    ],
+    [columns, lookupMaps, openEdit]
+  )
+
   const onCreate = async () => {
     const token = readStoredToken()
     if (!token) {
@@ -1938,30 +2011,6 @@ export function ScheduleManagementView({ section }: { section: string }) {
       router.refresh()
     } catch (errorObject) {
       setFormError(formatLoadError(errorObject, "Could not create this record."))
-    }
-  }
-
-  const openEdit = async (id: string) => {
-    const token = readStoredToken()
-    if (!token) {
-      setFormError("Authentication required. Please log in again.")
-      return
-    }
-
-    try {
-      const record = await getScheduleRow(token, activeSection, id)
-      if (!record) {
-        throw new Error("This record could not be loaded.")
-      }
-      setEditingId(id)
-      setEditRecord(record)
-      const initialEditState = buildEditValues(fields, record)
-      const initialEditDraftKey = buildFormDraftStorageKey(`schedule:${activeSection}:edit:${id}`)
-      setEditValues(readPersistedFormState(initialEditDraftKey, initialEditState))
-      setFormError(null)
-      setEditOpen(true)
-    } catch (errorObject) {
-      setFormError(formatLoadError(errorObject, "Could not load this record for editing."))
     }
   }
 
@@ -2074,31 +2123,50 @@ export function ScheduleManagementView({ section }: { section: string }) {
     setDetailsOpen(true)
   }
 
+  const sectionTitleBlock = (
+    <div className="min-w-0 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+      <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+        {config.moduleTitle}
+      </span>
+      <h1 className="truncate text-lg font-semibold tracking-tight text-foreground sm:text-xl">
+        {config.title}
+      </h1>
+    </div>
+  )
+
   return (
-    <div className="space-y-2">
-      <div className="w-full">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              {config.moduleTitle}
-            </p>
-            <h1 className="text-sm font-semibold tracking-tight text-slate-900 dark:text-slate-100">{config.title}</h1>
-          </div>
-          <div className="ml-auto flex items-center gap-1.5">
+    <div className="w-full space-y-2">
+      {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      {message ? <p className="text-sm text-green-700">{message}</p> : null}
+
+      <ResizableTable
+        title={config.title}
+        data={rows}
+        columns={tableColumns}
+        loading={loading}
+        itemsPerPage={20}
+        showExport={false}
+        storageKey={`schedule-${activeSection}`}
+        toolbarStart={sectionTitleBlock}
+        toolbarActions={
+          <>
             <button
-              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md bg-[var(--primary)] px-2.5 text-xs font-semibold text-white transition hover:brightness-95"
+              className="inline-flex h-8 items-center justify-center gap-1 rounded-lg bg-primary px-2.5 text-xs font-semibold !text-white transition hover:brightness-95"
               type="button"
               onClick={() => {
                 setFormError(null)
                 setCreateOpen(true)
               }}
+              aria-label={`Create ${config.title}`}
+              title="Create"
             >
               <PlusIcon className="h-3.5 w-3.5" />
-              Create
+              <span className="hidden sm:inline">Create</span>
             </button>
             <button
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border text-foreground transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
               type="button"
+              disabled={loading}
               onClick={() => {
                 setMessage(null)
                 void fetchRows()
@@ -2106,105 +2174,26 @@ export function ScheduleManagementView({ section }: { section: string }) {
               aria-label="Refresh"
               title="Refresh"
             >
-              <RefreshCwIcon className="h-3.5 w-3.5 text-primary" />
+              <RefreshCwIcon className={`h-3.5 w-3.5 text-primary ${loading ? "animate-spin" : ""}`} />
             </button>
-          </div>
-        </div>
+          </>
+        }
+        onRowSelect={(_, row) => {
+          if (row) {
+            openDetailsDialog(row)
+          }
+        }}
+      />
 
-        {error ? <p className="mt-2 text-sm text-red-600">{error}</p> : null}
-        {message ? <p className="mt-2 text-sm text-green-600">{message}</p> : null}
-
-        <div className="mt-2">
-          <TableScrollContainer>
-            <table className="min-w-full min-w-[720px] text-left text-sm">
-              <thead className="bg-[var(--table-header-accent-bg)] text-[var(--table-header-accent)] backdrop-blur-sm">
-                <tr>
-                  {columns.map((column) => (
-                    <th
-                      key={column}
-                      className="px-3 py-3 text-[0.7rem] font-semibold uppercase tracking-[0.08em] whitespace-nowrap"
-                    >
-                      {prettifyLabel(column)}
-                    </th>
-                  ))}
-                  <th className="px-3 py-3 text-right text-[0.7rem] font-semibold uppercase tracking-[0.08em] whitespace-nowrap">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white dark:bg-slate-950 [&_tr:nth-child(odd)]:bg-slate-50/35 dark:[&_tr:nth-child(odd)]:bg-slate-900/60 [&_tr]:border-t [&_tr]:border-slate-100 dark:[&_tr]:border-slate-800 [&_tr]:transition-colors [&_tr]:hover:bg-slate-50 dark:[&_tr]:text-slate-200 dark:[&_tr]:hover:bg-slate-900/90">
-                {loading ? (
-                  <tr>
-                    <td colSpan={columns.length + 1} className="px-4 py-10 text-center text-slate-500">
-                      Loading…
-                    </td>
-                  </tr>
-                ) : rows.length === 0 ? (
-                  <tr>
-                    <td colSpan={columns.length + 1} className="px-4 py-10 text-center text-slate-500">
-                      No records found yet.
-                    </td>
-                  </tr>
-                ) : (
-                  rows.map((row, index) => {
-                    const rowId = resolveRowId(row, index)
-                    return (
-                      <tr
-                        key={`${activeSection}-${String(rowId)}-${index}`}
-                        className="align-top cursor-pointer"
-                        onClick={() => openDetailsDialog(row)}
-                      >
-                        {columns.map((column) => (
-                          <td key={column} className="px-3 py-3 text-[0.95rem] text-slate-700 whitespace-nowrap dark:text-slate-200">
-                            {resolveScheduleCellValue(column, row, lookupMaps)}
-                          </td>
-                        ))}
-                        <td className="px-3 py-3">
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              className="inline-flex items-center rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:border-[color:rgb(var(--primary-rgb)/0.35)] hover:bg-[color:rgb(var(--primary-rgb)/0.10)] hover:text-[var(--primary)] dark:border-slate-700 dark:text-slate-200 dark:hover:border-[color:rgb(var(--primary-rgb)/0.45)] dark:hover:bg-[color:rgb(var(--primary-rgb)/0.18)]"
-                              type="button"
-                              onClick={(event) => {
-                                event.stopPropagation()
-                                void openEdit(String(rowId))
-                              }}
-                            >
-                              <PencilIcon className="mr-1.5 h-3.5 w-3.5" />
-                              Edit
-                            </button>
-                            <button
-                              className="inline-flex items-center rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-50"
-                              type="button"
-                              onClick={(event) => {
-                                event.stopPropagation()
-                                setDeletingId(String(rowId))
-                                setDeleteOpen(true)
-                              }}
-                            >
-                              <Trash2Icon className="mr-1.5 h-3.5 w-3.5" />
-                              Delete
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })
-                )}
-              </tbody>
-            </table>
-          </TableScrollContainer>
-        </div>
-
-        <RecordDetailsDialog
-          open={detailsOpen}
-          onOpenChange={setDetailsOpen}
-          title={`${config.title} details`}
-          description="Selected row details"
-          row={selectedRow}
-          resolveLabel={(key) => prettifyLabel(key)}
-          resolveValue={(key, row) => resolveScheduleCellValue(key, row, lookupMaps)}
-        />
-      </div>
+      <RecordDetailsDialog
+        open={detailsOpen}
+        onOpenChange={setDetailsOpen}
+        title={`${config.title} details`}
+        description="Selected row details"
+        row={selectedRow}
+        resolveLabel={(key) => prettifyLabel(key)}
+        resolveValue={(key, row) => resolveScheduleCellValue(key, row, lookupMaps)}
+      />
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogPopup className="flex max-h-[90vh] w-[min(1100px,96vw)] flex-col overflow-hidden sm:max-w-5xl">
@@ -2229,7 +2218,7 @@ export function ScheduleManagementView({ section }: { section: string }) {
             </button>
             <button
               type="button"
-              className="inline-flex h-11 items-center justify-center rounded-xl bg-[var(--primary)] px-4 text-sm font-semibold text-white transition hover:brightness-95"
+              className="inline-flex h-11 items-center justify-center rounded-xl bg-[var(--primary)] px-4 text-sm font-semibold !text-white transition hover:brightness-95"
               onClick={() => void onCreate()}
             >
               Create
@@ -2261,7 +2250,7 @@ export function ScheduleManagementView({ section }: { section: string }) {
             </button>
             <button
               type="button"
-              className="inline-flex h-11 items-center justify-center rounded-xl bg-[var(--primary)] px-4 text-sm font-semibold text-white transition hover:brightness-95"
+              className="inline-flex h-11 items-center justify-center rounded-xl bg-[var(--primary)] px-4 text-sm font-semibold !text-white transition hover:brightness-95"
               onClick={() => void onEdit()}
             >
               Save

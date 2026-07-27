@@ -1,5 +1,11 @@
-import { EmployeesListView } from "@/components/dashboard/employees-list-view"
+import { DashboardSectionRootRedirect } from "@/components/dashboard/dashboard-section-root-redirect"
+import { employeeSectionTabGroups } from "@/lib/dashboard-sections"
 
 export default function EmployeesPage() {
-  return <EmployeesListView />
+  return (
+    <DashboardSectionRootRedirect
+      groups={employeeSectionTabGroups}
+      fallbackHref="/dashboard"
+    />
+  )
 }

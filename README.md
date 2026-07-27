@@ -36,7 +36,8 @@ src/
 Copy `.env.example` to `.env.local` and set:
 
 ```env
-NEXT_PUBLIC_API_BASE_URL=https://your-api-host/api
+# Origin only (no trailing /api) — request paths already start with /api/...
+NEXT_PUBLIC_API_BASE_URL=http://192.168.1.30:8888
 ```
 
 ## API integration points

@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useSearchParams } from "next/navigation"
 import { ResizableTable } from "@/components/ui/resizable-table"
 import { Textarea } from "@/components/ui/textarea"
 import { Plus, RefreshCw } from "lucide-react"
@@ -14,6 +15,7 @@ import {
   createOffboardingRequest,
   createOffboardingWorkflow,
   createOffboardingWorkflowStep,
+  getOffboardingRequest,
   getOffboardingApprovals,
   getOffboardingAuditLogs,
   getOffboardingProgress,
@@ -50,6 +52,7 @@ import {
 } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
+import { notifySubmittedRequestApprovers } from "@/lib/request-notifications"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 
@@ -164,6 +167,15 @@ type Tab = "requests" | "workflows"
 type OffboardingLookupKey = "employees" | "branches" | "departments" | "workflows"
 
 export function OffboardingView() {
+  const searchParams = useSearchParams()
+  const highlightedRequestId = React.useMemo(
+    () =>
+      searchParams?.get("highlight") ??
+      searchParams?.get("requestId") ??
+      searchParams?.get("request_id") ??
+      "",
+    [searchParams]
+  )
   const actor = useDashboardActor()
   const [tab, setTab] = React.useState<Tab>("requests")
   const [canManage, setCanManage] = React.useState(false)
@@ -401,7 +413,7 @@ export function OffboardingView() {
     }
     setSaving(true)
     try {
-      await createOffboardingRequest(token, {
+      const createdRequest = await createOffboardingRequest(token, {
         employee_id: Number(requestForm.employee_id),
         branch_id: requestForm.branch_id ? Number(requestForm.branch_id) : undefined,
         department_id: requestForm.department_id ? Number(requestForm.department_id) : undefined,
@@ -415,6 +427,23 @@ export function OffboardingView() {
         submit: requestForm.submit === "true",
         metadata: {},
       })
+      if (requestForm.submit === "true") {
+        const createdRecord = asRecord(createdRequest)
+        const createdRequestId = readNumber(createdRecord ?? {}, ["id", "request_id"])
+        const selectedEmployee = employees.find((row) =>
+          readNumber(row, ["id", "employee_id", "user_id"]) === Number(requestForm.employee_id)
+        )
+        void notifySubmittedRequestApprovers({
+          kind: "offboarding_request",
+          token,
+          request: createdRequest,
+          requesterName: selectedEmployee ? employeeLabel(selectedEmployee) : undefined,
+          loadRequest:
+            createdRequestId === null
+              ? undefined
+              : () => getOffboardingRequest(token, createdRequestId),
+        })
+      }
       showSuccessAlert("Offboarding request created.")
       await reloadAll(tab, true)
       return true
@@ -433,12 +462,16 @@ export function OffboardingView() {
     setSelectedRequest(row)
     setRequestDetailsOpen(true)
     try {
-      const [approvals, audit, docs, progress] = await Promise.all([
+      const [detail, approvals, audit, docs, progress] = await Promise.all([
+        getOffboardingRequest(token, id),
         getOffboardingApprovals(token, id),
         getOffboardingAuditLogs(token, id),
         listOffboardingDocuments(token, id),
         getOffboardingProgress(token, id),
       ])
+      if (detail) {
+        setSelectedRequest({ ...row, ...detail })
+      }
       setRequestApprovals(approvals)
       setRequestAuditLogs(audit)
       setRequestDocuments(docs)
@@ -451,13 +484,39 @@ export function OffboardingView() {
     }
   }
 
+  const openedHighlightedRequestRef = React.useRef("")
+  React.useEffect(() => {
+    if (tab !== "requests" || !highlightedRequestId) {
+      return
+    }
+    if (openedHighlightedRequestRef.current === highlightedRequestId) {
+      return
+    }
+
+    const highlightedRow =
+      requests.find((row) =>
+        String(readNumber(row, ["id", "request_id"]) ?? "") === highlightedRequestId
+      ) ?? { id: highlightedRequestId, request_id: highlightedRequestId }
+
+    openedHighlightedRequestRef.current = highlightedRequestId
+    void openRequestDetails(highlightedRow)
+  }, [highlightedRequestId, requests, tab])
+
   async function runRequestAction(row: AdminRecord, action: "submit" | "approve" | "reject" | "cancel" | "complete") {
     const token = readStoredToken()
     const id = readNumber(row, ["id"])
     if (!token || id === null) return
     setSaving(true)
     try {
-      if (action === "submit") await submitOffboardingRequest(token, id, { workflow_id: readNumber(row, ["workflow_id"]) ?? undefined })
+      if (action === "submit") {
+        const submittedRequest = await submitOffboardingRequest(token, id, { workflow_id: readNumber(row, ["workflow_id"]) ?? undefined })
+        void notifySubmittedRequestApprovers({
+          kind: "offboarding_request",
+          token,
+          request: submittedRequest ?? row,
+          loadRequest: () => getOffboardingRequest(token, id),
+        })
+      }
       if (action === "approve") await approveOffboardingRequest(token, id, { approve: true, comments: "Approved" })
       if (action === "reject") await rejectOffboardingRequest(token, id, { comments: "Rejected" })
       if (action === "cancel") await cancelOffboardingRequest(token, id, { reason: "Cancelled by admin" })

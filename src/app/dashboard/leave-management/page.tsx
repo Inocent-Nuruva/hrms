@@ -1,5 +1,11 @@
-import { LeaveManagementView } from "@/components/dashboard/leave-management-view"
+import { DashboardSectionRootRedirect } from "@/components/dashboard/dashboard-section-root-redirect"
+import { leaveManagementSectionTabGroups } from "@/lib/dashboard-sections"
 
 export default function LeaveManagementIndexPage() {
-  return <LeaveManagementView activeTab="types" showTabButtons={false} />
+  return (
+    <DashboardSectionRootRedirect
+      groups={leaveManagementSectionTabGroups}
+      fallbackHref="/dashboard"
+    />
+  )
 }

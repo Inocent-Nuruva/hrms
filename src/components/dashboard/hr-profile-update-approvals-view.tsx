@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useSearchParams } from "next/navigation"
 import { CheckCircle2, Loader2, RefreshCw, XCircle } from "lucide-react"
 
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
@@ -342,6 +343,15 @@ function InfoItem({
 }
 
 export function HrProfileUpdateApprovalsView() {
+  const searchParams = useSearchParams()
+  const highlightedRequestId = React.useMemo(
+    () =>
+      searchParams?.get("highlight") ??
+      searchParams?.get("requestId") ??
+      searchParams?.get("request_id") ??
+      "",
+    [searchParams]
+  )
   const [requests, setRequests] = React.useState<AdminRecord[]>([])
   const [selectedRequestId, setSelectedRequestId] = React.useState("")
   const [selectedRequestDetail, setSelectedRequestDetail] = React.useState<AdminRecord | null>(null)
@@ -450,7 +460,7 @@ export function HrProfileUpdateApprovalsView() {
               className={cn(
                 "rounded-md border px-2 py-1 text-xs font-medium transition-colors",
                 isSelected
-                  ? "border-slate-900 bg-slate-900 text-white"
+                  ? "border-primary bg-primary !text-white"
                   : "border-slate-300 text-slate-700 hover:bg-slate-50"
               )}
               onClick={() => {
@@ -472,6 +482,11 @@ export function HrProfileUpdateApprovalsView() {
   React.useEffect(() => {
     selectedRequestIdRef.current = selectedRequestId
   }, [selectedRequestId])
+
+  const highlightedRequestIdRef = React.useRef(highlightedRequestId)
+  React.useEffect(() => {
+    highlightedRequestIdRef.current = highlightedRequestId
+  }, [highlightedRequestId])
 
   const loadRequests = React.useCallback(async () => {
     const token = readStoredToken()
@@ -500,6 +515,16 @@ export function HrProfileUpdateApprovalsView() {
 
       // Use a ref so selection preservation does not re-create this callback
       // (and re-trigger the load effect) every time the user opens a row.
+      const highlightedId = highlightedRequestIdRef.current
+      if (highlightedId) {
+        const highlightedRow =
+          result.rows.find((row) => getRequestId(row) === highlightedId) ?? null
+        setSelectedRequestId(highlightedId)
+        setSelectedRequestDetail(highlightedRow)
+        await loadRequestDetail(highlightedId)
+        return
+      }
+
       const currentSelection =
         result.rows.find((row) => getRequestId(row) === selectedRequestIdRef.current) ??
         result.rows[0] ??
@@ -640,7 +665,7 @@ export function HrProfileUpdateApprovalsView() {
           </button>
           <button
             type="button"
-            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-slate-900 px-2.5 text-xs font-semibold text-white"
+            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white"
             onClick={() => void loadRequests()}
             disabled={loading}
           >

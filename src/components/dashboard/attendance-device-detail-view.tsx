@@ -618,7 +618,7 @@ function HandFingerprintSelector({
                   !isThumb && index === 2 ? "min-h-[7rem]" : null,
                   !isThumb && (index === 1 || index === 3) ? "min-h-[6.75rem]" : null,
                   isSelected
-                    ? "border-primary bg-primary text-white shadow-md shadow-[0_8px_18px_rgb(var(--primary-rgb)/0.22)]"
+                    ? "border-primary bg-primary !text-white shadow-md shadow-[0_8px_18px_rgb(var(--primary-rgb)/0.22)]"
                     : isOccupied
                       ? "border-amber-200 bg-amber-50 text-amber-900 hover:border-amber-300"
                       : "border-white bg-white text-slate-700 shadow-sm hover:border-[color:rgb(var(--primary-rgb)/0.28)] hover:bg-[color:rgb(var(--primary-rgb)/0.06)]"
@@ -725,7 +725,7 @@ function CredentialTypePicker({
               className={cn(
                 "mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
                 isSelected
-                  ? "bg-primary text-white"
+                  ? "bg-primary !text-white"
                   : isEnabled
                     ? "bg-slate-100 text-slate-600"
                     : "bg-slate-100 text-slate-400"
@@ -2330,7 +2330,7 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
               </p>
               <button
                 type="button"
-                className="ml-auto inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-white hover:brightness-95 disabled:opacity-50"
+                className="ml-auto inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium !text-white hover:brightness-95 disabled:opacity-50"
                 onClick={() => setAssignEmployeeOpen(true)}
               >
                 <PlusIcon className="h-4 w-4" />
@@ -2788,7 +2788,7 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
                       <div className="sm:col-span-2 flex justify-end">
                         <button
                           type="button"
-                          className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+                          className="rounded-md bg-primary px-3 py-1.5 text-sm !text-white disabled:opacity-50"
                           onClick={() => void onUpdateAssignedEmployeeDetails()}
                           disabled={savingAssignedEmployeeDetails}
                         >
@@ -2946,7 +2946,7 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
             </button>
             <button
               type="button"
-              className="w-full rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white disabled:opacity-50 sm:w-auto"
+              className="w-full rounded-md bg-primary px-3 py-1.5 text-sm !text-white disabled:opacity-50 sm:w-auto"
               onClick={() =>
                 void (assignedEmployeeForCredentialStep
                   ? onSaveAssignedEmployeeCredentials()
@@ -3228,7 +3228,7 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
             </button>
             <button
               type="button"
-              className="w-full rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white disabled:opacity-50 sm:w-auto"
+              className="w-full rounded-md bg-primary px-3 py-1.5 text-sm !text-white disabled:opacity-50 sm:w-auto"
               onClick={() => void onSaveCredentials()}
               disabled={savingCredentials || !credentialEmployee}
             >

@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Poppins } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { SessionExpiryGuard } from "@/components/auth/session-expiry-guard";
 import { SuccessAlertOverlay } from "@/components/success-alert-overlay";
 import { ErrorAlertOverlay } from "@/components/error-alert-overlay";
+import { PwaProvider } from "@/components/pwa-provider";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 
@@ -21,7 +22,16 @@ export const metadata: Metadata = {
     default: "HRMS",
     template: "%s | HRMS",
   },
-  description: "HRMS",
+  description: "Alliance HRMS for attendance, leave, approvals, and reporting.",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "HRMS",
+  },
+  formatDetection: {
+    telephone: false,
+  },
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "16x16 32x32 48x48" },
@@ -29,6 +39,11 @@ export const metadata: Metadata = {
     ],
     apple: [{ url: "/apple-icon.png", type: "image/png", sizes: "180x180" }],
   },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#303194",
+  colorScheme: "light dark",
 };
 
 export default function RootLayout({
@@ -42,8 +57,9 @@ export default function RootLayout({
       suppressHydrationWarning
       className={cn("h-full", "antialiased", poppins.variable)}
     >
-      <body className="min-h-full flex flex-col">
+      <body className="flex min-h-full flex-col">
         <ThemeProvider>
+          <PwaProvider />
           <SessionExpiryGuard />
           <TooltipProvider>
             {children}

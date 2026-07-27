@@ -2,7 +2,17 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { EyeIcon, EyeOffIcon, PencilIcon, PlusIcon, SearchIcon, Trash2Icon, UploadIcon } from "lucide-react"
+import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  EyeIcon,
+  EyeOffIcon,
+  PencilIcon,
+  PlusIcon,
+  SearchIcon,
+  Trash2Icon,
+  UploadIcon,
+} from "lucide-react"
 import { getCountryCallingCode } from "libphonenumber-js"
 import { countries as countryCodes } from "country-flag-icons"
 import * as FlagIcons from "country-flag-icons/react/3x2"
@@ -1147,6 +1157,220 @@ function editableEntries(record: AdminRecord, sectionTitle: string) {
   return entries
 }
 
+const PROFILE_SECTION_DEFS: Array<{
+  title: string
+  /** Compact tab label (matches Employees top-tab density). Full title used in content. */
+  tabLabel: string
+  keys: string[]
+  special?: "company_user"
+}> = [
+  { title: "Contacts", tabLabel: "Contacts", keys: ["contacts", "contact_details", "contactDetails"] },
+  { title: "Documents", tabLabel: "Documents", keys: ["documents", "employee_documents", "employeeDocuments"] },
+  { title: "Addresses", tabLabel: "Addresses", keys: ["addresses", "address_details", "addressDetails"] },
+  { title: "Relatives", tabLabel: "Relatives", keys: ["relatives", "next_of_kin", "nextOfKin"] },
+  { title: "Identifications", tabLabel: "IDs", keys: ["identifications", "identification_documents", "identificationDocuments"] },
+  { title: "Bank Accounts", tabLabel: "Banks", keys: ["bank_accounts", "bankAccounts"] },
+  { title: "Departments", tabLabel: "Depts", keys: ["departments", "department_assignments", "departmentAssignments"] },
+  { title: "Academic Qualifications", tabLabel: "Academic", keys: ["academic_qualifications", "academicQualifications"] },
+  { title: "Professional Qualifications", tabLabel: "Professional", keys: ["professional_qualifications", "professionalQualifications"] },
+  { title: "Experience Details", tabLabel: "Experience", keys: ["experience_details", "experienceDetails"] },
+  { title: "Company User", tabLabel: "User", keys: [], special: "company_user" },
+]
+
+function resolveProfileSectionItems(employee: AdminRecord, def: (typeof PROFILE_SECTION_DEFS)[number]) {
+  if (def.special === "company_user") {
+    return firstRecordArray(
+      employee.company_user ? [asRecord(employee.company_user) ?? {}] : [],
+      employee.companyUser ? [asRecord(employee.companyUser) ?? {}] : []
+    )
+  }
+  return getProfileSectionItems(employee, def.keys)
+}
+
+function ProfileSectionsTabs({
+  employee,
+  employeeId,
+  onMutated,
+  requestedRouteKey,
+}: {
+  employee: AdminRecord
+  employeeId: number | null
+  onMutated: () => Promise<void>
+  requestedRouteKey?: string | null
+}) {
+  const sections = React.useMemo(
+    () =>
+      PROFILE_SECTION_DEFS.map((def) => {
+        const items = resolveProfileSectionItems(employee, def)
+        return {
+          title: def.title,
+          tabLabel: def.tabLabel,
+          routeKey: sectionTitleToRouteKey(def.title),
+          items,
+          count: items.length,
+        }
+      }),
+    [employee]
+  )
+
+  const requestedTitle = routeKeyToSectionTitle(requestedRouteKey)
+  const [activeTitle, setActiveTitle] = React.useState(
+    () => requestedTitle ?? sections[0]?.title ?? "Contacts"
+  )
+
+  React.useEffect(() => {
+    if (requestedTitle) {
+      setActiveTitle(requestedTitle)
+    }
+  }, [requestedTitle])
+
+  const active = sections.find((section) => section.title === activeTitle) ?? sections[0]
+  const tabsScrollRef = React.useRef<HTMLDivElement | null>(null)
+  const [tabScrollState, setTabScrollState] = React.useState({
+    canScrollLeft: false,
+    canScrollRight: false,
+    scrollable: false,
+  })
+
+  const updateTabScrollState = React.useCallback(() => {
+    const element = tabsScrollRef.current
+    if (!element) {
+      setTabScrollState({ canScrollLeft: false, canScrollRight: false, scrollable: false })
+      return
+    }
+
+    const maxScrollLeft = Math.max(0, element.scrollWidth - element.clientWidth)
+    const next = {
+      canScrollLeft: element.scrollLeft > 2,
+      canScrollRight: element.scrollLeft < maxScrollLeft - 2,
+      scrollable: maxScrollLeft > 2,
+    }
+
+    setTabScrollState((current) =>
+      current.canScrollLeft === next.canScrollLeft &&
+      current.canScrollRight === next.canScrollRight &&
+      current.scrollable === next.scrollable
+        ? current
+        : next
+    )
+  }, [])
+
+  React.useEffect(() => {
+    const element = tabsScrollRef.current
+    updateTabScrollState()
+    if (!element) {
+      return
+    }
+
+    const handleScrollUpdate = () => updateTabScrollState()
+    element.addEventListener("scroll", handleScrollUpdate, { passive: true })
+    window.addEventListener("resize", handleScrollUpdate)
+    const frameId = window.requestAnimationFrame(updateTabScrollState)
+
+    return () => {
+      element.removeEventListener("scroll", handleScrollUpdate)
+      window.removeEventListener("resize", handleScrollUpdate)
+      window.cancelAnimationFrame(frameId)
+    }
+  }, [sections.length, updateTabScrollState])
+
+  const scrollTabs = React.useCallback((direction: "left" | "right") => {
+    const element = tabsScrollRef.current
+    if (!element) {
+      return
+    }
+
+    const distance = Math.max(element.clientWidth * 0.65, 140)
+    element.scrollBy({
+      left: direction === "left" ? -distance : distance,
+      behavior: "smooth",
+    })
+    window.setTimeout(updateTabScrollState, 260)
+  }, [updateTabScrollState])
+
+  return (
+    <div className="space-y-3">
+      {/* Mirrors the compact Employees top tabs while keeping this rail horizontally scrollable. */}
+      <div className="flex min-w-0 items-center gap-1.5">
+        <button
+          type="button"
+          aria-label="Scroll profile sections left"
+          disabled={!tabScrollState.canScrollLeft}
+          onClick={() => scrollTabs("left")}
+          className="inline-flex size-6 shrink-0 items-center justify-center rounded-md border border-primary/25 bg-primary/10 text-primary shadow-sm transition hover:border-primary/45 hover:bg-primary hover:text-primary-foreground disabled:pointer-events-none disabled:border-border/60 disabled:bg-muted/30 disabled:text-muted-foreground disabled:opacity-45"
+        >
+          <ChevronLeftIcon className="size-3.5" />
+        </button>
+        <div
+          ref={tabsScrollRef}
+          className="min-w-0 flex-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          role="tablist"
+          aria-label="Employee profile sections"
+        >
+          <div className="inline-flex min-w-full items-center gap-5 border-b border-border/80 sm:gap-6">
+            {sections.map((section) => {
+              const isActive = section.title === active?.title
+              const needsAttention = requestedRouteKey === section.routeKey
+              return (
+                <button
+                  key={section.routeKey}
+                  type="button"
+                  role="tab"
+                  title={`${section.title} (${section.count})`}
+                  aria-label={`${section.title}, ${section.count} items`}
+                  aria-selected={isActive}
+                  onClick={() => setActiveTitle(section.title)}
+                  className={cn(
+                    "-mb-px inline-flex h-8 shrink-0 items-center border-b-2 px-0 text-xs font-medium whitespace-nowrap transition-colors duration-200",
+                    isActive
+                      ? "border-[var(--primary)] text-[var(--primary)]"
+                      : "border-transparent text-muted-foreground hover:text-foreground",
+                    needsAttention && !isActive ? "text-amber-700 dark:text-amber-300" : null
+                  )}
+                >
+                  {section.tabLabel}
+                  <span
+                    className={cn(
+                      "ml-1 text-[11px] tabular-nums",
+                      section.count === 0
+                        ? "text-rose-600 dark:text-rose-400"
+                        : isActive
+                          ? "text-[var(--primary)]"
+                          : "text-muted-foreground"
+                    )}
+                  >
+                    {section.count}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+        <button
+          type="button"
+          aria-label="Scroll profile sections right"
+          disabled={!tabScrollState.canScrollRight}
+          onClick={() => scrollTabs("right")}
+          className="inline-flex size-6 shrink-0 items-center justify-center rounded-md border border-primary/25 bg-primary/10 text-primary shadow-sm transition hover:border-primary/45 hover:bg-primary hover:text-primary-foreground disabled:pointer-events-none disabled:border-border/60 disabled:bg-muted/30 disabled:text-muted-foreground disabled:opacity-45"
+        >
+          <ChevronRightIcon className="size-3.5" />
+        </button>
+      </div>
+
+      {active ? (
+        <Section
+          key={active.routeKey}
+          title={active.title}
+          items={active.items}
+          employeeId={employeeId}
+          onMutated={onMutated}
+          requestedRouteKey={requestedRouteKey}
+        />
+      ) : null}
+    </div>
+  )
+}
+
 function Section({
   title,
   items,
@@ -1230,11 +1454,19 @@ function Section({
         <div className="mb-2 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="text-base font-semibold">{title}</span>
+            <span
+              className={cn(
+                "inline-flex min-w-5 items-center justify-center rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums",
+                items.length === 0
+                  ? "bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300"
+                  : "bg-primary/10 text-primary"
+              )}
+            >
+              {items.length}
+            </span>
             {items.length === 0 ? (
-              <span className="rounded-md bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-700 dark:bg-rose-500/15 dark:text-rose-300">Not provided</span>
-            ) : (
-              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-200">{items.length}</span>
-            )}
+              <span className="text-xs font-medium text-rose-700 dark:text-rose-300">Not provided</span>
+            ) : null}
             {isHighlighted ? (
               <span className="rounded-full bg-amber-200 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-900">
                 Needs attention
@@ -1353,7 +1585,7 @@ function Section({
             <button
               type="button"
               disabled={submitting || !editingRecord || !supportsEdit}
-              className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+              className="rounded-md bg-primary px-3 py-2 text-sm font-medium !text-white disabled:opacity-50"
               onClick={async () => {
                 if (!editingRecord || !apiSection || !employeeId || !token) {
                   return
@@ -1485,7 +1717,7 @@ function Section({
             <button
               type="button"
               disabled={submitting || !supportsAdd || templateEntries.length === 0}
-              className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+              className="rounded-md bg-primary px-3 py-2 text-sm font-medium !text-white disabled:opacity-50"
               onClick={async () => {
                 if (!employeeId || !token || templateEntries.length === 0) {
                   return
@@ -1874,19 +2106,12 @@ export function EmployeeProfilePage({
         })()}
       </div>
 
-      <div className="divide-y divide-border">
-        <Section title="Contacts" items={getProfileSectionItems(employee, ["contacts", "contact_details", "contactDetails"])} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} requestedRouteKey={requestedRouteKey} />
-        <Section title="Documents" items={getProfileSectionItems(employee, ["documents", "employee_documents", "employeeDocuments"])} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} requestedRouteKey={requestedRouteKey} />
-        <Section title="Addresses" items={getProfileSectionItems(employee, ["addresses", "address_details", "addressDetails"])} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} requestedRouteKey={requestedRouteKey} />
-        <Section title="Relatives" items={getProfileSectionItems(employee, ["relatives", "next_of_kin", "nextOfKin"])} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} requestedRouteKey={requestedRouteKey} />
-        <Section title="Identifications" items={getProfileSectionItems(employee, ["identifications", "identification_documents", "identificationDocuments"])} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} requestedRouteKey={requestedRouteKey} />
-        <Section title="Bank Accounts" items={getProfileSectionItems(employee, ["bank_accounts", "bankAccounts"])} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} requestedRouteKey={requestedRouteKey} />
-        <Section title="Departments" items={getProfileSectionItems(employee, ["departments", "department_assignments", "departmentAssignments"])} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} requestedRouteKey={requestedRouteKey} />
-        <Section title="Academic Qualifications" items={getProfileSectionItems(employee, ["academic_qualifications", "academicQualifications"])} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} requestedRouteKey={requestedRouteKey} />
-        <Section title="Professional Qualifications" items={getProfileSectionItems(employee, ["professional_qualifications", "professionalQualifications"])} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} requestedRouteKey={requestedRouteKey} />
-        <Section title="Experience Details" items={getProfileSectionItems(employee, ["experience_details", "experienceDetails"])} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} requestedRouteKey={requestedRouteKey} />
-        <Section title="Company User" items={firstRecordArray(employee.company_user ? [asRecord(employee.company_user) ?? {}] : [], employee.companyUser ? [asRecord(employee.companyUser) ?? {}] : [])} employeeId={readNumber(employee.id)} onMutated={fetchEmployee} requestedRouteKey={requestedRouteKey} />
-      </div>
+      <ProfileSectionsTabs
+        employee={employee}
+        employeeId={readNumber(employee.id)}
+        onMutated={fetchEmployee}
+        requestedRouteKey={requestedRouteKey}
+      />
 
       <AlertDialog open={statusDialogOpen} onOpenChange={setStatusDialogOpen}>
         <AlertDialogContent className="max-w-2xl">
@@ -1964,7 +2189,7 @@ export function EmployeeProfilePage({
             <button
               type="button"
               disabled={statusSubmitting || readNumber(employee.id) === null}
-              className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+              className="rounded-md bg-primary px-3 py-2 text-sm font-medium !text-white disabled:opacity-50"
               onClick={async () => {
                 const employeeId = readNumber(employee.id)
                 const token = readStoredToken()
@@ -2082,7 +2307,7 @@ export function EmployeeProfilePage({
             <button
               type="button"
               disabled={identitySubmitting}
-              className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+              className="rounded-md bg-primary px-3 py-2 text-sm font-medium !text-white disabled:opacity-50"
               onClick={async () => {
                 const token = readStoredToken()
                 const userId = resolveCompanyUserId(employee)

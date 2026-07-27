@@ -1269,7 +1269,7 @@ export function DataTable({
           defaultWidth: 200,
           sortable: true,
           render: (row) => (
-            <span className="font-medium text-slate-900">{row.display}</span>
+            <span className="font-medium text-slate-900 dark:text-slate-100">{row.display}</span>
           ),
         },
         {
@@ -1278,7 +1278,7 @@ export function DataTable({
           defaultWidth: 140,
           sortable: true,
           render: (row) => (
-            <span className="text-sm text-slate-700">{row.module}</span>
+            <span className="text-sm text-slate-700 dark:text-slate-300">{row.module}</span>
           ),
         },
         {
@@ -1287,7 +1287,7 @@ export function DataTable({
           defaultWidth: 260,
           sortable: true,
           render: (row) => (
-            <span className="line-clamp-2 text-xs text-slate-600">{row.description}</span>
+            <span className="line-clamp-2 text-xs text-slate-600 dark:text-slate-400">{row.description}</span>
           ),
         },
         {
@@ -1296,7 +1296,7 @@ export function DataTable({
           defaultWidth: 100,
           sortable: true,
           render: (row) => (
-            <span className="text-sm text-slate-700">{row.type}</span>
+            <span className="text-sm text-slate-700 dark:text-slate-300">{row.type}</span>
           ),
         },
         actionsColumn,
@@ -1310,7 +1310,7 @@ export function DataTable({
         defaultWidth: 200,
         sortable: true,
         render: (row) => (
-          <span className="font-medium text-slate-900">{row.display}</span>
+          <span className="font-medium text-slate-900 dark:text-slate-100">{row.display}</span>
         ),
       },
       {
@@ -1319,7 +1319,7 @@ export function DataTable({
         defaultWidth: 120,
         sortable: true,
         render: (row) => (
-          <span className="text-sm text-slate-700">{row.permissions_count ?? 0}</span>
+          <span className="text-sm text-slate-700 dark:text-slate-300">{row.permissions_count ?? 0}</span>
         ),
       },
       {
@@ -1328,7 +1328,7 @@ export function DataTable({
         defaultWidth: 260,
         sortable: true,
         render: (row) => (
-          <span className="line-clamp-2 text-xs text-slate-600">{row.description}</span>
+          <span className="line-clamp-2 text-xs text-slate-600 dark:text-slate-400">{row.description}</span>
         ),
       },
       {
@@ -1337,7 +1337,7 @@ export function DataTable({
         defaultWidth: 100,
         sortable: true,
         render: (row) => (
-          <span className="text-sm text-slate-700">{row.type}</span>
+          <span className="text-sm text-slate-700 dark:text-slate-300">{row.type}</span>
         ),
       },
       actionsColumn,
@@ -1826,121 +1826,92 @@ export function DataTable({
     }
   }
 
+  const accessControlCreateDrawer =
+    canCreateResource && isAccessControlResource ? (
+      <Drawer>
+        <DrawerTrigger asChild>
+          <button
+            type="button"
+            className="inline-flex h-8 items-center justify-center gap-1 rounded-lg bg-primary px-2.5 text-xs font-semibold !text-white transition hover:brightness-95"
+          >
+            <PlusIcon className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">
+              {activeResource === "roles" ? "Create role" : "Create permission"}
+            </span>
+          </button>
+        </DrawerTrigger>
+        <DrawerContent>
+          <DrawerHeader>
+            <DrawerTitle>
+              Create {activeResource === "roles" ? "Role" : "Permission"}
+            </DrawerTitle>
+            <DrawerDescription>
+              {activeResource === "roles"
+                ? "Create a company role. You can assign permissions after creation."
+                : "Create a permission in the catalog."}
+            </DrawerDescription>
+          </DrawerHeader>
+          <div className="grid gap-3 px-4 pb-2">
+            <div className="space-y-1.5">
+              <Label>Name (key)</Label>
+              <Input
+                value={roleForm.name}
+                onChange={(event) =>
+                  setRoleForm((prev) => ({ ...prev, name: event.target.value }))
+                }
+                placeholder={activeResource === "roles" ? "hr_manager" : "employees:read"}
+                className="font-mono text-sm"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Display name</Label>
+              <Input
+                value={roleForm.display_name}
+                onChange={(event) =>
+                  setRoleForm((prev) => ({ ...prev, display_name: event.target.value }))
+                }
+                placeholder={activeResource === "roles" ? "HR Manager" : "Read employees"}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Description</Label>
+              <Input
+                value={roleForm.description}
+                onChange={(event) =>
+                  setRoleForm((prev) => ({ ...prev, description: event.target.value }))
+                }
+                placeholder="Optional description"
+              />
+            </div>
+            {activeResource === "roles" ? (
+              <div className="max-h-64 overflow-y-auto rounded-lg border border-border/60 p-2">
+                <PermissionPicker
+                  options={permissionOptions}
+                  selectedNames={rolePermissionNames}
+                  onChange={setRolePermissionNames}
+                />
+              </div>
+            ) : null}
+          </div>
+          <DrawerFooter>
+            <Button onClick={() => void handleCreate()} disabled={loading}>
+              Create
+            </Button>
+            <DrawerClose asChild>
+              <Button variant="outline">Cancel</Button>
+            </DrawerClose>
+          </DrawerFooter>
+        </DrawerContent>
+      </Drawer>
+    ) : null
+
   return (
     <div className="w-full flex-col justify-start gap-4">
       <div className="flex flex-col gap-2 px-3 lg:px-4">
+        {!isAccessControlResource ? (
         <div className="flex flex-wrap items-center justify-between gap-3">
-          {isAccessControlResource ? (
-            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-              <div className="relative min-w-0 max-w-sm flex-1">
-                <Input
-                  value={accessControlSearch}
-                  onChange={(event) => setAccessControlSearch(event.target.value)}
-                  placeholder={
-                    activeResource === "permissions"
-                      ? "Search permissions by name, key, or description…"
-                      : "Search roles by name, key, or description…"
-                  }
-                  className="h-9 w-full pr-16"
-                  autoComplete="off"
-                />
-                {accessControlSearch.trim() ? (
-                  <button
-                    type="button"
-                    className="absolute top-1/2 right-2 -translate-y-1/2 rounded px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
-                    onClick={() => setAccessControlSearch("")}
-                  >
-                    Clear
-                  </button>
-                ) : null}
-              </div>
-              <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-700">
-                {filteredAccessControlRows.length}
-                {filteredAccessControlRows.length !== rows.length
-                  ? ` of ${rows.length}`
-                  : ""}{" "}
-                {RESOURCE_LABELS[activeResource].toLowerCase()}
-              </Badge>
-            </div>
-          ) : (
-            <div />
-          )}
-          {canCreateResource && isAccessControlResource ? (
-            <Drawer>
-              <DrawerTrigger asChild>
-                <Button variant="outline" size="sm">
-                  <PlusIcon data-icon="inline-start" />
-                  <span>
-                    {activeResource === "roles" ? "Create role" : "Create permission"}
-                  </span>
-                </Button>
-              </DrawerTrigger>
-              <DrawerContent>
-                <DrawerHeader>
-                  <DrawerTitle>
-                    Create {activeResource === "roles" ? "Role" : "Permission"}
-                  </DrawerTitle>
-                  <DrawerDescription>
-                    {activeResource === "roles"
-                      ? "Create a company role. You can assign permissions after creation."
-                      : "Create a permission in the catalog."}
-                  </DrawerDescription>
-                </DrawerHeader>
-                <div className="grid gap-3 px-4 pb-2">
-                  <div className="space-y-1.5">
-                    <Label>Name (key)</Label>
-                    <Input
-                      value={roleForm.name}
-                      onChange={(event) =>
-                        setRoleForm((prev) => ({ ...prev, name: event.target.value }))
-                      }
-                      placeholder={activeResource === "roles" ? "hr_manager" : "employees:read"}
-                      className="font-mono text-sm"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Display name</Label>
-                    <Input
-                      value={roleForm.display_name}
-                      onChange={(event) =>
-                        setRoleForm((prev) => ({ ...prev, display_name: event.target.value }))
-                      }
-                      placeholder={activeResource === "roles" ? "HR Manager" : "Read employees"}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Description</Label>
-                    <Input
-                      value={roleForm.description}
-                      onChange={(event) =>
-                        setRoleForm((prev) => ({ ...prev, description: event.target.value }))
-                      }
-                      placeholder="Optional description"
-                    />
-                  </div>
-                  {activeResource === "roles" ? (
-                    <div className="max-h-64 overflow-y-auto rounded-lg border border-border/60 p-2">
-                      <PermissionPicker
-                        options={permissionOptions}
-                        selectedNames={rolePermissionNames}
-                        onChange={setRolePermissionNames}
-                      />
-                    </div>
-                  ) : null}
-                </div>
-                <DrawerFooter>
-                  <Button onClick={() => void handleCreate()} disabled={loading}>
-                    Create
-                  </Button>
-                  <DrawerClose asChild>
-                    <Button variant="outline">Cancel</Button>
-                  </DrawerClose>
-                </DrawerFooter>
-              </DrawerContent>
-            </Drawer>
-          ) : null}
-
-          {canCreateResource && !isAccessControlResource ? (
+          <div />
+          {canCreateResource ? (
             <Drawer>
               <DrawerTrigger asChild>
                 <Button variant="outline" size="sm">
@@ -2048,7 +2019,7 @@ export function DataTable({
                             className={cn(
                               "rounded-md border px-2 py-1 text-sm",
                               createUserForm.roleIds.includes(role.id)
-                                ? "border-primary bg-primary text-primary-foreground"
+                                ? "border-primary bg-primary !text-white"
                                 : "border-border bg-background"
                             )}
                           >
@@ -2142,8 +2113,9 @@ export function DataTable({
             </Drawer>
           ) : null}
         </div>
+        ) : null}
 
-        {activeResource === "users" ? (
+        {!isAccessControlResource && activeResource === "users" ? (
           <div className="rounded-lg border p-3">
             <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
               <div className="space-y-1">
@@ -2259,8 +2231,57 @@ export function DataTable({
                   loading={loading}
                   itemsPerPage={20}
                   showExport={false}
+                  enableColumnVisibility
                   enableAnimations={false}
                   storageKey={`access-control-${activeResource}`}
+                  toolbarStart={
+                    <div className="min-w-0 flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <div className="min-w-0 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                        <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                          Access Control
+                        </span>
+                        <h2 className="truncate text-lg font-semibold tracking-tight text-foreground sm:text-xl">
+                          {RESOURCE_LABELS[activeResource]}
+                        </h2>
+                      </div>
+                      <Badge
+                        variant="outline"
+                        className="h-5 border-border bg-muted/40 px-1.5 text-[10px] text-muted-foreground"
+                      >
+                        {filteredAccessControlRows.length}
+                        {filteredAccessControlRows.length !== rows.length
+                          ? ` of ${rows.length}`
+                          : ""}
+                      </Badge>
+                    </div>
+                  }
+                  toolbarActions={
+                    <>
+                      <div className="relative">
+                        <Input
+                          value={accessControlSearch}
+                          onChange={(event) => setAccessControlSearch(event.target.value)}
+                          placeholder={
+                            activeResource === "permissions"
+                              ? "Search permissions…"
+                              : "Search roles…"
+                          }
+                          className="h-8 w-36 pr-12 text-xs sm:w-52"
+                          autoComplete="off"
+                        />
+                        {accessControlSearch.trim() ? (
+                          <button
+                            type="button"
+                            className="absolute top-1/2 right-1.5 -translate-y-1/2 rounded px-1 text-[10px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+                            onClick={() => setAccessControlSearch("")}
+                          >
+                            Clear
+                          </button>
+                        ) : null}
+                      </div>
+                      {accessControlCreateDrawer}
+                    </>
+                  }
                 />
               )}
             </div>
@@ -2518,7 +2539,7 @@ export function DataTable({
                     className={cn(
                       "rounded-md border px-2 py-1 text-sm",
                       editUserForm.roleIds.includes(role.id)
-                        ? "border-primary bg-primary text-primary-foreground"
+                        ? "border-primary bg-primary !text-white"
                         : "border-border bg-background"
                     )}
                   >
@@ -3016,7 +3037,7 @@ export function DataTable({
                             className={cn(
                               "mt-0.5 flex size-3.5 shrink-0 items-center justify-center rounded-full border",
                               selected
-                                ? "border-primary bg-primary text-primary-foreground"
+                                ? "border-primary bg-primary !text-white"
                                 : "border-border"
                             )}
                           >

@@ -1,3 +1,5 @@
+import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
+
 export type DashboardSectionTab = {
   title: string
   url: string
@@ -34,7 +36,6 @@ export const attendanceSectionTabGroups: DashboardSectionTabGroup[] = [
   {
     title: "Attendance Setup",
     items: [
-      { title: "Settings", url: "/dashboard/attendance/settings" },
       { title: "Policies", url: "/dashboard/attendance/policies" },
       { title: "Holiday Groups", url: "/dashboard/attendance/holiday-groups" },
       { title: "Holidays", url: "/dashboard/attendance/holidays" },
@@ -74,7 +75,6 @@ export const employeeAttendanceSectionTabGroups: DashboardSectionTabGroup[] = [
   {
     items: [
       { title: "Overview", url: "/dashboard/attendance/today" },
-      { title: "Punch History", url: "/dashboard/attendance/punch-history" },
       { title: "Attendance History", url: "/dashboard/attendance/attendance-history" },
       { title: "Schedule Preview", url: "/dashboard/attendance/schedule-preview" },
       { title: "Correction Requests", url: "/dashboard/attendance/corrections" },
@@ -128,3 +128,19 @@ export const accessControlSectionTabGroups: DashboardSectionTabGroup[] = [
     ],
   },
 ]
+
+export function findFirstAccessibleSectionUrl(
+  groups: DashboardSectionTabGroup[],
+  permissionLabels: string[]
+) {
+  for (const group of groups) {
+    const item = group.items.find((entry) =>
+      canAccessDashboardRoute(entry.url, permissionLabels)
+    )
+    if (item) {
+      return item.url
+    }
+  }
+
+  return null
+}

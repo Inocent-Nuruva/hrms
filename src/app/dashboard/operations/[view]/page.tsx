@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation"
 import { AttendanceReportView } from "@/components/dashboard/attendance-report-view"
+import { ScheduledReportingView } from "@/components/dashboard/scheduled-reporting-view"
 import { RecruitmentView } from "@/components/dashboard/recruitment-view"
 import {
   EmployeePromotionView,
@@ -11,6 +12,7 @@ const ALLOWED_VIEWS = new Set([
   "recruitment",
   "payroll",
   "reports",
+  "scheduled-reporting",
 ])
 
 interface OperationsViewPageProps {
@@ -45,6 +47,10 @@ export default async function OperationsViewPage({
 
   if (normalized === "reports") {
     return <AttendanceReportView />
+  }
+
+  if (normalized === "scheduled-reporting") {
+    return <ScheduledReportingView />
   }
 
   return null

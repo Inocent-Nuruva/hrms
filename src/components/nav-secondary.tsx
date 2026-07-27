@@ -11,7 +11,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/animate-ui/components/base/dialog"
-import { Input } from "@/components/ui/input"
 
 import {
   SidebarGroup,
@@ -76,6 +75,7 @@ export function NavSecondary({
   const [hoveredLink, setHoveredLink] = React.useState<string | null>(null)
   const [activeIndex, setActiveIndex] = React.useState(0)
   const [recentItems, setRecentItems] = React.useState<SearchItem[]>([])
+  const searchInputRef = React.useRef<HTMLInputElement | null>(null)
   const normalizedQuery = normalizeSearchValue(query)
   const renderAnimatedIcon = React.useCallback((icon: React.ReactNode, key: string) => {
     if (!React.isValidElement(icon)) {
@@ -83,7 +83,7 @@ export function NavSecondary({
     }
     return React.cloneElement(icon as React.ReactElement<Record<string, unknown>>, {
       animate: hoveredLink === key ? "path-loop" : false,
-      size: 48,
+      size: 20,
     })
   }, [hoveredLink])
 
@@ -133,6 +133,19 @@ export function NavSecondary({
   React.useEffect(() => {
     setActiveIndex(0)
   }, [normalizedQuery, isSearchOpen])
+
+  React.useEffect(() => {
+    if (!isSearchOpen) {
+      return
+    }
+
+    const timer = window.setTimeout(() => {
+      searchInputRef.current?.focus()
+      searchInputRef.current?.select()
+    }, 0)
+
+    return () => window.clearTimeout(timer)
+  }, [isSearchOpen])
 
   React.useEffect(() => {
     if (searchResults.length === 0) {
@@ -197,9 +210,9 @@ export function NavSecondary({
   }, [activeIndex, isSearchOpen, runGlobalNavigation, searchResults])
 
   return (
-    <SidebarGroup {...props}>
+    <SidebarGroup className="p-0" {...props}>
       <SidebarGroupContent>
-        <SidebarMenu>
+        <SidebarMenu className="gap-0.5">
           {items.map((item) => {
             if (item.title === "Search") {
               return (
@@ -209,7 +222,7 @@ export function NavSecondary({
                       render={
                         <SidebarMenuButton
                           isActive={false}
-                          className="cursor-pointer"
+                          className="h-8 min-h-8 cursor-pointer rounded-lg px-2 py-1.5 text-[0.8125rem] font-medium leading-none !text-foreground [&_svg]:!size-[1.125rem] [&_svg]:!text-[var(--sidebar-icon-color)]"
                           aria-label="Open global search"
                           onMouseEnter={() => setHoveredLink(item.title)}
                           onMouseLeave={() => setHoveredLink((value) => (value === item.title ? null : value))}
@@ -217,8 +230,8 @@ export function NavSecondary({
                       }
                     >
                       {renderAnimatedIcon(item.icon, item.title)}
-                      <span>{item.title}</span>
-                      <span className="ml-auto rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
+                      <span className="truncate">{item.title}</span>
+                      <span className="ml-auto rounded border border-border bg-muted/50 px-1 py-0.5 text-[10px] font-medium text-muted-foreground">
                         Ctrl K
                       </span>
                     </DialogTrigger>
@@ -241,12 +254,13 @@ export function NavSecondary({
                       <div className="space-y-4 px-5 pb-5 pt-4">
                         <div className="relative">
                           <SearchIcon className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                          <Input
+                          <input
+                            ref={searchInputRef}
                             value={query}
                             onChange={(event) => setQuery(event.target.value)}
                             placeholder="Search pages, teams, tools, settings, attendance..."
                             autoFocus
-                            className="h-12 rounded-2xl border-slate-200 pl-11 pr-24 text-sm shadow-sm transition focus-visible:ring-2 focus-visible:ring-slate-200"
+                            className="h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-24 text-sm text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-slate-200"
                           />
                           <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500">
                             Enter
@@ -325,11 +339,12 @@ export function NavSecondary({
                 <SidebarMenuButton
                   render={<Link href={item.url} />}
                   isActive={pathname === item.url}
+                  className="h-8 min-h-8 rounded-lg px-2 py-1.5 text-[0.8125rem] font-medium leading-none !text-foreground data-active:!bg-primary/10 dark:data-active:!bg-[#262626] data-active:!text-[var(--sidebar-active-link-color)] data-active:[&_svg]:!text-[var(--sidebar-active-link-color)] [&_svg]:!size-[1.125rem] [&_svg]:!text-[var(--sidebar-icon-color)]"
                   onMouseEnter={() => setHoveredLink(item.title)}
                   onMouseLeave={() => setHoveredLink((value) => (value === item.title ? null : value))}
                 >
                   {renderAnimatedIcon(item.icon, item.title)}
-                  <span>{item.title}</span>
+                  <span className="truncate">{item.title}</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             )

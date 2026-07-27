@@ -7,9 +7,9 @@ export default function LeaveManagementLayout({
   children: React.ReactNode
 }) {
   return (
-    <div className="flex flex-col gap-2 md:gap-2.5">
+    <div className="flex flex-col gap-3 md:gap-4">
       <DashboardSectionTabs groups={leaveManagementSectionTabGroups} />
-      {children}
+      <div className="min-w-0">{children}</div>
     </div>
   )
 }

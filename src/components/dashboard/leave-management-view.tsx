@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useSearchParams } from "next/navigation"
 
 import { ResizableTable } from "@/components/ui/resizable-table"
 import { Textarea } from "@/components/ui/textarea"
@@ -31,6 +32,7 @@ import {
   deleteLeaveWorkflow,
   deleteLeaveWorkflowStep,
   getCurrentAdmin,
+  getLeaveRequest,
   getLeaveWorkflow,
   leaveRequestApprovalAction,
   listBranches,
@@ -97,6 +99,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+  notifyLeaveRequestRequester,
+  notifySubmittedRequestApprovers,
+} from "@/lib/request-notifications"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 
@@ -106,6 +112,22 @@ type LeaveManagementViewProps = {
   activeTab?: LeaveTab
   showTabButtons?: boolean
 }
+
+function createEmptyLeaveTypeForm() {
+  return {
+    name: "",
+    code: "",
+    description: "",
+    status: "active",
+    is_paid: "true",
+    requires_attachment: "false",
+    is_carry_forward_allowed: "false",
+    max_carry_forward_days: "0",
+    max_days_per_year: "0",
+    gender_restriction: "any",
+  }
+}
+
 type WorkflowStepPayload = {
   approval_level: number
   approver_type: string
@@ -388,6 +410,20 @@ function progressPercent(completed: number, total: number) {
   return Math.round((completed / total) * 100)
 }
 
+function readLeaveTypeId(row: AdminRecord | null | undefined) {
+  if (!row) {
+    return null
+  }
+  return readNumber(row, ["id", "leave_type_id", "leaveTypeId"])
+}
+
+function readLeaveHolidayId(row: AdminRecord | null | undefined) {
+  if (!row) {
+    return null
+  }
+  return readNumber(row, ["id", "holiday_id", "leave_holiday_id", "leaveHolidayId"])
+}
+
 function buildWorkflowStepPayload(form: {
   approval_level: string
   approver_type: string
@@ -594,11 +630,53 @@ function resolveLeaveActor(token: string, profile: AdminRecord | null): LeaveAct
 function getLeaveApprovals(row: AdminRecord): LeaveApprovalRecord[] {
   const currentLevel =
     readNumber(row, ["current_approval_level", "currentApprovalLevel"]) ?? 0
-  return asRecordList(row.approvals)
+
+  const approvalKeys = [
+    "approvals",
+    "approval_chain",
+    "approvalChain",
+    "leave_request_approvals",
+    "leaveRequestApprovals",
+    "workflow_approvals",
+    "workflowApprovals",
+  ] as const
+
+  let source = asRecordList(row.approvals)
+  if (source.length === 0) {
+    for (const key of approvalKeys) {
+      const list = asRecordList(row[key])
+      if (list.length > 0) {
+        source = list
+        break
+      }
+    }
+  }
+
+  const currentCycle = readNumber(row, ["approval_cycle", "approvalCycle"])
+  if (currentCycle !== null && source.length > 0) {
+    const cycleFiltered = source.filter((approval) => {
+      const cycle = readNumber(approval, ["approval_cycle", "approvalCycle"])
+      return cycle === null || cycle === currentCycle
+    })
+    if (cycleFiltered.length > 0) {
+      source = cycleFiltered
+    }
+  }
+
+  return source
     .map((approval) => {
-      const approver = asRecord(approval.approver)
-      const level = readNumber(approval, ["approval_level", "approvalLevel"]) ?? 0
+      const approver =
+        asRecord(approval.approver) ??
+        asRecord(approval.company_user) ??
+        asRecord(approval.companyUser)
+      const nestedUser = asRecord(approver?.user)
+      const level = readNumber(approval, ["approval_level", "approvalLevel", "level"]) ?? 0
       const status = readString(approval, ["status"]).toLowerCase()
+      const approverName =
+        personName(approver, "") ||
+        personName(nestedUser, "") ||
+        readString(approval, ["approver_name", "approverName", "name"]) ||
+        "Approver"
       return {
         id: readNumber(approval, ["id"]),
         level,
@@ -609,9 +687,14 @@ function getLeaveApprovals(row: AdminRecord): LeaveApprovalRecord[] {
           "company_user_id",
           "companyUserId",
         ]),
-        userId: readNumber(approver ?? {}, ["id", "user_id", "userId"]),
-        email: readString(approver ?? {}, ["email"]).toLowerCase(),
-        name: personName(approver, "Approver"),
+        userId:
+          readNumber(nestedUser ?? {}, ["id", "user_id", "userId"]) ??
+          readNumber(approver ?? {}, ["user_id", "userId", "id"]),
+        email: (
+          readString(approver ?? {}, ["email"]) ||
+          readString(nestedUser ?? {}, ["email"])
+        ).toLowerCase(),
+        name: approverName,
         actedAt:
           readString(approval, ["acted_at", "actedAt", "updated_at", "updatedAt"]) === "-"
             ? ""
@@ -643,9 +726,33 @@ function isLeaveActorMatch(actor: LeaveActor, approval: LeaveApprovalRecord) {
   return false
 }
 
+function normalizeLeaveStatusLabel(value: string) {
+  return value.trim().toLowerCase().replace(/[_-]+/g, " ")
+}
+
+function isLeaveRequestTerminalStatus(status: string) {
+  const normalized = normalizeLeaveStatusLabel(status)
+  return ["rejected", "cancelled", "canceled", "completed", "approved"].includes(normalized)
+}
+
+function isLeaveRequestApprovalOpenStatus(status: string) {
+  const normalized = normalizeLeaveStatusLabel(status)
+  if (!normalized || isLeaveRequestTerminalStatus(normalized)) {
+    return false
+  }
+  return (
+    normalized === "pending" ||
+    normalized === "submitted" ||
+    normalized === "in review" ||
+    normalized.includes("pending") ||
+    normalized.includes("awaiting") ||
+    normalized.includes("review")
+  )
+}
+
 function getLeaveRequestPermissions(row: AdminRecord, actor: LeaveActor | null) {
   const status = readString(row, ["status"]).toLowerCase()
-  const isTerminal = ["rejected", "cancelled", "canceled", "completed", "approved"].includes(status)
+  const isTerminal = isLeaveRequestTerminalStatus(status)
   const approvals = getLeaveApprovals(row)
   const currentLevel =
     readNumber(row, ["current_approval_level", "currentApprovalLevel"]) ??
@@ -664,7 +771,7 @@ function getLeaveRequestPermissions(row: AdminRecord, actor: LeaveActor | null) 
   const canApproveOrReject =
     !isTerminal &&
     Boolean(myPending) &&
-    (status === "in_review" || status === "submitted" || status === "pending")
+    isLeaveRequestApprovalOpenStatus(status)
 
   const employeeId = readNumber(row, ["employee_id", "employeeId"])
   const nestedEmployee = asRecord(row.employee)
@@ -699,6 +806,7 @@ function getLeaveRequestPermissions(row: AdminRecord, actor: LeaveActor | null) 
     canApproveOrReject,
     canCancel,
     currentLevel,
+    myPending,
     pendingAtCurrent,
     waitingLabel,
     approvals,
@@ -827,6 +935,15 @@ export function LeaveManagementView({
   activeTab = "types",
   showTabButtons = true,
 }: LeaveManagementViewProps) {
+  const searchParams = useSearchParams()
+  const highlightedRequestId = React.useMemo(
+    () =>
+      searchParams?.get("highlight") ??
+      searchParams?.get("requestId") ??
+      searchParams?.get("request_id") ??
+      "",
+    [searchParams]
+  )
   const [tab, setTab] = React.useState<LeaveTab>(activeTab)
   const [types, setTypes] = React.useState<AdminRecord[]>([])
   const [requests, setRequests] = React.useState<AdminRecord[]>([])
@@ -868,6 +985,7 @@ export function LeaveManagementView({
   const [editingWorkflowId, setEditingWorkflowId] = React.useState<number | null>(null)
   const [editingWorkflowStepId, setEditingWorkflowStepId] = React.useState<number | null>(null)
   const [selectedLeaveTypeRow, setSelectedLeaveTypeRow] = React.useState<AdminRecord | null>(null)
+  const [editingLeaveTypeRow, setEditingLeaveTypeRow] = React.useState<AdminRecord | null>(null)
   const [leaveTypeDetailsOpen, setLeaveTypeDetailsOpen] = React.useState(false)
   const [selectedLeaveRequestRow, setSelectedLeaveRequestRow] = React.useState<AdminRecord | null>(null)
   const [leaveRequestDetailsOpen, setLeaveRequestDetailsOpen] = React.useState(false)
@@ -896,14 +1014,6 @@ export function LeaveManagementView({
     total: number
     label: string
   } | null>(null)
-  const [loadedTabs, setLoadedTabs] = React.useState<Record<LeaveTab, boolean>>({
-    types: false,
-    requests: false,
-    balances: false,
-    holidays: false,
-    policies: false,
-    workflows: false,
-  })
   const [loadedLookups, setLoadedLookups] = React.useState<Record<LeaveLookupKey, boolean>>({
     types: false,
     employees: false,
@@ -913,14 +1023,7 @@ export function LeaveManagementView({
     roles: false,
   })
 
-  const [typeForm, setTypeForm] = React.useState({
-    name: "",
-    code: "",
-    description: "",
-    status: "active",
-    is_paid: "true",
-    requires_attachment: "false",
-  })
+  const [typeForm, setTypeForm] = React.useState(createEmptyLeaveTypeForm)
 
   const [requestForm, setRequestForm] = React.useState({
     employee_id: "",
@@ -1126,10 +1229,6 @@ export function LeaveManagementView({
         }
       }
 
-      setLoadedTabs((current) => ({
-        ...current,
-        [targetTab]: true,
-      }))
     } catch (errorObject) {
       const message = errorObject instanceof Error ? errorObject.message : "Failed to load leave management data."
       setError(message)
@@ -1140,15 +1239,15 @@ export function LeaveManagementView({
   }, [loadLookups, tab])
 
   React.useEffect(() => {
-    if (loadedTabs[tab]) {
-      return
-    }
-    void reloadAll(tab)
-  }, [loadedTabs, reloadAll, tab])
-
-  React.useEffect(() => {
     setTab(activeTab)
   }, [activeTab])
+
+  // Always refetch the active tab when it changes (or on login remount).
+  // Previously we skipped after the first load via loadedTabs, so new leave
+  // requests/workflows created elsewhere never appeared until a full hard refresh.
+  React.useEffect(() => {
+    void reloadAll(tab, false)
+  }, [reloadAll, tab])
 
   React.useEffect(() => {
     if (tab !== "types") {
@@ -1162,16 +1261,99 @@ export function LeaveManagementView({
       if (types.length === 0) {
         return null
       }
-      const currentId = readNumber(current, ["id"])
-      const refreshed = types.find((row) => readNumber(row, ["id"]) === currentId)
+      const currentId = readLeaveTypeId(current)
+      const refreshed = types.find((row) => readLeaveTypeId(row) === currentId)
       return refreshed ?? null
     })
   }, [tab, types])
+
+  const resetTypeForm = React.useCallback(() => {
+    setTypeForm(createEmptyLeaveTypeForm())
+    setEditingLeaveTypeRow(null)
+  }, [])
+
+  const openTypeDialogForCreate = React.useCallback(() => {
+    resetTypeForm()
+    setTypeDialogOpen(true)
+  }, [resetTypeForm])
+
+  const openTypeDialogForEdit = React.useCallback((row: AdminRecord) => {
+    setEditingLeaveTypeRow(row)
+    setTypeForm({
+      name: readString(row, ["name"]) === "-" ? "" : readString(row, ["name"]),
+      code: readString(row, ["code"]) === "-" ? "" : readString(row, ["code"]),
+      description:
+        readString(row, ["description"]) === "-" ? "" : readString(row, ["description"]),
+      status: readString(row, ["status"]) === "inactive" ? "inactive" : "active",
+      is_paid: readBoolean(row, ["is_paid"]) ? "true" : "false",
+      requires_attachment: readBoolean(row, ["requires_attachment"]) ? "true" : "false",
+      is_carry_forward_allowed: readBoolean(row, ["is_carry_forward_allowed"]) ? "true" : "false",
+      max_carry_forward_days:
+        readDisplayValue(row, ["max_carry_forward_days"]) === "-"
+          ? "0"
+          : readDisplayValue(row, ["max_carry_forward_days"]),
+      max_days_per_year:
+        readDisplayValue(row, ["max_days_per_year"]) === "-"
+          ? "0"
+          : readDisplayValue(row, ["max_days_per_year"]),
+      gender_restriction:
+        (() => {
+          const value = readString(row, ["gender_restriction"]).toLowerCase()
+          if (value === "male" || value === "female") {
+            return value
+          }
+          return "any"
+        })(),
+    })
+    setTypeDialogOpen(true)
+  }, [])
 
   function openLeaveTypeDetails(row: AdminRecord) {
     setSelectedLeaveTypeRow(row)
     setLeaveTypeDetailsOpen(true)
   }
+
+  const openLeaveRequestDetails = React.useCallback(async (row: AdminRecord) => {
+    setSelectedLeaveRequestRow(row)
+    setLeaveRequestDetailsOpen(true)
+
+    const token = readStoredToken()
+    const requestId = readNumber(row, ["id", "leave_request_id", "leaveRequestId"])
+    if (!token || requestId === null) {
+      return
+    }
+
+    try {
+      const detail = await getLeaveRequest(token, requestId)
+      if (detail) {
+        setSelectedLeaveRequestRow({
+          ...row,
+          ...detail,
+        })
+      }
+    } catch (errorObject) {
+      console.warn("[leave] Failed to load highlighted leave request detail.", errorObject)
+    }
+  }, [])
+
+  const openedHighlightedRequestRef = React.useRef("")
+  React.useEffect(() => {
+    if (tab !== "requests" || !highlightedRequestId) {
+      return
+    }
+    if (openedHighlightedRequestRef.current === highlightedRequestId) {
+      return
+    }
+
+    const highlightedRow =
+      requests.find((row) =>
+        String(readNumber(row, ["id", "leave_request_id", "leaveRequestId"]) ?? "") ===
+        highlightedRequestId
+      ) ?? { id: highlightedRequestId }
+
+    openedHighlightedRequestRef.current = highlightedRequestId
+    void openLeaveRequestDetails(highlightedRow)
+  }, [highlightedRequestId, openLeaveRequestDetails, requests, tab])
 
   const fetchHolidayCatalog = React.useCallback(async (country: HolidayImportCountryCode, yearValue: string) => {
     const year = Number(yearValue)
@@ -1540,7 +1722,7 @@ export function LeaveManagementView({
 
       let completed = 0
       for (const row of removableCountryHolidays) {
-        const id = readNumber(row, ["id"])
+        const id = readLeaveHolidayId(row)
         if (id === null) {
           continue
         }
@@ -1588,29 +1770,46 @@ export function LeaveManagementView({
       return
     }
 
+    if (!typeForm.name.trim() || !typeForm.code.trim()) {
+      const message = "Leave type name and code are required."
+      setError(message)
+      showErrorAlert(message)
+      return
+    }
+
     setSaving(true)
     setError(null)
     try {
-      await createLeaveType(token, {
+      const payload = {
         name: typeForm.name.trim(),
         code: typeForm.code.trim(),
         description: typeForm.description.trim(),
         status: typeForm.status,
         is_paid: typeForm.is_paid === "true",
         requires_attachment: typeForm.requires_attachment === "true",
-      })
-      setTypeForm({
-        name: "",
-        code: "",
-        description: "",
-        status: "active",
-        is_paid: "true",
-        requires_attachment: "false",
-      })
+        is_carry_forward_allowed: typeForm.is_carry_forward_allowed === "true",
+        max_carry_forward_days: Number(typeForm.max_carry_forward_days || "0"),
+        max_days_per_year: Number(typeForm.max_days_per_year || "0"),
+        gender_restriction: typeForm.gender_restriction,
+      }
+
+      const editingId = readLeaveTypeId(editingLeaveTypeRow)
+      if (editingId !== null) {
+        await patchLeaveType(token, editingId, payload)
+      } else {
+        await createLeaveType(token, payload)
+      }
+
+      resetTypeForm()
       setTypeDialogOpen(false)
+      setLeaveTypeDetailsOpen(false)
       await reloadAll(tab, true)
     } catch (errorObject) {
-      const message = errorObject instanceof Error ? errorObject.message : "Failed to create leave type."
+      const message = errorObject instanceof Error
+        ? errorObject.message
+        : editingLeaveTypeRow
+          ? "Failed to update leave type."
+          : "Failed to create leave type."
       setError(message)
       showErrorAlert(message)
     } finally {
@@ -1661,7 +1860,7 @@ export function LeaveManagementView({
     setSaving(true)
     setError(null)
     try {
-      await createLeaveRequest(token, {
+      const createdRequest = await createLeaveRequest(token, {
         employee_id: Number(requestForm.employee_id),
         leave_type_id: Number(requestForm.leave_type_id),
         start_date: requestForm.start_date,
@@ -1669,6 +1868,37 @@ export function LeaveManagementView({
         reason: requestForm.reason.trim(),
         submit: requestForm.submit === "true",
       })
+      if (requestForm.submit === "true") {
+        const createdRecord = asRecord(createdRequest)
+        const nestedLeaveRequest = asRecord(createdRecord?.leave_request)
+        const nestedLeaveRequestCamel = asRecord(createdRecord?.leaveRequest)
+        const createdRequestId =
+          (createdRecord
+            ? readNumber(createdRecord, ["id", "request_id", "leave_request_id", "leaveRequestId"])
+            : null) ??
+          (nestedLeaveRequest ? readNumber(nestedLeaveRequest, ["id"]) : null) ??
+          (nestedLeaveRequestCamel ? readNumber(nestedLeaveRequestCamel, ["id"]) : null)
+        void notifySubmittedRequestApprovers({
+          kind: "leave_request",
+          token,
+          request: createdRequest,
+          loadRequest:
+            createdRequestId === null
+              ? undefined
+              : () => getLeaveRequest(token, createdRequestId),
+          requesterName:
+            employees.find((row) =>
+              readNumber(row, ["id", "employee_id", "user_id"]) === Number(requestForm.employee_id)
+            )
+              ? employeeLabelFromRow(
+                  employees.find((row) =>
+                    readNumber(row, ["id", "employee_id", "user_id"]) ===
+                    Number(requestForm.employee_id)
+                  ) as AdminRecord
+                )
+              : undefined,
+        })
+      }
       setRequestForm({
         employee_id: "",
         leave_type_id: "",
@@ -2356,9 +2586,16 @@ export function LeaveManagementView({
             ? "Rejected from dashboard"
             : "Returned for correction from dashboard"
 
-      await leaveRequestApprovalAction(token, id, {
+      const actionResult = await leaveRequestApprovalAction(token, id, {
         action,
         comments: defaultComment,
+      })
+      void notifyLeaveRequestRequester({
+        action,
+        actorName: permissions.myPending?.name,
+        token,
+        request: actionResult ?? row,
+        loadRequest: () => getLeaveRequest(token, id),
       })
 
       const successMessage =
@@ -2440,7 +2677,7 @@ export function LeaveManagementView({
 
   async function removeHoliday(row: AdminRecord) {
     const token = readStoredToken()
-    const id = readNumber(row, ["id"])
+    const id = readLeaveHolidayId(row)
     if (!token || id === null) {
       return
     }
@@ -2482,7 +2719,7 @@ export function LeaveManagementView({
                 type="button"
                 className={
                   tab === key
-                    ? "inline-flex h-8 items-center rounded-md bg-slate-900 px-2.5 text-xs font-medium text-white"
+                    ? "inline-flex h-8 items-center rounded-md bg-primary px-2.5 text-xs font-medium !text-white"
                     : "inline-flex h-8 items-center rounded-md border border-slate-300 px-2.5 text-xs"
                 }
                 onClick={() => setTab(key)}
@@ -2528,8 +2765,8 @@ export function LeaveManagementView({
             <div className="ml-auto flex flex-wrap items-center gap-1.5">
               <button
                 type="button"
-                className="inline-flex h-8 items-center gap-1.5 rounded-md bg-slate-900 px-2.5 text-xs font-semibold text-white"
-                onClick={() => setTypeDialogOpen(true)}
+                className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white"
+                onClick={() => openTypeDialogForCreate()}
               >
                 <Plus className="h-3.5 w-3.5" />
                 Create Leave Type
@@ -2567,6 +2804,15 @@ export function LeaveManagementView({
                         aria-label="Toggle Status"
                         className="scale-90"
                       />
+                      <button
+                        type="button"
+                        className="group rounded-md border border-sky-200 p-1.5 text-sky-600 transition-all duration-300 hover:-translate-y-0.5 hover:scale-110 hover:bg-sky-50 hover:shadow-sm active:scale-95"
+                        onClick={() => openTypeDialogForEdit(row)}
+                        aria-label="Edit leave type"
+                        title="Edit leave type"
+                      >
+                        <Pencil className="size-3.5 transition-transform duration-300 group-hover:scale-110" />
+                      </button>
                       <button
                         type="button"
                         className="group rounded-md border border-rose-200 p-1.5 text-rose-600 transition-all duration-300 hover:-translate-y-0.5 hover:scale-110 hover:bg-rose-50 hover:shadow-sm active:scale-95"
@@ -2676,6 +2922,19 @@ export function LeaveManagementView({
               <DialogFooter className="mt-2 shrink-0 border-t border-slate-100 pt-2 sm:justify-end">
                 <button
                   type="button"
+                  className="inline-flex h-8 items-center justify-center rounded-md border border-sky-200 px-3 text-xs font-medium text-sky-700"
+                  onClick={() => {
+                    if (!selectedLeaveTypeRow) {
+                      return
+                    }
+                    setLeaveTypeDetailsOpen(false)
+                    openTypeDialogForEdit(selectedLeaveTypeRow)
+                  }}
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
                   className="inline-flex h-8 items-center justify-center rounded-md border border-slate-300 px-3 text-xs font-medium text-slate-700"
                   onClick={() => setLeaveTypeDetailsOpen(false)}
                 >
@@ -2716,7 +2975,7 @@ export function LeaveManagementView({
             <div className="flex flex-wrap items-center gap-1.5 sm:ml-auto">
               <button
                 type="button"
-                className="inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md bg-slate-900 px-2.5 text-xs font-semibold text-white sm:flex-none"
+                className="inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white sm:flex-none"
                 onClick={() => void openRequestDialog()}
               >
                 <Plus className="h-3.5 w-3.5" />
@@ -2745,10 +3004,7 @@ export function LeaveManagementView({
                     <button
                       type="button"
                       className="flex w-full items-start justify-between gap-2 text-left"
-                      onClick={() => {
-                        setSelectedLeaveRequestRow(row)
-                        setLeaveRequestDetailsOpen(true)
-                      }}
+                      onClick={() => void openLeaveRequestDetails(row)}
                     >
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium text-foreground">
@@ -2829,8 +3085,7 @@ export function LeaveManagementView({
               data={filteredRequests}
               onRowSelect={(_, row) => {
                 if (row) {
-                  setSelectedLeaveRequestRow(row)
-                  setLeaveRequestDetailsOpen(true)
+                  void openLeaveRequestDetails(row)
                 }
               }}
               columns={[
@@ -2948,10 +3203,7 @@ export function LeaveManagementView({
                               Cancel request
                             </DropdownMenuItem>
                             <DropdownMenuItem
-                              onClick={() => {
-                                setSelectedLeaveRequestRow(row)
-                                setLeaveRequestDetailsOpen(true)
-                              }}
+                              onClick={() => void openLeaveRequestDetails(row)}
                             >
                               View approval chain
                             </DropdownMenuItem>
@@ -3131,18 +3383,30 @@ export function LeaveManagementView({
             <button type="button" className="rounded-md border border-slate-300 px-4 py-2 text-sm" onClick={() => setRequestDialogOpen(false)}>
               Cancel
             </button>
-            <button type="button" className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white" disabled={saving} onClick={() => void submitRequestForm()}>
+            <button type="button" className="rounded-md bg-primary px-4 py-2 text-sm font-medium !text-white" disabled={saving} onClick={() => void submitRequestForm()}>
               {saving ? "Saving..." : "Create Leave Request"}
             </button>
           </DialogFooter>
         </DialogPopup>
       </Dialog>
 
-      <Dialog open={typeDialogOpen} onOpenChange={setTypeDialogOpen}>
+      <Dialog
+        open={typeDialogOpen}
+        onOpenChange={(open) => {
+          setTypeDialogOpen(open)
+          if (!open) {
+            resetTypeForm()
+          }
+        }}
+      >
         <DialogPopup from="bottom" className="sm:max-w-3xl">
           <DialogHeader>
-            <DialogTitle>Create Leave Type</DialogTitle>
-            <DialogDescription>Enter leave type details, then save them.</DialogDescription>
+            <DialogTitle>{editingLeaveTypeRow ? "Edit Leave Type" : "Create Leave Type"}</DialogTitle>
+            <DialogDescription>
+              {editingLeaveTypeRow
+                ? "Update leave type details, then save your changes."
+                : "Enter leave type details, then save them."}
+            </DialogDescription>
           </DialogHeader>
           <div className="grid gap-3 md:grid-cols-3">
             <input className="h-10 rounded-md border border-slate-300 px-3 text-sm" placeholder="Type name" value={typeForm.name} onChange={(event) => setTypeForm((prev) => ({ ...prev, name: event.target.value }))} />
@@ -3159,7 +3423,32 @@ export function LeaveManagementView({
               <option value="false">Attachment Optional</option>
               <option value="true">Attachment Required</option>
             </select>
-            <div />
+            <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={typeForm.is_carry_forward_allowed} onChange={(event) => setTypeForm((prev) => ({ ...prev, is_carry_forward_allowed: event.target.value }))}>
+              <option value="false">No carry forward</option>
+              <option value="true">Carry forward allowed</option>
+            </select>
+            <input
+              type="number"
+              min={0}
+              className="h-10 rounded-md border border-slate-300 px-3 text-sm"
+              placeholder="Max carry forward days"
+              value={typeForm.max_carry_forward_days}
+              onChange={(event) => setTypeForm((prev) => ({ ...prev, max_carry_forward_days: event.target.value }))}
+            />
+            <input
+              type="number"
+              min={0}
+              className="h-10 rounded-md border border-slate-300 px-3 text-sm"
+              placeholder="Max days per year"
+              value={typeForm.max_days_per_year}
+              onChange={(event) => setTypeForm((prev) => ({ ...prev, max_days_per_year: event.target.value }))}
+            />
+            <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={typeForm.gender_restriction} onChange={(event) => setTypeForm((prev) => ({ ...prev, gender_restriction: event.target.value }))}>
+              <option value="any">Any gender</option>
+              <option value="male">Male only</option>
+              <option value="female">Female only</option>
+            </select>
+            <div className="md:col-span-2" />
             <Textarea
               containerClassName="md:col-span-3"
               className="min-h-24 rounded-md border border-slate-300 px-3 py-2 text-sm"
@@ -3172,8 +3461,8 @@ export function LeaveManagementView({
             <button type="button" className="rounded-md border border-slate-300 px-4 py-2 text-sm" onClick={() => setTypeDialogOpen(false)}>
               Cancel
             </button>
-            <button type="button" className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white" disabled={saving} onClick={() => void submitTypeForm()}>
-              {saving ? "Saving..." : "Add Leave Type"}
+            <button type="button" className="rounded-md bg-primary px-4 py-2 text-sm font-medium !text-white" disabled={saving} onClick={() => void submitTypeForm()}>
+              {saving ? "Saving..." : editingLeaveTypeRow ? "Save Leave Type" : "Add Leave Type"}
             </button>
           </DialogFooter>
         </DialogPopup>
@@ -3245,7 +3534,7 @@ export function LeaveManagementView({
             <button type="button" className="rounded-md border border-slate-300 px-4 py-2 text-sm" onClick={() => setBalanceDialogOpen(false)}>
               Cancel
             </button>
-            <button type="button" className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white" disabled={saving} onClick={() => void submitBalanceAdjustment()}>
+            <button type="button" className="rounded-md bg-primary px-4 py-2 text-sm font-medium !text-white" disabled={saving} onClick={() => void submitBalanceAdjustment()}>
               {saving ? "Saving..." : selectedBalanceRow ? "Save Balance Changes" : "Adjust Leave Balance"}
             </button>
           </DialogFooter>
@@ -3270,7 +3559,7 @@ export function LeaveManagementView({
             <button type="button" className="rounded-md border border-slate-300 px-4 py-2 text-sm" onClick={() => setHolidayDialogOpen(false)}>
               Cancel
             </button>
-            <button type="button" className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white" disabled={saving} onClick={() => void submitHolidayForm()}>
+            <button type="button" className="rounded-md bg-primary px-4 py-2 text-sm font-medium !text-white" disabled={saving} onClick={() => void submitHolidayForm()}>
               {saving ? "Saving..." : "Add Holiday"}
             </button>
           </DialogFooter>
@@ -3354,7 +3643,7 @@ export function LeaveManagementView({
             </button>
             <button
               type="button"
-              className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-md bg-primary px-4 py-2 text-sm font-medium !text-white disabled:cursor-not-allowed disabled:opacity-60"
               onClick={() => void importCountryHolidays()}
               disabled={holidayImportLoading || holidayImportBusy || selectedHolidayMissing.length === 0}
             >
@@ -3453,7 +3742,7 @@ export function LeaveManagementView({
           <div className="flex flex-wrap items-center justify-end gap-1.5">
             <button
               type="button"
-              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-slate-900 px-2.5 text-xs font-semibold text-white"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white"
               onClick={() => void openBalanceDialog()}
             >
               <Plus className="h-3.5 w-3.5" />
@@ -3508,7 +3797,7 @@ export function LeaveManagementView({
             </button>
             <button
               type="button"
-              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-slate-900 px-2.5 text-xs font-semibold text-white"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white"
               onClick={() => setHolidayDialogOpen(true)}
             >
               <Plus className="h-3.5 w-3.5" />
@@ -3557,7 +3846,7 @@ export function LeaveManagementView({
           <div className="flex flex-wrap items-center justify-end gap-1.5">
             <button
               type="button"
-              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-slate-900 px-2.5 text-xs font-semibold text-white"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white"
               onClick={openCreatePolicySheet}
             >
               <Plus className="h-3.5 w-3.5" />
@@ -3699,7 +3988,7 @@ export function LeaveManagementView({
                 </button>
                 <button
                   type="button"
-                  className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white"
+                  className="rounded-md bg-primary px-4 py-2 text-sm font-medium !text-white"
                   disabled={saving}
                   onClick={() => void submitPolicyForm()}
                 >
@@ -3732,7 +4021,7 @@ export function LeaveManagementView({
                 </button>
                 <button
                   type="button"
-                  className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white"
+                  className="rounded-md bg-primary px-4 py-2 text-sm font-medium !text-white"
                   onClick={() => {
                     if (selectedPolicyRow) {
                       loadPolicyIntoForm(selectedPolicyRow)
@@ -3753,7 +4042,7 @@ export function LeaveManagementView({
           <div className="flex flex-wrap items-center justify-end gap-1.5">
             <button
               type="button"
-              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-slate-900 px-2.5 text-xs font-semibold text-white"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white"
               onClick={openCreateWorkflowSheet}
             >
               <Plus className="h-3.5 w-3.5" />
@@ -3875,7 +4164,7 @@ export function LeaveManagementView({
               </div>
               <SheetFooter className="sm:flex-row sm:justify-end">
                 <button type="button" className="rounded-md border border-slate-300 px-3 py-2 text-sm" onClick={() => setWorkflowSheetOpen(false)}>Cancel</button>
-                <button type="button" className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white" disabled={saving} onClick={() => void submitWorkflowForm()}>
+                <button type="button" className="rounded-md bg-primary px-3 py-2 text-sm font-medium !text-white" disabled={saving} onClick={() => void submitWorkflowForm()}>
                   {editingWorkflowId === null ? "Create Workflow" : "Save Workflow"}
                 </button>
               </SheetFooter>
@@ -3966,7 +4255,7 @@ export function LeaveManagementView({
               </div>
               <DialogFooter>
                 <button type="button" className="rounded-md border border-slate-300 px-3 py-2 text-sm" onClick={() => setStepDialogOpen(false)}>Cancel</button>
-                <button type="button" className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white" disabled={saving} onClick={async () => {
+                <button type="button" className="rounded-md bg-primary px-3 py-2 text-sm font-medium !text-white" disabled={saving} onClick={async () => {
                   const targetWorkflowId = selectedWorkflowId || (editingWorkflowId !== null ? String(editingWorkflowId) : "")
                   if (targetWorkflowId) {
                     setSelectedWorkflowId(targetWorkflowId)

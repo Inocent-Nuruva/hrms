@@ -341,6 +341,106 @@ export const api = {
     return request<unknown>('/api/employees/me');
   },
 
+  /**
+   * GET /api/me/profile/photo — profile picture URL for the signed-in user.
+   * Returns null when no photo is set (404/204).
+   */
+  async getMyProfilePhotoUrl() {
+    try {
+      const payload = await request<unknown>('/api/me/profile/photo');
+      if (typeof payload === 'string' && payload.trim()) {
+        return payload.trim();
+      }
+      if (!payload || typeof payload !== 'object') {
+        return null;
+      }
+      const root = payload as Record<string, unknown>;
+      const nested =
+        (root.data as Record<string, unknown> | undefined) ||
+        (root.result as Record<string, unknown> | undefined) ||
+        root;
+      const keys = [
+        'profile_photo_url',
+        'photo_url',
+        'url',
+        'avatar_url',
+        'avatar',
+        'image_url',
+        'imageUrl',
+        'signed_url',
+        'public_url',
+      ];
+      for (const key of keys) {
+        const value = nested[key] ?? root[key];
+        if (typeof value === 'string' && value.trim()) {
+          return value.trim();
+        }
+      }
+      return null;
+    } catch (error) {
+      const status = (error as ApiError)?.status;
+      if (status === 404 || status === 204) {
+        return null;
+      }
+      throw error;
+    }
+  },
+
+  /**
+   * Upload the signed-in user's profile picture.
+   * POST /api/me/profile/photo (multipart/form-data, field: file) → 201
+   */
+  async uploadMyProfilePhoto(file: {
+    uri: string;
+    name?: string;
+    type?: string;
+  }) {
+    const formData = new FormData();
+    formData.append('file', {
+      uri: file.uri,
+      name: file.name?.trim() || 'profile-photo.jpg',
+      type: file.type?.trim() || 'image/jpeg',
+    } as unknown as Blob);
+
+    const bearerToken = await getBearerToken();
+    const url = `${API_BASE_URL}/api/me/profile/photo`;
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        ...(bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {}),
+      },
+      body: formData,
+    });
+
+    const text = await res.text();
+    let data: unknown = null;
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { message: text };
+      }
+    }
+
+    if (!res.ok) {
+      const d = data as Record<string, unknown> | null;
+      const message =
+        d && Array.isArray(d.message)
+          ? d.message.join('. ')
+          : d && typeof d.message === 'string'
+            ? d.message
+            : `Request failed (${res.status})`;
+      const err = new Error(message) as ApiError;
+      err.status = res.status;
+      err.payload = data;
+      throw err;
+    }
+
+    return data;
+  },
+
   async refreshToken(rt: string) {
     return request<unknown>('/api/auth/refresh', {
       method: 'POST',

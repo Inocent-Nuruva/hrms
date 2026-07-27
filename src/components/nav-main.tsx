@@ -1,17 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Button } from "@/components/ui/button"
 import { usePathname, useRouter } from "next/navigation"
-import {
-  Dialog,
-  DialogClose,
-  DialogFooter,
-  DialogHeader,
-  DialogPopup,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/animate-ui/components/base/dialog"
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -22,12 +12,9 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar"
-import { getUnreadNotificationsCount, type AdminResourceKey } from "@/lib/admin-api"
+import type { AdminResourceKey } from "@/lib/admin-api"
 import { ChevronDownIcon } from "lucide-react"
-import { Bell } from "@/components/animate-ui/icons/bell"
 import { LayoutDashboard } from "@/components/animate-ui/icons/layout-dashboard"
-import { NotificationCenter } from "@/components/notification-center"
-import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 
 type NavMainNode = {
   title: string
@@ -42,41 +29,27 @@ type NavMainItem = NavMainNode & {
   icon?: React.ReactNode
 }
 
-const LEGACY_ADMIN_TOKEN_KEY = "hrms.admin.accessToken"
-
-function readStoredToken() {
-  if (typeof window === "undefined") {
-    return ""
-  }
-
-  const authTokensRaw = window.localStorage.getItem(AUTH_STORAGE_KEYS.tokens)
-  if (authTokensRaw) {
-    try {
-      const parsed = JSON.parse(authTokensRaw) as { accessToken?: string; access_token?: string }
-      const accessToken = (parsed.accessToken ?? parsed.access_token ?? "").trim()
-      if (accessToken) {
-        return accessToken
-      }
-    } catch {
-      // Fall through to legacy key.
-    }
-  }
-
-  return window.localStorage.getItem(LEGACY_ADMIN_TOKEN_KEY)?.trim() ?? ""
+function pathMatches(url: string | undefined, currentPath: string): boolean {
+  if (!url) return false
+  return currentPath === url || currentPath.startsWith(`${url}/`)
 }
 
 function nodeContainsCurrentPath(node: NavMainNode, currentPath: string): boolean {
-  if (
-    (node.url && (currentPath === node.url || currentPath.startsWith(`${node.url}/`))) ||
-    (node.matchUrls ?? []).some(
-      (url) => currentPath === url || currentPath.startsWith(`${url}/`)
-    )
-  ) {
+  if (pathMatches(node.url, currentPath)) {
     return true
   }
-
+  if ((node.matchUrls ?? []).some((url) => pathMatches(url, currentPath))) {
+    return true
+  }
   return (node.items ?? []).some((child) => nodeContainsCurrentPath(child, currentPath))
 }
+
+/** Compact row styles — denser than default shadcn sidebar. */
+const SIDEBAR_ITEM_BASE =
+  "h-8 min-h-8 cursor-pointer rounded-lg px-2 py-1.5 text-[0.8125rem] font-medium leading-none text-foreground !no-underline hover:!no-underline hover:bg-muted duration-200 ease-linear"
+const SIDEBAR_ITEM_ACTIVE =
+  "data-active:!bg-primary/10 dark:data-active:!bg-[#262626] data-active:!text-[var(--sidebar-active-link-color)] data-active:[&_svg]:!text-[var(--sidebar-active-link-color)]"
+const SIDEBAR_ITEM_ICON = "[&_svg]:!size-[1.125rem] [&_svg]:!text-[var(--sidebar-icon-color)]"
 
 function collectOpenableNodes(nodes: NavMainNode[]): string[] {
   return nodes.flatMap((node) => [
@@ -119,8 +92,6 @@ export function NavMain({
     return defaultOpenGroups
   })
   const [hoveredLink, setHoveredLink] = React.useState<string | null>(null)
-  const [notificationsOpen, setNotificationsOpen] = React.useState(false)
-  const [unreadNotificationCount, setUnreadNotificationCount] = React.useState(0)
   const groupedItems = React.useMemo(() => {
     const expandable = items.filter((item) => item.items?.length)
     const directLinks = items.filter((item) => !item.items?.length)
@@ -133,7 +104,7 @@ export function NavMain({
     }
     return React.cloneElement(icon as React.ReactElement<Record<string, unknown>>, {
       animate: hoveredLink === key ? "path-loop" : false,
-      size: 32,
+      size: 20,
     })
   }, [hoveredLink])
 
@@ -150,41 +121,6 @@ export function NavMain({
       setOpenGroups((previous) => ({ ...previous, ...stored }))
     } catch {
       // ignore invalid cache
-    }
-  }, [])
-
-  React.useEffect(() => {
-    let cancelled = false
-
-    const loadUnreadCount = async () => {
-      const token = readStoredToken()
-      if (!token) {
-        if (!cancelled) {
-          setUnreadNotificationCount(0)
-        }
-        return
-      }
-
-      try {
-        const count = await getUnreadNotificationsCount(token)
-        if (!cancelled) {
-          setUnreadNotificationCount(count)
-        }
-      } catch {
-        if (!cancelled) {
-          setUnreadNotificationCount(0)
-        }
-      }
-    }
-
-    void loadUnreadCount()
-    const intervalId = window.setInterval(() => {
-      void loadUnreadCount()
-    }, 60_000)
-
-    return () => {
-      cancelled = true
-      window.clearInterval(intervalId)
     }
   }, [])
 
@@ -270,14 +206,12 @@ export function NavMain({
     return (
       <SidebarMenuSubItem key={key}>
         <SidebarMenuSubButton
-          className={`rounded-lg !no-underline data-active:!bg-transparent data-active:!text-[var(--sidebar-active-link-color)] ${
+          className={`rounded-lg !no-underline ${
             node.disabled
-              ? "cursor-not-allowed py-3 text-[0.82rem] leading-snug text-slate-400"
-              : depth === 0
-                ? "cursor-pointer py-3 text-[0.78rem] leading-snug text-foreground hover:!no-underline hover:bg-muted"
-                : "cursor-pointer py-3 text-[0.82rem] leading-snug text-foreground hover:!no-underline hover:bg-muted"
+              ? "cursor-not-allowed py-2.5 text-[0.82rem] leading-snug text-slate-400"
+              : "cursor-pointer py-2.5 text-[0.8rem] leading-snug text-foreground hover:!no-underline hover:bg-muted data-active:!bg-primary/10 dark:data-active:!bg-[#262626] data-active:!font-semibold data-active:!text-[var(--sidebar-active-link-color)]"
           }`}
-          isActive={!node.disabled && Boolean(node.url) && currentPath === node.url}
+          isActive={!node.disabled && nodeContainsCurrentPath(node, currentPath)}
           onClick={() => {
             if (!node.disabled && node.url) {
               router.push(node.url)
@@ -291,13 +225,13 @@ export function NavMain({
   }
 
   return (
-    <SidebarGroup>
-      <SidebarGroupContent className="flex flex-col gap-2">
-        <SidebarMenu className="space-y-0">
-          <SidebarMenuItem className="flex items-center gap-2">
+    <SidebarGroup className="p-0">
+      <SidebarGroupContent className="flex flex-col gap-1">
+        <SidebarMenu className="gap-0.5">
+          <SidebarMenuItem className="flex items-center gap-1.5">
             <SidebarMenuButton
               tooltip="Dashboard"
-              className="min-h-[2.6rem] h-auto min-w-8 rounded-xl bg-transparent py-2 text-[0.9rem] font-medium leading-snug text-foreground duration-200 ease-linear hover:bg-muted hover:text-foreground data-active:!bg-transparent data-active:!text-[var(--sidebar-active-link-color)] [&_svg]:!text-[var(--sidebar-icon-color)]"
+              className={`${SIDEBAR_ITEM_BASE} min-w-0 flex-1 bg-transparent ${SIDEBAR_ITEM_ACTIVE} ${SIDEBAR_ITEM_ICON}`}
               isActive={currentPath === "/dashboard"}
               onClick={() => {
                 router.push("/dashboard")
@@ -305,81 +239,46 @@ export function NavMain({
               onMouseEnter={() => setHoveredLink("__dashboard")}
               onMouseLeave={() => setHoveredLink((value) => (value === "__dashboard" ? null : value))}
             >
-              <LayoutDashboard size={40} animation="path-loop" animate={hoveredLink === "__dashboard" ? "path-loop" : false} />
-              <span className="min-w-0 flex-1 text-left leading-[1.1rem] whitespace-normal">Dashboard</span>
+              <LayoutDashboard size={20} animation="path-loop" animate={hoveredLink === "__dashboard" ? "path-loop" : false} />
+              <span className="min-w-0 flex-1 truncate text-left">Dashboard</span>
             </SidebarMenuButton>
-            <Dialog open={notificationsOpen} onOpenChange={setNotificationsOpen}>
-              <DialogTrigger
-                render={
-                  <Button
-                    size="icon"
-                    className="relative size-7 group-data-[collapsible=icon]:opacity-0"
-                    variant="outline"
-                    aria-label="Notifications"
-                    title="Notifications"
-                  />
-                }
-              >
-                <Bell size={40} animation="path-loop" animateOnHover="path-loop" />
-                {unreadNotificationCount > 0 ? (
-                  <span className="absolute -right-1 -top-1 inline-flex min-w-4 items-center justify-center rounded-full bg-blue-600 px-1 text-[10px] font-semibold leading-4 text-white">
-                    {unreadNotificationCount > 99 ? "99+" : unreadNotificationCount}
-                  </span>
-                ) : null}
-                <span className="sr-only">Notifications</span>
-              </DialogTrigger>
-              <DialogPopup from="right" showCloseButton className="sm:max-w-[425px]">
-                <DialogHeader>
-                  <DialogTitle>Notifications</DialogTitle>
-                </DialogHeader>
-
-                <NotificationCenter
-                  open={notificationsOpen}
-                  onOpenChange={setNotificationsOpen}
-                  onUnreadCountChange={setUnreadNotificationCount}
-                />
-
-                <DialogFooter>
-                  <DialogClose render={<Button variant="outline">Close</Button>} />
-                </DialogFooter>
-              </DialogPopup>
-            </Dialog>
           </SidebarMenuItem>
         </SidebarMenu>
-        <SidebarMenu className="space-y-0.5">
+        <SidebarMenu className="gap-0.5">
           {groupedItems.expandable.map((item) => (
             <SidebarMenuItem key={item.title}>
               <SidebarMenuButton
                 tooltip={item.title}
-                className="min-h-[2.6rem] h-auto cursor-pointer rounded-xl py-2 text-[0.9rem] font-medium leading-snug text-foreground !no-underline hover:!no-underline hover:bg-muted data-active:!bg-transparent data-active:!text-[var(--sidebar-active-link-color)] [&_svg]:!text-[var(--sidebar-icon-color)]"
-                isActive={
-                  item.items ? nodeContainsCurrentPath(item, currentPath) : currentPath === item.url
-                }
+                className={`${SIDEBAR_ITEM_BASE} ${SIDEBAR_ITEM_ACTIVE} ${SIDEBAR_ITEM_ICON}`}
+                isActive={nodeContainsCurrentPath(item, currentPath)}
                 onClick={() => {
-                  if (!item.items) {
-                    if (item.url) {
+                  if (item.items?.length) {
+                    const isOpen = Boolean(openGroups[item.title])
+                    // Toggle expand/collapse; first open also goes to default section URL.
+                    setOpenGroups((previous) => ({
+                      ...previous,
+                      [item.title]: !isOpen,
+                    }))
+                    if (!isOpen && item.url && !nodeContainsCurrentPath(item, currentPath)) {
                       router.push(item.url)
                     }
                     return
                   }
-                  setOpenGroups((previous) => ({
-                    ...previous,
-                    [item.title]: !previous[item.title],
-                  }))
+                  if (item.url) {
+                    router.push(item.url)
+                  }
                 }}
                 onMouseEnter={() => setHoveredLink(item.title)}
                 onMouseLeave={() => setHoveredLink((value) => (value === item.title ? null : value))}
               >
                 {renderAnimatedIcon(item.icon, item.title)}
-                <span className="min-w-0 flex-1 text-left leading-[1.1rem] whitespace-normal">
-                  {item.title}
-                </span>
+                <span className="min-w-0 flex-1 truncate text-left">{item.title}</span>
                 {item.items ? (
                   <ChevronDownIcon
                     className={
                       openGroups[item.title]
-                        ? "ml-auto mt-0.5 shrink-0 self-start transition-transform duration-300 rotate-180"
-                        : "ml-auto mt-0.5 shrink-0 self-start transition-transform duration-300"
+                        ? "ml-auto size-3.5 shrink-0 transition-transform duration-300 rotate-180"
+                        : "ml-auto size-3.5 shrink-0 transition-transform duration-300"
                     }
                   />
                 ) : null}
@@ -394,7 +293,7 @@ export function NavMain({
                   }
                 >
                   <div className="overflow-hidden">
-                    <SidebarMenuSub>
+                    <SidebarMenuSub className="mx-1.5 space-y-1 border-l border-border/70 pl-2 pt-1">
                       {item.items.map((subItem) => renderNode(subItem, 0))}
                     </SidebarMenuSub>
                   </div>
@@ -404,15 +303,13 @@ export function NavMain({
           ))}
         </SidebarMenu>
         {groupedItems.directLinks.length > 0 ? (
-          <SidebarMenu className="space-y-0.5 pt-1.5">
+          <SidebarMenu className="gap-0.5 pt-1">
             {groupedItems.directLinks.map((item) => (
             <SidebarMenuItem key={item.title}>
               <SidebarMenuButton
                 tooltip={item.title}
-                className="min-h-[2.6rem] h-auto cursor-pointer rounded-xl py-2 text-[0.9rem] font-medium leading-snug text-foreground !no-underline hover:!no-underline hover:bg-muted data-active:!bg-transparent data-active:!text-[var(--sidebar-active-link-color)] [&_svg]:!text-[var(--sidebar-icon-color)]"
-                isActive={
-                  item.items ? nodeContainsCurrentPath(item, currentPath) : currentPath === item.url
-                }
+                className={`${SIDEBAR_ITEM_BASE} ${SIDEBAR_ITEM_ACTIVE} ${SIDEBAR_ITEM_ICON}`}
+                isActive={nodeContainsCurrentPath(item, currentPath)}
                 onClick={() => {
                   if (!item.items) {
                     if (item.url) {
@@ -429,15 +326,13 @@ export function NavMain({
                 onMouseLeave={() => setHoveredLink((value) => (value === item.title ? null : value))}
               >
                 {renderAnimatedIcon(item.icon, item.title)}
-                <span className="min-w-0 flex-1 text-left leading-[1.1rem] whitespace-normal">
-                  {item.title}
-                </span>
+                <span className="min-w-0 flex-1 truncate text-left">{item.title}</span>
                 {item.items ? (
                   <ChevronDownIcon
                     className={
                       openGroups[item.title]
-                        ? "ml-auto mt-0.5 shrink-0 self-start transition-transform duration-300 rotate-180"
-                        : "ml-auto mt-0.5 shrink-0 self-start transition-transform duration-300"
+                        ? "ml-auto size-3.5 shrink-0 transition-transform duration-300 rotate-180"
+                        : "ml-auto size-3.5 shrink-0 transition-transform duration-300"
                     }
                   />
                 ) : null}

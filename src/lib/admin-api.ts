@@ -199,9 +199,66 @@ export interface SelfServiceRequestQueryParams extends UsersQueryParams {
   date_to?: string
 }
 
-export interface NotificationQueryParams extends UsersQueryParams {
-  status?: "UNREAD" | "READ"
+export type NotificationStatus = "UNREAD" | "READ"
+export type NotificationCategory = "GENERAL" | "HR" | "AUTH" | "ACCESS_CONTROL" | "SYSTEM"
+export type NotificationPriority = "LOW" | "MEDIUM" | "HIGH" | "URGENT"
+
+export type NotificationItem = AdminRecord & {
+  id?: number | string
+  notification_id?: number | string
+  notificationId?: number | string
+  title?: string
+  message?: string
+  status?: NotificationStatus | string
+  category?: NotificationCategory | string
+  priority?: NotificationPriority | string
   type?: string
+  related_module?: string
+  relatedModule?: string
+  entity_type?: string
+  entityType?: string
+  entity_id?: string
+  entityId?: string
+  action_url?: string
+  actionUrl?: string
+  seen?: boolean
+  is_seen?: boolean
+  seen_at?: string
+  seenAt?: string
+  read_at?: string
+  readAt?: string
+  archived_at?: string
+  archivedAt?: string
+  created_at?: string
+  createdAt?: string
+  metadata?: AdminRecord | null
+}
+
+export interface NotificationQueryParams extends UsersQueryParams {
+  status?: NotificationStatus
+  type?: string
+  category?: NotificationCategory
+  priority?: NotificationPriority
+  related_module?: string
+  entity_type?: string
+  entity_id?: string
+  seen?: boolean
+  include_archived?: boolean
+}
+
+export type CreateTestNotificationInput = {
+  receiver_company_user_id: number
+  title: string
+  message: string
+  type?: string
+  category?: NotificationCategory | string
+  priority?: NotificationPriority | string
+  related_module?: string
+  entity_type?: string
+  entity_id?: string
+  action_url?: string
+  dedupe_key?: string
+  metadata?: AdminRecord
 }
 
 export interface TeamAttendanceQueryParams extends UsersQueryParams {
@@ -420,6 +477,18 @@ export type CreateEmployeeResponse = AdminRecord & {
   }) | null
 }
 
+export type EmployeeImportMode = "CREATE_ONLY" | "UPDATE_EXIST" | "CREATE_OR_UPDATE"
+
+export type EmployeeImportRequest = {
+  import_mode: EmployeeImportMode
+  process_valid_rows_only?: boolean
+}
+
+export type EmployeeImportConfirmRequest = {
+  preview_token: string
+  process_valid_rows_only?: boolean
+}
+
 export function isEmployeeStatusValue(value: unknown): value is EmployeeStatusValue {
   return (
     typeof value === "string" &&
@@ -481,14 +550,22 @@ export const RESOURCE_CREATE_TEMPLATES: Record<AdminResourceKey, AdminRecord> = 
 }
 
 function getBaseUrl() {
-  return (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://192.168.1.30:8888").replace(/\/$/, "")
+  // Keep in sync with `resolveApiBaseUrl` in `@/utils/constants`.
+  const envBase = process.env.NEXT_PUBLIC_API_BASE_URL?.trim()
+  if (envBase) {
+    // Paths already include `/api/...` — strip a trailing `/api` to avoid `/api/api/...`.
+    return envBase.replace(/\/$/, "").replace(/\/api$/i, "")
+  }
+  // Never fall back to the Next.js origin — that returns HTML 404 for `/api/*`.
+  return "http://192.168.1.30:8888"
 }
 
 function buildUrl(path: string) {
   if (/^https?:\/\//i.test(path)) {
     return path
   }
-  return `${getBaseUrl()}${path}`
+  const baseUrl = getBaseUrl()
+  return baseUrl ? `${baseUrl}${path}` : path
 }
 
 function asRecord(value: unknown): AdminRecord | null {
@@ -669,6 +746,274 @@ function normalizeList(payload: unknown): AdminRecord[] {
   return extractListFromRecord(record) ?? []
 }
 
+const LEAVE_APPROVAL_LIST_KEYS = [
+  "approvals",
+  "approval_chain",
+  "approvalChain",
+  "approval_steps",
+  "approvalSteps",
+  "leave_request_approvals",
+  "leaveRequestApprovals",
+  "workflow_approvals",
+  "workflowApprovals",
+  "request_approvals",
+  "requestApprovals",
+  "pending_approvals",
+  "pendingApprovals",
+  "steps",
+] as const
+
+/**
+ * Coerce approval collections that may be a plain array or a nested envelope
+ * like `{ data: [...] }` / `{ items: [...] }`.
+ */
+function coerceLeaveApprovalsList(value: unknown): AdminRecord[] {
+  const direct = asArray(value)
+  if (direct && direct.length > 0) {
+    return direct
+  }
+
+  const record = asRecord(value)
+  if (!record) {
+    return []
+  }
+
+  for (const key of ["data", "items", "results", "rows", "records", "list", "approvals"] as const) {
+    const nested = asArray(record[key])
+    if (nested && nested.length > 0) {
+      return nested
+    }
+  }
+
+  return []
+}
+
+function extractLeaveApprovalsList(source: AdminRecord | null): AdminRecord[] {
+  if (!source) {
+    return []
+  }
+
+  for (const key of LEAVE_APPROVAL_LIST_KEYS) {
+    const list = coerceLeaveApprovalsList(source[key])
+    if (list.length > 0) {
+      return list
+    }
+  }
+
+  const workflow = asRecord(source.workflow ?? source.approval_workflow ?? source.approvalWorkflow)
+  if (workflow) {
+    for (const key of ["approvals", "steps", "approval_steps", "approvalSteps"] as const) {
+      const list = coerceLeaveApprovalsList(workflow[key])
+      if (list.length > 0) {
+        return list
+      }
+    }
+  }
+
+  return []
+}
+
+/** True when a record looks like a leave request entity (not a nested company/employee/etc.). */
+function looksLikeLeaveRequest(record: AdminRecord | null): boolean {
+  if (!record) {
+    return false
+  }
+
+  // Strong identity fields from LeaveRequest schema.
+  if (
+    "leave_no" in record ||
+    "leaveNo" in record ||
+    "leave_type_id" in record ||
+    "leaveTypeId" in record ||
+    "current_approval_level" in record ||
+    "currentApprovalLevel" in record ||
+    "total_days" in record ||
+    "totalDays" in record
+  ) {
+    return true
+  }
+
+  // Submitted/in-review leave rows commonly carry start/end + status.
+  // Do not treat "has approvals" alone as leave identity — envelopes may
+  // carry sibling approvals next to a nested request body.
+  if (
+    ("start_date" in record || "startDate" in record) &&
+    ("end_date" in record || "endDate" in record) &&
+    "status" in record
+  ) {
+    return true
+  }
+
+  return false
+}
+
+/**
+ * Unwrap leave-request detail without using generic normalizeSingle().
+ *
+ * normalizeSingle() prefers the first nested object (data/result/item/user/company),
+ * so a bare LeaveRequest payload with relations would be reduced to `company` or
+ * `employee` and drop `approvals` / workflow fields.
+ */
+function unwrapLeaveRequestCandidate(payload: unknown): AdminRecord | null {
+  const root = asRecord(payload)
+  if (!root) {
+    const list = asArray(payload)
+    return list?.[0] ?? null
+  }
+
+  if (looksLikeLeaveRequest(root)) {
+    return root
+  }
+
+  const wrappers = [
+    asRecord(root.data),
+    asRecord(root.result),
+    asRecord(root.item),
+    asRecord(root.payload),
+    asRecord(root.response),
+    asRecord(root.leave_request),
+    asRecord(root.leaveRequest),
+    asRecord(root.request),
+  ]
+
+  for (const wrapper of wrappers) {
+    if (!wrapper) continue
+    if (looksLikeLeaveRequest(wrapper)) {
+      return wrapper
+    }
+
+    const nested =
+      asRecord(wrapper.leave_request) ??
+      asRecord(wrapper.leaveRequest) ??
+      asRecord(wrapper.request) ??
+      asRecord(wrapper.data) ??
+      asRecord(wrapper.result) ??
+      asRecord(wrapper.item)
+
+    if (looksLikeLeaveRequest(nested)) {
+      return nested
+    }
+  }
+
+  // Last resort: first nested leave-shaped relation, never company/user alone.
+  for (const nested of getNestedRecords(root)) {
+    if (looksLikeLeaveRequest(nested)) {
+      return nested
+    }
+  }
+
+  return null
+}
+
+/**
+ * Preserve approval/workflow arrays that often sit next to (not inside) the leave request object.
+ * Plain normalizeSingle() can drop sibling fields like root.approvals when it returns root.data,
+ * and can also peel a bare leave request down to a nested company/employee relation.
+ */
+function normalizeLeaveRequestDetail(payload: unknown): AdminRecord | null {
+  const root = asRecord(payload)
+  const single = unwrapLeaveRequestCandidate(payload) ?? normalizeSingle(payload)
+  if (!single && !root) {
+    return null
+  }
+
+  const nestedData = root ? asRecord(root.data) : null
+  const nestedResult = root ? asRecord(root.result) : null
+  const nestedItem = root ? asRecord(root.item) : null
+  const nestedPayload = root ? asRecord(root.payload) : null
+  const nestedRequest =
+    asRecord(single?.leave_request) ??
+    asRecord(single?.leaveRequest) ??
+    asRecord(nestedData?.leave_request) ??
+    asRecord(nestedData?.leaveRequest) ??
+    asRecord(nestedResult?.leave_request) ??
+    asRecord(nestedItem?.leave_request) ??
+    asRecord(nestedPayload?.leave_request)
+
+  // Prefer the leave-request-shaped record as the merge base so nested relations
+  // (company/employee) never overwrite request fields when unwrapping failed partially.
+  const leaveShaped =
+    (looksLikeLeaveRequest(single) ? single : null) ??
+    (looksLikeLeaveRequest(nestedRequest) ? nestedRequest : null) ??
+    (looksLikeLeaveRequest(nestedData) ? nestedData : null) ??
+    (looksLikeLeaveRequest(root) ? root : null) ??
+    single ??
+    nestedRequest ??
+    root
+
+  const base: AdminRecord = {
+    ...(nestedRequest && nestedRequest !== leaveShaped ? nestedRequest : {}),
+    ...(leaveShaped ?? {}),
+  }
+
+  const approvalSources: Array<AdminRecord | null> = [
+    base,
+    leaveShaped,
+    single,
+    nestedRequest,
+    nestedData,
+    nestedResult,
+    nestedItem,
+    nestedPayload,
+    root,
+    asRecord(root?.meta),
+    asRecord(nestedData?.meta),
+  ]
+
+  let approvals: AdminRecord[] = []
+  for (const source of approvalSources) {
+    const list = extractLeaveApprovalsList(source)
+    if (list.length > 0) {
+      approvals = list
+      break
+    }
+  }
+
+  // Prefer the current approval cycle when the API returns historical cycles together.
+  const currentCycle =
+    readNumber(base.approval_cycle) ??
+    readNumber(base.approvalCycle) ??
+    readNumber(leaveShaped?.approval_cycle) ??
+    readNumber(leaveShaped?.approvalCycle)
+
+  if (approvals.length > 0 && currentCycle !== null) {
+    const cycleFiltered = approvals.filter((entry) => {
+      const cycle = readNumber(entry.approval_cycle) ?? readNumber(entry.approvalCycle)
+      return cycle === null || cycle === currentCycle
+    })
+    if (cycleFiltered.length > 0) {
+      approvals = cycleFiltered
+    }
+  }
+
+  if (approvals.length > 0) {
+    base.approvals = approvals
+  }
+
+  // Keep useful workflow metadata from parent wrappers when missing on the request body.
+  for (const source of approvalSources) {
+    if (!source) continue
+    if (base.current_approval_level == null && source.current_approval_level != null) {
+      base.current_approval_level = source.current_approval_level
+    }
+    if (base.currentApprovalLevel == null && source.currentApprovalLevel != null) {
+      base.currentApprovalLevel = source.currentApprovalLevel
+    }
+    if (base.approval_cycle == null && source.approval_cycle != null) {
+      base.approval_cycle = source.approval_cycle
+    }
+    if (base.workflow == null && source.workflow != null) {
+      base.workflow = source.workflow
+    }
+  }
+
+  if (!("id" in base) && !("status" in base) && approvals.length === 0) {
+    return single
+  }
+
+  return base
+}
+
 function buildUsersQuery(params: UsersQueryParams) {
   const searchParams = new URLSearchParams()
   if (typeof params.page === "number" && params.page > 0) {
@@ -712,6 +1057,27 @@ function buildNotificationsQuery(params: NotificationQueryParams) {
   }
   if (params.type && params.type.trim()) {
     searchParams.set("type", params.type.trim())
+  }
+  if (params.category) {
+    searchParams.set("category", params.category)
+  }
+  if (params.priority) {
+    searchParams.set("priority", params.priority)
+  }
+  if (params.related_module && params.related_module.trim()) {
+    searchParams.set("related_module", params.related_module.trim())
+  }
+  if (params.entity_type && params.entity_type.trim()) {
+    searchParams.set("entity_type", params.entity_type.trim())
+  }
+  if (params.entity_id && params.entity_id.trim()) {
+    searchParams.set("entity_id", params.entity_id.trim())
+  }
+  if (typeof params.seen === "boolean") {
+    searchParams.set("seen", String(params.seen))
+  }
+  if (typeof params.include_archived === "boolean") {
+    searchParams.set("include_archived", String(params.include_archived))
   }
   const query = searchParams.toString()
   return query ? `?${query}` : ""
@@ -1738,10 +2104,19 @@ export async function getUnreadNotificationsCount(token: string) {
 }
 
 export async function markNotificationAsRead(token: string, id: string | number) {
-  return adminRequest<unknown>(`/api/notifications/${id}/read`, {
+  const payload = await adminRequest<unknown>(`/api/notifications/${id}/read`, {
     method: "PATCH",
     token,
   })
+  return (normalizeSingle(payload) as NotificationItem | null) ?? null
+}
+
+export async function markNotificationAsSeen(token: string, id: string | number) {
+  const payload = await adminRequest<unknown>(`/api/notifications/${id}/seen`, {
+    method: "PATCH",
+    token,
+  })
+  return (normalizeSingle(payload) as NotificationItem | null) ?? null
 }
 
 export async function markAllNotificationsAsRead(token: string) {
@@ -1751,12 +2126,24 @@ export async function markAllNotificationsAsRead(token: string) {
   })
 }
 
-export async function createTestNotification(token: string, data: AdminRecord) {
-  return adminRequest<unknown>("/api/notifications/test", {
+export async function deleteNotification(token: string, id: string | number) {
+  const payload = await adminRequest<unknown>(`/api/notifications/${id}`, {
+    method: "DELETE",
+    token,
+  })
+  return (normalizeSingle(payload) as NotificationItem | null) ?? null
+}
+
+export async function createTestNotification(
+  token: string,
+  data: CreateTestNotificationInput | AdminRecord
+) {
+  const payload = await adminRequest<unknown>("/api/notifications/test", {
     method: "POST",
     token,
     body: data,
   })
+  return (normalizeSingle(payload) as NotificationItem | null) ?? null
 }
 
 export async function listEmployees(
@@ -1776,6 +2163,164 @@ export async function listEmployees(
   const rows = normalizeList(payload)
   const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit)
   return { rows, ...pagination }
+}
+
+function buildEmployeeImportHistoryQuery(params: { page?: number; limit?: number } = {}) {
+  const searchParams = new URLSearchParams()
+  if (typeof params.page === "number" && params.page > 0) {
+    searchParams.set("page", String(params.page))
+  }
+  if (typeof params.limit === "number" && params.limit > 0) {
+    searchParams.set("limit", String(params.limit))
+  }
+  const query = searchParams.toString()
+  return query ? `?${query}` : ""
+}
+
+async function submitEmployeeImportRequest(
+  path: string,
+  token: string,
+  data: EmployeeImportRequest,
+  file: File | Blob,
+  fileName?: string
+) {
+  const formData = new FormData()
+  formData.set("import_mode", data.import_mode)
+  formData.set(
+    "process_valid_rows_only",
+    data.process_valid_rows_only === false ? "false" : "true"
+  )
+  if (file instanceof File) {
+    formData.set("file", file)
+  } else {
+    formData.set("file", file, fileName?.trim() || "employee-import.xlsx")
+  }
+
+  const response = await fetch(buildUrl(path), {
+    method: "POST",
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: formData,
+    cache: "no-store",
+  })
+
+  invalidateAdminGetCache()
+
+  const text = await response.text()
+  let payload: unknown = null
+  if (text) {
+    try {
+      payload = JSON.parse(text) as unknown
+    } catch {
+      payload = { message: text }
+    }
+  }
+
+  if (!response.ok) {
+    const error = new Error(extractMessage(payload, response.status)) as Error & {
+      status?: number
+      payload?: unknown
+    }
+    error.status = response.status
+    error.payload = payload
+    throw error
+  }
+
+  return asRecord(payload) ?? normalizeSingle(payload)
+}
+
+export async function previewEmployeeImport(
+  token: string,
+  data: EmployeeImportRequest,
+  file: File | Blob,
+  fileName?: string
+) {
+  return submitEmployeeImportRequest("/api/employees/import/preview", token, data, file, fileName)
+}
+
+export async function startEmployeeImport(
+  token: string,
+  data: EmployeeImportRequest,
+  file: File | Blob,
+  fileName?: string
+) {
+  return submitEmployeeImportRequest("/api/employees/import", token, data, file, fileName)
+}
+
+export async function confirmEmployeeImport(token: string, data: EmployeeImportConfirmRequest) {
+  const payload = await adminRequest<unknown>("/api/employees/import/confirm", {
+    method: "POST",
+    token,
+    body: data,
+  })
+  return asRecord(payload) ?? normalizeSingle(payload)
+}
+
+export async function getEmployeeImportResult(token: string, batchId: string) {
+  const payload = await adminRequest<unknown>(`/api/employees/import/${encodeURIComponent(batchId)}/result`, {
+    token,
+  })
+  return asRecord(payload) ?? normalizeSingle(payload)
+}
+
+export async function listEmployeeImportHistory(
+  token: string,
+  params: { page?: number; limit?: number } = {}
+): Promise<PaginatedUsersResult> {
+  const fallbackPage = params.page && params.page > 0 ? params.page : 1
+  const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20
+  const query = buildEmployeeImportHistoryQuery(params)
+  const payload = await adminRequest<unknown>(`/api/employees/import/history${query}`, {
+    token,
+  })
+  const rows = normalizeList(payload)
+  const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit)
+  return { rows, ...pagination }
+}
+
+export async function downloadEmployeeImportTemplate(
+  token: string
+): Promise<{ blob: Blob; filename: string; contentType: string | null }> {
+  const response = await fetch(buildUrl("/api/employees/import/template"), {
+    method: "GET",
+    headers: {
+      accept: "*/*",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    cache: "no-store",
+  })
+
+  if (!response.ok) {
+    const text = await response.text()
+    let payload: unknown = null
+    if (text) {
+      try {
+        payload = JSON.parse(text) as unknown
+      } catch {
+        payload = { message: text }
+      }
+    }
+    const error = new Error(extractMessage(payload, response.status)) as Error & {
+      status?: number
+      payload?: unknown
+    }
+    error.status = response.status
+    error.payload = payload
+    throw error
+  }
+
+  const blob = await response.blob()
+  const disposition = response.headers.get("content-disposition") ?? ""
+  const filenameMatch = disposition.match(/filename\*=UTF-8''([^;]+)|filename=\"?([^\";]+)\"?/i)
+  const rawFilename = filenameMatch?.[1] ?? filenameMatch?.[2] ?? "employee-import-template.xlsx"
+  const filename = decodeURIComponent(rawFilename)
+
+  return {
+    blob,
+    filename,
+    contentType: response.headers.get("content-type"),
+  }
 }
 
 export async function listDepartments(
@@ -2106,6 +2651,26 @@ export async function listAttendanceDailySummaries(
   params: AttendanceQueryParams = {}
 ) {
   return listAllAttendanceCollection("/api/attendance/daily-summaries", token, params)
+}
+
+/** Single-page daily summaries — for dashboards that only need a sample rate, not full history. */
+export async function listAttendanceDailySummariesPage(
+  token: string,
+  params: AttendanceQueryParams = {},
+  options: ListRequestOptions = {}
+): Promise<PaginatedUsersResult> {
+  const fallbackPage = params.page && params.page > 0 ? params.page : 1
+  const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20
+  const query = buildUsersQuery(params)
+  const payload = await adminRequest<unknown>(`/api/attendance/daily-summaries${query}`, {
+    token,
+    signal: options.signal,
+    cacheTtlMs: options.cacheTtlMs,
+    dedupe: options.dedupe,
+  })
+  const rows = normalizeList(payload)
+  const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit)
+  return { rows, ...pagination }
 }
 
 export async function getAttendanceDailySummary(
@@ -3329,7 +3894,7 @@ export async function listMyLeaveRequests(
 
 export async function getMyLeaveRequest(token: string, id: string | number) {
   const payload = await adminRequest<unknown>(`/api/me/leave/requests/${id}`, { token })
-  return normalizeSingle(payload)
+  return normalizeLeaveRequestDetail(payload)
 }
 
 export async function submitMyLeaveRequest(token: string, id: string | number) {
@@ -3353,7 +3918,7 @@ export async function getMyLeaveRequestPdf(token: string, id: string | number) {
 
 export async function getLeaveRequest(token: string, id: string | number) {
   const payload = await adminRequest<unknown>(`/api/leave/requests/${id}`, { token })
-  return normalizeSingle(payload)
+  return normalizeLeaveRequestDetail(payload)
 }
 
 export async function leaveRequestApprovalAction(
@@ -4097,6 +4662,155 @@ export async function getMyProfile(token: string) {
   return normalizeSingle(payload)
 }
 
+const PROFILE_PHOTO_URL_KEYS = [
+  "profile_photo_url",
+  "photo_url",
+  "url",
+  "avatar_url",
+  "avatar",
+  "image_url",
+  "imageUrl",
+  "signed_url",
+  "public_url",
+] as const
+
+/**
+ * Extract a profile picture URL from common API response shapes.
+ * Supports plain strings, `{ url }`, nested `data`/`result`/`user`/`employee` objects.
+ */
+export function extractProfilePhotoUrl(payload: unknown): string | null {
+  if (typeof payload === "string") {
+    const trimmed = payload.trim()
+    return trimmed || null
+  }
+
+  const root = asRecord(payload)
+  if (!root) {
+    return null
+  }
+
+  const candidates: Array<AdminRecord | null> = [
+    root,
+    asRecord(root.data),
+    asRecord(root.result),
+    asRecord(root.item),
+    asRecord(root.profile),
+    asRecord(root.user),
+    asRecord(root.employee),
+    asRecord(asRecord(root.data)?.user),
+    asRecord(asRecord(root.data)?.employee),
+    asRecord(asRecord(root.result)?.user),
+    asRecord(asRecord(root.result)?.employee),
+    asRecord(asRecord(root.employee)?.company_user),
+    asRecord(asRecord(asRecord(root.employee)?.company_user)?.user),
+  ]
+
+  for (const candidate of candidates) {
+    if (!candidate) {
+      continue
+    }
+    for (const key of PROFILE_PHOTO_URL_KEYS) {
+      const value = candidate[key]
+      if (typeof value === "string" && value.trim()) {
+        return value.trim()
+      }
+    }
+  }
+
+  return null
+}
+
+/**
+ * GET /api/me/profile/photo — returns the signed-in user's profile picture URL.
+ * Missing photo (404) resolves to null rather than throwing.
+ */
+export async function getMyProfilePhotoUrl(token: string): Promise<string | null> {
+  try {
+    const payload = await adminRequest<unknown>("/api/me/profile/photo", {
+      token,
+      cacheTtlMs: 30_000,
+    })
+    return extractProfilePhotoUrl(payload)
+  } catch (errorObject) {
+    const status =
+      typeof errorObject === "object" &&
+      errorObject !== null &&
+      "status" in errorObject
+        ? Number((errorObject as { status?: number }).status)
+        : null
+    if (status === 404 || status === 204) {
+      return null
+    }
+    throw errorObject
+  }
+}
+
+/**
+ * Upload the signed-in user's profile picture.
+ * POST /api/me/profile/photo (multipart/form-data, field: file) → 201
+ */
+export async function uploadMyProfilePhoto(
+  token: string,
+  file: File | Blob,
+  fileName?: string
+): Promise<AdminRecord | null> {
+  const formData = new FormData()
+  if (file instanceof File) {
+    formData.set("file", file)
+  } else {
+    formData.set("file", file, fileName?.trim() || "profile-photo.jpg")
+  }
+
+  const response = await fetch(buildUrl("/api/me/profile/photo"), {
+    method: "POST",
+    headers: {
+      // Let the browser set multipart boundary; do not force JSON content-type.
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: formData,
+    cache: "no-store",
+  })
+
+  invalidateAdminGetCache()
+
+  const text = await response.text()
+  let payload: unknown = null
+  if (text) {
+    try {
+      payload = JSON.parse(text) as unknown
+    } catch {
+      payload = { message: text }
+    }
+  }
+
+  if (!response.ok) {
+    const error = new Error(extractMessage(payload, response.status)) as Error & {
+      status?: number
+      payload?: unknown
+    }
+    error.status = response.status
+    error.payload = payload
+    throw error
+  }
+
+  // Prefer explicit URL from the upload response; otherwise re-fetch GET photo.
+  const fromBody = extractProfilePhotoUrl(payload)
+  if (fromBody) {
+    return { ...(asRecord(payload) ?? {}), profile_photo_url: fromBody }
+  }
+
+  try {
+    const photoUrl = await getMyProfilePhotoUrl(token)
+    if (photoUrl) {
+      return { profile_photo_url: photoUrl }
+    }
+  } catch {
+    // Upload succeeded; URL may appear after a short delay.
+  }
+
+  return normalizeSingle(payload) ?? asRecord(payload)
+}
+
 export async function getMyStatus(token: string) {
   const payload = await adminRequest<unknown>("/api/me/status", { token })
   return normalizeSingle(payload)
@@ -4217,9 +4931,135 @@ export async function getMyAttendanceSchedule(
   return normalizeList(payload)
 }
 
+/**
+ * Attendance "today" payloads often include nested relations (employee, branch, schedule).
+ * Generic normalizeSingle() returns the first nested object and drops day status / punch times.
+ */
+function looksLikeAttendanceTodayRecord(record: AdminRecord | null): boolean {
+  if (!record) return false
+  const keys = [
+    "attendance_status",
+    "attendanceStatus",
+    "day_status",
+    "dayStatus",
+    "punch_state",
+    "punchState",
+    "first_punch",
+    "first_punch_at",
+    "first_check_in_at",
+    "firstCheckInAt",
+    "last_punch",
+    "last_punch_at",
+    "last_check_out_at",
+    "lastCheckOutAt",
+    "check_in_at",
+    "checkInAt",
+    "check_out_at",
+    "checkOutAt",
+    "worked_hours",
+    "workedHours",
+    "late_minutes",
+    "lateMinutes",
+    "schedule_start_at",
+    "scheduleStartAt",
+    "schedule_end_at",
+    "scheduleEndAt",
+    "is_off_day",
+    "isOffDay",
+    "processing_state",
+    "processingState",
+    "requires_checkout",
+    "requiresCheckout",
+    "flags",
+  ] as const
+  return keys.some((key) => key in record)
+}
+
+function mergeAttendanceTodayLayers(...layers: Array<AdminRecord | null | undefined>): AdminRecord {
+  const merged: AdminRecord = {}
+  for (const layer of layers) {
+    if (!layer) continue
+    for (const [key, value] of Object.entries(layer)) {
+      if (value === undefined || value === null) continue
+      // Prefer first non-empty scalar; keep first object/array unless missing.
+      if (!(key in merged)) {
+        merged[key] = value
+        continue
+      }
+      const existing = merged[key]
+      if (
+        (existing === "" || existing === "-" || existing === null || existing === undefined) &&
+        value !== "" &&
+        value !== "-"
+      ) {
+        merged[key] = value
+      }
+    }
+  }
+  return merged
+}
+
+function normalizeMyAttendanceToday(payload: unknown): AdminRecord | null {
+  const root = asRecord(payload)
+  if (!root) {
+    const list = asArray(payload)
+    return list?.[0] ?? null
+  }
+
+  // Prefer explicit envelope bodies without peeling to relations.
+  const envelopeCandidates = [
+    asRecord(root.data),
+    asRecord(root.result),
+    asRecord(root.item),
+    asRecord(root.payload),
+    asRecord(root.response),
+    asRecord(root.today),
+    asRecord(root.attendance),
+    asRecord(root.summary),
+    asRecord(root.daily_summary),
+    asRecord(root.dailySummary),
+  ].filter(Boolean) as AdminRecord[]
+
+  let base: AdminRecord | null = null
+  if (looksLikeAttendanceTodayRecord(root)) {
+    base = root
+  } else {
+    for (const candidate of envelopeCandidates) {
+      if (looksLikeAttendanceTodayRecord(candidate)) {
+        base = candidate
+        break
+      }
+    }
+  }
+
+  // Fall back to first envelope object, then root — never first nested employee/branch alone.
+  if (!base) {
+    base = envelopeCandidates[0] ?? root
+  }
+
+  const nestedSummary =
+    asRecord(base.summary) ??
+    asRecord(base.daily_summary) ??
+    asRecord(base.dailySummary) ??
+    asRecord(base.attendance) ??
+    asRecord(base.today) ??
+    asRecord(root.summary) ??
+    asRecord(root.daily_summary)
+
+  // Flatten useful nested summary fields onto the top-level record for UI readers.
+  const flattened = mergeAttendanceTodayLayers(base, nestedSummary)
+
+  // Preserve nested objects for detailed views (TodayOverview already reads summary).
+  if (nestedSummary && !asRecord(flattened.summary)) {
+    flattened.summary = nestedSummary
+  }
+
+  return flattened
+}
+
 export async function getMyAttendanceToday(token: string) {
   const payload = await adminRequest<unknown>("/api/me/attendance/today", { token })
-  return normalizeSingle(payload)
+  return normalizeMyAttendanceToday(payload)
 }
 
 export async function createMyProfileUpdateRequest(token: string, data: AdminRecord) {
@@ -4854,5 +5694,256 @@ export async function deleteEmployeeDocument(
   return adminRequest<unknown>(`/api/employees/${employeeId}/documents/${documentId}`, {
     method: "DELETE",
     token,
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Scheduled Reporting
+// ---------------------------------------------------------------------------
+
+export type ScheduledReportSortOrder = SortOrder
+
+export interface ScheduledReportingListParams {
+  page?: number
+  limit?: number
+  sortBy?: string
+  sortOrder?: ScheduledReportSortOrder
+  search?: string
+  templateId?: number
+  scheduleId?: number
+  reportDefinitionId?: number
+  smtpConfigurationId?: number
+  status?: string
+  emailDeliveryStatus?: string
+  source?: string
+  scheduleType?: string
+  isActive?: boolean
+  isDefault?: boolean
+}
+
+function buildScheduledReportingQuery(params: ScheduledReportingListParams = {}) {
+  const searchParams = new URLSearchParams()
+  if (typeof params.page === "number" && params.page > 0) {
+    searchParams.set("page", String(params.page))
+  }
+  if (typeof params.limit === "number" && params.limit > 0) {
+    searchParams.set("limit", String(params.limit))
+  }
+  if (params.sortBy?.trim()) {
+    searchParams.set("sortBy", params.sortBy.trim())
+  }
+  if (params.sortOrder === "ASC" || params.sortOrder === "DESC") {
+    searchParams.set("sortOrder", params.sortOrder)
+  }
+  if (params.search?.trim()) {
+    searchParams.set("search", params.search.trim())
+  }
+  if (typeof params.templateId === "number") {
+    searchParams.set("templateId", String(params.templateId))
+  }
+  if (typeof params.scheduleId === "number") {
+    searchParams.set("scheduleId", String(params.scheduleId))
+  }
+  if (typeof params.reportDefinitionId === "number") {
+    searchParams.set("reportDefinitionId", String(params.reportDefinitionId))
+  }
+  if (typeof params.smtpConfigurationId === "number") {
+    searchParams.set("smtpConfigurationId", String(params.smtpConfigurationId))
+  }
+  if (params.status?.trim()) {
+    searchParams.set("status", params.status.trim())
+  }
+  if (params.emailDeliveryStatus?.trim()) {
+    searchParams.set("emailDeliveryStatus", params.emailDeliveryStatus.trim())
+  }
+  if (params.source?.trim()) {
+    searchParams.set("source", params.source.trim())
+  }
+  if (params.scheduleType?.trim()) {
+    searchParams.set("scheduleType", params.scheduleType.trim())
+  }
+  if (typeof params.isActive === "boolean") {
+    searchParams.set("isActive", String(params.isActive))
+  }
+  if (typeof params.isDefault === "boolean") {
+    searchParams.set("isDefault", String(params.isDefault))
+  }
+  const query = searchParams.toString()
+  return query ? `?${query}` : ""
+}
+
+async function listScheduledReportingCollection(
+  path: string,
+  token: string,
+  params: ScheduledReportingListParams = {}
+): Promise<PaginatedUsersResult> {
+  const fallbackPage = params.page && params.page > 0 ? params.page : 1
+  const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20
+  const payload = await adminRequest<unknown>(`${path}${buildScheduledReportingQuery(params)}`, {
+    token,
+  })
+  const rows = normalizeList(payload)
+  const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit)
+  return { rows, ...pagination }
+}
+
+export async function listScheduledReportDefinitions(token: string) {
+  const payload = await adminRequest<unknown>("/api/scheduled-reporting/report-definitions", {
+    token,
+  })
+  return normalizeList(payload)
+}
+
+export async function listScheduledReportTemplates(
+  token: string,
+  params: ScheduledReportingListParams = {}
+) {
+  return listScheduledReportingCollection("/api/scheduled-reporting/templates", token, params)
+}
+
+export async function getScheduledReportTemplate(token: string, id: string | number) {
+  const payload = await adminRequest<unknown>(`/api/scheduled-reporting/templates/${id}`, {
+    token,
+  })
+  return normalizeSingle(payload)
+}
+
+export async function createScheduledReportTemplate(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/scheduled-reporting/templates", {
+    method: "POST",
+    token,
+    body: data,
+  })
+}
+
+export async function updateScheduledReportTemplate(
+  token: string,
+  id: string | number,
+  data: AdminRecord
+) {
+  return adminRequest<unknown>(`/api/scheduled-reporting/templates/${id}`, {
+    method: "PATCH",
+    token,
+    body: data,
+  })
+}
+
+export async function deleteScheduledReportTemplate(token: string, id: string | number) {
+  return adminRequest<unknown>(`/api/scheduled-reporting/templates/${id}`, {
+    method: "DELETE",
+    token,
+  })
+}
+
+export async function listScheduledReportSchedules(
+  token: string,
+  params: ScheduledReportingListParams = {}
+) {
+  return listScheduledReportingCollection("/api/scheduled-reporting/schedules", token, params)
+}
+
+export async function getScheduledReportSchedule(token: string, id: string | number) {
+  const payload = await adminRequest<unknown>(`/api/scheduled-reporting/schedules/${id}`, {
+    token,
+  })
+  return normalizeSingle(payload)
+}
+
+export async function createScheduledReportSchedule(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/scheduled-reporting/schedules", {
+    method: "POST",
+    token,
+    body: data,
+  })
+}
+
+export async function updateScheduledReportSchedule(
+  token: string,
+  id: string | number,
+  data: AdminRecord
+) {
+  return adminRequest<unknown>(`/api/scheduled-reporting/schedules/${id}`, {
+    method: "PATCH",
+    token,
+    body: data,
+  })
+}
+
+export async function deleteScheduledReportSchedule(token: string, id: string | number) {
+  return adminRequest<unknown>(`/api/scheduled-reporting/schedules/${id}`, {
+    method: "DELETE",
+    token,
+  })
+}
+
+export async function listScheduledReportExecutions(
+  token: string,
+  params: ScheduledReportingListParams = {}
+) {
+  return listScheduledReportingCollection("/api/scheduled-reporting/executions", token, params)
+}
+
+export async function getScheduledReportExecution(token: string, id: string | number) {
+  const payload = await adminRequest<unknown>(`/api/scheduled-reporting/executions/${id}`, {
+    token,
+  })
+  return normalizeSingle(payload)
+}
+
+export async function listScheduledReportSmtpConfigurations(
+  token: string,
+  params: ScheduledReportingListParams = {}
+) {
+  return listScheduledReportingCollection(
+    "/api/scheduled-reporting/smtp-configurations",
+    token,
+    params
+  )
+}
+
+export async function getScheduledReportSmtpConfiguration(token: string, id: string | number) {
+  const payload = await adminRequest<unknown>(
+    `/api/scheduled-reporting/smtp-configurations/${id}`,
+    { token }
+  )
+  return normalizeSingle(payload)
+}
+
+export async function createScheduledReportSmtpConfiguration(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/scheduled-reporting/smtp-configurations", {
+    method: "POST",
+    token,
+    body: data,
+  })
+}
+
+export async function updateScheduledReportSmtpConfiguration(
+  token: string,
+  id: string | number,
+  data: AdminRecord
+) {
+  return adminRequest<unknown>(`/api/scheduled-reporting/smtp-configurations/${id}`, {
+    method: "PATCH",
+    token,
+    body: data,
+  })
+}
+
+export async function deleteScheduledReportSmtpConfiguration(token: string, id: string | number) {
+  return adminRequest<unknown>(`/api/scheduled-reporting/smtp-configurations/${id}`, {
+    method: "DELETE",
+    token,
+  })
+}
+
+export async function testScheduledReportSmtpConfiguration(
+  token: string,
+  id: string | number,
+  data: { toEmail?: string; sendTestEmail?: boolean } = {}
+) {
+  return adminRequest<unknown>(`/api/scheduled-reporting/smtp-configurations/${id}/test`, {
+    method: "POST",
+    token,
+    body: data,
   })
 }

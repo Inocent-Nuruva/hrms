@@ -1,5 +1,23 @@
-import { AttendanceActivityClient } from "@/components/dashboard/attendance-activity-client"
+"use client"
+
+import { DashboardSectionRootRedirect } from "@/components/dashboard/dashboard-section-root-redirect"
+import { useDashboardActor } from "@/hooks/use-dashboard-actor"
+import {
+  attendanceSectionTabGroups,
+  employeeAttendanceSectionTabGroups,
+} from "@/lib/dashboard-sections"
 
 export default function AttendanceIndexPage() {
-  return <AttendanceActivityClient section="daily-summaries" />
+  const actor = useDashboardActor()
+
+  if (!actor.ready) {
+    return null
+  }
+
+  return (
+    <DashboardSectionRootRedirect
+      groups={actor.isAdmin ? attendanceSectionTabGroups : employeeAttendanceSectionTabGroups}
+      fallbackHref="/dashboard"
+    />
+  )
 }

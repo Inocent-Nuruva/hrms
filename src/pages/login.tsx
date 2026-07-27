@@ -1,5 +1,6 @@
 import { useRouter } from "next/router";
 import { LoginFlow } from "@/components/auth/LoginFlow";
+import { ThemeTogglerButton } from "@/components/animate-ui/components/buttons/theme-toggler";
 import { ErrorAlertOverlay } from "@/components/error-alert-overlay";
 import { SuccessAlertOverlay } from "@/components/success-alert-overlay";
 import { Toaster } from "@/components/ui/sonner";
@@ -24,22 +25,33 @@ export default function LoginPage() {
       <SuccessAlertOverlay />
       <ErrorAlertOverlay />
 
-      {/* Subtle background */}
+      {/* Theme-aware page background */}
+      <div className="pointer-events-none fixed inset-0 bg-background" />
       <div className="pointer-events-none fixed inset-0 bg-gradient-to-br from-slate-100 via-white to-slate-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950" />
+
+      {/* Theme toggle — available before login */}
+      <div className="fixed right-3 top-3 z-20 md:right-4 md:top-4">
+        <ThemeTogglerButton
+          variant="outline"
+          size="icon-sm"
+          modes={["light", "dark", "system"]}
+          className="border-border bg-card/90 text-foreground shadow-sm backdrop-blur-sm hover:bg-muted"
+        />
+      </div>
 
       <div className="relative flex min-h-screen items-center justify-center p-3 md:p-4 lg:p-6" style={{ zIndex: 1 }}>
         <div className="w-full max-w-[860px] animate-card-entrance">
           {/* Desktop / Tablet split layout */}
-          <div className="hidden md:grid grid-cols-1 md:grid-cols-5 overflow-hidden rounded-2xl border border-border bg-card shadow-sm min-h-[420px]">
-            {/* Brand panel */}
-            <div className="md:col-span-3 flex flex-col justify-center p-8 lg:p-10 bg-gradient-to-br from-[#303194] to-[#252882] text-white relative overflow-hidden">
+          <div className="hidden min-h-[420px] grid-cols-1 overflow-hidden rounded-2xl border border-border bg-card text-card-foreground shadow-sm md:grid md:grid-cols-5 dark:shadow-none">
+            {/* Brand panel — brand colors stay constant in both themes */}
+            <div className="relative flex flex-col justify-center overflow-hidden bg-gradient-to-br from-[#303194] to-[#252882] p-8 text-white md:col-span-3 lg:p-10">
               <div className="relative z-10">
                 <div className="mb-6">
                   <span className="text-sm font-semibold tracking-tight">Alliance HRMS</span>
                 </div>
 
                 <h1
-                  className="text-2xl lg:text-3xl font-semibold tracking-tighter leading-tight mb-3 animate-fade-up"
+                  className="mb-3 text-2xl font-semibold leading-tight tracking-tighter animate-fade-up lg:text-3xl"
                   style={{ animationDelay: "140ms" }}
                 >
                   Welcome back.
@@ -55,10 +67,12 @@ export default function LoginPage() {
             </div>
 
             {/* Form panel */}
-            <div className="md:col-span-2 p-4 lg:p-5 flex items-center bg-background">
-              <div className="w-full max-w-[240px] mx-auto">
+            <div className="flex items-center bg-background p-4 md:col-span-2 lg:p-5 dark:bg-card">
+              <div className="mx-auto w-full max-w-[240px]">
                 <div className="mb-4">
-                  <h2 className="text-base font-semibold tracking-tight">Sign in</h2>
+                  <h2 className="text-base font-semibold tracking-tight text-foreground">
+                    Sign in
+                  </h2>
                 </div>
 
                 <LoginFlow defaultEmail={prefillEmail} onSuccess={handleSuccess} />
@@ -73,24 +87,24 @@ export default function LoginPage() {
               <img
                 src="/assets/alliance-logo.png"
                 alt="Alliance Insurance"
-                className="h-7 w-auto"
+                className="h-7 w-auto dark:brightness-0 dark:invert"
               />
             </div>
 
             <div className="mb-3 text-center">
               <h1
-                className="text-lg font-semibold tracking-tighter animate-fade-up"
+                className="text-lg font-semibold tracking-tighter text-foreground animate-fade-up"
                 style={{ animationDelay: "80ms" }}
               >
                 Welcome back
               </h1>
             </div>
 
-            <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+            <div className="rounded-xl border border-border bg-card p-4 text-card-foreground shadow-sm dark:shadow-none">
               <LoginFlow defaultEmail={prefillEmail} onSuccess={handleSuccess} />
             </div>
 
-            <p className="mt-6 text-center text-[10px] text-muted-foreground/70">
+            <p className="mt-6 text-center text-[10px] text-muted-foreground">
               © {new Date().getFullYear()} Alliance Insurance Corporation Ltd
             </p>
           </div>

@@ -1,10 +1,12 @@
 "use client"
 
 import * as React from "react"
-import { KeyRound, ShieldCheck, Smartphone } from "lucide-react"
+import Link from "next/link"
+import { ImageIcon, KeyRound, ShieldCheck, Smartphone } from "lucide-react"
 import { toast } from "sonner"
 import { showSuccessAlert } from "@/lib/success-alert"
 
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -14,6 +16,9 @@ interface AccountSettingsPanelProps {
   token: string
   loading: boolean
   onChangeMyPassword: (oldPassword: string, newPassword: string) => Promise<void>
+  profilePhotoUrl?: string | null
+  displayName?: string | null
+  profilePictureHref?: string | null
 }
 
 type SecurityTab = "reset-password" | "two-factor" | "devices"
@@ -22,11 +27,22 @@ export function AccountSettingsPanel({
   token,
   loading,
   onChangeMyPassword,
+  profilePhotoUrl,
+  displayName,
+  profilePictureHref,
 }: AccountSettingsPanelProps) {
   const [activeTab, setActiveTab] = React.useState<SecurityTab>("reset-password")
   const [currentPassword, setCurrentPassword] = React.useState("")
   const [newPassword, setNewPassword] = React.useState("")
   const tabIndex = activeTab === "reset-password" ? 0 : activeTab === "two-factor" ? 1 : 2
+  const avatarLabel = displayName?.trim() || "Your profile"
+  const initials =
+    avatarLabel
+      .split(" ")
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? "")
+      .join("") || "U"
 
   const handleChangePassword = async () => {
     if (!token) {
@@ -51,6 +67,34 @@ export function AccountSettingsPanel({
 
   return (
     <div className="grid gap-4 px-4 lg:px-6">
+      {profilePictureHref ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Profile Picture</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <Avatar className="size-14 ring-1 ring-border" size="lg">
+                {profilePhotoUrl ? <AvatarImage src={profilePhotoUrl} alt={avatarLabel} /> : null}
+                <AvatarFallback className="text-base font-semibold">{initials}</AvatarFallback>
+              </Avatar>
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-foreground">{avatarLabel}</p>
+                <p className="text-sm text-muted-foreground">
+                  Update the photo shown on your dashboard, profile, and account menu.
+                </p>
+              </div>
+            </div>
+            <Link
+              href={profilePictureHref}
+              className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground shadow-xs transition-colors hover:bg-accent hover:text-accent-foreground self-start sm:self-auto"
+            >
+              <ImageIcon className="size-4" />
+              Change Profile Picture
+            </Link>
+          </CardContent>
+        </Card>
+      ) : null}
       <Card>
         <CardHeader>
           <CardTitle>Security & Authentication</CardTitle>

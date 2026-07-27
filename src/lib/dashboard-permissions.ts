@@ -63,7 +63,7 @@ const ADMIN_DASHBOARD_LANDING_ROUTES = [
   "/dashboard/employees/profile-update-approvals",
   "/dashboard/employees/offboarding",
   "/dashboard/attendance/daily-summaries",
-  "/dashboard/attendance/settings",
+  "/dashboard/attendance/policies",
   "/dashboard/attendance/shifts",
   "/dashboard/access-control",
   "/dashboard/positions",
@@ -134,7 +134,6 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/me/leave/policies": null,
   "/dashboard/attendance/today": null,
   "/dashboard/attendance/punch-action": null,
-  "/dashboard/attendance/punch-history": null,
   "/dashboard/attendance/attendance-history": null,
   "/dashboard/attendance/schedule-preview": null,
   "/dashboard/attendance/corrections": null,
@@ -247,6 +246,7 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/operations/recruitment": "view_company_data",
   "/dashboard/operations/payroll": null,
   "/dashboard/operations/reports": "view_company_data",
+  "/dashboard/operations/scheduled-reporting": "view_company_data",
   "/dashboard/access-control": {
     permissions: [
       "attendance_devices:read",

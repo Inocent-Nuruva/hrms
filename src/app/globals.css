@@ -47,8 +47,8 @@
   --card-foreground: #111111;
   --popover: #ffffff;
   --popover-foreground: #111111;
-  --primary: #111111;
-  --primary-rgb: 17 17 17;
+  --primary: #303194;
+  --primary-rgb: 48 49 148;
   --primary-foreground: #ffffff;
   --secondary: #f5f5f5;
   --secondary-foreground: #111111;
@@ -68,16 +68,16 @@
   --theme-transition-x: 50vw;
   --theme-transition-y: 50vh;
   --theme-transition-radius: 150vmax;
-  --sidebar: #ffffff;
+  --sidebar: #f7f8fc;
   --sidebar-foreground: #111111;
-  --sidebar-primary: #111111;
+  --sidebar-primary: #303194;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #f3f4f6;
+  --sidebar-accent: #eef0f8;
   --sidebar-accent-foreground: #111111;
-  --sidebar-border: #e5e7eb;
-  --sidebar-ring: #111111;
-  --sidebar-icon-color: #111111;
-  --sidebar-active-link-color: #111111;
+  --sidebar-border: #e2e5ef;
+  --sidebar-ring: #303194;
+  --sidebar-icon-color: #303194;
+  --sidebar-active-link-color: #303194;
   --table-header-accent: #111111;
   --table-header-accent-bg: rgba(17, 17, 17, 0.14);
   --section-tab-rail-bg: rgba(17, 17, 17, 0.10);
@@ -101,6 +101,14 @@
   box-sizing: border-box;
 }
 
+html {
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
 html,
 body,
 #__next {
@@ -116,12 +124,27 @@ body {
   overflow-x: hidden;
 }
 
+/* Dashboard shell owns scrolling — avoid a second browser scrollbar. */
+body:has([data-slot="sidebar-wrapper"]) {
+  height: 100%;
+  overflow: hidden;
+}
+
+html:has([data-slot="sidebar-wrapper"]) {
+  height: 100%;
+  overflow: hidden;
+}
+
 input:focus {
   outline: none;
 }
 
 input::placeholder {
-  color: #c0c5d0;
+  color: color-mix(in srgb, var(--muted-foreground) 72%, transparent);
+}
+
+.dark input::placeholder {
+  color: color-mix(in srgb, var(--muted-foreground) 80%, transparent);
 }
 
 button:focus-visible {
@@ -743,40 +766,41 @@ table.min-w-full > tbody > tr > td {
   --brand-blue: #303194;
   --brand-blue-dark: #252882;
   --brand-blue-pale: color-mix(in srgb, var(--brand-blue) 18%, white);
-  --background: #0a0a0a;
+  --background: #181818;
   --foreground: #ffffff;
-  --card: #111111;
+  --card: #202020;
   --card-foreground: #ffffff;
-  --popover: #111111;
+  --popover: #202020;
   --popover-foreground: #ffffff;
-  --primary: #ffffff;
-  --primary-rgb: 255 255 255;
-  --primary-foreground: #111111;
-  --secondary: #1f1f1f;
+  /* Solid brand primary (not pure white) so primary buttons keep white text in dark mode. */
+  --primary: #303194;
+  --primary-rgb: 48 49 148;
+  --primary-foreground: #ffffff;
+  --secondary: #222222;
   --secondary-foreground: #ffffff;
-  --muted: #1a1a1a;
+  --muted: #242424;
   --muted-foreground: #d4d4d8;
-  --accent: #ffffff;
-  --accent-foreground: #111111;
+  --accent: #303194;
+  --accent-foreground: #ffffff;
   --destructive: #ef4444;
-  --border: #2a2a2a;
-  --input: #2a2a2a;
+  --border: #303030;
+  --input: #303030;
   --ring: #ffffff;
   --chart-1: #ffffff;
   --chart-2: #d4d4d4;
   --chart-3: #a3a3a3;
   --chart-4: #737373;
   --chart-5: #525252;
-  --sidebar: #0d0d0d;
+  --sidebar: #14151c;
   --sidebar-foreground: #ffffff;
-  --sidebar-primary: #ffffff;
-  --sidebar-primary-foreground: #111111;
-  --sidebar-accent: #1f1f1f;
+  --sidebar-primary: #303194;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #1e2030;
   --sidebar-accent-foreground: #ffffff;
-  --sidebar-border: #2a2a2a;
-  --sidebar-ring: #ffffff;
-  --sidebar-icon-color: #ffffff;
-  --sidebar-active-link-color: #ffffff;
+  --sidebar-border: #2a2d3a;
+  --sidebar-ring: #303194;
+  --sidebar-icon-color: #a5a6e8;
+  --sidebar-active-link-color: #c7c8f5;
   --context-card-border: hsla(0, 0%, 18%, 1);
   --ds-red-300: oklch(31.47% 0.1105 20.96);
   --ds-red-900: oklch(69.96% 0.2136 22.03);
@@ -946,6 +970,228 @@ table.min-w-full > tbody > tr > td {
 
 .dark .fixed.inset-0.z-50 table.min-w-full > thead.bg-slate-50 > tr > th {
   color: #e5e7eb !important;
+}
+
+/* ─── Site header: glass + soft brand depth ─── */
+.site-header,
+[data-slot="site-header"] {
+  position: relative;
+  isolation: isolate;
+  /* Keep visible so header popovers (accent color, menus) are not clipped */
+  overflow: visible;
+  background:
+    radial-gradient(90% 140% at 0% 50%, rgba(var(--primary-rgb), 0.08) 0%, transparent 58%),
+    radial-gradient(70% 120% at 100% 0%, rgba(var(--primary-rgb), 0.06) 0%, transparent 52%),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--background) 88%, white 12%) 0%,
+      color-mix(in srgb, var(--background) 96%, rgb(var(--primary-rgb)) 4%) 100%
+    );
+  backdrop-filter: blur(12px) saturate(1.15);
+  -webkit-backdrop-filter: blur(12px) saturate(1.15);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.65),
+    0 1px 0 color-mix(in srgb, var(--border) 70%, transparent),
+    0 8px 24px rgba(15, 23, 42, 0.04);
+}
+
+.site-header::before,
+[data-slot="site-header"]::before {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  opacity: 0.35;
+  background-image: radial-gradient(rgba(var(--primary-rgb), 0.08) 0.6px, transparent 0.6px);
+  background-size: 12px 12px;
+  mask-image: linear-gradient(90deg, transparent 0%, rgba(0, 0, 0, 0.7) 20%, rgba(0, 0, 0, 0.7) 80%, transparent 100%);
+}
+
+.dark .site-header,
+.dark [data-slot="site-header"] {
+  background:
+    radial-gradient(90% 140% at 0% 50%, rgba(var(--primary-rgb), 0.16) 0%, transparent 58%),
+    radial-gradient(70% 120% at 100% 0%, rgba(var(--primary-rgb), 0.12) 0%, transparent 52%),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--background) 82%, rgb(var(--primary-rgb)) 18%) 0%,
+      color-mix(in srgb, var(--background) 94%, #000 6%) 100%
+    );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 1px 0 color-mix(in srgb, var(--border) 80%, transparent),
+    0 10px 28px rgba(0, 0, 0, 0.22);
+}
+
+.dark .site-header::before,
+.dark [data-slot="site-header"]::before {
+  opacity: 0.22;
+  background-image: radial-gradient(rgba(var(--primary-rgb), 0.14) 0.6px, transparent 0.6px);
+}
+
+/* ─── Sidebar surface: soft brand depth (restored design, no split border) ─── */
+.app-sidebar-surface,
+[data-sidebar="sidebar"][data-slot="sidebar-inner"],
+[data-sidebar="sidebar"][data-mobile="true"] {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-right: none !important;
+  /* Multi-layer brand wash — wins over plain bg-sidebar */
+  background-color: transparent !important;
+  background-image:
+    radial-gradient(120% 70% at 0% 0%, rgba(var(--primary-rgb), 0.12) 0%, transparent 55%),
+    radial-gradient(90% 55% at 100% 100%, rgba(var(--primary-rgb), 0.08) 0%, transparent 50%),
+    linear-gradient(
+      165deg,
+      color-mix(in srgb, var(--sidebar) 90%, white 10%) 0%,
+      var(--sidebar) 42%,
+      color-mix(in srgb, var(--sidebar) 92%, rgb(var(--primary-rgb)) 8%) 100%
+    ) !important;
+  background-repeat: no-repeat;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+.app-sidebar-surface::before,
+[data-sidebar="sidebar"][data-slot="sidebar-inner"]::before,
+[data-sidebar="sidebar"][data-mobile="true"]::before {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  opacity: 0.45;
+  background-image:
+    radial-gradient(rgba(var(--primary-rgb), 0.1) 0.7px, transparent 0.7px);
+  background-size: 14px 14px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.55) 0%, transparent 72%);
+  -webkit-mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.55) 0%, transparent 72%);
+}
+
+.app-sidebar-surface::after,
+[data-sidebar="sidebar"][data-slot="sidebar-inner"]::after,
+[data-sidebar="sidebar"][data-mobile="true"]::after {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  top: -20%;
+  right: -35%;
+  z-index: 0;
+  width: 70%;
+  height: 55%;
+  border-radius: 9999px;
+  background: radial-gradient(
+    circle,
+    rgba(var(--primary-rgb), 0.14) 0%,
+    transparent 68%
+  );
+  filter: blur(2px);
+}
+
+/* Keep sidebar content above decorative layers */
+.app-sidebar-surface > *,
+[data-sidebar="sidebar"][data-slot="sidebar-inner"] > *,
+[data-sidebar="sidebar"][data-mobile="true"] > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Footer sits on a glass strip */
+[data-sidebar="footer"] {
+  position: relative;
+  margin-top: 0.25rem;
+  border-top: 1px solid color-mix(in srgb, var(--sidebar-border) 80%, transparent);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--sidebar) 55%, transparent) 0%,
+      color-mix(in srgb, rgb(var(--primary-rgb)) 5%, var(--sidebar)) 100%
+    );
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+[data-sidebar="footer"]::before {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  top: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(var(--primary-rgb), 0.35),
+    transparent
+  );
+}
+
+/* Active nav item: soft brand wash */
+[data-sidebar="menu-button"][data-active="true"],
+[data-sidebar="menu-button"][data-active] {
+  background:
+    linear-gradient(
+      90deg,
+      rgba(var(--primary-rgb), 0.12) 0%,
+      rgba(var(--primary-rgb), 0.05) 100%
+    ) !important;
+  box-shadow: inset 3px 0 0 0 rgb(var(--primary-rgb));
+}
+
+.dark .app-sidebar-surface,
+.dark [data-sidebar="sidebar"][data-slot="sidebar-inner"],
+.dark [data-sidebar="sidebar"][data-mobile="true"] {
+  background-color: transparent !important;
+  background-image:
+    radial-gradient(120% 70% at 0% 0%, rgba(var(--primary-rgb), 0.2) 0%, transparent 55%),
+    radial-gradient(90% 55% at 100% 100%, rgba(var(--primary-rgb), 0.12) 0%, transparent 52%),
+    linear-gradient(
+      165deg,
+      color-mix(in srgb, var(--sidebar) 86%, rgb(var(--primary-rgb)) 14%) 0%,
+      var(--sidebar) 48%,
+      color-mix(in srgb, var(--sidebar) 92%, #000 8%) 100%
+    ) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  border-right: none !important;
+}
+
+.dark .app-sidebar-surface::before,
+.dark [data-sidebar="sidebar"][data-slot="sidebar-inner"]::before,
+.dark [data-sidebar="sidebar"][data-mobile="true"]::before {
+  opacity: 0.3;
+  background-image:
+    radial-gradient(rgba(var(--primary-rgb), 0.16) 0.7px, transparent 0.7px);
+}
+
+.dark .app-sidebar-surface::after,
+.dark [data-sidebar="sidebar"][data-slot="sidebar-inner"]::after,
+.dark [data-sidebar="sidebar"][data-mobile="true"]::after {
+  background: radial-gradient(
+    circle,
+    rgba(var(--primary-rgb), 0.22) 0%,
+    transparent 68%
+  );
+}
+
+.dark [data-sidebar="footer"] {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--sidebar) 70%, transparent) 0%,
+      color-mix(in srgb, rgb(var(--primary-rgb)) 10%, var(--sidebar)) 100%
+    );
+}
+
+.dark [data-sidebar="menu-button"][data-active="true"],
+.dark [data-sidebar="menu-button"][data-active] {
+  background:
+    linear-gradient(
+      90deg,
+      rgba(var(--primary-rgb), 0.22) 0%,
+      rgba(var(--primary-rgb), 0.08) 100%
+    ) !important;
 }
 
 @layer base {

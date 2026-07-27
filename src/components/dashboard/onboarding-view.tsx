@@ -1,11 +1,12 @@
 "use client"
 
 import * as React from "react"
+import { useSearchParams } from "next/navigation"
 import { HorizontalScrollContainer } from "@/components/common/horizontal-scroll-container"
 import { SearchToggleField } from "@/components/common/search-toggle-field"
 import { Ban, CheckCheck, CircleHelp, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react"
-import { canPerformPermission } from "@/components/app-sidebar"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
+import { canPerformPermission } from "@/lib/dashboard-permissions"
 
 import { cn } from "@/lib/utils"
 import { useDebouncedValue } from "@/hooks/use-debounced-value"
@@ -89,6 +90,7 @@ import {
   type OnboardingShiftAssignmentDraft,
   type OnboardingTimetableAssignmentDraft,
 } from "@/lib/onboarding-provisioning"
+import { notifySubmittedRequestApprovers } from "@/lib/request-notifications"
 
 type OnboardingTab = "requests" | "workflows"
 type OnboardingLookupKey =
@@ -816,6 +818,15 @@ function MultiSelectChecklist({
 }
 
 export function OnboardingView() {
+  const searchParams = useSearchParams()
+  const highlightedRequestId = React.useMemo(
+    () =>
+      searchParams?.get("highlight") ??
+      searchParams?.get("requestId") ??
+      searchParams?.get("request_id") ??
+      "",
+    [searchParams]
+  )
   const actor = useDashboardActor()
   const actorPermissions = actor.permissionLabels
   const canCreateOnboardingRequests = React.useMemo(
@@ -2032,7 +2043,7 @@ export function OnboardingView() {
         throw new Error(provisioningResult.error)
       }
 
-      await createOnboardingRequest(token, {
+      const createdRequest = await createOnboardingRequest(token, {
         employee_id: Number(requestForm.employee_id),
         workflow_id: requestForm.workflow_id ? Number(requestForm.workflow_id) : undefined,
         title: requestForm.title.trim(),
@@ -2042,6 +2053,20 @@ export function OnboardingView() {
         submit: requestForm.submit === "true",
         provisioning: provisioningResult.provisioning,
       })
+      if (requestForm.submit === "true") {
+        const createdRecord = toRecord(createdRequest)
+        const createdRequestId = readNumber(createdRecord ?? {}, ["id", "request_id"])
+        void notifySubmittedRequestApprovers({
+          kind: "onboarding_request",
+          token,
+          request: createdRequest,
+          requesterName: selectedEmployee ? formatEmployeeOptionLabel(selectedEmployee, Number(requestForm.employee_id)) : undefined,
+          loadRequest:
+            createdRequestId === null
+              ? undefined
+              : () => getOnboardingRequest(token, createdRequestId),
+        })
+      }
 
       resetRequestForm()
       setRequestSheetOpen(false)
@@ -2411,6 +2436,24 @@ export function OnboardingView() {
       setRequestDetailsLoading(false)
     }
   }
+
+  const openedHighlightedRequestRef = React.useRef("")
+  React.useEffect(() => {
+    if (activeTab !== "requests" || !highlightedRequestId) {
+      return
+    }
+    if (openedHighlightedRequestRef.current === highlightedRequestId) {
+      return
+    }
+
+    const highlightedRow =
+      requests.find((row) =>
+        String(readNumber(row, ["id", "request_id"]) ?? "") === highlightedRequestId
+      ) ?? { id: highlightedRequestId, request_id: highlightedRequestId }
+
+    openedHighlightedRequestRef.current = highlightedRequestId
+    void openRequestDetails(highlightedRow)
+  }, [activeTab, highlightedRequestId, requests])
 
   return (
     <div className="space-y-2 px-4 pb-6 pt-2 lg:px-6">

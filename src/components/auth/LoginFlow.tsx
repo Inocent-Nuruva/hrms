@@ -134,7 +134,7 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
                 if (loginError) setLoginError(null);
               }}
               placeholder="admin@company.com"
-              className="flex h-8 w-full rounded-md border border-input bg-background px-2.5 py-1 text-xs ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex h-8 w-full rounded-md border border-input bg-background px-2.5 py-1 text-xs text-foreground ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 dark:placeholder:text-muted-foreground/70"
             />
           </div>
 
@@ -158,13 +158,13 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
                   if (loginError) setLoginError(null);
                 }}
                 placeholder="Enter password"
-                className="flex h-8 w-full rounded-md border border-input bg-background px-2.5 py-1 pr-9 text-xs ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex h-8 w-full rounded-md border border-input bg-background px-2.5 py-1 pr-9 text-xs text-foreground ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 dark:placeholder:text-muted-foreground/70"
               />
               <button
                 type="button"
                 aria-label={showPassword ? "Hide password" : "Show password"}
                 onClick={() => setShowPassword((current) => !current)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
               >
                 {showPassword ? <EyeOffIcon size={14} /> : <EyeIcon size={14} />}
               </button>
@@ -172,13 +172,13 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
           </div>
 
           {loginError && (
-            <div className="rounded-md border border-destructive/20 bg-destructive/5 px-2.5 py-1.5 text-[10px] text-destructive">
+            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-2.5 py-1.5 text-[10px] text-destructive dark:border-destructive/40 dark:bg-destructive/15">
               {loginError}
             </div>
           )}
 
           <div className="flex items-center justify-between text-[10px]">
-            <label className="flex items-center gap-1 text-muted-foreground cursor-pointer">
+            <label className="flex cursor-pointer items-center gap-1 text-muted-foreground">
               <Checkbox
                 checked={rememberMe}
                 onCheckedChange={(checked) => {
@@ -191,7 +191,7 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
                     }
                   }
                 }}
-                className="data-checked:bg-[#303194] data-checked:border-[#303194] focus-visible:ring-[#303194]/50"
+                className="data-checked:border-primary data-checked:bg-primary focus-visible:ring-primary/50"
               />
               Remember me
             </label>
@@ -200,7 +200,7 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
           <button
             type="submit"
             disabled={isLoading}
-            className="inline-flex h-8 w-full items-center justify-center rounded-md bg-[#303194] px-3 text-[10px] font-semibold text-white transition-all hover:bg-[#252882] active:scale-[0.985] disabled:opacity-70 disabled:cursor-not-allowed"
+            className="inline-flex h-8 w-full items-center justify-center rounded-md bg-primary px-3 text-[10px] font-semibold text-primary-foreground transition-all hover:bg-[var(--brand-blue-dark)] active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-70"
           >
             {isLoading ? "Signing in..." : "Sign In"}
           </button>

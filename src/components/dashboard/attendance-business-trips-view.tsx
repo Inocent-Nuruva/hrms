@@ -349,7 +349,7 @@ function ToolbarButton({
       className={cn(
         "inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50",
         variant === "primary"
-          ? "bg-slate-900 text-white hover:bg-slate-800"
+          ? "bg-primary !text-white hover:brightness-95"
           : "border border-slate-300 text-slate-700 hover:bg-slate-50"
       )}
     >
@@ -708,7 +708,7 @@ export function AttendanceBusinessTripsView() {
                 className={cn(
                   "rounded px-1.5 py-0.5 text-[11px] font-medium transition-colors",
                   isSelected
-                    ? "bg-slate-900 text-white"
+                    ? "bg-primary !text-white"
                     : "text-slate-600 hover:bg-slate-100"
                 )}
                 onClick={() => {

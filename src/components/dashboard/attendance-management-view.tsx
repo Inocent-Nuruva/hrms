@@ -3,7 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { CircleHelpIcon, InfoIcon, PencilIcon, PlusIcon, RefreshCwIcon, Trash2Icon, XIcon } from "lucide-react"
+import { CircleHelpIcon, FilterIcon, InfoIcon, PencilIcon, PlusIcon, RefreshCwIcon, Trash2Icon, XIcon } from "lucide-react"
 import {
   Dialog,
   DialogDescription,
@@ -22,6 +22,12 @@ import {
   RecordDetailsDialog,
 } from "@/components/dashboard/admin-view-shared"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   Tooltip,
   TooltipContent,
@@ -69,7 +75,226 @@ type FieldConfig = {
   options?: FieldOption[]
   placeholder?: string
   readOnlyOnEdit?: boolean
+  /** Pre-filled create value (string form state). */
+  defaultValue?: string
 }
+
+/** Full attendance policy schema → POST/PATCH /api/attendance/config/policies */
+const ATTENDANCE_POLICY_FIELDS: FieldConfig[] = [
+  {
+    key: "name",
+    label: "Policy Name",
+    description: "Name of this attendance policy.",
+    type: "text",
+    required: true,
+    placeholder: "e.g Main Office Policy",
+  },
+  {
+    key: "is_active",
+    label: "Policy Is Active",
+    description: "Usually leave No and use Activate after review. Only one policy is active per company.",
+    type: "boolean",
+    defaultValue: "false",
+  },
+  {
+    key: "late_after_minutes",
+    label: "Mark Late After (Minutes)",
+    description: "Minutes after scheduled start before someone is considered late.",
+    type: "number",
+    placeholder: "e.g 10",
+    defaultValue: "10",
+  },
+  {
+    key: "half_day_after_minutes",
+    label: "Mark Half Day After (Minutes)",
+    description: "Minutes late after which the day counts as half day.",
+    type: "number",
+    placeholder: "e.g 240",
+    defaultValue: "240",
+  },
+  {
+    key: "absent_after_minutes",
+    label: "Mark Absent After (Minutes)",
+    description: "Minutes late after which the day counts as absent.",
+    type: "number",
+    placeholder: "e.g 480",
+    defaultValue: "480",
+  },
+  {
+    key: "grace_period_minutes",
+    label: "Grace Period (Minutes)",
+    description: "Extra minutes allowed before late rules apply.",
+    type: "number",
+    placeholder: "e.g 10",
+    defaultValue: "10",
+  },
+  {
+    key: "allow_early_checkin",
+    label: "Allow Early Check-In",
+    type: "boolean",
+    defaultValue: "true",
+  },
+  {
+    key: "allow_late_checkout",
+    label: "Allow Late Check-Out",
+    type: "boolean",
+    defaultValue: "true",
+  },
+  {
+    key: "auto_absent_if_no_checkin",
+    label: "Auto-Mark Absent If No Check-In",
+    type: "boolean",
+    defaultValue: "true",
+  },
+  {
+    key: "ignore_missing_checkout_if_hours_valid",
+    label: "Ignore Missing Check-Out If Hours Are Enough",
+    type: "boolean",
+    defaultValue: "true",
+  },
+  {
+    key: "max_missing_punch_allowed",
+    label: "Maximum Missing Punches Allowed",
+    type: "number",
+    placeholder: "e.g 0",
+    defaultValue: "0",
+  },
+  {
+    key: "rounding_mode",
+    label: "Rounding Mode",
+    description: "How attendance minutes are rounded.",
+    type: "select",
+    options: ["NEAREST", "UP", "DOWN"],
+    defaultValue: "NEAREST",
+  },
+  {
+    key: "weekend_days",
+    label: "Weekend Days",
+    description: "Comma-separated day codes (API format).",
+    type: "text",
+    placeholder: "e.g SAT,SUN",
+    defaultValue: "SAT,SUN",
+  },
+  {
+    key: "auto_mark_weekend_as_off",
+    label: "Auto-Mark Weekends As Off Days",
+    type: "boolean",
+    defaultValue: "true",
+  },
+  {
+    key: "treat_weekend_as_absent_if_scheduled",
+    label: "Treat Weekend As Absent If Scheduled",
+    type: "boolean",
+    defaultValue: "false",
+  },
+  {
+    key: "holiday_policy_mode",
+    label: "Holiday Policy Mode",
+    type: "select",
+    options: ["OFF", "PAID", "UNPAID", "OPTIONAL"],
+    defaultValue: "OFF",
+  },
+  {
+    key: "authentication_modes",
+    label: "Allowed Check-In Methods",
+    description: "Comma-separated modes employees may use.",
+    type: "text",
+    placeholder: "e.g MOBILE_APP,WEB",
+    defaultValue: "MOBILE_APP,WEB",
+  },
+  {
+    key: "require_geo_fencing",
+    label: "Require Geo-Fencing",
+    type: "boolean",
+    defaultValue: "false",
+  },
+  {
+    key: "allow_multi_device_login",
+    label: "Allow Multiple Device Login",
+    type: "boolean",
+    defaultValue: "false",
+  },
+  {
+    key: "auto_calculate_attendance",
+    label: "Calculate Attendance Automatically",
+    type: "boolean",
+    defaultValue: "true",
+  },
+  {
+    key: "calculation_time",
+    label: "Daily Calculation Time",
+    description: "Time of day attendance totals are processed (HH:mm:ss).",
+    type: "text",
+    placeholder: "e.g 23:59:00",
+    defaultValue: "23:59:00",
+  },
+  {
+    key: "consider_shift_roster",
+    label: "Use Shift Roster",
+    type: "boolean",
+    defaultValue: "true",
+  },
+  {
+    key: "requires_manager_approval_for_overtime",
+    label: "Require Manager Approval For Overtime",
+    type: "boolean",
+    defaultValue: "false",
+  },
+  {
+    key: "overtime_requires_approval",
+    label: "Overtime Requires Approval",
+    type: "boolean",
+    defaultValue: "false",
+  },
+  {
+    key: "overtime_auto_calculate",
+    label: "Auto-Calculate Overtime",
+    type: "boolean",
+    defaultValue: "true",
+  },
+  {
+    key: "overtime_start_after_minutes",
+    label: "Start Overtime After (Minutes)",
+    type: "number",
+    placeholder: "e.g 0",
+    defaultValue: "0",
+  },
+  {
+    key: "max_overtime_minutes_per_day",
+    label: "Daily Overtime Limit (Minutes)",
+    type: "number",
+    placeholder: "e.g 0",
+    defaultValue: "0",
+  },
+  {
+    key: "max_overtime_minutes_per_month",
+    label: "Monthly Overtime Limit (Minutes)",
+    type: "number",
+    placeholder: "e.g 0",
+    defaultValue: "0",
+  },
+  {
+    key: "overtime_rate_multiplier",
+    label: "Normal Overtime Rate Multiplier",
+    type: "number",
+    placeholder: "e.g 1",
+    defaultValue: "1",
+  },
+  {
+    key: "holiday_overtime_multiplier",
+    label: "Holiday Overtime Rate Multiplier",
+    type: "number",
+    placeholder: "e.g 1",
+    defaultValue: "1",
+  },
+  {
+    key: "weekend_overtime_multiplier",
+    label: "Weekend Overtime Rate Multiplier",
+    type: "number",
+    placeholder: "e.g 1",
+    defaultValue: "1",
+  },
+]
 
 const EAST_AFRICA_TIMEZONES = [
   "Africa/Dar_es_Salaam",
@@ -99,101 +324,9 @@ const ROUTE_TO_SECTION: Record<string, AttendanceSectionKey> = {
 }
 
 const SECTION_FIELDS: Record<AttendanceSectionKey, FieldConfig[]> = {
-  settings: [
-    {
-      key: "name",
-      label: "Setting Name",
-      description: "Use a clear name so this attendance setup is easy to identify later.",
-      type: "text",
-      required: true,
-      placeholder: "e.g Standard Office Attendance",
-    },
-    {
-      key: "overtime_start_after_minutes",
-      label: "Start Overtime After (Minutes)",
-      description: "How many extra minutes someone must work before overtime begins.",
-      type: "number",
-      placeholder: "e.g 30",
-    },
-    {
-      key: "max_overtime_minutes_per_day",
-      label: "Daily Overtime Limit (Minutes)",
-      description: "Maximum overtime one employee can accumulate in a single day.",
-      type: "number",
-      placeholder: "e.g 240",
-    },
-    {
-      key: "max_overtime_minutes_per_month",
-      label: "Monthly Overtime Limit (Minutes)",
-      description: "Maximum overtime one employee can accumulate in a month.",
-      type: "number",
-      placeholder: "e.g 1800",
-    },
-    {
-      key: "overtime_rate_multiplier",
-      label: "Normal Overtime Rate Multiplier",
-      description: "Multiplier applied to overtime pay on normal working days.",
-      type: "number",
-      placeholder: "e.g 1.5",
-    },
-    {
-      key: "holiday_overtime_multiplier",
-      label: "Holiday Overtime Rate Multiplier",
-      description: "Multiplier applied when overtime is worked on a public holiday.",
-      type: "number",
-      placeholder: "e.g 2",
-    },
-    {
-      key: "weekend_overtime_multiplier",
-      label: "Weekend Overtime Rate Multiplier",
-      description: "Multiplier applied when overtime is worked on weekends.",
-      type: "number",
-      placeholder: "e.g 1.75",
-    },
-    {
-      key: "requires_approval",
-      label: "Require Approval Before Counting Overtime",
-      description: "Choose Yes if overtime must be approved before it is accepted.",
-      type: "boolean",
-    },
-    {
-      key: "auto_calculate",
-      label: "Calculate Attendance Automatically",
-      description: "Choose Yes if the system should calculate attendance without manual action.",
-      type: "boolean",
-    },
-  ],
-  policies: [
-    { key: "name", label: "Policy Name", description: "Name of this attendance policy.", type: "text", required: true, placeholder: "e.g Main Office Policy" },
-    { key: "is_active", label: "Policy Is Active", description: "Choose Yes if this policy can currently be used.", type: "boolean" },
-    { key: "late_after_minutes", label: "Mark Late After (Minutes)", description: "Minutes after scheduled start time before someone is considered late.", type: "number", placeholder: "e.g 10" },
-    { key: "half_day_after_minutes", label: "Mark Half Day After (Minutes)", description: "Minutes late after which the day should count as a half day.", type: "number", placeholder: "e.g 240" },
-    { key: "absent_after_minutes", label: "Mark Absent After (Minutes)", description: "Minutes late after which the day should count as absent.", type: "number", placeholder: "e.g 480" },
-    { key: "allow_early_checkin", label: "Allow Early Check-In", description: "Choose Yes if employees can check in before their shift starts.", type: "boolean" },
-    { key: "allow_late_checkout", label: "Allow Late Check-Out", description: "Choose Yes if employees can check out after shift end.", type: "boolean" },
-    { key: "auto_absent_if_no_checkin", label: "Auto-Mark Absent If No Check-In", description: "Choose Yes if no check-in should automatically mark the employee absent.", type: "boolean" },
-    { key: "requires_manager_approval_for_overtime", label: "Require Manager Approval For Overtime", description: "Choose Yes if overtime must be approved by a manager.", type: "boolean" },
-    {
-      key: "rounding_mode",
-      label: "Rounding Mode",
-      description: "Choose how attendance minutes should be rounded when calculating final time values.",
-      type: "select",
-      options: ["UP", "DOWN", "NEAREST"],
-    },
-    { key: "max_missing_punch_allowed", label: "Maximum Missing Punches Allowed", description: "How many missing in/out punches are allowed before the record needs attention.", type: "number", placeholder: "e.g 1" },
-    { key: "weekend_days", label: "Weekend Days", description: "Comma-separated days treated as weekends.", type: "text", placeholder: "e.g SATURDAY,SUNDAY" },
-    { key: "auto_mark_weekend_as_off", label: "Auto-Mark Weekends As Off Days", description: "Choose Yes if weekends should automatically be marked as off days.", type: "boolean" },
-    { key: "treat_weekend_as_absent_if_scheduled", label: "Treat Weekend As Absent If Scheduled", description: "Choose Yes if missing a scheduled weekend shift should count as absent.", type: "boolean" },
-    { key: "holiday_policy_mode", label: "Holiday Policy Mode", type: "select", options: ["OFF", "PAID", "UNPAID", "OPTIONAL"] },
-    { key: "authentication_modes", label: "Allowed Check-In Methods", description: "Comma-separated methods employees can use to authenticate attendance.", type: "text", placeholder: "e.g BIOMETRIC,QR" },
-    { key: "require_geo_fencing", label: "Require Geo-Fencing", description: "Choose Yes if employees must be within an allowed location to check in.", type: "boolean" },
-    { key: "allow_multi_device_login", label: "Allow Multiple Device Login", description: "Choose Yes if one account can be used on more than one device.", type: "boolean" },
-    { key: "auto_calculate_attendance", label: "Calculate Attendance Automatically", description: "Choose Yes if the system should automatically process attendance records.", type: "boolean" },
-    { key: "calculation_time", label: "Daily Calculation Time", description: "Time of day when attendance totals should be processed.", type: "text", placeholder: "e.g 23:59" },
-    { key: "grace_period_minutes", label: "Grace Period (Minutes)", description: "Extra minutes allowed before late rules start applying.", type: "number", placeholder: "e.g 5" },
-    { key: "consider_shift_roster", label: "Use Shift Roster", description: "Choose Yes if the system should use assigned shifts when evaluating attendance.", type: "boolean" },
-    { key: "ignore_missing_checkout_if_hours_valid", label: "Ignore Missing Check-Out If Hours Are Enough", description: "Choose Yes if valid total hours can still count even without a final check-out.", type: "boolean" },
-  ],
+  // settings + policies both hit POST/GET /api/attendance/config/policies
+  settings: ATTENDANCE_POLICY_FIELDS,
+  policies: ATTENDANCE_POLICY_FIELDS,
   devices: [
     {
       key: "device_name",
@@ -628,8 +761,22 @@ function formatAttendanceError(
 
 function resolveVisibleColumns(section: AttendanceSectionKey, rows: AdminRecord[]) {
   const preferredBySection: Record<AttendanceSectionKey, string[]> = {
-    settings: ["name", "auto_calculate", "requires_approval", "overtime_rate_multiplier"],
-    policies: ["name", "is_active", "grace_period_minutes", "require_geo_fencing"],
+    settings: [
+      "name",
+      "is_active",
+      "grace_period_minutes",
+      "late_after_minutes",
+      "auto_calculate_attendance",
+      "require_geo_fencing",
+    ],
+    policies: [
+      "name",
+      "is_active",
+      "grace_period_minutes",
+      "late_after_minutes",
+      "auto_calculate_attendance",
+      "require_geo_fencing",
+    ],
     devices: ["device_code", "device_serial_number", "device_model", "branch_id", "vendor_name", "integration_type", "status", "ip_address"],
     checkpoints: ["name", "type", "policy_set_id", "status"],
     geofences: ["name", "status", "type", "branchId"],
@@ -695,9 +842,18 @@ function getSectionFormDescription(section: AttendanceSectionKey) {
 }
 
 function getSectionSetupGuidance(section: AttendanceSectionKey) {
+  if (section === "policies" || section === "settings") {
+    return [
+      "Policies map to POST/GET /api/attendance/config/policies for the active company.",
+      "Create a policy first, then use Activate so only one policy is active company-wide.",
+      "Timing order must be: Late After ≤ Half Day After ≤ Absent After.",
+      "Weekend days use short codes like SAT,SUN. Auth modes use values like MOBILE_APP,WEB.",
+    ]
+  }
+
   if (section === "geofences") {
     return [
-      "Recommended order: Attendance Settings -> Policies -> Geofences/WiFi -> Checkpoints.",
+      "Recommended order: Policies → Geofences/WiFi → Checkpoints.",
       "Use Circle for normal offices or branches with one center point.",
       "Use Polygon only when the allowed area has an irregular shape with multiple corners.",
       "Mobile punch validation currently works best with Circle geofences.",
@@ -725,7 +881,7 @@ function getSectionSetupGuidance(section: AttendanceSectionKey) {
 }
 
 function validateAttendancePayload(section: AttendanceSectionKey, payload: AdminRecord) {
-  if (section === "policies") {
+  if (section === "policies" || section === "settings") {
     const late = typeof payload.late_after_minutes === "number" ? payload.late_after_minutes : null
     const halfDay =
       typeof payload.half_day_after_minutes === "number" ? payload.half_day_after_minutes : null
@@ -839,9 +995,19 @@ function validateAttendancePayload(section: AttendanceSectionKey, payload: Admin
 function buildInitialState(fields: FieldConfig[]) {
   const initial: Record<string, string> = {}
   for (const field of fields) {
+    if (field.defaultValue !== undefined) {
+      initial[field.key] = field.defaultValue
+      continue
+    }
+
     if (field.type === "select" && field.options?.length === 1) {
       const onlyOption = field.options[0]
       initial[field.key] = typeof onlyOption === "string" ? onlyOption : onlyOption.value
+      continue
+    }
+
+    if (field.type === "boolean") {
+      initial[field.key] = "false"
       continue
     }
 
@@ -976,6 +1142,14 @@ function toPayload(fields: FieldConfig[], values: Record<string, string>) {
       continue
     }
 
+    // Normalize calculation_time to HH:mm:ss for attendance policies API.
+    if (field.key === "calculation_time") {
+      if (/^\d{2}:\d{2}$/.test(trimmed)) {
+        payload[field.key] = `${trimmed}:00`
+        continue
+      }
+    }
+
     payload[field.key] = trimmed
   }
   return payload
@@ -1099,6 +1273,16 @@ function resolveAttendanceCellValue(
     return map.get(String(raw)) ?? formatAdminValue(raw)
   }
   return formatAdminValue(raw)
+}
+
+function isAttendanceDateLikeColumn(column: string) {
+  const normalized = column.trim().toLowerCase()
+  return (
+    normalized.includes("date") ||
+    normalized.includes("time") ||
+    normalized.includes("_at") ||
+    normalized.endsWith("at")
+  )
 }
 
 function isFieldDisabled(
@@ -1507,7 +1691,7 @@ function FieldInput({
 function FieldLabel({ field }: { field: FieldConfig }) {
   return (
     <div className="flex items-center gap-1.5">
-      <span className="text-xs font-medium uppercase text-slate-600 dark:text-slate-300">
+      <span className="text-xs font-medium uppercase text-slate-600 dark:text-slate-100">
         {field.label}
         {field.required ? <span className="text-red-600"> *</span> : null}
       </span>
@@ -2022,6 +2206,13 @@ export function AttendanceManagementView({ section }: { section: string }) {
       ).sort((a, b) => a.localeCompare(b)),
     [rows]
   )
+  const activeDeviceFilterCount = React.useMemo(() => {
+    let count = 0
+    if (deviceBranchFilter !== "all") count += 1
+    if (deviceVendorFilter !== "all") count += 1
+    if (deviceIntegrationFilter !== "all") count += 1
+    return count
+  }, [deviceBranchFilter, deviceIntegrationFilter, deviceVendorFilter])
 
   const onCreate = async () => {
     const token = readStoredToken()
@@ -2135,7 +2326,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
   }
 
   const onActivatePolicy = async (row: AdminRecord) => {
-    if (activeSection !== "policies") return
+    if (activeSection !== "policies" && activeSection !== "settings") return
 
     const rowId = row.id
     if (rowId === null || rowId === undefined) {
@@ -2236,7 +2427,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
     return (
       <DialogHeader>
         <div className="flex items-center gap-2">
-          <DialogTitle>{mode} {activeSection.replaceAll("-", " ")}</DialogTitle>
+          <DialogTitle className="text-slate-900 dark:text-slate-100">{mode} {activeSection.replaceAll("-", " ")}</DialogTitle>
           {useInfoTooltip ? (
             <Tooltip>
               <TooltipTrigger
@@ -2256,65 +2447,176 @@ export function AttendanceManagementView({ section }: { section: string }) {
             </Tooltip>
           ) : null}
         </div>
-        {!useInfoTooltip ? <DialogDescription>{description}</DialogDescription> : null}
+        {!useInfoTooltip ? <DialogDescription className="text-slate-600 dark:text-slate-300">{description}</DialogDescription> : null}
       </DialogHeader>
     )
   }
 
-  return (
-    <div className="w-full space-y-2">
-      <div className="flex flex-wrap items-center gap-1.5">
-        <div className="flex min-w-0 items-center gap-1.5">
-          <h2 className="text-sm font-semibold capitalize text-slate-900 dark:text-slate-100">{activeSection.replaceAll("-", " ")}</h2>
-          {activeSection === "devices" ? (
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <button
-                    type="button"
-                    className="inline-flex h-4 w-4 items-center justify-center rounded-full text-slate-400 transition hover:text-slate-700"
-                    aria-label="About device sync"
-                  />
-                }
-              >
-                <CircleHelpIcon className="h-3.5 w-3.5" />
-              </TooltipTrigger>
-              <TooltipContent side="top" align="start" className="max-w-72 text-left leading-relaxed">
-                Click a device row to open its device page, where you can sync it and manage
-                assigned employees.
-              </TooltipContent>
-            </Tooltip>
-          ) : null}
-          {sectionGuidance.length && guidanceDismissed ? (
-            <button
-              type="button"
-              className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-700 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:text-slate-100"
-              aria-label="Show setup guidance"
-              onClick={() => {
-                setGuidanceDismissed(false)
-                if (typeof window !== "undefined") {
-                  window.localStorage.removeItem(guidanceStorageKey)
-                }
-              }}
-            >
-              <InfoIcon className="h-3.5 w-3.5" />
-            </button>
-          ) : null}
-        </div>
-        <div className="ml-auto flex flex-wrap items-center gap-1.5">
-          {supportsCreate ? (
-            <>
+  const ATTENDANCE_SETUP_SECTIONS = new Set([
+    "policies",
+    "holiday-groups",
+    "holidays",
+    "geofences",
+    "wifi-networks",
+    "checkpoints",
+  ])
+  const sectionDisplayTitle = activeSection
+    .replaceAll("-", " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase())
+  const sectionGroupTitle = ATTENDANCE_SETUP_SECTIONS.has(activeSection)
+    ? "Attendance Setup"
+    : activeSection === "mobile-punches" || activeSection === "device-sync-logs"
+      ? "Attendance Operations"
+      : "Attendance"
+
+  const sectionTitleBlock = (
+    <div className="min-w-0 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+      <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+        {sectionGroupTitle}
+      </span>
+      <h1 className="truncate text-lg font-semibold tracking-tight text-foreground sm:text-xl">
+        {sectionDisplayTitle}
+      </h1>
+      {activeSection === "devices" ? (
+        <Tooltip>
+          <TooltipTrigger
+            render={
               <button
                 type="button"
-                className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[var(--primary)] px-2.5 text-xs font-semibold text-white transition hover:brightness-95"
-                onClick={() => setCreateOpen(true)}
-                aria-label={`Create ${activeSection.replaceAll("-", " ")}`}
-                title="Create"
+                className="inline-flex h-5 w-5 items-center justify-center rounded-full text-slate-400 transition hover:text-slate-700"
+                aria-label="About device sync"
+              />
+            }
+          >
+            <CircleHelpIcon className="h-3.5 w-3.5" />
+          </TooltipTrigger>
+          <TooltipContent side="top" align="start" className="max-w-72 text-left leading-relaxed">
+            Click a device row to open its device page, where you can sync it and manage assigned
+            employees.
+          </TooltipContent>
+        </Tooltip>
+      ) : null}
+      {sectionGuidance.length && guidanceDismissed ? (
+        <button
+          type="button"
+          className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-700 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:text-slate-100"
+          aria-label="Show setup guidance"
+          onClick={() => {
+            setGuidanceDismissed(false)
+            if (typeof window !== "undefined") {
+              window.localStorage.removeItem(guidanceStorageKey)
+            }
+          }}
+        >
+          <InfoIcon className="h-3.5 w-3.5" />
+        </button>
+      ) : null}
+    </div>
+  )
+
+  const deviceFiltersControl =
+    activeSection === "devices" ? (
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          className="relative inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-border px-2 text-xs font-medium text-foreground transition hover:bg-muted"
+          aria-label="Filter devices"
+          title="Filters"
+        >
+          <FilterIcon className="h-3.5 w-3.5 text-primary" />
+          <span className="hidden sm:inline">Filters</span>
+          {activeDeviceFilterCount > 0 || deviceSearch.trim() ? (
+            <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
+              {activeDeviceFilterCount + (deviceSearch.trim() ? 1 : 0)}
+            </span>
+          ) : null}
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-72 p-2.5">
+          <div className="space-y-1.5">
+            <DropdownMenuLabel className="px-0 py-0 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Filters
+            </DropdownMenuLabel>
+            <input
+              type="text"
+              className="h-7 w-full rounded-md border border-slate-300 bg-white px-2 text-[11px] text-slate-900 placeholder:text-slate-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+              value={deviceSearch}
+              onChange={(event) => setDeviceSearch(event.target.value)}
+              placeholder="Search code, serial, model…"
+            />
+            <label className="grid gap-0.5 text-[10px]">
+              <span className="font-medium text-slate-600 dark:text-slate-300">Branch</span>
+              <select
+                className="h-7 w-full rounded-md border border-slate-300 bg-white px-1.5 text-[11px] text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                value={deviceBranchFilter}
+                onChange={(event) => setDeviceBranchFilter(event.target.value)}
               >
-                <PlusIcon className="h-3.5 w-3.5" />
-                Create
-              </button>
-              <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+                <option value="all">All branches</option>
+                {branches.map((branch, index) => {
+                  const branchId = readNumberFromRecord(branch, ["id", "branch_id"])
+                  if (branchId === null) return null
+                  return (
+                    <option key={`device-branch-filter-${branchId}-${index}`} value={String(branchId)}>
+                      {resolveBranchName(branchId)}
+                    </option>
+                  )
+                })}
+              </select>
+            </label>
+            <label className="grid gap-0.5 text-[10px]">
+              <span className="font-medium text-slate-600 dark:text-slate-300">Vendor</span>
+              <select
+                className="h-7 w-full rounded-md border border-slate-300 bg-white px-1.5 text-[11px] text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                value={deviceVendorFilter}
+                onChange={(event) => setDeviceVendorFilter(event.target.value)}
+              >
+                <option value="all">All vendors</option>
+                {deviceVendorOptions.map((vendor) => (
+                  <option key={vendor} value={vendor}>
+                    {vendor}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="grid gap-0.5 text-[10px]">
+              <span className="font-medium text-slate-600 dark:text-slate-300">Integration</span>
+              <select
+                className="h-7 w-full rounded-md border border-slate-300 bg-white px-1.5 text-[11px] text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                value={deviceIntegrationFilter}
+                onChange={(event) => setDeviceIntegrationFilter(event.target.value)}
+              >
+                <option value="all">All integrations</option>
+                {deviceIntegrationOptions.map((integration) => (
+                  <option key={integration} value={integration}>
+                    {integration}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              className="inline-flex h-7 w-full items-center justify-center rounded-md border border-slate-300 px-2 text-[11px] font-medium text-slate-700 transition hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-900"
+              disabled={activeDeviceFilterCount === 0 && !deviceSearch.trim()}
+              onClick={() => {
+                setDeviceSearch("")
+                setDeviceBranchFilter("all")
+                setDeviceVendorFilter("all")
+                setDeviceIntegrationFilter("all")
+              }}
+            >
+              Reset filters
+            </button>
+            <p className="text-[10px] text-muted-foreground">
+              {filteredRows.length}/{rows.length} devices
+            </p>
+          </div>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    ) : null
+
+  return (
+    <div className="w-full space-y-2">
+      {/* Dialogs stay mounted at root so toolbar actions only open them. */}
+      {supportsCreate ? (
+        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
                 <DialogPopup className="flex max-h-[90vh] w-[min(920px,96vw)] flex-col overflow-hidden sm:max-w-4xl">
                   {renderSectionDialogHeader("Create")}
                   {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
@@ -2366,13 +2668,12 @@ export function AttendanceManagementView({ section }: { section: string }) {
                     >
                       Cancel
                     </button>
-                    <button type="button" onClick={() => void onCreate()} className="rounded-md bg-[var(--primary)] px-3 py-1.5 text-sm text-white transition hover:brightness-95">
+                    <button type="button" onClick={() => void onCreate()} className="rounded-md bg-[var(--primary)] px-3 py-1.5 text-sm !text-white transition hover:brightness-95">
                       Create
                     </button>
                   </DialogFooter>
                 </DialogPopup>
               </Dialog>
-            </>
           ) : null}
           <Dialog open={editOpen} onOpenChange={setEditOpen}>
             <DialogPopup className="flex max-h-[90vh] w-[min(920px,96vw)] flex-col overflow-hidden sm:max-w-4xl">
@@ -2482,19 +2783,6 @@ export function AttendanceManagementView({ section }: { section: string }) {
             resolveValue={(key, row) => resolveAttendanceCellValue(key, row, lookupMaps)}
           />
 
-          <button
-            type="button"
-            onClick={() => void fetchRows()}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 text-primary hover:bg-slate-50 dark:border-slate-700 dark:text-primary dark:hover:bg-slate-800"
-            disabled={loading}
-            aria-label="Refresh"
-            title="Refresh"
-          >
-            <RefreshCwIcon className={`h-3.5 w-3.5 text-primary ${loading ? "animate-spin" : ""}`} />
-          </button>
-        </div>
-      </div>
-
       {sectionGuidance.length && !guidanceDismissed ? (
         <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900 dark:border-sky-900/70 dark:bg-sky-950/35 dark:text-sky-100">
           <div className="mb-1.5 flex items-start justify-between gap-2">
@@ -2543,65 +2831,8 @@ export function AttendanceManagementView({ section }: { section: string }) {
         </div>
       ) : null}
 
-      {activeSection === "devices" ? (
-        <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50/80 p-2">
-          <input
-            type="text"
-            className="h-8 min-w-[12rem] flex-1 rounded-md border border-slate-300 bg-white px-2.5 text-xs text-slate-900 sm:max-w-xs"
-            value={deviceSearch}
-            onChange={(event) => setDeviceSearch(event.target.value)}
-            placeholder="Search code, serial, model, vendor, branch or IP"
-          />
-          <select
-            className="h-8 min-w-[8.5rem] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
-            value={deviceBranchFilter}
-            onChange={(event) => setDeviceBranchFilter(event.target.value)}
-          >
-            <option value="all">All branches</option>
-            {branches.map((branch, index) => {
-              const branchId = readNumberFromRecord(branch, ["id", "branch_id"])
-              if (branchId === null) {
-                return null
-              }
-              return (
-                <option key={`device-branch-filter-${branchId}-${index}`} value={String(branchId)}>
-                  {resolveBranchName(branchId)}
-                </option>
-              )
-            })}
-          </select>
-          <select
-            className="h-8 min-w-[8rem] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
-            value={deviceVendorFilter}
-            onChange={(event) => setDeviceVendorFilter(event.target.value)}
-          >
-            <option value="all">All vendors</option>
-            {deviceVendorOptions.map((vendor) => (
-              <option key={vendor} value={vendor}>
-                {vendor}
-              </option>
-            ))}
-          </select>
-          <select
-            className="h-8 min-w-[8.5rem] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
-            value={deviceIntegrationFilter}
-            onChange={(event) => setDeviceIntegrationFilter(event.target.value)}
-          >
-            <option value="all">All integrations</option>
-            {deviceIntegrationOptions.map((integration) => (
-              <option key={integration} value={integration}>
-                {integration}
-              </option>
-            ))}
-          </select>
-          <p className="ml-auto text-[11px] text-slate-600">
-            {filteredRows.length}/{rows.length} devices
-          </p>
-        </div>
-      ) : null}
-
       <ResizableTable
-        title={activeSection.replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()) || "Attendance"}
+        title={sectionDisplayTitle || "Attendance"}
         data={filteredRows}
         onRowSelect={(_, row) => {
           if (row) {
@@ -2611,14 +2842,29 @@ export function AttendanceManagementView({ section }: { section: string }) {
         columns={[
           ...columns.map((column: string) => ({
             key: column,
-            label: column.replaceAll("_", " "),
+            label:
+              column === "branch_id"
+                ? "branch"
+                : column === "company_id" || column === "companyId"
+                  ? "company"
+                  : column.replaceAll("_", " "),
             defaultWidth: 75,
             sortable: true,
+            render:
+              column === "branch_id"
+                ? (row: AdminRecord) =>
+                    resolveBranchName(readNumberFromRecord(row, ["branch_id", "branchId"]))
+                : column === "company_id" || column === "companyId"
+                  ? () => currentCompanyName ?? "Alliance Insurance Corporation Limited"
+                : isAttendanceDateLikeColumn(column)
+                  ? (row: AdminRecord) => formatAdminValue(row[column])
+                : undefined,
           })),
           ...(showDeviceContextColumn ? [{ key: "related_device", label: "Device", defaultWidth: 75 }] : []),
           ...(supportsEditDelete ? [{ key: "actions", label: "Actions", defaultWidth: 55, sortable: false, render: (row: AdminRecord) => (
             <div className="flex justify-end gap-1" onClick={e=>e.stopPropagation()}>
-              {activeSection === "policies" && !row.is_active ? (
+              {(activeSection === "policies" || activeSection === "settings") &&
+              !row.is_active ? (
                 <button
                   className="admin-table-icon-button"
                   disabled={activatingId === String(row.id)}
@@ -2634,6 +2880,37 @@ export function AttendanceManagementView({ section }: { section: string }) {
         ]}
         itemsPerPage={20}
         loading={loading}
+        showExport={false}
+        toolbarStart={sectionTitleBlock}
+        toolbarActions={
+          <>
+            {supportsCreate ? (
+              <button
+                type="button"
+                className="inline-flex h-8 items-center justify-center gap-1 rounded-lg bg-primary px-2.5 text-xs font-semibold !text-white transition hover:brightness-95"
+                onClick={() => setCreateOpen(true)}
+                aria-label={`Create ${activeSection.replaceAll("-", " ")}`}
+                title="Create"
+              >
+                <PlusIcon className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Create</span>
+              </button>
+            ) : null}
+            {deviceFiltersControl}
+            <button
+              type="button"
+              onClick={() => void fetchRows()}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border text-foreground transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={loading}
+              aria-label="Refresh"
+              title="Refresh"
+            >
+              <RefreshCwIcon className={`h-3.5 w-3.5 text-primary ${loading ? "animate-spin" : ""}`} />
+            </button>
+          </>
+        }
+        enableColumnVisibility={activeSection === "devices"}
+        hiddenColumnKeys={activeSection === "devices" ? ["device_code"] : []}
         storageKey={`attendance-${activeSection}`}
       />
 

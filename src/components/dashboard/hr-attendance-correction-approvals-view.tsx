@@ -1,10 +1,19 @@
 "use client"
 
 import * as React from "react"
-import { CheckCircle2, Loader2, RefreshCw, XCircle } from "lucide-react"
+import { useSearchParams } from "next/navigation"
+import { CheckCircle2, Filter, Loader2, RefreshCw, XCircle } from "lucide-react"
 
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 import { Badge } from "@/components/ui/badge"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
 import { Textarea } from "@/components/ui/textarea"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 import {
@@ -16,8 +25,11 @@ import {
 } from "@/components/ui/select"
 import {
   approveHrAttendanceCorrectionRequest,
+  getEmployeeById,
   getHrAttendanceCorrectionApprovalRequest,
   listHrAttendanceCorrectionApprovalRequests,
+  listEmployees,
+  listUsers,
   rejectHrAttendanceCorrectionRequest,
   type AdminRecord,
 } from "@/lib/admin-api"
@@ -238,43 +250,217 @@ function getStatusMeta(value: unknown) {
   }
 }
 
-function getEmployeeLabel(row: AdminRecord | null) {
-  const nestedEmployee = asRecord(row?.employee)
-  const nestedUser = asRecord(nestedEmployee?.user) ?? asRecord(row?.user)
+/** Prefer real person name only — never “Employee #id” or employee numbers. */
+function getEmployeeDisplayName(row: AdminRecord | null) {
+  if (!row) {
+    return ""
+  }
+
+  const companyUser =
+    asRecord(row.company_user) ??
+    asRecord(row.companyUser)
+  const nestedEmployee =
+    asRecord(row.employee) ??
+    asRecord(row.employee_profile) ??
+    asRecord(row.staff) ??
+    asRecord(row.person)
+  const nestedUser =
+    asRecord(nestedEmployee?.user) ??
+    asRecord(companyUser?.user) ??
+    asRecord(row.user) ??
+    asRecord(row.profile) ??
+    companyUser
+
   const explicit =
-    readString(row, ["employee_name", "full_name", "employee_full_name", "name"], "") ||
-    readString(nestedEmployee, ["full_name", "name"], "") ||
-    readString(nestedUser, ["full_name", "name"], "")
+    readString(
+      row,
+      ["employee_name", "full_name", "employee_full_name", "display_name", "name"],
+      ""
+    ) ||
+    readString(companyUser, ["full_name", "display_name", "name", "employee_name"], "") ||
+    readString(nestedEmployee, ["full_name", "display_name", "name", "employee_name"], "") ||
+    readString(nestedUser, ["full_name", "display_name", "name"], "")
 
-  const employeeNo =
-    readString(row, ["employee_no", "employeeNo", "user_no"], "") ||
-    readString(nestedEmployee, ["employee_no", "employeeNo", "user_no"], "") ||
-    readString(nestedUser, ["employee_no", "employeeNo", "user_no"], "")
-
-  if (explicit) {
-    return employeeNo ? `${explicit} (${employeeNo})` : explicit
+  if (explicit && !/^Employee #\d+$/i.test(explicit) && !looksLikeEmployeeCode(explicit)) {
+    return explicit
   }
 
   const firstName =
-    readString(row, ["first_name"], "") ||
-    readString(nestedEmployee, ["first_name"], "") ||
-    readString(nestedUser, ["first_name"], "")
+    readString(row, ["first_name", "firstName"], "") ||
+    readString(companyUser, ["first_name", "firstName"], "") ||
+    readString(nestedEmployee, ["first_name", "firstName"], "") ||
+    readString(nestedUser, ["first_name", "firstName"], "")
+  const middleName =
+    readString(row, ["middle_name", "middleName"], "") ||
+    readString(companyUser, ["middle_name", "middleName"], "") ||
+    readString(nestedEmployee, ["middle_name", "middleName"], "") ||
+    readString(nestedUser, ["middle_name", "middleName"], "")
   const lastName =
-    readString(row, ["last_name"], "") ||
-    readString(nestedEmployee, ["last_name"], "") ||
-    readString(nestedUser, ["last_name"], "")
+    readString(row, ["last_name", "lastName"], "") ||
+    readString(companyUser, ["last_name", "lastName"], "") ||
+    readString(nestedEmployee, ["last_name", "lastName"], "") ||
+    readString(nestedUser, ["last_name", "lastName"], "")
 
-  if (firstName || lastName) {
-    const fullName = [firstName, lastName].filter(Boolean).join(" ")
-    return employeeNo ? `${fullName} (${employeeNo})` : fullName
+  return [firstName, middleName, lastName].filter(Boolean).join(" ").trim()
+}
+
+function formatEmployeeOptionLabel(row: AdminRecord) {
+  const nestedEmployee =
+    asRecord(row.employee) ?? asRecord(row.employee_profile) ?? asRecord(row.staff) ?? asRecord(row.person)
+  const primaryName =
+    getEmployeeDisplayName(row) ||
+    getEmployeeDisplayName(nestedEmployee) ||
+    readString(nestedEmployee, ["full_name", "display_name", "name"], "")
+
+  if (primaryName && !/^Employee #\d+$/i.test(primaryName) && !looksLikeEmployeeCode(primaryName)) {
+    return primaryName
   }
 
-  if (employeeNo) {
-    return employeeNo
+  return "Unknown employee"
+}
+
+function looksLikeEmployeeCode(value: string) {
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return false
+  }
+  return /^[A-Z]{2,}[A-Z0-9-]*\d{2,}$/i.test(trimmed)
+}
+
+/** All numeric identifiers that might match correction.employee_id. */
+function collectEmployeeLookupIds(row: AdminRecord): number[] {
+  const ids = new Set<number>()
+  const push = (value: number | null) => {
+    if (value !== null) ids.add(value)
   }
 
-  const employeeId = readNumber(row, ["employee_id", "user_id"])
-  return employeeId === null ? "Employee" : `Employee #${employeeId}`
+  push(readNumber(row, ["id", "employee_id", "employeeId", "user_id", "userId", "company_user_id", "companyUserId", "staff_id"]))
+
+  const nestedEmployee =
+    asRecord(row.employee) ?? asRecord(row.employee_profile) ?? asRecord(row.staff)
+  if (nestedEmployee) {
+    push(readNumber(nestedEmployee, ["id", "employee_id", "user_id", "company_user_id"]))
+  }
+
+  const nestedUser =
+    asRecord(row.user) ??
+    asRecord(nestedEmployee?.user) ??
+    asRecord(asRecord(row.company_user)?.user) ??
+    asRecord(row.company_user)
+  if (nestedUser) {
+    push(readNumber(nestedUser, ["id", "user_id", "userId", "company_user_id"]))
+  }
+
+  return Array.from(ids)
+}
+
+function buildEmployeeLabelById(rows: AdminRecord[]): Map<number, string> {
+  const map = new Map<number, string>()
+  for (const row of rows) {
+    const label = formatEmployeeOptionLabel(row)
+    if (!label || label === "Unknown employee") {
+      continue
+    }
+    for (const id of collectEmployeeLookupIds(row)) {
+      map.set(id, label)
+    }
+  }
+  return map
+}
+
+function unwrapNamedEmployeeRecord(row: AdminRecord | null): AdminRecord | null {
+  if (!row) {
+    return null
+  }
+  if (formatEmployeeOptionLabel(row) !== "Unknown employee") {
+    return row
+  }
+
+  const candidates = [
+    asRecord(row.employee),
+    asRecord(row.data),
+    asRecord(row.user),
+    asRecord(row.company_user),
+    asRecord(asRecord(row.company_user)?.user),
+    asRecord(asRecord(row.employee)?.user),
+  ].filter((entry): entry is AdminRecord => Boolean(entry))
+
+  for (const candidate of candidates) {
+    if (formatEmployeeOptionLabel(candidate) !== "Unknown employee") {
+      // Preserve original id fields so lookup by correction.employee_id still works.
+      return { ...candidate, ...row, ...candidate }
+    }
+  }
+
+  return row
+}
+
+async function resolveEmployeesForRequests(
+  token: string,
+  requestRows: AdminRecord[],
+  directoryRows: AdminRecord[]
+): Promise<AdminRecord[]> {
+  const labelMap = buildEmployeeLabelById(directoryRows)
+  const missingIds = Array.from(
+    new Set(
+      requestRows
+        .map((row) => readNumber(row, ["employee_id", "employeeId", "user_id", "userId"]))
+        .filter((id): id is number => id !== null && !labelMap.has(id))
+    )
+  )
+
+  if (missingIds.length === 0) {
+    return directoryRows
+  }
+
+  const extra: AdminRecord[] = []
+  await Promise.all(
+    missingIds.map(async (employeeId) => {
+      try {
+        const employee = unwrapNamedEmployeeRecord(await getEmployeeById(employeeId, token))
+        if (employee && formatEmployeeOptionLabel(employee) !== "Unknown employee") {
+          // Ensure correction.employee_id maps even if record uses another primary key.
+          extra.push({
+            ...employee,
+            employee_id: employeeId,
+            id: readNumber(employee, ["id"]) ?? employeeId,
+          } as AdminRecord)
+        }
+      } catch {
+        // fall through
+      }
+    })
+  )
+
+  // If still missing after employee GET, try company users directory.
+  const stillMissing = missingIds.filter((id) => {
+    const merged = buildEmployeeLabelById([...directoryRows, ...extra])
+    return !merged.has(id)
+  })
+
+  const usersExtra: AdminRecord[] = []
+  if (stillMissing.length > 0) {
+    try {
+      const usersResult = await listUsers(token, {
+        page: 1,
+        limit: 500,
+        sortBy: "created_at",
+        sortOrder: "DESC",
+      })
+      for (const rawUser of usersResult.rows as AdminRecord[]) {
+        const user = unwrapNamedEmployeeRecord(rawUser)
+        if (!user) continue
+        const ids = collectEmployeeLookupIds(user)
+        const matched = stillMissing.find((missingId) => ids.includes(missingId))
+        if (matched == null) continue
+        usersExtra.push({ ...user, employee_id: matched } as AdminRecord)
+      }
+    } catch {
+      // ignore users fallback failures
+    }
+  }
+
+  return [...directoryRows, ...extra, ...usersExtra]
 }
 
 function getRequestTitle(row: AdminRecord | null) {
@@ -395,45 +581,27 @@ function extractCorrectionRows(row: AdminRecord | null): ChangeRow[] {
 
 function MetaChip({ label, value }: { label: string; value: string }) {
   return (
-    <div className="min-w-0 rounded-md border border-slate-200/80 bg-slate-50/80 px-2 py-1">
-      <p className="text-[10px] font-medium tracking-wide text-slate-500 uppercase">{label}</p>
-      <p className="truncate text-xs font-medium text-slate-900" title={value}>
+    <div className="min-w-0 rounded-md border border-border bg-muted/30 px-2 py-1.5">
+      <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">{label}</p>
+      <p className="truncate text-xs font-medium text-foreground" title={value}>
         {value}
       </p>
     </div>
   )
 }
 
-function ToolbarButton({
-  children,
-  onClick,
-  disabled,
-  variant = "outline",
-}: {
-  children: React.ReactNode
-  onClick?: () => void
-  disabled?: boolean
-  variant?: "outline" | "primary"
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={cn(
-        "inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50",
-        variant === "primary"
-          ? "bg-slate-900 text-white hover:bg-slate-800"
-          : "border border-slate-300 text-slate-700 hover:bg-slate-50"
-      )}
-    >
-      {children}
-    </button>
-  )
-}
-
 export function HrAttendanceCorrectionApprovalsView() {
+  const searchParams = useSearchParams()
+  const highlightedRequestId = React.useMemo(
+    () =>
+      searchParams?.get("highlight") ??
+      searchParams?.get("requestId") ??
+      searchParams?.get("request_id") ??
+      "",
+    [searchParams]
+  )
   const [requests, setRequests] = React.useState<AdminRecord[]>([])
+  const [employees, setEmployees] = React.useState<AdminRecord[]>([])
   const [selectedRequestId, setSelectedRequestId] = React.useState("")
   const [selectedRequestDetail, setSelectedRequestDetail] = React.useState<AdminRecord | null>(null)
   const [statusFilter, setStatusFilter] = React.useState("all")
@@ -445,10 +613,83 @@ export function HrAttendanceCorrectionApprovalsView() {
   const [loading, setLoading] = React.useState(false)
   const [detailLoading, setDetailLoading] = React.useState(false)
   const [actionLoading, setActionLoading] = React.useState<"approve" | "reject" | null>(null)
+  const [filtersOpen, setFiltersOpen] = React.useState(false)
 
   const selectedListRequest = React.useMemo(
     () => requests.find((row) => getRequestId(row) === selectedRequestId) ?? null,
     [requests, selectedRequestId]
+  )
+
+  const employeeLabelById = React.useMemo(() => buildEmployeeLabelById(employees), [employees])
+
+  const employeeLabelByCode = React.useMemo(() => {
+    const map = new Map<string, string>()
+    employees.forEach((row) => {
+      const label = formatEmployeeOptionLabel(row)
+      if (!label || label === "Unknown employee") {
+        return
+      }
+
+      const codes = [
+        readString(row, ["employee_no", "employeeNo", "employee_number", "employee_code", "user_no"], ""),
+        readString(asRecord(row.employee), ["employee_no", "employeeNo", "employee_number", "employee_code", "user_no"], ""),
+        readString(asRecord(row.user), ["employee_no", "employeeNo", "employee_number", "employee_code", "user_no"], ""),
+      ]
+        .map((value) => value.trim())
+        .filter(Boolean)
+
+      codes.forEach((code) => {
+        map.set(code.toLowerCase(), label)
+      })
+    })
+    return map
+  }, [employees])
+
+  const requestEmployeeLabel = React.useCallback(
+    (row: AdminRecord | null) => {
+      if (!row) {
+        return "Unknown employee"
+      }
+
+      // Prefer nested person data from the request/detail payload first.
+      const directName = getEmployeeDisplayName(row)
+      if (directName) {
+        return directName
+      }
+
+      const employeeCodes = [
+        readString(row, ["employee_no", "employeeNo", "employee_number", "employee_code", "user_no"], ""),
+        readString(asRecord(row.employee), ["employee_no", "employeeNo", "employee_number", "employee_code", "user_no"], ""),
+        readString(asRecord(asRecord(row.employee)?.user) ?? asRecord(row.user), ["employee_no", "employeeNo", "employee_number", "employee_code", "user_no"], ""),
+      ]
+        .map((value) => value.trim())
+        .filter(Boolean)
+
+      for (const code of employeeCodes) {
+        const lookupByCode = employeeLabelByCode.get(code.toLowerCase())
+        if (lookupByCode && lookupByCode !== "Unknown employee") {
+          return lookupByCode
+        }
+      }
+
+      const candidateIds = collectEmployeeLookupIds(row)
+      // Correction list rows only have employee_id — always include that.
+      const employeeId = readNumber(row, ["employee_id", "employeeId"])
+      if (employeeId !== null && !candidateIds.includes(employeeId)) {
+        candidateIds.push(employeeId)
+      }
+
+      for (const id of candidateIds) {
+        const lookupLabel = employeeLabelById.get(id)
+        if (lookupLabel && lookupLabel !== "Unknown employee") {
+          return lookupLabel
+        }
+      }
+
+      // Never fall back to employee numbers or “Employee #id”.
+      return "Unknown employee"
+    },
+    [employeeLabelByCode, employeeLabelById]
   )
 
   const activeRequest = React.useMemo(() => {
@@ -477,6 +718,34 @@ export function HrAttendanceCorrectionApprovalsView() {
     try {
       const detail = await getHrAttendanceCorrectionApprovalRequest(token, requestId)
       setSelectedRequestDetail(detail)
+      setRequests((current) =>
+        current.map((row) => (getRequestId(row) === requestId ? ({ ...row, ...detail } as AdminRecord) : row))
+      )
+
+      const detailEmployeeId = readNumber(detail, ["employee_id", "employeeId"])
+      if (detailEmployeeId !== null) {
+        try {
+          const employee = unwrapNamedEmployeeRecord(await getEmployeeById(detailEmployeeId, token))
+          if (employee && formatEmployeeOptionLabel(employee) !== "Unknown employee") {
+            setEmployees((current) => {
+              const labels = buildEmployeeLabelById(current)
+              if (labels.has(detailEmployeeId)) {
+                return current
+              }
+              return [
+                ...current,
+                {
+                  ...employee,
+                  employee_id: detailEmployeeId,
+                  id: readNumber(employee, ["id"]) ?? detailEmployeeId,
+                },
+              ]
+            })
+          }
+        } catch {
+          /* ignore employee name hydrate failures */
+        }
+      }
     } catch (errorObject) {
       const message =
         errorObject instanceof Error
@@ -496,7 +765,7 @@ export function HrAttendanceCorrectionApprovalsView() {
         label: "Employee",
         defaultWidth: 120,
         render: (row) => (
-          <span className="text-xs font-medium text-slate-900">{getEmployeeLabel(row)}</span>
+          <span className="text-xs font-medium text-slate-900">{requestEmployeeLabel(row)}</span>
         ),
       },
       {
@@ -555,7 +824,7 @@ export function HrAttendanceCorrectionApprovalsView() {
                 className={cn(
                   "rounded px-1.5 py-0.5 text-[11px] font-medium transition-colors",
                   isSelected
-                    ? "bg-slate-900 text-white"
+                    ? "bg-primary !text-white"
                     : "text-slate-600 hover:bg-slate-100"
                 )}
                 onClick={() => {
@@ -572,13 +841,18 @@ export function HrAttendanceCorrectionApprovalsView() {
         },
       },
     ],
-    [loadRequestDetail, selectedRequestId]
+    [loadRequestDetail, requestEmployeeLabel, selectedRequestId]
   )
 
   const selectedRequestIdRef = React.useRef(selectedRequestId)
   React.useEffect(() => {
     selectedRequestIdRef.current = selectedRequestId
   }, [selectedRequestId])
+
+  const highlightedRequestIdRef = React.useRef(highlightedRequestId)
+  React.useEffect(() => {
+    highlightedRequestIdRef.current = highlightedRequestId
+  }, [highlightedRequestId])
 
   const loadRequests = React.useCallback(async () => {
     const token = readStoredToken()
@@ -594,19 +868,54 @@ export function HrAttendanceCorrectionApprovalsView() {
     setLoading(true)
     setError(null)
     try {
-      const result = await listHrAttendanceCorrectionApprovalRequests(token, {
-        page: 1,
-        limit: 100,
-        status: statusFilter === "all" ? undefined : statusFilter,
-        date_from: dateFrom || undefined,
-        date_to: dateTo || undefined,
-      })
-      setRequests(result.rows)
+      const [result, employeesResult] = await Promise.all([
+        listHrAttendanceCorrectionApprovalRequests(token, {
+          page: 1,
+          limit: 100,
+          status: statusFilter === "all" ? undefined : statusFilter,
+          date_from: dateFrom || undefined,
+          date_to: dateTo || undefined,
+        }),
+        listEmployees(token, {
+          page: 1,
+          limit: 500,
+          sortBy: "created_at",
+          sortOrder: "DESC",
+        }).catch(() => ({ rows: [] as AdminRecord[], total: null })),
+      ])
+      const requestRows = result.rows
+      // List API returns only employee_id — resolve names via directory + per-id fetch.
+      const resolvedEmployees = await resolveEmployeesForRequests(
+        token,
+        requestRows,
+        employeesResult.rows ?? []
+      )
+
+      setRequests(requestRows)
+      setEmployees(resolvedEmployees)
+
+      const highlightedId = highlightedRequestIdRef.current
+      if (highlightedId) {
+        const highlightedRow =
+          result.rows.find((row) => getRequestId(row) === highlightedId) ?? null
+        if (highlightedRow) {
+          setSelectedRequestId(highlightedId)
+          setSelectedRequestDetail(highlightedRow)
+          await loadRequestDetail(highlightedId)
+        } else {
+          setSelectedRequestId("")
+          setSelectedRequestDetail(null)
+        }
+        return
+      }
+
+      if (!selectedRequestIdRef.current) {
+        setSelectedRequestDetail(null)
+        return
+      }
 
       const currentSelection =
-        result.rows.find((row) => getRequestId(row) === selectedRequestIdRef.current) ??
-        result.rows[0] ??
-        null
+        result.rows.find((row) => getRequestId(row) === selectedRequestIdRef.current) ?? null
 
       if (!currentSelection) {
         setSelectedRequestId("")
@@ -702,155 +1011,257 @@ export function HrAttendanceCorrectionApprovalsView() {
     [requests]
   )
 
-  return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2 py-1.5">
-        <h2 className="shrink-0 text-sm font-semibold text-slate-900">Correction Requests</h2>
+  const activeFilterCount = React.useMemo(() => {
+    let count = 0
+    if (statusFilter !== "all") count += 1
+    if (dateFrom.trim()) count += 1
+    if (dateTo.trim()) count += 1
+    return count
+  }, [dateFrom, dateTo, statusFilter])
+
+  const resetFilters = React.useCallback(() => {
+    setStatusFilter("all")
+    setDateFrom("")
+    setDateTo("")
+    setFeedback(null)
+  }, [])
+
+  const sectionTitleBlock = (
+    <div className="min-w-0 flex flex-wrap items-center gap-x-2 gap-y-1">
+      <div className="min-w-0 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+        <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+          Correction Requests
+        </span>
+        <h1 className="truncate text-lg font-semibold tracking-tight text-foreground sm:text-xl">
+          Requests
+        </h1>
+      </div>
+      <div className="flex flex-wrap items-center gap-1">
         <Badge
           variant="outline"
-          className="h-5 border-slate-200 bg-slate-50 px-1.5 text-[10px] text-slate-600"
+          className="h-5 border-border bg-muted/40 px-1.5 text-[10px] text-muted-foreground"
         >
-          {requests.length}
+          {requests.length} total
         </Badge>
         <Badge
           variant="outline"
-          className="h-5 border-amber-200 bg-amber-50 px-1.5 text-[10px] text-amber-700"
+          className="h-5 border-amber-200 bg-amber-50 px-1.5 text-[10px] text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-300"
         >
           {pendingCount} pending
         </Badge>
-
-        <div className="mx-0.5 hidden h-4 w-px bg-slate-200 sm:block" />
-
-        <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value ?? "all")}>
-          <SelectTrigger className="h-7 w-auto min-w-[7.5rem] text-xs">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All statuses</SelectItem>
-            <SelectItem value="submitted">Submitted</SelectItem>
-            <SelectItem value="draft">Draft</SelectItem>
-            <SelectItem value="approved">Approved</SelectItem>
-            <SelectItem value="rejected">Rejected</SelectItem>
-            <SelectItem value="cancelled">Cancelled</SelectItem>
-          </SelectContent>
-        </Select>
-        <div className="min-w-[7.5rem]">
-          <DatePickerPresets
-            value={dateFrom}
-            onChange={setDateFrom}
-            placeholder="From"
-            className="h-7 px-2 text-xs"
-          />
-        </div>
-        <div className="min-w-[7.5rem]">
-          <DatePickerPresets
-            value={dateTo}
-            onChange={setDateTo}
-            placeholder="To"
-            className="h-7 px-2 text-xs"
-          />
-        </div>
-
-        <div className="ml-auto flex flex-wrap items-center gap-1">
-          <ToolbarButton
-            onClick={() => {
-              setStatusFilter("all")
-              setDateFrom("")
-              setDateTo("")
-              setFeedback(null)
-            }}
-          >
-            Reset
-          </ToolbarButton>
-          <ToolbarButton variant="primary" onClick={() => void loadRequests()} disabled={loading}>
-            <RefreshCw className={cn("size-3", loading ? "animate-spin" : "")} />
-            Refresh
-          </ToolbarButton>
-        </div>
       </div>
+    </div>
+  )
 
+  const selectedDetailTitle = activeRequest
+    ? requestEmployeeLabel(activeRequest)
+    : selectedRequestId
+      ? "Loading request…"
+      : "Select a request"
+
+  const detailSheetOpen = Boolean(selectedRequestId)
+
+  const closeDetailSheet = React.useCallback(() => {
+    setSelectedRequestId("")
+    setSelectedRequestDetail(null)
+    setDecisionComment("")
+    setFeedback(null)
+  }, [])
+
+  return (
+    <div className="w-full space-y-2">
       {error ? (
-        <div className="rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs text-rose-700">
+        <div className="rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300">
           {error}
         </div>
       ) : null}
 
-      <div className="grid gap-2 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,21rem)]">
-        <div className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white">
-          <div className="flex items-center justify-between border-b border-slate-100 px-2.5 py-1.5">
-            <p className="text-xs font-semibold text-slate-800">Requests</p>
-            <p className="text-[11px] text-slate-500">Select a row to review</p>
-          </div>
-          <div className="p-1.5">
-            <ResizableTable
-              title="Correction Requests"
-              data={requests}
-              columns={requestColumns}
-              itemsPerPage={12}
-              loading={loading}
-              storageKey="hr-attendance-correction-approval-requests-v2"
-            />
-            {!loading && requests.length === 0 ? (
-              <div className="rounded-md border border-dashed border-slate-200 px-3 py-5 text-center text-xs text-slate-500">
-                No correction requests match the current filters.
-              </div>
-            ) : null}
-          </div>
-        </div>
-
-        <aside className="flex min-h-[16rem] flex-col rounded-lg border border-slate-200 bg-white">
-          <div className="flex items-center justify-between border-b border-slate-100 px-2.5 py-1.5">
-            <p className="text-xs font-semibold text-slate-800">Review</p>
-            {activeRequest ? (
-              <Badge
-                variant="outline"
-                className={cn("px-1.5 py-0 text-[10px] capitalize", statusMeta.className)}
+      <ResizableTable
+        title="Correction Requests"
+        data={requests}
+        columns={requestColumns}
+        itemsPerPage={12}
+        loading={loading}
+        showExport={false}
+        storageKey="hr-attendance-correction-approval-requests-v3"
+        toolbarStart={sectionTitleBlock}
+        toolbarActions={
+          <>
+            <Popover open={filtersOpen} onOpenChange={setFiltersOpen}>
+              <PopoverTrigger
+                className={cn(
+                  "relative inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-border px-2 text-xs font-medium text-foreground transition hover:bg-muted",
+                  activeFilterCount > 0 && "border-primary/40 bg-primary/5"
+                )}
+                aria-label="Open filters"
+                title="Filters"
               >
-                {statusMeta.label}
-              </Badge>
-            ) : null}
-          </div>
+                <Filter className="size-3.5 text-primary" />
+                <span className="hidden sm:inline">Filters</span>
+                {activeFilterCount > 0 ? (
+                  <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
+                    {activeFilterCount}
+                  </span>
+                ) : null}
+              </PopoverTrigger>
+              <PopoverContent className="w-[min(100vw-1.5rem,18.5rem)] p-2.5" align="end">
+                <div className="space-y-1.5">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Filters
+                  </div>
+                  <label className="grid min-w-0 gap-0.5 text-[10px]">
+                    <span className="font-medium text-slate-600 dark:text-slate-300">Status</span>
+                    <Select
+                      value={statusFilter}
+                      onValueChange={(value) => setStatusFilter(value ?? "all")}
+                    >
+                      <SelectTrigger className="h-7 w-full text-[11px]">
+                        <SelectValue placeholder="Status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All statuses</SelectItem>
+                        <SelectItem value="submitted">Submitted</SelectItem>
+                        <SelectItem value="draft">Draft</SelectItem>
+                        <SelectItem value="approved">Approved</SelectItem>
+                        <SelectItem value="rejected">Rejected</SelectItem>
+                        <SelectItem value="cancelled">Cancelled</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <label className="grid min-w-0 gap-0.5 text-[10px]">
+                      <span className="font-medium text-slate-600 dark:text-slate-300">From</span>
+                      <DatePickerPresets
+                        value={dateFrom}
+                        onChange={setDateFrom}
+                        placeholder="From"
+                        className="h-7 gap-1 px-2 text-[11px] [&_svg]:size-3"
+                      />
+                    </label>
+                    <label className="grid min-w-0 gap-0.5 text-[10px]">
+                      <span className="font-medium text-slate-600 dark:text-slate-300">To</span>
+                      <DatePickerPresets
+                        value={dateTo}
+                        onChange={setDateTo}
+                        placeholder="To"
+                        className="h-7 gap-1 px-2 text-[11px] [&_svg]:size-3"
+                      />
+                    </label>
+                  </div>
+                  <div className="flex gap-1 border-t border-border pt-1.5">
+                    <button
+                      type="button"
+                      className="inline-flex h-7 flex-1 items-center justify-center rounded-md bg-primary px-2 text-[11px] font-semibold !text-white transition hover:brightness-95"
+                      onClick={() => {
+                        setFiltersOpen(false)
+                        void loadRequests()
+                      }}
+                    >
+                      Apply
+                    </button>
+                    <button
+                      type="button"
+                      className="inline-flex h-7 items-center justify-center rounded-md border border-border px-2 text-[11px] font-semibold text-foreground transition hover:bg-muted"
+                      onClick={resetFilters}
+                    >
+                      Reset
+                    </button>
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
+            <button
+              type="button"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border text-foreground transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={() => void loadRequests()}
+              disabled={loading}
+              aria-label="Refresh"
+              title="Refresh"
+            >
+              <RefreshCw className={cn("size-3.5 text-primary", loading && "animate-spin")} />
+            </button>
+          </>
+        }
+      />
+      {!loading && requests.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
+          No correction requests match the current filters.
+        </div>
+      ) : null}
 
-          <div className="flex flex-1 flex-col gap-2 p-2.5">
-            {detailLoading ? (
-              <div className="flex flex-1 items-center justify-center gap-1.5 text-xs text-slate-500">
-                <Loader2 className="size-3.5 animate-spin" />
-                Loading…
+      <Sheet
+        open={detailSheetOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeDetailSheet()
+          }
+        }}
+      >
+        <SheetContent
+          side="right"
+          className="w-full gap-0 p-0 sm:max-w-md"
+          showCloseButton
+        >
+          <SheetHeader className="border-b border-border bg-muted/20 px-4 py-3 pr-12">
+            <SheetDescription className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              Selected request
+            </SheetDescription>
+            <div className="flex items-start justify-between gap-2">
+              <SheetTitle className="truncate text-base font-semibold" title={selectedDetailTitle}>
+                {selectedDetailTitle}
+              </SheetTitle>
+              {activeRequest || detailLoading ? (
+                <Badge
+                  variant="outline"
+                  className={cn("shrink-0 px-1.5 py-0 text-[10px] capitalize", statusMeta.className)}
+                >
+                  {detailLoading && !activeRequest ? "Loading" : statusMeta.label}
+                </Badge>
+              ) : null}
+            </div>
+          </SheetHeader>
+
+          <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto p-4">
+            {detailLoading && !activeRequest ? (
+              <div className="flex flex-1 flex-col items-center justify-center gap-2 py-16 text-xs text-muted-foreground">
+                <Loader2 className="size-5 animate-spin text-primary" />
+                Loading request details…
               </div>
             ) : null}
 
-            {!detailLoading && !activeRequest ? (
-              <div className="flex flex-1 items-center justify-center rounded-md border border-dashed border-slate-200 px-3 py-6 text-center text-xs text-slate-500">
-                Select a request to review
-              </div>
-            ) : null}
-
-            {!detailLoading && activeRequest ? (
+            {activeRequest ? (
               <>
+                {detailLoading ? (
+                  <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                    <Loader2 className="size-3 animate-spin" />
+                    Refreshing details…
+                  </div>
+                ) : null}
+
                 {feedback ? (
                   <div
                     className={cn(
-                      "rounded-md border px-2 py-1.5 text-xs",
+                      "rounded-md border px-2.5 py-1.5 text-xs",
                       error
-                        ? "border-rose-200 bg-rose-50 text-rose-700"
-                        : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                        ? "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300"
+                        : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300"
                     )}
                   >
                     {feedback}
                   </div>
                 ) : null}
 
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-slate-900">
+                <div className="min-w-0 rounded-lg border border-border bg-muted/15 px-2.5 py-2">
+                  <p className="truncate text-sm font-semibold text-foreground">
                     {getRequestTitle(activeRequest)}
                   </p>
-                  <p className="mt-0.5 line-clamp-2 text-xs leading-snug text-slate-500">
+                  <p className="mt-0.5 line-clamp-3 text-xs leading-snug text-muted-foreground">
                     {readString(activeRequest, ["reason"], "No reason supplied")}
                   </p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-1.5">
-                  <MetaChip label="Employee" value={getEmployeeLabel(activeRequest)} />
+                  <MetaChip label="Employee" value={requestEmployeeLabel(activeRequest)} />
                   <MetaChip
                     label="Date"
                     value={formatDateOnly(
@@ -885,43 +1296,43 @@ export function HrAttendanceCorrectionApprovalsView() {
 
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs font-semibold text-slate-800">Changes</p>
-                    <span className="text-[11px] text-slate-500">
+                    <p className="text-xs font-semibold text-foreground">Requested changes</p>
+                    <span className="text-[11px] text-muted-foreground">
                       {changeRows.length} field{changeRows.length === 1 ? "" : "s"}
                     </span>
                   </div>
                   {changeRows.length > 0 ? (
-                    <div className="overflow-hidden rounded-md border border-slate-200">
+                    <div className="overflow-hidden rounded-lg border border-border">
                       <table className="min-w-full text-xs">
-                        <thead className="bg-slate-50 text-left text-[10px] tracking-wide text-slate-500 uppercase">
+                        <thead className="bg-muted/40 text-left text-[10px] tracking-wide text-muted-foreground uppercase">
                           <tr>
-                            <th className="px-2 py-1 font-medium">Field</th>
-                            <th className="px-2 py-1 font-medium">Current</th>
-                            <th className="px-2 py-1 font-medium">Requested</th>
+                            <th className="px-2.5 py-1.5 font-medium">Field</th>
+                            <th className="px-2.5 py-1.5 font-medium">Current</th>
+                            <th className="px-2.5 py-1.5 font-medium">Requested</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-100 bg-white">
+                        <tbody className="divide-y divide-border bg-card">
                           {changeRows.map((row) => (
                             <tr key={row.field}>
-                              <td className="px-2 py-1 font-medium text-slate-900">{row.label}</td>
-                              <td className="px-2 py-1 text-slate-600">{row.currentValue}</td>
-                              <td className="px-2 py-1 text-slate-900">{row.requestedValue}</td>
+                              <td className="px-2.5 py-1.5 font-medium text-foreground">{row.label}</td>
+                              <td className="px-2.5 py-1.5 text-muted-foreground">{row.currentValue}</td>
+                              <td className="px-2.5 py-1.5 font-medium text-primary">{row.requestedValue}</td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
                     </div>
                   ) : (
-                    <div className="rounded-md border border-dashed border-slate-200 px-2 py-3 text-[11px] text-slate-500">
+                    <div className="rounded-lg border border-dashed border-border px-2.5 py-3 text-[11px] text-muted-foreground">
                       No structured diffs returned. Review metadata before acting.
                     </div>
                   )}
                 </div>
 
                 <div className="space-y-1">
-                  <p className="text-xs font-semibold text-slate-800">HR note</p>
+                  <p className="text-xs font-semibold text-foreground">HR note</p>
                   <Textarea
-                    className="min-h-16 rounded-md border border-slate-300 px-2 py-1.5 text-xs"
+                    className="min-h-16 rounded-lg border border-border px-2.5 py-1.5 text-xs"
                     placeholder={
                       statusMeta.terminal
                         ? "This request is already closed."
@@ -931,44 +1342,46 @@ export function HrAttendanceCorrectionApprovalsView() {
                     onChange={(event) => setDecisionComment(event.target.value)}
                     disabled={statusMeta.terminal || actionLoading !== null}
                   />
-                  <p className="text-[11px] text-slate-500">
+                  <p className="text-[11px] text-muted-foreground">
                     Approve applies to the daily summary. Reject requires a clear reason.
                   </p>
-                </div>
-
-                <div className="mt-auto flex flex-wrap justify-end gap-1.5 border-t border-slate-100 pt-2">
-                  <button
-                    type="button"
-                    className="inline-flex h-7 items-center gap-1 rounded-md border border-emerald-300 px-2.5 text-xs font-medium text-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
-                    onClick={() => void handleDecision("approve")}
-                    disabled={statusMeta.terminal || actionLoading !== null}
-                  >
-                    {actionLoading === "approve" ? (
-                      <Loader2 className="size-3 animate-spin" />
-                    ) : (
-                      <CheckCircle2 className="size-3" />
-                    )}
-                    Approve
-                  </button>
-                  <button
-                    type="button"
-                    className="inline-flex h-7 items-center gap-1 rounded-md border border-rose-300 px-2.5 text-xs font-medium text-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
-                    onClick={() => void handleDecision("reject")}
-                    disabled={statusMeta.terminal || actionLoading !== null}
-                  >
-                    {actionLoading === "reject" ? (
-                      <Loader2 className="size-3 animate-spin" />
-                    ) : (
-                      <XCircle className="size-3" />
-                    )}
-                    Reject
-                  </button>
                 </div>
               </>
             ) : null}
           </div>
-        </aside>
-      </div>
+
+          {activeRequest ? (
+            <div className="mt-auto flex flex-wrap gap-1.5 border-t border-border bg-background p-4">
+              <button
+                type="button"
+                className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-3 text-xs font-semibold !text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={() => void handleDecision("approve")}
+                disabled={statusMeta.terminal || actionLoading !== null}
+              >
+                {actionLoading === "approve" ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="size-3.5" />
+                )}
+                Approve
+              </button>
+              <button
+                type="button"
+                className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg border border-rose-300 bg-background px-3 text-xs font-semibold text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-300 dark:hover:bg-rose-950/40"
+                onClick={() => void handleDecision("reject")}
+                disabled={statusMeta.terminal || actionLoading !== null}
+              >
+                {actionLoading === "reject" ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <XCircle className="size-3.5" />
+                )}
+                Reject
+              </button>
+            </div>
+          ) : null}
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }

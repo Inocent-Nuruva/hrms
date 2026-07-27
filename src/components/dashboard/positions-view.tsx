@@ -18,8 +18,8 @@ import {
   type AdminRecord,
   type PositionsQueryParams,
 } from "@/lib/admin-api"
-import { canPerformPermission } from "@/components/app-sidebar"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
+import { canPerformPermission } from "@/lib/dashboard-permissions"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import {
   AlertDialog,
@@ -463,7 +463,7 @@ export function PositionsView() {
           {canCreatePositions ? (
             <button
               type="button"
-              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-slate-900 px-2.5 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white transition hover:brightness-95 disabled:opacity-60"
               onClick={() => {
                 setEditingId(null)
                 setForm(emptyForm())
@@ -628,7 +628,7 @@ export function PositionsView() {
               <button type="button" className="rounded-md border border-slate-300 px-3 py-2 text-sm" onClick={() => setOpenForm(false)}>
                 Cancel
               </button>
-              <button type="button" className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60" disabled={saving} onClick={() => void submitForm()}>
+              <button type="button" className="rounded-md bg-primary px-3 py-2 text-sm font-medium !text-white transition hover:brightness-95 disabled:opacity-60" disabled={saving} onClick={() => void submitForm()}>
                 {saving ? "Saving..." : "Save"}
               </button>
             </div>

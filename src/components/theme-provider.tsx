@@ -28,6 +28,7 @@ function applyThemeClass(theme: ThemeMode) {
   const root = document.documentElement
   root.classList.remove("light", "dark")
   root.classList.add(resolved)
+  root.style.colorScheme = resolved
   return resolved
 }
 

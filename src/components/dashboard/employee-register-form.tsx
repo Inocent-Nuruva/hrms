@@ -19,6 +19,7 @@ import {
 
 import {
   createEmployeeProfile,
+  getOnboardingRequest,
   getCurrentAdmin,
   getCurrentEmployee,
   listAccessControlResources,
@@ -35,6 +36,7 @@ import {
   type CreateEmployeeResponse,
   type OnboardingAttendanceMode,
 } from "@/lib/admin-api"
+import { notifySubmittedRequestApprovers } from "@/lib/request-notifications"
 import {
   Tabs,
   TabsContent,
@@ -736,14 +738,16 @@ function readRecordId(record: AdminRecord | null) {
   if (!record) {
     return null
   }
-  const value = record.id
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value
-  }
-  if (typeof value === "string" && value.trim()) {
-    const parsed = Number(value)
-    if (Number.isFinite(parsed)) {
-      return parsed
+  for (const key of ["id", "request_id", "requestId"]) {
+    const value = record[key]
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value
+    }
+    if (typeof value === "string" && value.trim()) {
+      const parsed = Number(value)
+      if (Number.isFinite(parsed)) {
+        return parsed
+      }
     }
   }
   return null
@@ -2964,6 +2968,22 @@ export function EmployeeRegisterForm() {
           registration_mode: isInviteMode ? "send_invite" : "full_registration",
         },
       })
+      if (response.onboarding_request && onboardingPayload?.submit) {
+        const onboardingRequestId = readRecordId(response.onboarding_request)
+        void notifySubmittedRequestApprovers({
+          kind: "onboarding_request",
+          token: accessToken,
+          request: response.onboarding_request,
+          requesterName: [form.firstName, form.middleName, form.lastName]
+            .map((value) => value.trim())
+            .filter(Boolean)
+            .join(" "),
+          loadRequest:
+            onboardingRequestId === null
+              ? undefined
+              : () => getOnboardingRequest(accessToken, onboardingRequestId),
+        })
+      }
       setCreatedEmployeeResult(response)
       showSuccessAlert(
         response.onboarding_request
@@ -3134,7 +3154,7 @@ export function EmployeeRegisterForm() {
                         className={cn(
                           "mr-1.5 inline-flex size-4 items-center justify-center rounded-full text-[10px] font-semibold leading-none",
                           isActive && hasData
-                            ? "bg-[var(--primary)] text-white"
+                            ? "bg-[var(--primary)] !text-white"
                             : isActive && !hasData
                               ? "bg-rose-500 text-white"
                               : isEmptyVisited

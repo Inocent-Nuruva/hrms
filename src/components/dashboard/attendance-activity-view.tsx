@@ -2,12 +2,18 @@
 
 import * as React from "react"
 import {
+  AnimatePresence,
+  motion,
+  useReducedMotion,
+} from "framer-motion"
+import {
   AlarmClockCheckIcon,
   Clock3Icon,
   Filter,
   MapPinIcon,
   PlusIcon,
   RefreshCwIcon,
+  RotateCcwIcon,
   SearchIcon,
   TimerResetIcon,
 } from "lucide-react"
@@ -26,6 +32,7 @@ import {
   cancelMyAttendanceCorrectionRequest,
   createMyAttendanceCorrectionRequest,
   downloadAttendanceReport,
+  getMyAttendanceCorrectionRequest,
   getMyAttendanceSchedule,
   getMyAttendanceToday,
   listMyAttendanceCorrectionRequests,
@@ -36,13 +43,14 @@ import {
   listBranches,
   listEmployees,
   listMyAttendanceHistory,
-  listMyAttendancePunches,
   processAttendanceRange,
   runPendingAttendanceProcessingJobs,
   submitMyAttendanceCorrectionRequest,
   type AdminRecord,
 } from "@/lib/admin-api"
+import { cn } from "@/lib/utils"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
+import { notifySubmittedRequestApprovers } from "@/lib/request-notifications"
 import {
   Dialog,
   DialogDescription,
@@ -58,7 +66,6 @@ type AttendanceActivitySectionKey =
   | "unmatched-logs"
   | "today"
   | "punch-action"
-  | "punch-history"
   | "attendance-history"
   | "schedule-preview"
   | "corrections"
@@ -105,11 +112,6 @@ const SECTION_CONFIG: Record<AttendanceActivitySectionKey, SectionConfig> = {
     title: "Punch Action",
     groupTitle: "My Attendance",
     description: "",
-  },
-  "punch-history": {
-    title: "Punch History",
-    groupTitle: "My Attendance",
-    description: "Review your recorded punch events.",
   },
   "attendance-history": {
     title: "Attendance History",
@@ -376,6 +378,151 @@ function formatMinutesLabel(value: unknown) {
   return `${hours}h ${remainingMinutes.toString().padStart(2, "0")}m`
 }
 
+function formatHistoryDateLabel(value: string | null) {
+  if (!value) return "—"
+  const date = new Date(value.length <= 10 ? `${value}T00:00:00` : value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  })
+}
+
+function formatHistoryTimeLabel(value: unknown) {
+  if (value === null || value === undefined || value === "") return "—"
+  const raw = String(value)
+  const date = new Date(raw)
+  if (!Number.isNaN(date.getTime())) {
+    return date.toLocaleTimeString(undefined, {
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+  }
+  // Already a time-like string (HH:mm / HH:mm:ss)
+  if (/^\d{1,2}:\d{2}/.test(raw)) {
+    return raw.slice(0, 5)
+  }
+  return raw
+}
+
+/** Clear color map for attendance day statuses (summary chips + row accent). */
+function attendanceHistoryStatusTone(status: string) {
+  const key = status.trim().toLowerCase().replace(/[\s-]+/g, "_")
+
+  if (
+    key.includes("early_depart") ||
+    key.includes("early_leave") ||
+    key === "early_departure" ||
+    key.includes("early_out")
+  ) {
+    return {
+      bar: "bg-violet-500",
+      chip: "bg-violet-500/10 text-violet-800 dark:text-violet-300",
+      label: "text-violet-700 dark:text-violet-300",
+      count: "text-violet-700 dark:text-violet-300",
+    }
+  }
+  if (key.includes("late")) {
+    return {
+      bar: "bg-amber-500",
+      chip: "bg-amber-500/10 text-amber-900 dark:text-amber-300",
+      label: "text-amber-800 dark:text-amber-300",
+      count: "text-amber-800 dark:text-amber-300",
+    }
+  }
+  if (key.includes("half")) {
+    return {
+      bar: "bg-orange-500",
+      chip: "bg-orange-500/10 text-orange-900 dark:text-orange-300",
+      label: "text-orange-800 dark:text-orange-300",
+      count: "text-orange-800 dark:text-orange-300",
+    }
+  }
+  if (key.includes("absent")) {
+    return {
+      bar: "bg-rose-500",
+      chip: "bg-rose-500/10 text-rose-800 dark:text-rose-300",
+      label: "text-rose-700 dark:text-rose-300",
+      count: "text-rose-700 dark:text-rose-300",
+    }
+  }
+  if (key.includes("holiday")) {
+    return {
+      bar: "bg-indigo-500",
+      chip: "bg-indigo-500/10 text-indigo-800 dark:text-indigo-300",
+      label: "text-indigo-700 dark:text-indigo-300",
+      count: "text-indigo-700 dark:text-indigo-300",
+    }
+  }
+  if (key.includes("leave") || key.includes("on_leave")) {
+    return {
+      bar: "bg-sky-500",
+      chip: "bg-sky-500/10 text-sky-900 dark:text-sky-300",
+      label: "text-sky-800 dark:text-sky-300",
+      count: "text-sky-800 dark:text-sky-300",
+    }
+  }
+  if (key.includes("off") || key.includes("weekend") || key.includes("rest")) {
+    return {
+      bar: "bg-slate-400",
+      chip: "bg-slate-500/10 text-slate-700 dark:text-slate-300",
+      label: "text-slate-600 dark:text-slate-300",
+      count: "text-slate-700 dark:text-slate-300",
+    }
+  }
+  if (key.includes("present") || key.includes("on_time") || key === "ok" || key === "worked") {
+    return {
+      bar: "bg-emerald-500",
+      chip: "bg-emerald-500/10 text-emerald-800 dark:text-emerald-300",
+      label: "text-emerald-700 dark:text-emerald-300",
+      count: "text-emerald-700 dark:text-emerald-300",
+    }
+  }
+  return {
+    bar: "bg-primary",
+    chip: "bg-primary/10 text-primary",
+    label: "text-primary",
+    count: "text-primary",
+  }
+}
+
+function schedulePreviewDayKind(row: AdminRecord): string {
+  if (isOffDayValue(row.is_off_day) || isOffDayValue(row.isOffDay)) {
+    return "Off Day"
+  }
+  if (
+    isOffDayValue(row.is_holiday) ||
+    isOffDayValue(row.isHoliday) ||
+    Boolean(readStringFromRow(row, ["holiday_name", "holidayName"]))
+  ) {
+    return "Holiday"
+  }
+  if (
+    isOffDayValue(row.is_on_leave) ||
+    isOffDayValue(row.on_leave) ||
+    Boolean(readStringFromRow(row, ["leave_type", "leaveType", "leave_status"]))
+  ) {
+    return "On Leave"
+  }
+  const shift = readNestedRecord(row, ["shift"])
+  const shiftName = readStringFromRow(shift ?? row, [
+    "name",
+    "shift_name",
+    "code",
+    "schedule_name",
+  ])
+  if (shift || shiftName) {
+    return "Working"
+  }
+  return "Unassigned"
+}
+
+function schedulePreviewKindTone(kind: string) {
+  return attendanceHistoryStatusTone(kind)
+}
+
 function isOffDayValue(value: unknown) {
   return value === true || value === "true"
 }
@@ -427,147 +574,416 @@ function readFirstValue(record: AdminRecord | null | undefined, keys: string[]) 
 
 function statusTone(statusValue: string | null) {
   const normalized = statusValue?.trim().toUpperCase() ?? ""
-  if (normalized.includes("PRESENT") || normalized.includes("COMPLETE")) {
+  if (normalized.includes("PRESENT") || normalized.includes("COMPLETE") || normalized.includes("APPROV")) {
     return {
-      badge: "border-emerald-200 bg-emerald-50 text-emerald-700",
+      badge: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300",
       accent: "bg-emerald-500",
       panel: "border-emerald-100 bg-emerald-50/60",
     }
   }
-  if (normalized.includes("LATE") || normalized.includes("MISSING")) {
+  if (normalized.includes("LATE") || normalized.includes("MISSING") || normalized.includes("SUBMIT") || normalized.includes("PENDING")) {
     return {
-      badge: "border-amber-200 bg-amber-50 text-amber-700",
+      badge: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300",
       accent: "bg-amber-500",
       panel: "border-amber-100 bg-amber-50/60",
     }
   }
-  if (normalized.includes("ABSENT") || normalized.includes("REJECT")) {
+  if (normalized.includes("ABSENT") || normalized.includes("REJECT") || normalized.includes("CANCEL")) {
     return {
-      badge: "border-rose-200 bg-rose-50 text-rose-700",
+      badge: "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300",
       accent: "bg-rose-500",
       panel: "border-rose-100 bg-rose-50/60",
     }
   }
+  if (normalized.includes("DRAFT")) {
+    return {
+      badge: "border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300",
+      accent: "bg-slate-400",
+      panel: "border-slate-100 bg-slate-50/60",
+    }
+  }
   return {
-    badge: "border-sky-200 bg-sky-50 text-sky-700",
+    badge: "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-300",
     accent: "bg-sky-500",
     panel: "border-sky-100 bg-sky-50/60",
   }
 }
 
+/** Correction request list tones (chips + row accent). */
+function correctionRequestStatusTone(statusValue: string) {
+  const key = statusValue.trim().toLowerCase().replace(/[\s-]+/g, "_")
+  if (key.includes("approv") || key.includes("complete")) {
+    return {
+      bar: "bg-emerald-500",
+      chip: "bg-emerald-500/10 text-emerald-800 dark:text-emerald-300",
+      label: "text-emerald-700 dark:text-emerald-300",
+      count: "text-emerald-700 dark:text-emerald-300",
+    }
+  }
+  if (key.includes("submit") || key.includes("pending") || key.includes("review")) {
+    return {
+      bar: "bg-amber-500",
+      chip: "bg-amber-500/10 text-amber-900 dark:text-amber-300",
+      label: "text-amber-800 dark:text-amber-300",
+      count: "text-amber-800 dark:text-amber-300",
+    }
+  }
+  if (key.includes("reject") || key.includes("deny")) {
+    return {
+      bar: "bg-rose-500",
+      chip: "bg-rose-500/10 text-rose-800 dark:text-rose-300",
+      label: "text-rose-700 dark:text-rose-300",
+      count: "text-rose-700 dark:text-rose-300",
+    }
+  }
+  if (key.includes("cancel")) {
+    return {
+      bar: "bg-slate-400",
+      chip: "bg-slate-500/10 text-slate-700 dark:text-slate-300",
+      label: "text-slate-600 dark:text-slate-300",
+      count: "text-slate-700 dark:text-slate-300",
+    }
+  }
+  if (key.includes("draft")) {
+    return {
+      bar: "bg-sky-500",
+      chip: "bg-sky-500/10 text-sky-900 dark:text-sky-300",
+      label: "text-sky-800 dark:text-sky-300",
+      count: "text-sky-800 dark:text-sky-300",
+    }
+  }
+  return {
+    bar: "bg-primary",
+    chip: "bg-primary/10 text-primary",
+    label: "text-primary",
+    count: "text-primary",
+  }
+}
+
 function TodayOverview({ record }: { record: AdminRecord | null }) {
+  const prefersReducedMotion = useReducedMotion()
+  const animate = !prefersReducedMotion
+
   if (!record) {
     return (
-      <div className="py-4 text-sm text-muted-foreground">
-        No attendance summary yet. Your data for today has not been published.
+      <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center">
+        <p className="text-sm font-medium text-foreground">No attendance for today</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Your data for today has not been published yet.
+        </p>
       </div>
     )
   }
 
-  const effective = record && record.summary && typeof record.summary === "object" && !Array.isArray(record.summary)
-    ? (record.summary as AdminRecord)
-    : (record || {})
+  const effective =
+    record && record.summary && typeof record.summary === "object" && !Array.isArray(record.summary)
+      ? (record.summary as AdminRecord)
+      : record || {}
 
-  const scheduleStart = formatOptionalValue(
-    readWithFallback(record, ["schedule_start_at", "schedule_start_time", "shift_start_at", "start_time"], effective),
-    "Not set"
+  const statusRaw =
+    readStringFromRow(effective, ["attendance_status", "status", "attendanceStatus"]) ||
+    readStringFromRow(record, ["attendance_status", "status", "attendanceStatus", "punch_state"]) ||
+    "Today"
+  const tone = attendanceHistoryStatusTone(statusRaw)
+
+  const scheduleStartRaw = readWithFallback(
+    record,
+    ["schedule_start_at", "schedule_start_time", "shift_start_at", "start_time"],
+    effective
   )
-  const scheduleEnd = formatOptionalValue(
-    readWithFallback(record, ["schedule_end_at", "schedule_end_time", "shift_end_at", "end_time"], effective),
-    "Not set"
+  const scheduleEndRaw = readWithFallback(
+    record,
+    ["schedule_end_at", "schedule_end_time", "shift_end_at", "end_time"],
+    effective
   )
-  const firstPunch = formatOptionalValue(
-    readWithFallback(record, ["first_punch", "first_check_in_at", "first_punch_at", "check_in_at", "clock_in_at"], null),
-    "Not recorded"
+  const firstPunchRaw = readWithFallback(
+    record,
+    ["first_punch", "first_check_in_at", "first_punch_at", "check_in_at", "clock_in_at"],
+    effective
   )
-  const lastPunch = formatOptionalValue(
-    readWithFallback(record, ["last_punch", "last_check_out_at", "last_punch_at", "check_out_at", "clock_out_at"], null),
-    "Not recorded"
+  const lastPunchRaw = readWithFallback(
+    record,
+    ["last_punch", "last_check_out_at", "last_punch_at", "check_out_at", "clock_out_at"],
+    effective
   )
-  const workedHours = readWithFallback(record, ["worked_hours", "worked_duration", "total_worked_hours", "hours_worked"], effective) ?? "Still calculating"
-  const branch = readWithFallback(record, ["branch_name", "branch", "location_name", "site_name"], effective) ?? "Assigned branch"
-  const shift = readWithFallback(record, ["shift_name", "schedule_name", "timetable_name"], effective) || ""
-  const lateness = readWithFallback(record, ["late_minutes", "lateness_minutes", "minutes_late"], effective) ?? "0"
-  const overtime = readWithFallback(record, ["overtime_minutes", "overtime_hours", "extra_time"], effective) ?? "0"
+
+  const scheduleStart = formatHistoryTimeLabel(scheduleStartRaw ?? "—")
+  const scheduleEnd = formatHistoryTimeLabel(scheduleEndRaw ?? "—")
+  const firstPunch = formatHistoryTimeLabel(firstPunchRaw ?? "—")
+  const lastPunch = formatHistoryTimeLabel(lastPunchRaw ?? "—")
+
+  const workedRaw = readWithFallback(
+    record,
+    ["worked_hours", "worked_duration", "total_worked_hours", "hours_worked", "work_minutes", "worked_minutes"],
+    effective
+  )
+  const workedLabel =
+    workedRaw === null || workedRaw === undefined || workedRaw === ""
+      ? "—"
+      : typeof workedRaw === "number" || /^\d+(\.\d+)?$/.test(String(workedRaw))
+        ? // Prefer minutes formatting when value looks like minutes (> 24 unlikely for hours-as-number display)
+          Number(workedRaw) > 24
+          ? formatMinutesLabel(workedRaw)
+          : String(workedRaw)
+        : formatOptionalValue(workedRaw, "—")
+
+  const branch =
+    formatOptionalValue(
+      readWithFallback(record, ["branch_name", "branch", "location_name", "site_name"], effective),
+      "—"
+    )
+  const shift =
+    formatOptionalValue(
+      readWithFallback(record, ["shift_name", "schedule_name", "timetable_name"], effective),
+      ""
+    )
+  const latenessNum = Number(
+    readWithFallback(record, ["late_minutes", "lateness_minutes", "minutes_late"], effective) ?? 0
+  )
+  const overtimeNum = Number(
+    readWithFallback(record, ["overtime_minutes", "overtime_hours", "extra_time"], effective) ?? 0
+  )
+  const lateness = Number.isFinite(latenessNum) ? latenessNum : 0
+  const overtime = Number.isFinite(overtimeNum) ? overtimeNum : 0
+
+  const summaryChips: Array<{ key: string; label: string; value: string; toneKey: string }> = [
+    { key: "status", label: "Status", value: statusRaw.replace(/[_-]+/g, " "), toneKey: statusRaw },
+    {
+      key: "late",
+      label: "Late",
+      value: lateness > 0 ? `${lateness}m` : "0m",
+      toneKey: lateness > 0 ? "late" : "present",
+    },
+    {
+      key: "ot",
+      label: "Overtime",
+      value: overtime > 0 ? `${overtime}m` : "0m",
+      toneKey: overtime > 0 ? "late" : "present",
+    },
+    {
+      key: "worked",
+      label: "Worked",
+      value: workedLabel,
+      toneKey: "present",
+    },
+  ]
+
+  const rowSpring = (index: number) =>
+    animate
+      ? {
+          opacity: 1,
+          y: 0,
+          scale: 1,
+          transition: {
+            type: "spring" as const,
+            stiffness: 420,
+            damping: 28,
+            mass: 0.7,
+            delay: index * 0.04,
+          },
+        }
+      : { opacity: 1, y: 0, scale: 1 }
 
   return (
-    <div className="space-y-4">
-      {shift && (
-        <div className="inline-flex items-center rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs text-muted-foreground">
-          {shift}
-        </div>
-      )}
+    <div className="space-y-3">
+      <motion.div
+        className="inline-flex max-w-full flex-nowrap items-stretch overflow-x-auto rounded-lg border border-border"
+        initial={animate ? { opacity: 0, y: 8 } : false}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.25, ease: "easeOut" }}
+      >
+        {summaryChips.map((chip, index, arr) => {
+          const chipTone = attendanceHistoryStatusTone(chip.toneKey)
+          return (
+            <div
+              key={chip.key}
+              className={cn(
+                "flex min-w-[5.25rem] shrink-0 flex-col justify-center px-3 py-2",
+                chipTone.chip,
+                index < arr.length - 1 ? "border-r border-border/60" : null
+              )}
+            >
+              <span className="truncate text-[10px] font-semibold uppercase tracking-wide opacity-80">
+                {chip.label}
+              </span>
+              <span className={cn("text-base font-semibold tabular-nums capitalize", chipTone.count)}>
+                {chip.value}
+              </span>
+            </div>
+          )
+        })}
+      </motion.div>
 
-      {/* Schedule - using our card design (bright primary + doodle, white text) */}
-      <div className="relative overflow-hidden rounded-2xl p-4 text-white" style={{ backgroundColor: 'var(--primary)' }}>
-        <Doodle name="doodle-circles" />
-        <div className="relative z-10">
-          <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-white/70">Schedule</div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="flex gap-2">
-              <Clock3Icon className="mt-0.5 size-3.5 shrink-0 text-white/70" />
-              <div className="text-xs">
-                <div className="text-white/70">Start</div>
-                <div className="font-medium text-white">{scheduleStart}</div>
+      <div className="divide-y divide-border overflow-hidden rounded-lg border border-border">
+        <AnimatePresence mode="popLayout">
+          <motion.div
+            key="schedule-row"
+            initial={animate ? { opacity: 0, y: 10, scale: 0.99 } : false}
+            animate={rowSpring(0)}
+            className="flex bg-background"
+          >
+            <div className="w-1 shrink-0 bg-primary" />
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3 px-3 py-2.5 sm:flex-nowrap">
+              <div className="w-[7rem] shrink-0">
+                <div className="text-xs font-semibold text-foreground">Schedule</div>
+                <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                  {shift || "Assigned shift"}
+                </div>
+              </div>
+              <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Start
+                  </div>
+                  <div
+                    className={cn(
+                      "text-base font-semibold tabular-nums leading-tight sm:text-lg",
+                      scheduleStart === "—" ? "text-muted-foreground/45" : "text-primary"
+                    )}
+                  >
+                    {scheduleStart}
+                  </div>
+                </div>
+                <div className="text-muted-foreground/40" aria-hidden>
+                  →
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    End
+                  </div>
+                  <div
+                    className={cn(
+                      "text-base font-semibold tabular-nums leading-tight sm:text-lg",
+                      scheduleEnd === "—" ? "text-muted-foreground/45" : "text-primary"
+                    )}
+                  >
+                    {scheduleEnd}
+                  </div>
+                </div>
+                <div className="hidden min-w-[6rem] shrink-0 text-right sm:block">
+                  <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Branch
+                  </div>
+                  <div className="truncate text-sm font-medium text-foreground">{branch}</div>
+                </div>
               </div>
             </div>
-            <div className="flex gap-2">
-              <TimerResetIcon className="mt-0.5 size-3.5 shrink-0 text-white/70" />
-              <div className="text-xs">
-                <div className="text-white/70">End</div>
-                <div className="font-medium text-white">{scheduleEnd}</div>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <AlarmClockCheckIcon className="mt-0.5 size-3.5 shrink-0 text-white/70" />
-              <div className="text-xs">
-                <div className="text-white/70">Worked</div>
-                <div className="font-medium text-white">{workedHours}</div>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <MapPinIcon className="mt-0.5 size-3.5 shrink-0 text-white/70" />
-              <div className="text-xs">
-                <div className="text-white/70">Branch</div>
-                <div className="font-medium text-white">{branch}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+          </motion.div>
 
-      {/* Today's pulse - using our card design */}
-      <div className="relative overflow-hidden rounded-2xl p-4 text-white" style={{ backgroundColor: 'var(--primary)' }}>
-        <Doodle name="doodle-circles" />
-        <div className="relative z-10">
-          <div className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-white/70">Today&apos;s pulse</div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="flex gap-2">
-              <div className="text-xs">
-                <div className="text-white/70">First punch</div>
-                <div className="font-medium text-white">{firstPunch}</div>
+          <motion.div
+            key="punches-row"
+            initial={animate ? { opacity: 0, y: 10, scale: 0.99 } : false}
+            animate={rowSpring(1)}
+            className="flex bg-background"
+          >
+            <div className={cn("w-1 shrink-0", tone.bar)} />
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3 px-3 py-2.5 sm:flex-nowrap">
+              <div className="w-[7rem] shrink-0">
+                <div className="text-xs font-semibold text-foreground">Punches</div>
+                <div className={cn("mt-0.5 text-[11px] font-semibold capitalize", tone.label)}>
+                  {statusRaw.replace(/[_-]+/g, " ")}
+                </div>
+              </div>
+              <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Check in
+                  </div>
+                  <div
+                    className={cn(
+                      "text-base font-semibold tabular-nums leading-tight sm:text-lg",
+                      firstPunch === "—" ? "text-muted-foreground/45" : "text-primary"
+                    )}
+                  >
+                    {firstPunch}
+                  </div>
+                </div>
+                <div className="text-muted-foreground/40" aria-hidden>
+                  →
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Check out
+                  </div>
+                  <div
+                    className={cn(
+                      "text-base font-semibold tabular-nums leading-tight sm:text-lg",
+                      lastPunch === "—" ? "text-muted-foreground/45" : "text-primary"
+                    )}
+                  >
+                    {lastPunch}
+                  </div>
+                </div>
+                <div className="hidden min-w-[4.5rem] shrink-0 text-right sm:block">
+                  <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Worked
+                  </div>
+                  <div className="text-sm font-semibold tabular-nums text-foreground">
+                    {workedLabel}
+                  </div>
+                </div>
               </div>
             </div>
-            <div className="flex gap-2">
-              <div className="text-xs">
-                <div className="text-white/70">Last punch</div>
-                <div className="font-medium text-white">{lastPunch}</div>
+          </motion.div>
+
+          <motion.div
+            key="metrics-row"
+            initial={animate ? { opacity: 0, y: 10, scale: 0.99 } : false}
+            animate={rowSpring(2)}
+            className="flex bg-background"
+          >
+            <div
+              className={cn(
+                "w-1 shrink-0",
+                lateness > 0 ? "bg-amber-500" : overtime > 0 ? "bg-sky-500" : "bg-emerald-500"
+              )}
+            />
+            <div className="flex min-w-0 flex-1 items-center gap-4 px-3 py-2.5">
+              <div className="w-[7rem] shrink-0">
+                <div className="text-xs font-semibold text-foreground">Metrics</div>
+                <div className="mt-0.5 text-[11px] text-muted-foreground">Today</div>
+              </div>
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-5 gap-y-1">
+                <div>
+                  <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Lateness
+                  </div>
+                  <div
+                    className={cn(
+                      "text-sm font-semibold tabular-nums",
+                      lateness > 0
+                        ? "text-amber-700 dark:text-amber-300"
+                        : "text-emerald-700 dark:text-emerald-300"
+                    )}
+                  >
+                    {lateness} min
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Overtime
+                  </div>
+                  <div
+                    className={cn(
+                      "text-sm font-semibold tabular-nums",
+                      overtime > 0 ? "text-sky-700 dark:text-sky-300" : "text-foreground"
+                    )}
+                  >
+                    {overtime} min
+                  </div>
+                </div>
+                {branch !== "—" ? (
+                  <div className="min-w-0 sm:hidden">
+                    <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                      Branch
+                    </div>
+                    <div className="truncate text-sm font-medium text-foreground">{branch}</div>
+                  </div>
+                ) : null}
               </div>
             </div>
-            <div className="flex gap-2">
-              <div className="text-xs">
-                <div className="text-white/70">Lateness</div>
-                <div className="font-medium text-white">{lateness} min</div>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <div className="text-xs">
-                <div className="text-white/70">Overtime</div>
-                <div className="font-medium text-white">{overtime} min</div>
-              </div>
-            </div>
-          </div>
-        </div>
+          </motion.div>
+        </AnimatePresence>
       </div>
     </div>
   )
@@ -619,6 +1035,205 @@ function readWithFallback(
     val = readFirstValue(fallbackRecord, keys)
   }
   return val
+}
+
+function isPunchHistoryTimestampField(key: string) {
+  return [
+    "punched_at",
+    "punchedAt",
+    "punch_time",
+    "punchTime",
+    "punch_at",
+    "punchAt",
+    "time",
+    "at",
+    "event_time",
+    "eventTime",
+    "timestamp",
+    "datetime",
+    "created_at",
+    "createdAt",
+  ].includes(key)
+}
+
+function readPunchHistoryTimestamp(row: AdminRecord | null | undefined) {
+  return readFirstValue(row, [
+    "punched_at",
+    "punchedAt",
+    "punch_time",
+    "punchTime",
+    "punch_at",
+    "punchAt",
+    "time",
+    "at",
+    "event_time",
+    "eventTime",
+    "timestamp",
+    "datetime",
+    "created_at",
+    "createdAt",
+  ])
+}
+
+function readPunchHistoryType(row: AdminRecord | null | undefined) {
+  return readFirstValue(row, [
+    "punch_type",
+    "punchType",
+    "type",
+    "direction",
+    "in_out",
+    "inOut",
+    "event_type",
+    "eventType",
+  ])
+}
+
+function toPunchHistoryRow(value: unknown, fallbackType?: string): AdminRecord | null {
+  if (typeof value === "string" || typeof value === "number") {
+    return { punched_at: String(value), punch_type: fallbackType ?? undefined }
+  }
+
+  const record = asRecordValue(value)
+  if (!record) {
+    return null
+  }
+
+  const timestamp = readPunchHistoryTimestamp(record)
+  if (timestamp) {
+    return record
+  }
+
+  for (const [key, nestedValue] of Object.entries(record)) {
+    if (!isPunchHistoryTimestampField(key)) {
+      continue
+    }
+    if (nestedValue === null || nestedValue === undefined || nestedValue === "") {
+      continue
+    }
+    return {
+      ...record,
+      punched_at: String(nestedValue),
+      punch_type: readPunchHistoryType(record) ?? fallbackType,
+    }
+  }
+
+  return null
+}
+
+function toPunchHistorySortTime(value: string | null) {
+  if (!value) {
+    return Number.NEGATIVE_INFINITY
+  }
+
+  const parsed = new Date(value)
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.getTime()
+  }
+
+  const directTimeMatch = value.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/)
+  if (!directTimeMatch) {
+    return Number.NEGATIVE_INFINITY
+  }
+
+  const [, hours, minutes, seconds] = directTimeMatch
+  return (
+    Number(hours) * 60 * 60 * 1000 +
+    Number(minutes) * 60 * 1000 +
+    Number(seconds ?? "0") * 1000
+  )
+}
+
+function uniquePunchHistoryRows(rows: AdminRecord[]) {
+  const seen = new Set<string>()
+  const deduped: AdminRecord[] = []
+
+  for (const row of rows) {
+    const timestamp = readPunchHistoryTimestamp(row) ?? ""
+    const type = readPunchHistoryType(row) ?? ""
+    const key = String(row.id ?? `${timestamp}|${type}|${JSON.stringify(row)}`)
+    if (seen.has(key)) {
+      continue
+    }
+    seen.add(key)
+    deduped.push(row)
+  }
+
+  return deduped.sort((left, right) => {
+    const leftTime = toPunchHistorySortTime(readPunchHistoryTimestamp(left))
+    const rightTime = toPunchHistorySortTime(readPunchHistoryTimestamp(right))
+    return rightTime - leftTime
+  })
+}
+
+function buildPunchHistoryFallbackRows(record: AdminRecord | null) {
+  if (!record) {
+    return []
+  }
+
+  const summary =
+    readNestedRecord(record, ["summary", "daily_summary", "dailySummary", "attendance", "today"]) ?? null
+  const sources = [record, summary].filter(Boolean) as AdminRecord[]
+  const rows: AdminRecord[] = []
+
+  for (const source of sources) {
+    for (const key of [
+      "punches",
+      "punch_history",
+      "punchHistory",
+      "punch_logs",
+      "punchLogs",
+      "attendance_logs",
+      "attendanceLogs",
+      "events",
+      "logs",
+      "history",
+      "records",
+      "rows",
+      "items",
+      "data",
+    ]) {
+      const list = Array.isArray(source[key]) ? source[key] : []
+      for (const entry of list) {
+        const row = toPunchHistoryRow(entry)
+        if (row) {
+          rows.push(row)
+        }
+      }
+    }
+  }
+
+  if (rows.length > 0) {
+    return uniquePunchHistoryRows(rows)
+  }
+
+  const firstPunch = readWithFallback(
+    record,
+    ["first_punch", "first_check_in_at", "first_punch_at", "check_in_at", "checkInAt", "clock_in_at", "clockInAt"],
+    summary
+  )
+  const lastPunch = readWithFallback(
+    record,
+    ["last_punch", "last_check_out_at", "last_punch_at", "check_out_at", "checkOutAt", "clock_out_at", "clockOutAt"],
+    summary
+  )
+
+  const synthesized: AdminRecord[] = []
+  if (firstPunch) {
+    synthesized.push({
+      id: "today-first-punch",
+      punched_at: firstPunch,
+      punch_type: "CHECK_IN",
+    })
+  }
+  if (lastPunch && lastPunch !== firstPunch) {
+    synthesized.push({
+      id: "today-last-punch",
+      punched_at: lastPunch,
+      punch_type: "CHECK_OUT",
+    })
+  }
+
+  return uniquePunchHistoryRows(synthesized)
 }
 
 function getEmployeeOptionLabel(employee: AdminRecord) {
@@ -1194,10 +1809,14 @@ function TableBlock({
   rows,
   section,
   loading = false,
+  toolbarStart,
+  toolbarActions,
 }: {
   rows: AdminRecord[]
   section: AttendanceActivitySectionKey
   loading?: boolean
+  toolbarStart?: React.ReactNode
+  toolbarActions?: React.ReactNode
 }) {
   const columns = React.useMemo(() => resolveVisibleColumns(rows, section), [rows, section])
 
@@ -1215,6 +1834,8 @@ function TableBlock({
         itemsPerPage={20}
         loading={loading}
         showExport={false}
+        toolbarStart={toolbarStart}
+        toolbarActions={toolbarActions}
         storageKey="attendance-activity"
       />
     </div>
@@ -1258,10 +1879,21 @@ export function AttendanceActivityView({ section }: { section: string }) {
     }
   })
   const [hasAppliedDailySummaryFilters, setHasAppliedDailySummaryFilters] = React.useState(true)
+  const [dailySummaryFiltersOpen, setDailySummaryFiltersOpen] = React.useState(false)
+  const [rebuildFormOpen, setRebuildFormOpen] = React.useState(false)
+  const [processRangeFormOpen, setProcessRangeFormOpen] = React.useState(false)
+  const [recalcActionBusy, setRecalcActionBusy] = React.useState(false)
   const [historyFilters, setHistoryFilters] = React.useState<Record<string, string>>(() => ({
     from_date: "",
     to_date: "",
   }))
+  /** null = all days; otherwise filter attendance-history rows by status label */
+  const [historyStatusFilter, setHistoryStatusFilter] = React.useState<string | null>(null)
+  /** null = all; filter schedule-preview by day kind (Working / Off Day / …) */
+  const [scheduleKindFilter, setScheduleKindFilter] = React.useState<string | null>(null)
+  /** null = all; filter correction requests by status */
+  const [correctionStatusFilter, setCorrectionStatusFilter] = React.useState<string | null>(null)
+  const prefersReducedMotion = useReducedMotion()
   const [correctionRequests, setCorrectionRequests] = React.useState<AdminRecord[]>([])
   const [correctionDialogOpen, setCorrectionDialogOpen] = React.useState(false)
   const [correctionBusy, setCorrectionBusy] = React.useState(false)
@@ -1284,6 +1916,49 @@ export function AttendanceActivityView({ section }: { section: string }) {
       getEmployeeOptionLabel(employee).toLowerCase().includes(search)
     )
   }, [employeeSearch, employees])
+
+  const dailySummaryActiveFilterCount = React.useMemo(() => {
+    const today = getTodayDateInputValue()
+    let count = 0
+    if (
+      appliedDailySummaryFilters.from_date !== today ||
+      appliedDailySummaryFilters.to_date !== today
+    ) {
+      count += 1
+    }
+    if (appliedDailySummaryFilters.employee_id) count += 1
+    if (appliedDailySummaryFilters.organization_id) count += 1
+    if (appliedDailySummaryFilters.status) count += 1
+    if (employeeSearch.trim()) count += 1
+    return count
+  }, [appliedDailySummaryFilters, employeeSearch])
+
+  const applyDailySummaryDraftFilters = React.useCallback(() => {
+    setHasAppliedDailySummaryFilters(true)
+    setAppliedDailySummaryFilters({ ...dailySummaryFilters })
+    setMessage(null)
+    setError(null)
+    setDailySummaryFiltersOpen(false)
+  }, [dailySummaryFilters])
+
+  const resetDailySummaryFiltersToToday = React.useCallback(() => {
+    const today = getTodayDateInputValue()
+    const resetFilters = {
+      from_date: today,
+      to_date: today,
+      employee_id: "",
+      organization_id: "",
+      status: "",
+    }
+    setEmployeeSearch("")
+    setDailySummaryFilters(resetFilters)
+    setAppliedDailySummaryFilters(resetFilters)
+    setHasAppliedDailySummaryFilters(true)
+    setError(null)
+    setMessage(null)
+    setDailySummaryFiltersOpen(false)
+  }, [])
+
   const [recalculateValues, setRecalculateValues] = React.useState<Record<string, string>>({
     start_date: "",
     end_date: "",
@@ -1386,15 +2061,6 @@ export function AttendanceActivityView({ section }: { section: string }) {
         const days = Array.isArray(payload) ? payload : (Array.isArray(daysRecord?.days) ? daysRecord.days : [])
         setDailySummaryRows([])
         setRows(days)
-        setSingleRecord(null)
-        setCorrectionRequests([])
-        return
-      }
-
-      if (activeSection === "punch-history") {
-        const result = await listMyAttendancePunches(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" })
-        setDailySummaryRows([])
-        setRows(result.rows)
         setSingleRecord(null)
         setCorrectionRequests([])
         return
@@ -1507,6 +2173,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
       return
     }
 
+    setRecalcActionBusy(true)
     try {
       await runPendingAttendanceProcessingJobs(token)
       setMessage("Pending recalculation jobs started successfully.")
@@ -1514,6 +2181,8 @@ export function AttendanceActivityView({ section }: { section: string }) {
       await fetchSectionData(true)
     } catch (errorObject) {
       setError(formatLoadError(errorObject, "Could not run pending jobs."))
+    } finally {
+      setRecalcActionBusy(false)
     }
   }
 
@@ -1523,13 +2192,17 @@ export function AttendanceActivityView({ section }: { section: string }) {
       setError("Authentication required. Please log in again.")
       return
     }
+    setRecalcActionBusy(true)
     try {
       await rebuildAttendanceDailySummaries(token, buildRecalculatePayload(recalculateValues))
       setMessage("Attendance summary rebuild started successfully.")
       setError(null)
+      setRebuildFormOpen(false)
       await fetchSectionData(true)
     } catch (errorObject) {
       setError(formatLoadError(errorObject, "Could not start the attendance summary rebuild."))
+    } finally {
+      setRecalcActionBusy(false)
     }
   }
 
@@ -1539,13 +2212,17 @@ export function AttendanceActivityView({ section }: { section: string }) {
       setError("Authentication required. Please log in again.")
       return
     }
+    setRecalcActionBusy(true)
     try {
       await processAttendanceRange(token, buildRangePayload(rangeValues))
       setMessage("Attendance range processing started successfully.")
       setError(null)
+      setProcessRangeFormOpen(false)
       await fetchSectionData(true)
     } catch (errorObject) {
       setError(formatLoadError(errorObject, "Could not process this attendance range."))
+    } finally {
+      setRecalcActionBusy(false)
     }
   }
 
@@ -1566,7 +2243,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
     setMessage(null)
 
     try {
-      await createMyAttendanceCorrectionRequest(token, {
+      const createdRequest = await createMyAttendanceCorrectionRequest(token, {
         attendance_date: correctionForm.attendance_date,
         request_type: correctionForm.request_type,
         requested_check_in_at: toIsoDateTime(
@@ -1580,6 +2257,19 @@ export function AttendanceActivityView({ section }: { section: string }) {
         requested_status: correctionForm.requested_status,
         reason: correctionForm.reason.trim(),
       })
+      const createdRecord = asRecordValue(createdRequest)
+      const createdRequestId = readNumberFromRow(createdRecord ?? {}, ["id", "request_id"])
+      const createdStatus = (
+        readStringFromRow(createdRecord ?? {}, ["status", "request_status"]) ?? ""
+      ).toLowerCase()
+      if (createdRequestId !== null && !["", "-", "draft"].includes(createdStatus)) {
+        void notifySubmittedRequestApprovers({
+          kind: "attendance_correction_request",
+          token,
+          request: createdRequest,
+          loadRequest: () => getMyAttendanceCorrectionRequest(token, createdRequestId),
+        })
+      }
       setMessage("Attendance correction request created.")
       setCorrectionDialogOpen(false)
       setCorrectionForm({
@@ -1611,7 +2301,13 @@ export function AttendanceActivityView({ section }: { section: string }) {
 
     try {
       if (action === "submit") {
-        await submitMyAttendanceCorrectionRequest(token, id)
+        const submittedRequest = await submitMyAttendanceCorrectionRequest(token, id)
+        void notifySubmittedRequestApprovers({
+          kind: "attendance_correction_request",
+          token,
+          request: submittedRequest ?? { id },
+          loadRequest: () => getMyAttendanceCorrectionRequest(token, id),
+        })
         setMessage("Attendance correction request submitted.")
       } else {
         await cancelMyAttendanceCorrectionRequest(token, id)
@@ -1687,20 +2383,233 @@ export function AttendanceActivityView({ section }: { section: string }) {
     )
   }
 
+  const dailySummaryFilterPopover = activeSection === "daily-summaries" ? (
+    <Popover open={dailySummaryFiltersOpen} onOpenChange={setDailySummaryFiltersOpen}>
+      <PopoverTrigger
+        className={cn(
+          "relative inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border text-xs font-medium text-foreground transition hover:bg-muted",
+          dailySummaryActiveFilterCount > 0 && "border-primary/40 bg-primary/5"
+        )}
+        aria-label="Open filters"
+        title="Filters"
+      >
+        <Filter className="size-3.5 text-primary" />
+        {dailySummaryActiveFilterCount > 0 ? (
+          <span className="absolute -right-1 -top-1 inline-flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-primary px-0.5 text-[9px] font-semibold text-primary-foreground">
+            {dailySummaryActiveFilterCount}
+          </span>
+        ) : null}
+      </PopoverTrigger>
+      <PopoverContent className="w-[min(100vw-1.5rem,18.5rem)] p-2.5" align="end">
+        <div className="space-y-1.5">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Filters
+          </div>
+
+          <label className="relative block w-full">
+            <SearchIcon className="pointer-events-none absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-slate-400" />
+            <input
+              className="h-7 w-full rounded-md border border-slate-300 bg-white pl-7 pr-2 text-xs text-slate-900 placeholder:text-slate-400 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100 dark:placeholder:text-slate-500"
+              value={employeeSearch}
+              onChange={(event) => setEmployeeSearch(event.target.value)}
+              placeholder="Name, number, or ID"
+              aria-label="Search employee by name, number, or ID"
+            />
+          </label>
+
+          <div className="grid grid-cols-2 gap-1.5">
+            <label className="grid min-w-0 gap-0.5 text-[10px]">
+              <span className="font-medium text-slate-600 dark:text-slate-300">From</span>
+              <DatePickerPresets
+                value={dailySummaryFilters.from_date}
+                onChange={(value) =>
+                  setDailySummaryFilters((current) => ({ ...current, from_date: value }))
+                }
+                placeholder="From"
+                className="h-7 gap-1 border-slate-300 bg-white px-2 text-[11px] text-slate-900 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100 [&_svg]:size-3"
+              />
+            </label>
+            <label className="grid min-w-0 gap-0.5 text-[10px]">
+              <span className="font-medium text-slate-600 dark:text-slate-300">To</span>
+              <DatePickerPresets
+                value={dailySummaryFilters.to_date}
+                onChange={(value) =>
+                  setDailySummaryFilters((current) => ({ ...current, to_date: value }))
+                }
+                placeholder="To"
+                className="h-7 gap-1 border-slate-300 bg-white px-2 text-[11px] text-slate-900 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100 [&_svg]:size-3"
+              />
+            </label>
+          </div>
+
+          <div className="grid grid-cols-2 gap-1.5">
+            <label className="grid min-w-0 gap-0.5 text-[10px]">
+              <span className="font-medium text-slate-600 dark:text-slate-300">Employee</span>
+              <select
+                className="h-7 w-full min-w-0 rounded-md border border-slate-300 bg-white px-1.5 text-[11px] text-slate-900 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100"
+                value={dailySummaryFilters.employee_id}
+                onChange={(event) =>
+                  setDailySummaryFilters((current) => ({
+                    ...current,
+                    employee_id: event.target.value,
+                  }))
+                }
+              >
+                <option value="">All</option>
+                {filteredEmployeeOptions.map((employee, index) => {
+                  const employeeId = readNumberFromRow(employee, [
+                    "id",
+                    "employee_id",
+                    "employeeId",
+                  ])
+                  if (employeeId === null) return null
+                  return (
+                    <option
+                      key={`attendance-employee-${employeeId}-${index}`}
+                      value={String(employeeId)}
+                    >
+                      {getEmployeeOptionLabel(employee)}
+                    </option>
+                  )
+                })}
+              </select>
+            </label>
+            <label className="grid min-w-0 gap-0.5 text-[10px]">
+              <span className="font-medium text-slate-600 dark:text-slate-300">Org</span>
+              <select
+                className="h-7 w-full min-w-0 rounded-md border border-slate-300 bg-white px-1.5 text-[11px] text-slate-900 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100"
+                value={dailySummaryFilters.organization_id}
+                onChange={(event) =>
+                  setDailySummaryFilters((current) => ({
+                    ...current,
+                    organization_id: event.target.value,
+                  }))
+                }
+              >
+                <option value="">All</option>
+                {branches.map((branch, index) => {
+                  const branchId = readNumberFromRow(branch, ["id", "branch_id", "branchId"])
+                  if (branchId === null) return null
+                  return (
+                    <option
+                      key={`attendance-branch-${branchId}-${index}`}
+                      value={String(branchId)}
+                    >
+                      {getBranchOptionLabel(branch)}
+                    </option>
+                  )
+                })}
+              </select>
+            </label>
+          </div>
+
+          <label className="grid min-w-0 gap-0.5 text-[10px]">
+            <span className="font-medium text-slate-600 dark:text-slate-300">Status</span>
+            <select
+              className="h-7 w-full min-w-0 rounded-md border border-slate-300 bg-white px-1.5 text-[11px] text-slate-900 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100"
+              value={dailySummaryFilters.status}
+              onChange={(event) =>
+                setDailySummaryFilters((current) => ({
+                  ...current,
+                  status: event.target.value,
+                }))
+              }
+            >
+              <option value="">All statuses</option>
+              {DAILY_SUMMARY_STATUS_OPTIONS.map((status) => (
+                <option key={status} value={status}>
+                  {prettifyLabel(status)}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <div className="flex gap-1 border-t border-border pt-1.5">
+            <button
+              className="inline-flex h-7 flex-1 items-center justify-center rounded-md bg-primary px-2 text-[11px] font-semibold !text-white transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
+              type="button"
+              disabled={loading}
+              onClick={applyDailySummaryDraftFilters}
+            >
+              Apply
+            </button>
+            <button
+              className="inline-flex h-7 items-center justify-center rounded-md border border-slate-300 bg-white px-2 text-[11px] font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100 dark:hover:bg-[#303030]"
+              type="button"
+              onClick={resetDailySummaryFiltersToToday}
+            >
+              Reset
+            </button>
+          </div>
+
+          <div className="flex gap-1">
+            <button
+              type="button"
+              className="inline-flex h-6 flex-1 items-center justify-center rounded-md border border-slate-300 bg-white px-1.5 text-[10px] font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100 dark:hover:bg-[#303030] disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={() => void exportDailySummaryReport("xlsx")}
+              disabled={attendanceExporting}
+            >
+              {attendanceExporting ? "…" : "XLSX"}
+            </button>
+            <button
+              type="button"
+              className="inline-flex h-6 flex-1 items-center justify-center rounded-md border border-slate-300 bg-white px-1.5 text-[10px] font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100 dark:hover:bg-[#303030] disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={() => void exportDailySummaryReport("csv")}
+              disabled={attendanceExporting}
+            >
+              CSV
+            </button>
+            <button
+              type="button"
+              className="inline-flex h-6 flex-1 items-center justify-center rounded-md border border-slate-300 bg-white px-1.5 text-[10px] font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100 dark:hover:bg-[#303030] disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={() => void exportDailySummaryReport("pdf")}
+              disabled={attendanceExporting}
+            >
+              PDF
+            </button>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  ) : null
+
+  const refreshButton = (
+    <button
+      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border text-xs font-medium text-foreground transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+      type="button"
+      disabled={loading}
+      aria-label="Refresh"
+      title="Refresh"
+      onClick={() => {
+        setMessage(null)
+        void fetchSectionData(true)
+      }}
+    >
+      <RefreshCwIcon className={`size-3.5 text-primary ${loading ? "animate-spin" : ""}`} />
+    </button>
+  )
+
+  const sectionTitleBlock = (
+    <div className="min-w-0 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+      <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+        {config.groupTitle}
+      </span>
+      {config.groupTitle !== "My Attendance" ? (
+        <h1 className="truncate text-lg font-semibold tracking-tight text-foreground sm:text-xl">
+          {config.title}
+        </h1>
+      ) : null}
+    </div>
+  )
+
   return (
     <div className="space-y-4">
       <DoodleSprites />
-      <div>
-        <div className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-          {config.groupTitle}
-        </div>
-        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-          <div>
-            {config.groupTitle !== "My Attendance" && (
-              <h1 className="text-xl font-semibold tracking-tight text-foreground">{config.title}</h1>
-            )}
-          </div>
-          <div className="flex items-center gap-1">
+      {/* Daily summaries + recalculation jobs host titles/actions on the table toolbar row. */}
+      {activeSection !== "daily-summaries" && activeSection !== "recalculation-jobs" ? (
+        <div className="flex flex-nowrap items-center justify-between gap-2">
+          {sectionTitleBlock}
+          <div className="flex shrink-0 items-center gap-1">
             {activeSection === "corrections" && (
               <button
                 className="inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-border px-2.5 text-xs font-medium text-foreground transition hover:bg-muted"
@@ -1712,55 +2621,69 @@ export function AttendanceActivityView({ section }: { section: string }) {
               </button>
             )}
             {activeSection === "attendance-history" && (
-              <Popover>
-                <PopoverTrigger
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border px-2 text-xs font-medium text-foreground transition hover:bg-muted"
-                  aria-label="Filter by date"
-                >
-                  <Filter className="size-3.5 text-primary" />
-                </PopoverTrigger>
-                <PopoverContent className="w-72 p-4" align="end">
-                  <div className="space-y-3">
-                    <div className="text-sm font-medium text-foreground">Filter by date range</div>
-                    <div className="grid gap-3">
-                      <label className="grid gap-1 text-xs">
-                        <span className="font-medium text-slate-700">From date</span>
-                        <DatePickerPresets
-                          value={historyFilters.from_date}
-                          onChange={(value) => setHistoryFilters((current) => ({ ...current, from_date: value }))}
-                          placeholder="From date"
-                          className="h-8 text-xs"
-                        />
-                      </label>
-                      <label className="grid gap-1 text-xs">
-                        <span className="font-medium text-slate-700">To date</span>
-                        <DatePickerPresets
-                          value={historyFilters.to_date}
-                          onChange={(value) => setHistoryFilters((current) => ({ ...current, to_date: value }))}
-                          placeholder="To date"
-                          className="h-8 text-xs"
-                        />
-                      </label>
+              <>
+                <Popover>
+                  <PopoverTrigger
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border px-2 text-xs font-medium text-foreground transition hover:bg-muted"
+                    aria-label="Filter by date"
+                    title="Filter by date"
+                  >
+                    <Filter className="size-3.5 text-primary" />
+                  </PopoverTrigger>
+                  <PopoverContent className="w-72 p-4" align="end">
+                    <div className="space-y-3">
+                      <div className="text-sm font-medium text-foreground">Filter by date range</div>
+                      <div className="grid gap-3">
+                        <label className="grid gap-1 text-xs">
+                          <span className="font-medium text-muted-foreground">From date</span>
+                          <DatePickerPresets
+                            value={historyFilters.from_date}
+                            onChange={(value) =>
+                              setHistoryFilters((current) => ({ ...current, from_date: value }))
+                            }
+                            placeholder="From date"
+                            className="h-8 text-xs"
+                          />
+                        </label>
+                        <label className="grid gap-1 text-xs">
+                          <span className="font-medium text-muted-foreground">To date</span>
+                          <DatePickerPresets
+                            value={historyFilters.to_date}
+                            onChange={(value) =>
+                              setHistoryFilters((current) => ({ ...current, to_date: value }))
+                            }
+                            placeholder="To date"
+                            className="h-8 text-xs"
+                          />
+                        </label>
+                      </div>
                     </div>
-                  </div>
-                </PopoverContent>
-              </Popover>
+                  </PopoverContent>
+                </Popover>
+                <button
+                  type="button"
+                  className="inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-border px-2.5 text-xs font-medium text-foreground transition hover:bg-muted disabled:opacity-50"
+                  title="Reset filters"
+                  aria-label="Reset filters"
+                  disabled={
+                    !historyFilters.from_date &&
+                    !historyFilters.to_date &&
+                    !historyStatusFilter
+                  }
+                  onClick={() => {
+                    setHistoryFilters({ from_date: "", to_date: "" })
+                    setHistoryStatusFilter(null)
+                  }}
+                >
+                  <RotateCcwIcon className="size-3.5 text-primary" />
+                  <span className="hidden sm:inline">Reset</span>
+                </button>
+              </>
             )}
-            <button
-              className="inline-flex h-8 items-center justify-center rounded-lg border border-border px-2 text-xs font-medium text-foreground transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
-              type="button"
-              disabled={loading}
-              aria-label="Refresh"
-              onClick={() => {
-                setMessage(null)
-                void fetchSectionData(true)
-              }}
-            >
-              <RefreshCwIcon className={`size-3.5 text-primary ${loading ? "animate-spin" : ""}`} />
-            </button>
+            {refreshButton}
           </div>
         </div>
-      </div>
+      ) : null}
 
       <div>
         {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
@@ -1768,6 +2691,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
 
         {loading &&
         activeSection !== "daily-summaries" &&
+        activeSection !== "recalculation-jobs" &&
         rows.length === 0 &&
         !singleRecord &&
         correctionRequests.length === 0 ? (
@@ -1778,308 +2702,945 @@ export function AttendanceActivityView({ section }: { section: string }) {
 
         {!loading && activeSection === "today" ? <TodayOverview record={singleRecord} /> : null}
 
-        {!loading && activeSection === "punch-history" ? (
-          <div className="space-y-3">
-            {rows.map((row, index) => (
-              <div key={String(row.id ?? index)} className="relative overflow-hidden rounded-2xl p-4 text-white" style={{ backgroundColor: 'var(--primary)' }}>
-                <Doodle name="doodle-circles" />
-                <div className="relative z-10">
-                  <p className="font-medium">{readStringFromRow(row, ["punch_time", "time", "punch_at", "created_at"]) || "Punch Event"}</p>
-                  <p className="text-white/80">Type: {readStringFromRow(row, ["punch_type", "type", "direction", "in_out"]) || "—"}</p>
-                  <p className="text-white/80">Time: {formatOptionalValue(readFirstValue(row, ["punch_time", "time"]), "—")}</p>
-                  {readStringFromRow(row, ["device_name", "location", "branch_name"]) && (
-                    <p className="text-white/60 text-xs">Location: {readStringFromRow(row, ["device_name", "location", "branch_name"])}</p>
-                  )}
-                </div>
-              </div>
-            ))}
-            {rows.length === 0 && <p className="text-sm text-muted-foreground">No punch history found.</p>}
-          </div>
-        ) : null}
-
         {!loading && activeSection === "attendance-history" ? (
           <div className="space-y-3">
-            {rows.map((row, index) => (
-              <div key={String(row.id ?? index)} className="relative overflow-hidden rounded-2xl p-4 text-white" style={{ backgroundColor: 'var(--primary)' }}>
-                <Doodle name="doodle-circles" />
-                <div className="relative z-10">
-                  <p className="font-medium">{readStringFromRow(row, ["attendance_date", "date", "attendanceDate"]) || "Attendance Record"}</p>
-                  <p className="text-white/80">Status: {readStringFromRow(row, ["attendance_status", "status", "attendanceStatus"]) || "—"}</p>
-                  <p className="text-white/80">Check In: {formatOptionalValue(readFirstValue(row, ["check_in_at", "checkInAt", "first_punch"]), "—")}</p>
-                  <p className="text-white/80">Check Out: {formatOptionalValue(readFirstValue(row, ["check_out_at", "checkOutAt", "last_punch"]), "—")}</p>
-                  {readStringFromRow(row, ["work_minutes", "worked_minutes", "workMinutes"]) && (
-                    <p className="text-white/60 text-xs">Worked: {readStringFromRow(row, ["work_minutes", "worked_minutes", "workMinutes"])} min</p>
-                  )}
-                  {readStringFromRow(row, ["remarks"]) && <p className="text-white/60 text-xs">Remarks: {readStringFromRow(row, ["remarks"])}</p>}
-                </div>
+            {rows.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center">
+                <p className="text-sm font-medium text-foreground">No attendance history</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Try a different date range from the filter.
+                </p>
               </div>
-            ))}
-            {rows.length === 0 && <p className="text-sm text-muted-foreground">No attendance history found.</p>}
+            ) : (
+              (() => {
+                const statusTallies = Object.entries(
+                  rows.reduce<Record<string, number>>((acc, row) => {
+                    const status =
+                      readStringFromRow(row, [
+                        "attendance_status",
+                        "status",
+                        "attendanceStatus",
+                      ]) || "Unknown"
+                    const key = status.trim() || "Unknown"
+                    acc[key] = (acc[key] || 0) + 1
+                    return acc
+                  }, {})
+                ).sort((a, b) => b[1] - a[1])
+
+                const filteredRows = historyStatusFilter
+                  ? rows.filter((row) => {
+                      const status =
+                        readStringFromRow(row, [
+                          "attendance_status",
+                          "status",
+                          "attendanceStatus",
+                        ]) || "Unknown"
+                      return status.trim() === historyStatusFilter
+                    })
+                  : rows
+
+                const animate = !prefersReducedMotion
+
+                return (
+                  <>
+                    {/* Summary grids — click to filter; width hugs content (no empty right space) */}
+                    <motion.div
+                      className="inline-flex max-w-full flex-nowrap items-stretch overflow-x-auto rounded-lg border border-border"
+                      initial={animate ? { opacity: 0, y: 8 } : false}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.25, ease: "easeOut" }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setHistoryStatusFilter(null)}
+                        className={cn(
+                          "flex min-w-[4.5rem] shrink-0 cursor-pointer flex-col justify-center border-r border-border px-3 py-2 text-left transition",
+                          historyStatusFilter === null
+                            ? "bg-primary/10"
+                            : "hover:bg-muted/40"
+                        )}
+                        title="Show all days"
+                        aria-pressed={historyStatusFilter === null}
+                      >
+                        <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                          Days
+                        </span>
+                        <span className="text-base font-semibold tabular-nums text-foreground">
+                          {rows.length}
+                        </span>
+                      </button>
+                      {statusTallies.map(([status, count], index, arr) => {
+                        const tone = attendanceHistoryStatusTone(status)
+                        const isActive = historyStatusFilter === status
+                        return (
+                          <button
+                            key={status}
+                            type="button"
+                            onClick={() =>
+                              setHistoryStatusFilter((current) =>
+                                current === status ? null : status
+                              )
+                            }
+                            className={cn(
+                              "flex min-w-[5.5rem] shrink-0 cursor-pointer flex-col justify-center px-3 py-2 text-left transition",
+                              tone.chip,
+                              isActive
+                                ? "ring-2 ring-inset ring-primary/40"
+                                : "hover:brightness-95 dark:hover:brightness-110",
+                              index < arr.length - 1 ? "border-r border-border/60" : null
+                            )}
+                            title={
+                              isActive
+                                ? `Clear ${status.replace(/[_-]+/g, " ")} filter`
+                                : `Filter by ${status.replace(/[_-]+/g, " ")}`
+                            }
+                            aria-pressed={isActive}
+                          >
+                            <span className="truncate text-[10px] font-semibold uppercase tracking-wide opacity-80">
+                              {status.replace(/[_-]+/g, " ")}
+                            </span>
+                            <span className={cn("text-base font-semibold tabular-nums", tone.count)}>
+                              {count}
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </motion.div>
+
+                    {historyStatusFilter ? (
+                      <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                        <span>
+                          Showing{" "}
+                          <span className="font-semibold capitalize text-foreground">
+                            {historyStatusFilter.replace(/[_-]+/g, " ")}
+                          </span>{" "}
+                          · {filteredRows.length} of {rows.length}
+                        </span>
+                        <button
+                          type="button"
+                          className="font-medium text-primary hover:underline"
+                          onClick={() => setHistoryStatusFilter(null)}
+                        >
+                          Clear status
+                        </button>
+                      </div>
+                    ) : null}
+
+                    {/* Day rows — animate on load and when filtering */}
+                    <div className="divide-y divide-border overflow-hidden rounded-lg border border-border">
+                      <AnimatePresence mode="popLayout">
+                        {filteredRows.length === 0 ? (
+                          <motion.div
+                            key="empty-filter"
+                            initial={animate ? { opacity: 0, y: 8 } : false}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={animate ? { opacity: 0 } : undefined}
+                            className="px-3 py-8 text-center text-sm text-muted-foreground"
+                          >
+                            No days match this status.
+                          </motion.div>
+                        ) : (
+                          filteredRows.map((row, index) => {
+                            const dateRaw =
+                              readStringFromRow(row, [
+                                "attendance_date",
+                                "date",
+                                "attendanceDate",
+                              ]) || null
+                            const status =
+                              readStringFromRow(row, [
+                                "attendance_status",
+                                "status",
+                                "attendanceStatus",
+                              ]) || "—"
+                            const tone = attendanceHistoryStatusTone(status)
+                            const checkIn = readFirstValue(row, [
+                              "check_in_at",
+                              "checkInAt",
+                              "first_punch",
+                              "first_punch_at",
+                            ])
+                            const checkOut = readFirstValue(row, [
+                              "check_out_at",
+                              "checkOutAt",
+                              "last_punch",
+                              "last_punch_at",
+                            ])
+                            const worked = readFirstValue(row, [
+                              "work_minutes",
+                              "worked_minutes",
+                              "workMinutes",
+                              "workedMinutes",
+                            ])
+                            const remarks = readStringFromRow(row, [
+                              "remarks",
+                              "notes",
+                              "comment",
+                            ])
+                            const inLabel = formatHistoryTimeLabel(checkIn)
+                            const outLabel = formatHistoryTimeLabel(checkOut)
+                            const missingIn = inLabel === "—"
+                            const missingOut = outLabel === "—"
+                            const rowKey = String(row.id ?? `${dateRaw}-${status}-${index}`)
+
+                            return (
+                              <motion.div
+                                key={rowKey}
+                                layout={animate}
+                                initial={
+                                  animate
+                                    ? { opacity: 0, y: 10, scale: 0.99 }
+                                    : false
+                                }
+                                animate={{
+                                  opacity: 1,
+                                  y: 0,
+                                  scale: 1,
+                                  transition: {
+                                    type: "spring",
+                                    stiffness: 420,
+                                    damping: 28,
+                                    mass: 0.7,
+                                    delay: Math.min(index, 12) * 0.02,
+                                  },
+                                }}
+                                exit={
+                                  animate
+                                    ? { opacity: 0, y: -6, transition: { duration: 0.12 } }
+                                    : undefined
+                                }
+                                className="flex bg-background transition-colors hover:bg-muted/25"
+                              >
+                                <div className={cn("w-1 shrink-0", tone.bar)} />
+                                <div className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2">
+                                  <div className="w-[8rem] shrink-0 sm:w-[9.5rem]">
+                                    <div className="text-xs font-medium text-foreground">
+                                      {formatHistoryDateLabel(dateRaw)}
+                                    </div>
+                                    <div
+                                      className={cn(
+                                        "mt-0.5 text-[11px] font-semibold capitalize",
+                                        tone.label
+                                      )}
+                                    >
+                                      {status.replace(/[_-]+/g, " ")}
+                                    </div>
+                                  </div>
+
+                                  <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
+                                    <div className="min-w-0 flex-1">
+                                      <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                        Check in
+                                      </div>
+                                      <div
+                                        className={cn(
+                                          "text-base font-semibold tabular-nums leading-tight sm:text-lg",
+                                          missingIn
+                                            ? "text-muted-foreground/45"
+                                            : "text-primary"
+                                        )}
+                                      >
+                                        {inLabel}
+                                      </div>
+                                    </div>
+                                    <div className="text-muted-foreground/40" aria-hidden>
+                                      →
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                        Check out
+                                      </div>
+                                      <div
+                                        className={cn(
+                                          "text-base font-semibold tabular-nums leading-tight sm:text-lg",
+                                          missingOut
+                                            ? "text-muted-foreground/45"
+                                            : "text-primary"
+                                        )}
+                                      >
+                                        {outLabel}
+                                      </div>
+                                    </div>
+                                    <div className="hidden min-w-[4.5rem] shrink-0 text-right sm:block">
+                                      <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                        Worked
+                                      </div>
+                                      <div className="text-sm font-semibold tabular-nums text-foreground">
+                                        {formatMinutesLabel(worked)}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {remarks ? (
+                                    <p className="hidden max-w-[8rem] truncate text-[11px] text-muted-foreground lg:block">
+                                      {remarks}
+                                    </p>
+                                  ) : null}
+                                </div>
+                              </motion.div>
+                            )
+                          })
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  </>
+                )
+              })()
+            )}
           </div>
         ) : null}
 
         {!loading && activeSection === "schedule-preview" ? (
           <div className="space-y-3">
-            {rows.map((row, index) => {
-              const shift = readNestedRecord(row, ["shift"])
-              const timetable = readNestedRecord(row, ["timetable"])
-              const isOffDay = isOffDayValue(row.is_off_day)
-              const timeRange = !shift || isOffDay
-                ? "—"
-                : `${formatOptionalValue(readWithFallback(shift, ["start_time"], row), "—")} - ${formatOptionalValue(readWithFallback(shift, ["end_time"], row), "—")}`
-              const expectedWork = isOffDay
-                ? "—"
-                : formatMinutesLabel(readWithFallback(shift, ["expected_work_minutes"], row))
+            {rows.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center">
+                <p className="text-sm font-medium text-foreground">No schedule preview</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  No scheduled days were returned for your account.
+                </p>
+              </div>
+            ) : (
+              (() => {
+                const kindTallies = Object.entries(
+                  rows.reduce<Record<string, number>>((acc, row) => {
+                    const kind = schedulePreviewDayKind(row)
+                    acc[kind] = (acc[kind] || 0) + 1
+                    return acc
+                  }, {})
+                ).sort((a, b) => b[1] - a[1])
 
-              return (
-                <div key={String(row.id ?? row.date ?? index)} className="relative overflow-hidden rounded-2xl p-4 text-white" style={{ backgroundColor: 'var(--primary)' }}>
-                  <Doodle name="doodle-circles" />
-                  <div className="relative z-10">
-                    <p className="font-medium">{formatOptionalValue(readFirstValue(row, ["date", "attendance_date"]), "—") || "Day"}</p>
-                    <p className="text-white/80">Shift: {isOffDay ? "Off Day" : readStringFromRow(shift ?? row, ["name", "shift_name", "code", "schedule_name"]) || "—"}</p>
-                    <p className="text-white/80">Time: {timeRange}</p>
-                    <p className="text-white/80">Expected Work: {expectedWork}</p>
-                    {timetable ? (
-                      <p className="text-white/60 text-xs">Timetable: {readStringFromRow(timetable, ["name", "code"]) || "—"}</p>
+                const filteredRows = scheduleKindFilter
+                  ? rows.filter((row) => schedulePreviewDayKind(row) === scheduleKindFilter)
+                  : rows
+
+                const animate = !prefersReducedMotion
+
+                return (
+                  <>
+                    <motion.div
+                      className="inline-flex max-w-full flex-nowrap items-stretch overflow-x-auto rounded-lg border border-border"
+                      initial={animate ? { opacity: 0, y: 8 } : false}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.25, ease: "easeOut" }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setScheduleKindFilter(null)}
+                        className={cn(
+                          "flex min-w-[4.5rem] shrink-0 cursor-pointer flex-col justify-center border-r border-border px-3 py-2 text-left transition",
+                          scheduleKindFilter === null ? "bg-primary/10" : "hover:bg-muted/40"
+                        )}
+                        title="Show all days"
+                        aria-pressed={scheduleKindFilter === null}
+                      >
+                        <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                          Days
+                        </span>
+                        <span className="text-base font-semibold tabular-nums text-foreground">
+                          {rows.length}
+                        </span>
+                      </button>
+                      {kindTallies.map(([kind, count], index, arr) => {
+                        const tone = schedulePreviewKindTone(kind)
+                        const isActive = scheduleKindFilter === kind
+                        return (
+                          <button
+                            key={kind}
+                            type="button"
+                            onClick={() =>
+                              setScheduleKindFilter((current) =>
+                                current === kind ? null : kind
+                              )
+                            }
+                            className={cn(
+                              "flex min-w-[5.5rem] shrink-0 cursor-pointer flex-col justify-center px-3 py-2 text-left transition",
+                              tone.chip,
+                              isActive
+                                ? "ring-2 ring-inset ring-primary/40"
+                                : "hover:brightness-95 dark:hover:brightness-110",
+                              index < arr.length - 1 ? "border-r border-border/60" : null
+                            )}
+                            title={
+                              isActive
+                                ? `Clear ${kind} filter`
+                                : `Filter by ${kind}`
+                            }
+                            aria-pressed={isActive}
+                          >
+                            <span className="truncate text-[10px] font-semibold uppercase tracking-wide opacity-80">
+                              {kind}
+                            </span>
+                            <span className={cn("text-base font-semibold tabular-nums", tone.count)}>
+                              {count}
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </motion.div>
+
+                    {scheduleKindFilter ? (
+                      <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                        <span>
+                          Showing{" "}
+                          <span className="font-semibold text-foreground">{scheduleKindFilter}</span>{" "}
+                          · {filteredRows.length} of {rows.length}
+                        </span>
+                        <button
+                          type="button"
+                          className="cursor-pointer font-medium text-primary hover:underline"
+                          onClick={() => setScheduleKindFilter(null)}
+                        >
+                          Clear filter
+                        </button>
+                      </div>
                     ) : null}
-                  </div>
-                </div>
-              )
-            })}
-            {rows.length === 0 && <p className="text-sm text-muted-foreground">No schedule preview found.</p>}
+
+                    <div className="divide-y divide-border overflow-hidden rounded-lg border border-border">
+                      <AnimatePresence mode="popLayout">
+                        {filteredRows.length === 0 ? (
+                          <motion.div
+                            key="schedule-empty"
+                            initial={animate ? { opacity: 0, y: 8 } : false}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={animate ? { opacity: 0 } : undefined}
+                            className="px-3 py-8 text-center text-sm text-muted-foreground"
+                          >
+                            No days match this filter.
+                          </motion.div>
+                        ) : (
+                          filteredRows.map((row, index) => {
+                            const shift = readNestedRecord(row, ["shift"])
+                            const timetable = readNestedRecord(row, ["timetable"])
+                            const kind = schedulePreviewDayKind(row)
+                            const tone = schedulePreviewKindTone(kind)
+                            const isOffDay = kind === "Off Day" || kind === "Holiday"
+                            const dateRaw =
+                              readStringFromRow(row, ["date", "attendance_date"]) ||
+                              String(readFirstValue(row, ["date", "attendance_date"]) ?? "")
+                            const shiftName = isOffDay
+                              ? kind
+                              : readStringFromRow(shift ?? row, [
+                                  "name",
+                                  "shift_name",
+                                  "code",
+                                  "schedule_name",
+                                ]) || "—"
+                            const startRaw = !shift || isOffDay
+                              ? null
+                              : readWithFallback(shift, ["start_time", "startTime"], row)
+                            const endRaw = !shift || isOffDay
+                              ? null
+                              : readWithFallback(shift, ["end_time", "endTime"], row)
+                            const startLabel = formatHistoryTimeLabel(startRaw ?? "—")
+                            const endLabel = formatHistoryTimeLabel(endRaw ?? "—")
+                            const missingStart = startLabel === "—"
+                            const missingEnd = endLabel === "—"
+                            const expectedWork = isOffDay
+                              ? "—"
+                              : formatMinutesLabel(
+                                  readWithFallback(shift, ["expected_work_minutes"], row)
+                                )
+                            const timetableName = timetable
+                              ? readStringFromRow(timetable, ["name", "code"])
+                              : null
+                            const rowKey = String(row.id ?? row.date ?? `${kind}-${index}`)
+
+                            return (
+                              <motion.div
+                                key={rowKey}
+                                layout={animate}
+                                initial={
+                                  animate ? { opacity: 0, y: 10, scale: 0.99 } : false
+                                }
+                                animate={{
+                                  opacity: 1,
+                                  y: 0,
+                                  scale: 1,
+                                  transition: {
+                                    type: "spring",
+                                    stiffness: 420,
+                                    damping: 28,
+                                    mass: 0.7,
+                                    delay: Math.min(index, 12) * 0.02,
+                                  },
+                                }}
+                                exit={
+                                  animate
+                                    ? { opacity: 0, y: -6, transition: { duration: 0.12 } }
+                                    : undefined
+                                }
+                                className="flex bg-background transition-colors hover:bg-muted/25"
+                              >
+                                <div className={cn("w-1 shrink-0", tone.bar)} />
+                                <div className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2">
+                                  <div className="w-[8rem] shrink-0 sm:w-[9.5rem]">
+                                    <div className="text-xs font-medium text-foreground">
+                                      {formatHistoryDateLabel(dateRaw || null)}
+                                    </div>
+                                    <div
+                                      className={cn(
+                                        "mt-0.5 text-[11px] font-semibold",
+                                        tone.label
+                                      )}
+                                    >
+                                      {kind}
+                                    </div>
+                                  </div>
+
+                                  <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
+                                    <div className="min-w-0 flex-1">
+                                      <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                        Start
+                                      </div>
+                                      <div
+                                        className={cn(
+                                          "text-base font-semibold tabular-nums leading-tight sm:text-lg",
+                                          missingStart
+                                            ? "text-muted-foreground/45"
+                                            : "text-primary"
+                                        )}
+                                      >
+                                        {startLabel}
+                                      </div>
+                                    </div>
+                                    <div className="text-muted-foreground/40" aria-hidden>
+                                      →
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                        End
+                                      </div>
+                                      <div
+                                        className={cn(
+                                          "text-base font-semibold tabular-nums leading-tight sm:text-lg",
+                                          missingEnd
+                                            ? "text-muted-foreground/45"
+                                            : "text-primary"
+                                        )}
+                                      >
+                                        {endLabel}
+                                      </div>
+                                    </div>
+                                    <div className="hidden min-w-[5.5rem] shrink-0 sm:block">
+                                      <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                        Shift
+                                      </div>
+                                      <div className="truncate text-sm font-semibold text-foreground">
+                                        {shiftName}
+                                      </div>
+                                    </div>
+                                    <div className="hidden min-w-[4.5rem] shrink-0 text-right sm:block">
+                                      <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                        Expected
+                                      </div>
+                                      <div className="text-sm font-semibold tabular-nums text-foreground">
+                                        {expectedWork}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {timetableName ? (
+                                    <p className="hidden max-w-[7rem] truncate text-[11px] text-muted-foreground lg:block">
+                                      {timetableName}
+                                    </p>
+                                  ) : null}
+                                </div>
+                              </motion.div>
+                            )
+                          })
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  </>
+                )
+              })()
+            )}
           </div>
         ) : null}
 
         {!loading && activeSection === "corrections" ? (
           <div className="space-y-3">
-            {correctionRequests.map((row, index) => {
-              const id = readFirstValue(row, ["id"]) ?? `${index}`
-              const status = (readFirstValue(row, ["status"]) ?? "draft").toLowerCase()
-              const tone = statusTone(status)
-              const canSubmit = status === "draft"
-              const canCancel = ["draft", "submitted"].includes(status)
-              return (
-                <div key={String(id)} className="relative overflow-hidden rounded-2xl p-4 text-white" style={{ backgroundColor: 'var(--primary)' }}>
-                  <Doodle name="doodle-circles" />
-                  <div className="relative z-10">
-                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                      <div className="space-y-1 text-sm">
-                        <div className="font-medium">
-                          {prettifyLabel(readFirstValue(row, ["request_type"]) ?? "attendance correction")}
-                        </div>
-                        <div className="text-white/80">
-                          {formatOptionalValue(readFirstValue(row, ["attendance_date"]), "Date not provided")}
-                        </div>
-                        <div className="text-white/80">
-                          {formatOptionalValue(readFirstValue(row, ["reason"]), "No reason provided")}
-                        </div>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-medium uppercase tracking-wide ${tone.badge}`}>
-                          {status}
-                        </span>
-                        {canSubmit ? (
-                          <button
-                            className="inline-flex h-8 items-center justify-center rounded-lg border border-white/30 px-3 text-xs font-medium text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
-                            type="button"
-                            disabled={correctionBusy}
-                            onClick={() => void updateCorrectionRequestStatus(id, "submit")}
-                          >
-                            Submit
-                          </button>
-                        ) : null}
-                        {canCancel ? (
-                          <button
-                            className="inline-flex h-8 items-center justify-center rounded-lg border border-white/30 px-3 text-xs font-medium text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
-                            type="button"
-                            disabled={correctionBusy}
-                            onClick={() => void updateCorrectionRequestStatus(id, "cancel")}
-                          >
-                            Cancel
-                          </button>
-                        ) : null}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-            {correctionRequests.length === 0 && <p className="text-sm text-muted-foreground">No correction requests found.</p>}
-          </div>
-        ) : null}
-
-        {activeSection === "daily-summaries" ? (
-          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/80 p-3">
-            <div className="flex flex-col gap-2.5">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1">
-                  <h2 className="shrink-0 text-sm font-semibold text-slate-900">Filters</h2>
-                  <p className="text-[11px] leading-snug text-slate-500">
-                    Showing today by default. Update fields, then Apply Filters to refresh.
-                  </p>
-                </div>
-                <label className="relative block w-full sm:max-w-[16rem] sm:shrink-0">
-                  <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-                  <input
-                    className="h-8 w-full rounded-md border border-slate-300 bg-white pl-8 pr-2.5 text-sm text-slate-900 placeholder:text-slate-400"
-                    value={employeeSearch}
-                    onChange={(event) => setEmployeeSearch(event.target.value)}
-                    placeholder="Name, number, or ID"
-                    aria-label="Search employee by name, number, or ID"
-                  />
-                </label>
+            {correctionRequests.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center">
+                <p className="text-sm font-medium text-foreground">No correction requests</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Use “Request correction” to create one.
+                </p>
               </div>
-
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
-                <label className="grid min-w-0 gap-1 text-xs">
-                  <span className="font-medium text-slate-600">From</span>
-                  <DatePickerPresets
-                    value={dailySummaryFilters.from_date}
-                    onChange={(value) => setDailySummaryFilters((current) => ({ ...current, from_date: value }))}
-                    placeholder="From"
-                    className="h-8 px-2.5 text-xs"
-                  />
-                </label>
-                <label className="grid min-w-0 gap-1 text-xs">
-                  <span className="font-medium text-slate-600">To</span>
-                  <DatePickerPresets
-                    value={dailySummaryFilters.to_date}
-                    onChange={(value) => setDailySummaryFilters((current) => ({ ...current, to_date: value }))}
-                    placeholder="To"
-                    className="h-8 px-2.5 text-xs"
-                  />
-                </label>
-                <label className="grid min-w-0 gap-1 text-xs">
-                  <span className="font-medium text-slate-600">Employee</span>
-                  <select
-                    className="h-8 w-full min-w-0 rounded-md border border-slate-300 bg-white px-2.5 text-sm text-slate-900"
-                    value={dailySummaryFilters.employee_id}
-                    onChange={(event) => setDailySummaryFilters((current) => ({ ...current, employee_id: event.target.value }))}
-                  >
-                    <option value="">All employees</option>
-                    {filteredEmployeeOptions.map((employee, index) => {
-                      const employeeId = readNumberFromRow(employee, ["id", "employee_id", "employeeId"])
-                      if (employeeId === null) return null
-                      return (
-                        <option key={`attendance-employee-${employeeId}-${index}`} value={String(employeeId)}>
-                          {getEmployeeOptionLabel(employee)}
-                        </option>
-                      )
-                    })}
-                  </select>
-                </label>
-                <label className="grid min-w-0 gap-1 text-xs">
-                  <span className="font-medium text-slate-600">Organization</span>
-                  <select
-                    className="h-8 w-full min-w-0 rounded-md border border-slate-300 bg-white px-2.5 text-sm text-slate-900"
-                    value={dailySummaryFilters.organization_id}
-                    onChange={(event) => setDailySummaryFilters((current) => ({ ...current, organization_id: event.target.value }))}
-                  >
-                    <option value="">All organizations</option>
-                    {branches.map((branch, index) => {
-                      const branchId = readNumberFromRow(branch, ["id", "branch_id", "branchId"])
-                      if (branchId === null) return null
-                      return (
-                        <option key={`attendance-branch-${branchId}-${index}`} value={String(branchId)}>
-                          {getBranchOptionLabel(branch)}
-                        </option>
-                      )
-                    })}
-                  </select>
-                </label>
-                <label className="grid min-w-0 gap-1 text-xs sm:col-span-2 md:col-span-1 lg:col-span-1">
-                  <span className="font-medium text-slate-600">Status</span>
-                  <select
-                    className="h-8 w-full min-w-0 rounded-md border border-slate-300 bg-white px-2.5 text-sm text-slate-900"
-                    value={dailySummaryFilters.status}
-                    onChange={(event) => setDailySummaryFilters((current) => ({ ...current, status: event.target.value }))}
-                  >
-                    <option value="">All statuses</option>
-                    {DAILY_SUMMARY_STATUS_OPTIONS.map((status) => (
-                      <option key={status} value={status}>
-                        {prettifyLabel(status)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-
-              <div className="flex flex-col gap-2 border-t border-slate-200 pt-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-                <div className="flex flex-wrap gap-1.5">
-                  <button
-                    className="inline-flex h-8 items-center justify-center rounded-md bg-slate-900 px-3 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                    type="button"
-                    disabled={loading}
-                    onClick={() => {
-                      setHasAppliedDailySummaryFilters(true)
-                      setAppliedDailySummaryFilters({ ...dailySummaryFilters })
-                      setMessage(null)
-                      setError(null)
-                    }}
-                  >
-                    Apply Filters
-                  </button>
-                  <button
-                    className="inline-flex h-8 items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
-                    type="button"
-                    onClick={() => {
-                      const today = getTodayDateInputValue()
-                      const resetFilters = {
-                        from_date: today,
-                        to_date: today,
-                        employee_id: "",
-                        organization_id: "",
-                        status: "",
-                      }
-                      setEmployeeSearch("")
-                      setDailySummaryFilters(resetFilters)
-                      setAppliedDailySummaryFilters(resetFilters)
-                      setHasAppliedDailySummaryFilters(true)
-                      setError(null)
-                      setMessage(null)
-                    }}
-                  >
-                    Reset To Today
-                  </button>
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  <button
-                    type="button"
-                    className="inline-flex h-8 items-center justify-center rounded-md border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                    onClick={() => void exportDailySummaryReport("xlsx")}
-                    disabled={attendanceExporting}
-                  >
-                    {attendanceExporting ? "Exporting..." : "XLSX"}
-                  </button>
-                  <button
-                    type="button"
-                    className="inline-flex h-8 items-center justify-center rounded-md border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                    onClick={() => void exportDailySummaryReport("csv")}
-                    disabled={attendanceExporting}
-                  >
-                    CSV
-                  </button>
-                  <button
-                    type="button"
-                    className="inline-flex h-8 items-center justify-center rounded-md border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                    onClick={() => void exportDailySummaryReport("pdf")}
-                    disabled={attendanceExporting}
-                  >
-                    PDF
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        ) : null}
-
-        {activeSection === "daily-summaries" ? (
-          <div className="mt-4">
-            {loading && rows.length === 0 ? (
-              <AttendanceViewLoader label={getDailySummaryLoadingLabel(appliedDailySummaryFilters)} />
             ) : (
-              <TableBlock rows={rows} section={activeSection} loading={loading} />
+              (() => {
+                const statusTallies = Object.entries(
+                  correctionRequests.reduce<Record<string, number>>((acc, row) => {
+                    const status = (
+                      readFirstValue(row, ["status"]) ?? "draft"
+                    )
+                      .toString()
+                      .trim()
+                      .toLowerCase() || "draft"
+                    acc[status] = (acc[status] || 0) + 1
+                    return acc
+                  }, {})
+                ).sort((a, b) => b[1] - a[1])
+
+                const filteredRequests = correctionStatusFilter
+                  ? correctionRequests.filter((row) => {
+                      const status = (
+                        readFirstValue(row, ["status"]) ?? "draft"
+                      )
+                        .toString()
+                        .trim()
+                        .toLowerCase()
+                      return status === correctionStatusFilter
+                    })
+                  : correctionRequests
+
+                const animate = !prefersReducedMotion
+
+                return (
+                  <>
+                    <motion.div
+                      className="inline-flex max-w-full flex-nowrap items-stretch overflow-x-auto rounded-lg border border-border"
+                      initial={animate ? { opacity: 0, y: 8 } : false}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.25, ease: "easeOut" }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setCorrectionStatusFilter(null)}
+                        className={cn(
+                          "flex min-w-[4.5rem] shrink-0 cursor-pointer flex-col justify-center border-r border-border px-3 py-2 text-left transition",
+                          correctionStatusFilter === null
+                            ? "bg-primary/10"
+                            : "hover:bg-muted/40"
+                        )}
+                        title="Show all requests"
+                        aria-pressed={correctionStatusFilter === null}
+                      >
+                        <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                          All
+                        </span>
+                        <span className="text-base font-semibold tabular-nums text-foreground">
+                          {correctionRequests.length}
+                        </span>
+                      </button>
+                      {statusTallies.map(([status, count], index, arr) => {
+                        const tone = correctionRequestStatusTone(status)
+                        const isActive = correctionStatusFilter === status
+                        return (
+                          <button
+                            key={status}
+                            type="button"
+                            onClick={() =>
+                              setCorrectionStatusFilter((current) =>
+                                current === status ? null : status
+                              )
+                            }
+                            className={cn(
+                              "flex min-w-[5.5rem] shrink-0 cursor-pointer flex-col justify-center px-3 py-2 text-left transition",
+                              tone.chip,
+                              isActive
+                                ? "ring-2 ring-inset ring-primary/40"
+                                : "hover:brightness-95 dark:hover:brightness-110",
+                              index < arr.length - 1 ? "border-r border-border/60" : null
+                            )}
+                            title={
+                              isActive
+                                ? `Clear ${status} filter`
+                                : `Filter by ${status}`
+                            }
+                            aria-pressed={isActive}
+                          >
+                            <span className="truncate text-[10px] font-semibold uppercase tracking-wide opacity-80">
+                              {status.replace(/[_-]+/g, " ")}
+                            </span>
+                            <span className={cn("text-base font-semibold tabular-nums", tone.count)}>
+                              {count}
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </motion.div>
+
+                    {correctionStatusFilter ? (
+                      <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                        <span>
+                          Showing{" "}
+                          <span className="font-semibold capitalize text-foreground">
+                            {correctionStatusFilter.replace(/[_-]+/g, " ")}
+                          </span>{" "}
+                          · {filteredRequests.length} of {correctionRequests.length}
+                        </span>
+                        <button
+                          type="button"
+                          className="cursor-pointer font-medium text-primary hover:underline"
+                          onClick={() => setCorrectionStatusFilter(null)}
+                        >
+                          Clear status
+                        </button>
+                      </div>
+                    ) : null}
+
+                    <div className="divide-y divide-border overflow-hidden rounded-lg border border-border">
+                      <AnimatePresence mode="popLayout">
+                        {filteredRequests.length === 0 ? (
+                          <motion.div
+                            key="corrections-empty"
+                            initial={animate ? { opacity: 0, y: 8 } : false}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={animate ? { opacity: 0 } : undefined}
+                            className="px-3 py-8 text-center text-sm text-muted-foreground"
+                          >
+                            No requests match this status.
+                          </motion.div>
+                        ) : (
+                          filteredRequests.map((row, index) => {
+                            const id = readFirstValue(row, ["id"]) ?? `${index}`
+                            const status = (
+                              readFirstValue(row, ["status"]) ?? "draft"
+                            )
+                              .toString()
+                              .trim()
+                              .toLowerCase()
+                            const tone = correctionRequestStatusTone(status)
+                            const canSubmit = status === "draft"
+                            const canCancel = ["draft", "submitted"].includes(status)
+                            const requestType = prettifyLabel(
+                              readFirstValue(row, ["request_type", "requestType"]) ??
+                                "attendance correction"
+                            )
+                            const attendanceDate = formatOptionalValue(
+                              readFirstValue(row, ["attendance_date", "attendanceDate"]),
+                              "—"
+                            )
+                            const reason = formatOptionalValue(
+                              readFirstValue(row, ["reason"]),
+                              "No reason"
+                            )
+                            const requestedIn = formatHistoryTimeLabel(
+                              readFirstValue(row, [
+                                "requested_check_in_at",
+                                "requestedCheckInAt",
+                                "requested_check_in",
+                              ])
+                            )
+                            const requestedOut = formatHistoryTimeLabel(
+                              readFirstValue(row, [
+                                "requested_check_out_at",
+                                "requestedCheckOutAt",
+                                "requested_check_out",
+                              ])
+                            )
+                            const requestedStatus = formatOptionalValue(
+                              readFirstValue(row, ["requested_status", "requestedStatus"]),
+                              "—"
+                            )
+                            const hasPunchRequest =
+                              requestedIn !== "—" || requestedOut !== "—"
+
+                            return (
+                              <motion.div
+                                key={String(id)}
+                                layout={animate}
+                                initial={
+                                  animate ? { opacity: 0, y: 10, scale: 0.99 } : false
+                                }
+                                animate={{
+                                  opacity: 1,
+                                  y: 0,
+                                  scale: 1,
+                                  transition: {
+                                    type: "spring",
+                                    stiffness: 420,
+                                    damping: 28,
+                                    mass: 0.7,
+                                    delay: Math.min(index, 12) * 0.02,
+                                  },
+                                }}
+                                exit={
+                                  animate
+                                    ? { opacity: 0, y: -6, transition: { duration: 0.12 } }
+                                    : undefined
+                                }
+                                className="flex bg-background transition-colors hover:bg-muted/25"
+                              >
+                                <div className={cn("w-1 shrink-0", tone.bar)} />
+                                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3 px-3 py-2 sm:flex-nowrap">
+                                  <div className="w-[8.5rem] shrink-0 sm:w-[10rem]">
+                                    <div className="text-xs font-medium text-foreground">
+                                      {formatHistoryDateLabel(
+                                        attendanceDate === "—" ? null : attendanceDate
+                                      )}
+                                    </div>
+                                    <div
+                                      className={cn(
+                                        "mt-0.5 text-[11px] font-semibold capitalize",
+                                        tone.label
+                                      )}
+                                    >
+                                      {status.replace(/[_-]+/g, " ")}
+                                    </div>
+                                    <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                                      {requestType}
+                                    </div>
+                                  </div>
+
+                                  <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
+                                    {hasPunchRequest ? (
+                                      <>
+                                        <div className="min-w-0 flex-1">
+                                          <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                            Req. in
+                                          </div>
+                                          <div
+                                            className={cn(
+                                              "text-base font-semibold tabular-nums leading-tight sm:text-lg",
+                                              requestedIn === "—"
+                                                ? "text-muted-foreground/45"
+                                                : "text-primary"
+                                            )}
+                                          >
+                                            {requestedIn}
+                                          </div>
+                                        </div>
+                                        <div className="text-muted-foreground/40" aria-hidden>
+                                          →
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                          <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                            Req. out
+                                          </div>
+                                          <div
+                                            className={cn(
+                                              "text-base font-semibold tabular-nums leading-tight sm:text-lg",
+                                              requestedOut === "—"
+                                                ? "text-muted-foreground/45"
+                                                : "text-primary"
+                                            )}
+                                          >
+                                            {requestedOut}
+                                          </div>
+                                        </div>
+                                      </>
+                                    ) : (
+                                      <div className="min-w-0 flex-1">
+                                        <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                          Requested status
+                                        </div>
+                                        <div className="text-sm font-semibold capitalize text-primary">
+                                          {String(requestedStatus).replace(/[_-]+/g, " ")}
+                                        </div>
+                                      </div>
+                                    )}
+                                    <div className="hidden min-w-0 max-w-[12rem] flex-1 sm:block">
+                                      <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                        Reason
+                                      </div>
+                                      <div className="truncate text-xs text-foreground">
+                                        {reason}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex shrink-0 items-center gap-1.5">
+                                    {canSubmit ? (
+                                      <button
+                                        className="inline-flex h-7 cursor-pointer items-center justify-center rounded-md border border-border px-2.5 text-[11px] font-medium text-foreground transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                                        type="button"
+                                        disabled={correctionBusy}
+                                        onClick={() =>
+                                          void updateCorrectionRequestStatus(id, "submit")
+                                        }
+                                      >
+                                        Submit
+                                      </button>
+                                    ) : null}
+                                    {canCancel ? (
+                                      <button
+                                        className="inline-flex h-7 cursor-pointer items-center justify-center rounded-md border border-border px-2.5 text-[11px] font-medium text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60 dark:text-rose-300 dark:hover:bg-rose-950/40"
+                                        type="button"
+                                        disabled={correctionBusy}
+                                        onClick={() =>
+                                          void updateCorrectionRequestStatus(id, "cancel")
+                                        }
+                                      >
+                                        Cancel
+                                      </button>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              </motion.div>
+                            )
+                          })
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  </>
+                )
+              })()
             )}
+          </div>
+        ) : null}
+
+        {activeSection === "daily-summaries" ? (
+          <div className="space-y-2">
+            {dailySummaryActiveFilterCount > 0 ? (
+              <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+                <span className="font-medium text-foreground">Active filters:</span>
+                {(() => {
+                  const today = getTodayDateInputValue()
+                  const customRange =
+                    appliedDailySummaryFilters.from_date !== today ||
+                    appliedDailySummaryFilters.to_date !== today
+                  if (!customRange) return null
+                  return (
+                    <span className="rounded-full border border-border bg-muted/40 px-2 py-0.5">
+                      {appliedDailySummaryFilters.from_date || "…"}
+                      {" → "}
+                      {appliedDailySummaryFilters.to_date || "…"}
+                    </span>
+                  )
+                })()}
+                {appliedDailySummaryFilters.employee_id ? (
+                  <span className="rounded-full border border-border bg-muted/40 px-2 py-0.5">
+                    Employee #{appliedDailySummaryFilters.employee_id}
+                  </span>
+                ) : null}
+                {appliedDailySummaryFilters.organization_id ? (
+                  <span className="rounded-full border border-border bg-muted/40 px-2 py-0.5">
+                    Org #{appliedDailySummaryFilters.organization_id}
+                  </span>
+                ) : null}
+                {appliedDailySummaryFilters.status ? (
+                  <span className="rounded-full border border-border bg-muted/40 px-2 py-0.5">
+                    {prettifyLabel(appliedDailySummaryFilters.status)}
+                  </span>
+                ) : null}
+                {employeeSearch.trim() ? (
+                  <span className="rounded-full border border-border bg-muted/40 px-2 py-0.5">
+                    “{employeeSearch.trim()}”
+                  </span>
+                ) : null}
+                <button
+                  type="button"
+                  className="ml-0.5 text-xs font-medium text-primary hover:underline"
+                  onClick={resetDailySummaryFiltersToToday}
+                >
+                  Clear
+                </button>
+              </div>
+            ) : null}
+            <TableBlock
+              rows={rows}
+              section={activeSection}
+              loading={loading}
+              toolbarStart={sectionTitleBlock}
+              toolbarActions={
+                <>
+                  {dailySummaryFilterPopover}
+                  {refreshButton}
+                </>
+              }
+            />
           </div>
         ) : null}
 
@@ -2088,66 +3649,229 @@ export function AttendanceActivityView({ section }: { section: string }) {
         {/* Punch Action is only available in the native mobile app (iOS/Android). No content shown in browser. */}
 
         {activeSection === "recalculation-jobs" ? (
-          <div className="mt-6 space-y-6">
-            <div className="flex flex-wrap gap-3">
-              <button className="inline-flex h-11 items-center justify-center rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800" type="button" onClick={() => void runPendingJobs()}>
-                Run Pending Jobs
-              </button>
-            </div>
-            <div className="grid gap-6 xl:grid-cols-2">
-              <div className="rounded-xl border border-slate-200 p-4">
-                <h2 className="text-base font-semibold text-slate-900">Rebuild Daily Summaries</h2>
-                <div className="mt-4 grid gap-3">
-                  <DatePickerPresets value={recalculateValues.start_date} onChange={(value) => setRecalculateValues((current) => ({ ...current, start_date: value }))} placeholder="Start date" />
-                  <DatePickerPresets value={recalculateValues.end_date} onChange={(value) => setRecalculateValues((current) => ({ ...current, end_date: value }))} placeholder="End date" />
-                  <input className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="Employee Id (optional)" value={recalculateValues.employee_id} onChange={(event) => setRecalculateValues((current) => ({ ...current, employee_id: event.target.value }))} />
-                  <input className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="Reason" value={recalculateValues.reason} onChange={(event) => setRecalculateValues((current) => ({ ...current, reason: event.target.value }))} />
-                  <select className="rounded-md border border-slate-300 px-3 py-2 text-sm" value={recalculateValues.force_rebuild} onChange={(event) => setRecalculateValues((current) => ({ ...current, force_rebuild: event.target.value }))}>
-                    <option value="true">Force rebuild existing summaries</option>
-                    <option value="false">Upsert without clearing</option>
-                  </select>
-                  <select className="rounded-md border border-slate-300 px-3 py-2 text-sm" value={recalculateValues.async} onChange={(event) => setRecalculateValues((current) => ({ ...current, async: event.target.value }))}>
-                    <option value="true">Queue in background</option>
-                    <option value="false">Run synchronously</option>
-                  </select>
-                  <button className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-300 px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50" type="button" onClick={() => void queueRecalculation()}>
-                    Rebuild Daily Summaries
-                  </button>
-                </div>
-              </div>
-              <div className="rounded-xl border border-slate-200 p-4">
-                <h2 className="text-base font-semibold text-slate-900">Process Attendance Range</h2>
-                <div className="mt-4 grid gap-3">
-                  <DatePickerPresets value={rangeValues.start_date} onChange={(value) => setRangeValues((current) => ({ ...current, start_date: value }))} placeholder="Start date" />
-                  <DatePickerPresets value={rangeValues.end_date} onChange={(value) => setRangeValues((current) => ({ ...current, end_date: value }))} placeholder="End date" />
-                  <input className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="Employee Id (optional)" value={rangeValues.employee_id} onChange={(event) => setRangeValues((current) => ({ ...current, employee_id: event.target.value }))} />
-                  <input className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="Batch size" value={rangeValues.batch_size} onChange={(event) => setRangeValues((current) => ({ ...current, batch_size: event.target.value }))} />
-                  <select className="rounded-md border border-slate-300 px-3 py-2 text-sm" value={rangeValues.rebuild_summaries} onChange={(event) => setRangeValues((current) => ({ ...current, rebuild_summaries: event.target.value }))}>
-                    <option value="true">Rebuild summaries</option>
-                    <option value="false">Keep current summaries</option>
-                  </select>
-                  <select className="rounded-md border border-slate-300 px-3 py-2 text-sm" value={rangeValues.force_rebuild_summaries} onChange={(event) => setRangeValues((current) => ({ ...current, force_rebuild_summaries: event.target.value }))}>
-                    <option value="false">Normal rebuild</option>
-                    <option value="true">Force rebuild</option>
-                  </select>
-                  <button className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-300 px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50" type="button" onClick={() => void runRange()}>
-                    Process Range
-                  </button>
-                </div>
-              </div>
-            </div>
-            {loading && rows.length === 0 ? (
-              <AttendanceViewLoader label="Loading recalculation jobs…" />
-            ) : (
-              <TableBlock rows={rows} section={activeSection} loading={loading} />
-            )}
-          </div>
+          <TableBlock
+            rows={rows}
+            section={activeSection}
+            loading={loading}
+            toolbarStart={sectionTitleBlock}
+            toolbarActions={
+              <>
+                <button
+                  type="button"
+                  className="inline-flex h-8 items-center justify-center gap-1 rounded-lg bg-primary px-2.5 text-xs font-semibold !text-white transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={recalcActionBusy || loading}
+                  onClick={() => void runPendingJobs()}
+                  title="Run pending jobs"
+                >
+                  <AlarmClockCheckIcon className="size-3.5" />
+                  <span className="hidden sm:inline">Run pending</span>
+                </button>
+
+                <Popover open={rebuildFormOpen} onOpenChange={setRebuildFormOpen}>
+                  <PopoverTrigger
+                    className="inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-border px-2 text-xs font-medium text-foreground transition hover:bg-muted"
+                    aria-label="Rebuild daily summaries"
+                    title="Rebuild daily summaries"
+                  >
+                    <TimerResetIcon className="size-3.5 text-primary" />
+                    <span className="hidden sm:inline">Rebuild</span>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[min(100vw-1.5rem,18.5rem)] p-2.5" align="end">
+                    <div className="space-y-1.5">
+                      <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        Rebuild summaries
+                      </div>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <label className="grid min-w-0 gap-0.5 text-[10px]">
+                          <span className="font-medium text-slate-600 dark:text-slate-300">Start</span>
+                          <DatePickerPresets
+                            value={recalculateValues.start_date}
+                            onChange={(value) =>
+                              setRecalculateValues((current) => ({ ...current, start_date: value }))
+                            }
+                            placeholder="Start"
+                            className="h-7 gap-1 border-slate-300 bg-white px-2 text-[11px] text-slate-900 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100 [&_svg]:size-3"
+                          />
+                        </label>
+                        <label className="grid min-w-0 gap-0.5 text-[10px]">
+                          <span className="font-medium text-slate-600 dark:text-slate-300">End</span>
+                          <DatePickerPresets
+                            value={recalculateValues.end_date}
+                            onChange={(value) =>
+                              setRecalculateValues((current) => ({ ...current, end_date: value }))
+                            }
+                            placeholder="End"
+                            className="h-7 gap-1 border-slate-300 bg-white px-2 text-[11px] text-slate-900 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100 [&_svg]:size-3"
+                          />
+                        </label>
+                      </div>
+                      <input
+                        className="h-7 w-full rounded-md border border-slate-300 bg-white px-2 text-[11px] text-slate-900 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100"
+                        placeholder="Employee ID (optional)"
+                        value={recalculateValues.employee_id}
+                        onChange={(event) =>
+                          setRecalculateValues((current) => ({
+                            ...current,
+                            employee_id: event.target.value,
+                          }))
+                        }
+                      />
+                      <input
+                        className="h-7 w-full rounded-md border border-slate-300 bg-white px-2 text-[11px] text-slate-900 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100"
+                        placeholder="Reason"
+                        value={recalculateValues.reason}
+                        onChange={(event) =>
+                          setRecalculateValues((current) => ({
+                            ...current,
+                            reason: event.target.value,
+                          }))
+                        }
+                      />
+                      <select
+                        className="h-7 w-full rounded-md border border-slate-300 bg-white px-1.5 text-[11px] text-slate-900 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100"
+                        value={recalculateValues.force_rebuild}
+                        onChange={(event) =>
+                          setRecalculateValues((current) => ({
+                            ...current,
+                            force_rebuild: event.target.value,
+                          }))
+                        }
+                      >
+                        <option value="true">Force rebuild</option>
+                        <option value="false">Upsert only</option>
+                      </select>
+                      <select
+                        className="h-7 w-full rounded-md border border-slate-300 bg-white px-1.5 text-[11px] text-slate-900 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100"
+                        value={recalculateValues.async}
+                        onChange={(event) =>
+                          setRecalculateValues((current) => ({
+                            ...current,
+                            async: event.target.value,
+                          }))
+                        }
+                      >
+                        <option value="true">Queue in background</option>
+                        <option value="false">Run synchronously</option>
+                      </select>
+                      <button
+                        type="button"
+                        className="inline-flex h-7 w-full items-center justify-center rounded-md bg-primary px-2 text-[11px] font-semibold !text-white transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
+                        disabled={recalcActionBusy}
+                        onClick={() => void queueRecalculation()}
+                      >
+                        {recalcActionBusy ? "Starting…" : "Start rebuild"}
+                      </button>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+
+                <Popover open={processRangeFormOpen} onOpenChange={setProcessRangeFormOpen}>
+                  <PopoverTrigger
+                    className="inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-border px-2 text-xs font-medium text-foreground transition hover:bg-muted"
+                    aria-label="Process attendance range"
+                    title="Process attendance range"
+                  >
+                    <Clock3Icon className="size-3.5 text-primary" />
+                    <span className="hidden sm:inline">Process</span>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[min(100vw-1.5rem,18.5rem)] p-2.5" align="end">
+                    <div className="space-y-1.5">
+                      <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        Process range
+                      </div>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <label className="grid min-w-0 gap-0.5 text-[10px]">
+                          <span className="font-medium text-slate-600 dark:text-slate-300">Start</span>
+                          <DatePickerPresets
+                            value={rangeValues.start_date}
+                            onChange={(value) =>
+                              setRangeValues((current) => ({ ...current, start_date: value }))
+                            }
+                            placeholder="Start"
+                            className="h-7 gap-1 border-slate-300 bg-white px-2 text-[11px] text-slate-900 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100 [&_svg]:size-3"
+                          />
+                        </label>
+                        <label className="grid min-w-0 gap-0.5 text-[10px]">
+                          <span className="font-medium text-slate-600 dark:text-slate-300">End</span>
+                          <DatePickerPresets
+                            value={rangeValues.end_date}
+                            onChange={(value) =>
+                              setRangeValues((current) => ({ ...current, end_date: value }))
+                            }
+                            placeholder="End"
+                            className="h-7 gap-1 border-slate-300 bg-white px-2 text-[11px] text-slate-900 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100 [&_svg]:size-3"
+                          />
+                        </label>
+                      </div>
+                      <input
+                        className="h-7 w-full rounded-md border border-slate-300 bg-white px-2 text-[11px] text-slate-900 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100"
+                        placeholder="Employee ID (optional)"
+                        value={rangeValues.employee_id}
+                        onChange={(event) =>
+                          setRangeValues((current) => ({
+                            ...current,
+                            employee_id: event.target.value,
+                          }))
+                        }
+                      />
+                      <input
+                        className="h-7 w-full rounded-md border border-slate-300 bg-white px-2 text-[11px] text-slate-900 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100"
+                        placeholder="Batch size"
+                        value={rangeValues.batch_size}
+                        onChange={(event) =>
+                          setRangeValues((current) => ({
+                            ...current,
+                            batch_size: event.target.value,
+                          }))
+                        }
+                      />
+                      <select
+                        className="h-7 w-full rounded-md border border-slate-300 bg-white px-1.5 text-[11px] text-slate-900 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100"
+                        value={rangeValues.rebuild_summaries}
+                        onChange={(event) =>
+                          setRangeValues((current) => ({
+                            ...current,
+                            rebuild_summaries: event.target.value,
+                          }))
+                        }
+                      >
+                        <option value="true">Rebuild summaries</option>
+                        <option value="false">Keep summaries</option>
+                      </select>
+                      <select
+                        className="h-7 w-full rounded-md border border-slate-300 bg-white px-1.5 text-[11px] text-slate-900 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100"
+                        value={rangeValues.force_rebuild_summaries}
+                        onChange={(event) =>
+                          setRangeValues((current) => ({
+                            ...current,
+                            force_rebuild_summaries: event.target.value,
+                          }))
+                        }
+                      >
+                        <option value="false">Normal rebuild</option>
+                        <option value="true">Force rebuild</option>
+                      </select>
+                      <button
+                        type="button"
+                        className="inline-flex h-7 w-full items-center justify-center rounded-md bg-primary px-2 text-[11px] font-semibold !text-white transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
+                        disabled={recalcActionBusy}
+                        onClick={() => void runRange()}
+                      >
+                        {recalcActionBusy ? "Starting…" : "Process range"}
+                      </button>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+
+                {refreshButton}
+              </>
+            }
+          />
         ) : null}
 
         {!loading &&
         activeSection !== "daily-summaries" &&
         activeSection !== "today" &&
-        activeSection !== "punch-history" &&
         activeSection !== "attendance-history" &&
         activeSection !== "schedule-preview" &&
         activeSection !== "recalculation-jobs" &&
@@ -2240,7 +3964,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
               Close
             </button>
             <button
-              className="inline-flex h-10 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex h-10 items-center justify-center rounded-lg bg-primary px-4 text-sm font-medium !text-white transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
               type="button"
               disabled={correctionBusy}
               onClick={() => void submitCorrectionRequest()}

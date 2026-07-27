@@ -1,7 +1,19 @@
 import type { OnboardingStep } from "@/types";
 
-export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL?.trim() || "http://192.168.1.30:8888";
+/** Local/dev backend used when env is missing (matches android default). */
+const DEFAULT_API_BASE_URL = "http://192.168.1.30:8888"
+
+export function resolveApiBaseUrl() {
+  const envBase = process.env.NEXT_PUBLIC_API_BASE_URL?.trim()
+  if (envBase) {
+    // Paths already include `/api/...` — strip a trailing `/api` to avoid `/api/api/...`.
+    return envBase.replace(/\/$/, "").replace(/\/api$/i, "")
+  }
+  // Never fall back to the Next.js origin — that returns HTML 404 for `/api/*`.
+  return DEFAULT_API_BASE_URL
+}
+
+export const API_BASE_URL = resolveApiBaseUrl()
 
 export const AUTH_STORAGE_KEYS = {
   tokens: "ess.auth.tokens",

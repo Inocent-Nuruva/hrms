@@ -30,7 +30,7 @@ const tabTriggerClass = (active: boolean) =>
     "inline-flex min-w-0 items-center gap-1 border-b-2 px-1.5 py-1.5 text-left text-xs font-medium outline-none transition-colors",
     active
       ? "border-[var(--primary)] text-[var(--primary)]"
-      : "border-transparent text-muted-foreground hover:text-foreground"
+      : "border-transparent text-muted-foreground hover:text-foreground dark:text-slate-100 dark:hover:text-white"
   )
 
 export function Tabs2({ groups, currentPath, className }: Tabs2Props) {
@@ -55,13 +55,14 @@ export function Tabs2({ groups, currentPath, className }: Tabs2Props) {
     <div className={cn("flex flex-col gap-1.5", className)}>
       <div className="hidden flex-wrap items-end gap-x-1 gap-y-0.5 border-b border-border/80 md:flex">
         {groups.map((group) => {
-          const activeGroupItem =
-            group.items.find((item) => isActivePath(currentPath, item.url)) ?? group.items[0] ?? null
-          const isActiveGroup = Boolean(
-            activeGroupItem && isActivePath(currentPath, activeGroupItem.url)
-          )
+          // Prefer the path-matched child; when this group is inactive fall back to first item
+          // only for the secondary preview — never replace the group title itself.
+          const matchedItem = group.items.find((item) => isActivePath(currentPath, item.url)) ?? null
+          const previewItem = matchedItem ?? group.items[0] ?? null
+          const isActiveGroup = Boolean(matchedItem)
+          const groupLabel = group.title?.trim() || previewItem?.title || "Section"
 
-          if (!activeGroupItem) {
+          if (!previewItem) {
             return null
           }
 
@@ -75,29 +76,37 @@ export function Tabs2({ groups, currentPath, className }: Tabs2Props) {
                 href={only.url}
                 className={tabTriggerClass(isActivePath(currentPath, only.url))}
               >
-                <span className="truncate">{label}</span>
+                <span className="truncate whitespace-nowrap">{label}</span>
               </Link>
             )
           }
 
+          const showChildPreview =
+            Boolean(group.title) &&
+            Boolean(previewItem.title) &&
+            group.title !== previewItem.title
+
           return (
-            <DropdownMenu key={group.title ?? activeGroupItem.url}>
+            <DropdownMenu key={group.title ?? previewItem.url}>
               <DropdownMenuTrigger
                 render={
-                  <button type="button" className={tabTriggerClass(isActiveGroup)} />
+                  <button type="button" className={cn(tabTriggerClass(isActiveGroup), "max-w-none")} />
                 }
               >
-                <span className="truncate">{group.title ?? activeGroupItem.title}</span>
-                <span
-                  className={cn(
-                    "hidden max-w-36 truncate text-[11px] font-normal lg:inline",
-                    isActiveGroup
-                      ? "text-[color:rgb(var(--primary-rgb)/0.78)]"
-                      : "text-muted-foreground/80"
-                  )}
-                >
-                  · {activeGroupItem.title}
-                </span>
+                {/* Group title stays stable so layout does not jump when a child becomes active. */}
+                <span className="truncate whitespace-nowrap">{groupLabel}</span>
+                {showChildPreview ? (
+                  <span
+                    className={cn(
+                      "hidden max-w-40 truncate text-[11px] font-normal whitespace-nowrap sm:inline",
+                      isActiveGroup
+                        ? "text-[var(--primary)]/80"
+                        : "text-muted-foreground/80 dark:text-slate-300"
+                    )}
+                  >
+                    · {previewItem.title}
+                  </span>
+                ) : null}
                 <ChevronDownIcon className="size-3.5 shrink-0 opacity-70" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="min-w-48">
