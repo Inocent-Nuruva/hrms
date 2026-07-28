@@ -67,7 +67,7 @@ function SidebarUserAvatar({
         key={src}
         src={src}
         alt={alt}
-        className={`${sizeClassName} shrink-0 rounded-md object-cover ring-1 ring-border`}
+        className={`${sizeClassName} shrink-0 rounded-full mr-0.5 scale-125 object-cover ring-1 ring-border`}
         onError={() => setFailed(true)}
       />
     )
