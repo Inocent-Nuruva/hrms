@@ -2,7 +2,6 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { useSearchParams } from "next/navigation"
 import {
   CheckCircle2,
   Copy,
@@ -66,6 +65,48 @@ function normalizeTotpCode(value: string) {
   return value.replace(/\D/g, "").slice(0, 6)
 }
 
+/**
+ * Read `?tab=` without useSearchParams — avoids Next.js static prerender bailout
+ * ("useSearchParams() should be wrapped in a suspense boundary").
+ */
+function useSettingsTabFromLocation(): string | null {
+  const [tabQuery, setTabQuery] = React.useState<string | null>(null)
+
+  React.useEffect(() => {
+    const readTab = () => {
+      try {
+        setTabQuery(new URLSearchParams(window.location.search).get("tab"))
+      } catch {
+        setTabQuery(null)
+      }
+    }
+
+    readTab()
+
+    window.addEventListener("popstate", readTab)
+
+    // App Router client navigations update history without popstate.
+    const { pushState, replaceState } = window.history
+    const patch =
+      (original: typeof pushState) =>
+      (...args: Parameters<typeof pushState>) => {
+        const result = original.apply(window.history, args)
+        readTab()
+        return result
+      }
+    window.history.pushState = patch(pushState)
+    window.history.replaceState = patch(replaceState)
+
+    return () => {
+      window.removeEventListener("popstate", readTab)
+      window.history.pushState = pushState
+      window.history.replaceState = replaceState
+    }
+  }, [])
+
+  return tabQuery
+}
+
 export function AccountSettingsPanel({
   token,
   loading,
@@ -74,9 +115,8 @@ export function AccountSettingsPanel({
   displayName,
   profilePictureHref,
 }: AccountSettingsPanelProps) {
-  const searchParams = useSearchParams()
-  const tabQuery = searchParams?.get("tab") ?? null
-  const [activeTab, setActiveTab] = React.useState<SecurityTab>(() => securityTabFromQuery(tabQuery))
+  const tabQuery = useSettingsTabFromLocation()
+  const [activeTab, setActiveTab] = React.useState<SecurityTab>("reset-password")
   const [currentPassword, setCurrentPassword] = React.useState("")
   const [newPassword, setNewPassword] = React.useState("")
 
