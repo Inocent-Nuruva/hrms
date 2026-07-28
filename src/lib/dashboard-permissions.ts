@@ -58,16 +58,49 @@ const ADMIN_BYPASS_LABELS = new Set([
 const ADMIN_DASHBOARD_LANDING_ROUTES = [
   "/dashboard/branches",
   "/dashboard/departments",
-  "/dashboard/employees/all",
+  // Do NOT use /dashboard/employees/all here — normal employees often have
+  // employees:read for self-service and must not flip into admin mode.
+  "/dashboard/employees/registration",
   "/dashboard/employees/onboarding",
   "/dashboard/employees/profile-update-approvals",
-  "/dashboard/employees/offboarding",
   "/dashboard/attendance/daily-summaries",
   "/dashboard/attendance/policies",
   "/dashboard/attendance/shifts",
   "/dashboard/access-control",
   "/dashboard/positions",
 ]
+
+/**
+ * HR/admin employee-directory routes. Blocked for accessMode === "employee"
+ * even when the JWT includes a broad `employees:read` grant for self-service.
+ */
+const ADMIN_ONLY_EMPLOYEE_DIRECTORY_PREFIXES = [
+  "/dashboard/employees/all",
+  "/dashboard/employees/registration",
+  "/dashboard/employees/onboarding",
+  "/dashboard/employees/profile-update-approvals",
+  "/dashboard/employees/profile",
+] as const
+
+/** Permissions that unlock the company employee directory (not basic self-service read). */
+const EMPLOYEE_DIRECTORY_MANAGE_PERMISSIONS: PermissionRequirement = {
+  permissions: [
+    "employees:create",
+    "employees:update",
+    "employees:delete",
+    "company_users:create",
+    "users:create",
+    "create_company_user",
+  ],
+  mode: "any",
+}
+
+export function isAdminOnlyEmployeeDirectoryRoute(url: string) {
+  const path = url.split("?")[0] ?? url
+  return ADMIN_ONLY_EMPLOYEE_DIRECTORY_PREFIXES.some(
+    (prefix) => path === prefix || path.startsWith(`${prefix}/`)
+  )
+}
 
 const ADMIN_IDENTITY_HINTS = new Set([
   "admin",
@@ -127,6 +160,14 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/me/profile": null,
   "/dashboard/me/organization": null,
   "/dashboard/me/promotion": null,
+  "/dashboard/me/offboarding": {
+    permissions: [
+      "offboarding_requests:read",
+      "offboarding_workflows:read",
+      "offboarding_requests:create",
+    ],
+    mode: "any",
+  },
   "/dashboard/me/leave": null,
   "/dashboard/me/leave/requests": null,
   "/dashboard/me/leave/balances": null,
@@ -139,10 +180,12 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/attendance/corrections": null,
   "/dashboard/employees": {
     permissions: [
-      "employees:read",
       "employees:create",
+      "employees:update",
+      "employees:delete",
       "company_users:create",
       "users:create",
+      "create_company_user",
       "offboarding_requests:read",
       "offboarding_workflows:read",
       "onboarding_requests:read",
@@ -151,7 +194,21 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
     ],
     mode: "any",
   },
-  "/dashboard/employees/all": "employees:read",
+  // Directory: employees:read alone is intentionally NOT enough for the employee
+  // shell (see canAccessDashboardRoute accessMode gate). Admin shell still uses this
+  // requirement; manage permissions keep pure self-service tokens out of the directory.
+  "/dashboard/employees/all": {
+    permissions: [
+      "employees:create",
+      "employees:update",
+      "employees:delete",
+      "employees:read",
+      "company_users:create",
+      "users:create",
+      "create_company_user",
+    ],
+    mode: "any",
+  },
   "/dashboard/employees/registration": {
     permissions: [
       "employees:create",
@@ -169,8 +226,9 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
     permissions: ["onboarding_requests:read", "onboarding_workflows:read"],
     mode: "any",
   },
-  "/dashboard/employees/profile": "employees:read",
-  "/dashboard/employees/profile/": "employees:read",
+  // Other employees' profiles — not self profile under /dashboard/me/profile.
+  "/dashboard/employees/profile": EMPLOYEE_DIRECTORY_MANAGE_PERMISSIONS,
+  "/dashboard/employees/profile/": EMPLOYEE_DIRECTORY_MANAGE_PERMISSIONS,
   "/dashboard/employees/profile-update-approvals": "self_service_requests:approve",
   "/dashboard/attendance": ATTENDANCE_ROUTE_PERMISSIONS,
   "/dashboard/attendance/settings": "attendance_policies:read",
@@ -268,6 +326,17 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/access-control/permissions": "permissions:read",
   "/dashboard/roles": "roles:read",
   "/dashboard/permissions": "permissions:read",
+  "/dashboard/settings": null,
+  "/dashboard/settings/default-avatars": {
+    permissions: [
+      "view_company_data",
+      "users:update",
+      "employees:update",
+      "employees:create",
+      "employees:read",
+    ],
+    mode: "any",
+  },
 }
 
 function decodeBase64Url(input: string) {
@@ -533,7 +602,36 @@ function resolveRequiredPermissions(url: string) {
   return matchedEntry?.[1]
 }
 
-export function canAccessDashboardRoute(url: string, permissionLabels: string[]) {
+export function canAccessDashboardRoute(
+  url: string,
+  permissionLabels: string[],
+  accessMode?: DashboardAccessMode
+) {
+  // Hard block: employee shell never reaches the company employee directory
+  // even if the token still includes a broad employees:read claim.
+  if (accessMode === "employee" && isAdminOnlyEmployeeDirectoryRoute(url)) {
+    return false
+  }
+
+  // Admin / HR shell: allow directory with employees:read (manage grants preferred).
+  if (accessMode === "admin" && isAdminOnlyEmployeeDirectoryRoute(url)) {
+    return hasPermission(permissionLabels, {
+      permissions: [
+        "employees:read",
+        "employees:create",
+        "employees:update",
+        "employees:delete",
+        "company_users:create",
+        "users:create",
+        "create_company_user",
+        "self_service_requests:approve",
+        "onboarding_requests:read",
+        "onboarding_workflows:read",
+      ],
+      mode: "any",
+    })
+  }
+
   return hasPermission(permissionLabels, resolveRequiredPermissions(url))
 }
 

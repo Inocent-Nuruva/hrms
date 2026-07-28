@@ -441,6 +441,17 @@ export const api = {
     return data;
   },
 
+  /**
+   * Select (or clear) a default profile avatar for the signed-in employee.
+   * PATCH /api/me/profile/avatar — body: { default_avatar_id: number | null }
+   */
+  async selectMyProfileAvatar(defaultAvatarId: number | null) {
+    return request<unknown>('/api/me/profile/avatar', {
+      method: 'PATCH',
+      body: { default_avatar_id: defaultAvatarId },
+    });
+  },
+
   async refreshToken(rt: string) {
     return request<unknown>('/api/auth/refresh', {
       method: 'POST',

@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { showErrorAlert } from "@/lib/error-alert";
-import { EyeIcon, EyeOffIcon } from "lucide-react";
+import { EyeIcon, EyeOffIcon, ShieldCheck } from "lucide-react";
 
 import { Checkbox } from "@/components/ui/checkbox";
 import { SecurityScanLoader } from "@/components/ui/security-scan-loader";
@@ -18,6 +18,22 @@ interface LoginFlowProps {
   onSuccess?: (redirectUrl: string) => void;
 }
 
+type LoginStep = "credentials" | "two-factor";
+
+/** TOTP (6 digits) or backup codes: 10 hex / 5-5 hex per API pattern. */
+function normalizeTwoFactorCode(value: string) {
+  const trimmed = value.trim();
+  if (/^\d{0,6}$/.test(trimmed.replace(/\s/g, ""))) {
+    return trimmed.replace(/\D/g, "").slice(0, 6);
+  }
+  // Allow backup-code shape while typing (hex + optional dash).
+  return trimmed.replace(/[^A-Fa-f0-9-]/g, "").slice(0, 11);
+}
+
+function isValidTwoFactorCode(value: string) {
+  return /^(\d{6}|[A-Fa-f0-9]{10}|[A-Fa-f0-9]{5}-[A-Fa-f0-9]{5})$/.test(value.trim());
+}
+
 export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
   const [email, setEmail] = useState(defaultEmail);
   const [password, setPassword] = useState("");
@@ -26,7 +42,10 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
   const [rememberMe, setRememberMe] = useState(true);
   const [isDone, setIsDone] = useState(false);
   const [inputsMounted, setInputsMounted] = useState(false);
-  const { login, isLoading } = useAuth();
+  const [step, setStep] = useState<LoginStep>("credentials");
+  const [tempToken, setTempToken] = useState<string | null>(null);
+  const [twoFactorCode, setTwoFactorCode] = useState("");
+  const { login, completeOtpLogin, isLoading } = useAuth();
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -48,6 +67,38 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
     const t = setTimeout(() => setInputsMounted(true), 60);
     return () => clearTimeout(t);
   }, []);
+
+  const finishLogin = async (accessToken: string, normalizedEmail: string) => {
+    if (typeof window !== "undefined") {
+      if (rememberMe) {
+        window.localStorage.setItem(AUTH_STORAGE_KEYS.rememberMe, "true");
+        window.localStorage.setItem(AUTH_STORAGE_KEYS.rememberedEmail, normalizedEmail);
+      } else {
+        window.localStorage.setItem(AUTH_STORAGE_KEYS.rememberMe, "false");
+        window.localStorage.removeItem(AUTH_STORAGE_KEYS.rememberedEmail);
+      }
+    }
+
+    // Hide form; keep loader only here while dashboard data is prefetched.
+    setIsDone(true);
+    markDashboardFromLogin();
+
+    try {
+      // Cap wait so a slow network still opens the app; snapshot is best-effort.
+      await Promise.race([
+        prefetchDashboardWarmCache(accessToken),
+        new Promise<void>((resolve) => {
+          window.setTimeout(resolve, 10_000);
+        }),
+      ]);
+    } catch {
+      // Still redirect — dashboard will load normally if warm cache failed.
+    }
+
+    const redirect = "/dashboard";
+    if (onSuccess) onSuccess(redirect);
+    else window.location.href = redirect;
+  };
 
   const handleLogin = async () => {
     const normalizedEmail = email.trim().toLowerCase();
@@ -73,9 +124,17 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
       });
 
       if (response.requiresOtp) {
-        const message = "This admin login accepts only email and password.";
-        setLoginError(message);
-        showErrorAlert(message, "Invalid credentials");
+        if (!response.tempToken) {
+          const message =
+            "Two-factor authentication is required, but no temporary token was returned. Please try again.";
+          setLoginError(message);
+          showErrorAlert(message, "2FA required");
+          return;
+        }
+        setTempToken(response.tempToken);
+        setTwoFactorCode("");
+        setStep("two-factor");
+        setLoginError(null);
         return;
       }
 
@@ -86,36 +145,7 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
         return;
       }
 
-      if (typeof window !== "undefined") {
-        if (rememberMe) {
-          window.localStorage.setItem(AUTH_STORAGE_KEYS.rememberMe, "true");
-          window.localStorage.setItem(AUTH_STORAGE_KEYS.rememberedEmail, normalizedEmail);
-        } else {
-          window.localStorage.setItem(AUTH_STORAGE_KEYS.rememberMe, "false");
-          window.localStorage.removeItem(AUTH_STORAGE_KEYS.rememberedEmail);
-        }
-      }
-
-      // Hide form; keep loader only here while dashboard data is prefetched.
-      setIsDone(true);
-      markDashboardFromLogin();
-
-      const accessToken = response.tokens.accessToken;
-      try {
-        // Cap wait so a slow network still opens the app; snapshot is best-effort.
-        await Promise.race([
-          prefetchDashboardWarmCache(accessToken),
-          new Promise<void>((resolve) => {
-            window.setTimeout(resolve, 10_000);
-          }),
-        ]);
-      } catch {
-        // Still redirect — dashboard will load normally if warm cache failed.
-      }
-
-      const redirect = "/dashboard";
-      if (onSuccess) onSuccess(redirect);
-      else window.location.href = redirect;
+      await finishLogin(response.tokens.accessToken, normalizedEmail);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Login failed. Please try again.";
       setLoginError(message);
@@ -123,9 +153,51 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
     }
   };
 
+  const handleVerifyTwoFactor = async () => {
+    const normalizedEmail = email.trim().toLowerCase();
+    setLoginError(null);
+
+    if (!tempToken) {
+      const message = "Your 2FA session expired. Please sign in again.";
+      setLoginError(message);
+      showErrorAlert(message, "2FA expired");
+      setStep("credentials");
+      return;
+    }
+
+    const code = twoFactorCode.trim();
+    if (!isValidTwoFactorCode(code)) {
+      const message = "Enter a valid 6-digit authenticator code or backup code.";
+      setLoginError(message);
+      showErrorAlert(message, "Invalid code");
+      return;
+    }
+
+    try {
+      const response = await completeOtpLogin(tempToken, code);
+      await finishLogin(response.tokens.accessToken, normalizedEmail);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "2FA verification failed. Please try again.";
+      setLoginError(message);
+      showErrorAlert(message, "2FA verification failed");
+    }
+  };
+
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (step === "two-factor") {
+      void handleVerifyTwoFactor();
+      return;
+    }
     void handleLogin();
+  };
+
+  const handleBackToCredentials = () => {
+    setStep("credentials");
+    setTempToken(null);
+    setTwoFactorCode("");
+    setLoginError(null);
   };
 
   if (isDone) {
@@ -143,6 +215,77 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
             Verifying permissions and signing you in securely
           </p>
         </div>
+      </div>
+    );
+  }
+
+  if (step === "two-factor") {
+    return (
+      <div className="w-full">
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div className="flex items-start gap-2 rounded-md border border-primary/20 bg-primary/5 px-2.5 py-2">
+            <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-primary" />
+            <div className="min-w-0 space-y-0.5">
+              <p className="text-[11px] font-medium text-foreground">Two-factor authentication</p>
+              <p className="text-[10px] text-muted-foreground">
+                Enter the code from your authenticator app
+                {email.trim() ? (
+                  <>
+                    {" "}
+                    for <span className="font-medium text-foreground">{email.trim()}</span>
+                  </>
+                ) : null}
+                .
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <label htmlFor="two-factor-code" className="text-[10px] font-medium text-foreground">
+              Authentication code
+            </label>
+            <input
+              id="two-factor-code"
+              type="text"
+              inputMode="text"
+              autoComplete="one-time-code"
+              autoFocus
+              value={twoFactorCode}
+              onChange={(event) => {
+                setTwoFactorCode(normalizeTwoFactorCode(event.target.value));
+                if (loginError) setLoginError(null);
+              }}
+              placeholder="123456"
+              className="flex h-9 w-full rounded-md border border-input bg-background px-2.5 py-1 text-center font-mono text-sm tracking-[0.25em] text-foreground ring-offset-background placeholder:tracking-normal placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
+            />
+            <p className="text-[10px] text-muted-foreground">
+              6-digit app code, or a backup code if you have one.
+            </p>
+          </div>
+
+          {loginError && (
+            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-2.5 py-1.5 text-[10px] text-destructive dark:border-destructive/40 dark:bg-destructive/15">
+              {loginError}
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={isLoading || !isValidTwoFactorCode(twoFactorCode)}
+            className="inline-flex h-8 w-full items-center justify-center rounded-md bg-primary px-3 text-[10px] font-semibold text-primary-foreground transition-all hover:bg-[var(--brand-blue-dark)] active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            {isLoading ? "Verifying..." : "Verify & continue"}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleBackToCredentials}
+            disabled={isLoading}
+            className="inline-flex h-8 w-full items-center justify-center rounded-md border border-input bg-background px-3 text-[10px] font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            Back to sign in
+          </button>
+        </form>
       </div>
     );
   }

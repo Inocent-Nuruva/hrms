@@ -3,6 +3,8 @@ import type {
   LoginRequest,
   LoginResponse,
   RefreshTokenResponse,
+  TwoFactorSetupResponse,
+  UserSecurityFlags,
   VerifyOtpRequest,
   VerifyOtpResponse,
   AuthUser,
@@ -227,21 +229,29 @@ function normalizeLoginResponse(payload: unknown): LoginResponse {
   const rootResult = asRecord(root?.result);
 
   const tempToken =
-    readString(root, ["tempToken", "temp_token"]) ??
-    readString(rootData, ["tempToken", "temp_token"]) ??
-    readString(rootResult, ["tempToken", "temp_token"]);
+    readString(root, ["tempToken", "temp_token", "temporary_token", "temporaryToken"]) ??
+    readString(rootData, ["tempToken", "temp_token", "temporary_token", "temporaryToken"]) ??
+    readString(rootResult, ["tempToken", "temp_token", "temporary_token", "temporaryToken"]);
 
   const tokens = normalizeTokens(payload);
   const user = normalizeUser(payload);
-  const explicitRequiresOtp = readBoolean(root, [
+  const twoFactorKeys = [
     "requiresOtp",
     "requires_otp",
     "requires2FA",
     "requires_2fa",
     "twoFactorRequired",
-  ]);
+    "two_factor_required",
+    "mfaRequired",
+    "mfa_required",
+  ] as const;
+  const explicitRequiresOtp =
+    readBoolean(root, [...twoFactorKeys]) ??
+    readBoolean(rootData, [...twoFactorKeys]) ??
+    readBoolean(rootResult, [...twoFactorKeys]);
 
-  const requiresOtp = explicitRequiresOtp ?? Boolean(tempToken && !tokens);
+  // Login step returns a temporary token when 2FA is required (no final JWT pair yet).
+  const requiresOtp = explicitRequiresOtp === true || Boolean(tempToken && !tokens);
 
   return {
     requiresOtp,
@@ -253,10 +263,33 @@ function normalizeLoginResponse(payload: unknown): LoginResponse {
 
 function normalizeVerifyOtpResponse(payload: unknown): VerifyOtpResponse {
   const tokens = normalizeTokens(payload);
-  const user = normalizeUser(payload);
+  let user = normalizeUser(payload);
 
-  if (!tokens || !user) {
-    throw new Error("2FA verification response is missing session data.");
+  // Complete-login may return a minimal user { id, email } without names.
+  if (!user && tokens) {
+    const root = asRecord(payload);
+    const rootData = asRecord(root?.data);
+    const candidate =
+      asRecord(root?.user) ?? asRecord(rootData?.user) ?? rootData ?? root;
+    const id = candidate?.id ?? candidate?.user_id;
+    const email = readString(candidate, ["email"]);
+    if ((typeof id === "string" || typeof id === "number") && email) {
+      user = {
+        id,
+        email,
+        fullName:
+          readString(candidate, ["fullName", "full_name", "name"]) ??
+          email.split("@")[0]?.replace(/[._-]+/g, " ").trim() ??
+          email,
+      };
+    }
+  }
+
+  if (!tokens) {
+    throw new Error("2FA verification response is missing session tokens.");
+  }
+  if (!user) {
+    throw new Error("2FA verification response is missing user profile data.");
   }
 
   return { tokens, user };
@@ -277,11 +310,96 @@ export const authService = {
   },
 
   async verifyOtp(payload: VerifyOtpRequest) {
+    // Backend Complete2FALoginDto accepts tempToken + code (login flow).
     const response = await apiRequest<unknown>("/api/auth/2fa/complete-login", {
       method: "POST",
-      body: payload,
+      body: {
+        tempToken: payload.tempToken,
+        code: payload.code,
+      },
     });
     return normalizeVerifyOtpResponse(response);
+  },
+
+  async setupTwoFactor(token: string): Promise<TwoFactorSetupResponse> {
+    const response = await apiRequest<unknown>("/api/users/2fa/setup", {
+      method: "POST",
+      token,
+    });
+    const root = asRecord(response);
+    const data = asRecord(root?.data) ?? root;
+    const secret = readString(data, ["secret", "base32", "base32Secret"]);
+    if (!secret) {
+      throw new Error("2FA setup response did not include a secret.");
+    }
+    return {
+      secret,
+      qrCode: readString(data, ["qrCode", "qr_code", "qr"]),
+      otpAuthUrl: readString(data, ["otpAuthUrl", "otp_auth_url", "otpauth_url", "uri"]),
+    };
+  },
+
+  async verifyTwoFactor(token: string, code: string) {
+    return apiRequest<unknown>("/api/users/2fa/verify", {
+      method: "POST",
+      token,
+      body: { token: code },
+    });
+  },
+
+  async disableTwoFactor(token: string, code: string) {
+    return apiRequest<unknown>("/api/users/2fa/disable", {
+      method: "POST",
+      token,
+      body: { token: code },
+    });
+  },
+
+  async getSecurityFlags(token: string): Promise<UserSecurityFlags> {
+    const response = await apiRequest<unknown>("/api/users/me", {
+      method: "GET",
+      token,
+    });
+    const root = asRecord(response);
+    const candidates = [
+      asRecord(root?.user),
+      asRecord(asRecord(root?.data)?.user),
+      asRecord(root?.data),
+      root,
+    ];
+    for (const candidate of candidates) {
+      if (!candidate) continue;
+      const hasTwoFactorField =
+        "is_two_factor_enabled" in candidate ||
+        "isTwoFactorEnabled" in candidate ||
+        "two_factor_enabled" in candidate ||
+        "twoFactorEnabled" in candidate ||
+        "is_2fa_enabled" in candidate;
+      const hasEmailField =
+        "is_email_verified" in candidate ||
+        "isEmailVerified" in candidate ||
+        "email_verified" in candidate ||
+        "emailVerified" in candidate;
+      if (!hasTwoFactorField && !hasEmailField) continue;
+      return {
+        isTwoFactorEnabled:
+          readBoolean(candidate, [
+            "is_two_factor_enabled",
+            "isTwoFactorEnabled",
+            "two_factor_enabled",
+            "twoFactorEnabled",
+            "is_2fa_enabled",
+          ]) ?? false,
+        isEmailVerified:
+          readBoolean(candidate, [
+            "is_email_verified",
+            "isEmailVerified",
+            "email_verified",
+            "emailVerified",
+          ]) ?? false,
+      };
+    }
+    return { isTwoFactorEnabled: false, isEmailVerified: false };
   },
 
   async refresh(refreshToken: string): Promise<RefreshTokenResponse> {

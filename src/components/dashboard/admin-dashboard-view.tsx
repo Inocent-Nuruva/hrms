@@ -924,7 +924,7 @@ export default function AdminDashboardView({
       return
     }
 
-    if (!canAccessDashboardRoute(currentPath, effectivePermissionLabels)) {
+    if (!canAccessDashboardRoute(currentPath, effectivePermissionLabels, accessMode)) {
       router.replace(SELF_SERVICE_HOME_ROUTE)
       return
     }

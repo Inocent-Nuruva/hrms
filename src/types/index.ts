@@ -47,6 +47,17 @@ export interface ChangePasswordRequest {
   confirmPassword: string;
 }
 
+export interface TwoFactorSetupResponse {
+  secret: string;
+  qrCode?: string;
+  otpAuthUrl?: string;
+}
+
+export interface UserSecurityFlags {
+  isTwoFactorEnabled: boolean;
+  isEmailVerified: boolean;
+}
+
 export interface OnboardingStep {
   id: string;
   title: string;

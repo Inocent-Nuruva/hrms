@@ -22,7 +22,14 @@ import {
   FileText,
   CheckCircle,
   UserCheck,
+  Globe2,
+  ShieldCheck,
+  ShieldAlert,
+  MailCheck,
+  MailWarning,
 } from "lucide-react"
+import { countries as countryCodes } from "country-flag-icons"
+import * as FlagIcons from "country-flag-icons/react/3x2"
 import { LumaSpin } from "@/components/ui/luma-spin"
 
 
@@ -159,10 +166,14 @@ type DashboardEmployee = {
   profile_photo_url?: string | null
   gender?: string | null
   sex?: string | null
+  nationality?: string | null
   employment_status?: string
   employment_type?: string
   hire_date?: string | null
   probation_end_date?: string | null
+  confirmation_date?: string | null
+  current_fiscal_year_confirmation_date?: string | null
+  is_manager?: boolean
   notes?: string | null
   primary_branch?: DashboardBranch | null
   primary_department?: DashboardDepartment | null
@@ -182,10 +193,13 @@ type DashboardUser = {
   email: string
   status: string
   user_type?: string
+  is_email_verified?: boolean
+  is_two_factor_enabled?: boolean
   roles: DashboardRole[]
   permissions: DashboardPermission[]
   active_company?: DashboardCompany | null
   active_company_membership?: DashboardCompanyMembership | null
+  [key: string]: unknown
 }
 
 type EmployeeDashboardData = {
@@ -196,18 +210,23 @@ type EmployeeDashboardData = {
     account_status?: string
     employment_status?: string
     employment_type?: string
+    is_manager?: boolean
+    current_fiscal_year_confirmation_date?: string | null
+    confirmation_date?: string | null
   } | null
   action_flags?: {
     can_check_in?: boolean
     can_check_out?: boolean
     can_request_leave?: boolean
     has_employee_profile?: boolean
+    is_manager?: boolean
   } | null
   links?: {
     profile?: string
     leave_requests?: string
     leave_balances?: string
   } | null
+  [key: string]: unknown
 }
 
 type EmployeeDashboardViewProps = {
@@ -559,6 +578,125 @@ function formatDate(value?: string | null) {
   }).format(parsed)
 }
 
+function formatEmploymentType(value?: string | null) {
+  if (!value?.trim()) return "—"
+  return value
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part[0]?.toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ")
+}
+
+function readBooleanValue(
+  record: Record<string, unknown> | null | undefined,
+  keys: string[]
+): boolean | undefined {
+  if (!record) return undefined
+  for (const key of keys) {
+    const value = record[key]
+    if (typeof value === "boolean") return value
+    if (typeof value === "number" && Number.isFinite(value)) return value !== 0
+    if (typeof value === "string") {
+      const normalized = value.trim().toLowerCase()
+      if (["true", "1", "yes", "y", "on", "enabled", "verified"].includes(normalized)) return true
+      if (["false", "0", "no", "n", "off", "disabled", "unverified"].includes(normalized)) return false
+    }
+  }
+  return undefined
+}
+
+function resolveCountryCode(value?: string | null): string | null {
+  if (!value?.trim()) return null
+  const trimmed = value.trim()
+  const codes = countryCodes as string[]
+  if (/^[A-Za-z]{2}$/.test(trimmed)) {
+    const upper = trimmed.toUpperCase()
+    return codes.includes(upper) ? upper : null
+  }
+  try {
+    const regionNames = new Intl.DisplayNames(["en"], { type: "region" })
+    const needle = trimmed.toLowerCase()
+    for (const code of codes) {
+      const name = regionNames.of(code)
+      if (!name) continue
+      if (name.toLowerCase() === needle) return code
+      // e.g. "Tanzanian" → match "Tanzania"
+      if (needle.startsWith(name.toLowerCase()) || name.toLowerCase().startsWith(needle.replace(/n$/i, ""))) {
+        if (needle.length >= 4) return code
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return null
+}
+
+function formatNationality(value?: string | null) {
+  if (!value?.trim()) return "—"
+  const code = resolveCountryCode(value)
+  if (code) {
+    try {
+      const regionNames = new Intl.DisplayNames(["en"], { type: "region" })
+      return regionNames.of(code) ?? code
+    } catch {
+      return code
+    }
+  }
+  return value.trim()
+}
+
+function formatGenderLabel(value?: string | null) {
+  if (!value?.trim()) return "—"
+  return value
+    .trim()
+    .split(/[_\s-]+/)
+    .filter(Boolean)
+    .map((part) => part[0]?.toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ")
+}
+
+/** Regional-indicator emoji fallback when the SVG flag component is unavailable. */
+function flagEmojiFromIso(code: string) {
+  const upper = code.toUpperCase()
+  if (!/^[A-Z]{2}$/.test(upper)) return null
+  return Array.from(upper)
+    .map((char) => String.fromCodePoint(127397 + char.charCodeAt(0)))
+    .join("")
+}
+
+function NationalityFlag({
+  code,
+  className,
+}: {
+  code: string | null
+  className?: string
+}) {
+  if (!code) return null
+  const Flag = (FlagIcons as Record<string, React.ComponentType<{ title?: string; className?: string }>>)[
+    code.toUpperCase()
+  ]
+  if (Flag) {
+    return (
+      <span
+        className={cn(
+          "inline-flex h-3.5 w-5 shrink-0 overflow-hidden rounded-[2px] border border-border/70 bg-muted shadow-sm",
+          className
+        )}
+        title={code.toUpperCase()}
+      >
+        <Flag title={code.toUpperCase()} className="h-full w-full object-cover" />
+      </span>
+    )
+  }
+  const emoji = flagEmojiFromIso(code)
+  if (!emoji) return null
+  return (
+    <span className={cn("inline-flex shrink-0 text-sm leading-none", className)} title={code.toUpperCase()}>
+      {emoji}
+    </span>
+  )
+}
+
 function initialsFor(name: string) {
   return name
     .split(" ")
@@ -566,23 +704,6 @@ function initialsFor(name: string) {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("")
-}
-
-function computeTenure(hireDate?: string | null): string {
-  if (!hireDate) return "—"
-  const hire = new Date(hireDate)
-  if (Number.isNaN(hire.getTime())) return "—"
-  const now = new Date()
-  let years = now.getFullYear() - hire.getFullYear()
-  let months = now.getMonth() - hire.getMonth()
-  if (months < 0) {
-    years--
-    months += 12
-  }
-  if (years > 0) {
-    return `${years}y ${months}m`
-  }
-  return `${months}m`
 }
 
 function formatBalanceNumber(value: unknown): string {
@@ -1548,9 +1669,104 @@ export function EmployeeDashboardView({
       .join(" · ") || "—"
   const employeeNo = dashboardData.employee.employee_no || "—"
   const hireDateLabel = formatDate(dashboardData.employee.hire_date)
-  const tenure = computeTenure(dashboardData.employee.hire_date)
   const employmentStatus =
     readString(asRecord(dashboardData.employee), ["employment_status", "status"]) || "Active"
+  const employeeRecord = asRecord(dashboardData.employee)
+  const userRecord = asRecord(dashboardData.user)
+  const statusRecord = asRecord(dashboardData.status)
+  const actionFlagsRecord = asRecord(dashboardData.action_flags)
+  const dashboardRoot = asRecord(dashboardData)
+
+  const nationalityRaw =
+    readString(employeeRecord, ["nationality"]) ||
+    readString(statusRecord, ["nationality"]) ||
+    null
+  const nationalityCode = resolveCountryCode(nationalityRaw)
+  const nationalityLabel = formatNationality(nationalityRaw)
+  const genderLabel = formatGenderLabel(
+    readString(employeeRecord, ["gender", "sex", "Gender", "Sex"]) ||
+      (readEmployeeGender(dashboardData.employee) ?? null)
+  )
+  const employmentTypeLabel = formatEmploymentType(
+    readString(employeeRecord, ["employment_type", "employmentType"]) ||
+      readString(statusRecord, ["employment_type", "employmentType"])
+  )
+  const probationEndDateRaw =
+    readString(employeeRecord, ["probation_end_date", "probationEndDate"]) ||
+    readString(statusRecord, ["probation_end_date", "probationEndDate"])
+  const probationEndDateLabel = probationEndDateRaw
+    ? formatDate(probationEndDateRaw)
+    : "—"
+
+  const roleLooksManager = (dashboardData.user.roles ?? []).some((role) => {
+    const name = `${role.name ?? ""} ${role.display_name ?? ""}`.toLowerCase()
+    return (
+      name.includes("manager") ||
+      name.includes("supervisor") ||
+      name.includes("team lead") ||
+      name.includes("team_lead")
+    )
+  })
+  const isManager =
+    readBooleanValue(employeeRecord, ["is_manager", "isManager", "is_managerial", "isManagerial"]) ??
+    readBooleanValue(statusRecord, ["is_manager", "isManager", "is_managerial"]) ??
+    readBooleanValue(actionFlagsRecord, ["is_manager", "isManager"]) ??
+    readBooleanValue(userRecord, ["is_manager", "isManager"]) ??
+    readBooleanValue(dashboardRoot, ["is_manager", "isManager"]) ??
+    roleLooksManager
+
+  const fiscalConfirmationRaw =
+    readString(employeeRecord, [
+      "current_fiscal_year_confirmation_date",
+      "currentFiscalYearConfirmationDate",
+      "fiscal_year_confirmation_date",
+      "fiscalYearConfirmationDate",
+      "confirmation_date",
+      "confirmationDate",
+    ]) ||
+    readString(statusRecord, [
+      "current_fiscal_year_confirmation_date",
+      "currentFiscalYearConfirmationDate",
+      "fiscal_year_confirmation_date",
+      "confirmation_date",
+      "confirmationDate",
+    ]) ||
+    readString(dashboardRoot, [
+      "current_fiscal_year_confirmation_date",
+      "currentFiscalYearConfirmationDate",
+      "fiscal_year_confirmation_date",
+      "confirmation_date",
+    ])
+  // API returns FY confirmation for managers; also show when the date is present.
+  const showFiscalConfirmation = isManager || Boolean(fiscalConfirmationRaw)
+  const fiscalConfirmationLabel = fiscalConfirmationRaw
+    ? formatDate(fiscalConfirmationRaw)
+    : "—"
+
+  const isEmailVerified =
+    readBooleanValue(userRecord, [
+      "is_email_verified",
+      "isEmailVerified",
+      "email_verified",
+      "emailVerified",
+    ]) ?? false
+  const isTwoFactorEnabled =
+    readBooleanValue(userRecord, [
+      "is_two_factor_enabled",
+      "isTwoFactorEnabled",
+      "two_factor_enabled",
+      "twoFactorEnabled",
+      "is_2fa_enabled",
+      "is2faEnabled",
+    ]) ??
+    readBooleanValue(dashboardRoot, [
+      "is_two_factor_enabled",
+      "isTwoFactorEnabled",
+      "two_factor_enabled",
+    ]) ??
+    false
+  const settingsTwoFactorHref = "/dashboard/settings?tab=two-factor"
+  const settingsEmailVerifyHref = "/dashboard/settings?tab=email"
 
   const att = getAttendanceStatus(attendanceToday, attendancePunchesToday)
   const leaveSummaries = extractLeaveSummaries(
@@ -1878,24 +2094,93 @@ export function EmployeeDashboardView({
         <motion.div variants={dashboardItem}>
           <DashboardSection title="Employment" barClassName="bg-primary">
             <div className="min-w-0 space-y-1.5 px-3 py-3">
-              <p className="truncate text-sm font-semibold text-foreground">{fullName}</p>
-              <div className="flex flex-col gap-1">
+              <div className="flex flex-col gap-1.5">
+                <p className="flex min-w-0 items-start gap-1.5 text-xs text-muted-foreground">
+                  <Globe2 className="mt-0.5 size-3 shrink-0 text-primary" />
+                  <span className="min-w-0">
+                    <span className="text-muted-foreground/80">Nationality · </span>
+                    <span className="inline-flex items-center gap-1.5 font-medium text-foreground">
+                      <NationalityFlag code={nationalityCode} className="mt-px" />
+                      <span>{nationalityLabel}</span>
+                    </span>
+                  </span>
+                </p>
+                <p className="flex min-w-0 items-start gap-1.5 text-xs text-muted-foreground">
+                  <User className="mt-0.5 size-3 shrink-0 text-primary" />
+                  <span className="min-w-0">
+                    <span className="text-muted-foreground/80">Gender · </span>
+                    <span className="font-medium text-foreground">{genderLabel}</span>
+                  </span>
+                </p>
                 <p className="flex min-w-0 items-start gap-1.5 text-xs text-muted-foreground">
                   <Briefcase className="mt-0.5 size-3 shrink-0 text-primary" />
-                  <span className="min-w-0 capitalize">{employmentStatus}</span>
+                  <span className="min-w-0">
+                    <span className="text-muted-foreground/80">Employment type · </span>
+                    <span className="font-medium text-foreground">{employmentTypeLabel}</span>
+                  </span>
                 </p>
-                {hireDateLabel && hireDateLabel !== "—" ? (
+                <p className="flex min-w-0 items-start gap-1.5 text-xs text-muted-foreground">
+                  <CalendarIcon className="mt-0.5 size-3 shrink-0 text-primary" />
+                  <span className="min-w-0">
+                    <span className="text-muted-foreground/80">Probation end · </span>
+                    <span className="font-medium text-foreground">{probationEndDateLabel}</span>
+                  </span>
+                </p>
+                {showFiscalConfirmation ? (
                   <p className="flex min-w-0 items-start gap-1.5 text-xs text-muted-foreground">
-                    <CalendarIcon className="mt-0.5 size-3 shrink-0 text-primary" />
-                    <span className="min-w-0">Joined {hireDateLabel}</span>
+                    <UserCheck className="mt-0.5 size-3 shrink-0 text-primary" />
+                    <span className="min-w-0">
+                      <span className="text-muted-foreground/80">FY confirmation · </span>
+                      <span className="font-medium text-foreground">{fiscalConfirmationLabel}</span>
+                    </span>
                   </p>
                 ) : null}
-                {tenure && tenure !== "—" ? (
-                  <p className="flex min-w-0 items-start gap-1.5 text-xs text-muted-foreground">
-                    <ClockIcon className="mt-0.5 size-3 shrink-0 text-primary" />
-                    <span className="min-w-0">{tenure}</span>
-                  </p>
-                ) : null}
+                <p className="flex min-w-0 items-start gap-1.5 text-xs text-muted-foreground">
+                  {isEmailVerified ? (
+                    <MailCheck className="mt-0.5 size-3 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                  ) : (
+                    <MailWarning className="mt-0.5 size-3 shrink-0 text-amber-600 dark:text-amber-400" />
+                  )}
+                  <span className="min-w-0">
+                    <span className="text-muted-foreground/80">Email · </span>
+                    {isEmailVerified ? (
+                      <span className="font-medium text-emerald-700 dark:text-emerald-400">Verified</span>
+                    ) : (
+                      <>
+                        <span className="font-medium text-amber-700 dark:text-amber-400">Not verified</span>
+                        <Link
+                          href={settingsEmailVerifyHref}
+                          className="ml-1.5 font-medium text-primary underline-offset-2 hover:underline"
+                        >
+                          Verify in settings
+                        </Link>
+                      </>
+                    )}
+                  </span>
+                </p>
+                <p className="flex min-w-0 items-start gap-1.5 text-xs text-muted-foreground">
+                  {isTwoFactorEnabled ? (
+                    <ShieldCheck className="mt-0.5 size-3 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                  ) : (
+                    <ShieldAlert className="mt-0.5 size-3 shrink-0 text-amber-600 dark:text-amber-400" />
+                  )}
+                  <span className="min-w-0">
+                    <span className="text-muted-foreground/80">2FA · </span>
+                    {isTwoFactorEnabled ? (
+                      <span className="font-medium text-emerald-700 dark:text-emerald-400">Enabled</span>
+                    ) : (
+                      <>
+                        <span className="font-medium text-amber-700 dark:text-amber-400">Not enabled</span>
+                        <Link
+                          href={settingsTwoFactorHref}
+                          className="ml-1.5 font-medium text-primary underline-offset-2 hover:underline"
+                        >
+                          Enable in settings
+                        </Link>
+                      </>
+                    )}
+                  </span>
+                </p>
               </div>
             </div>
           </DashboardSection>

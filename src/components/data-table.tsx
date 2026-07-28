@@ -36,14 +36,6 @@ import {
   DrawerTrigger,
 } from "@/components/ui/drawer"
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet"
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -75,10 +67,17 @@ import {
   assignPermissionToCurrentCompanyUser,
   assignPermissionToRole,
   assignUserToRole,
+  assignUserAvatar,
+  disableUserTwoFactor,
+  enableUserTwoFactor,
+  extractDefaultAvatarImageUrl,
   getPermissionById,
   getRoleById,
+  isSelectableDefaultAvatar,
   listAllCurrentCompanyUsers,
+  listDefaultAvatars,
   listRolePermissions,
+  readDefaultAvatarId,
   listRoleUsers,
   revokePermissionFromCurrentCompanyUser,
   revokePermissionFromRole,
@@ -95,15 +94,19 @@ import {
   CheckIcon,
   CopyIcon,
   EllipsisVerticalIcon,
+  ImageIcon,
   KeyRoundIcon,
   Loader2Icon,
   PencilIcon,
   PlusIcon,
+  ShieldCheckIcon,
+  ShieldOffIcon,
   Trash2Icon,
   UsersIcon,
   UserPlusIcon,
   UserMinusIcon,
 } from "lucide-react"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
 interface DataTableProps {
   token: string
@@ -657,18 +660,34 @@ function MicrosoftPermissionList({
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-3">
+      <p className="text-xs text-muted-foreground">
+        <span className="font-semibold text-foreground">{selectedNames.length}</span> permissions
+        included in this role
+      </p>
       {grouped.map(([group, items]) => (
-        <div key={group} className="space-y-2">
-          <h4 className="text-sm font-semibold text-foreground">{group}</h4>
-          <ul className="space-y-2">
+        <section
+          key={group}
+          className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-xs"
+        >
+          <div className="flex items-center justify-between gap-2 border-b border-border/50 bg-muted/20 px-3 py-2">
+            {/* Primary color only on permission group titles */}
+            <h4 className="text-sm font-semibold text-primary">{group}</h4>
+            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold tabular-nums text-primary">
+              {items.length}
+            </span>
+          </div>
+          <ul className="grid grid-cols-1 gap-px bg-border/40 sm:grid-cols-2">
             {items.map((item) => (
-              <li key={item.name} className="flex items-start gap-2.5">
-                <CheckIcon className="mt-0.5 size-4 shrink-0 text-primary" strokeWidth={2.5} />
+              <li key={item.name} className="flex items-start gap-2 bg-card px-3 py-2.5">
+                <CheckIcon className="mt-0.5 size-3.5 shrink-0 text-primary" strokeWidth={2.5} />
                 <div className="min-w-0">
-                  <p className="text-sm leading-snug text-foreground">{item.label}</p>
+                  <p className="text-xs font-medium leading-snug text-foreground">{item.label}</p>
+                  <p className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground">
+                    {item.name}
+                  </p>
                   {item.description ? (
-                    <p className="mt-0.5 text-xs leading-snug text-muted-foreground">
+                    <p className="mt-0.5 line-clamp-2 text-[10px] leading-snug text-muted-foreground/90">
                       {item.description}
                     </p>
                   ) : null}
@@ -676,7 +695,7 @@ function MicrosoftPermissionList({
               </li>
             ))}
           </ul>
-        </div>
+        </section>
       ))}
     </div>
   )
@@ -839,6 +858,20 @@ export function DataTable({
   const [editUserForm, setEditUserForm] = React.useState<UserFormState>(EMPTY_USER_FORM)
   const [targetPasswordUser, setTargetPasswordUser] = React.useState<{ id: string | number; label: string } | null>(null)
   const [targetPassword, setTargetPassword] = React.useState("")
+  const [twoFactorUser, setTwoFactorUser] = React.useState<{
+    id: string | number
+    label: string
+    mode: "enable" | "disable"
+  } | null>(null)
+  const [twoFactorReason, setTwoFactorReason] = React.useState("")
+  const [twoFactorBusy, setTwoFactorBusy] = React.useState(false)
+  const [avatarUser, setAvatarUser] = React.useState<{ id: string | number; label: string } | null>(
+    null
+  )
+  const [defaultAvatars, setDefaultAvatars] = React.useState<AdminRecord[]>([])
+  const [avatarsLoading, setAvatarsLoading] = React.useState(false)
+  const [selectedAvatarId, setSelectedAvatarId] = React.useState<number | null>(null)
+  const [avatarBusy, setAvatarBusy] = React.useState(false)
 
   const [roleForm, setRoleForm] = React.useState<BasicEntityForm>(EMPTY_ENTITY_FORM)
   const [rolePermissionNames, setRolePermissionNames] = React.useState<string[]>([])
@@ -1361,6 +1394,73 @@ export function DataTable({
     } catch (errorObject) {
       const message = errorObject instanceof Error ? errorObject.message : "Password update failed."
       toast.error(message)
+    }
+  }
+
+  React.useEffect(() => {
+    if (!avatarUser || !token) return
+    let cancelled = false
+    setAvatarsLoading(true)
+    void listDefaultAvatars(token, { status: "active" })
+      .then((rows) => {
+        if (!cancelled) {
+          setDefaultAvatars(rows.filter((row) => isSelectableDefaultAvatar(row)))
+        }
+      })
+      .catch((errorObject) => {
+        if (!cancelled) {
+          setDefaultAvatars([])
+          const message =
+            errorObject instanceof Error ? errorObject.message : "Failed to load avatars."
+          toast.error(message)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setAvatarsLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [avatarUser, token])
+
+  const handleAdminTwoFactor = async () => {
+    if (!token || !twoFactorUser) return
+    setTwoFactorBusy(true)
+    try {
+      if (twoFactorUser.mode === "enable") {
+        await enableUserTwoFactor(token, twoFactorUser.id)
+        showSuccessAlert(
+          "2FA enabled. The user must complete setup during their next login."
+        )
+      } else {
+        await disableUserTwoFactor(token, twoFactorUser.id, twoFactorReason)
+        showSuccessAlert("2FA has been disabled for this user.")
+      }
+      setTwoFactorUser(null)
+      setTwoFactorReason("")
+    } catch (errorObject) {
+      const message =
+        errorObject instanceof Error ? errorObject.message : "Failed to update 2FA."
+      toast.error(message)
+    } finally {
+      setTwoFactorBusy(false)
+    }
+  }
+
+  const handleAssignAvatar = async () => {
+    if (!token || !avatarUser || selectedAvatarId == null) return
+    setAvatarBusy(true)
+    try {
+      await assignUserAvatar(token, avatarUser.id, selectedAvatarId)
+      showSuccessAlert("Avatar assigned successfully.")
+      setAvatarUser(null)
+      setSelectedAvatarId(null)
+    } catch (errorObject) {
+      const message =
+        errorObject instanceof Error ? errorObject.message : "Failed to assign avatar."
+      toast.error(message)
+    } finally {
+      setAvatarBusy(false)
     }
   }
 
@@ -2391,6 +2491,50 @@ export function DataTable({
                                     </DropdownMenuItem>
                                   ) : null}
 
+                                  {activeResource === "users" ? (
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        setAvatarUser({ id: rowId, label: rowLabel })
+                                        setSelectedAvatarId(null)
+                                      }}
+                                    >
+                                      <ImageIcon />
+                                      Assign avatar
+                                    </DropdownMenuItem>
+                                  ) : null}
+
+                                  {activeResource === "users" ? (
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        setTwoFactorUser({
+                                          id: rowId,
+                                          label: rowLabel,
+                                          mode: "enable",
+                                        })
+                                        setTwoFactorReason("")
+                                      }}
+                                    >
+                                      <ShieldCheckIcon />
+                                      Enable 2FA
+                                    </DropdownMenuItem>
+                                  ) : null}
+
+                                  {activeResource === "users" ? (
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        setTwoFactorUser({
+                                          id: rowId,
+                                          label: rowLabel,
+                                          mode: "disable",
+                                        })
+                                        setTwoFactorReason("")
+                                      }}
+                                    >
+                                      <ShieldOffIcon />
+                                      Disable 2FA
+                                    </DropdownMenuItem>
+                                  ) : null}
+
                                   {isEditableResource(activeResource) &&
                                   (canUpdateResource || canDeleteResource) ? (
                                     <DropdownMenuSeparator />
@@ -2588,7 +2732,153 @@ export function DataTable({
         </DrawerContent>
       </Drawer>
 
-      <Sheet
+      <Dialog
+        open={Boolean(twoFactorUser)}
+        onOpenChange={(open) => {
+          if (!open && !twoFactorBusy) {
+            setTwoFactorUser(null)
+            setTwoFactorReason("")
+          }
+        }}
+      >
+        <DialogPopup className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {twoFactorUser?.mode === "disable" ? "Disable 2FA" : "Enable 2FA"} for{" "}
+              {twoFactorUser?.label ?? "user"}
+            </DialogTitle>
+            <DialogDescription>
+              {twoFactorUser?.mode === "disable"
+                ? "This disables two-factor authentication, revokes recovery data, and may invalidate active sessions."
+                : "The user must complete 2FA setup during their next login. No secret is shown here."}
+            </DialogDescription>
+          </DialogHeader>
+          {twoFactorUser?.mode === "disable" ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="disable-2fa-reason">Reason (optional)</Label>
+              <Input
+                id="disable-2fa-reason"
+                value={twoFactorReason}
+                onChange={(event) => setTwoFactorReason(event.target.value)}
+                placeholder="e.g. User lost authenticator device"
+              />
+            </div>
+          ) : null}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={twoFactorBusy}
+              onClick={() => {
+                setTwoFactorUser(null)
+                setTwoFactorReason("")
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant={twoFactorUser?.mode === "disable" ? "destructive" : "default"}
+              disabled={twoFactorBusy || !twoFactorUser}
+              onClick={() => void handleAdminTwoFactor()}
+            >
+              {twoFactorBusy
+                ? "Working…"
+                : twoFactorUser?.mode === "disable"
+                  ? "Disable 2FA"
+                  : "Enable 2FA"}
+            </Button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(avatarUser)}
+        onOpenChange={(open) => {
+          if (!open && !avatarBusy) {
+            setAvatarUser(null)
+            setSelectedAvatarId(null)
+          }
+        }}
+      >
+        <DialogPopup className="max-h-[min(90vh,36rem)] max-w-lg overflow-hidden p-0">
+          <DialogHeader className="mb-0 border-b border-border/70 px-5 pb-3 pt-5">
+            <DialogTitle>Assign avatar</DialogTitle>
+            <DialogDescription>
+              Choose an active default avatar for {avatarUser?.label ?? "this user"}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[min(60vh,24rem)] overflow-y-auto px-5 py-4">
+            {avatarsLoading ? (
+              <SectionLoader label="Loading avatars…" />
+            ) : defaultAvatars.length === 0 ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                No active default avatars found. Add some under Settings → Default Avatars.
+              </p>
+            ) : (
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                {defaultAvatars.map((avatar, index) => {
+                  const idRaw = readDefaultAvatarId(avatar)
+                  const id = idRaw == null ? NaN : Number(idRaw)
+                  if (!Number.isFinite(id)) return null
+                  const imageUrl = extractDefaultAvatarImageUrl(avatar)
+                  const name =
+                    (typeof avatar.avatar_name === "string" && avatar.avatar_name) ||
+                    (typeof avatar.name === "string" && avatar.name) ||
+                    `Avatar ${id}`
+                  const selected = selectedAvatarId === id
+                  return (
+                    <button
+                      key={`av-${id}-${index}`}
+                      type="button"
+                      title={name}
+                      onClick={() => setSelectedAvatarId(id)}
+                      className={cn(
+                        "flex flex-col items-center gap-1.5 rounded-lg border p-2 transition-colors",
+                        selected
+                          ? "border-primary bg-primary/5 ring-2 ring-primary/25"
+                          : "border-border/70 hover:border-primary/40 hover:bg-muted/30"
+                      )}
+                    >
+                      <Avatar className="size-14 ring-1 ring-border" size="lg">
+                        {imageUrl ? <AvatarImage src={imageUrl} alt={name} /> : null}
+                        <AvatarFallback className="text-[10px]">
+                          {name.slice(0, 2).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span className="line-clamp-2 w-full text-center text-[10px] text-muted-foreground">
+                        {name}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+          <DialogFooter className="mt-0 border-t border-border/70 px-5 py-3">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={avatarBusy}
+              onClick={() => {
+                setAvatarUser(null)
+                setSelectedAvatarId(null)
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={avatarBusy || selectedAvatarId == null || !avatarUser}
+              onClick={() => void handleAssignAvatar()}
+            >
+              {avatarBusy ? "Assigning…" : "Assign avatar"}
+            </Button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
+
+      <Dialog
         open={Boolean(editingEntity)}
         onOpenChange={(open) => {
           if (!open) {
@@ -2596,23 +2886,24 @@ export function DataTable({
             setInitialEditingEntityForm(EMPTY_ENTITY_FORM)
             setEditingRolePermissionNames([])
             setInitialEditingRolePermissionNames([])
+            setRolePermissionNamesFromApi(null)
           }
         }}
       >
-        <SheetContent
-          side="right"
-          className="flex w-full flex-col gap-0 overflow-hidden bg-background p-0 data-[side=right]:w-full sm:data-[side=right]:max-w-none sm:data-[side=right]:w-[min(100vw-1rem,34rem)]"
+        <DialogPopup
+          from="center"
+          className="flex h-[calc(100vh-1.25rem)] w-[calc(100%-1.25rem)] max-h-none max-w-none flex-col gap-0 overflow-hidden bg-background p-0 sm:h-[calc(100vh-1.75rem)] sm:w-[calc(100%-1.75rem)]"
         >
-          <SheetHeader className="shrink-0 space-y-3 px-6 pb-0 pt-5 text-left">
+          <DialogHeader className="mb-0 shrink-0 space-y-2 border-b border-border/70 px-5 pb-0 pt-4 text-left sm:px-6">
             <div className="pr-8">
-              <SheetTitle className="text-xl font-semibold tracking-tight text-foreground">
+              <DialogTitle className="text-lg font-semibold tracking-tight text-foreground sm:text-xl">
                 {editingEntity?.label ?? "Details"}
-              </SheetTitle>
-              <SheetDescription className="mt-1 text-sm text-muted-foreground">
+              </DialogTitle>
+              <DialogDescription className="mt-0.5 text-xs text-muted-foreground sm:text-sm">
                 {editingEntity?.resource === "roles"
                   ? "Review role details, assigned people, and included permissions."
                   : "Review this permission and manage direct user grants."}
-              </SheetDescription>
+              </DialogDescription>
             </div>
             <DetailTabs
               tabs={
@@ -2630,9 +2921,9 @@ export function DataTable({
               value={detailSheetTab}
               onChange={setDetailSheetTab}
             />
-          </SheetHeader>
+          </DialogHeader>
 
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-6 py-4">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-5 py-3 sm:px-6 sm:py-4">
             {detailSheetTab === "general" ? (
               <div className="space-y-4 overflow-y-auto">
                 {canUpdateResource ? (
@@ -2861,37 +3152,35 @@ export function DataTable({
             ) : null}
 
             {detailSheetTab === "permissions" && editingEntity?.resource === "roles" ? (
-              <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
-                <p className="shrink-0 text-sm text-muted-foreground">
-                  {canManageAssignments
-                    ? "Toggle permissions to assign or revoke them on this role immediately."
-                    : "Permissions currently included in this role."}
-                </p>
-                <div className="min-h-0 flex-1 overflow-y-auto pr-1">
-                  {membersLoading || rolePermissionsLoading ? (
-                    <SectionLoader label="Loading role permissions…" />
-                  ) : canManageAssignments ? (
-                    <PermissionPicker
-                      options={permissionOptions}
-                      selectedNames={displayedRolePermissionNames}
-                      onChange={(next) => {
-                        void handleRolePermissionsChange(next)
-                      }}
-                      className={cn(membersBusy ? "pointer-events-none opacity-70" : "")}
-                    />
-                  ) : (
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                {membersLoading || rolePermissionsLoading ? (
+                  <SectionLoader label="Loading role permissions…" />
+                ) : canManageAssignments ? (
+                  <PermissionPicker
+                    options={permissionOptions}
+                    selectedNames={displayedRolePermissionNames}
+                    onChange={(next) => {
+                      void handleRolePermissionsChange(next)
+                    }}
+                    className={cn(
+                      "min-h-0 flex-1",
+                      membersBusy ? "pointer-events-none opacity-70" : ""
+                    )}
+                  />
+                ) : (
+                  <div className="min-h-0 flex-1 overflow-y-auto">
                     <MicrosoftPermissionList
                       options={permissionOptions}
                       selectedNames={displayedRolePermissionNames}
                       emptyLabel="No permissions are included in this role yet."
                     />
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
             ) : null}
           </div>
 
-          <SheetFooter className="shrink-0 border-t border-border/70 px-6 py-3">
+          <DialogFooter className="mt-0 shrink-0 border-t border-border/70 px-6 py-3">
             {canUpdateResource && detailSheetTab === "general" && isEditingEntityDirty ? (
               <Button
                 type="button"
@@ -2914,9 +3203,9 @@ export function DataTable({
             >
               Close
             </Button>
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
 
       <AlertDialog
         open={Boolean(revokeConfirm)}

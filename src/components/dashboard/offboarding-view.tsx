@@ -12,17 +12,24 @@ import {
   approveOffboardingRequest,
   cancelOffboardingRequest,
   completeOffboardingRequest,
+  completeOffboardingTask,
   createOffboardingRequest,
   createOffboardingWorkflow,
   createOffboardingWorkflowStep,
+  getCurrentEmployee,
   getOffboardingRequest,
   getOffboardingApprovals,
   getOffboardingAuditLogs,
+  getOffboardingDashboard,
   getOffboardingProgress,
   listBranches,
   listDepartments,
   listEmployees,
+  listMyOffboardingApprovals,
+  listMyOffboardingClearances,
+  listMyOffboardingTasks,
   listOffboardingDocuments,
+  listOffboardingItemsFromOwnRequests,
   listOffboardingRequests,
   listOffboardingWorkflows,
   rejectOffboardingRequest,
@@ -30,6 +37,7 @@ import {
   type AdminRecord,
 } from "@/lib/admin-api"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
+import { canPerformPermission } from "@/lib/dashboard-permissions"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import { asRecord, isLikelyRefreshToken, readString as readTokenString } from "@/utils/token-utils"
 import { showErrorAlert } from "@/lib/error-alert"
@@ -163,8 +171,18 @@ function EmptyState({
   )
 }
 
-type Tab = "requests" | "workflows"
+type Tab = "requests" | "workflows" | "my-tasks" | "my-approvals" | "my-clearances"
 type OffboardingLookupKey = "employees" | "branches" | "departments" | "workflows"
+
+function statusIsDraft(status: string) {
+  const s = status.trim().toLowerCase()
+  return s === "draft" || s === "pending_submit" || s === "new" || s === ""
+}
+
+function statusIsCancellable(status: string) {
+  const s = status.trim().toLowerCase()
+  return ["draft", "pending", "submitted", "in_review", "in_progress", "pending_approval"].includes(s)
+}
 
 export function OffboardingView() {
   const searchParams = useSearchParams()
@@ -177,8 +195,14 @@ export function OffboardingView() {
     [searchParams]
   )
   const actor = useDashboardActor()
+  const isEmployeeMode = actor.ready ? actor.accessMode === "employee" || !actor.isAdmin : false
+  const canManage = actor.ready && actor.isAdmin
+  const canSelfCreate =
+    actor.ready &&
+    (isEmployeeMode || canPerformPermission(actor.permissionLabels, "offboarding_requests:create"))
+  const canCreateRequest = canManage || canSelfCreate
+
   const [tab, setTab] = React.useState<Tab>("requests")
-  const [canManage, setCanManage] = React.useState(false)
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -186,12 +210,20 @@ export function OffboardingView() {
   const [employees, setEmployees] = React.useState<AdminRecord[]>([])
   const [, setBranches] = React.useState<AdminRecord[]>([])
   const [, setDepartments] = React.useState<AdminRecord[]>([])
+  const [selfEmployee, setSelfEmployee] = React.useState<AdminRecord | null>(null)
+  const [selfEmployeeId, setSelfEmployeeId] = React.useState<number | null>(null)
 
   const [requests, setRequests] = React.useState<AdminRecord[]>([])
   const [workflows, setWorkflows] = React.useState<AdminRecord[]>([])
-  const [loadedTabs, setLoadedTabs] = React.useState<Record<Tab, boolean>>({
+  const [myTasks, setMyTasks] = React.useState<AdminRecord[]>([])
+  const [myApprovals, setMyApprovals] = React.useState<AdminRecord[]>([])
+  const [myClearances, setMyClearances] = React.useState<AdminRecord[]>([])
+  const [loadedTabs, setLoadedTabs] = React.useState<Partial<Record<Tab, boolean>>>({
     requests: false,
     workflows: false,
+    "my-tasks": false,
+    "my-approvals": false,
+    "my-clearances": false,
   })
   const [loadedLookups, setLoadedLookups] = React.useState<Record<OffboardingLookupKey, boolean>>({
     employees: false,
@@ -345,9 +377,20 @@ export function OffboardingView() {
     }
   }, [loadLookups])
 
+  const loadSelfEmployee = React.useCallback(async (token: string) => {
+    try {
+      const me = await getCurrentEmployee(token)
+      if (!me) return null
+      setSelfEmployee(me)
+      const id = readNumber(me, ["id", "employee_id", "employeeId"])
+      if (id !== null) setSelfEmployeeId(id)
+      return me
+    } catch {
+      return null
+    }
+  }, [])
+
   const reloadAll = React.useCallback(async (targetTab: Tab = tab, force = false) => {
-    // `force` is accepted for API symmetry with loadLookups/ensureLookups callers;
-    // this function always refetches regardless.
     void force
     const token = readStoredToken()
     if (!token) {
@@ -360,38 +403,187 @@ export function OffboardingView() {
     setError(null)
     try {
       if (targetTab === "requests") {
-        const requestsResult = await listOffboardingRequests(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" })
+        let employeeFilter = selfEmployeeId ?? undefined
+        if (isEmployeeMode && employeeFilter == null) {
+          const me = await loadSelfEmployee(token)
+          employeeFilter = me
+            ? readNumber(me, ["id", "employee_id", "employeeId"]) ?? undefined
+            : undefined
+        }
+        const requestsResult = await listOffboardingRequests(token, {
+          page: 1,
+          limit: 100,
+          sortBy: "created_at",
+          sortOrder: "DESC",
+          employee_id: isEmployeeMode && employeeFilter ? employeeFilter : undefined,
+        })
         setRequests(requestsResult.rows)
-      } else {
-        const workflowsResult = await listOffboardingWorkflows(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" })
+        if (canManage) {
+          try {
+            await getOffboardingDashboard(token)
+          } catch {
+            // optional
+          }
+        }
+      } else if (targetTab === "workflows") {
+        const workflowsResult = await listOffboardingWorkflows(token, {
+          page: 1,
+          limit: 100,
+          sortBy: "created_at",
+          sortOrder: "DESC",
+        })
         setWorkflows(workflowsResult.rows)
         setLoadedLookups((current) => ({ ...current, workflows: true }))
         if (!selectedWorkflowId && workflowsResult.rows.length > 0) {
           const firstId = readNumber(workflowsResult.rows[0], ["id", "workflow_id"])
           if (firstId !== null) setSelectedWorkflowId(String(firstId))
         }
+      } else if (targetTab === "my-tasks") {
+        let tasks = await listMyOffboardingTasks(token)
+        if (tasks.length === 0) {
+          let employeeFilter = selfEmployeeId
+          if (isEmployeeMode && employeeFilter == null) {
+            const me = await loadSelfEmployee(token)
+            employeeFilter = me ? readNumber(me, ["id", "employee_id", "employeeId"]) : null
+          }
+          try {
+            const fallback = await listOffboardingItemsFromOwnRequests(
+              token,
+              "tasks",
+              isEmployeeMode ? employeeFilter : null
+            )
+            if (fallback.length > 0) tasks = fallback
+          } catch {
+            // keep empty
+          }
+        }
+        setMyTasks(tasks)
+      } else if (targetTab === "my-approvals") {
+        setMyApprovals(await listMyOffboardingApprovals(token))
+      } else if (targetTab === "my-clearances") {
+        let clearances = await listMyOffboardingClearances(token)
+        if (clearances.length === 0) {
+          let employeeFilter = selfEmployeeId
+          if (isEmployeeMode && employeeFilter == null) {
+            const me = await loadSelfEmployee(token)
+            employeeFilter = me ? readNumber(me, ["id", "employee_id", "employeeId"]) : null
+          }
+          try {
+            const fallback = await listOffboardingItemsFromOwnRequests(
+              token,
+              "clearances",
+              isEmployeeMode ? employeeFilter : null
+            )
+            if (fallback.length > 0) clearances = fallback
+          } catch {
+            // keep empty
+          }
+        }
+        setMyClearances(clearances)
       }
       setLoadedTabs((current) => ({ ...current, [targetTab]: true }))
     } catch (errorObject) {
       const msg = errorObject instanceof Error ? errorObject.message : "Failed to load offboarding data."
-      setError(msg)
-      showErrorAlert(msg)
+      if (/forbidden/i.test(msg)) {
+        if (targetTab === "my-tasks") setMyTasks([])
+        if (targetTab === "my-clearances") setMyClearances([])
+        if (targetTab === "my-approvals") setMyApprovals([])
+        setLoadedTabs((current) => ({ ...current, [targetTab]: true }))
+        setError(null)
+      } else {
+        setError(msg)
+        showErrorAlert(msg)
+      }
     } finally {
       setLoading(false)
     }
-  }, [tab, selectedWorkflowId])
+  }, [canManage, isEmployeeMode, loadSelfEmployee, selectedWorkflowId, selfEmployeeId, tab])
 
   React.useEffect(() => {
-    setCanManage(actor.ready && actor.isAdmin)
-  }, [actor.isAdmin, actor.ready])
+    if (isEmployeeMode && tab === "workflows") setTab("requests")
+  }, [isEmployeeMode, tab])
 
   React.useEffect(() => {
     if (loadedTabs[tab]) return
     void reloadAll(tab)
   }, [loadedTabs, reloadAll, tab])
 
+  function pickDefaultWorkflowId(rows: AdminRecord[]): string {
+    if (!rows.length) return ""
+    const active = rows.filter((row) => {
+      const status = readString(row, ["status"]).toLowerCase()
+      return status === "-" || status === "" || status === "active"
+    })
+    const pool = active.length > 0 ? active : rows
+    const defaultRow =
+      pool.find(
+        (row) =>
+          row.is_default === true ||
+          String(row.is_default ?? "").toLowerCase() === "true" ||
+          row.isDefault === true
+      ) ?? pool[0]
+    const id = readNumber(defaultRow, ["id", "workflow_id"])
+    return id === null ? "" : String(id)
+  }
+
+  function workflowDisplayName(workflowId: string, rows: AdminRecord[] = workflows): string {
+    if (!workflowId) return "No workflow available"
+    const match = rows.find(
+      (row) => String(readNumber(row, ["id", "workflow_id"]) ?? "") === workflowId
+    )
+    if (!match) return `Workflow #${workflowId}`
+    const name = readString(match, ["name", "title"])
+    return name === "-" ? `Workflow #${workflowId}` : name
+  }
+
   async function openRequestSheet() {
-    if (!canManage) return
+    if (!canCreateRequest) return
+    const token = readStoredToken()
+    if (!token) {
+      showErrorAlert("Authentication required. Please log in again.")
+      return
+    }
+
+    if (isEmployeeMode || !canManage) {
+      const me = selfEmployee ?? (await loadSelfEmployee(token))
+      const id = me ? readNumber(me, ["id", "employee_id", "employeeId"]) : null
+      if (id === null) {
+        showErrorAlert("Could not load your employee profile. Please try again.")
+        return
+      }
+      setLoading(true)
+      setError(null)
+      try {
+        const workflowsResult = await listOffboardingWorkflows(token, {
+          page: 1,
+          limit: 100,
+          sortBy: "created_at",
+          sortOrder: "DESC",
+        })
+        const rows = workflowsResult.rows
+        setWorkflows(rows)
+        setLoadedLookups((current) => ({ ...current, workflows: true }))
+        const defaultWorkflowId = pickDefaultWorkflowId(rows)
+        setRequestForm((prev) => ({
+          ...prev,
+          employee_id: String(id),
+          workflow_id: defaultWorkflowId,
+          offboarding_type: "resignation",
+          title: prev.title || "My resignation",
+          submit: "true",
+        }))
+        setRequestSheetOpen(true)
+      } catch (errorObject) {
+        const msg =
+          errorObject instanceof Error ? errorObject.message : "Failed to load exit workflows."
+        setError(msg)
+        showErrorAlert(msg)
+      } finally {
+        setLoading(false)
+      }
+      return
+    }
+
     const loaded = await ensureLookups(["employees", "branches", "departments", "workflows"])
     if (!loaded) return
     setRequestSheetOpen(true)
@@ -411,6 +603,10 @@ export function OffboardingView() {
       showErrorAlert("Employee, title, reason and last working date are required.")
       return false
     }
+    if (isEmployeeMode && selfEmployeeId != null && Number(requestForm.employee_id) !== selfEmployeeId) {
+      showErrorAlert("You can only create an offboarding request for yourself.")
+      return false
+    }
     setSaving(true)
     try {
       const createdRequest = await createOffboardingRequest(token, {
@@ -419,7 +615,7 @@ export function OffboardingView() {
         department_id: requestForm.department_id ? Number(requestForm.department_id) : undefined,
         workflow_id: requestForm.workflow_id ? Number(requestForm.workflow_id) : undefined,
         title: requestForm.title.trim(),
-        description: requestForm.description.trim(),
+        description: requestForm.description.trim() || undefined,
         offboarding_type: requestForm.offboarding_type,
         reason: requestForm.reason.trim(),
         notice_date: requestForm.notice_date || undefined,
@@ -430,9 +626,10 @@ export function OffboardingView() {
       if (requestForm.submit === "true") {
         const createdRecord = asRecord(createdRequest)
         const createdRequestId = readNumber(createdRecord ?? {}, ["id", "request_id"])
-        const selectedEmployee = employees.find((row) =>
-          readNumber(row, ["id", "employee_id", "user_id"]) === Number(requestForm.employee_id)
-        )
+        const selectedEmployee =
+          employees.find(
+            (row) => readNumber(row, ["id", "employee_id", "user_id"]) === Number(requestForm.employee_id)
+          ) ?? selfEmployee
         void notifySubmittedRequestApprovers({
           kind: "offboarding_request",
           token,
@@ -502,14 +699,19 @@ export function OffboardingView() {
     void openRequestDetails(highlightedRow)
   }, [highlightedRequestId, requests, tab])
 
-  async function runRequestAction(row: AdminRecord, action: "submit" | "approve" | "reject" | "cancel" | "complete") {
+  async function runRequestAction(
+    row: AdminRecord,
+    action: "submit" | "approve" | "reject" | "cancel" | "complete"
+  ) {
     const token = readStoredToken()
     const id = readNumber(row, ["id"])
     if (!token || id === null) return
     setSaving(true)
     try {
       if (action === "submit") {
-        const submittedRequest = await submitOffboardingRequest(token, id, { workflow_id: readNumber(row, ["workflow_id"]) ?? undefined })
+        const submittedRequest = await submitOffboardingRequest(token, id, {
+          workflow_id: readNumber(row, ["workflow_id"]) ?? undefined,
+        })
         void notifySubmittedRequestApprovers({
           kind: "offboarding_request",
           token,
@@ -517,14 +719,84 @@ export function OffboardingView() {
           loadRequest: () => getOffboardingRequest(token, id),
         })
       }
-      if (action === "approve") await approveOffboardingRequest(token, id, { approve: true, comments: "Approved" })
-      if (action === "reject") await rejectOffboardingRequest(token, id, { comments: "Rejected" })
-      if (action === "cancel") await cancelOffboardingRequest(token, id, { reason: "Cancelled by admin" })
+      if (action === "approve") {
+        await approveOffboardingRequest(token, id, { approve: true, comments: "Approved" })
+      }
+      if (action === "reject") {
+        await rejectOffboardingRequest(token, id, { comments: "Rejected" })
+      }
+      if (action === "cancel") {
+        await cancelOffboardingRequest(token, id, {
+          reason: isEmployeeMode ? "Cancelled by employee" : "Cancelled by admin",
+        })
+      }
       if (action === "complete") await completeOffboardingRequest(token, id)
-      showSuccessAlert(`Request ${action}d successfully.`)
-      await reloadAll(tab, true)
+      const pastTense =
+        action === "submit"
+          ? "submitted"
+          : action === "approve"
+            ? "approved"
+            : action === "reject"
+              ? "rejected"
+              : action === "cancel"
+                ? "cancelled"
+                : "completed"
+      showSuccessAlert(`Request ${pastTense} successfully.`)
+      await reloadAll("requests", true)
+      if (requestDetailsOpen) {
+        await openRequestDetails({ ...row, id })
+      }
     } catch (errorObject) {
       showErrorAlert(errorObject instanceof Error ? errorObject.message : "Action failed.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function completeMyTask(row: AdminRecord) {
+    const token = readStoredToken()
+    const requestId =
+      readNumber(row, ["offboarding_request_id", "request_id", "offboardingRequestId"]) ??
+      readNumber(asRecord(row.request) ?? {}, ["id"])
+    const taskId = readNumber(row, ["id", "task_id"])
+    if (!token || requestId === null || taskId === null) {
+      showErrorAlert("Missing task identifiers.")
+      return
+    }
+    setSaving(true)
+    try {
+      await completeOffboardingTask(token, requestId, taskId, { notes: "Completed" })
+      showSuccessAlert("Task marked complete.")
+      await reloadAll("my-tasks", true)
+    } catch (errorObject) {
+      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to complete task.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function approveFromMyQueue(row: AdminRecord, approve: boolean) {
+    const token = readStoredToken()
+    const requestId =
+      readNumber(row, ["offboarding_request_id", "request_id", "offboardingRequestId"]) ??
+      readNumber(asRecord(row.request) ?? {}, ["id"]) ??
+      readNumber(row, ["id"])
+    if (!token || requestId === null) {
+      showErrorAlert("Missing request id.")
+      return
+    }
+    setSaving(true)
+    try {
+      if (approve) {
+        await approveOffboardingRequest(token, requestId, { approve: true, comments: "Approved" })
+      } else {
+        await rejectOffboardingRequest(token, requestId, { comments: "Rejected" })
+      }
+      showSuccessAlert(approve ? "Request approved." : "Request rejected.")
+      await reloadAll("my-approvals", true)
+      await reloadAll("requests", true)
+    } catch (errorObject) {
+      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Approval action failed.")
     } finally {
       setSaving(false)
     }
@@ -637,18 +909,29 @@ export function OffboardingView() {
     }
   }
 
+  const canActOnSelected =
+    selectedRequest != null &&
+    (canManage ||
+      (isEmployeeMode &&
+        selfEmployeeId != null &&
+        (readNumber(selectedRequest, ["employee_id"]) === selfEmployeeId ||
+          readNumber(asRecord(selectedRequest.employee) ?? {}, ["id", "employee_id"]) ===
+            selfEmployeeId)))
+
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 pb-6">
       <div className="flex flex-col gap-1">
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">Offboarding</h1>
+        <h1 className="text-xl font-semibold tracking-tight text-foreground">
+          {isEmployeeMode ? "My Offboarding" : "Offboarding"}
+        </h1>
         <p className="text-sm text-muted-foreground">
           {canManage
-            ? "Review offboarding requests and manage exit workflows."
-            : "View offboarding requests and company exit workflows."}
+            ? "Review exit requests, approvals, tasks, and manage workflows."
+            : "Submit and track your exit request, plus any tasks or clearances assigned to you."}
         </p>
       </div>
 
-      <div className="inline-flex w-fit items-center gap-1 border-b border-border">
+      <div className="inline-flex w-fit flex-wrap items-center gap-1 border-b border-border">
         <button
           type="button"
           onClick={() => setTab("requests")}
@@ -659,20 +942,58 @@ export function OffboardingView() {
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
-          Requests
+          {isEmployeeMode ? "My requests" : "Requests"}
         </button>
         <button
           type="button"
-          onClick={() => setTab("workflows")}
+          onClick={() => setTab("my-approvals")}
           className={cn(
             "border-b-2 px-3 py-2 text-sm font-medium transition-colors",
-            tab === "workflows"
+            tab === "my-approvals"
               ? "border-primary text-primary"
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
-          Workflows
+          My approvals
         </button>
+        <button
+          type="button"
+          onClick={() => setTab("my-tasks")}
+          className={cn(
+            "border-b-2 px-3 py-2 text-sm font-medium transition-colors",
+            tab === "my-tasks"
+              ? "border-primary text-primary"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          )}
+        >
+          My tasks
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab("my-clearances")}
+          className={cn(
+            "border-b-2 px-3 py-2 text-sm font-medium transition-colors",
+            tab === "my-clearances"
+              ? "border-primary text-primary"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          )}
+        >
+          My clearances
+        </button>
+        {canManage ? (
+          <button
+            type="button"
+            onClick={() => setTab("workflows")}
+            className={cn(
+              "border-b-2 px-3 py-2 text-sm font-medium transition-colors",
+              tab === "workflows"
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
+          >
+            Workflows
+          </button>
+        ) : null}
       </div>
 
       {error ? (
@@ -684,16 +1005,14 @@ export function OffboardingView() {
       {tab === "requests" ? (
         <div className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm font-medium text-foreground">Offboarding requests</p>
+            <p className="text-sm font-medium text-foreground">
+              {isEmployeeMode ? "Your offboarding requests" : "Offboarding requests"}
+            </p>
             <div className="flex items-center gap-1.5">
-              {canManage ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => void openRequestSheet()}
-                >
+              {canCreateRequest ? (
+                <Button type="button" size="sm" onClick={() => void openRequestSheet()}>
                   <Plus data-icon="inline-start" />
-                  Create request
+                  {isEmployeeMode ? "Start exit request" : "Create request"}
                 </Button>
               ) : null}
               <button
@@ -717,7 +1036,9 @@ export function OffboardingView() {
               description={
                 canManage
                   ? "There are no offboarding requests yet. Create one when an employee is leaving."
-                  : "No offboarding requested."
+                  : canCreateRequest
+                    ? "You have not started an exit request yet."
+                    : "No offboarding requests available."
               }
             />
           ) : (
@@ -787,23 +1108,28 @@ export function OffboardingView() {
         </div>
       ) : null}
 
-      {canManage ? (
+      {canCreateRequest ? (
         <Sheet open={requestSheetOpen} onOpenChange={setRequestSheetOpen}>
           <SheetContent
             side="right"
-            className="w-full overflow-y-auto data-[side=right]:w-full sm:data-[side=right]:w-[28rem] data-[side=right]:sm:max-w-none"
+            className="w-full gap-0 overflow-y-auto p-0 data-[side=right]:w-full sm:data-[side=right]:w-[22rem] data-[side=right]:sm:max-w-none"
           >
-            <SheetHeader>
-              <SheetTitle>Create offboarding request</SheetTitle>
-              <SheetDescription>
-                Capture exit details and optionally attach a workflow.
+            <SheetHeader className="space-y-1 border-b border-border/60 px-4 py-3 text-left">
+              <SheetTitle className="text-base">
+                {isEmployeeMode ? "Start your exit request" : "Create offboarding request"}
+              </SheetTitle>
+              <SheetDescription className="text-xs">
+                {isEmployeeMode
+                  ? "Tell HR you are leaving. Save a draft or submit for approval."
+                  : "Capture exit details and optionally attach a workflow."}
               </SheetDescription>
             </SheetHeader>
-            <div className="mt-4 grid gap-3 px-4 pb-4">
-              <label className="grid gap-1 text-xs">
+            <div className="grid gap-2 px-4 py-3">
+              {canManage && !isEmployeeMode ? (
+              <label className="grid gap-0.5 text-[11px]">
                 <span className="font-medium text-muted-foreground">Employee</span>
                 <select
-                  className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                  className="h-8 rounded-md border border-input bg-background px-2 text-xs"
                   value={requestForm.employee_id}
                   onChange={(event) =>
                     setRequestForm((prev) => ({ ...prev, employee_id: event.target.value }))
@@ -821,34 +1147,57 @@ export function OffboardingView() {
                   })}
                 </select>
               </label>
+              ) : (
+                <div className="rounded-md border border-border/70 bg-muted/20 px-2.5 py-1.5 text-[11px]">
+                  <p className="font-medium text-muted-foreground">Employee</p>
+                  <p className="mt-0.5 text-xs font-medium text-foreground">
+                    {selfEmployee ? employeeLabel(selfEmployee) : "You (signed-in employee)"}
+                  </p>
+                </div>
+              )}
 
-              <label className="grid gap-1 text-xs">
-                <span className="font-medium text-muted-foreground">Type</span>
-                <select
-                  className="h-10 rounded-md border border-input bg-background px-3 text-sm"
-                  value={requestForm.offboarding_type}
-                  onChange={(event) =>
-                    setRequestForm((prev) => ({
-                      ...prev,
-                      offboarding_type: event.target.value,
-                    }))
-                  }
-                >
-                  <option value="resignation">Resignation</option>
-                  <option value="termination">Termination</option>
-                  <option value="retirement">Retirement</option>
-                  <option value="contract_end">Contract end</option>
-                  <option value="absconded">Absconded</option>
-                  <option value="deceased">Deceased</option>
-                  <option value="layoff">Layoff</option>
-                  <option value="other">Other</option>
-                </select>
-              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="grid gap-0.5 text-[11px]">
+                  <span className="font-medium text-muted-foreground">Type</span>
+                  <select
+                    className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                    value={requestForm.offboarding_type}
+                    onChange={(event) =>
+                      setRequestForm((prev) => ({
+                        ...prev,
+                        offboarding_type: event.target.value,
+                      }))
+                    }
+                  >
+                    <option value="resignation">Resignation</option>
+                    <option value="termination">Termination</option>
+                    <option value="retirement">Retirement</option>
+                    <option value="contract_end">Contract end</option>
+                    <option value="absconded">Absconded</option>
+                    <option value="deceased">Deceased</option>
+                    <option value="layoff">Layoff</option>
+                    <option value="other">Other</option>
+                  </select>
+                </label>
+                <label className="grid gap-0.5 text-[11px]">
+                  <span className="font-medium text-muted-foreground">Save mode</span>
+                  <select
+                    className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                    value={requestForm.submit}
+                    onChange={(event) =>
+                      setRequestForm((prev) => ({ ...prev, submit: event.target.value }))
+                    }
+                  >
+                    <option value="false">Save draft</option>
+                    <option value="true">Submit now</option>
+                  </select>
+                </label>
+              </div>
 
-              <label className="grid gap-1 text-xs">
+              <label className="grid gap-0.5 text-[11px]">
                 <span className="font-medium text-muted-foreground">Title</span>
                 <input
-                  className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                  className="h-8 rounded-md border border-input bg-background px-2 text-xs"
                   placeholder="e.g. Resignation - IT Officer"
                   value={requestForm.title}
                   onChange={(event) =>
@@ -857,8 +1206,8 @@ export function OffboardingView() {
                 />
               </label>
 
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="grid gap-1 text-xs">
+              <div className="grid grid-cols-2 gap-2">
+                <label className="grid gap-0.5 text-[11px]">
                   <span className="font-medium text-muted-foreground">Notice date</span>
                   <DatePickerPresets
                     value={requestForm.notice_date}
@@ -866,9 +1215,10 @@ export function OffboardingView() {
                       setRequestForm((prev) => ({ ...prev, notice_date: value }))
                     }
                     placeholder="Notice date"
+                    className="h-8 text-xs"
                   />
                 </label>
-                <label className="grid gap-1 text-xs">
+                <label className="grid gap-0.5 text-[11px]">
                   <span className="font-medium text-muted-foreground">Last working date</span>
                   <DatePickerPresets
                     value={requestForm.last_working_date}
@@ -876,36 +1226,49 @@ export function OffboardingView() {
                       setRequestForm((prev) => ({ ...prev, last_working_date: value }))
                     }
                     placeholder="Last working date"
+                    className="h-8 text-xs"
                   />
                 </label>
               </div>
 
-              <label className="grid gap-1 text-xs">
-                <span className="font-medium text-muted-foreground">Workflow</span>
-                <select
-                  className="h-10 rounded-md border border-input bg-background px-3 text-sm"
-                  value={requestForm.workflow_id}
-                  onChange={(event) =>
-                    setRequestForm((prev) => ({ ...prev, workflow_id: event.target.value }))
-                  }
-                >
-                  <option value="">Optional</option>
-                  {workflows.map((row, index) => {
-                    const id = readNumber(row, ["id", "workflow_id"])
-                    if (id === null) return null
-                    return (
-                      <option key={`off-wf-${id}-${index}`} value={String(id)}>
-                        {readString(row, ["name", "title"])}
-                      </option>
-                    )
-                  })}
-                </select>
-              </label>
+              {isEmployeeMode || !canManage ? (
+                <div className="rounded-md border border-border/70 bg-muted/20 px-2.5 py-1.5 text-[11px]">
+                  <p className="font-medium text-muted-foreground">Workflow</p>
+                  <p className="mt-0.5 text-xs font-medium text-foreground">
+                    {workflowDisplayName(requestForm.workflow_id)}
+                  </p>
+                  <p className="mt-0.5 text-[10px] text-muted-foreground">
+                    Assigned automatically — cannot be changed.
+                  </p>
+                </div>
+              ) : (
+                <label className="grid gap-0.5 text-[11px]">
+                  <span className="font-medium text-muted-foreground">Workflow</span>
+                  <select
+                    className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                    value={requestForm.workflow_id}
+                    onChange={(event) =>
+                      setRequestForm((prev) => ({ ...prev, workflow_id: event.target.value }))
+                    }
+                  >
+                    <option value="">Optional</option>
+                    {workflows.map((row, index) => {
+                      const id = readNumber(row, ["id", "workflow_id"])
+                      if (id === null) return null
+                      return (
+                        <option key={`off-wf-${id}-${index}`} value={String(id)}>
+                          {readString(row, ["name", "title"])}
+                        </option>
+                      )
+                    })}
+                  </select>
+                </label>
+              )}
 
-              <label className="grid gap-1 text-xs">
+              <label className="grid gap-0.5 text-[11px]">
                 <span className="font-medium text-muted-foreground">Reason</span>
                 <Textarea
-                  className="min-h-20 rounded-md border border-input px-3 py-2 text-sm"
+                  className="min-h-14 rounded-md border border-input px-2 py-1.5 text-xs"
                   placeholder="Reason for leaving"
                   value={requestForm.reason}
                   onInput={autoResizeTextarea}
@@ -915,10 +1278,10 @@ export function OffboardingView() {
                 />
               </label>
 
-              <label className="grid gap-1 text-xs">
+              <label className="grid gap-0.5 text-[11px]">
                 <span className="font-medium text-muted-foreground">Description</span>
                 <Textarea
-                  className="min-h-20 rounded-md border border-input px-3 py-2 text-sm"
+                  className="min-h-12 rounded-md border border-input px-2 py-1.5 text-xs"
                   placeholder="Optional notes"
                   value={requestForm.description}
                   onChange={(event) =>
@@ -926,41 +1289,260 @@ export function OffboardingView() {
                   }
                 />
               </label>
-
-              <label className="grid gap-1 text-xs">
-                <span className="font-medium text-muted-foreground">Save mode</span>
-                <select
-                  className="h-10 rounded-md border border-input bg-background px-3 text-sm"
-                  value={requestForm.submit}
-                  onChange={(event) =>
-                    setRequestForm((prev) => ({ ...prev, submit: event.target.value }))
-                  }
-                >
-                  <option value="false">Save draft</option>
-                  <option value="true">Submit now</option>
-                </select>
-              </label>
             </div>
-            <SheetFooter>
-              <Button type="button" variant="outline" onClick={() => setRequestSheetOpen(false)}>
+            <SheetFooter className="border-t border-border/60 px-4 py-2.5 sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8"
+                onClick={() => setRequestSheetOpen(false)}
+              >
                 Cancel
               </Button>
               <Button
                 type="button"
+                size="sm"
+                className="h-8"
                 disabled={saving}
                 onClick={async () => {
                   const created = await submitRequestForm()
                   if (created) setRequestSheetOpen(false)
                 }}
               >
-                {saving ? "Saving…" : "Create request"}
+                {saving
+                  ? "Saving…"
+                  : requestForm.submit === "true"
+                    ? "Submit request"
+                    : "Save draft"}
               </Button>
             </SheetFooter>
           </SheetContent>
         </Sheet>
       ) : null}
 
-      {tab === "workflows" ? (
+      {tab === "my-approvals" ? (
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm font-medium text-foreground">Approvals waiting on you</p>
+            <button
+              type="button"
+              className="inline-flex size-8 items-center justify-center rounded-md border border-border text-sm"
+              onClick={() => void reloadAll("my-approvals", true)}
+              disabled={loading}
+              aria-label="Refresh"
+            >
+              <RefreshCw className={`size-3.5 text-primary ${loading ? "animate-spin" : ""}`} />
+            </button>
+          </div>
+          {loading && myApprovals.length === 0 ? (
+            <EmptyState title="Loading…" description="Loading your approval queue." />
+          ) : myApprovals.length === 0 ? (
+            <EmptyState
+              title="No pending approvals"
+              description="When someone submits an offboarding request that needs you, it will show here."
+            />
+          ) : (
+            <div className="min-w-0 overflow-hidden">
+              <ResizableTable
+                title="My Offboarding Approvals"
+                data={myApprovals}
+                itemsPerPage={15}
+                loading={loading}
+                showExport={false}
+                storageKey="offboarding-my-approvals-v1"
+                columns={[
+                  {
+                    key: "request",
+                    label: "Request",
+                    defaultWidth: 180,
+                    render: (row) =>
+                      readString(row, ["title", "request_title", "request_no"]) !== "-"
+                        ? readString(row, ["title", "request_title", "request_no"])
+                        : `Request #${readNumber(row, ["offboarding_request_id", "request_id", "id"]) ?? "—"}`,
+                  },
+                  {
+                    key: "status",
+                    label: "Status",
+                    defaultWidth: 100,
+                    render: (row) => (
+                      <StatusDot status={readString(row, ["status", "approval_status"])} />
+                    ),
+                  },
+                  {
+                    key: "actions",
+                    label: "Actions",
+                    defaultWidth: 160,
+                    render: (row) => (
+                      <div className="flex flex-wrap gap-1">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 px-2 text-xs"
+                          disabled={saving}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            void approveFromMyQueue(row, true)
+                          }}
+                        >
+                          Approve
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 px-2 text-xs"
+                          disabled={saving}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            void approveFromMyQueue(row, false)
+                          }}
+                        >
+                          Reject
+                        </Button>
+                      </div>
+                    ),
+                  },
+                ]}
+              />
+            </div>
+          )}
+        </div>
+      ) : null}
+
+      {tab === "my-tasks" ? (
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm font-medium text-foreground">Tasks assigned to you</p>
+            <button
+              type="button"
+              className="inline-flex size-8 items-center justify-center rounded-md border border-border text-sm"
+              onClick={() => void reloadAll("my-tasks", true)}
+              disabled={loading}
+              aria-label="Refresh"
+            >
+              <RefreshCw className={`size-3.5 text-primary ${loading ? "animate-spin" : ""}`} />
+            </button>
+          </div>
+          {loading && myTasks.length === 0 ? (
+            <EmptyState title="Loading…" description="Loading your offboarding tasks." />
+          ) : myTasks.length === 0 ? (
+            <EmptyState
+              title="No tasks assigned"
+              description="When HR assigns exit tasks to you, they will show up here."
+            />
+          ) : (
+            <div className="min-w-0 overflow-hidden">
+              <ResizableTable
+                title="My Offboarding Tasks"
+                data={myTasks}
+                itemsPerPage={15}
+                loading={loading}
+                showExport={false}
+                storageKey="offboarding-my-tasks-v1"
+                columns={[
+                  {
+                    key: "task",
+                    label: "Task",
+                    defaultWidth: 180,
+                    render: (row) => readString(row, ["title", "task_title", "name", "step_name"]),
+                  },
+                  {
+                    key: "status",
+                    label: "Status",
+                    defaultWidth: 100,
+                    render: (row) => <StatusDot status={readString(row, ["status"])} />,
+                  },
+                  {
+                    key: "actions",
+                    label: "Actions",
+                    defaultWidth: 120,
+                    render: (row) => {
+                      const status = readString(row, ["status"]).toLowerCase()
+                      if (status === "completed" || status === "done") return "—"
+                      return (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 px-2 text-xs"
+                          disabled={saving}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            void completeMyTask(row)
+                          }}
+                        >
+                          Complete
+                        </Button>
+                      )
+                    },
+                  },
+                ]}
+              />
+            </div>
+          )}
+        </div>
+      ) : null}
+
+      {tab === "my-clearances" ? (
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm font-medium text-foreground">Clearances assigned to you</p>
+            <button
+              type="button"
+              className="inline-flex size-8 items-center justify-center rounded-md border border-border text-sm"
+              onClick={() => void reloadAll("my-clearances", true)}
+              disabled={loading}
+              aria-label="Refresh"
+            >
+              <RefreshCw className={`size-3.5 text-primary ${loading ? "animate-spin" : ""}`} />
+            </button>
+          </div>
+          {loading && myClearances.length === 0 ? (
+            <EmptyState title="Loading…" description="Loading your clearances." />
+          ) : myClearances.length === 0 ? (
+            <EmptyState
+              title="No clearances assigned"
+              description="Department clearances that need your sign-off will appear here."
+            />
+          ) : (
+            <div className="min-w-0 overflow-hidden">
+              <ResizableTable
+                title="My Offboarding Clearances"
+                data={myClearances}
+                itemsPerPage={15}
+                loading={loading}
+                showExport={false}
+                storageKey="offboarding-my-clearances-v1"
+                columns={[
+                  {
+                    key: "name",
+                    label: "Clearance",
+                    defaultWidth: 180,
+                    render: (row) =>
+                      readString(row, ["title", "name", "clearance_name", "department_name"]),
+                  },
+                  {
+                    key: "status",
+                    label: "Status",
+                    defaultWidth: 100,
+                    render: (row) => <StatusDot status={readString(row, ["status"])} />,
+                  },
+                  {
+                    key: "due",
+                    label: "Due",
+                    defaultWidth: 100,
+                    render: (row) => readString(row, ["due_date", "dueDate"]),
+                  },
+                ]}
+              />
+            </div>
+          )}
+        </div>
+      ) : null}
+
+      {tab === "workflows" && canManage ? (
         <div className="flex flex-col gap-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
@@ -1492,9 +2074,10 @@ export function OffboardingView() {
             </div>
           ) : null}
           <DialogFooter>
-            {canManage && selectedRequest ? (
+            {selectedRequest ? (
               <>
-                {readString(selectedRequest, ["status"]).toLowerCase() === "draft" ? (
+                {(canManage || canActOnSelected) &&
+                statusIsDraft(readString(selectedRequest, ["status"])) ? (
                   <Button
                     type="button"
                     variant="outline"
@@ -1504,7 +2087,10 @@ export function OffboardingView() {
                     Submit
                   </Button>
                 ) : null}
-                {readString(selectedRequest, ["status"]).toLowerCase() === "submitted" ? (
+                {canManage &&
+                ["submitted", "pending", "pending_approval", "in_review"].includes(
+                  readString(selectedRequest, ["status"]).toLowerCase()
+                ) ? (
                   <>
                     <Button
                       type="button"
@@ -1524,17 +2110,10 @@ export function OffboardingView() {
                     </Button>
                   </>
                 ) : null}
-                {["draft", "submitted", "approved"].includes(readString(selectedRequest, ["status"]).toLowerCase()) ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={saving}
-                    onClick={() => void runRequestAction(selectedRequest, "cancel")}
-                  >
-                    Cancel
-                  </Button>
-                ) : null}
-                {readString(selectedRequest, ["status"]).toLowerCase() === "approved" ? (
+                {canManage &&
+                ["approved", "in_progress"].includes(
+                  readString(selectedRequest, ["status"]).toLowerCase()
+                ) ? (
                   <Button
                     type="button"
                     variant="outline"
@@ -1542,6 +2121,17 @@ export function OffboardingView() {
                     onClick={() => void runRequestAction(selectedRequest, "complete")}
                   >
                     Complete
+                  </Button>
+                ) : null}
+                {(canManage || canActOnSelected) &&
+                statusIsCancellable(readString(selectedRequest, ["status"])) ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={saving}
+                    onClick={() => void runRequestAction(selectedRequest, "cancel")}
+                  >
+                    Cancel request
                   </Button>
                 ) : null}
               </>

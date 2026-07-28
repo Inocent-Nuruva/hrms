@@ -39,11 +39,11 @@ export function DashboardSectionTabs({
       .map((group) => ({
         ...group,
         items: group.items.filter((item) =>
-          canAccessDashboardRoute(item.url, actor.permissionLabels)
+          canAccessDashboardRoute(item.url, actor.permissionLabels, actor.accessMode)
         ),
       }))
       .filter((group) => group.items.length > 0)
-  }, [actor.permissionLabels, actor.ready, groups])
+  }, [actor.accessMode, actor.permissionLabels, actor.ready, groups])
 
   const hasGroupedTabs =
     filteredGroups.length > 1 && filteredGroups.every((group) => Boolean(group.title))

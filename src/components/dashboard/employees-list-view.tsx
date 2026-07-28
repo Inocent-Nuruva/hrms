@@ -21,6 +21,8 @@ import {
 import { listEmployees, type AdminRecord, type EmployeesQueryParams } from "@/lib/admin-api"
 import { useDebouncedValue } from "@/hooks/use-debounced-value"
 import { useRenderDiagnostics } from "@/hooks/use-render-diagnostics"
+import { useDashboardActor } from "@/hooks/use-dashboard-actor"
+import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import { Trash2 } from "lucide-react"
 
@@ -179,6 +181,7 @@ function writeSnapshot(cacheKey: string, snapshot: EmployeeListSnapshot) {
 
 export function EmployeesListView() {
   const router = useRouter()
+  const actor = useDashboardActor()
   const [query, setQuery] = React.useState(DEFAULT_QUERY)
   const [rows, setRows] = React.useState<AdminRecord[]>([])
   const [loading, setLoading] = React.useState(false)
@@ -191,6 +194,14 @@ export function EmployeesListView() {
   const [removalTarget, setRemovalTarget] = React.useState<EmployeeAccessRemovalTarget | null>(null)
   const debouncedSearch = useDebouncedValue(query.search, 350)
   const lastFetchAtRef = React.useRef(0)
+
+  // Defense in depth: never render the company directory for employee shell users.
+  React.useEffect(() => {
+    if (!actor.ready) return
+    if (!canAccessDashboardRoute("/dashboard/employees/all", actor.permissionLabels, actor.accessMode)) {
+      router.replace(actor.accessMode === "employee" ? "/dashboard" : "/dashboard")
+    }
+  }, [actor.accessMode, actor.permissionLabels, actor.ready, router])
 
   useRenderDiagnostics("EmployeesListView", {
     page,

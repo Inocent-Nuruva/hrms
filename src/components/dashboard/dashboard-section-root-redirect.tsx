@@ -27,8 +27,11 @@ export function DashboardSectionRootRedirect({
  return null
  }
 
- return findFirstAccessibleSectionUrl(groups, actor.permissionLabels) ?? fallbackHref
- }, [actor.permissionLabels, actor.ready, fallbackHref, groups])
+ return (
+   findFirstAccessibleSectionUrl(groups, actor.permissionLabels, actor.accessMode) ??
+   fallbackHref
+ )
+ }, [actor.accessMode, actor.permissionLabels, actor.ready, fallbackHref, groups])
 
  React.useEffect(() => {
  if (!targetHref || pathname === targetHref) {

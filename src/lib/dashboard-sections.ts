@@ -131,11 +131,12 @@ export const accessControlSectionTabGroups: DashboardSectionTabGroup[] = [
 
 export function findFirstAccessibleSectionUrl(
   groups: DashboardSectionTabGroup[],
-  permissionLabels: string[]
+  permissionLabels: string[],
+  accessMode?: "admin" | "employee"
 ) {
   for (const group of groups) {
     const item = group.items.find((entry) =>
-      canAccessDashboardRoute(entry.url, permissionLabels)
+      canAccessDashboardRoute(entry.url, permissionLabels, accessMode)
     )
     if (item) {
       return item.url

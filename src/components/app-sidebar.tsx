@@ -13,6 +13,8 @@ import {
   SidebarRail,
   useSidebar,
 } from "@/components/ui/sidebar"
+import { resolveBackendMediaUrl } from "@/lib/admin-api"
+import { useMyProfilePhoto } from "@/lib/my-profile-photo"
 import { UsersRound } from "@/components/animate-ui/icons/users-round"
 import { Route } from "@/components/animate-ui/icons/route"
 import { CircleX } from "@/components/animate-ui/icons/circle-x"
@@ -201,6 +203,12 @@ const adminSearchIndex = [
   { title: "Access Control / Roles", url: "/dashboard/access-control/roles", section: "Access Control", keywords: ["role", "access", "authorization"] },
   { title: "Access Control / Permissions", url: "/dashboard/access-control/permissions", section: "Access Control", keywords: ["permission", "policy", "authorization"] },
   { title: "Settings", url: "/dashboard/settings", section: "General", keywords: ["preferences", "account"] },
+  {
+    title: "Settings / Default Avatars",
+    url: "/dashboard/settings/default-avatars",
+    section: "General",
+    keywords: ["avatar", "profile picture", "default photo", "gallery"],
+  },
 ]
 
 const employeeData: SidebarData = {
@@ -237,7 +245,8 @@ const employeeData: SidebarData = {
     {
       title: "Offboarding",
       icon: IOffboarding,
-      url: "/dashboard/employees/offboarding",
+      // Self-service path — does not mount the HR Employees section tabs.
+      url: "/dashboard/me/offboarding",
     },
   ],
   navSecondary: [
@@ -271,7 +280,7 @@ const employeeSearchIndex = [
   { title: "My Leave / Balances", url: "/dashboard/me/leave/balances", section: "Leave", keywords: ["leave", "balance", "quota"] },
   { title: "My Leave / Holidays", url: "/dashboard/me/leave/holidays", section: "Leave", keywords: ["leave", "holiday"] },
   { title: "My Leave / Policies", url: "/dashboard/me/leave/policies", section: "Leave", keywords: ["leave", "policy"] },
-  { title: "Offboarding", url: "/dashboard/employees/offboarding", section: "Employees", keywords: ["employee", "exit"] },
+  { title: "Offboarding", url: "/dashboard/me/offboarding", section: "Employees", keywords: ["employee", "exit"] },
   { title: "Settings", url: "/dashboard/settings", section: "General", keywords: ["preferences", "account"] },
 ]
 
@@ -287,13 +296,14 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
 
 function filterNavByPermissions(
   navMain: SidebarNavItem[],
-  normalizedPermissions: string[]
+  normalizedPermissions: string[],
+  accessMode: AppSidebarAccessMode
 ): SidebarNavItem[] {
   return navMain
     .map((item) => {
       const hasChildren = Array.isArray(item.items) && item.items.length > 0
       const directAccess = item.url
-        ? canAccessDashboardRoute(item.url, normalizedPermissions)
+        ? canAccessDashboardRoute(item.url, normalizedPermissions, accessMode)
         : !hasChildren
 
       if (!hasChildren) {
@@ -302,7 +312,8 @@ function filterNavByPermissions(
 
       const filteredItems: SidebarNavItem[] = filterNavByPermissions(
         item.items ?? [],
-        normalizedPermissions
+        normalizedPermissions,
+        accessMode
       )
       if (!directAccess && filteredItems.length === 0) {
         return null
@@ -315,8 +326,14 @@ function filterNavByPermissions(
     .filter((item): item is NonNullable<typeof item> => item !== null)
 }
 
-function filterAdminSearchByPermissions(searchItems: SearchItem[], normalizedPermissions: string[]) {
-  return searchItems.filter((item) => canAccessDashboardRoute(item.url, normalizedPermissions))
+function filterAdminSearchByPermissions(
+  searchItems: SearchItem[],
+  normalizedPermissions: string[],
+  accessMode: AppSidebarAccessMode
+) {
+  return searchItems.filter((item) =>
+    canAccessDashboardRoute(item.url, normalizedPermissions, accessMode)
+  )
 }
 
 export function AppSidebar({
@@ -331,6 +348,19 @@ export function AppSidebar({
 }: AppSidebarProps) {
   const pathname = usePathname()
   const { isMobile, setOpenMobile } = useSidebar()
+  // Keep footer avatar in sync with Change Photo / default avatar selection.
+  const { url: liveProfilePhotoUrl, revision: photoRevision } = useMyProfilePhoto()
+  const footerAvatar = React.useMemo(() => {
+    const live = resolveBackendMediaUrl(liveProfilePhotoUrl) || liveProfilePhotoUrl?.trim() || ""
+    const prop = resolveBackendMediaUrl(userAvatar) || userAvatar?.trim() || ""
+    const base = live || prop || "/assets/alliance-logo.png"
+    if (!base || base.startsWith("data:") || base.startsWith("blob:") || base.startsWith("/assets/")) {
+      return base
+    }
+    if (photoRevision <= 0) return base
+    const joiner = base.includes("?") ? "&" : "?"
+    return `${base}${joiner}v=${photoRevision}`
+  }, [liveProfilePhotoUrl, photoRevision, userAvatar])
   const normalizedPermissions = React.useMemo(
     () => normalizePermissionLabels(permissionLabels),
     [permissionLabels]
@@ -348,20 +378,32 @@ export function AppSidebar({
     if (resolvedAccessMode === "employee") {
       return {
         ...employeeData,
-        navMain: filterNavByPermissions(employeeData.navMain, normalizedPermissions),
+        navMain: filterNavByPermissions(
+          employeeData.navMain,
+          normalizedPermissions,
+          resolvedAccessMode
+        ),
       }
     }
     return {
       ...adminData,
-      navMain: filterNavByPermissions(adminData.navMain, normalizedPermissions),
+      navMain: filterNavByPermissions(adminData.navMain, normalizedPermissions, resolvedAccessMode),
     }
   }, [normalizedPermissions, resolvedAccessMode])
 
   const searchIndex = React.useMemo(() => {
     if (resolvedAccessMode === "employee") {
-      return filterAdminSearchByPermissions(employeeSearchIndex, normalizedPermissions)
+      return filterAdminSearchByPermissions(
+        employeeSearchIndex,
+        normalizedPermissions,
+        resolvedAccessMode
+      )
     }
-    return filterAdminSearchByPermissions(adminSearchIndex, normalizedPermissions)
+    return filterAdminSearchByPermissions(
+      adminSearchIndex,
+      normalizedPermissions,
+      resolvedAccessMode
+    )
   }, [normalizedPermissions, resolvedAccessMode])
 
   return (
@@ -392,10 +434,11 @@ export function AppSidebar({
       </SidebarContent>
       <SidebarFooter className="relative z-[1]">
         <NavUser
+          key={`nav-user-${photoRevision}-${footerAvatar}`}
           user={{
             name: userName ?? "Admin",
             email: userEmail ?? "admin@hrms.local",
-            avatar: userAvatar?.trim() || "/assets/alliance-logo.png",
+            avatar: footerAvatar,
           }}
         />
       </SidebarFooter>

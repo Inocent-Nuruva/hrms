@@ -10,7 +10,14 @@ type Listener = () => void
 /** `undefined` = not loaded yet; `null` = loaded, no photo; string = URL. */
 let cachedUrl: string | null | undefined = undefined
 let cachedToken = ""
+/** Bumps whenever the photo URL is intentionally changed so UI can remount/bust cache. */
+let photoRevision = 0
+/** Monotonic generation — protects optimistic sets from stale GET overwrites. */
+let photoGeneration = 0
+/** While Date.now() < this, keep optimistic URL even if GET returns something older. */
+let preferLocalUntil = 0
 let inflight: Promise<string | null> | null = null
+let inflightGeneration = 0
 const listeners = new Set<Listener>()
 
 function emit() {
@@ -21,18 +28,31 @@ export function getCachedMyProfilePhotoUrl(): string | null {
   return cachedUrl === undefined ? null : cachedUrl
 }
 
+export function getMyProfilePhotoRevision(): number {
+  return photoRevision
+}
+
 export function hasLoadedMyProfilePhoto(): boolean {
   return cachedUrl !== undefined
 }
 
 export function setMyProfilePhotoUrl(url: string | null) {
-  cachedUrl = typeof url === "string" && url.trim() ? url.trim() : null
+  const next = typeof url === "string" && url.trim() ? url.trim() : null
+  // Always bump generation so in-flight GETs cannot clobber this value.
+  photoGeneration += 1
+  photoRevision += 1
+  // Hold optimistic/local URL briefly so a lagging GET cannot roll the UI back.
+  preferLocalUntil = Date.now() + 5_000
+  cachedUrl = next
   emit()
 }
 
 export function invalidateMyProfilePhoto() {
   cachedUrl = undefined
   inflight = null
+  photoGeneration += 1
+  photoRevision += 1
+  preferLocalUntil = 0
   emit()
 }
 
@@ -69,22 +89,43 @@ export async function ensureMyProfilePhotoUrl(
   }
 
   cachedToken = resolvedToken
+  // Capture generation at request start; ignore result if a newer setMyProfilePhotoUrl ran.
+  const requestGeneration = photoGeneration
+  inflightGeneration = requestGeneration
   inflight = getMyProfilePhotoUrl(resolvedToken)
     .then((url) => {
+      if (requestGeneration !== photoGeneration) {
+        // A newer optimistic/local URL was published while this GET was in flight.
+        return cachedUrl ?? url
+      }
+      // Right after setMyProfilePhotoUrl, keep the local URL so the sidebar/header
+      // do not snap back to a stale GET result.
+      if (Date.now() < preferLocalUntil && cachedUrl) {
+        return cachedUrl
+      }
+      // Prefer keeping a good cached URL if the server still returns empty right after upload.
+      if (url == null && cachedUrl) {
+        return cachedUrl
+      }
+      if (url !== cachedUrl) {
+        photoRevision += 1
+      }
       cachedUrl = url
       emit()
       return url
     })
     .catch(() => {
       // Keep a previous good URL if a refresh fails mid-session.
-      if (cachedUrl === undefined) {
+      if (cachedUrl === undefined && requestGeneration === photoGeneration) {
         cachedUrl = null
         emit()
       }
       return cachedUrl ?? null
     })
     .finally(() => {
-      inflight = null
+      if (inflightGeneration === requestGeneration) {
+        inflight = null
+      }
     })
 
   return inflight
@@ -96,11 +137,13 @@ export async function ensureMyProfilePhotoUrl(
  */
 export function useMyProfilePhoto(token?: string | null) {
   const [url, setUrl] = React.useState<string | null>(() => getCachedMyProfilePhotoUrl())
+  const [revision, setRevision] = React.useState(() => getMyProfilePhotoRevision())
   const [loading, setLoading] = React.useState(() => !hasLoadedMyProfilePhoto())
 
   React.useEffect(() => {
     return subscribeMyProfilePhoto(() => {
       setUrl(getCachedMyProfilePhotoUrl())
+      setRevision(getMyProfilePhotoRevision())
       setLoading(!hasLoadedMyProfilePhoto() && Boolean(inflight))
     })
   }, [])
@@ -118,6 +161,7 @@ export function useMyProfilePhoto(token?: string | null) {
     void ensureMyProfilePhotoUrl(resolvedToken).then((next) => {
       if (!cancelled) {
         setUrl(next)
+        setRevision(getMyProfilePhotoRevision())
         setLoading(false)
       }
     })
@@ -136,9 +180,10 @@ export function useMyProfilePhoto(token?: string | null) {
     setLoading(true)
     const next = await ensureMyProfilePhotoUrl(resolvedToken, { force: true })
     setUrl(next)
+    setRevision(getMyProfilePhotoRevision())
     setLoading(false)
     return next
   }, [token])
 
-  return { url, loading, refresh }
+  return { url, loading, refresh, revision }
 }

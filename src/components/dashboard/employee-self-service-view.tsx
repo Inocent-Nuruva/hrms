@@ -51,7 +51,15 @@ import {
   getMyLeaveRequest,
   submitMyLeaveRequest,
   uploadMyProfilePhoto,
+  selectMyProfileAvatar,
+  listDefaultAvatars,
+  extractDefaultAvatarImageUrl,
+  fetchImageUrlAsAvatarFile,
+  isSelectableDefaultAvatar,
+  readDefaultAvatarId,
+  resolveBackendMediaUrl,
   type AdminRecord,
+  type DefaultAvatarGender,
 } from "@/lib/admin-api"
 import {
   ensureMyProfilePhotoUrl,
@@ -3623,6 +3631,11 @@ export function EmployeeSelfServiceProfileView() {
   const [profilePhotoPreviewUrl, setProfilePhotoPreviewUrl] = React.useState("")
   const [profilePhotoFileName, setProfilePhotoFileName] = React.useState("")
   const [selectedProfilePhotoFile, setSelectedProfilePhotoFile] = React.useState<File | null>(null)
+  const [defaultAvatars, setDefaultAvatars] = React.useState<AdminRecord[]>([])
+  const [defaultAvatarsLoading, setDefaultAvatarsLoading] = React.useState(false)
+  const [selectedDefaultAvatarId, setSelectedDefaultAvatarId] = React.useState<string | number | null>(
+    null
+  )
   const [dashboardOverview, setDashboardOverview] = React.useState<AdminRecord | null>(null)
   const [employmentStatus, setEmploymentStatus] = React.useState<AdminRecord | null>(null)
   const [attendanceOverview, setAttendanceOverview] = React.useState<AdminRecord | null>(null)
@@ -3678,11 +3691,111 @@ export function EmployeeSelfServiceProfileView() {
       setProfilePhotoPreviewUrl("")
       setProfilePhotoFileName("")
       setSelectedProfilePhotoFile(null)
+      setSelectedDefaultAvatarId(null)
       setSectionValues(baseEditorValues)
       setSectionEditor({ key, title, fields })
     },
     [baseEditorValues]
   )
+
+  React.useEffect(() => {
+    if (!token || !sectionEditor || sectionEditor.fields[0] !== "profile_photo_url") {
+      return
+    }
+    let cancelled = false
+    setDefaultAvatarsLoading(true)
+    const genderRaw = readString(employee, ["gender", "sex"], "").toLowerCase()
+    const genderCategory: DefaultAvatarGender | undefined =
+      genderRaw.includes("female") || genderRaw === "f"
+        ? "female"
+        : genderRaw.includes("male") || genderRaw === "m"
+          ? "male"
+          : undefined
+
+    void listDefaultAvatars(token, {
+      status: "active",
+      // Prefer matching gender when known; still load neutrals by omitting filter if needed.
+      gender_category: genderCategory,
+    })
+      .then(async (matched) => {
+        if (cancelled) return
+        // Also pull neutrals so users always have options.
+        let neutrals: AdminRecord[] = []
+        try {
+          neutrals = await listDefaultAvatars(token, {
+            status: "active",
+            gender_category: "neutral",
+          })
+        } catch {
+          neutrals = []
+        }
+        if (cancelled) return
+        const byId = new Map<string, AdminRecord>()
+        for (const row of [...matched, ...neutrals]) {
+          // Skip inactive / missing-id / missing-image rows (often 500 on select).
+          if (!isSelectableDefaultAvatar(row)) continue
+          const id = readDefaultAvatarId(row)
+          if (id == null) continue
+          byId.set(String(id), row)
+        }
+        // If gender-filtered list was empty, fall back to all active.
+        if (byId.size === 0) {
+          try {
+            const all = await listDefaultAvatars(token, { status: "active" })
+            for (const row of all) {
+              if (!isSelectableDefaultAvatar(row)) continue
+              const id = readDefaultAvatarId(row)
+              if (id == null) continue
+              byId.set(String(id), row)
+            }
+          } catch {
+            // ignore
+          }
+        }
+        if (!cancelled) {
+          setDefaultAvatars(Array.from(byId.values()))
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setDefaultAvatars([])
+      })
+      .finally(() => {
+        if (!cancelled) setDefaultAvatarsLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [employee, sectionEditor, token])
+
+  const handleDefaultAvatarSelected = React.useCallback((row: AdminRecord) => {
+    const imageUrl = extractDefaultAvatarImageUrl(row)
+    const id = readDefaultAvatarId(row)
+    if (id == null) {
+      setSectionError("This avatar has no valid id.")
+      setSectionErrorLines([])
+      return
+    }
+    if (!imageUrl) {
+      setSectionError("This avatar has no image available.")
+      setSectionErrorLines([])
+      return
+    }
+
+    const name =
+      (typeof row.avatar_name === "string" && row.avatar_name) ||
+      (typeof row.name === "string" && row.name) ||
+      "Default avatar"
+
+    // Default gallery selection uses PATCH /api/me/profile/avatar (not file upload).
+    // Keep a numeric id only — backend DTO is number | null.
+    setSelectedDefaultAvatarId(id)
+    setSelectedProfilePhotoFile(null)
+    setProfilePhotoFileName(name)
+    setProfilePhotoPreviewUrl(imageUrl)
+    setSectionError(null)
+    setSectionErrorLines([])
+  }, [])
 
   const handleSectionFieldChange = React.useCallback((field: EditableUserField, value: string) => {
     setSectionValues((previous) => ({ ...previous, [field]: value }))
@@ -3710,12 +3823,14 @@ export function EmployeeSelfServiceProfileView() {
     reader.onload = () => {
       const result = typeof reader.result === "string" ? reader.result : ""
       if (!result) {
-      setSectionError("We couldn't read that image. Please try another file.")
-      setSectionErrorLines([])
-      return
-    }
+        setSectionError("We couldn't read that image. Please try another file.")
+        setSectionErrorLines([])
+        return
+      }
       setSectionError(null)
       setSectionErrorLines([])
+      // Device image upload uses POST /api/me/profile/photo — clears default avatar pick.
+      setSelectedDefaultAvatarId(null)
       setSelectedProfilePhotoFile(file)
       setProfilePhotoFileName(file.name)
       setProfilePhotoPreviewUrl(result)
@@ -3741,10 +3856,15 @@ export function EmployeeSelfServiceProfileView() {
     const isProfilePhotoSection =
       sectionEditor.fields.length === 1 && sectionEditor.fields[0] === "profile_photo_url"
 
-    // Profile picture uses POST /api/me/profile/photo and applies immediately.
+    // Profile picture:
+    // - default avatar → PATCH /api/me/profile/avatar { default_avatar_id }
+    // - device image  → POST /api/me/profile/photo (multipart file)
     if (isProfilePhotoSection) {
-      if (!selectedProfilePhotoFile) {
-        setSectionError("Choose an image to upload as your profile picture.")
+      const hasDefaultAvatar = selectedDefaultAvatarId != null && String(selectedDefaultAvatarId).trim() !== ""
+      const hasUploadFile = Boolean(selectedProfilePhotoFile)
+
+      if (!hasDefaultAvatar && !hasUploadFile) {
+        setSectionError("Choose a default avatar or upload an image.")
         setSectionErrorLines([])
         return
       }
@@ -3753,41 +3873,115 @@ export function EmployeeSelfServiceProfileView() {
       setSectionError(null)
       setSectionErrorLines([])
       try {
-        const uploaded = await uploadMyProfilePhoto(token, selectedProfilePhotoFile)
-        const uploadedUrl =
-          readString(uploaded, ["profile_photo_url", "photo_url", "url", "avatar_url"], "") ||
-          readString(asRecord(uploaded?.user), ["profile_photo_url", "photo_url", "url", "avatar_url"], "") ||
-          readString(asRecord(uploaded?.employee), ["profile_photo_url", "photo_url", "url", "avatar_url"], "") ||
-          ""
+        let result: AdminRecord | null = null
+        let usedUploadFallback = false
 
-        if (uploadedUrl) {
-          setMyProfilePhotoUrl(uploadedUrl)
+        if (hasDefaultAvatar) {
+          const avatarId =
+            typeof selectedDefaultAvatarId === "number"
+              ? selectedDefaultAvatarId
+              : Number(selectedDefaultAvatarId)
+          if (!Number.isFinite(avatarId)) {
+            throw new Error("Invalid default avatar id.")
+          }
+          try {
+            result = await selectMyProfileAvatar(token, avatarId)
+          } catch (selectError) {
+            // Some gallery rows 500 on the backend (missing storage file / bad media).
+            // Fall back to uploading the preview image as a normal profile photo.
+            const status =
+              typeof selectError === "object" &&
+              selectError !== null &&
+              "status" in selectError
+                ? Number((selectError as { status?: number }).status)
+                : null
+            if (status !== 500 && status !== 502 && status !== 503) {
+              throw selectError
+            }
+            if (!profilePhotoPreviewUrl) {
+              throw selectError
+            }
+            const fallbackFile = await fetchImageUrlAsAvatarFile(
+              profilePhotoPreviewUrl,
+              profilePhotoFileName || "avatar.png"
+            )
+            result = await uploadMyProfilePhoto(token, fallbackFile)
+            usedUploadFallback = true
+          }
+        } else if (selectedProfilePhotoFile) {
+          result = await uploadMyProfilePhoto(token, selectedProfilePhotoFile)
         }
 
-        const canonicalUrl =
-          (await ensureMyProfilePhotoUrl(token, { force: true })) ||
-          uploadedUrl ||
-          profilePhotoPreviewUrl ||
-          null
+        const rawResultUrl =
+          readString(result, ["profile_photo_url", "photo_url", "url", "avatar_url"], "") ||
+          readString(asRecord(result?.user), ["profile_photo_url", "photo_url", "url", "avatar_url"], "") ||
+          readString(asRecord(result?.employee), ["profile_photo_url", "photo_url", "url", "avatar_url"], "") ||
+          ""
+        const resultUrl =
+          resolveBackendMediaUrl(rawResultUrl) || rawResultUrl.trim() || ""
+        const previewUrl =
+          resolveBackendMediaUrl(profilePhotoPreviewUrl) || profilePhotoPreviewUrl.trim() || ""
+
+        // Publish immediately so the sidebar footer updates before any follow-up GET.
+        const optimisticUrl = resultUrl || previewUrl
+        if (optimisticUrl) {
+          setMyProfilePhotoUrl(optimisticUrl)
+        }
+
+        let canonicalUrl = optimisticUrl
+        try {
+          const fresh = await ensureMyProfilePhotoUrl(token, { force: true })
+          // Only replace if the server returned a real URL (never clear optimistic).
+          if (fresh) {
+            canonicalUrl = fresh
+            setMyProfilePhotoUrl(fresh)
+          }
+        } catch {
+          // Save already succeeded; photo URL refresh is best-effort.
+        }
 
         if (canonicalUrl) {
-          setMyProfilePhotoUrl(canonicalUrl)
           setSectionValues((previous) => ({
             ...previous,
             profile_photo_url: canonicalUrl,
           }))
         }
 
+        // Force every subscriber (including sidebar) to re-read the store.
         void refreshMyProfilePhoto()
         setSectionEditor(null)
         setSelectedProfilePhotoFile(null)
+        setSelectedDefaultAvatarId(null)
         setProfilePhotoFileName("")
         setProfilePhotoPreviewUrl("")
-        setMessage("Profile picture updated.")
-        await refresh()
+        setMessage(
+          hasDefaultAvatar
+            ? usedUploadFallback
+              ? "Avatar applied (uploaded as profile photo)."
+              : "Default avatar applied."
+            : "Profile picture updated."
+        )
+        try {
+          await refresh()
+        } catch {
+          // Photo was saved; profile reload is best-effort.
+        }
       } catch (errorObject) {
-        const lines = formatApiErrorLines(errorObject, "Failed to upload profile picture.")
-        setSectionError(lines[0] ?? "Failed to upload profile picture.")
+        const status =
+          typeof errorObject === "object" &&
+          errorObject !== null &&
+          "status" in errorObject
+            ? Number((errorObject as { status?: number }).status)
+            : null
+        const lines = formatApiErrorLines(
+          errorObject,
+          hasDefaultAvatar
+            ? status === 500
+              ? "This avatar failed on the server. Try another avatar, or upload your own photo."
+              : "Failed to select default avatar."
+            : "Failed to upload profile picture."
+        )
+        setSectionError(lines[0] ?? "Failed to update profile picture.")
         setSectionErrorLines(lines)
       } finally {
         setSectionSaving(false)
@@ -3866,11 +4060,13 @@ export function EmployeeSelfServiceProfileView() {
       setSectionSaving(false)
     }
   }, [
+    profilePhotoFileName,
     profilePhotoPreviewUrl,
     refresh,
     refreshMyProfilePhoto,
     sectionEditor,
     sectionValues,
+    selectedDefaultAvatarId,
     selectedProfilePhotoFile,
     token,
   ])
@@ -4165,7 +4361,7 @@ export function EmployeeSelfServiceProfileView() {
                               {profilePhotoFileName || "No new image selected"}
                             </p>
                             <p className="text-xs text-muted-foreground">
-                              Choose an image from your device. Your profile picture is updated as soon as you save.
+                              Pick a default avatar or upload your own image. Changes apply when you save.
                             </p>
                           </div>
                         </div>
@@ -4175,6 +4371,7 @@ export function EmployeeSelfServiceProfileView() {
                           accept="image/*"
                           className="hidden"
                           onChange={(event) => {
+                            setSelectedDefaultAvatarId(null)
                             handleProfilePhotoSelected(event.target.files?.[0] ?? null)
                             event.currentTarget.value = ""
                           }}
@@ -4185,8 +4382,58 @@ export function EmployeeSelfServiceProfileView() {
                             variant="outline"
                             onClick={() => profilePhotoInputRef.current?.click()}
                           >
-                            {profilePhotoFileName ? "Choose Another Image" : "Choose Image"}
+                            {profilePhotoFileName ? "Choose Another Image" : "Upload Image"}
                           </Button>
+                        </div>
+
+                        <div className="space-y-2 border-t border-border/60 pt-3">
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                            Default avatars
+                          </p>
+                          {defaultAvatarsLoading ? (
+                            <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <Loader2 className="size-3.5 animate-spin" />
+                              Loading avatars…
+                            </p>
+                          ) : defaultAvatars.length === 0 ? (
+                            <p className="text-xs text-muted-foreground">
+                              No default avatars available yet.
+                            </p>
+                          ) : (
+                            <div className="grid grid-cols-4 gap-2 sm:grid-cols-5">
+                              {defaultAvatars.map((avatarRow) => {
+                                const avatarId = readDefaultAvatarId(avatarRow)
+                                const imageUrl = extractDefaultAvatarImageUrl(avatarRow)
+                                const name =
+                                  (typeof avatarRow.avatar_name === "string" && avatarRow.avatar_name) ||
+                                  (typeof avatarRow.name === "string" && avatarRow.name) ||
+                                  "Avatar"
+                                const selected =
+                                  selectedDefaultAvatarId != null &&
+                                  avatarId != null &&
+                                  String(selectedDefaultAvatarId) === String(avatarId)
+                                return (
+                                  <button
+                                    key={String(avatarId ?? name)}
+                                    type="button"
+                                    title={name}
+                                    onClick={() => void handleDefaultAvatarSelected(avatarRow)}
+                                    className={cn(
+                                      "relative overflow-hidden rounded-lg border bg-background p-1 transition-all hover:border-primary/50 hover:shadow-sm",
+                                      selected && "border-primary ring-2 ring-primary/30"
+                                    )}
+                                  >
+                                    <Avatar className="size-full aspect-square w-full rounded-md" size="lg">
+                                      {imageUrl ? <AvatarImage src={imageUrl} alt={name} className="object-cover" /> : null}
+                                      <AvatarFallback className="rounded-md text-[10px]">
+                                        {name.slice(0, 2).toUpperCase()}
+                                      </AvatarFallback>
+                                    </Avatar>
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          )}
                         </div>
                       </div>
                     ) : (
@@ -4224,12 +4471,15 @@ export function EmployeeSelfServiceProfileView() {
                     sectionSaving ||
                     (sectionEditor?.fields.length === 1 &&
                       sectionEditor.fields[0] === "profile_photo_url" &&
-                      !selectedProfilePhotoFile)
+                      !selectedProfilePhotoFile &&
+                      selectedDefaultAvatarId == null)
                   }
                 >
                   {sectionSaving ? <Loader2 className="mr-1 size-4 animate-spin" /> : null}
                   {sectionEditor?.fields.length === 1 && sectionEditor.fields[0] === "profile_photo_url"
-                    ? "Upload Picture"
+                    ? selectedDefaultAvatarId != null
+                      ? "Apply Avatar"
+                      : "Upload Picture"
                     : "Save Changes"}
                 </Button>
               </DialogFooter>

@@ -4772,6 +4772,203 @@ export async function getOffboardingAuditLogs(token: string, requestId: string |
   return normalizeList(payload)
 }
 
+export async function getOffboardingDashboard(token: string) {
+  const payload = await adminRequest<unknown>("/api/offboarding/dashboard", { token })
+  return asRecord(payload) ?? normalizeSingle(payload) ?? {}
+}
+
+function isForbiddenOrMissingError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false
+  const status = (error as { status?: number }).status
+  if (status === 401 || status === 403 || status === 404) return true
+  const message = String((error as { message?: string }).message ?? "").toLowerCase()
+  return (
+    message.includes("forbidden") ||
+    message.includes("not allowed") ||
+    message.includes("unauthorized") ||
+    message.includes("access denied") ||
+    message.includes("not found")
+  )
+}
+
+/**
+ * Soft-read helpers for "my" offboarding queues.
+ * Many employee roles are not granted these endpoints (403 Forbidden resource).
+ * Callers should treat an empty array as "none" and optionally fall back.
+ */
+export async function listMyOffboardingApprovals(token: string): Promise<AdminRecord[]> {
+  try {
+    const payload = await adminRequest<unknown>("/api/offboarding/approvals/my", { token })
+    return normalizeList(payload)
+  } catch (error) {
+    if (isForbiddenOrMissingError(error)) return []
+    throw error
+  }
+}
+
+export async function listMyOffboardingTasks(token: string): Promise<AdminRecord[]> {
+  try {
+    const payload = await adminRequest<unknown>("/api/offboarding/tasks/my", { token })
+    return normalizeList(payload)
+  } catch (error) {
+    if (isForbiddenOrMissingError(error)) return []
+    throw error
+  }
+}
+
+export async function listMyOffboardingClearances(token: string): Promise<AdminRecord[]> {
+  try {
+    const payload = await adminRequest<unknown>("/api/offboarding/clearances/my", { token })
+    return normalizeList(payload)
+  } catch (error) {
+    if (isForbiddenOrMissingError(error)) return []
+    throw error
+  }
+}
+
+/** Pull nested task/clearance arrays from a request detail or progress payload. */
+export function extractOffboardingItemsFromRecord(
+  record: AdminRecord | null | undefined,
+  kinds: Array<"tasks" | "clearances">
+): { tasks: AdminRecord[]; clearances: AdminRecord[] } {
+  const root = asRecord(record) ?? {}
+  const nested =
+    asRecord(root.data) ??
+    asRecord(root.result) ??
+    asRecord(root.item) ??
+    asRecord(root.progress) ??
+    root
+
+  const collect = (keys: string[]): AdminRecord[] => {
+    for (const key of keys) {
+      const value = nested[key] ?? root[key]
+      if (Array.isArray(value)) {
+        return value.filter(
+          (entry): entry is AdminRecord => typeof entry === "object" && entry !== null
+        )
+      }
+    }
+    return []
+  }
+
+  return {
+    tasks: kinds.includes("tasks")
+      ? collect(["tasks", "task_list", "taskList", "assigned_tasks", "my_tasks"])
+      : [],
+    clearances: kinds.includes("clearances")
+      ? collect([
+          "clearances",
+          "clearance_list",
+          "clearanceList",
+          "assigned_clearances",
+          "my_clearances",
+        ])
+      : [],
+  }
+}
+
+/**
+ * Fallback when GET /tasks/my or /clearances/my is forbidden for the actor:
+ * load the actor's offboarding requests and harvest nested items from detail/progress.
+ */
+export async function listOffboardingItemsFromOwnRequests(
+  token: string,
+  kind: "tasks" | "clearances",
+  employeeId?: number | null
+): Promise<AdminRecord[]> {
+  const requestsResult = await listOffboardingRequests(token, {
+    page: 1,
+    limit: 50,
+    sortBy: "created_at",
+    sortOrder: "DESC",
+    employee_id: employeeId && employeeId > 0 ? employeeId : undefined,
+  })
+
+  const items: AdminRecord[] = []
+  const seen = new Set<string>()
+
+  for (const request of requestsResult.rows) {
+    const requestId = (() => {
+      const id = request.id ?? request.request_id
+      if (typeof id === "number" && Number.isFinite(id)) return id
+      if (typeof id === "string" && id.trim()) return id.trim()
+      return null
+    })()
+    if (requestId === null) continue
+
+    let detail: AdminRecord | null = null
+    let progress: AdminRecord | null = null
+    try {
+      detail = (await getOffboardingRequest(token, requestId)) as AdminRecord | null
+    } catch {
+      detail = null
+    }
+    try {
+      progress = (await getOffboardingProgress(token, requestId)) as AdminRecord | null
+    } catch {
+      progress = null
+    }
+
+    const fromDetail = extractOffboardingItemsFromRecord(detail, [kind])
+    const fromProgress = extractOffboardingItemsFromRecord(progress, [kind])
+    const fromRequest = extractOffboardingItemsFromRecord(request, [kind])
+    const batch = kind === "tasks"
+      ? [...fromDetail.tasks, ...fromProgress.tasks, ...fromRequest.tasks]
+      : [...fromDetail.clearances, ...fromProgress.clearances, ...fromRequest.clearances]
+
+    for (const row of batch) {
+      const itemId = row.id ?? row.task_id ?? row.clearance_id
+      const key = `${requestId}:${String(itemId ?? JSON.stringify(row).slice(0, 40))}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      items.push({
+        ...row,
+        offboarding_request_id: requestId,
+        request_id: requestId,
+      })
+    }
+  }
+
+  return items
+}
+
+export async function listOffboardingActions(token: string, requestId: string | number) {
+  const payload = await adminRequest<unknown>(`/api/offboarding/requests/${requestId}/actions`, { token })
+  return normalizeList(payload)
+}
+
+export async function listOffboardingAssets(token: string, requestId: string | number) {
+  const payload = await adminRequest<unknown>(`/api/offboarding/requests/${requestId}/assets`, { token })
+  return normalizeList(payload)
+}
+
+export async function listOffboardingSettlements(token: string, requestId: string | number) {
+  const payload = await adminRequest<unknown>(`/api/offboarding/requests/${requestId}/settlements`, {
+    token,
+  })
+  return normalizeList(payload)
+}
+
+export async function getOffboardingExitInterview(token: string, requestId: string | number) {
+  const payload = await adminRequest<unknown>(`/api/offboarding/requests/${requestId}/exit-interview`, {
+    token,
+  })
+  return asRecord(payload) ?? normalizeSingle(payload)
+}
+
+export async function reopenOffboardingTask(
+  token: string,
+  requestId: string | number,
+  taskId: string | number,
+  data: AdminRecord = {}
+) {
+  return adminRequest<unknown>(`/api/offboarding/requests/${requestId}/tasks/${taskId}/reopen`, {
+    method: "POST",
+    token,
+    body: data,
+  })
+}
+
 export async function getCurrentAdmin(token: string) {
   const payload = await adminRequest<unknown>("/api/users/me", { token })
   return normalizeSingle(payload)
@@ -4864,16 +5061,86 @@ const PROFILE_PHOTO_URL_KEYS = [
   "imageUrl",
   "signed_url",
   "public_url",
+  "file_url",
+  "fileUrl",
+  "path",
+  "file_path",
+  "filePath",
+  "storage_path",
+  "storagePath",
+  "relative_path",
+  "relativePath",
+  "image_path",
+  "imagePath",
 ] as const
+
+/**
+ * Map a backend media path/URL onto the current API host.
+ * - `/uploads/default-avatars/company-1/x.svg` → `{API_BASE}/uploads/...`
+ * - Absolute upload URLs from another host are rewritten to the current API base
+ *   so environments can move without broken images.
+ * - `data:` / `blob:` URLs are left unchanged.
+ */
+export function resolveBackendMediaUrl(value: string | null | undefined): string | null {
+  if (!value?.trim()) return null
+  const raw = value.trim()
+  if (raw.startsWith("data:") || raw.startsWith("blob:")) return raw
+
+  const base = getBaseUrl().replace(/\/$/, "")
+
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      const url = new URL(raw)
+      // Backend-hosted assets always rebind to the active API origin.
+      if (
+        url.pathname.startsWith("/uploads/") ||
+        url.pathname.includes("/default-avatars/") ||
+        url.pathname.includes("/profile-photos/")
+      ) {
+        return `${base}${url.pathname}${url.search}`
+      }
+      return raw
+    } catch {
+      return raw
+    }
+  }
+
+  if (raw.startsWith("//")) {
+    try {
+      const url = new URL(`http:${raw}`)
+      if (
+        url.pathname.startsWith("/uploads/") ||
+        url.pathname.includes("/default-avatars/") ||
+        url.pathname.includes("/profile-photos/")
+      ) {
+        return `${base}${url.pathname}${url.search}`
+      }
+    } catch {
+      // fall through
+    }
+  }
+
+  // Relative path or bare filename under uploads.
+  let path = raw.replace(/\\/g, "/")
+  if (!path.startsWith("/")) {
+    // e.g. uploads/default-avatars/... or default-avatars/company-1/...
+    if (path.startsWith("uploads/") || path.startsWith("default-avatars/") || path.startsWith("profile-photos/")) {
+      path = path.startsWith("uploads/") ? `/${path}` : `/uploads/${path}`
+    } else {
+      path = `/${path}`
+    }
+  }
+  return `${base}${path}`
+}
 
 /**
  * Extract a profile picture URL from common API response shapes.
  * Supports plain strings, `{ url }`, nested `data`/`result`/`user`/`employee` objects.
+ * Relative/upload paths are resolved against the active API base URL.
  */
 export function extractProfilePhotoUrl(payload: unknown): string | null {
   if (typeof payload === "string") {
-    const trimmed = payload.trim()
-    return trimmed || null
+    return resolveBackendMediaUrl(payload)
   }
 
   const root = asRecord(payload)
@@ -4904,7 +5171,7 @@ export function extractProfilePhotoUrl(payload: unknown): string | null {
     for (const key of PROFILE_PHOTO_URL_KEYS) {
       const value = candidate[key]
       if (typeof value === "string" && value.trim()) {
-        return value.trim()
+        return resolveBackendMediaUrl(value)
       }
     }
   }
@@ -4998,6 +5265,54 @@ export async function uploadMyProfilePhoto(
     }
   } catch {
     // Upload succeeded; URL may appear after a short delay.
+  }
+
+  return normalizeSingle(payload) ?? asRecord(payload)
+}
+
+/**
+ * Select (or clear) a default profile avatar for the signed-in employee.
+ * PATCH /api/me/profile/avatar — body: { default_avatar_id: number | null }
+ * Pass null to clear the selection.
+ *
+ * Some backend avatar records throw 500 (missing file, unsupported format).
+ * Callers should catch and optionally fall back to POST /api/me/profile/photo.
+ */
+export async function selectMyProfileAvatar(
+  token: string,
+  defaultAvatarId: number | null
+): Promise<AdminRecord | null> {
+  // Backend DTO expects number | null — never send a string id.
+  const body: { default_avatar_id: number | null } = {
+    default_avatar_id:
+      defaultAvatarId == null
+        ? null
+        : Number.isFinite(Number(defaultAvatarId))
+          ? Math.trunc(Number(defaultAvatarId))
+          : null,
+  }
+  if (defaultAvatarId != null && body.default_avatar_id == null) {
+    throw new Error("Invalid default avatar id.")
+  }
+
+  const payload = await adminRequest<unknown>("/api/me/profile/avatar", {
+    method: "PATCH",
+    token,
+    body,
+  })
+
+  const fromBody = extractProfilePhotoUrl(payload)
+  if (fromBody) {
+    return { ...(asRecord(payload) ?? {}), profile_photo_url: fromBody }
+  }
+
+  try {
+    const photoUrl = await getMyProfilePhotoUrl(token)
+    if (photoUrl) {
+      return { ...(asRecord(payload) ?? {}), profile_photo_url: photoUrl }
+    }
+  } catch {
+    // Selection succeeded; URL may appear after a short delay.
   }
 
   return normalizeSingle(payload) ?? asRecord(payload)
@@ -5602,6 +5917,40 @@ export async function updateUserById(id: string | number, token: string, data: A
   })
 }
 
+/** PATCH /api/users/{id}/avatar — assign an active default avatar to a user. */
+export async function assignUserAvatar(
+  token: string,
+  userId: string | number,
+  avatarId: number
+) {
+  return adminRequest<unknown>(`/api/users/${userId}/avatar`, {
+    method: "PATCH",
+    token,
+    body: { avatar_id: avatarId },
+  })
+}
+
+/** PATCH /api/users/{userId}/two-factor/enable — admin enables 2FA (user completes setup on next login). */
+export async function enableUserTwoFactor(token: string, userId: string | number) {
+  return adminRequest<unknown>(`/api/users/${userId}/two-factor/enable`, {
+    method: "PATCH",
+    token,
+  })
+}
+
+/** PATCH /api/users/{userId}/two-factor/disable — admin disables 2FA and revokes recovery data. */
+export async function disableUserTwoFactor(
+  token: string,
+  userId: string | number,
+  reason?: string
+) {
+  return adminRequest<unknown>(`/api/users/${userId}/two-factor/disable`, {
+    method: "PATCH",
+    token,
+    body: reason?.trim() ? { reason: reason.trim() } : {},
+  })
+}
+
 export async function deleteUserById(id: string | number, token: string) {
   return adminRequest<unknown>(`/api/users/${id}`, {
     method: "DELETE",
@@ -6138,4 +6487,531 @@ export async function testScheduledReportSmtpConfiguration(
     token,
     body: data,
   })
+}
+
+// ── Default Avatars ──────────────────────────────────────────────────────────
+
+export type DefaultAvatarGender = "male" | "female" | "neutral"
+export type DefaultAvatarStatus = "active" | "inactive"
+
+export interface Base64FileDto {
+  fileName: string
+  fileSize: number
+  mimeType: string
+  fileString: string
+}
+
+export interface CreateDefaultAvatarPayload {
+  avatar_name: string
+  gender_category: DefaultAvatarGender
+  image_file: Base64FileDto
+  display_order?: number
+  is_default?: boolean
+  status?: DefaultAvatarStatus
+}
+
+export interface UpdateDefaultAvatarPayload {
+  avatar_name?: string
+  gender_category?: DefaultAvatarGender
+  image_file?: Base64FileDto
+  display_order?: number
+  is_default?: boolean
+  status?: DefaultAvatarStatus
+}
+
+export interface DefaultAvatarsQueryParams {
+  gender_category?: DefaultAvatarGender
+  status?: DefaultAvatarStatus
+  include_inactive?: boolean
+}
+
+/** Resolve a displayable image URL from a default-avatar record. */
+export function extractDefaultAvatarImageUrl(row: AdminRecord | null | undefined): string | null {
+  if (!row) return null
+
+  // Prefer explicit media fields (relative or absolute) before nested structures.
+  const pathKeys = [
+    "image_url",
+    "imageUrl",
+    "url",
+    "avatar_url",
+    "avatarUrl",
+    "photo_url",
+    "photoUrl",
+    "file_url",
+    "fileUrl",
+    "media_url",
+    "mediaUrl",
+    "public_url",
+    "publicUrl",
+    "signed_url",
+    "signedUrl",
+    "download_url",
+    "downloadUrl",
+    "path",
+    "file_path",
+    "filePath",
+    "storage_path",
+    "storagePath",
+    "storage_key",
+    "storageKey",
+    "relative_path",
+    "relativePath",
+    "image_path",
+    "imagePath",
+    "thumbnail_url",
+    "thumbnailUrl",
+  ] as const
+
+  const resolvePathValue = (value: unknown): string | null => {
+    if (typeof value !== "string" || !value.trim()) return null
+    return resolveBackendMediaUrl(value.trim())
+  }
+
+  for (const key of pathKeys) {
+    const resolved = resolvePathValue(row[key])
+    if (resolved) return resolved
+  }
+
+  // Reconstruct from company + filename when API only returns file metadata.
+  // Example final URL: {API}/uploads/default-avatars/company-1/neutral-secondary.svg
+  const fileName =
+    (typeof row.file_name === "string" && row.file_name.trim()) ||
+    (typeof row.fileName === "string" && row.fileName.trim()) ||
+    (typeof row.filename === "string" && row.filename.trim()) ||
+    (typeof row.stored_name === "string" && row.stored_name.trim()) ||
+    (typeof row.storedName === "string" && row.storedName.trim()) ||
+    (typeof row.original_name === "string" && row.original_name.trim()) ||
+    ""
+  const companyId =
+    row.company_id ??
+    row.companyId ??
+    asRecord(row.company)?.id ??
+    null
+  if (fileName) {
+    if (companyId != null && String(companyId).trim()) {
+      const built = resolveBackendMediaUrl(
+        `/uploads/default-avatars/company-${String(companyId).trim()}/${fileName.replace(/^\/+/, "")}`
+      )
+      if (built) return built
+    }
+    // Fallback when company is known only via path fragments.
+    if (fileName.includes("default-avatars/") || fileName.includes("uploads/")) {
+      const built = resolveBackendMediaUrl(fileName)
+      if (built) return built
+    }
+  }
+
+  const direct = extractProfilePhotoUrl(row)
+  if (direct) return direct
+
+  const nestedCandidates = [
+    asRecord(row.image_file),
+    asRecord(row.imageFile),
+    asRecord(row.file),
+    asRecord(row.media),
+    asRecord(row.image),
+  ]
+  for (const nestedFile of nestedCandidates) {
+    if (!nestedFile) continue
+    for (const key of pathKeys) {
+      const resolved = resolvePathValue(nestedFile[key])
+      if (resolved) return resolved
+    }
+    const fromNested = extractProfilePhotoUrl(nestedFile)
+    if (fromNested) return fromNested
+    const nestedName =
+      (typeof nestedFile.fileName === "string" && nestedFile.fileName.trim()) ||
+      (typeof nestedFile.file_name === "string" && nestedFile.file_name.trim()) ||
+      (typeof nestedFile.filename === "string" && nestedFile.filename.trim()) ||
+      ""
+    if (nestedName && companyId != null && String(companyId).trim()) {
+      const built = resolveBackendMediaUrl(
+        `/uploads/default-avatars/company-${String(companyId).trim()}/${nestedName.replace(/^\/+/, "")}`
+      )
+      if (built) return built
+    }
+    const fileString =
+      typeof nestedFile.fileString === "string"
+        ? nestedFile.fileString
+        : typeof nestedFile.file_string === "string"
+          ? nestedFile.file_string
+          : typeof nestedFile.base64 === "string"
+            ? nestedFile.base64
+            : ""
+    const mime =
+      typeof nestedFile.mimeType === "string"
+        ? nestedFile.mimeType
+        : typeof nestedFile.mime_type === "string"
+          ? nestedFile.mime_type
+          : "image/png"
+    if (fileString.trim()) {
+      const compact = fileString.trim()
+      // Relative/path strings accidentally stored in fileString
+      if (
+        compact.startsWith("/") ||
+        compact.startsWith("uploads/") ||
+        compact.startsWith("default-avatars/") ||
+        /^https?:\/\//i.test(compact)
+      ) {
+        return resolveBackendMediaUrl(compact)
+      }
+      if (compact.startsWith("data:image")) return compact
+      return `data:${mime};base64,${compact.replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/, "")}`
+    }
+  }
+
+  // Some APIs store raw base64 on the avatar itself.
+  const raw =
+    typeof row.fileString === "string"
+      ? row.fileString
+      : typeof row.file_string === "string"
+        ? row.file_string
+        : typeof row.image_base64 === "string"
+          ? row.image_base64
+          : typeof row.imageBase64 === "string"
+            ? row.imageBase64
+            : ""
+  if (raw.trim()) {
+    const compact = raw.trim()
+    if (
+      compact.startsWith("/") ||
+      compact.startsWith("uploads/") ||
+      compact.startsWith("default-avatars/") ||
+      /^https?:\/\//i.test(compact)
+    ) {
+      return resolveBackendMediaUrl(compact)
+    }
+    if (compact.startsWith("data:image")) return compact
+    return `data:image/png;base64,${compact}`
+  }
+
+  return null
+}
+
+/**
+ * GET /api/default-avatars
+ * Query: gender_category?, status?, include_inactive?
+ */
+export async function listDefaultAvatars(
+  token: string,
+  params: DefaultAvatarsQueryParams = {}
+): Promise<AdminRecord[]> {
+  const searchParams = new URLSearchParams()
+  if (params.gender_category) searchParams.set("gender_category", params.gender_category)
+  if (params.status) searchParams.set("status", params.status)
+  // Only send when explicitly requested (API: Include inactive avatars in the response.)
+  if (params.include_inactive === true) searchParams.set("include_inactive", "true")
+  const query = searchParams.toString() ? `?${searchParams.toString()}` : ""
+  const payload = await adminRequest<unknown>(`/api/default-avatars${query}`, {
+    token,
+    cacheTtlMs: 0,
+    dedupe: false,
+  })
+  return normalizeList(payload)
+}
+
+/** GET /api/default-avatars/{id} */
+export async function getDefaultAvatar(token: string, id: string | number) {
+  const payload = await adminRequest<unknown>(`/api/default-avatars/${id}`, {
+    token,
+    cacheTtlMs: 0,
+    dedupe: false,
+  })
+  return normalizeSingle(payload) ?? asRecord(payload)
+}
+
+/**
+ * POST /api/default-avatars → 201
+ * Body: CreateDefaultAvatarDto
+ *   avatar_name, gender_category, image_file (Base64FileDto),
+ *   display_order?, is_default?, status?
+ */
+export async function createDefaultAvatar(
+  token: string,
+  data: CreateDefaultAvatarPayload
+): Promise<AdminRecord | null> {
+  const payload = await adminRequest<unknown>("/api/default-avatars", {
+    method: "POST",
+    token,
+    body: {
+      avatar_name: data.avatar_name,
+      gender_category: data.gender_category,
+      image_file: {
+        fileName: data.image_file.fileName,
+        fileSize: Math.max(1, Number(data.image_file.fileSize) || 1),
+        mimeType: data.image_file.mimeType,
+        fileString: data.image_file.fileString,
+      },
+      display_order:
+        typeof data.display_order === "number" && Number.isFinite(data.display_order)
+          ? Math.max(0, data.display_order)
+          : 0,
+      is_default: data.is_default === true,
+      status: data.status === "inactive" ? "inactive" : "active",
+    },
+  })
+  return normalizeSingle(payload) ?? asRecord(payload)
+}
+
+/**
+ * PATCH /api/default-avatars/{id} → 200
+ * Body: UpdateDefaultAvatarDto (partial create fields)
+ */
+export async function updateDefaultAvatar(
+  token: string,
+  id: string | number,
+  data: UpdateDefaultAvatarPayload
+): Promise<AdminRecord | null> {
+  const body: AdminRecord = {}
+  if (typeof data.avatar_name === "string") body.avatar_name = data.avatar_name
+  if (data.gender_category) body.gender_category = data.gender_category
+  if (typeof data.display_order === "number" && Number.isFinite(data.display_order)) {
+    body.display_order = Math.max(0, data.display_order)
+  }
+  if (typeof data.is_default === "boolean") body.is_default = data.is_default
+  if (data.status === "active" || data.status === "inactive") body.status = data.status
+  if (data.image_file) {
+    body.image_file = {
+      fileName: data.image_file.fileName,
+      fileSize: Math.max(1, Number(data.image_file.fileSize) || 1),
+      mimeType: data.image_file.mimeType,
+      fileString: data.image_file.fileString,
+    }
+  }
+
+  const payload = await adminRequest<unknown>(`/api/default-avatars/${id}`, {
+    method: "PATCH",
+    token,
+    body,
+  })
+  return normalizeSingle(payload) ?? asRecord(payload)
+}
+
+/**
+ * POST /api/default-avatars/{id}/set-default → 201
+ * Marks this avatar as the company default for its gender category.
+ */
+export async function setDefaultAvatarAsDefault(token: string, id: string | number) {
+  return adminRequest<unknown>(`/api/default-avatars/${id}/set-default`, {
+    method: "POST",
+    token,
+  })
+}
+
+/** DELETE /api/default-avatars/{id} → 200 */
+export async function deleteDefaultAvatar(token: string, id: string | number) {
+  return adminRequest<unknown>(`/api/default-avatars/${id}`, {
+    method: "DELETE",
+    token,
+  })
+}
+
+const SAFE_AVATAR_MIME = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/jpg",
+  "image/webp",
+  "image/gif",
+])
+
+function sanitizeAvatarFileName(name: string, mimeType: string): string {
+  const base = (name || "avatar")
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 80)
+  const ext =
+    mimeType.includes("png")
+      ? "png"
+      : mimeType.includes("webp")
+        ? "webp"
+        : mimeType.includes("gif")
+          ? "gif"
+          : "jpg"
+  if (/\.(png|jpe?g|webp|gif)$/i.test(base)) {
+    return base
+  }
+  return `${base || "avatar"}.${ext}`
+}
+
+function estimateBase64ByteLength(base64: string): number {
+  const compact = base64.replace(/\s+/g, "")
+  const padding = compact.endsWith("==") ? 2 : compact.endsWith("=") ? 1 : 0
+  return Math.max(1, Math.floor((compact.length * 3) / 4) - padding)
+}
+
+/**
+ * Normalize any picked image into a backend-safe raster (PNG/JPEG).
+ * SVG / exotic types often crash image processors (500). Large files can too.
+ */
+export async function normalizeAvatarImageFile(
+  file: File,
+  options: { maxEdge?: number; maxBytes?: number } = {}
+): Promise<File> {
+  const maxEdge = options.maxEdge ?? 1024
+  const maxBytes = options.maxBytes ?? 2 * 1024 * 1024
+  const rawType = (file.type || "").toLowerCase().trim()
+  const nameLower = file.name.toLowerCase()
+  const looksSvg =
+    rawType.includes("svg") || nameLower.endsWith(".svg") || rawType === "image/svg+xml"
+  const looksHeic =
+    rawType.includes("heic") ||
+    rawType.includes("heif") ||
+    nameLower.endsWith(".heic") ||
+    nameLower.endsWith(".heif")
+
+  if (looksHeic) {
+    throw new Error("HEIC/HEIF images are not supported. Please use PNG or JPG.")
+  }
+
+  // Already a safe small raster — keep as-is when possible.
+  if (
+    !looksSvg &&
+    SAFE_AVATAR_MIME.has(rawType === "image/jpg" ? "image/jpeg" : rawType) &&
+    file.size > 0 &&
+    file.size <= maxBytes
+  ) {
+    // Still re-encode if mime is ambiguous empty type.
+    if (rawType) {
+      return file
+    }
+  }
+
+  if (typeof document === "undefined" || typeof Image === "undefined") {
+    // SSR / non-browser — return original; caller still base64-encodes it.
+    return file
+  }
+
+  const objectUrl = URL.createObjectURL(file)
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image()
+      img.onload = () => resolve(img)
+      img.onerror = () => reject(new Error("Could not read this image. Try PNG or JPG."))
+      img.src = objectUrl
+    })
+
+    const srcW = Math.max(1, image.naturalWidth || image.width || 1)
+    const srcH = Math.max(1, image.naturalHeight || image.height || 1)
+    const scale = Math.min(1, maxEdge / Math.max(srcW, srcH))
+    const width = Math.max(1, Math.round(srcW * scale))
+    const height = Math.max(1, Math.round(srcH * scale))
+
+    const canvas = document.createElement("canvas")
+    canvas.width = width
+    canvas.height = height
+    const ctx = canvas.getContext("2d")
+    if (!ctx) {
+      throw new Error("Could not process image.")
+    }
+    // White background so transparent SVG/PNG don't become black on JPEG.
+    ctx.fillStyle = "#ffffff"
+    ctx.fillRect(0, 0, width, height)
+    ctx.drawImage(image, 0, 0, width, height)
+
+    const preferPng = looksSvg || rawType.includes("png") || rawType.includes("gif")
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(
+        (result) => {
+          if (result) resolve(result)
+          else reject(new Error("Could not encode image."))
+        },
+        preferPng ? "image/png" : "image/jpeg",
+        0.9
+      )
+    })
+
+    const outMime = blob.type || (preferPng ? "image/png" : "image/jpeg")
+    const outName = sanitizeAvatarFileName(
+      file.name.replace(/\.[^.]+$/, "") || "avatar",
+      outMime
+    )
+    return new File([blob], outName, { type: outMime })
+  } finally {
+    URL.revokeObjectURL(objectUrl)
+  }
+}
+
+/**
+ * Build Base64FileDto for CreateDefaultAvatarDto.image_file.
+ * fileString is pure base64 (no data: prefix). fileSize matches decoded bytes.
+ * Images are normalized to PNG/JPEG so the backend image processor is less likely to 500.
+ */
+export async function fileToBase64FileDto(file: File): Promise<Base64FileDto> {
+  const normalized = await normalizeAvatarImageFile(file)
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      if (typeof reader.result === "string") resolve(reader.result)
+      else reject(new Error("Could not read file."))
+    }
+    reader.onerror = () => reject(new Error("Could not read file."))
+    reader.readAsDataURL(normalized)
+  })
+  const comma = dataUrl.indexOf(",")
+  const header = comma >= 0 ? dataUrl.slice(0, comma) : ""
+  // Strip whitespace/newlines some browsers insert into large data URLs.
+  const fileString = (comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl).replace(/\s+/g, "")
+  if (!fileString) {
+    throw new Error("Image encoding produced an empty file.")
+  }
+  const mimeFromHeader = header.match(/^data:([^;]+);/i)?.[1]?.trim().toLowerCase() || ""
+  let mimeType = (normalized.type || mimeFromHeader || "image/png").trim().toLowerCase()
+  if (mimeType === "image/jpg") mimeType = "image/jpeg"
+  if (!SAFE_AVATAR_MIME.has(mimeType)) {
+    // Force a known-safe type after normalization.
+    mimeType = "image/png"
+  }
+  const fileName = sanitizeAvatarFileName(normalized.name || file.name || "avatar", mimeType)
+  const fileSize = estimateBase64ByteLength(fileString)
+
+  return {
+    fileName,
+    fileSize,
+    mimeType,
+    fileString,
+  }
+}
+
+/**
+ * Load a remote/default-avatar image URL into a File for upload fallback
+ * (POST /api/me/profile/photo) when PATCH avatar returns 500.
+ */
+export async function fetchImageUrlAsAvatarFile(
+  imageUrl: string,
+  fileName = "avatar.png"
+): Promise<File> {
+  const resolved = resolveBackendMediaUrl(imageUrl) || imageUrl
+  const response = await fetch(resolved, { cache: "no-store" })
+  if (!response.ok) {
+    throw new Error("Could not load avatar image for upload fallback.")
+  }
+  const blob = await response.blob()
+  const mime = blob.type || "image/png"
+  const safeName = sanitizeAvatarFileName(fileName, mime)
+  const raw = new File([blob], safeName, { type: mime || "image/png" })
+  return normalizeAvatarImageFile(raw)
+}
+
+/** Extract numeric/string id from a default-avatar API record. */
+export function readDefaultAvatarId(row: AdminRecord | null | undefined): string | number | null {
+  if (!row) return null
+  const value = row.id ?? row.avatar_id ?? row.default_avatar_id ?? row.defaultAvatarId
+  if (typeof value === "number" && Number.isFinite(value)) return Math.trunc(value)
+  if (typeof value === "string" && value.trim()) {
+    const asNum = Number(value.trim())
+    return Number.isFinite(asNum) ? Math.trunc(asNum) : null
+  }
+  return null
+}
+
+/** True when a list row is usable for employee self-select (active + numeric id + image). */
+export function isSelectableDefaultAvatar(row: AdminRecord | null | undefined): boolean {
+  if (!row) return false
+  const id = readDefaultAvatarId(row)
+  if (id == null) return false
+  const status = String(row.status ?? "active").trim().toLowerCase()
+  if (status && status !== "active") return false
+  return Boolean(extractDefaultAvatarImageUrl(row))
 }
