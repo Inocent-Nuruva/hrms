@@ -9,6 +9,7 @@ import { ErrorAlertOverlay } from "@/components/error-alert-overlay";
 import { PwaProvider } from "@/components/pwa-provider";
 import "./globals.css";
 import { cn } from "@/lib/utils";
+import { env } from "@/lib/env";
 
 const poppins = Poppins({
   variable: "--font-poppins",
@@ -17,17 +18,17 @@ const poppins = Poppins({
 });
 
 export const metadata: Metadata = {
-  applicationName: "HRMS",
+  applicationName: env.NEXT_PUBLIC_APP_NAME,
   title: {
-    default: "HRMS",
-    template: "%s | HRMS",
+    default: env.NEXT_PUBLIC_APP_NAME,
+    template: `%s | ${env.NEXT_PUBLIC_APP_NAME}`,
   },
   description: "Alliance HRMS for attendance, leave, approvals, and reporting.",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "HRMS",
+    title: env.NEXT_PUBLIC_APP_NAME,
   },
   formatDetection: {
     telephone: false,

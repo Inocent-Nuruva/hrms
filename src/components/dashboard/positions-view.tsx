@@ -20,6 +20,7 @@ import {
 } from "@/lib/admin-api"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { canPerformPermission } from "@/lib/dashboard-permissions"
+import { env } from "@/lib/env"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import {
   AlertDialog,
@@ -206,7 +207,7 @@ export function PositionsView() {
         },
         {
           signal,
-          cacheTtlMs: 20_000,
+          cacheTtlMs: env.NEXT_PUBLIC_LIST_CACHE_TTL_SHORT_MS,
         }
       )
       setRows(result.rows)
@@ -240,9 +241,9 @@ export function PositionsView() {
     }
 
     void Promise.all([
-      listBranches(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }, { cacheTtlMs: 60_000 }),
-      listDepartments(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }, { cacheTtlMs: 60_000 }),
-      listDesignations(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }, { cacheTtlMs: 60_000 }),
+      listBranches(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }, { cacheTtlMs: env.NEXT_PUBLIC_LIST_CACHE_TTL_LONG_MS }),
+      listDepartments(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }, { cacheTtlMs: env.NEXT_PUBLIC_LIST_CACHE_TTL_LONG_MS }),
+      listDesignations(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }, { cacheTtlMs: env.NEXT_PUBLIC_LIST_CACHE_TTL_LONG_MS }),
     ])
       .then(([branchResult, departmentResult, designationResult]) => {
         setBranches(branchResult.rows)

@@ -51,9 +51,11 @@ import { showErrorAlert } from "@/lib/error-alert"
 import { showSuccessAlert } from "@/lib/success-alert"
 import { cn } from "@/lib/utils"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
+import { env } from "@/lib/env"
 
 const LEGACY_ADMIN_TOKEN_KEY = "hrms.admin.accessToken"
 const SEARCH_DEBOUNCE_MS = 250
+const POLL_INTERVAL_MS = env.NEXT_PUBLIC_NOTIFICATION_POLL_INTERVAL_MS
 
 const CATEGORY_OPTIONS: Array<{ value: NotificationCategory; label: string }> = [
   { value: "GENERAL", label: "General" },

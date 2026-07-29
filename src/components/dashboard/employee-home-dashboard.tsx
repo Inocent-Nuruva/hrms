@@ -2389,7 +2389,7 @@ export function EmployeeHomeDashboard() {
           throw new Error(`Failed to load address dataset (${response.status})`)
         }
 
-        const payload: PublicCountryStateResponse = await response.json()
+        const payload = (await response.json()) as PublicCountryStateResponse
         if (!Array.isArray(payload?.data)) {
           throw new Error(payload?.msg || "Failed to load address dataset.")
         }

@@ -1,7 +1,16 @@
 import React, { useEffect } from 'react';
 import { Tabs, useRouter, useRootNavigationState } from 'expo-router';
 import { CalendarDays, Clock3, House, UserRound } from 'lucide-react-native';
-import { ActivityIndicator, Animated, Pressable, View, StyleSheet, type GestureResponderEvent, type StyleProp, type ViewStyle } from 'react-native';
+import {
+  ActivityIndicator,
+  Animated,
+  Pressable,
+  View,
+  StyleSheet,
+  type GestureResponderEvent,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../hooks/useAuth';
 import { COLORS } from '../../lib/config';

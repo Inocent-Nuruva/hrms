@@ -1,16 +1,9 @@
 import type { OnboardingStep } from "@/types";
+import { env } from "@/lib/env";
 
-/** Local/dev backend used when env is missing (matches android default). */
-const DEFAULT_API_BASE_URL = "http://192.168.1.30:8888"
-
+/** Normalize API base (strip trailing /api if someone set full API root). */
 export function resolveApiBaseUrl() {
-  const envBase = process.env.NEXT_PUBLIC_API_BASE_URL?.trim()
-  if (envBase) {
-    // Paths already include `/api/...` — strip a trailing `/api` to avoid `/api/api/...`.
-    return envBase.replace(/\/$/, "").replace(/\/api$/i, "")
-  }
-  // Never fall back to the Next.js origin — that returns HTML 404 for `/api/*`.
-  return DEFAULT_API_BASE_URL
+  return env.NEXT_PUBLIC_API_BASE_URL.replace(/\/api$/i, "")
 }
 
 export const API_BASE_URL = resolveApiBaseUrl()

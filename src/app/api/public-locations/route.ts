@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server"
+import { env } from "@/lib/env"
 
 export const dynamic = "force-dynamic"
 
-const COUNTRY_STATES_URL = "https://countriesnow.space/api/v0.1/countries/states"
-const STATE_CITIES_URL = "https://countriesnow.space/api/v0.1/countries/state/cities/q"
+const COUNTRY_STATES_URL = `${env.COUNTRIES_API_BASE_URL}/countries/states`
+const STATE_CITIES_URL = `${env.COUNTRIES_API_BASE_URL}/countries/state/cities/q`
 
 type CountryStateRecord = {
   name: string

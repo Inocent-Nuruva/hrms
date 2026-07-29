@@ -22,6 +22,7 @@ import {
 } from "@/lib/admin-api"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { canPerformPermission } from "@/lib/dashboard-permissions"
+import { env } from "@/lib/env"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import {
   AlertDialog,
@@ -278,7 +279,7 @@ export function BranchesView() {
         },
         {
           signal,
-          cacheTtlMs: 20_000,
+          cacheTtlMs: env.NEXT_PUBLIC_LIST_CACHE_TTL_SHORT_MS,
         }
       )
       setRows(result.rows)

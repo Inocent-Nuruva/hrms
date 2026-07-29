@@ -3,6 +3,7 @@
 import * as React from "react"
 import { toast } from "sonner"
 import { showSuccessAlert } from "@/lib/success-alert"
+import { env } from "@/lib/env"
 import ReactFlagsSelect from "react-flags-select"
 import Image from "next/image"
 import {
@@ -108,9 +109,11 @@ type RegisterFormState = {
   nationality: string
   profilePhotoUrl: string
   roleId: string | number
-  employmentType: string
+  employmentType: EmploymentType
   reportsTo: string
 }
+
+type EmploymentType = (typeof EMPLOYMENT_TYPE_OPTIONS)[number]["value"]
 
 type InitializedRegistrationFields = {
   employeeNo: string
@@ -817,8 +820,7 @@ function normalizeRolesPayload(payload: unknown): AdminRecord[] {
 }
 
 async function fetchRolesDirect(accessToken: string) {
-  const baseUrl = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://192.168.1.30:8888").replace(/\/$/, "")
-  const endpoint = `${baseUrl}/api/roles`
+  const endpoint = `${env.NEXT_PUBLIC_API_BASE_URL}/api/roles`
 
   // Roles endpoint is auth-protected in this environment.
   const authedResponse = await fetch(endpoint, {

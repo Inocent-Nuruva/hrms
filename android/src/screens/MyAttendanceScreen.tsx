@@ -52,8 +52,9 @@ export function MyAttendanceScreen({ auth }: Props) {
         sortBy: 'attendanceDate',
         sortOrder: 'DESC',
       });
-      const data = (res as MobileRecord).data || normalizeList(res);
-      return data as MobileRecord[];
+      const responseRecord = asRecord(res);
+      const responseData = Array.isArray(responseRecord?.data) ? responseRecord.data : null;
+      return (responseData || normalizeList(res)) as MobileRecord[];
     },
     enabled: auth.isAuthenticated,
   });
@@ -67,7 +68,7 @@ export function MyAttendanceScreen({ auth }: Props) {
     .filter((item): item is MobileRecord => Boolean(item))
     .filter((item) => readString(item, ['attendanceDate', 'attendance_date']) === selectedDate);
 
-  const selectedRecord = dateRecords[0] || (todayQuery.data as MobileRecord | null) || null;
+  const selectedRecord = dateRecords[0] || todayQuery.data || null;
 
   const checkIn = readString(selectedRecord, ['checkInAt', 'check_in_at', 'first_punch', 'firstCheckInAt', 'first_punch_at']);
   const checkOut = readString(selectedRecord, ['checkOutAt', 'check_out_at', 'last_punch', 'lastCheckOutAt', 'last_punch_at']);
@@ -166,7 +167,7 @@ export function MyAttendanceScreen({ auth }: Props) {
                     <Text style={[styles.emptyText, { color: mutedColor }]}>No records for this date.</Text>
                   </View>
                 ) : (
-                  punchesList.map((record: MobileRecord, index: number) => {
+                  punchesList.map((record, index: number) => {
                     const date = readString(record, ['attendanceDate', 'attendance_date']);
                     const checkInTime = formatTime(readString(record, ['checkInAt', 'check_in_at']));
                     const checkOutTime = formatTime(readString(record, ['checkOutAt', 'check_out_at']));

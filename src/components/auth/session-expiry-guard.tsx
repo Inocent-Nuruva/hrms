@@ -6,9 +6,10 @@ import { clearStoredSession, persistSessionTokens, readJwtExpiry, readStoredSess
 import { publishDashboardActorSnapshotFromBrowserStorage } from "@/lib/dashboard-permissions"
 import { authService } from "@/services/authService"
 import { ROUTES } from "@/utils/constants"
+import { env } from "@/lib/env"
 
-const SESSION_CHECK_INTERVAL_MS = 30_000
-const ACCESS_TOKEN_REFRESH_WINDOW_MS = 60_000
+const SESSION_CHECK_INTERVAL_MS = env.NEXT_PUBLIC_SESSION_CHECK_INTERVAL_MS
+const ACCESS_TOKEN_REFRESH_WINDOW_MS = env.NEXT_PUBLIC_TOKEN_REFRESH_WINDOW_MS
 
 export function SessionExpiryGuard() {
   const refreshInFlightRef = React.useRef<Promise<void> | null>(null)

@@ -10,9 +10,10 @@ import type {
   VerifyOTPRequest,
   VerifyOTPResponse,
 } from "../types/auth";
+import { env } from "./env";
 
-const MOCK_DELAY_MS = 1500; // simulated network latency in dev/mock mode
-const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK_AUTH === "true";
+const MOCK_DELAY_MS = env.NEXT_PUBLIC_MOCK_AUTH_DELAY_MS; // simulated network latency in dev/mock mode
+const USE_MOCK = env.NEXT_PUBLIC_USE_MOCK_AUTH;
 
 function unsupportedAuthFlow(message: string): never {
   throw new Error(message)

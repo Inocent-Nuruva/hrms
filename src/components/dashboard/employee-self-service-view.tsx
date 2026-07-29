@@ -5080,6 +5080,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
     try {
       const baseUrl = resolveApiBaseUrl()
       const res = await fetch(`${baseUrl}/api/me/leave/requests/${id}/pdf`, {
+
         headers: { Authorization: `Bearer ${token}` },
       })
       if (!res.ok) throw new Error("Failed to generate PDF")

@@ -10,13 +10,19 @@ import {
 import { normalizeSingle } from '../lib/api';
 
 type AnyRecord = Record<string, unknown>;
+type AuthEmployee = AnyRecord & {
+  first_name?: string;
+  last_name?: string;
+  full_name?: string;
+  email?: string;
+};
 
 interface AuthState {
   isLoading: boolean;
   isAuthenticated: boolean;
   hasStoredSession: boolean;
   user: AuthUser | null;
-  employee: AnyRecord | null;
+  employee: AuthEmployee | null;
   error: string | null;
   requiresOtp: boolean;
   tempToken: string | null;
@@ -89,14 +95,18 @@ function useProvideAuth() {
       ]);
 
       const user = extractUser(userPayload);
-      const employee = await normalizeSingle(empPayload);
+      const normalizedEmployee = await normalizeSingle(empPayload);
+      const employee =
+        normalizedEmployee && typeof normalizedEmployee === 'object'
+          ? (normalizedEmployee as AuthEmployee)
+          : null;
 
       // Fallbacks for name
       const empName = employee ? [employee.first_name, employee.last_name, employee.full_name].filter(Boolean).join(' ') : '';
       const finalUser: AuthUser = user || {
         id: 'me',
         fullName: empName || 'Employee',
-        email: user?.email || (employee?.email as string | undefined) || '',
+        email: user?.email || employee?.email || '',
       };
 
       // Persist lightly
@@ -120,7 +130,7 @@ function useProvideAuth() {
         biometricSupported: biometricStatus.supported,
         biometricTypeLabel: biometricStatus.label,
       });
-    } catch (_e: unknown) {
+    } catch {
       // Invalid token probably
       await clearTokens();
       setState({
@@ -154,7 +164,7 @@ function useProvideAuth() {
       const userFromResponse = (res?.user as AnyRecord) || ((res?.data as AnyRecord)?.user as AnyRecord) || {};
       const requiresOtp = !!(
         res?.requires_2fa ||
-        userFromResponse?.requires_2fa ||
+        userFromResponse.requires_2fa ||
         res?.requiresOtp ||
         res?.requires_otp ||
         res?.temp_token ||
@@ -187,7 +197,6 @@ function useProvideAuth() {
 
       // Direct login success (tokens + user) per spec examples
       const tokens = extractTokens(res);
-
       if (tokens) {
         await saveTokens(tokens);
       }
