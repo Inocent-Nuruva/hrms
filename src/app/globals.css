@@ -68,15 +68,16 @@
   --theme-transition-x: 50vw;
   --theme-transition-y: 50vh;
   --theme-transition-radius: 150vmax;
-  --sidebar: #f7f8fc;
+  /* Sidebar matches card/page surface (neutral — no blue wash) */
+  --sidebar: #ffffff;
   --sidebar-foreground: #111111;
   --sidebar-primary: #303194;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #eef0f8;
+  --sidebar-accent: #f4f4f5;
   --sidebar-accent-foreground: #111111;
-  --sidebar-border: #e2e5ef;
+  --sidebar-border: #e4e4e7;
   --sidebar-ring: #303194;
-  --sidebar-icon-color: #303194;
+  --sidebar-icon-color: #52525b;
   --sidebar-active-link-color: #303194;
   --table-header-accent: #111111;
   --table-header-accent-bg: rgba(17, 17, 17, 0.14);
@@ -872,7 +873,8 @@ table.min-w-full > tbody > tr > td {
   --brand-blue: #303194;
   --brand-blue-dark: #252882;
   --brand-blue-pale: color-mix(in srgb, var(--brand-blue) 18%, white);
-  --background: #181818;
+  /* Match page surface to cards so all dashboard pages share one bg in dark mode */
+  --background: #202020;
   --foreground: #ffffff;
   --card: #202020;
   --card-foreground: #ffffff;
@@ -886,7 +888,8 @@ table.min-w-full > tbody > tr > td {
   --secondary-foreground: #ffffff;
   --muted: #242424;
   --muted-foreground: #d4d4d8;
-  --accent: #303194;
+  /* Neutral hover/selected surface for menus & dropdowns (not brand blue) */
+  --accent: #2a2a2a;
   --accent-foreground: #ffffff;
   --destructive: #ef4444;
   --border: #303030;
@@ -897,16 +900,17 @@ table.min-w-full > tbody > tr > td {
   --chart-3: #a3a3a3;
   --chart-4: #737373;
   --chart-5: #525252;
-  --sidebar: #14151c;
+  /* Sidebar matches card surface */
+  --sidebar: #202020;
   --sidebar-foreground: #ffffff;
   --sidebar-primary: #303194;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #1e2030;
+  --sidebar-accent: #2a2a2a;
   --sidebar-accent-foreground: #ffffff;
-  --sidebar-border: #2a2d3a;
+  --sidebar-border: #303030;
   --sidebar-ring: #303194;
-  --sidebar-icon-color: #a5a6e8;
-  --sidebar-active-link-color: #c7c8f5;
+  --sidebar-icon-color: #a1a1aa;
+  --sidebar-active-link-color: #e4e4e7;
   --context-card-border: hsla(0, 0%, 18%, 1);
   --ds-red-300: oklch(31.47% 0.1105 20.96);
   --ds-red-900: oklch(69.96% 0.2136 22.03);
@@ -1078,62 +1082,41 @@ table.min-w-full > tbody > tr > td {
   color: #e5e7eb !important;
 }
 
-/* ─── Site header: glass + soft brand depth ─── */
+/* ─── Site header: solid card surface (matches page / dropdowns) ─── */
 .site-header,
 [data-slot="site-header"] {
   position: relative;
   isolation: isolate;
   /* Keep visible so header popovers (accent color, menus) are not clipped */
   overflow: visible;
-  background:
-    radial-gradient(90% 140% at 0% 50%, rgba(var(--primary-rgb), 0.08) 0%, transparent 58%),
-    radial-gradient(70% 120% at 100% 0%, rgba(var(--primary-rgb), 0.06) 0%, transparent 52%),
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--background) 88%, white 12%) 0%,
-      color-mix(in srgb, var(--background) 96%, rgb(var(--primary-rgb)) 4%) 100%
-    );
-  backdrop-filter: blur(12px) saturate(1.15);
-  -webkit-backdrop-filter: blur(12px) saturate(1.15);
+  background: var(--card) !important;
+  background-color: var(--card) !important;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.65),
-    0 1px 0 color-mix(in srgb, var(--border) 70%, transparent),
-    0 8px 24px rgba(15, 23, 42, 0.04);
+    0 1px 0 color-mix(in srgb, var(--border) 85%, transparent),
+    0 6px 16px rgba(15, 23, 42, 0.04);
 }
 
 .site-header::before,
 [data-slot="site-header"]::before {
-  content: "";
-  pointer-events: none;
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  opacity: 0.35;
-  background-image: radial-gradient(rgba(var(--primary-rgb), 0.08) 0.6px, transparent 0.6px);
-  background-size: 12px 12px;
-  mask-image: linear-gradient(90deg, transparent 0%, rgba(0, 0, 0, 0.7) 20%, rgba(0, 0, 0, 0.7) 80%, transparent 100%);
+  content: none !important;
+  display: none !important;
 }
 
 .dark .site-header,
 .dark [data-slot="site-header"] {
-  background:
-    radial-gradient(90% 140% at 0% 50%, rgba(var(--primary-rgb), 0.16) 0%, transparent 58%),
-    radial-gradient(70% 120% at 100% 0%, rgba(var(--primary-rgb), 0.12) 0%, transparent 52%),
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--background) 82%, rgb(var(--primary-rgb)) 18%) 0%,
-      color-mix(in srgb, var(--background) 94%, #000 6%) 100%
-    );
+  background: var(--card) !important;
+  background-color: var(--card) !important;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.05),
-    0 1px 0 color-mix(in srgb, var(--border) 80%, transparent),
-    0 10px 28px rgba(0, 0, 0, 0.22);
+    0 1px 0 color-mix(in srgb, var(--border) 90%, transparent),
+    0 8px 18px rgba(0, 0, 0, 0.28);
 }
 
 .dark .site-header::before,
 .dark [data-slot="site-header"]::before {
-  opacity: 0.22;
-  background-image: radial-gradient(rgba(var(--primary-rgb), 0.14) 0.6px, transparent 0.6px);
+  display: none !important;
+  opacity: 0;
 }
 
 /*
@@ -1150,8 +1133,8 @@ table.min-w-full > tbody > tr > td {
   [data-slot="site-header"],
   .dark .site-header,
   .dark [data-slot="site-header"] {
-    background: var(--background) !important;
-    background-color: var(--background) !important;
+    background: var(--card) !important;
+    background-color: var(--card) !important;
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
     box-shadow:
@@ -1189,26 +1172,16 @@ table.min-w-full > tbody > tr > td {
   }
 }
 
-/* ─── Sidebar surface: soft brand depth (restored design, no split border) ─── */
+/* ─── Sidebar surface: neutral card match (no blue brand wash) ─── */
 .app-sidebar-surface,
 [data-sidebar="sidebar"][data-slot="sidebar-inner"],
 [data-sidebar="sidebar"][data-mobile="true"] {
   isolation: isolate;
   overflow: hidden;
-  border-right: none !important;
-  /* Multi-layer brand wash — wins over plain bg-sidebar */
-  background-color: transparent !important;
-  background-image:
-    radial-gradient(120% 70% at 0% 0%, rgba(var(--primary-rgb), 0.12) 0%, transparent 55%),
-    radial-gradient(90% 55% at 100% 100%, rgba(var(--primary-rgb), 0.08) 0%, transparent 50%),
-    linear-gradient(
-      165deg,
-      color-mix(in srgb, var(--sidebar) 90%, white 10%) 0%,
-      var(--sidebar) 42%,
-      color-mix(in srgb, var(--sidebar) 92%, rgb(var(--primary-rgb)) 8%) 100%
-    ) !important;
-  background-repeat: no-repeat;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  border-right: 1px solid var(--sidebar-border) !important;
+  background-color: var(--sidebar) !important;
+  background-image: none !important;
+  box-shadow: none;
 }
 
 /* Desktop inner shell only — never override the mobile sheet's fixed positioning */
@@ -1228,43 +1201,18 @@ table.min-w-full > tbody > tr > td {
   max-height: 100dvh;
 }
 
+/* Disable decorative brand layers */
 .app-sidebar-surface::before,
 [data-sidebar="sidebar"][data-slot="sidebar-inner"]::before,
-[data-sidebar="sidebar"][data-mobile="true"]::before {
-  content: "";
-  pointer-events: none;
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  opacity: 0.45;
-  background-image:
-    radial-gradient(rgba(var(--primary-rgb), 0.1) 0.7px, transparent 0.7px);
-  background-size: 14px 14px;
-  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.55) 0%, transparent 72%);
-  -webkit-mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.55) 0%, transparent 72%);
-}
-
+[data-sidebar="sidebar"][data-mobile="true"]::before,
 .app-sidebar-surface::after,
 [data-sidebar="sidebar"][data-slot="sidebar-inner"]::after,
 [data-sidebar="sidebar"][data-mobile="true"]::after {
-  content: "";
-  pointer-events: none;
-  position: absolute;
-  top: -20%;
-  right: -35%;
-  z-index: 0;
-  width: 70%;
-  height: 55%;
-  border-radius: 9999px;
-  background: radial-gradient(
-    circle,
-    rgba(var(--primary-rgb), 0.14) 0%,
-    transparent 68%
-  );
-  filter: blur(2px);
+  content: none !important;
+  display: none !important;
 }
 
-/* Keep sidebar content above decorative layers */
+/* Keep sidebar content above base surface */
 .app-sidebar-surface > *,
 [data-sidebar="sidebar"][data-slot="sidebar-inner"] > *,
 [data-sidebar="sidebar"][data-mobile="true"] > * {
@@ -1272,101 +1220,60 @@ table.min-w-full > tbody > tr > td {
   z-index: 1;
 }
 
-/* Footer sits on a glass strip */
+/* Footer: same surface as sidebar */
 [data-sidebar="footer"] {
   position: relative;
   margin-top: 0.25rem;
-  border-top: 1px solid color-mix(in srgb, var(--sidebar-border) 80%, transparent);
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--sidebar) 55%, transparent) 0%,
-      color-mix(in srgb, rgb(var(--primary-rgb)) 5%, var(--sidebar)) 100%
-    );
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  border-top: 1px solid var(--sidebar-border);
+  background: var(--sidebar);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 [data-sidebar="footer"]::before {
-  content: "";
-  pointer-events: none;
-  position: absolute;
-  left: 12%;
-  right: 12%;
-  top: 0;
-  height: 1px;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(var(--primary-rgb), 0.35),
-    transparent
-  );
+  content: none !important;
+  display: none !important;
 }
 
-/* Active nav item: soft brand wash */
+/* Active nav item: muted surface + primary edge (not full blue wash) */
 [data-sidebar="menu-button"][data-active="true"],
 [data-sidebar="menu-button"][data-active] {
-  background:
-    linear-gradient(
-      90deg,
-      rgba(var(--primary-rgb), 0.12) 0%,
-      rgba(var(--primary-rgb), 0.05) 100%
-    ) !important;
+  background: var(--sidebar-accent) !important;
+  color: var(--sidebar-accent-foreground) !important;
   box-shadow: inset 3px 0 0 0 rgb(var(--primary-rgb));
 }
 
 .dark .app-sidebar-surface,
 .dark [data-sidebar="sidebar"][data-slot="sidebar-inner"],
 .dark [data-sidebar="sidebar"][data-mobile="true"] {
-  background-color: transparent !important;
-  background-image:
-    radial-gradient(120% 70% at 0% 0%, rgba(var(--primary-rgb), 0.2) 0%, transparent 55%),
-    radial-gradient(90% 55% at 100% 100%, rgba(var(--primary-rgb), 0.12) 0%, transparent 52%),
-    linear-gradient(
-      165deg,
-      color-mix(in srgb, var(--sidebar) 86%, rgb(var(--primary-rgb)) 14%) 0%,
-      var(--sidebar) 48%,
-      color-mix(in srgb, var(--sidebar) 92%, #000 8%) 100%
-    ) !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  border-right: none !important;
+  background-color: var(--sidebar) !important;
+  background-image: none !important;
+  box-shadow: none;
+  border-right: 1px solid var(--sidebar-border) !important;
 }
 
 .dark .app-sidebar-surface::before,
 .dark [data-sidebar="sidebar"][data-slot="sidebar-inner"]::before,
 .dark [data-sidebar="sidebar"][data-mobile="true"]::before {
-  opacity: 0.3;
-  background-image:
-    radial-gradient(rgba(var(--primary-rgb), 0.16) 0.7px, transparent 0.7px);
+  content: none !important;
+  display: none !important;
+  opacity: 0;
+  background-image: none !important;
 }
 
 .dark .app-sidebar-surface::after,
 .dark [data-sidebar="sidebar"][data-slot="sidebar-inner"]::after,
 .dark [data-sidebar="sidebar"][data-mobile="true"]::after {
-  background: radial-gradient(
-    circle,
-    rgba(var(--primary-rgb), 0.22) 0%,
-    transparent 68%
-  );
+  display: none !important;
 }
 
 .dark [data-sidebar="footer"] {
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--sidebar) 70%, transparent) 0%,
-      color-mix(in srgb, rgb(var(--primary-rgb)) 10%, var(--sidebar)) 100%
-    );
+  background: var(--sidebar);
 }
 
 .dark [data-sidebar="menu-button"][data-active="true"],
 .dark [data-sidebar="menu-button"][data-active] {
-  background:
-    linear-gradient(
-      90deg,
-      rgba(var(--primary-rgb), 0.22) 0%,
-      rgba(var(--primary-rgb), 0.08) 100%
-    ) !important;
+  background: var(--sidebar-accent) !important;
 }
 
 @layer base {
@@ -1413,6 +1320,9 @@ table.min-w-full > tbody > tr > td {
 
 .register-nationality button[class*="ReactFlagsSelect-module_selectBtn"] {
   width: 100%;
+  background: var(--card) !important;
+  color: var(--card-foreground) !important;
+  border-color: var(--input) !important;
 }
 
 .register-nationality ul[class*="ReactFlagsSelect-module_selectOptions"] {
@@ -1424,13 +1334,24 @@ table.min-w-full > tbody > tr > td {
   width: 100%;
   max-height: min(18rem, 46vh);
   overflow-y: auto;
+  background: var(--popover) !important;
+  color: var(--popover-foreground) !important;
+  border-color: var(--border) !important;
 }
 
 .register-nationality ul[class*="ReactFlagsSelect-module_selectOptions"] > div[class*="ReactFlagsSelect-module_filterBox"] {
   position: sticky;
   top: 0;
   z-index: 1;
-  background: inherit;
+  background: var(--popover) !important;
+}
+
+.register-nationality ul[class*="ReactFlagsSelect-module_selectOptions"] li {
+  color: var(--popover-foreground) !important;
+}
+
+.register-nationality ul[class*="ReactFlagsSelect-module_selectOptions"] li:hover {
+  background: var(--muted) !important;
 }
 
 @media (prefers-reduced-motion: no-preference) {

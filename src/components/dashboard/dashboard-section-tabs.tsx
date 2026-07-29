@@ -31,7 +31,7 @@ export function DashboardSectionTabs({
   // Solid bg-background so content never shows through the sticky rail on mobile.
   // Negative margins match parent content padding (px-3 / sm:px-4 / md:px-4).
   const stickyClassName =
-    "sticky top-0 z-40 -mx-3 min-w-0 border-b border-border/80 bg-background px-3 py-1.5 sm:-mx-4 sm:px-4 md:-mx-4 md:px-4"
+    "sticky top-0 z-40 -mx-3 min-w-0 border-b border-border/80 bg-card px-3 py-1.5 sm:-mx-4 sm:px-4 md:-mx-4 md:px-4"
 
   const filteredGroups = React.useMemo(() => {
     if (!actor.ready) {
@@ -81,7 +81,7 @@ export function DashboardSectionTabs({
                       "shrink-0 border-b-2 px-1.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors duration-200",
                       isActive
                         ? "border-[var(--primary)] text-[var(--primary)]"
-                        : "border-transparent text-slate-600 hover:text-slate-900 dark:text-slate-100 dark:hover:text-white"
+                        : "border-transparent text-muted-foreground hover:text-foreground"
                     )}
                   >
                     {item.title}

@@ -1220,7 +1220,7 @@ function Field({
   return (
     <AnimatedField delayMs={delayMs} className={className}>
       <div className="flex h-full flex-col gap-1">
-        <Label htmlFor={htmlFor} className="text-xs font-medium text-slate-700">
+        <Label htmlFor={htmlFor} className="text-xs font-medium text-foreground">
           {label}
         </Label>
         {children}
@@ -1251,7 +1251,7 @@ function InfoTooltip({
         render={
           <button
             type="button"
-            className="inline-flex h-5 w-5 items-center justify-center rounded-full text-slate-400 transition hover:text-slate-700"
+            className="inline-flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground transition hover:text-foreground"
             aria-label={label}
           />
         }
@@ -1288,7 +1288,7 @@ function MultiSelectChecklist({
           <span className="text-xs text-muted-foreground">{selectedIds.length} selected</span>
         ) : null}
       </div>
-      <div className="max-h-44 overflow-y-auto rounded-md border border-slate-200 bg-white">
+      <div className="max-h-44 overflow-y-auto rounded-md border border-border bg-card">
         {options.length === 0 ? (
           <div className="px-3 py-3 text-sm text-muted-foreground">{emptyText}</div>
         ) : (
@@ -1298,11 +1298,11 @@ function MultiSelectChecklist({
               return (
                 <label
                   key={option.id}
-                  className="flex cursor-pointer items-start gap-2 rounded-md px-2 py-2 text-sm hover:bg-slate-50"
+                  className="flex cursor-pointer items-start gap-2 rounded-md px-2 py-2 text-sm hover:bg-muted/50"
                 >
                   <Checkbox checked={checked} onCheckedChange={(value) => onToggle(option.id, Boolean(value))} />
                   <span className="min-w-0">
-                    <span className="block font-medium text-slate-800">{option.label}</span>
+                    <span className="block font-medium text-foreground">{option.label}</span>
                     {option.description ? (
                       <span className="block text-xs text-muted-foreground">{option.description}</span>
                     ) : null}
@@ -3093,18 +3093,18 @@ export function EmployeeRegisterForm() {
 
   if (!registrationContextResolved) {
     return (
-      <div className="rounded-lg border border-slate-200 bg-white px-3 py-4">
-        <p className="text-sm font-medium text-slate-900">Loading registration</p>
-        <p className="mt-1 text-xs text-slate-500">Checking your registration access...</p>
+      <div className="rounded-lg border border-border bg-card px-3 py-4">
+        <p className="text-sm font-medium text-foreground">Loading registration</p>
+        <p className="mt-1 text-xs text-muted-foreground">Checking your registration access...</p>
       </div>
     )
   }
 
   if (!isRegisteringOthers && selfRegistrationStatus !== "onboarding") {
     return (
-      <div className="rounded-lg border border-slate-200 bg-white px-3 py-4">
-        <p className="text-sm font-medium text-slate-900">Self registration unavailable</p>
-        <p className="mt-1 text-xs text-slate-500">
+      <div className="rounded-lg border border-border bg-card px-3 py-4">
+        <p className="text-sm font-medium text-foreground">Self registration unavailable</p>
+        <p className="mt-1 text-xs text-muted-foreground">
           This page is available only while your employee status is onboarding.
         </p>
       </div>
@@ -3113,7 +3113,7 @@ export function EmployeeRegisterForm() {
 
   return (
     <div className="space-y-2">
-      <div className="animate-card-entrance overflow-visible rounded-xl border border-slate-200/80 bg-white">
+      <div className="animate-card-entrance overflow-visible rounded-xl bg-card text-card-foreground ring-1 ring-foreground/10">
         <Tabs
           value={currentStep}
           onValueChange={(value) => {
@@ -3127,13 +3127,13 @@ export function EmployeeRegisterForm() {
             }
           }}
         >
-          <div className="space-y-1.5 border-b border-slate-200 px-3 pt-3 pb-0 sm:px-4">
+          <div className="space-y-1.5 border-b border-border px-3 pt-3 pb-0 sm:px-4">
             {!isInviteMode ? (
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-[11px] font-medium text-slate-500">
+                <p className="text-[11px] font-medium text-muted-foreground">
                   Step {Math.max(currentVisibleStepIndex + 1, 1)} of {visibleRegisterSteps.length}
-                  <span className="mx-1.5 text-slate-300">·</span>
-                  <span className="text-slate-700">
+                  <span className="mx-1.5 text-muted-foreground/50">·</span>
+                  <span className="text-foreground">
                     {REGISTER_STEP_LABELS[currentStep] ?? "Details"}
                   </span>
                 </p>
@@ -3167,10 +3167,10 @@ export function EmployeeRegisterForm() {
                           : isActive && !hasData
                             ? "border-rose-500 text-rose-600"
                             : isEmptyVisited
-                              ? "border-transparent text-rose-600 hover:text-rose-700"
+                              ? "border-transparent text-rose-600 hover:text-rose-700 dark:text-rose-400 dark:hover:text-rose-300"
                               : isFilledVisited
-                                ? "border-transparent text-emerald-700 hover:text-emerald-800"
-                                : "border-transparent text-slate-600 hover:text-slate-900"
+                                ? "border-transparent text-emerald-700 hover:text-emerald-800 dark:text-emerald-400 dark:hover:text-emerald-300"
+                                : "border-transparent text-muted-foreground hover:text-foreground"
                       )}
                     >
                       <span
@@ -3181,10 +3181,10 @@ export function EmployeeRegisterForm() {
                             : isActive && !hasData
                               ? "bg-rose-500 text-white"
                               : isEmptyVisited
-                                ? "bg-rose-100 text-rose-700"
+                                ? "bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300"
                                 : isFilledVisited
-                                  ? "bg-emerald-100 text-emerald-700"
-                                  : "bg-slate-100 text-slate-500"
+                                  ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300"
+                                  : "bg-muted text-muted-foreground"
                         )}
                       >
                         {index + 1}
@@ -3557,7 +3557,7 @@ export function EmployeeRegisterForm() {
                         reserveHintSpace
                         className="relative z-40 focus-within:z-[140]"
                       >
-                        <div className="register-nationality relative z-[70] rounded-md border border-slate-300 px-2 py-2">
+                        <div className="register-nationality relative z-[70] rounded-md border border-input px-2 py-2">
                           <ReactFlagsSelect
                             selected={form.nationality || ""}
                             onSelect={(value) => updateField("nationality", value ?? "")}
@@ -3629,16 +3629,16 @@ export function EmployeeRegisterForm() {
                 </div>
 
                 {isRegisteringOthers && !isInviteMode ? (
-                  <div className="mt-8 rounded-xl border border-slate-200 bg-slate-50/60 p-4 sm:p-5">
-                    <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="mt-8 rounded-xl border border-border bg-muted/40 p-4 sm:p-5">
+                    <div className="flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-start sm:justify-between">
                       <div className="flex items-center gap-2">
-                        <h3 className="text-base font-semibold text-slate-900">Optional onboarding</h3>
+                        <h3 className="text-base font-semibold text-foreground">Optional onboarding</h3>
                         <InfoTooltip
                           label="About optional onboarding"
                           content="Configure onboarding workflow and provisioning once during employee registration."
                         />
                       </div>
-                      <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2">
+                      <div className="flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2">
                         <Switch
                           checked={onboarding.enabled}
                           onCheckedChange={(checked) =>
@@ -3650,7 +3650,7 @@ export function EmployeeRegisterForm() {
                             }))
                           }
                         />
-                        <span className="text-sm font-medium text-slate-900">Enable</span>
+                        <span className="text-sm font-medium text-foreground">Enable</span>
                       </div>
                     </div>
 
@@ -3731,9 +3731,9 @@ export function EmployeeRegisterForm() {
 
                           <div className="grid gap-2">
                             <Label>Start onboarding automatically</Label>
-                            <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2">
+                            <div className="flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2">
                               <div className="flex items-center gap-2">
-                                <p className="text-sm font-medium text-slate-900">
+                                <p className="text-sm font-medium text-foreground">
                                   Auto-start onboarding request
                                 </p>
                                 <InfoTooltip
@@ -3750,9 +3750,9 @@ export function EmployeeRegisterForm() {
 
                           <div className="grid gap-2">
                             <Label>Submit immediately</Label>
-                            <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2">
+                            <div className="flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2">
                               <div className="flex items-center gap-2">
-                                <p className="text-sm font-medium text-slate-900">
+                                <p className="text-sm font-medium text-foreground">
                                   Submit onboarding after creation
                                 </p>
                                 <InfoTooltip
@@ -3772,7 +3772,7 @@ export function EmployeeRegisterForm() {
                           <Label htmlFor="onboarding-description">Description</Label>
                           <Textarea
                             id="onboarding-description"
-                            className="min-h-24 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+                            className="min-h-24 rounded-md border border-input bg-card px-3 py-2 text-sm"
                             value={onboarding.description}
                             onChange={(event) => updateOnboardingField("description", event.target.value)}
                             placeholder="Add onboarding notes or instructions (optional)"
@@ -3810,9 +3810,9 @@ export function EmployeeRegisterForm() {
                         </div>
 
                         {onboarding.attendanceMode === "shift" ? (
-                          <div className="grid gap-4 rounded-xl border border-slate-200 bg-white p-4 md:grid-cols-2">
+                          <div className="grid gap-4 rounded-xl border border-border bg-card p-4 md:grid-cols-2">
                             <div className="md:col-span-2">
-                              <p className="text-sm font-medium text-slate-900">Shift assignment</p>
+                              <p className="text-sm font-medium text-foreground">Shift assignment</p>
                               <p className="text-xs text-muted-foreground">
                                 This section is required when attendance mode is set to shift.
                               </p>
@@ -3897,9 +3897,9 @@ export function EmployeeRegisterForm() {
                                 </SelectContent>
                               </Select>
                             </Field>
-                            <div className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2">
+                            <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
                               <div className="space-y-0.5">
-                                <p className="text-sm font-medium text-slate-900">Primary shift</p>
+                                <p className="text-sm font-medium text-foreground">Primary shift</p>
                                 <p className="text-xs text-muted-foreground">
                                   Mark this assignment as the primary one for the employee
                                 </p>
@@ -3915,9 +3915,9 @@ export function EmployeeRegisterForm() {
                         ) : null}
 
                         {onboarding.attendanceMode === "timetable" ? (
-                          <div className="grid gap-4 rounded-xl border border-slate-200 bg-white p-4 md:grid-cols-2">
+                          <div className="grid gap-4 rounded-xl border border-border bg-card p-4 md:grid-cols-2">
                             <div className="md:col-span-2">
-                              <p className="text-sm font-medium text-slate-900">Timetable assignment</p>
+                              <p className="text-sm font-medium text-foreground">Timetable assignment</p>
                               <p className="text-xs text-muted-foreground">
                                 This section is required when attendance mode is set to timetable.
                               </p>
@@ -3968,16 +3968,16 @@ export function EmployeeRegisterForm() {
                           </div>
                         ) : null}
 
-                        <div className="rounded-xl border border-slate-200 bg-white p-4">
-                          <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="rounded-xl border border-border bg-card p-4">
+                          <div className="flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-start sm:justify-between">
                             <div className="space-y-1">
-                              <p className="text-sm font-medium text-slate-900">Device and access control setup</p>
+                              <p className="text-sm font-medium text-foreground">Device and access control setup</p>
                               <p className="text-xs text-muted-foreground">
                                 Enable only if this employee should get device/access provisioning during onboarding.
                               </p>
                             </div>
                             <div className="flex items-center gap-3">
-                              <span className="text-sm text-slate-700">Enable</span>
+                              <span className="text-sm text-foreground">Enable</span>
                               <Switch
                                 checked={onboarding.deviceAssignment.enabled}
                                 onCheckedChange={(checked) =>
@@ -4180,10 +4180,10 @@ export function EmployeeRegisterForm() {
                                 ].map((item) => (
                                   <div
                                     key={item.field}
-                                    className="flex items-start justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2"
+                                    className="flex items-start justify-between gap-3 rounded-lg border border-border px-3 py-2"
                                   >
                                     <div className="space-y-1">
-                                      <span className="block text-sm font-medium text-slate-800">{item.label}</span>
+                                      <span className="block text-sm font-medium text-foreground">{item.label}</span>
                                       <span className="block text-xs text-muted-foreground">{item.description}</span>
                                     </div>
                                     <Switch
@@ -4233,7 +4233,7 @@ export function EmployeeRegisterForm() {
                               <div className="flex items-center gap-2">
                                 <p className="text-sm font-medium">Contact {index + 1}</p>
                                 {contact.isPrimary ? (
-                                  <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300/70 bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:border-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+                                  <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300/70 bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-300 dark:border-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
                                     <BadgeCheckIcon className="size-3.5" />
                                     Primary
                                   </span>
@@ -4669,7 +4669,7 @@ export function EmployeeRegisterForm() {
               </TabsContent>
             </TabsContents>
 
-            <div className="flex flex-wrap items-center justify-between gap-1.5 border-t border-slate-100 pt-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-1.5 border-t border-border/60 pt-2.5">
               <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" onClick={clearForm}>
                 Clear
               </Button>
@@ -4718,34 +4718,34 @@ export function EmployeeRegisterForm() {
       </div>
 
       {createdEmployeeResult?.onboarding_request ? (
-        <Card className="mt-4 border-emerald-200 bg-emerald-50/60">
+        <Card className="mt-4 border-emerald-300/70 dark:border-emerald-700 bg-emerald-50/60 dark:bg-emerald-950/30">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base text-emerald-800">
+            <CardTitle className="text-base text-emerald-800 dark:text-emerald-200">
               Employee created and onboarding started
             </CardTitle>
           </CardHeader>
           <CardContent className="grid gap-3 pb-6 md:grid-cols-2 xl:grid-cols-4">
             <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-emerald-700">Onboarding No</p>
-              <p className="text-sm font-semibold text-emerald-900">
+              <p className="text-xs font-medium uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Onboarding No</p>
+              <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">
                 {createdEmployeeResult.onboarding_request.onboarding_no ?? "-"}
               </p>
             </div>
             <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-emerald-700">Status</p>
-              <p className="text-sm font-semibold text-emerald-900">
+              <p className="text-xs font-medium uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Status</p>
+              <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">
                 {createdEmployeeResult.onboarding_request.status ?? "-"}
               </p>
             </div>
             <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-emerald-700">Title</p>
-              <p className="text-sm font-semibold text-emerald-900">
+              <p className="text-xs font-medium uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Title</p>
+              <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">
                 {createdEmployeeResult.onboarding_request.title ?? "-"}
               </p>
             </div>
             <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-emerald-700">Progress</p>
-              <p className="text-sm font-semibold text-emerald-900">
+              <p className="text-xs font-medium uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Progress</p>
+              <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">
                 {createdEmployeeResult.onboarding_request.progress_percentage ?? "0%"}
               </p>
             </div>

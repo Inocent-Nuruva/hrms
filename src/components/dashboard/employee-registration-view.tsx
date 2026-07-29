@@ -30,7 +30,7 @@ export function EmployeeRegistrationView() {
                   "shrink-0 border-b-2 px-2 py-2 text-sm font-medium whitespace-nowrap transition-colors duration-200",
                   isActive
                     ? "border-[var(--primary)] text-[var(--primary)]"
-                    : "border-transparent text-slate-600 hover:text-slate-900"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
                 )}
               >
                 {tab.label}
