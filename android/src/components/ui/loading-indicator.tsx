@@ -20,7 +20,7 @@ export function LoadingIndicator({
   type = 'dot-circle',
 }: LoadingIndicatorProps) {
   const { isDark } = useThemePreference();
-  const spin = React.useRef(new Animated.Value(0)).current;
+  const [spin] = React.useState(() => new Animated.Value(0));
   const dimension = SIZE_MAP[size];
 
   React.useEffect(() => {

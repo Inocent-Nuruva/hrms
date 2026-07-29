@@ -3031,8 +3031,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
   const onDownloadPdf = async (id: number | string) => {
     if (!token) return
     try {
-      const base = API_BASE_URL || "http://192.168.1.30:8888"
-      const res = await fetch(`${base}/api/me/leave/requests/${id}/pdf`, {
+      const res = await fetch(`${API_BASE_URL}/api/me/leave/requests/${id}/pdf`, {
         headers: { Authorization: `Bearer ${token}` },
       })
       if (!res.ok) throw new Error("Failed to generate PDF")

@@ -2616,7 +2616,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
             sortable: true,
           })),
           ...(showDeviceContextColumn ? [{ key: "related_device", label: "Device", defaultWidth: 75 }] : []),
-          ...(supportsEditDelete ? [{ key: "actions", label: "Actions", defaultWidth: 55, sortable: false, render: (row: any) => (
+          ...(supportsEditDelete ? [{ key: "actions", label: "Actions", defaultWidth: 55, sortable: false, render: (row: AdminRecord) => (
             <div className="flex justify-end gap-1" onClick={e=>e.stopPropagation()}>
               <button className="admin-table-icon-button" onClick={() => openEditDialog(row)}>Edit</button>
               <button className="admin-table-icon-button" data-variant="danger" onClick={() => openDeleteDialog(row)}>Del</button>

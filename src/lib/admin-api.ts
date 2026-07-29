@@ -1,3 +1,5 @@
+import { env } from "@/lib/env"
+
 export type AdminResourceKey = "users" | "roles" | "permissions" | "companies"
 
 export type AdminRecord = Record<string, unknown>
@@ -385,7 +387,7 @@ export interface CreateEmployeePayload {
   primary_designation_id?: number
   position_id?: number
   employment_status?: EmployeeStatusValue
-  employment_type?: "full_time" | "part_time" | "contract" | "intern" | "consultant" | "temporary"
+  employment_type?: "full_time" | "part_time" | "contract" | "probation" | "intern" | "consultant" | "temporary"
   hire_date?: string
   probation_end_date?: string
   confirmation_date?: string
@@ -481,7 +483,7 @@ export const RESOURCE_CREATE_TEMPLATES: Record<AdminResourceKey, AdminRecord> = 
 }
 
 function getBaseUrl() {
-  return (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://192.168.1.30:8888").replace(/\/$/, "")
+  return env.NEXT_PUBLIC_API_BASE_URL
 }
 
 function buildUrl(path: string) {
@@ -2003,8 +2005,8 @@ async function listAllAttendanceCollection(
   token: string,
   params: AttendanceQueryParams = {}
 ): Promise<PaginatedUsersResult> {
-  const requestedLimit = params.limit && params.limit > 0 ? params.limit : 100
-  const pageSize = Math.min(requestedLimit, 100)
+  const requestedLimit = params.limit && params.limit > 0 ? params.limit : env.NEXT_PUBLIC_MAX_PAGE_SIZE
+  const pageSize = Math.min(requestedLimit, env.NEXT_PUBLIC_MAX_PAGE_SIZE)
   const startPage = params.page && params.page > 0 ? params.page : 1
 
   const mergedRows: AdminRecord[] = []

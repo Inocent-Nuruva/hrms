@@ -48,8 +48,6 @@ export function Calendar({
   onSelect,
   fromYear,
   toYear,
-  mode: _mode,
-  captionLayout: _captionLayout,
 }: CalendarProps) {
   const value = React.useMemo(() => toCalendarValue(selected), [selected])
   const minValue = React.useMemo(

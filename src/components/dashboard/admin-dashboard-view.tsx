@@ -42,6 +42,7 @@ import {
 } from "@/lib/admin-api"
 import { authService } from "@/services/authService"
 import { asRecord, isLikelyRefreshToken, readString } from "@/utils/token-utils"
+import { env } from "@/lib/env"
 import { AUTH_STORAGE_KEYS, ROUTES } from "@/utils/constants"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
@@ -761,7 +762,7 @@ export default function AdminDashboardView({
 
     const prefetchEmployees = () => {
       void listEmployees(token, DEFAULT_EMPLOYEE_PREFETCH_QUERY, {
-        cacheTtlMs: 20_000,
+        cacheTtlMs: env.NEXT_PUBLIC_LIST_CACHE_TTL_SHORT_MS,
       }).catch(() => undefined)
     }
 

@@ -21,6 +21,7 @@ import {
   type BranchesQueryParams,
 } from "@/lib/admin-api"
 import { canPerformPermission, normalizePermissionLabels } from "@/components/app-sidebar"
+import { env } from "@/lib/env"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import {
   AlertDialog,
@@ -344,7 +345,7 @@ export function BranchesView() {
         },
         {
           signal,
-          cacheTtlMs: 20_000,
+          cacheTtlMs: env.NEXT_PUBLIC_LIST_CACHE_TTL_SHORT_MS,
         }
       )
       setRows(result.rows)

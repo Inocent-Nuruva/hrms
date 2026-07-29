@@ -17,6 +17,7 @@ import {
   type DepartmentsQueryParams,
 } from "@/lib/admin-api"
 import { canPerformPermission, normalizePermissionLabels } from "@/components/app-sidebar"
+import { env } from "@/lib/env"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import {
   AlertDialog,
@@ -229,7 +230,7 @@ export function DepartmentsView() {
         },
         {
           signal,
-          cacheTtlMs: 20_000,
+          cacheTtlMs: env.NEXT_PUBLIC_LIST_CACHE_TTL_SHORT_MS,
         }
       )
       setRows(result.rows)
@@ -267,7 +268,7 @@ export function DepartmentsView() {
       sortBy: "created_at",
       sortOrder: "DESC",
       status: "active",
-    }, { cacheTtlMs: 60_000 })
+    }, { cacheTtlMs: env.NEXT_PUBLIC_LIST_CACHE_TTL_LONG_MS })
       .then((result) => setBranches(result.rows))
       .catch(() => setBranches([]))
   }, [])
@@ -282,7 +283,7 @@ export function DepartmentsView() {
       limit: 100,
       sortBy: "created_at",
       sortOrder: "DESC",
-    }, { cacheTtlMs: 60_000 })
+    }, { cacheTtlMs: env.NEXT_PUBLIC_LIST_CACHE_TTL_LONG_MS })
       .then((result) => setAllDepartments(result.rows))
       .catch(() => setAllDepartments([]))
   }, [])

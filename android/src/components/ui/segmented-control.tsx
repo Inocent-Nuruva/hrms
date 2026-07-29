@@ -19,7 +19,7 @@ export function SegmentedControl({
 }) {
   const isDark = useColorScheme() === 'dark';
   const [width, setWidth] = React.useState(0);
-  const translateX = React.useRef(new Animated.Value(0)).current;
+  const [translateX] = React.useState(() => new Animated.Value(0));
   const activeIndex = Math.max(
     0,
     options.findIndex((option) => option.key === value)

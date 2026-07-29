@@ -55,8 +55,8 @@ interface CurrentToast extends ToastOptions {
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [current, setCurrent] = useState<CurrentToast | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const translateY = useRef(new Animated.Value(-80)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
+  const [translateY] = useState(() => new Animated.Value(-80));
+  const [opacity] = useState(() => new Animated.Value(0));
   const idCounter = useRef(0);
 
   const hide = useCallback(() => {

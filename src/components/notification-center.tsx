@@ -17,9 +17,10 @@ import { showErrorAlert } from "@/lib/error-alert"
 import { showSuccessAlert } from "@/lib/success-alert"
 import { cn } from "@/lib/utils"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
+import { env } from "@/lib/env"
 
 const LEGACY_ADMIN_TOKEN_KEY = "hrms.admin.accessToken"
-const POLL_INTERVAL_MS = 60_000
+const POLL_INTERVAL_MS = env.NEXT_PUBLIC_NOTIFICATION_POLL_INTERVAL_MS
 
 function readStoredToken() {
   if (typeof window === "undefined") {

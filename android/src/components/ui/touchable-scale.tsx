@@ -24,7 +24,7 @@ export function TouchableScale({
   onPressOut,
   ...props
 }: TouchableScaleProps) {
-  const scale = React.useRef(new Animated.Value(1)).current;
+  const [scale] = React.useState(() => new Animated.Value(1));
 
   const animateTo = React.useCallback(
     (value: number) => {

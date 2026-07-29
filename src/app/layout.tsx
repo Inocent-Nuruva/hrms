@@ -8,6 +8,7 @@ import { SuccessAlertOverlay } from "@/components/success-alert-overlay";
 import { ErrorAlertOverlay } from "@/components/error-alert-overlay";
 import "./globals.css";
 import { cn } from "@/lib/utils";
+import { env } from "@/lib/env";
 
 const poppins = Poppins({
   variable: "--font-poppins",
@@ -16,12 +17,12 @@ const poppins = Poppins({
 });
 
 export const metadata: Metadata = {
-  applicationName: "HRMS",
+  applicationName: env.NEXT_PUBLIC_APP_NAME,
   title: {
-    default: "HRMS",
-    template: "%s | HRMS",
+    default: env.NEXT_PUBLIC_APP_NAME,
+    template: `%s | ${env.NEXT_PUBLIC_APP_NAME}`,
   },
-  description: "HRMS",
+  description: env.NEXT_PUBLIC_APP_NAME,
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "16x16 32x32 48x48" },

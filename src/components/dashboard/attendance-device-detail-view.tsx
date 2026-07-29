@@ -72,6 +72,7 @@ import { cn } from "@/lib/utils"
 import { showErrorAlert } from "@/lib/error-alert"
 import { showSuccessAlert } from "@/lib/success-alert"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
+import { env } from "@/lib/env"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 
@@ -1266,7 +1267,7 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
     ) => {
       setSyncStepStatus(step, "running", options.pendingMessage)
       try {
-        await withTimeout(action(), options.timeoutMs ?? 20000, `${options.pendingMessage} timed out.`)
+        await withTimeout(action(), options.timeoutMs ?? env.NEXT_PUBLIC_DEVICE_ACTION_TIMEOUT_MS, `${options.pendingMessage} timed out.`)
         setSyncStepStatus(step, "success", options.successMessage)
       } catch (errorObject) {
         const nextMessage =
@@ -1363,7 +1364,10 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
       await runSyncStep(resource, action, {
         pendingMessage: `Syncing ${label.toLowerCase()}`,
         successMessage: `${label} synced`,
-        timeoutMs: resource === "users" || resource === "fingerprints" ? 90000 : 20000,
+        timeoutMs:
+          resource === "users" || resource === "fingerprints"
+            ? env.NEXT_PUBLIC_DEVICE_BULK_ACTION_TIMEOUT_MS
+            : env.NEXT_PUBLIC_DEVICE_ACTION_TIMEOUT_MS,
       })
 
       setMessage(`${label} synced successfully.`)

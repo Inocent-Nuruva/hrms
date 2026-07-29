@@ -176,7 +176,7 @@ export function HomeScreen({ auth, onTabChange }: Props) {
   const totalDays = daysInMonth(today);
   const absentDays = Math.max(totalDays - workedDays - holidayCount, 0);
   const remainingTime = getRemainingWorkTime(currentTime);
-  const approvedLeavesThisMonth = (requestsQuery.data || []).filter((item: any) => {
+  const approvedLeavesThisMonth = (requestsQuery.data || []).filter((item) => {
     const status = String(item?.status || '').toLowerCase();
     const isApproved = status.includes('approve') || status.includes('used') || status.includes('complete') || status.includes('taken');
     if (!isApproved) return false;

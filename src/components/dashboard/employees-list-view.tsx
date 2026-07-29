@@ -22,13 +22,14 @@ import { listEmployees, type AdminRecord, type EmployeesQueryParams } from "@/li
 import { useDebouncedValue } from "@/hooks/use-debounced-value"
 import { useRenderDiagnostics } from "@/hooks/use-render-diagnostics"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
+import { env } from "@/lib/env"
 import { Trash2 } from "lucide-react"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 const EMPLOYEE_STATUS_REFRESH_KEY = "hrms.employees.status.updatedAt"
 const EMPLOYEE_STATUS_REFRESH_EVENT = "hrms:employee-status-updated"
 const EMPLOYEE_LIST_CACHE_PREFIX = "hrms.employees.list"
-const EMPLOYEE_LIST_CACHE_TTL_MS = 60_000
+const EMPLOYEE_LIST_CACHE_TTL_MS = env.NEXT_PUBLIC_LIST_CACHE_TTL_LONG_MS
 const DEFAULT_QUERY: Required<Omit<EmployeesQueryParams, "employment_status">> & {
   employment_status: "" | NonNullable<EmployeesQueryParams["employment_status"]>
 } = {
@@ -269,7 +270,7 @@ export function EmployeesListView() {
         },
         {
           signal,
-          cacheTtlMs: 20_000,
+          cacheTtlMs: env.NEXT_PUBLIC_LIST_CACHE_TTL_SHORT_MS,
         }
       )
       lastFetchAtRef.current = Date.now()

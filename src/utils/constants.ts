@@ -1,7 +1,7 @@
 import type { OnboardingStep } from "@/types";
+import { env } from "@/lib/env";
 
-export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL?.trim() || "http://192.168.1.30:8888";
+export const API_BASE_URL = env.NEXT_PUBLIC_API_BASE_URL;
 
 export const AUTH_STORAGE_KEYS = {
   tokens: "ess.auth.tokens",

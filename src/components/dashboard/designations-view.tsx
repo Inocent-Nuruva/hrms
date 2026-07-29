@@ -17,6 +17,7 @@ import {
   type DesignationsQueryParams,
 } from "@/lib/admin-api"
 import { canPerformPermission, normalizePermissionLabels } from "@/components/app-sidebar"
+import { env } from "@/lib/env"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import {
   AlertDialog,
@@ -251,7 +252,7 @@ export function DesignationsView() {
         },
         {
           signal,
-          cacheTtlMs: 20_000,
+          cacheTtlMs: env.NEXT_PUBLIC_LIST_CACHE_TTL_SHORT_MS,
         }
       )
       setRows(result.rows)
@@ -288,7 +289,7 @@ export function DesignationsView() {
       limit: 100,
       sortBy: "created_at",
       sortOrder: "DESC",
-    }, { cacheTtlMs: 60_000 })
+    }, { cacheTtlMs: env.NEXT_PUBLIC_LIST_CACHE_TTL_LONG_MS })
       .then((result) => setDepartments(result.rows))
       .catch(() => setDepartments([]))
   }, [])

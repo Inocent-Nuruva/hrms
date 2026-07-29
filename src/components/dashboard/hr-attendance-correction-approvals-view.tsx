@@ -576,7 +576,10 @@ export function HrAttendanceCorrectionApprovalsView() {
   )
 
   const selectedRequestIdRef = React.useRef(selectedRequestId)
-  selectedRequestIdRef.current = selectedRequestId
+
+  React.useEffect(() => {
+    selectedRequestIdRef.current = selectedRequestId
+  }, [selectedRequestId])
 
   const loadRequests = React.useCallback(async () => {
     const token = readStoredToken()

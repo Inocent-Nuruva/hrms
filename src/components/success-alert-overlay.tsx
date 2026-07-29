@@ -28,7 +28,7 @@ export function SuccessAlertOverlay() {
 
   React.useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null
-    let hideTimer: ReturnType<typeof setTimeout> | null = null
+    const hideTimer: ReturnType<typeof setTimeout> | null = null
 
     const onSuccess = (event: Event) => {
       const custom = event as CustomEvent<SuccessDetail>

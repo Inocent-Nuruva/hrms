@@ -5,6 +5,7 @@ interface LoadingSpinnerProps {
 }
 
 export function LoadingSpinner({ size = "md" }: LoadingSpinnerProps) {
+  void size;
   // Note: LumaSpin is fixed size; for variable sizes consider scaling or variant
   return <LumaSpin />;
 }
