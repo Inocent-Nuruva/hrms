@@ -5626,37 +5626,164 @@ export async function submitMyProfileUpdateRequest(token: string, id: string | n
   })
 }
 
+/**
+ * When "all / history" is requested, many backends only return actionable (pending)
+ * rows unless a status is supplied. Fetch these statuses in parallel and merge.
+ */
+const PROFILE_UPDATE_HISTORY_STATUSES = [
+  "submitted",
+  "pending",
+  "draft",
+  "approved",
+  "rejected",
+  "cancelled",
+] as const
+
+function readProfileUpdateRequestRowId(row: AdminRecord) {
+  const raw = row.id ?? row.request_id ?? row.requestId
+  if (typeof raw === "number" && Number.isFinite(raw)) {
+    return String(raw)
+  }
+  if (typeof raw === "string" && raw.trim()) {
+    return raw.trim()
+  }
+  return ""
+}
+
+function profileUpdateRequestSortTime(row: AdminRecord) {
+  const candidates = [row.submitted_at, row.updated_at, row.created_at, row.decided_at, row.reviewed_at]
+  for (const value of candidates) {
+    if (typeof value === "string" && value.trim()) {
+      const time = Date.parse(value)
+      if (Number.isFinite(time)) {
+        return time
+      }
+    }
+  }
+  return 0
+}
+
 export async function listHrProfileUpdateApprovalRequests(
   token: string,
-  params: SelfServiceRequestQueryParams & { employee_id?: number } = {}
+  params: SelfServiceRequestQueryParams & {
+    employee_id?: number
+    /** When true (and no single status), fetch pending + decided statuses for history. */
+    includeHistory?: boolean
+  } = {}
 ): Promise<PaginatedUsersResult> {
   const fallbackPage = params.page && params.page > 0 ? params.page : 1
   const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20
-  const query = new URLSearchParams()
 
-  query.set("page", String(fallbackPage))
-  query.set("limit", String(fallbackLimit))
+  const buildQuery = (status?: string) => {
+    const query = new URLSearchParams()
+    query.set("page", String(fallbackPage))
+    query.set("limit", String(fallbackLimit))
 
-  if (params.employee_id !== undefined) {
-    query.set("employee_id", String(params.employee_id))
-  }
-  if (params.status) {
-    query.set("status", params.status)
-  }
-  if (params.date_from) {
-    query.set("from_date", params.date_from)
-  }
-  if (params.date_to) {
-    query.set("to_date", params.date_to)
+    if (params.employee_id !== undefined) {
+      query.set("employee_id", String(params.employee_id))
+    }
+    if (status && status.trim()) {
+      query.set("status", status.trim())
+    }
+    // Support both param conventions used by self-service endpoints.
+    if (params.date_from) {
+      query.set("from_date", params.date_from)
+      query.set("date_from", params.date_from)
+    }
+    if (params.date_to) {
+      query.set("to_date", params.date_to)
+      query.set("date_to", params.date_to)
+    }
+    if (params.sortBy && params.sortBy.trim()) {
+      query.set("sortBy", params.sortBy.trim())
+    }
+    if (params.sortOrder === "ASC" || params.sortOrder === "DESC") {
+      query.set("sortOrder", params.sortOrder)
+    }
+    // Hint for backends that gate history behind an explicit flag.
+    if (params.includeHistory && !status) {
+      query.set("include_history", "true")
+      query.set("includeHistory", "true")
+    }
+    return query
   }
 
-  const payload = await adminRequest<unknown>(
-    `/api/hr/self-service/approvals/profile-updates?${query.toString()}`,
-    { token }
-  )
-  const rows = normalizeList(payload)
-  const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit)
-  return { rows, ...pagination }
+  const fetchPage = async (status?: string) => {
+    const payload = await adminRequest<unknown>(
+      `/api/hr/self-service/approvals/profile-updates?${buildQuery(status).toString()}`,
+      { token }
+    )
+    const rows = normalizeList(payload)
+    const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit)
+    return { rows, ...pagination }
+  }
+
+  // Single status filter — one request.
+  if (params.status && params.status.trim() && params.status.trim().toLowerCase() !== "all") {
+    return fetchPage(params.status.trim())
+  }
+
+  // "All" / history: many APIs default to actionable-only when status is omitted.
+  // Pull each known status (plus an unfiltered/include_history pass) and merge.
+  if (params.includeHistory !== false) {
+    const settled = await Promise.allSettled([
+      fetchPage(undefined),
+      ...PROFILE_UPDATE_HISTORY_STATUSES.map((status) => fetchPage(status)),
+    ])
+
+    const byId = new Map<string, AdminRecord>()
+    let totalHint: number | null = null
+
+    for (const result of settled) {
+      if (result.status !== "fulfilled") {
+        continue
+      }
+      if (typeof result.value.total === "number" && Number.isFinite(result.value.total)) {
+        totalHint = Math.max(totalHint ?? 0, result.value.total)
+      }
+      for (const row of result.value.rows) {
+        const id = readProfileUpdateRequestRowId(row)
+        if (!id) {
+          // Keep rows without ids keyed by a synthetic stable fallback.
+          byId.set(`anon-${byId.size}-${JSON.stringify(row).slice(0, 48)}`, row)
+          continue
+        }
+        const existing = byId.get(id)
+        if (!existing) {
+          byId.set(id, row)
+          continue
+        }
+        // Prefer the richer payload when the same id appears twice.
+        byId.set(id, { ...existing, ...row })
+      }
+    }
+
+    // Only surface an error when every parallel request failed.
+    const anyFulfilled = settled.some((result) => result.status === "fulfilled")
+    if (!anyFulfilled) {
+      const firstRejected = settled.find((result) => result.status === "rejected")
+      if (firstRejected && firstRejected.status === "rejected") {
+        throw firstRejected.reason
+      }
+    }
+
+    const rows = Array.from(byId.values()).sort(
+      (left, right) => profileUpdateRequestSortTime(right) - profileUpdateRequestSortTime(left)
+    )
+
+    return {
+      rows,
+      total: totalHint !== null ? Math.max(totalHint, rows.length) : rows.length,
+      page: fallbackPage,
+      limit: fallbackLimit,
+      totalPages:
+        fallbackLimit > 0
+          ? Math.max(1, Math.ceil((totalHint !== null ? Math.max(totalHint, rows.length) : rows.length) / fallbackLimit))
+          : 1,
+    }
+  }
+
+  return fetchPage(undefined)
 }
 
 export async function getHrProfileUpdateApprovalRequest(token: string, id: string | number) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { type FormEvent, type MouseEvent, useEffect, useState } from "react";
 import { showErrorAlert } from "@/lib/error-alert";
 import { EyeIcon, EyeOffIcon, ShieldCheck } from "lucide-react";
 
@@ -193,7 +193,10 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
     void handleLogin();
   };
 
-  const handleBackToCredentials = () => {
+  const handleBackToCredentials = (event?: MouseEvent<HTMLButtonElement>) => {
+    event?.preventDefault();
+    event?.stopPropagation();
+    // Always leave the OTP step, even if a verify request is in flight.
     setStep("credentials");
     setTempToken(null);
     setTwoFactorCode("");
@@ -280,8 +283,7 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
           <button
             type="button"
             onClick={handleBackToCredentials}
-            disabled={isLoading}
-            className="inline-flex h-8 w-full items-center justify-center rounded-md border border-input bg-background px-3 text-[10px] font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-70"
+            className="relative z-10 inline-flex h-9 w-full touch-manipulation items-center justify-center rounded-md border border-input bg-background px-3 text-[10px] font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground active:bg-accent"
           >
             Back to sign in
           </button>

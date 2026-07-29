@@ -2457,13 +2457,13 @@ export function OnboardingView() {
 
   return (
     <div className="space-y-2 px-4 pb-6 pt-2 lg:px-6">
-      <div className="glass-scrollbar overflow-x-auto">
+      <div className="tab-rail-scroll">
         <div className="inline-flex min-w-full items-center gap-1 border-b border-border/80">
           <button
             type="button"
             onClick={() => setActiveTab("requests")}
             className={cn(
-              "border-b-2 px-1.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors duration-200",
+              "shrink-0 border-b-2 px-1.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors duration-200",
               activeTab === "requests"
                 ? "border-[var(--primary)] text-[var(--primary)]"
                 : "border-transparent text-slate-600 hover:text-slate-900"
@@ -2475,7 +2475,7 @@ export function OnboardingView() {
             type="button"
             onClick={() => setActiveTab("workflows")}
             className={cn(
-              "border-b-2 px-1.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors duration-200",
+              "shrink-0 border-b-2 px-1.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors duration-200",
               activeTab === "workflows"
                 ? "border-[var(--primary)] text-[var(--primary)]"
                 : "border-transparent text-slate-600 hover:text-slate-900"

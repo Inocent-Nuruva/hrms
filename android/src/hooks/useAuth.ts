@@ -45,7 +45,13 @@ function useProvideAuth() {
   });
 
   const resetOtp = useCallback(() => {
-    setState((s) => ({ ...s, requiresOtp: false, tempToken: null, error: null }));
+    setState((s) => ({
+      ...s,
+      requiresOtp: false,
+      tempToken: null,
+      error: null,
+      isLoading: false,
+    }));
   }, []);
 
   const clearError = useCallback(() => {

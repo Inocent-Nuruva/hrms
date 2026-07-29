@@ -58,7 +58,7 @@ export function SiteHeader({
   return (
     <header
       data-slot="site-header"
-      className="site-header sticky top-0 z-50 flex h-(--header-height) shrink-0 items-center gap-1.5 border-b border-border/80 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height) supports-[backdrop-filter]:backdrop-blur-md"
+      className="site-header sticky top-0 z-50 flex h-(--header-height) shrink-0 items-center gap-1.5 border-b border-border/80 bg-background transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height) md:bg-transparent supports-[backdrop-filter]:md:backdrop-blur-md"
     >
       {/* Decorative depth — mirrors sidebar polish */}
       <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">

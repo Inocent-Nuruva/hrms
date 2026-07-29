@@ -27,7 +27,7 @@ function isActivePath(currentPath: string, url: string) {
 
 const tabTriggerClass = (active: boolean) =>
   cn(
-    "inline-flex min-w-0 items-center gap-1 border-b-2 px-1.5 py-1.5 text-left text-xs font-medium outline-none transition-colors",
+    "inline-flex min-w-0 shrink-0 items-center gap-1 border-b-2 px-1.5 py-1.5 text-left text-xs font-medium outline-none transition-colors",
     active
       ? "border-[var(--primary)] text-[var(--primary)]"
       : "border-transparent text-muted-foreground hover:text-foreground dark:text-slate-100 dark:hover:text-white"
@@ -48,11 +48,9 @@ export function Tabs2({ groups, currentPath, className }: Tabs2Props) {
     [groups]
   )
 
-  const activeItem =
-    flatItems.find((item) => isActivePath(currentPath, item.url)) ?? flatItems[0] ?? null
-
   return (
     <div className={cn("flex flex-col gap-1.5", className)}>
+      {/* Desktop: grouped dropdowns + direct links */}
       <div className="hidden flex-wrap items-end gap-x-1 gap-y-0.5 border-b border-border/80 md:flex">
         {groups.map((group) => {
           // Prefer the path-matched child; when this group is inactive fall back to first item
@@ -134,25 +132,29 @@ export function Tabs2({ groups, currentPath, className }: Tabs2Props) {
         })}
       </div>
 
-      <div className="relative md:hidden">
-        <ChevronDownIcon className="pointer-events-none absolute top-1/2 right-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
-        <select
-          className="h-8 w-full appearance-none rounded-md border border-border bg-background px-2.5 pr-8 text-xs text-foreground outline-none transition focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
-          value={activeItem?.url ?? ""}
-          onChange={(event) => {
-            if (event.target.value) {
-              router.push(event.target.value)
-            }
-          }}
-        >
-          {flatItems.map((item) => (
-            <option key={item.url} value={item.url}>
-              {item.isDirectLink || item.groupTitle === item.title
+      {/* Mobile: swipeable flat tab rail — blue underline only, no scrollbar / no select */}
+      <div className="tab-rail-scroll md:hidden" role="tablist" aria-label="Section tabs">
+        <div className="inline-flex min-w-full items-center gap-1 border-b border-border/80">
+          {flatItems.map((item) => {
+            const isActive = isActivePath(currentPath, item.url)
+            const label =
+              item.isDirectLink || item.groupTitle === item.title
                 ? item.title
-                : `${item.groupTitle}: ${item.title}`}
-            </option>
-          ))}
-        </select>
+                : `${item.groupTitle}: ${item.title}`
+
+            return (
+              <Link
+                key={item.url}
+                href={item.url}
+                role="tab"
+                aria-selected={isActive}
+                className={tabTriggerClass(isActive)}
+              >
+                <span className="whitespace-nowrap">{label}</span>
+              </Link>
+            )
+          })}
+        </div>
       </div>
     </div>
   )

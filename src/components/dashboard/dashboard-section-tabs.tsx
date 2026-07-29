@@ -27,8 +27,9 @@ export function DashboardSectionTabs({
   const currentPath = pathname ?? ""
   const actor = useDashboardActor()
   // Stick under the site header inside the main scroll pane (header is outside scroll).
+  // min-w-0 keeps horizontal tab rails scrollable inside the overflow-x-hidden main pane.
   const stickyClassName =
-    "sticky top-0 z-40 -mx-3 border-b border-border/80 bg-background px-3 py-1.5 md:-mx-4 md:px-4"
+    "sticky top-0 z-40 -mx-3 min-w-0 border-b border-border/80 bg-background px-3 py-1.5 md:-mx-4 md:px-4"
 
   const filteredGroups = React.useMemo(() => {
     if (!actor.ready) {
@@ -65,7 +66,7 @@ export function DashboardSectionTabs({
               {group.title}
             </p>
           ) : null}
-          <div className="glass-scrollbar overflow-x-auto">
+          <div className="tab-rail-scroll">
             <div className="inline-flex min-w-full items-center gap-1 border-b border-border/80">
               {group.items.map((item) => {
                 const isActive = isActivePath(currentPath, item.url)
@@ -75,7 +76,7 @@ export function DashboardSectionTabs({
                     key={item.url}
                     href={item.url}
                     className={cn(
-                      "border-b-2 px-1.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors duration-200",
+                      "shrink-0 border-b-2 px-1.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors duration-200",
                       isActive
                         ? "border-[var(--primary)] text-[var(--primary)]"
                         : "border-transparent text-slate-600 hover:text-slate-900 dark:text-slate-100 dark:hover:text-white"

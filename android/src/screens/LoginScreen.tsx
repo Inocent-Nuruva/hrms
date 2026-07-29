@@ -179,7 +179,13 @@ export function LoginScreen({ auth }: LoginScreenProps) {
                   placeholder="123456"
                   hint="Enter the code sent by your organization."
                 />
-                <Pressable onPress={auth.resetOtp}>
+                <Pressable
+                  onPress={() => {
+                    setOtp('');
+                    auth.resetOtp();
+                  }}
+                  hitSlop={12}
+                >
                   <Text style={[styles.backLink, { color: mutedColor }]}>Use another account</Text>
                 </Pressable>
               </>
@@ -205,8 +211,15 @@ export function LoginScreen({ auth }: LoginScreenProps) {
               )}
             </View>
             {showOtp ? (
-              <Button onPress={auth.resetOtp} variant="ghost">
-                Back to login
+              <Button
+                onPress={() => {
+                  setOtp('');
+                  auth.resetOtp();
+                }}
+                variant="ghost"
+                disabled={false}
+              >
+                Back to sign in
               </Button>
             ) : null}
           </Card>

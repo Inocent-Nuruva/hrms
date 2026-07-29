@@ -1828,7 +1828,7 @@ function SelfServiceProfileSectionTabs({
 
   return (
     <div className="space-y-3">
-      <div className="glass-scrollbar overflow-x-auto" role="tablist" aria-label="Personal profile sections">
+      <div className="tab-rail-scroll" role="tablist" aria-label="Personal profile sections">
         <div className="inline-flex min-w-full items-center gap-1 border-b border-border/80">
           {sections.map((section) => {
             const isActive = section.id === active.id
@@ -1843,7 +1843,7 @@ function SelfServiceProfileSectionTabs({
                 aria-selected={isActive}
                 onClick={() => setActiveId(section.id)}
                 className={cn(
-                  "border-b-2 px-1.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors duration-200",
+                  "shrink-0 border-b-2 px-1.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors duration-200",
                   isActive
                     ? "border-[var(--primary)] text-[var(--primary)]"
                     : "border-transparent text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
@@ -4250,7 +4250,7 @@ export function EmployeeSelfServiceProfileView() {
   return (
     <div className="grid gap-4">
       <DoodleSprites />
-      <div className="glass-scrollbar overflow-x-auto">
+      <div className="tab-rail-scroll">
         <div className="inline-flex min-w-full items-center gap-4 border-b border-border/80">
           {tabs.map((tab) => {
             const isActive = activeTab === tab.key
@@ -4259,7 +4259,7 @@ export function EmployeeSelfServiceProfileView() {
                 key={tab.key}
                 href={`${pathname}?tab=${tab.key}`}
                 className={cn(
-                  "border-b-2 px-1 py-2 text-[0.92rem] font-medium whitespace-nowrap transition-colors duration-200",
+                  "shrink-0 border-b-2 px-1 py-2 text-[0.92rem] font-medium whitespace-nowrap transition-colors duration-200",
                   isActive
                     ? "border-[var(--primary)] text-[var(--primary)]"
                     : "border-transparent text-slate-600 hover:text-slate-900"

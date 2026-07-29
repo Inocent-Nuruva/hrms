@@ -209,8 +209,21 @@ export function MobileTopBar({
 
   return (
     <>
-      <SafeAreaView edges={['top']} style={{ backgroundColor: barBackground }}>
-        <View style={[styles.shell, variant === 'dashboard' ? styles.shellDashboard : styles.shellCompact, { backgroundColor: barBackground }]}>
+      <SafeAreaView
+        edges={['top']}
+        style={{
+          backgroundColor: barBackground,
+          borderBottomWidth: StyleSheet.hairlineWidth,
+          borderBottomColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.08)',
+        }}
+      >
+        <View
+          style={[
+            styles.shell,
+            variant === 'dashboard' ? styles.shellDashboard : styles.shellCompact,
+            { backgroundColor: barBackground },
+          ]}
+        >
           <View style={styles.actionsRow}>
             <View style={styles.leadingActionRow}>
               {showBackButton ? (
@@ -414,19 +427,23 @@ function readGreeting() {
 const styles = StyleSheet.create({
   shell: {
     paddingHorizontal: 20,
+    backgroundColor: 'transparent',
   },
   shellDashboard: {
-    paddingTop: 2,
-    paddingBottom: 10,
+    paddingTop: 8,
+    paddingBottom: 14,
+    minHeight: 56,
   },
   shellCompact: {
-    paddingTop: 4,
-    paddingBottom: 8,
+    paddingTop: 10,
+    paddingBottom: 12,
+    minHeight: 52,
   },
   actionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    minHeight: 44,
   },
   topRightActions: {
     flexDirection: 'row',

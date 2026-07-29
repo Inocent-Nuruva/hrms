@@ -779,6 +779,7 @@ export function HrProfileUpdateApprovalsView() {
         sortable: false,
         render: (row) => {
           const rowId = getRequestId(row)
+          const isHistory = getStatusMeta(row.status).terminal
           return (
             <div className="flex justify-end" onClick={(event) => event.stopPropagation()}>
               <button
@@ -786,7 +787,7 @@ export function HrProfileUpdateApprovalsView() {
                 className="rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted"
                 onClick={() => openReview(rowId)}
               >
-                Review
+                {isHistory ? "View" : "Review"}
               </button>
             </div>
           )
@@ -825,7 +826,9 @@ export function HrProfileUpdateApprovalsView() {
         limit: 100,
         sortBy: "created_at",
         sortOrder: "DESC",
+        // "all" loads pending + decided history; a single status filters the API.
         status: statusFilter === "all" ? undefined : statusFilter,
+        includeHistory: statusFilter === "all",
         date_from: dateFrom || undefined,
         date_to: dateTo || undefined,
       })
@@ -956,6 +959,11 @@ export function HrProfileUpdateApprovalsView() {
     [filteredRequests]
   )
 
+  const historyCount = React.useMemo(
+    () => filteredRequests.filter((row) => getStatusMeta(row.status).terminal).length,
+    [filteredRequests]
+  )
+
   const activeFilterCount = React.useMemo(() => {
     let count = 0
     if (statusFilter !== "all") count += 1
@@ -1011,7 +1019,7 @@ export function HrProfileUpdateApprovalsView() {
           <div className="min-w-0">
             <h3 className="text-sm font-semibold tracking-tight text-foreground">Requests</h3>
             <p className="text-xs text-muted-foreground">
-              Open a request to review changes and decide.
+              Review pending changes and browse past approvals and rejections.
             </p>
           </div>
           <div className="flex min-w-0 flex-wrap items-center gap-1.5">
@@ -1068,8 +1076,9 @@ export function HrProfileUpdateApprovalsView() {
                       <SelectValue placeholder="All statuses" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All statuses</SelectItem>
+                      <SelectItem value="all">All (incl. history)</SelectItem>
                       <SelectItem value="submitted">Submitted</SelectItem>
+                      <SelectItem value="pending">Pending</SelectItem>
                       <SelectItem value="draft">Draft</SelectItem>
                       <SelectItem value="approved">Approved</SelectItem>
                       <SelectItem value="rejected">Rejected</SelectItem>
@@ -1107,6 +1116,10 @@ export function HrProfileUpdateApprovalsView() {
               <span className="font-semibold text-amber-700 dark:text-amber-400">
                 {pendingCount} pending
               </span>
+              <span className="mx-1.5 text-border">·</span>
+              <span className="font-semibold text-slate-600 dark:text-slate-300">
+                {historyCount} history
+              </span>
             </p>
           </div>
         </div>
@@ -1127,7 +1140,9 @@ export function HrProfileUpdateApprovalsView() {
         {!loading && filteredRequests.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted-foreground">
             {requests.length === 0
-              ? "No profile update requests match the current filters."
+              ? statusFilter === "all"
+                ? "No profile update requests yet — pending and past decisions will appear here."
+                : `No ${statusFilter} profile update requests match the current filters.`
               : "No requests match your search."}
           </p>
         ) : null}

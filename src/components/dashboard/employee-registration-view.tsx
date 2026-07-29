@@ -13,7 +13,7 @@ export function EmployeeRegistrationView() {
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
-      <div className="glass-scrollbar overflow-x-auto">
+      <div className="tab-rail-scroll">
         <div className="inline-flex min-w-full items-center gap-1 border-b border-border/80">
           {([
             { id: "manual", label: "Manual Registration" },
@@ -27,7 +27,7 @@ export function EmployeeRegistrationView() {
                 type="button"
                 onClick={() => setActiveTab(tab.id)}
                 className={cn(
-                  "border-b-2 px-2 py-2 text-sm font-medium whitespace-nowrap transition-colors duration-200",
+                  "shrink-0 border-b-2 px-2 py-2 text-sm font-medium whitespace-nowrap transition-colors duration-200",
                   isActive
                     ? "border-[var(--primary)] text-[var(--primary)]"
                     : "border-transparent text-slate-600 hover:text-slate-900"
