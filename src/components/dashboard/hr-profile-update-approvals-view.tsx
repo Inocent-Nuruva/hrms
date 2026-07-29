@@ -821,19 +821,28 @@ export function HrProfileUpdateApprovalsView() {
     setLoading(true)
     setError(null)
     try {
+      // Match attendance-corrections query shape — avoid sortBy/includeHistory flags
+      // that some backends reject with HTTP 400 Bad Request.
+      // "draft" is self-service only; load history and filter client-side.
+      const apiStatus =
+        statusFilter === "all" || statusFilter === "draft" ? undefined : statusFilter
       const result = await listHrProfileUpdateApprovalRequests(token, {
         page: 1,
         limit: 100,
-        sortBy: "created_at",
-        sortOrder: "DESC",
-        // "all" loads pending + decided history; a single status filters the API.
-        status: statusFilter === "all" ? undefined : statusFilter,
-        includeHistory: statusFilter === "all",
+        status: apiStatus,
+        includeHistory: statusFilter === "all" || statusFilter === "draft",
         date_from: dateFrom || undefined,
         date_to: dateTo || undefined,
       })
+      const listRows =
+        statusFilter === "draft"
+          ? result.rows.filter((row) => {
+              const status = String(row.status ?? "").trim().toLowerCase()
+              return status === "draft" || status.includes("draft")
+            })
+          : result.rows
       // List payloads often only include employee_id — resolve names for display.
-      const enrichedRows = await enrichRowsWithEmployeeNames(token, result.rows)
+      const enrichedRows = await enrichRowsWithEmployeeNames(token, listRows)
       setRequests(enrichedRows)
 
       // Deep-link / notification highlight opens the review modal once.

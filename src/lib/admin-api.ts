@@ -5625,11 +5625,11 @@ export async function submitMyProfileUpdateRequest(token: string, id: string | n
 /**
  * When "all / history" is requested, many backends only return actionable (pending)
  * rows unless a status is supplied. Fetch these statuses in parallel and merge.
+ * Keep to values the HR approvals endpoint typically accepts (avoid draft — self-service only).
  */
 const PROFILE_UPDATE_HISTORY_STATUSES = [
   "submitted",
   "pending",
-  "draft",
   "approved",
   "rejected",
   "cancelled",
@@ -5659,6 +5659,40 @@ function profileUpdateRequestSortTime(row: AdminRecord) {
   return 0
 }
 
+/**
+ * Build list query for HR profile-update approvals.
+ * Match attendance-corrections: only page/limit/status/from_date/to_date/employee_id.
+ * Extra keys (sortBy, includeHistory, dual date aliases) caused HTTP 400 Bad Request
+ * on backends with strict query validation.
+ */
+function buildHrProfileUpdateApprovalsQuery(
+  params: SelfServiceRequestQueryParams & { employee_id?: number },
+  status?: string
+) {
+  const fallbackPage = params.page && params.page > 0 ? params.page : 1
+  const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20
+  const query = new URLSearchParams()
+
+  query.set("page", String(fallbackPage))
+  query.set("limit", String(fallbackLimit))
+
+  if (params.employee_id !== undefined) {
+    query.set("employee_id", String(params.employee_id))
+  }
+  const statusValue = (status ?? params.status)?.trim()
+  if (statusValue && statusValue.toLowerCase() !== "all") {
+    query.set("status", statusValue)
+  }
+  if (params.date_from) {
+    query.set("from_date", params.date_from)
+  }
+  if (params.date_to) {
+    query.set("to_date", params.date_to)
+  }
+
+  return query
+}
+
 export async function listHrProfileUpdateApprovalRequests(
   token: string,
   params: SelfServiceRequestQueryParams & {
@@ -5670,43 +5704,13 @@ export async function listHrProfileUpdateApprovalRequests(
   const fallbackPage = params.page && params.page > 0 ? params.page : 1
   const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20
 
-  const buildQuery = (status?: string) => {
-    const query = new URLSearchParams()
-    query.set("page", String(fallbackPage))
-    query.set("limit", String(fallbackLimit))
-
-    if (params.employee_id !== undefined) {
-      query.set("employee_id", String(params.employee_id))
-    }
-    if (status && status.trim()) {
-      query.set("status", status.trim())
-    }
-    // Support both param conventions used by self-service endpoints.
-    if (params.date_from) {
-      query.set("from_date", params.date_from)
-      query.set("date_from", params.date_from)
-    }
-    if (params.date_to) {
-      query.set("to_date", params.date_to)
-      query.set("date_to", params.date_to)
-    }
-    if (params.sortBy && params.sortBy.trim()) {
-      query.set("sortBy", params.sortBy.trim())
-    }
-    if (params.sortOrder === "ASC" || params.sortOrder === "DESC") {
-      query.set("sortOrder", params.sortOrder)
-    }
-    // Hint for backends that gate history behind an explicit flag.
-    if (params.includeHistory && !status) {
-      query.set("include_history", "true")
-      query.set("includeHistory", "true")
-    }
-    return query
-  }
-
   const fetchPage = async (status?: string) => {
+    const query = buildHrProfileUpdateApprovalsQuery(
+      status === undefined ? { ...params, status: undefined } : params,
+      status
+    )
     const payload = await adminRequest<unknown>(
-      `/api/hr/self-service/approvals/profile-updates?${buildQuery(status).toString()}`,
+      `/api/hr/self-service/approvals/profile-updates?${query.toString()}`,
       { token }
     )
     const rows = normalizeList(payload)
@@ -5714,53 +5718,34 @@ export async function listHrProfileUpdateApprovalRequests(
     return { rows, ...pagination }
   }
 
-  // Single status filter — one request.
-  if (params.status && params.status.trim() && params.status.trim().toLowerCase() !== "all") {
-    return fetchPage(params.status.trim())
-  }
-
-  // "All" / history: many APIs default to actionable-only when status is omitted.
-  // Pull each known status (plus an unfiltered/include_history pass) and merge.
-  if (params.includeHistory !== false) {
-    const settled = await Promise.allSettled([
-      fetchPage(undefined),
-      ...PROFILE_UPDATE_HISTORY_STATUSES.map((status) => fetchPage(status)),
-    ])
-
+  const mergeSettledPages = (
+    settled: PromiseSettledResult<PaginatedUsersResult>[]
+  ): PaginatedUsersResult | null => {
     const byId = new Map<string, AdminRecord>()
     let totalHint: number | null = null
+    let anyFulfilled = false
 
     for (const result of settled) {
       if (result.status !== "fulfilled") {
         continue
       }
+      anyFulfilled = true
       if (typeof result.value.total === "number" && Number.isFinite(result.value.total)) {
         totalHint = Math.max(totalHint ?? 0, result.value.total)
       }
       for (const row of result.value.rows) {
         const id = readProfileUpdateRequestRowId(row)
         if (!id) {
-          // Keep rows without ids keyed by a synthetic stable fallback.
           byId.set(`anon-${byId.size}-${JSON.stringify(row).slice(0, 48)}`, row)
           continue
         }
         const existing = byId.get(id)
-        if (!existing) {
-          byId.set(id, row)
-          continue
-        }
-        // Prefer the richer payload when the same id appears twice.
-        byId.set(id, { ...existing, ...row })
+        byId.set(id, existing ? { ...existing, ...row } : row)
       }
     }
 
-    // Only surface an error when every parallel request failed.
-    const anyFulfilled = settled.some((result) => result.status === "fulfilled")
     if (!anyFulfilled) {
-      const firstRejected = settled.find((result) => result.status === "rejected")
-      if (firstRejected && firstRejected.status === "rejected") {
-        throw firstRejected.reason
-      }
+      return null
     }
 
     const rows = Array.from(byId.values()).sort(
@@ -5777,6 +5762,66 @@ export async function listHrProfileUpdateApprovalRequests(
           ? Math.max(1, Math.ceil((totalHint !== null ? Math.max(totalHint, rows.length) : rows.length) / fallbackLimit))
           : 1,
     }
+  }
+
+  const fetchHistoryMerged = async () => {
+    const settled = await Promise.allSettled([
+      fetchPage(undefined),
+      ...PROFILE_UPDATE_HISTORY_STATUSES.map((status) => fetchPage(status)),
+    ])
+    const merged = mergeSettledPages(settled)
+    if (merged) {
+      return merged
+    }
+
+    // Last resort: bare request with only page/limit (no status/dates).
+    const bare = new URLSearchParams({
+      page: String(fallbackPage),
+      limit: String(fallbackLimit),
+    })
+    const payload = await adminRequest<unknown>(
+      `/api/hr/self-service/approvals/profile-updates?${bare.toString()}`,
+      { token }
+    )
+    const rows = normalizeList(payload)
+    const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit)
+    return { rows, ...pagination }
+  }
+
+  // Single status filter — try API first; on 400, load history and filter client-side.
+  if (params.status && params.status.trim() && params.status.trim().toLowerCase() !== "all") {
+    const requestedStatus = params.status.trim().toLowerCase()
+    try {
+      return await fetchPage(params.status.trim())
+    } catch (errorObject) {
+      const statusCode =
+        typeof errorObject === "object" &&
+        errorObject !== null &&
+        "status" in errorObject
+          ? Number((errorObject as { status?: number }).status)
+          : null
+      if (statusCode !== 400) {
+        throw errorObject
+      }
+      const history = await fetchHistoryMerged()
+      const rows = history.rows.filter((row) => {
+        const rowStatus = String(row.status ?? "").trim().toLowerCase()
+        return rowStatus === requestedStatus || rowStatus.includes(requestedStatus)
+      })
+      return {
+        rows,
+        total: rows.length,
+        page: fallbackPage,
+        limit: fallbackLimit,
+        totalPages:
+          fallbackLimit > 0 ? Math.max(1, Math.ceil(rows.length / fallbackLimit)) : 1,
+      }
+    }
+  }
+
+  // Default / "all": unfiltered + status variants, same query shape as attendance corrections.
+  if (params.includeHistory !== false) {
+    return fetchHistoryMerged()
   }
 
   return fetchPage(undefined)
