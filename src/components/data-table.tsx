@@ -2306,7 +2306,7 @@ export function DataTable({
         ) : null}
       </div>
 
-      <div className="relative flex flex-col gap-3 overflow-auto px-3 lg:px-4">
+      <div className="relative flex min-w-0 max-w-full flex-col gap-3 overflow-x-hidden overflow-y-auto px-0 sm:px-1 lg:px-2">
           {isAccessControlResource ? (
             <div className="space-y-2">
               {!token ? (

@@ -949,7 +949,7 @@ export default function AdminDashboardView({
         activeResource={resolvedActiveResource}
         onSelectResource={navigateToResource}
       />
-      <SidebarInset className="overflow-hidden">
+      <SidebarInset className="min-w-0 overflow-hidden">
         {/* Header stays pinned; only this page body scrolls (single scrollbar). */}
         <SiteHeader
           onRefresh={handleHeaderRefresh}
@@ -957,8 +957,8 @@ export default function AdminDashboardView({
           adminName={adminName}
           companyName={companyName}
         />
-        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain">
-          <div className="@container/main flex flex-col">
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain">
+          <div className="@container/main flex min-w-0 max-w-full flex-col">
             {/* Overview sits flush under the top bar (full width of the content pane). */}
             {resolvedShowOverview && accessMode === "admin" ? (
               <HrAnalyticsDashboard
@@ -967,7 +967,7 @@ export default function AdminDashboardView({
                 adminRolesLabel={adminRolesLabel}
               />
             ) : null}
-            <div className="flex flex-col gap-3 px-3 py-3 md:gap-4 md:px-4 md:py-4">
+            <div className="flex min-w-0 max-w-full flex-col gap-3 px-3 py-3 sm:px-4 md:gap-4 md:px-4 md:py-4">
               {children}
               {resolvedActiveResource && resolvedUseApis ? (
                 <DataTable

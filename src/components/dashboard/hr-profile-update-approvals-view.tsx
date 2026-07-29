@@ -990,12 +990,12 @@ export function HrProfileUpdateApprovalsView() {
     : ""
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-1.5">
-        <h2 className="mr-1 shrink-0 text-sm font-semibold text-foreground">
+    <div className="w-full min-w-0 max-w-full space-y-3">
+      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+        <h2 className="min-w-0 flex-1 text-sm font-semibold text-foreground">
           Profile Update Approvals
         </h2>
-        <div className="ml-auto flex flex-wrap items-center gap-1.5">
+        <div className="flex shrink-0 flex-wrap items-center gap-1.5">
           <button
             type="button"
             className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white"
@@ -1014,101 +1014,103 @@ export function HrProfileUpdateApprovalsView() {
         </div>
       ) : null}
 
-      <div className="min-w-0 space-y-2">
-        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
-          <div className="min-w-0">
+      <div className="min-w-0 max-w-full space-y-2">
+        <div className="flex min-w-0 max-w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+          <div className="min-w-0 max-w-full">
             <h3 className="text-sm font-semibold tracking-tight text-foreground">Requests</h3>
             <p className="text-xs text-muted-foreground">
               Review pending changes and browse past approvals and rejections.
             </p>
           </div>
-          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-            <SearchToggleField
-              value={searchQuery}
-              onChange={setSearchQuery}
-              placeholder="Search name, request, status…"
-              label="Search requests"
-              className="min-w-0 max-w-full"
-            />
-            <Popover open={filterOpen} onOpenChange={setFilterOpen}>
-              <PopoverTrigger
-                type="button"
-                className={cn(
-                  "relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-background text-foreground transition-colors hover:bg-muted",
-                  activeFilterCount > 0 && "border-primary/40 text-primary"
-                )}
-                aria-label="Open filters"
-                title="Filters"
-              >
-                <FilterIcon className="size-3.5" />
-                {activeFilterCount > 0 ? (
-                  <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold !text-white">
-                    {activeFilterCount}
-                  </span>
-                ) : null}
-              </PopoverTrigger>
-              <PopoverContent
-                align="end"
-                className="w-[min(18rem,calc(100vw-1.5rem))] space-y-3 p-3"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-semibold text-foreground">Filters</p>
+          <div className="flex min-w-0 max-w-full flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:items-center">
+            <div className="flex min-w-0 max-w-full items-center gap-1.5">
+              <SearchToggleField
+                value={searchQuery}
+                onChange={setSearchQuery}
+                placeholder="Search name, request, status…"
+                label="Search requests"
+                className="min-w-0 max-w-full"
+              />
+              <Popover open={filterOpen} onOpenChange={setFilterOpen}>
+                <PopoverTrigger
+                  type="button"
+                  className={cn(
+                    "relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-background text-foreground transition-colors hover:bg-muted",
+                    activeFilterCount > 0 && "border-primary/40 text-primary"
+                  )}
+                  aria-label="Open filters"
+                  title="Filters"
+                >
+                  <FilterIcon className="size-3.5" />
                   {activeFilterCount > 0 ? (
-                    <button
-                      type="button"
-                      className="text-xs font-medium text-primary hover:underline"
-                      onClick={clearFilters}
-                    >
-                      Clear all
-                    </button>
+                    <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold !text-white">
+                      {activeFilterCount}
+                    </span>
                   ) : null}
-                </div>
+                </PopoverTrigger>
+                <PopoverContent
+                  align="end"
+                  className="w-[min(18rem,calc(100vw-1.5rem))] space-y-3 p-3"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-foreground">Filters</p>
+                    {activeFilterCount > 0 ? (
+                      <button
+                        type="button"
+                        className="text-xs font-medium text-primary hover:underline"
+                        onClick={clearFilters}
+                      >
+                        Clear all
+                      </button>
+                    ) : null}
+                  </div>
 
-                <div className="space-y-1.5">
-                  <Label htmlFor="profile-approval-status" className="text-xs text-muted-foreground">
-                    Status
-                  </Label>
-                  <Select
-                    value={statusFilter}
-                    onValueChange={(value) => setStatusFilter(value ?? "all")}
-                  >
-                    <SelectTrigger id="profile-approval-status" className="h-8 w-full text-xs">
-                      <SelectValue placeholder="All statuses" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All (incl. history)</SelectItem>
-                      <SelectItem value="submitted">Submitted</SelectItem>
-                      <SelectItem value="pending">Pending</SelectItem>
-                      <SelectItem value="draft">Draft</SelectItem>
-                      <SelectItem value="approved">Approved</SelectItem>
-                      <SelectItem value="rejected">Rejected</SelectItem>
-                      <SelectItem value="cancelled">Cancelled</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="profile-approval-status" className="text-xs text-muted-foreground">
+                      Status
+                    </Label>
+                    <Select
+                      value={statusFilter}
+                      onValueChange={(value) => setStatusFilter(value ?? "all")}
+                    >
+                      <SelectTrigger id="profile-approval-status" className="h-8 w-full text-xs">
+                        <SelectValue placeholder="All statuses" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All (incl. history)</SelectItem>
+                        <SelectItem value="submitted">Submitted</SelectItem>
+                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="draft">Draft</SelectItem>
+                        <SelectItem value="approved">Approved</SelectItem>
+                        <SelectItem value="rejected">Rejected</SelectItem>
+                        <SelectItem value="cancelled">Cancelled</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">From date</Label>
-                  <DatePickerPresets
-                    value={dateFrom}
-                    onChange={setDateFrom}
-                    placeholder="From"
-                    className="h-8 w-full px-2 text-xs"
-                  />
-                </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">From date</Label>
+                    <DatePickerPresets
+                      value={dateFrom}
+                      onChange={setDateFrom}
+                      placeholder="From"
+                      className="h-8 w-full px-2 text-xs"
+                    />
+                  </div>
 
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">To date</Label>
-                  <DatePickerPresets
-                    value={dateTo}
-                    onChange={setDateTo}
-                    placeholder="To"
-                    className="h-8 w-full px-2 text-xs"
-                  />
-                </div>
-              </PopoverContent>
-            </Popover>
-            <p className="w-full text-xs sm:ml-1 sm:w-auto">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">To date</Label>
+                    <DatePickerPresets
+                      value={dateTo}
+                      onChange={setDateTo}
+                      placeholder="To"
+                      className="h-8 w-full px-2 text-xs"
+                    />
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
+            <p className="min-w-0 max-w-full text-xs leading-relaxed sm:ml-1">
               <span className="font-semibold text-muted-foreground">
                 {filteredRequests.length} total
               </span>
@@ -1124,19 +1126,21 @@ export function HrProfileUpdateApprovalsView() {
           </div>
         </div>
 
-        <ResizableTable
-          title="Profile Update Approval Requests"
-          data={filteredRequests}
-          columns={requestColumns}
-          itemsPerPage={15}
-          loading={loading}
-          storageKey="hr-profile-update-approval-requests"
-          showToolbar={false}
-          getRowId={(row) => getRequestId(row) || String(row.id ?? "")}
-          onRowSelect={(id) => {
-            if (id) openReview(id)
-          }}
-        />
+        <div className="min-w-0 max-w-full">
+          <ResizableTable
+            title="Profile Update Approval Requests"
+            data={filteredRequests}
+            columns={requestColumns}
+            itemsPerPage={15}
+            loading={loading}
+            storageKey="hr-profile-update-approval-requests"
+            showToolbar={false}
+            getRowId={(row) => getRequestId(row) || String(row.id ?? "")}
+            onRowSelect={(id) => {
+              if (id) openReview(id)
+            }}
+          />
+        </div>
         {!loading && filteredRequests.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted-foreground">
             {requests.length === 0

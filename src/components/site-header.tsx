@@ -58,17 +58,21 @@ export function SiteHeader({
   return (
     <header
       data-slot="site-header"
-      className="site-header sticky top-0 z-50 flex h-(--header-height) shrink-0 items-center gap-1.5 border-b border-border/80 bg-background transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height) md:bg-transparent supports-[backdrop-filter]:md:backdrop-blur-md"
+      className="site-header sticky top-0 z-50 flex h-(--header-height) shrink-0 items-center gap-1.5 border-b border-border/80 bg-background transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height)"
     >
-      {/* Decorative depth — mirrors sidebar polish */}
-      <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+      {/* Decorative depth — desktop only; hidden on mobile so the bar stays solid */}
+      <div
+        aria-hidden
+        data-site-header-decor
+        className="pointer-events-none absolute inset-0 hidden overflow-hidden md:block"
+      >
         <div className="absolute -left-10 top-1/2 h-24 w-40 -translate-y-1/2 rounded-full bg-primary/[0.08] blur-2xl dark:bg-primary/15" />
         <div className="absolute -right-8 top-0 h-20 w-32 rounded-full bg-primary/[0.06] blur-2xl dark:bg-primary/12" />
         <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
         <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/70 to-transparent dark:via-white/10" />
       </div>
 
-      <div className="relative z-[1] flex w-full items-center gap-1.5 px-3 lg:px-4">
+      <div className="relative z-[1] flex w-full min-w-0 items-center gap-1.5 px-3 sm:px-4 lg:px-4">
         <SidebarTrigger className="-ml-1" />
         <Separator orientation="vertical" className="mx-1 h-3.5 data-vertical:self-auto bg-border/80" />
 

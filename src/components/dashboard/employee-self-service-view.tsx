@@ -1640,17 +1640,17 @@ function SelfServiceSectionCard({
   barClassName?: string
 }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-card">
-      <div className="flex">
+    <div className="min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-card">
+      <div className="flex min-w-0">
         <div className={cn("w-1 shrink-0", barClassName)} />
-        <div className="flex min-w-0 flex-1 items-center justify-between gap-2 px-3 py-2.5">
-          <div className="min-w-0">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-2 px-3 py-2.5">
+          <div className="min-w-0 flex-1">
             <h3 className="text-sm font-semibold text-foreground">{title}</h3>
             {subtitle ? (
               <p className="truncate text-[11px] text-muted-foreground">{subtitle}</p>
             ) : null}
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
             {typeof count === "number" ? (
               <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-primary">
                 {count}
@@ -1660,7 +1660,7 @@ function SelfServiceSectionCard({
           </div>
         </div>
       </div>
-      <div className="divide-y divide-border/70 border-t border-border/70">{children}</div>
+      <div className="min-w-0 divide-y divide-border/70 border-t border-border/70">{children}</div>
     </div>
   )
 }
@@ -1752,17 +1752,17 @@ function ProfileRequestRow({
 }) {
   const tone = requestStatusTone(status)
   return (
-    <div className="flex bg-background">
+    <div className="flex min-w-0 bg-background">
       <div className={cn("w-1 shrink-0", tone.bar)} />
-      <div className="flex min-w-0 flex-1 items-start justify-between gap-3 px-3 py-2.5">
-        <div className="min-w-0 space-y-0.5">
+      <div className="flex min-w-0 flex-1 items-start justify-between gap-2 px-3 py-2.5 sm:gap-3">
+        <div className="min-w-0 flex-1 space-y-0.5">
           <p className="truncate text-sm font-semibold text-foreground">{title}</p>
           <p className="text-[11px] text-muted-foreground">{dateLabel}</p>
-          {detail ? <p className="text-xs text-muted-foreground line-clamp-2">{detail}</p> : null}
+          {detail ? <p className="line-clamp-2 break-words text-xs text-muted-foreground">{detail}</p> : null}
         </div>
         <span
           className={cn(
-            "inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+            "inline-flex max-w-[40%] shrink-0 items-center truncate rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
             tone.badge
           )}
         >
@@ -2899,13 +2899,18 @@ function ProfileUpdatesTab({
   ]
 
   return (
-    <motion.div className="space-y-4" variants={profileTabStagger} initial="hidden" animate="show">
+    <motion.div
+      className="w-full min-w-0 max-w-full space-y-4"
+      variants={profileTabStagger}
+      initial="hidden"
+      animate="show"
+    >
       {/* Primary actions */}
       <motion.div
         variants={profileTabItem}
-        className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+        className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
       >
-        <div className="min-w-0">
+        <div className="min-w-0 max-w-full">
           <h2 className="text-base font-semibold text-foreground">Update requests</h2>
           <p className="text-sm text-muted-foreground">
             Submit a change for HR approval, or track requests you already sent.
@@ -2914,7 +2919,7 @@ function ProfileUpdatesTab({
         <Button
           type="button"
           size="sm"
-          className="h-9 shrink-0 bg-primary !text-white hover:bg-primary/90"
+          className="h-9 w-full shrink-0 bg-primary !text-white hover:bg-primary/90 sm:w-auto"
           onClick={() =>
             openSectionEditor("personal-details", "Personal Details", [
               "first_name",
@@ -2932,7 +2937,7 @@ function ProfileUpdatesTab({
 
       <motion.div
         variants={profileTabItem}
-        className="inline-flex max-w-full flex-nowrap items-stretch overflow-x-auto rounded-lg border border-border"
+        className="flex max-w-full min-w-0 flex-nowrap items-stretch overflow-x-auto overscroll-x-contain rounded-lg border border-border"
       >
         {[
           { label: "All", value: String(statusCounts.total), className: "text-primary" },
@@ -2954,7 +2959,7 @@ function ProfileUpdatesTab({
           <div
             key={chip.label}
             className={cn(
-              "flex min-w-[5.5rem] shrink-0 flex-col justify-center bg-background px-3 py-2",
+              "flex min-w-0 flex-1 basis-0 flex-col justify-center bg-background px-2.5 py-2 sm:min-w-[5.5rem] sm:flex-none sm:basis-auto sm:px-3",
               index < arr.length - 1 ? "border-r border-border/60" : null
             )}
           >
@@ -2969,9 +2974,9 @@ function ProfileUpdatesTab({
       </motion.div>
 
       {/* Quick update types */}
-      <motion.div variants={profileTabItem}>
+      <motion.div variants={profileTabItem} className="min-w-0 max-w-full">
         <div className="overflow-hidden rounded-lg border border-border bg-card">
-          <div className="flex">
+          <div className="flex min-w-0">
             <div className="w-1 shrink-0 bg-primary" />
             <div className="min-w-0 flex-1 px-3 py-2.5">
               <h3 className="text-sm font-semibold text-foreground">What do you want to change?</h3>
@@ -2980,22 +2985,24 @@ function ProfileUpdatesTab({
               </p>
             </div>
           </div>
-          <div className="grid gap-0 border-t border-border/70 sm:grid-cols-2">
+          <div className="grid min-w-0 gap-0 border-t border-border/70 sm:grid-cols-2">
             {updateActions.map((action) => (
               <button
                 key={action.key}
                 type="button"
                 onClick={() => openSectionEditor(action.key, action.label, action.fields)}
-                className="flex items-center gap-3 border-b border-border/70 px-3 py-3 text-left transition-colors hover:bg-muted/40 sm:odd:border-r sm:[&:nth-last-child(-n+2)]:border-b-0"
+                className="flex min-w-0 items-center gap-2.5 border-b border-border/70 px-3 py-3 text-left transition-colors hover:bg-muted/40 sm:gap-3 sm:odd:border-r sm:[&:nth-last-child(-n+2)]:border-b-0"
               >
                 <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
                   <PencilIcon className="size-3.5" />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-semibold text-foreground">{action.title}</span>
+                  <span className="block truncate text-sm font-semibold text-foreground">
+                    {action.title}
+                  </span>
                   <span className="block text-[11px] text-muted-foreground">{action.description}</span>
                 </span>
-                <span className="text-xs font-medium text-primary">Request →</span>
+                <span className="shrink-0 text-xs font-medium text-primary">Request →</span>
               </button>
             ))}
           </div>
@@ -5210,7 +5217,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
 
     tabContent = (
       <motion.section
-        className="space-y-4 px-1 py-1 md:px-0"
+        className="w-full min-w-0 max-w-full space-y-4"
         variants={profileTabStagger}
         initial="hidden"
         animate="show"

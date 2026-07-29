@@ -36,9 +36,9 @@ export default function EmployeesLayout({
   }
 
   return (
-    <div className="flex flex-col gap-3 md:gap-4">
+    <div className="flex min-w-0 max-w-full flex-col gap-3 md:gap-4">
       <DashboardSectionTabs groups={employeeSectionTabGroups} />
-      <div className="min-w-0">{children}</div>
+      <div className="min-w-0 max-w-full">{children}</div>
     </div>
   )
 }

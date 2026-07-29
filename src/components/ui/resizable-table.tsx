@@ -1022,14 +1022,14 @@ export function ResizableTable<T = Record<string, unknown>>({
     "inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-lg border border-border bg-background px-2 text-xs font-medium text-foreground transition hover:bg-muted";
 
   return (
-    <div className={`w-full ${className}`}>
+    <div className={`w-full min-w-0 max-w-full ${className}`}>
       {showToolbar ? (
-        <div className="mb-2 flex flex-nowrap items-center justify-between gap-2">
-          <div className="min-w-0 flex flex-1 items-center gap-2 overflow-hidden">
+        <div className="mb-2 flex min-w-0 max-w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+          <div className="flex min-w-0 max-w-full flex-1 items-center gap-2 overflow-hidden">
             {toolbarStart}
           </div>
 
-          <div className="flex shrink-0 items-center gap-1">
+          <div className="flex min-w-0 max-w-full shrink-0 flex-wrap items-center gap-1">
             {toolbarActions}
 
             {enableColumnVisibility ? (
@@ -1174,8 +1174,8 @@ export function ResizableTable<T = Record<string, unknown>>({
         </div>
       ) : null}
 
-      <div className="bg-background border border-border/50 overflow-hidden rounded-lg relative">
-        <div className="overflow-x-auto" ref={overflowRef}>
+      <div className="relative max-w-full overflow-hidden rounded-lg border border-border/50 bg-background">
+        <div className="max-w-full overflow-x-auto overscroll-x-contain" ref={overflowRef}>
           <div className="min-w-full align-top" style={{ minWidth: containerWidth ? `${containerWidth}px` : undefined }}>
             {/* Header */}
             <div className="flex py-1 text-base font-semibold text-muted-foreground/70 bg-muted/5 border-b border-border w-full">
@@ -1336,13 +1336,13 @@ export function ResizableTable<T = Record<string, unknown>>({
       </div>
 
       {totalPages > 1 && (
-        <div className="mt-1 flex items-center justify-between px-1 text-xs">
-          <div className="text-muted-foreground/70">
+        <div className="mt-1 flex min-w-0 max-w-full flex-wrap items-center justify-between gap-2 px-1 text-xs">
+          <div className="min-w-0 text-muted-foreground/70">
             Page {activePage} of {totalPages} • {totalCountLabel} {title.toLowerCase()}
             {totalCountLabel === 1 ? "" : "s"}
           </div>
 
-          <div className="flex gap-1">
+          <div className="flex shrink-0 gap-1">
             <button
               type="button"
               onClick={() => goToPage(activePage - 1)}
