@@ -479,7 +479,7 @@ export type CreateEmployeeResponse = AdminRecord & {
   }) | null
 }
 
-export type EmployeeImportMode = "CREATE_ONLY" | "UPDATE_EXIST" | "CREATE_OR_UPDATE"
+export type EmployeeImportMode = "CREATE_ONLY" | "UPDATE_EXISTING" | "CREATE_OR_UPDATE"
 
 export type EmployeeImportRequest = {
   import_mode: EmployeeImportMode
@@ -487,7 +487,12 @@ export type EmployeeImportRequest = {
 }
 
 export type EmployeeImportConfirmRequest = {
-  preview_token: string
+  batch_id?: string
+  preview_token?: string
+  row_ids?: number[]
+  excluded_row_ids?: number[]
+  skip_existing_records?: boolean
+  exclude_invalid_records?: boolean
   process_valid_rows_only?: boolean
 }
 
@@ -2296,6 +2301,16 @@ export async function previewEmployeeImport(
   return submitEmployeeImportRequest("/api/employees/import/preview", token, data, file, fileName)
 }
 
+export async function getEmployeeImportPreview(token: string, batchId: string) {
+  const payload = await adminRequest<unknown>(
+    `/api/employees/import/${encodeURIComponent(batchId)}/preview`,
+    {
+      token,
+    }
+  )
+  return asRecord(payload) ?? normalizeSingle(payload)
+}
+
 export async function startEmployeeImport(
   token: string,
   data: EmployeeImportRequest,
@@ -2342,11 +2357,7 @@ function isZipOrXlsxMagic(bytes: Uint8Array) {
   return bytes.length >= 2 && bytes[0] === 0x50 && bytes[1] === 0x4b
 }
 
-/**
- * Import "result" may be either:
- * - JSON status/summary for the batch, or
- * - an Excel/binary error/result report (common when rows failed).
- */
+/** Fetch the JSON status/summary for an employee import batch. */
 export async function getEmployeeImportResult(
   token: string,
   batchId: string
@@ -2356,8 +2367,7 @@ export async function getEmployeeImportResult(
     {
       method: "GET",
       headers: {
-        accept:
-          "application/json, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/octet-stream, */*",
+        accept: "application/json, */*",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       cache: "no-store",
@@ -2436,20 +2446,62 @@ export async function getEmployeeImportResult(
   }
 }
 
-/** Download the import result report (Excel) for a batch when the API returns a file. */
+/** Download the import error/result report workbook for a batch. */
 export async function downloadEmployeeImportResult(
   token: string,
   batchId: string
 ): Promise<{ blob: Blob; filename: string; contentType: string | null }> {
-  const result = await getEmployeeImportResult(token, batchId)
-  if (result.type === "file") {
-    return {
-      blob: result.blob,
-      filename: result.filename,
-      contentType: result.contentType,
+  const response = await fetch(
+    buildUrl(`/api/employees/import/${encodeURIComponent(batchId)}/errors/download`),
+    {
+      method: "GET",
+      headers: {
+        accept:
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/octet-stream, */*",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      cache: "no-store",
     }
+  )
+
+  const contentType = response.headers.get("content-type")
+  const buffer = await response.arrayBuffer()
+  const bytes = new Uint8Array(buffer)
+  const looksLikeFile = isBinaryContentType(contentType) || isZipOrXlsxMagic(bytes)
+
+  if (!response.ok) {
+    const text = new TextDecoder().decode(buffer)
+    const payload = parseResponseBodyText(text, contentType)
+    const error = new Error(extractMessage(payload, response.status)) as Error & {
+      status?: number
+      payload?: unknown
+    }
+    error.status = response.status
+    error.payload = payload
+    throw error
   }
-  throw new Error("Import result is a status response, not a downloadable file.")
+
+  if (!looksLikeFile) {
+    const text = new TextDecoder().decode(buffer)
+    const payload = parseResponseBodyText(text, contentType)
+    const record = asRecord(payload)
+    throw new Error(
+      typeof record?.message === "string"
+        ? record.message
+        : "Unexpected response when downloading the import report."
+    )
+  }
+
+  return {
+    blob: new Blob([buffer], {
+      type: contentType || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    }),
+    filename: filenameFromContentDisposition(
+      response.headers.get("content-disposition"),
+      `employee-import-result-${batchId}.xlsx`
+    ),
+    contentType,
+  }
 }
 
 export async function listEmployeeImportHistory(

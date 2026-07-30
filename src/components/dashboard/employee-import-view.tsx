@@ -20,11 +20,12 @@ import { cn } from "@/lib/utils"
 
 import {
   confirmEmployeeImport,
+  downloadEmployeeImportResult,
   downloadEmployeeImportTemplate,
+  getEmployeeImportPreview,
   getEmployeeImportResult,
   listEmployeeImportHistory,
   previewEmployeeImport,
-  startEmployeeImport,
   type AdminRecord,
   type EmployeeImportMode,
   type EmployeeImportResultResponse,
@@ -42,6 +43,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -55,7 +57,7 @@ const IMPORT_MODES: Array<{ value: EmployeeImportMode; label: string; hint: stri
     hint: "Skip people who already exist",
   },
   {
-    value: "UPDATE_EXIST",
+    value: "UPDATE_EXISTING",
     label: "Update existing only",
     hint: "Change current records, no new hires",
   },
@@ -104,11 +106,36 @@ type ImportIssue = {
 
 type PreviewDetails = {
   payload: AdminRecord | null
+  batchId: string
   previewToken: string
   importMode: string
   processValidRowsOnly: boolean | null
   overview: ImportOverview
   issues: ImportIssue[]
+  rows: PreviewRowDetails[]
+}
+
+type PreviewRowIssue = {
+  field: string
+  value?: unknown
+  message: string
+  suggestion?: string
+}
+
+type PreviewRowDetails = {
+  rowId: number | null
+  rowNumber: number
+  identifier: string
+  employeeName: string
+  employeeNumber: string
+  status: string
+  selectable: boolean
+  selectedByDefault: boolean
+  importAction: string
+  matchedBy: string[]
+  errors: string[]
+  warnings: string[]
+  issues: PreviewRowIssue[]
 }
 
 type BatchDetails = {
@@ -258,6 +285,43 @@ function readStringArray(value: unknown) {
     .map((entry) => entry.trim())
 }
 
+function normalizePreviewRows(payload: AdminRecord | null): PreviewRowDetails[] {
+  const rows = asRecordArray(payload?.rows)
+  if (!rows) {
+    return []
+  }
+
+  return rows.map((row) => ({
+    rowId: readNumber(row, ["rowId", "row_id", "id"]),
+    rowNumber: readNumber(row, ["rowNumber", "row_number"]) ?? 0,
+    identifier: readString(row, ["identifier", "employeeName", "employee_name"], "Employee row"),
+    employeeName: readString(row, ["employeeName", "employee_name"], "—"),
+    employeeNumber: readString(row, ["employeeNumber", "employee_number"], "—"),
+    status: readString(row, ["status"], "INVALID_RECORD"),
+    selectable: readBoolean(row, ["selectable"]) ?? false,
+    selectedByDefault: readBoolean(row, ["selectedByDefault", "selected_by_default"]) ?? false,
+    importAction: readString(row, ["importAction", "import_action"], ""),
+    matchedBy: readStringArray(row.matchedBy ?? row.matched_by),
+    errors: readStringArray(row.errors),
+    warnings: readStringArray(row.warnings),
+    issues: (asRecordArray(row.issues) ?? []).map((issue) => ({
+      field: readString(issue, ["field"], "—"),
+      value: issue.value,
+      message: readString(issue, ["message"], "Validation issue"),
+      suggestion: readString(issue, ["suggestion"], ""),
+    })),
+  }))
+}
+
+function previewRowDetailText(row: PreviewRowDetails) {
+  return (
+    row.issues[0]?.message ||
+    row.errors[0] ||
+    row.warnings[0] ||
+    (row.importAction ? `${row.importAction.toLowerCase()} on confirm` : "Ready")
+  )
+}
+
 function formatDateTime(value: string) {
   if (!value.trim()) {
     return "—"
@@ -299,8 +363,8 @@ function modeToneClass(value: string) {
     return "text-sky-600 dark:text-sky-400"
   }
   if (
-    raw === "UPDATE_EXIST" ||
-    raw.includes("UPDATE_EXIST") ||
+    raw === "UPDATE_EXISTING" ||
+    raw.includes("UPDATE_EXISTING") ||
     label.includes("update existing")
   ) {
     return "text-violet-600 dark:text-violet-400"
@@ -609,11 +673,13 @@ function extractPreviewDetails(payload: AdminRecord | null): PreviewDetails | nu
   const records = collectRecords(payload)
   return {
     payload,
+    batchId: readStringFromCandidates(records, ["batch_id", "batchId", "import_batch_id", "importBatchId"]),
     previewToken: readStringFromCandidates(records, ["preview_token", "previewToken"]),
     importMode: readStringFromCandidates(records, ["import_mode", "importMode", "mode"]),
     processValidRowsOnly: readBooleanFromCandidates(records, ["process_valid_rows_only", "processValidRowsOnly"]),
     overview: buildOverview(records),
     issues: extractIssues(payload, records),
+    rows: normalizePreviewRows(payload),
   }
 }
 
@@ -1219,16 +1285,18 @@ function ResultReportPanel({
 function BatchDetailsBody({
   batch,
   checkingResult,
-  onRefresh,
+  fetchingReport,
+  onFetchReport,
   showFetchReport = true,
 }: {
   batch: BatchDetails
   checkingResult?: boolean
-  onRefresh?: () => void
+  fetchingReport?: boolean
+  onFetchReport?: () => void
   showFetchReport?: boolean
 }) {
   const canFetch =
-    showFetchReport && Boolean(batch.batchId && batch.batchId !== "—" && onRefresh)
+    showFetchReport && Boolean(batch.batchId && batch.batchId !== "—" && onFetchReport)
   const hasErrorSignal = batchHasErrorSignal(batch)
   const displayIssues = resolveDisplayIssues(batch.overview, batch.issues, {
     context: "batch",
@@ -1250,8 +1318,8 @@ function BatchDetailsBody({
                 }
               : undefined
           }
-          checkingResult={checkingResult}
-          onFetch={onRefresh}
+          checkingResult={checkingResult || fetchingReport}
+          onFetch={onFetchReport}
           canFetch={canFetch && !batch.resultReport}
         />
       </div>
@@ -1284,6 +1352,12 @@ export function EmployeeImportView() {
   const [previewDetails, setPreviewDetails] = React.useState<PreviewDetails | null>(null)
   const [latestBatch, setLatestBatch] = React.useState<BatchDetails | null>(null)
   const [viewedBatch, setViewedBatch] = React.useState<BatchDetails | null>(null)
+  const [viewedPreviewDetails, setViewedPreviewDetails] = React.useState<PreviewDetails | null>(
+    null
+  )
+  const [selectedPreviewRowIds, setSelectedPreviewRowIds] = React.useState<number[]>([])
+  const [previewStatusFilter, setPreviewStatusFilter] = React.useState("ALL")
+  const [historyPreviewStatusFilter, setHistoryPreviewStatusFilter] = React.useState("ALL")
   const [flowDialogOpen, setFlowDialogOpen] = React.useState(false)
   const [historyDialogOpen, setHistoryDialogOpen] = React.useState(false)
   const [inspectedBatchId, setInspectedBatchId] = React.useState("")
@@ -1298,9 +1372,10 @@ export function EmployeeImportView() {
 
   const [loadingHistory, setLoadingHistory] = React.useState(false)
   const [previewing, setPreviewing] = React.useState(false)
-  const [importing, setImporting] = React.useState(false)
   const [confirming, setConfirming] = React.useState(false)
   const [checkingResult, setCheckingResult] = React.useState(false)
+  const [loadingPreviewBatchId, setLoadingPreviewBatchId] = React.useState("")
+  const [loadingResultReportBatchId, setLoadingResultReportBatchId] = React.useState("")
   const [downloadingTemplate, setDownloadingTemplate] = React.useState(false)
 
   const syncTokenFromSession = React.useCallback(() => {
@@ -1557,6 +1632,26 @@ export function EmployeeImportView() {
     [applyBatchDetails, historyRows, token]
   )
 
+  const loadViewedPreview = React.useCallback(
+    async (nextBatchId: string) => {
+      if (!token) return
+      const normalizedBatchId = nextBatchId.trim()
+      if (!normalizedBatchId) return
+
+      setLoadingPreviewBatchId(normalizedBatchId)
+      try {
+        const response = await getEmployeeImportPreview(token, normalizedBatchId)
+        setViewedPreviewDetails(extractPreviewDetails(response))
+        setHistoryPreviewStatusFilter("ALL")
+      } catch {
+        setViewedPreviewDetails(null)
+      } finally {
+        setLoadingPreviewBatchId("")
+      }
+    },
+    [token]
+  )
+
   const openHistoryBatch = React.useCallback(
     (batchId: string) => {
       const normalizedBatchId = batchId.trim()
@@ -1572,10 +1667,50 @@ export function EmployeeImportView() {
       } else {
         setViewedBatch(null)
       }
+      setViewedPreviewDetails(null)
+      setHistoryPreviewStatusFilter("ALL")
       setHistoryDialogOpen(true)
       void inspectBatch(normalizedBatchId, undefined, { asDialog: true })
+      void loadViewedPreview(normalizedBatchId)
     },
-    [historyRows, inspectBatch]
+    [historyRows, inspectBatch, loadViewedPreview]
+  )
+
+  const fetchResultReport = React.useCallback(
+    async (batchId: string, options?: { asDialog?: boolean }) => {
+      if (!token) return
+      const normalizedBatchId = batchId.trim()
+      if (!normalizedBatchId) return
+
+      setLoadingResultReportBatchId(normalizedBatchId)
+      setError(null)
+      try {
+        const report = await downloadEmployeeImportResult(token, normalizedBatchId)
+        const payload = { blob: report.blob, filename: report.filename }
+        if (options?.asDialog) {
+          setViewedBatch((current) =>
+            current?.batchId === normalizedBatchId
+              ? { ...current, resultReport: payload }
+              : current
+          )
+        } else {
+          setLatestBatch((current) =>
+            current?.batchId === normalizedBatchId
+              ? { ...current, resultReport: payload }
+              : current
+          )
+        }
+      } catch (reportError) {
+        setError(
+          reportError instanceof Error
+            ? reportError.message
+            : "Failed to download the import result report."
+        )
+      } finally {
+        setLoadingResultReportBatchId("")
+      }
+    },
+    [token]
   )
 
   const handleFileSelection = React.useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
@@ -1625,6 +1760,12 @@ export function EmployeeImportView() {
       )
       const details = extractPreviewDetails(response)
       setPreviewDetails(details)
+      setSelectedPreviewRowIds(
+        details?.rows
+          .filter((row) => row.selectable && row.selectedByDefault && row.rowId !== null)
+          .map((row) => row.rowId as number) ?? []
+      )
+      setPreviewStatusFilter("ALL")
       setFlowDialogOpen(true)
       setMessage("File checked. Review the preview dialog.")
     } catch (previewError) {
@@ -1634,57 +1775,16 @@ export function EmployeeImportView() {
     }
   }, [importMode, processValidRowsOnly, selectedFile, token])
 
-  const handleImport = React.useCallback(async () => {
-    if (!token) return
-    if (!selectedFile) {
-      setError("Excel file is required.")
-      return
-    }
-
-    setImporting(true)
-    setError(null)
-    setMessage(null)
-    try {
-      const response = await startEmployeeImport(
-        token,
-        {
-          import_mode: importMode,
-          process_valid_rows_only: processValidRowsOnly,
-        },
-        selectedFile,
-        selectedFile.name
-      )
-      const details = extractBatchDetails(response)
-      if (!details) {
-        setLatestBatch(null)
-        setError("Import started, but the server did not return a usable status. Check Past imports.")
-        void loadHistory()
-        return
-      }
-      setLatestBatch(details)
-      setFlowDialogOpen(true)
-      const nextBatchId = details.batchId ?? ""
-      if (nextBatchId) {
-        setInspectedBatchId(nextBatchId)
-      }
-      setMessage("Import started. Review the result dialog.")
-      void loadHistory()
-      if (nextBatchId) {
-        void inspectBatch(nextBatchId, "Import started.")
-      }
-    } catch (importError) {
-      setLatestBatch(null)
-      setError(importError instanceof Error ? importError.message : "Could not start import.")
-    } finally {
-      setImporting(false)
-    }
-  }, [importMode, inspectBatch, loadHistory, processValidRowsOnly, selectedFile, token])
-
   const handleConfirm = React.useCallback(async () => {
     if (!token) return
     const previewToken = previewDetails?.previewToken.trim() ?? ""
-    if (!previewToken) {
-      setError("Generate a preview first so there is a token to confirm.")
+    const batchId = previewDetails?.batchId.trim() ?? ""
+    if (!previewToken && !batchId) {
+      setError("Generate a preview first so there is a batch to confirm.")
+      return
+    }
+    if (selectedPreviewRowIds.length === 0) {
+      setError("Select at least one ready row before confirming the import.")
       return
     }
 
@@ -1692,8 +1792,16 @@ export function EmployeeImportView() {
     setError(null)
     setMessage(null)
     try {
+      const previewRowIds = previewDetails?.rows
+        .map((row) => row.rowId)
+        .filter((rowId): rowId is number => typeof rowId === "number") ?? []
       const response = await confirmEmployeeImport(token, {
-        preview_token: previewToken,
+        batch_id: batchId || undefined,
+        preview_token: previewToken || undefined,
+        row_ids: selectedPreviewRowIds,
+        excluded_row_ids: previewRowIds.filter((rowId) => !selectedPreviewRowIds.includes(rowId)),
+        skip_existing_records: true,
+        exclude_invalid_records: true,
         process_valid_rows_only: processValidRowsOnly,
       })
       const details = extractBatchDetails(response)
@@ -1713,7 +1821,7 @@ export function EmployeeImportView() {
     } finally {
       setConfirming(false)
     }
-  }, [inspectBatch, loadHistory, previewDetails, processValidRowsOnly, token])
+  }, [inspectBatch, loadHistory, previewDetails, processValidRowsOnly, selectedPreviewRowIds, token])
 
   const handleTemplateDownload = React.useCallback(async () => {
     if (!token) return
@@ -1785,6 +1893,52 @@ export function EmployeeImportView() {
     )
   }, [historyStatusFilter, historyTableRows])
 
+  const previewStatusOptions = React.useMemo(() => {
+    const rows = previewDetails?.rows ?? []
+    const keys = new Map<string, string>([["ALL", "All records"]])
+    for (const row of rows) {
+      const raw = row.status?.trim()
+      if (!raw) continue
+      keys.set(raw, formatStatusLabel(raw))
+    }
+    return Array.from(keys.entries()).map(([value, label]) => ({ value, label }))
+  }, [previewDetails])
+
+  const filteredPreviewRows = React.useMemo(() => {
+    const rows = previewDetails?.rows ?? []
+    if (previewStatusFilter === "ALL") {
+      return rows
+    }
+    return rows.filter((row) => row.status === previewStatusFilter)
+  }, [previewDetails, previewStatusFilter])
+
+  const selectedPreviewCount = React.useMemo(
+    () =>
+      (previewDetails?.rows ?? []).filter(
+        (row) => row.rowId !== null && selectedPreviewRowIds.includes(row.rowId)
+      ).length,
+    [previewDetails, selectedPreviewRowIds]
+  )
+
+  const historyPreviewStatusOptions = React.useMemo(() => {
+    const rows = viewedPreviewDetails?.rows ?? []
+    const keys = new Map<string, string>([["ALL", "All records"]])
+    for (const row of rows) {
+      const raw = row.status?.trim()
+      if (!raw) continue
+      keys.set(raw, formatStatusLabel(raw))
+    }
+    return Array.from(keys.entries()).map(([value, label]) => ({ value, label }))
+  }, [viewedPreviewDetails])
+
+  const filteredHistoryPreviewRows = React.useMemo(() => {
+    const rows = viewedPreviewDetails?.rows ?? []
+    if (historyPreviewStatusFilter === "ALL") {
+      return rows
+    }
+    return rows.filter((row) => row.status === historyPreviewStatusFilter)
+  }, [historyPreviewStatusFilter, viewedPreviewDetails])
+
   const historyColumns = React.useMemo<Column<HistoryTableRow>[]>(
     () => [
       {
@@ -1850,6 +2004,8 @@ export function EmployeeImportView() {
   const clearSelectedFile = React.useCallback(() => {
     setSelectedFile(null)
     setPreviewDetails(null)
+    setSelectedPreviewRowIds([])
+    setPreviewStatusFilter("ALL")
     setLatestBatch(null)
     setFlowDialogOpen(false)
     if (fileInputRef.current) {
@@ -1912,7 +2068,7 @@ export function EmployeeImportView() {
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium tracking-tight">{selectedFile.name}</p>
                     <p className="mt-0.5 text-xs text-muted-foreground">
-                      {(selectedFile.size / 1024).toFixed(1)} KB · ready to check or import
+                      {(selectedFile.size / 1024).toFixed(1)} KB · ready to validate
                     </p>
                   </div>
                 </div>
@@ -2017,7 +2173,7 @@ export function EmployeeImportView() {
               size="sm"
               className="h-8"
               onClick={handlePreview}
-              disabled={previewing || importing || !token || !selectedFile}
+              disabled={previewing || !token || !selectedFile}
             >
               {previewing ? (
                 <Loader2Icon className="size-3.5 animate-spin" />
@@ -2025,21 +2181,6 @@ export function EmployeeImportView() {
                 <FileSearchIcon className="size-3.5" />
               )}
               Check file
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="h-8"
-              onClick={handleImport}
-              disabled={importing || previewing || !token || !selectedFile}
-            >
-              {importing ? (
-                <Loader2Icon className="size-3.5 animate-spin" />
-              ) : (
-                <UploadIcon className="size-3.5" />
-              )}
-              Import now
             </Button>
             {!selectedFile ? (
               <span className="ml-0.5 text-xs text-muted-foreground">Select a file to continue</span>
@@ -2136,7 +2277,7 @@ export function EmployeeImportView() {
                     {(() => {
                       const previewOverview = previewDetails!.overview
                       const previewHasProblems = overviewHasProblems(previewOverview)
-                      const previewCanProceed = overviewCanImport(previewOverview)
+                      const previewCanProceed = selectedPreviewCount > 0
                       const previewReady = overviewReadyCount(previewOverview)
                       const previewNeedsFix = overviewNeedsFixCount(previewOverview)
                       const previewIssues = resolveDisplayIssues(
@@ -2194,6 +2335,95 @@ export function EmployeeImportView() {
                           </div>
 
                           <div className="space-y-2 border-t border-border pt-4">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div>
+                                <p className="text-[11px] font-medium text-muted-foreground">
+                                  Preview rows
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {selectedPreviewCount} selected for import
+                                </p>
+                              </div>
+                              <Select
+                                value={previewStatusFilter}
+                                onValueChange={setPreviewStatusFilter}
+                              >
+                                <SelectTrigger className="h-8 w-[190px]">
+                                  <SelectValue placeholder="Filter rows" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {previewStatusOptions.map((option) => (
+                                    <SelectItem key={option.value} value={option.value}>
+                                      {option.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+
+                            <div className="max-h-64 overflow-auto rounded-xl border border-border/60">
+                              <table className="min-w-full text-xs">
+                                <thead className="sticky top-0 bg-background/95 backdrop-blur">
+                                  <tr className="border-b border-border/60 text-left text-muted-foreground">
+                                    <th className="px-3 py-2 font-medium">Import</th>
+                                    <th className="px-3 py-2 font-medium">Row</th>
+                                    <th className="px-3 py-2 font-medium">Employee</th>
+                                    <th className="px-3 py-2 font-medium">Number</th>
+                                    <th className="px-3 py-2 font-medium">Status</th>
+                                    <th className="px-3 py-2 font-medium">Details</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {filteredPreviewRows.map((row) => {
+                                    const checked =
+                                      row.rowId !== null && selectedPreviewRowIds.includes(row.rowId)
+                                    const detailText = previewRowDetailText(row)
+
+                                    return (
+                                      <tr key={`${row.rowId ?? "row"}-${row.rowNumber}`} className="border-b border-border/40 align-top">
+                                        <td className="px-3 py-2">
+                                          <Checkbox
+                                            checked={checked}
+                                            disabled={!row.selectable || row.rowId === null}
+                                            onCheckedChange={(nextChecked) => {
+                                              if (!row.selectable || row.rowId === null) return
+                                              setSelectedPreviewRowIds((current) => {
+                                                if (nextChecked) {
+                                                  return current.includes(row.rowId)
+                                                    ? current
+                                                    : [...current, row.rowId]
+                                                }
+                                                return current.filter((value) => value !== row.rowId)
+                                              })
+                                            }}
+                                            aria-label={`Select preview row ${row.rowNumber}`}
+                                          />
+                                        </td>
+                                        <td className="px-3 py-2 tabular-nums">{row.rowNumber}</td>
+                                        <td className="px-3 py-2">
+                                          <div className="min-w-0">
+                                            <p className="truncate font-medium text-foreground">{row.identifier}</p>
+                                            {row.matchedBy.length > 0 ? (
+                                              <p className="truncate text-[11px] text-muted-foreground">
+                                                Matched by {row.matchedBy.join(", ")}
+                                              </p>
+                                            ) : null}
+                                          </div>
+                                        </td>
+                                        <td className="px-3 py-2">{row.employeeNumber || "—"}</td>
+                                        <td className="px-3 py-2">
+                                          <StatusText value={row.status} />
+                                        </td>
+                                        <td className="px-3 py-2 text-muted-foreground">{detailText}</td>
+                                      </tr>
+                                    )
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+
+                          <div className="space-y-2 border-t border-border pt-4">
                             <div className="flex flex-wrap gap-2">
                               <Button
                                 type="button"
@@ -2218,28 +2448,6 @@ export function EmployeeImportView() {
                                   <SendIcon className="size-3.5" />
                                 )}
                                 Confirm &amp; import
-                              </Button>
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                className="h-8"
-                                onClick={handleImport}
-                                disabled={
-                                  importing || previewing || !token || !previewCanProceed
-                                }
-                                title={
-                                  !previewCanProceed
-                                    ? "No ready rows to import"
-                                    : "Start import without the confirm step"
-                                }
-                              >
-                                {importing ? (
-                                  <Loader2Icon className="size-3.5 animate-spin" />
-                                ) : (
-                                  <UploadIcon className="size-3.5" />
-                                )}
-                                Import without confirm
                               </Button>
                             </div>
                             {!previewCanProceed ? (
@@ -2326,10 +2534,10 @@ export function EmployeeImportView() {
                     <BatchDetailsBody
                       batch={latestBatch!}
                       checkingResult={checkingResult}
-                      onRefresh={
+                      fetchingReport={loadingResultReportBatchId === latestBatch!.batchId}
+                      onFetchReport={
                         latestBatchId
-                          ? () =>
-                              void inspectBatch(latestBatchId, "Import details refreshed.")
+                          ? () => void fetchResultReport(latestBatchId)
                           : undefined
                       }
                     />
@@ -2347,6 +2555,8 @@ export function EmployeeImportView() {
           setHistoryDialogOpen(open)
           if (!open) {
             setViewedBatch(null)
+            setViewedPreviewDetails(null)
+            setHistoryPreviewStatusFilter("ALL")
           }
         }}
       >
@@ -2397,15 +2607,116 @@ export function EmployeeImportView() {
                   Loading details…
                 </div>
               ) : viewedBatch ? (
-                <BatchDetailsBody
+                <>
+                  {loadingPreviewBatchId === viewedBatch.batchId || viewedPreviewDetails ? (
+                    <div className="space-y-3 rounded-xl border border-border/60 bg-muted/20 p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <p className="text-[11px] font-medium text-muted-foreground">
+                            Saved preview
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {viewedPreviewDetails
+                              ? `${overviewReadyCount(viewedPreviewDetails.overview) ?? 0} ready for import`
+                              : "Loading validated rows..."}
+                          </p>
+                        </div>
+                        {viewedPreviewDetails ? (
+                          <Select
+                            value={historyPreviewStatusFilter}
+                            onValueChange={setHistoryPreviewStatusFilter}
+                          >
+                            <SelectTrigger className="h-8 w-[190px]">
+                              <SelectValue placeholder="Filter rows" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {historyPreviewStatusOptions.map((option) => (
+                                <SelectItem key={option.value} value={option.value}>
+                                  {option.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : null}
+                      </div>
+
+                      {loadingPreviewBatchId === viewedBatch.batchId && !viewedPreviewDetails ? (
+                        <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
+                          <Loader2Icon className="size-4 animate-spin" />
+                          Loading preview rows...
+                        </div>
+                      ) : viewedPreviewDetails ? (
+                        <>
+                          <IssueTable
+                            issues={resolveDisplayIssues(
+                              viewedPreviewDetails.overview,
+                              viewedPreviewDetails.issues,
+                              { context: "preview" }
+                            )}
+                            emptyTitle="Preview looked good"
+                            emptyMessage="These rows and classifications were saved with the batch."
+                            emptyTone="success"
+                          />
+
+                          <div className="max-h-64 overflow-auto rounded-xl border border-border/60">
+                            <table className="min-w-full text-xs">
+                              <thead className="sticky top-0 bg-background/95 backdrop-blur">
+                                <tr className="border-b border-border/60 text-left text-muted-foreground">
+                                  <th className="px-3 py-2 font-medium">Row</th>
+                                  <th className="px-3 py-2 font-medium">Employee</th>
+                                  <th className="px-3 py-2 font-medium">Number</th>
+                                  <th className="px-3 py-2 font-medium">Status</th>
+                                  <th className="px-3 py-2 font-medium">Details</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {filteredHistoryPreviewRows.map((row) => (
+                                  <tr
+                                    key={`${row.rowId ?? "row"}-${row.rowNumber}`}
+                                    className="border-b border-border/40 align-top"
+                                  >
+                                    <td className="px-3 py-2 tabular-nums">{row.rowNumber}</td>
+                                    <td className="px-3 py-2">
+                                      <div className="min-w-0">
+                                        <p className="truncate font-medium text-foreground">
+                                          {row.identifier}
+                                        </p>
+                                        {row.matchedBy.length > 0 ? (
+                                          <p className="truncate text-[11px] text-muted-foreground">
+                                            Matched by {row.matchedBy.join(", ")}
+                                          </p>
+                                        ) : null}
+                                      </div>
+                                    </td>
+                                    <td className="px-3 py-2">{row.employeeNumber || "—"}</td>
+                                    <td className="px-3 py-2">
+                                      <StatusText value={row.status} />
+                                    </td>
+                                    <td className="px-3 py-2 text-muted-foreground">
+                                      {previewRowDetailText(row)}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  <BatchDetailsBody
                   batch={viewedBatch}
                   checkingResult={checkingResult}
-                  onRefresh={
+                  fetchingReport={loadingResultReportBatchId === viewedBatch.batchId}
+                  onFetchReport={
                     viewedBatch.batchId && viewedBatch.batchId !== "—"
-                      ? () => void inspectBatch(viewedBatch.batchId, undefined, { asDialog: true })
+                      ? () =>
+                          void fetchResultReport(viewedBatch.batchId, { asDialog: true })
                       : undefined
                   }
                 />
+                </>
               ) : (
                 <p className="py-8 text-center text-sm text-muted-foreground">
                   No details available for this import.
@@ -2421,9 +2732,10 @@ export function EmployeeImportView() {
                   variant="outline"
                   className="h-8"
                   disabled={checkingResult || !token}
-                  onClick={() =>
+                  onClick={() => {
                     void inspectBatch(viewedBatch.batchId, undefined, { asDialog: true })
-                  }
+                    void loadViewedPreview(viewedBatch.batchId)
+                  }}
                 >
                   {checkingResult ? (
                     <Loader2Icon className="size-3.5 animate-spin" />
