@@ -28,14 +28,14 @@ describe("employee import admin API helpers", () => {
       importMode: "CREATE_OR_UPDATE",
       process_valid_rows_only: true,
       totalRows: 119,
-      validRows: 117,
-      invalidRows: 2,
+      validRows: 118,
+      invalidRows: 1,
       duplicateRows: 0,
-      rowsReadyForImport: 117,
+      rowsReadyForImport: 118,
       summary: {
         totalRows: 119,
-        readyForImport: 117,
-        invalidRecords: 2,
+        readyForImport: 118,
+        invalidRecords: 1,
       },
       rows: [
         {
@@ -52,14 +52,16 @@ describe("employee import admin API helpers", () => {
         {
           rowNumber: 68,
           identifier: "KVA Krishnan",
-          status: "INVALID_RECORD",
-          issues: [
-            {
-              field: "device_employee_number",
-              message:
-                "Device employee number is required when access device codes are provided",
-            },
+          status: "READY_FOR_IMPORT",
+          warnings: [
+            "Device employee number is blank. HRMS will use the employee number for access-device assignment during import.",
           ],
+          device_assignment_status: "DEVICE_ASSIGNMENT_WARNING",
+          device_assignment_message:
+            "Device employee number is blank. HRMS will use the employee number for access-device assignment during import.",
+          device_codes: ["DEVICE-DSM-01"],
+          provided_device_employee_number: "",
+          effective_device_employee_number: "AICL-00068",
         },
       ],
     }

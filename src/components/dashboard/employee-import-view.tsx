@@ -136,6 +136,11 @@ type PreviewRowDetails = {
   errors: string[]
   warnings: string[]
   issues: PreviewRowIssue[]
+  deviceAssignmentStatus: string
+  deviceAssignmentMessage: string
+  deviceCodes: string[]
+  providedDeviceEmployeeNumber: string
+  effectiveDeviceEmployeeNumber: string
 }
 
 type BatchDetails = {
@@ -310,6 +315,27 @@ function normalizePreviewRows(payload: AdminRecord | null): PreviewRowDetails[] 
       message: readString(issue, ["message"], "Validation issue"),
       suggestion: readString(issue, ["suggestion"], ""),
     })),
+    deviceAssignmentStatus: readString(
+      row,
+      ["deviceAssignmentStatus", "device_assignment_status"],
+      "NO_DEVICE_ASSIGNMENT"
+    ),
+    deviceAssignmentMessage: readString(
+      row,
+      ["deviceAssignmentMessage", "device_assignment_message"],
+      ""
+    ),
+    deviceCodes: readStringArray(row.deviceCodes ?? row.device_codes),
+    providedDeviceEmployeeNumber: readString(
+      row,
+      ["providedDeviceEmployeeNumber", "provided_device_employee_number"],
+      ""
+    ),
+    effectiveDeviceEmployeeNumber: readString(
+      row,
+      ["effectiveDeviceEmployeeNumber", "effective_device_employee_number"],
+      ""
+    ),
   }))
 }
 
@@ -318,8 +344,30 @@ function previewRowDetailText(row: PreviewRowDetails) {
     row.issues[0]?.message ||
     row.errors[0] ||
     row.warnings[0] ||
+    (row.deviceAssignmentStatus !== "NO_DEVICE_ASSIGNMENT"
+      ? row.deviceAssignmentMessage
+      : "") ||
     (row.importAction ? `${row.importAction.toLowerCase()} on confirm` : "Ready")
   )
+}
+
+function previewRowDeviceSummary(row: PreviewRowDetails) {
+  if (
+    row.deviceAssignmentStatus === "NO_DEVICE_ASSIGNMENT" &&
+    row.deviceCodes.length === 0 &&
+    !row.providedDeviceEmployeeNumber &&
+    !row.effectiveDeviceEmployeeNumber
+  ) {
+    return ""
+  }
+
+  const codes = row.deviceCodes.length > 0 ? row.deviceCodes.join(", ") : ""
+  const deviceEmployeeNumber =
+    row.effectiveDeviceEmployeeNumber || row.providedDeviceEmployeeNumber
+  const parts = [codes ? `Devices: ${codes}` : "", deviceEmployeeNumber ? `Device No: ${deviceEmployeeNumber}` : ""]
+    .filter(Boolean)
+
+  return parts.join(" • ")
 }
 
 function formatDateTime(value: string) {
@@ -2378,6 +2426,7 @@ export function EmployeeImportView() {
                                     const checked =
                                       row.rowId !== null && selectedPreviewRowIds.includes(row.rowId)
                                     const detailText = previewRowDetailText(row)
+                                    const deviceSummary = previewRowDeviceSummary(row)
 
                                     return (
                                       <tr key={`${row.rowId ?? "row"}-${row.rowNumber}`} className="border-b border-border/40 align-top">
@@ -2406,6 +2455,11 @@ export function EmployeeImportView() {
                                             {row.matchedBy.length > 0 ? (
                                               <p className="truncate text-[11px] text-muted-foreground">
                                                 Matched by {row.matchedBy.join(", ")}
+                                              </p>
+                                            ) : null}
+                                            {deviceSummary ? (
+                                              <p className="truncate text-[11px] text-muted-foreground">
+                                                {deviceSummary}
                                               </p>
                                             ) : null}
                                           </div>
@@ -2684,6 +2738,11 @@ export function EmployeeImportView() {
                                         {row.matchedBy.length > 0 ? (
                                           <p className="truncate text-[11px] text-muted-foreground">
                                             Matched by {row.matchedBy.join(", ")}
+                                          </p>
+                                        ) : null}
+                                        {previewRowDeviceSummary(row) ? (
+                                          <p className="truncate text-[11px] text-muted-foreground">
+                                            {previewRowDeviceSummary(row)}
                                           </p>
                                         ) : null}
                                       </div>
