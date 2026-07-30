@@ -2673,7 +2673,9 @@ export function EmployeeImportView() {
                             </p>
                             <Select
                               value={previewStatusFilter}
-                              onValueChange={setPreviewStatusFilter}
+                              onValueChange={(value) =>
+                                setPreviewStatusFilter(value ?? "ALL")
+                              }
                             >
                               <SelectTrigger className="h-7 w-[150px] text-[11px]">
                                 <SelectValue placeholder="Filter" />
@@ -2997,7 +2999,9 @@ export function EmployeeImportView() {
                         {viewedPreviewDetails ? (
                           <Select
                             value={historyPreviewStatusFilter}
-                            onValueChange={setHistoryPreviewStatusFilter}
+                            onValueChange={(value) =>
+                              setHistoryPreviewStatusFilter(value ?? "ALL")
+                            }
                           >
                             <SelectTrigger className="h-8 w-[190px]">
                               <SelectValue placeholder="Filter rows" />
