@@ -2026,6 +2026,8 @@ export function EmployeeImportView() {
       )
       const details = extractPreviewDetails(response)
       setPreviewDetails(details)
+      // New file check starts a fresh flow — drop any previous import result panel.
+      setLatestBatch(null)
       setSelectedPreviewRowIds(
         details?.rows
           .filter((row) => row.selectable && row.selectedByDefault && row.rowId !== null)
@@ -2723,6 +2725,7 @@ export function EmployeeImportView() {
                                         <Checkbox
                                           checked={checked}
                                           disabled={
+                                            hasBatch ||
                                             importInProgress ||
                                             !row.selectable ||
                                             row.rowId === null
@@ -2784,40 +2787,42 @@ export function EmployeeImportView() {
                         </div>
                       </div>
 
-                      {/* Sticky footer action */}
-                      <div className="shrink-0 border-t border-border bg-card/95 px-3 py-2 backdrop-blur-sm">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <p className="text-[11px] text-muted-foreground">
-                            {!previewCanProceed
-                              ? "Select at least one ready row to import."
-                              : `${selectedPreviewCount} row${selectedPreviewCount === 1 ? "" : "s"} will be imported.`}
-                          </p>
-                          <Button
-                            type="button"
-                            size="sm"
-                            className="h-8 gap-1.5"
-                            onClick={handleConfirm}
-                            disabled={
-                              confirming ||
-                              !token ||
-                              !previewDetails!.previewToken ||
-                              !previewCanProceed
-                            }
-                            title={
-                              !previewCanProceed
-                                ? "No ready rows to import"
-                                : "Import only the rows that passed validation"
-                            }
-                          >
-                            {confirming ? (
-                              <Loader2Icon className="size-3.5 animate-spin" />
-                            ) : (
-                              <SendIcon className="size-3.5" />
-                            )}
-                            {confirming ? "Importing…" : "Confirm & import"}
-                          </Button>
+                      {/* Sticky footer: only before import completes (result panel takes over after). */}
+                      {!hasBatch ? (
+                        <div className="shrink-0 border-t border-border bg-card/95 px-3 py-2 backdrop-blur-sm">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-[11px] text-muted-foreground">
+                              {!previewCanProceed
+                                ? "Select at least one ready row to import."
+                                : `${selectedPreviewCount} row${selectedPreviewCount === 1 ? "" : "s"} will be imported.`}
+                            </p>
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="h-8 gap-1.5"
+                              onClick={handleConfirm}
+                              disabled={
+                                confirming ||
+                                !token ||
+                                !previewDetails!.previewToken ||
+                                !previewCanProceed
+                              }
+                              title={
+                                !previewCanProceed
+                                  ? "No ready rows to import"
+                                  : "Import only the rows that passed validation"
+                              }
+                            >
+                              {confirming ? (
+                                <Loader2Icon className="size-3.5 animate-spin" />
+                              ) : (
+                                <SendIcon className="size-3.5" />
+                              )}
+                              {confirming ? "Importing…" : "Confirm & import"}
+                            </Button>
+                          </div>
                         </div>
-                      </div>
+                      ) : null}
                     </div>
                   )
                 })()}
