@@ -290,53 +290,111 @@ function readStringArray(value: unknown) {
     .map((entry) => entry.trim())
 }
 
+/** Ready/importable preview statuses when the API omits selectable flags. */
+function isPreviewRowImportable(status: string) {
+  const normalized = status.trim().toUpperCase().replace(/[\s-]+/g, "_")
+  if (!normalized) return false
+
+  if (
+    normalized.includes("INVALID") ||
+    normalized.includes("ERROR") ||
+    normalized.includes("FAIL") ||
+    normalized.includes("REJECT") ||
+    normalized.includes("SKIP") ||
+    normalized.includes("BLOCK") ||
+    normalized.includes("DUPLICATE") ||
+    normalized === "EXISTING" ||
+    normalized === "NOT_READY"
+  ) {
+    return false
+  }
+
+  return (
+    normalized === "READY" ||
+    normalized === "READY_FOR_IMPORT" ||
+    normalized === "VALID" ||
+    normalized === "OK" ||
+    normalized === "NEW" ||
+    normalized === "CREATE" ||
+    normalized === "UPDATE" ||
+    normalized === "CREATE_OR_UPDATE" ||
+    normalized.includes("READY") ||
+    normalized.startsWith("VALID")
+  )
+}
+
 function normalizePreviewRows(payload: AdminRecord | null): PreviewRowDetails[] {
   const rows = asRecordArray(payload?.rows)
   if (!rows) {
     return []
   }
 
-  return rows.map((row) => ({
-    rowId: readNumber(row, ["rowId", "row_id", "id"]),
-    rowNumber: readNumber(row, ["rowNumber", "row_number"]) ?? 0,
-    identifier: readString(row, ["identifier", "employeeName", "employee_name"], "Employee row"),
-    employeeName: readString(row, ["employeeName", "employee_name"], "—"),
-    employeeNumber: readString(row, ["employeeNumber", "employee_number"], "—"),
-    status: readString(row, ["status"], "INVALID_RECORD"),
-    selectable: readBoolean(row, ["selectable"]) ?? false,
-    selectedByDefault: readBoolean(row, ["selectedByDefault", "selected_by_default"]) ?? false,
-    importAction: readString(row, ["importAction", "import_action"], ""),
-    matchedBy: readStringArray(row.matchedBy ?? row.matched_by),
-    errors: readStringArray(row.errors),
-    warnings: readStringArray(row.warnings),
-    issues: (asRecordArray(row.issues) ?? []).map((issue) => ({
-      field: readString(issue, ["field"], "—"),
-      value: issue.value,
-      message: readString(issue, ["message"], "Validation issue"),
-      suggestion: readString(issue, ["suggestion"], ""),
-    })),
-    deviceAssignmentStatus: readString(
-      row,
-      ["deviceAssignmentStatus", "device_assignment_status"],
-      "NO_DEVICE_ASSIGNMENT"
-    ),
-    deviceAssignmentMessage: readString(
-      row,
-      ["deviceAssignmentMessage", "device_assignment_message"],
-      ""
-    ),
-    deviceCodes: readStringArray(row.deviceCodes ?? row.device_codes),
-    providedDeviceEmployeeNumber: readString(
-      row,
-      ["providedDeviceEmployeeNumber", "provided_device_employee_number"],
-      ""
-    ),
-    effectiveDeviceEmployeeNumber: readString(
-      row,
-      ["effectiveDeviceEmployeeNumber", "effective_device_employee_number"],
-      ""
-    ),
-  }))
+  return rows.map((row) => {
+    const status = readString(row, ["status"], "INVALID_RECORD")
+    const rowNumber =
+      readNumber(row, ["rowNumber", "row_number", "row", "line_number", "lineNumber"]) ?? 0
+    // Many preview payloads only send rowNumber (no rowId). Confirm APIs accept that as the id.
+    const rowId =
+      readNumber(row, ["rowId", "row_id", "id"]) ?? (rowNumber > 0 ? rowNumber : null)
+    const importable = isPreviewRowImportable(status)
+    const selectable = readBoolean(row, ["selectable"]) ?? importable
+    const selectedByDefault =
+      readBoolean(row, ["selectedByDefault", "selected_by_default", "selected"]) ?? importable
+
+    return {
+      rowId,
+      rowNumber,
+      identifier: readString(
+        row,
+        ["identifier", "employeeName", "employee_name", "full_name", "fullName", "name"],
+        "Employee row"
+      ),
+      employeeName: readString(
+        row,
+        ["employeeName", "employee_name", "full_name", "fullName", "name"],
+        "—"
+      ),
+      employeeNumber: readString(
+        row,
+        ["employeeNumber", "employee_number", "employee_no", "employeeNo"],
+        "—"
+      ),
+      status,
+      selectable,
+      selectedByDefault,
+      importAction: readString(row, ["importAction", "import_action"], ""),
+      matchedBy: readStringArray(row.matchedBy ?? row.matched_by),
+      errors: readStringArray(row.errors),
+      warnings: readStringArray(row.warnings),
+      issues: (asRecordArray(row.issues) ?? []).map((issue) => ({
+        field: readString(issue, ["field"], "—"),
+        value: issue.value,
+        message: readString(issue, ["message"], "Validation issue"),
+        suggestion: readString(issue, ["suggestion"], ""),
+      })),
+      deviceAssignmentStatus: readString(
+        row,
+        ["deviceAssignmentStatus", "device_assignment_status"],
+        "NO_DEVICE_ASSIGNMENT"
+      ),
+      deviceAssignmentMessage: readString(
+        row,
+        ["deviceAssignmentMessage", "device_assignment_message"],
+        ""
+      ),
+      deviceCodes: readStringArray(row.deviceCodes ?? row.device_codes),
+      providedDeviceEmployeeNumber: readString(
+        row,
+        ["providedDeviceEmployeeNumber", "provided_device_employee_number"],
+        ""
+      ),
+      effectiveDeviceEmployeeNumber: readString(
+        row,
+        ["effectiveDeviceEmployeeNumber", "effective_device_employee_number"],
+        ""
+      ),
+    }
+  })
 }
 
 function previewRowDetailText(row: PreviewRowDetails) {
@@ -1093,12 +1151,12 @@ function FloatingFlowPanel({
   return (
     <div
       className={cn(
-        "relative min-w-0 flex-1 overflow-hidden rounded-2xl p-[2px] shadow-md dark:shadow-none",
+        "relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl p-px shadow-lg dark:shadow-none",
         className
       )}
     >
       <BorderBeam duration={5} colorFrom="#ffffff" colorTo="#a5b4fc" />
-      <div className="relative z-10 flex h-full flex-col overflow-hidden rounded-[14px] bg-card text-card-foreground">
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[11px] bg-card text-card-foreground">
         {children}
       </div>
     </div>
@@ -1108,33 +1166,133 @@ function FloatingFlowPanel({
 function FlowStepArrow() {
   return (
     <div
-      className="flex shrink-0 items-center justify-center self-center py-1 lg:px-2 lg:py-0"
+      className="flex shrink-0 items-center justify-center self-center py-0.5 lg:px-1.5 lg:py-0"
       aria-hidden
     >
-      <div className="flex flex-col items-center gap-1.5 lg:flex-row lg:gap-2">
-        {/* Vertical connector (mobile) */}
-        <div className="flex flex-col items-center lg:hidden">
-          <div className="h-3 w-px bg-primary/40" />
-          <div className="flex size-9 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md shadow-primary/25">
-            <ArrowDownIcon className="size-4" strokeWidth={2.5} />
-          </div>
-          <div className="h-3 w-px bg-primary/40" />
-          <span className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-primary">
-            then
-          </span>
-        </div>
-        {/* Horizontal connector (desktop) */}
-        <div className="hidden items-center lg:flex">
-          <div className="h-px w-4 bg-primary/40" />
-          <div className="flex size-10 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md shadow-primary/30 ring-4 ring-background">
-            <ArrowRightIcon className="size-4" strokeWidth={2.5} />
-          </div>
-          <div className="h-px w-4 bg-primary/40" />
-        </div>
-        <span className="hidden text-[10px] font-semibold uppercase tracking-[0.16em] text-primary lg:block">
-          then
-        </span>
+      <div className="flex size-7 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm shadow-primary/25 ring-2 ring-background">
+        <ArrowDownIcon className="size-3.5 lg:hidden" strokeWidth={2.5} />
+        <ArrowRightIcon className="hidden size-3.5 lg:block" strokeWidth={2.5} />
       </div>
+    </div>
+  )
+}
+
+/** Compact overview chips for quick scanning. */
+function OverviewStatChips({
+  overview,
+  selectedCount,
+  variant = "preview",
+}: {
+  overview: ImportOverview
+  selectedCount?: number
+  variant?: "preview" | "result"
+}) {
+  const chips: Array<{ label: string; value: string; tone: string }> = []
+  if (typeof overview.totalRows === "number") {
+    chips.push({
+      label: "Total",
+      value: String(overview.totalRows),
+      tone: "bg-muted/70 text-foreground",
+    })
+  }
+
+  if (variant === "preview") {
+    const ready = overviewReadyCount(overview)
+    if (typeof ready === "number") {
+      chips.push({
+        label: "Ready",
+        value: String(ready),
+        tone: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+      })
+    }
+    const needsFix = overviewNeedsFixCount(overview)
+    if (typeof needsFix === "number" && needsFix > 0) {
+      chips.push({
+        label: "Fix",
+        value: String(needsFix),
+        tone: "bg-orange-500/10 text-orange-700 dark:text-orange-300",
+      })
+    }
+  } else {
+    if (typeof overview.successRows === "number") {
+      chips.push({
+        label: "OK",
+        value: String(overview.successRows),
+        tone: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+      })
+    } else {
+      const ready = overviewReadyCount(overview)
+      if (typeof ready === "number") {
+        chips.push({
+          label: "Ready",
+          value: String(ready),
+          tone: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+        })
+      }
+    }
+    if (typeof overview.failedRows === "number" && overview.failedRows > 0) {
+      chips.push({
+        label: "Failed",
+        value: String(overview.failedRows),
+        tone: "bg-rose-500/10 text-rose-700 dark:text-rose-300",
+      })
+    } else {
+      const needsFix = overviewNeedsFixCount(overview)
+      if (typeof needsFix === "number" && needsFix > 0) {
+        chips.push({
+          label: "Fix",
+          value: String(needsFix),
+          tone: "bg-orange-500/10 text-orange-700 dark:text-orange-300",
+        })
+      }
+    }
+    if (typeof overview.newRows === "number" && overview.newRows > 0) {
+      chips.push({
+        label: "New",
+        value: String(overview.newRows),
+        tone: "bg-sky-500/10 text-sky-700 dark:text-sky-300",
+      })
+    }
+    if (typeof overview.updatedRows === "number" && overview.updatedRows > 0) {
+      chips.push({
+        label: "Updated",
+        value: String(overview.updatedRows),
+        tone: "bg-violet-500/10 text-violet-700 dark:text-violet-300",
+      })
+    }
+  }
+
+  if (typeof overview.skippedRows === "number" && overview.skippedRows > 0) {
+    chips.push({
+      label: "Skip",
+      value: String(overview.skippedRows),
+      tone: "bg-amber-500/10 text-amber-800 dark:text-amber-300",
+    })
+  }
+  if (typeof selectedCount === "number") {
+    chips.push({
+      label: "Selected",
+      value: String(selectedCount),
+      tone: "bg-sky-500/10 text-sky-700 dark:text-sky-300",
+    })
+  }
+
+  if (chips.length === 0) return null
+
+  return (
+    <div className="flex flex-wrap gap-1">
+      {chips.map((chip) => (
+        <span
+          key={chip.label}
+          className={cn(
+            "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium tabular-nums",
+            chip.tone
+          )}
+        >
+          <span className="text-[10px] font-normal opacity-70">{chip.label}</span>
+          {chip.value}
+        </span>
+      ))}
     </div>
   )
 }
@@ -1163,6 +1321,7 @@ function IssueTable({
   emptyMessage,
   compactEmpty = false,
   emptyTone = "success",
+  dense = false,
 }: {
   issues: ImportIssue[]
   emptyTitle?: string
@@ -1170,28 +1329,41 @@ function IssueTable({
   /** Centered empty state for side column layout. */
   compactEmpty?: boolean
   emptyTone?: "success" | "warn"
+  /** Tighter spacing for modal flow. */
+  dense?: boolean
 }) {
   if (issues.length === 0) {
     const isWarn = emptyTone === "warn"
     if (compactEmpty) {
       return (
-        <div className="flex min-h-[7.5rem] flex-col items-center justify-center px-2 py-4 text-center">
+        <div
+          className={cn(
+            "flex flex-col items-center justify-center px-2 text-center",
+            dense ? "min-h-[4.5rem] py-2" : "min-h-[7.5rem] py-4"
+          )}
+        >
           <div
             className={cn(
-              "mb-2 flex size-9 items-center justify-center rounded-full",
+              "mb-1.5 flex items-center justify-center rounded-full",
+              dense ? "size-7" : "mb-2 size-9",
               isWarn
                 ? "bg-orange-500/10 text-orange-600 dark:text-orange-400"
                 : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
             )}
           >
             {isWarn ? (
-              <CircleAlertIcon className="size-4" />
+              <CircleAlertIcon className={dense ? "size-3.5" : "size-4"} />
             ) : (
-              <CheckCircle2Icon className="size-4" />
+              <CheckCircle2Icon className={dense ? "size-3.5" : "size-4"} />
             )}
           </div>
           <p className="text-xs font-medium text-foreground">{emptyTitle}</p>
-          <p className="mt-1 max-w-[14rem] text-[11px] leading-relaxed text-muted-foreground">
+          <p
+            className={cn(
+              "mt-0.5 max-w-[14rem] text-[11px] text-muted-foreground",
+              dense ? "leading-snug" : "leading-relaxed"
+            )}
+          >
             {emptyMessage}
           </p>
         </div>
@@ -1199,7 +1371,7 @@ function IssueTable({
     }
 
     return (
-      <div className="flex items-start gap-2">
+      <div className={cn("flex items-start gap-1.5", dense ? "gap-1.5" : "gap-2")}>
         {isWarn ? (
           <CircleAlertIcon className="mt-0.5 size-3.5 shrink-0 text-orange-600 dark:text-orange-400" />
         ) : (
@@ -1207,7 +1379,14 @@ function IssueTable({
         )}
         <div className="min-w-0">
           <p className="text-xs font-medium text-foreground">{emptyTitle}</p>
-          <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{emptyMessage}</p>
+          <p
+            className={cn(
+              "text-[11px] text-muted-foreground",
+              dense ? "mt-0 leading-snug" : "mt-0.5 text-xs leading-relaxed"
+            )}
+          >
+            {emptyMessage}
+          </p>
         </div>
       </div>
     )
@@ -1219,26 +1398,31 @@ function IssueTable({
     issues[0]?.rowLabel === "—"
 
   return (
-    <div className="space-y-2">
-      <p className="flex items-center gap-1.5 text-xs text-orange-700 dark:text-orange-300">
-        <CircleAlertIcon className="size-3.5 shrink-0" />
+    <div className={dense ? "space-y-1" : "space-y-2"}>
+      <p className="flex items-center gap-1.5 text-[11px] text-orange-700 dark:text-orange-300">
+        <CircleAlertIcon className="size-3 shrink-0" />
         <span className="font-medium">
           {isSummaryOnly
             ? "Needs attention"
             : `${issues.length} row${issues.length === 1 ? "" : "s"} need attention`}
         </span>
       </p>
-      <ul className="max-h-48 space-y-2.5 overflow-auto pr-0.5">
+      <ul
+        className={cn(
+          "overflow-auto pr-0.5",
+          dense ? "max-h-24 space-y-1" : "max-h-48 space-y-2.5"
+        )}
+      >
         {issues.map((issue, index) => (
           <li
             key={`${issue.rowLabel}-${issue.employeeLabel}-${index}`}
-            className="text-xs leading-relaxed"
+            className={cn("text-[11px]", dense ? "leading-snug" : "text-xs leading-relaxed")}
           >
             {isSummaryOnly ? (
               <p className="text-muted-foreground">{issue.message}</p>
             ) : (
               <>
-                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0">
                   <span className="font-mono tabular-nums text-muted-foreground">
                     {issue.rowLabel.startsWith("Row") ? issue.rowLabel : `Row ${issue.rowLabel}`}
                   </span>
@@ -1246,7 +1430,7 @@ function IssueTable({
                     <span className="font-medium text-foreground">{issue.employeeLabel}</span>
                   ) : null}
                 </div>
-                <p className="mt-0.5 text-muted-foreground">
+                <p className="text-muted-foreground">
                   {issue.fieldLabel !== "—" ? (
                     <span className="font-medium text-foreground/80">{issue.fieldLabel}: </span>
                   ) : null}
@@ -1267,64 +1451,72 @@ function ResultReportPanel({
   checkingResult,
   onFetch,
   canFetch,
+  dense = false,
 }: {
   filename?: string | null
   onDownload?: () => void
   checkingResult?: boolean
   onFetch?: () => void
   canFetch?: boolean
+  dense?: boolean
 }) {
   if (filename && onDownload) {
     return (
-      <div className="flex min-w-0 flex-col gap-3">
-        <div className="flex min-w-0 items-start gap-2.5">
-          <FileSpreadsheetIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+      <div className={cn("flex min-w-0", dense ? "items-center gap-2" : "flex-col gap-3")}>
+        <div className="flex min-w-0 flex-1 items-start gap-2">
+          <FileSpreadsheetIcon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
           <div className="min-w-0 flex-1">
-            <p className="break-all text-xs font-medium leading-snug text-foreground">{filename}</p>
-            <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
-              Excel result report
+            <p className="truncate text-[11px] font-medium leading-snug text-foreground" title={filename}>
+              {filename}
             </p>
+            {!dense ? (
+              <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+                Excel result report
+              </p>
+            ) : null}
           </div>
         </div>
-        <div className="flex justify-start">
-          <Button type="button" size="sm" variant="outline" className="h-7 gap-1.5 px-2.5 text-xs" onClick={onDownload}>
-            <DownloadIcon className="size-3.5" />
-            Download
-          </Button>
-        </div>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="h-7 shrink-0 gap-1.5 px-2 text-[11px]"
+          onClick={onDownload}
+        >
+          <DownloadIcon className="size-3" />
+          Download
+        </Button>
       </div>
     )
   }
 
   if (canFetch && onFetch) {
     return (
-      <div className="flex min-w-0 flex-col gap-3">
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          Result report is not loaded yet.
+      <div className={cn("flex min-w-0", dense ? "items-center gap-2" : "flex-col gap-3")}>
+        <p className="min-w-0 flex-1 text-[11px] leading-snug text-muted-foreground">
+          Report not loaded yet.
         </p>
-        <div className="flex justify-start">
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-7 gap-1.5 px-2.5 text-xs"
-            disabled={checkingResult}
-            onClick={onFetch}
-          >
-            {checkingResult ? (
-              <Loader2Icon className="size-3.5 animate-spin" />
-            ) : (
-              <DownloadIcon className="size-3.5" />
-            )}
-            Fetch report
-          </Button>
-        </div>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="h-7 shrink-0 gap-1.5 px-2 text-[11px]"
+          disabled={checkingResult}
+          onClick={onFetch}
+        >
+          {checkingResult ? (
+            <Loader2Icon className="size-3 animate-spin" />
+          ) : (
+            <DownloadIcon className="size-3" />
+          )}
+          Fetch report
+        </Button>
       </div>
     )
   }
 
   return (
-    <p className="text-xs leading-relaxed text-muted-foreground">
+    <p className="text-[11px] leading-snug text-muted-foreground">
       No result report for this import.
     </p>
   )
@@ -1336,12 +1528,14 @@ function BatchDetailsBody({
   fetchingReport,
   onFetchReport,
   showFetchReport = true,
+  dense = false,
 }: {
   batch: BatchDetails
   checkingResult?: boolean
   fetchingReport?: boolean
   onFetchReport?: () => void
   showFetchReport?: boolean
+  dense?: boolean
 }) {
   const canFetch =
     showFetchReport && Boolean(batch.batchId && batch.batchId !== "—" && onFetchReport)
@@ -1353,10 +1547,23 @@ function BatchDetailsBody({
   })
 
   return (
-    <div className="grid gap-0 sm:grid-cols-2">
-      {/* Left: report + download */}
-      <div className="min-w-0 space-y-2 border-b border-border pb-4 sm:border-b-0 sm:border-r sm:pb-0 sm:pr-5">
-        <p className="text-[11px] font-medium text-muted-foreground">Report</p>
+    <div className={cn("grid gap-0", dense ? "gap-3" : "sm:grid-cols-2")}>
+      {dense ? (
+        <OverviewStatChips overview={batch.overview} variant="result" />
+      ) : null}
+
+      {/* Report */}
+      <div
+        className={cn(
+          "min-w-0",
+          dense
+            ? "space-y-1 rounded-lg border border-border/60 bg-muted/20 px-2.5 py-2"
+            : "space-y-2 border-b border-border pb-4 sm:border-b-0 sm:border-r sm:pb-0 sm:pr-5"
+        )}
+      >
+        <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+          Report
+        </p>
         <ResultReportPanel
           filename={batch.resultReport?.filename}
           onDownload={
@@ -1369,22 +1576,33 @@ function BatchDetailsBody({
           checkingResult={checkingResult || fetchingReport}
           onFetch={onFetchReport}
           canFetch={canFetch && !batch.resultReport}
+          dense={dense}
         />
       </div>
 
-      {/* Right: issues — show row errors or a summary when completed with errors */}
-      <div className="min-w-0 space-y-2 pt-4 sm:pl-5 sm:pt-0">
-        <p className="text-[11px] font-medium text-muted-foreground">Issues</p>
+      {/* Issues */}
+      <div
+        className={cn(
+          "min-w-0",
+          dense
+            ? "space-y-1"
+            : "space-y-2 pt-4 sm:pl-5 sm:pt-0"
+        )}
+      >
+        <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+          Issues
+        </p>
         <IssueTable
           issues={displayIssues}
           emptyTitle={hasErrorSignal ? "Errors not listed" : "All clear"}
           emptyMessage={
             hasErrorSignal
-              ? "This batch finished with errors, but no row details were returned. Download the Excel report for the full list."
+              ? "Finished with errors — download the Excel report for row details."
               : "No row-level problems in this batch."
           }
           emptyTone={hasErrorSignal ? "warn" : "success"}
-          compactEmpty
+          compactEmpty={!dense}
+          dense={dense}
         />
       </div>
     </div>
@@ -1892,6 +2110,13 @@ export function EmployeeImportView() {
   const hasPreview = Boolean(previewDetails)
   const hasBatch = Boolean(latestBatch)
   const showFlowDialog = flowDialogOpen && (hasPreview || hasBatch)
+  /** While confirm is in flight the backend processes rows one-by-one — keep the dialog locked. */
+  const importInProgress = confirming
+
+  const closeFlowDialog = React.useCallback(() => {
+    if (importInProgress) return
+    setFlowDialogOpen(false)
+  }, [importInProgress])
 
   React.useEffect(() => {
     if (!showFlowDialog || typeof document === "undefined") return
@@ -1899,6 +2124,11 @@ export function EmployeeImportView() {
     document.body.style.overflow = "hidden"
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        if (importInProgress) {
+          event.preventDefault()
+          event.stopPropagation()
+          return
+        }
         setFlowDialogOpen(false)
       }
     }
@@ -1907,7 +2137,7 @@ export function EmployeeImportView() {
       document.body.style.overflow = previousOverflow
       window.removeEventListener("keydown", onKeyDown)
     }
-  }, [showFlowDialog])
+  }, [importInProgress, showFlowDialog])
 
   const historyTableRows = React.useMemo<HistoryTableRow[]>(() => {
     return historyRows.map((row, index) => {
@@ -2277,78 +2507,116 @@ export function EmployeeImportView() {
         </div>
       ) : null}
 
-      {/* Modal flow: Preview dialog → Result dialog */}
+      {/* Modal flow: Preview dialog → Result dialog (compact, scannable) */}
       {showFlowDialog ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4">
           <button
             type="button"
             className="absolute inset-0 bg-black/45 backdrop-blur-[2px]"
-            aria-label="Close dialogs"
-            onClick={() => setFlowDialogOpen(false)}
+            aria-label={
+              importInProgress
+                ? "Import in progress — dialog cannot be closed"
+                : "Close dialogs"
+            }
+            onClick={closeFlowDialog}
           />
 
           <div
             role="dialog"
             aria-modal="true"
             aria-label="Import file check and result"
-            className="relative z-10 flex max-h-[min(92vh,56rem)] w-full max-w-5xl flex-col gap-1 overflow-y-auto lg:flex-row lg:items-stretch lg:gap-0 lg:overflow-visible"
+            aria-busy={importInProgress || undefined}
+            className={cn(
+              "relative z-10 flex w-full flex-col gap-1.5 lg:flex-row lg:items-stretch lg:gap-0",
+              hasPreview && hasBatch
+                ? "max-h-[min(94vh,40rem)] max-w-6xl lg:overflow-hidden"
+                : "max-h-[min(94vh,36rem)] max-w-3xl overflow-hidden"
+            )}
           >
             {hasPreview ? (
-              <FloatingFlowPanel className="max-h-[min(85vh,40rem)] shadow-xl lg:max-h-[min(80vh,42rem)]">
-                <div className="flex max-h-[min(85vh,40rem)] flex-col lg:max-h-[min(80vh,42rem)]">
-                  <div className="shrink-0 border-b border-border px-4 pt-4 pb-3">
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div className="min-w-0 space-y-0.5">
-                        <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                          {hasBatch ? "1 · Preview" : "Preview"}
-                        </p>
-                        <h3 className="text-base font-semibold tracking-tight">File check</h3>
-                      </div>
-                      <div className="flex shrink-0 items-center gap-2">
-                        <ModeText value={previewDetails!.importMode || importMode} />
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
-                          onClick={() => setFlowDialogOpen(false)}
-                          aria-label="Close"
-                          title="Close"
-                        >
-                          <XIcon className="size-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
+              <FloatingFlowPanel
+                className={cn(
+                  "max-h-[min(70vh,32rem)] shadow-xl lg:max-h-full",
+                  hasPreview && hasBatch ? "lg:min-w-0 lg:flex-[1.35]" : "flex-1"
+                )}
+              >
+                {(() => {
+                  const previewOverview = previewDetails!.overview
+                  const previewHasProblems = overviewHasProblems(previewOverview)
+                  const previewCanProceed = selectedPreviewCount > 0
+                  const previewReady = overviewReadyCount(previewOverview)
+                  const previewNeedsFix = overviewNeedsFixCount(previewOverview)
+                  const previewIssues = resolveDisplayIssues(
+                    previewOverview,
+                    previewDetails!.issues,
+                    { context: "preview" }
+                  )
 
-                  <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
-                    {(() => {
-                      const previewOverview = previewDetails!.overview
-                      const previewHasProblems = overviewHasProblems(previewOverview)
-                      const previewCanProceed = selectedPreviewCount > 0
-                      const previewReady = overviewReadyCount(previewOverview)
-                      const previewNeedsFix = overviewNeedsFixCount(previewOverview)
-                      const previewIssues = resolveDisplayIssues(
-                        previewOverview,
-                        previewDetails!.issues,
-                        { context: "preview" }
-                      )
+                  return (
+                    <div className="flex min-h-0 flex-1 flex-col">
+                      {/* Compact header */}
+                      <div className="shrink-0 border-b border-border px-3 py-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-muted-foreground">
+                              {hasBatch ? "1" : "·"}
+                            </span>
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                                <h3 className="text-sm font-semibold tracking-tight">
+                                  File check
+                                </h3>
+                                <ModeText value={previewDetails!.importMode || importMode} />
+                              </div>
+                            </div>
+                          </div>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 w-7 shrink-0 p-0 text-muted-foreground hover:text-foreground"
+                            onClick={closeFlowDialog}
+                            disabled={importInProgress}
+                            aria-label="Close"
+                            title={
+                              importInProgress
+                                ? "Cannot close while import is in progress"
+                                : "Close"
+                            }
+                          >
+                            <XIcon className="size-3.5" />
+                          </Button>
+                        </div>
 
-                      return (
-                        <>
-                          <div className="space-y-1.5">
-                            <p className="text-[11px] font-medium text-muted-foreground">
-                              Validation
-                            </p>
+                        <div className="mt-1.5">
+                          <OverviewStatChips
+                            overview={previewOverview}
+                            selectedCount={selectedPreviewCount}
+                          />
+                        </div>
+
+                        {importInProgress ? (
+                          <div className="mt-1.5 flex items-center gap-1.5 rounded-md border border-sky-500/25 bg-sky-500/10 px-2 py-1 text-[11px] font-medium text-sky-800 dark:text-sky-200">
+                            <Loader2Icon className="size-3 shrink-0 animate-spin" />
+                            Importing rows… stay on this dialog until finished.
+                          </div>
+                        ) : null}
+                      </div>
+
+                      {/* Scrollable body: validation + rows */}
+                      <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto px-3 py-2.5">
+                        {(previewIssues.length > 0 || previewHasProblems) && (
+                          <div className="rounded-lg border border-border/60 bg-muted/15 px-2.5 py-2">
                             <IssueTable
                               issues={previewIssues}
                               emptyTitle="Looks good"
-                              emptyMessage="Every row is ready. You can confirm and import."
+                              emptyMessage="Every row is ready to import."
                               emptyTone="success"
+                              dense
                             />
                             {previewHasProblems ? (
-                              <p className="flex items-start gap-1.5 text-[11px] leading-relaxed text-sky-700 dark:text-sky-300">
-                                <InfoIcon className="mt-0.5 size-3.5 shrink-0 text-sky-600 dark:text-sky-400" />
+                              <p className="mt-1.5 flex items-start gap-1 text-[11px] leading-snug text-sky-700 dark:text-sky-300">
+                                <InfoIcon className="mt-0.5 size-3 shrink-0 text-sky-600 dark:text-sky-400" />
                                 <span>
                                   {previewCanProceed ? (
                                     <>
@@ -2366,11 +2634,11 @@ export function EmployeeImportView() {
                                           </span>
                                         </>
                                       ) : null}
-                                      . Confirm imports only ready rows when Skip bad rows is on.
+                                      . Only ready rows import when Skip bad rows is on.
                                     </>
                                   ) : (
                                     <>
-                                      Nothing is ready to import. Fix the file, then run{" "}
+                                      Nothing ready. Fix the file, then run{" "}
                                       <span className="font-medium text-foreground">
                                         Check file
                                       </span>{" "}
@@ -2381,181 +2649,226 @@ export function EmployeeImportView() {
                               </p>
                             ) : null}
                           </div>
+                        )}
 
-                          <div className="space-y-2 border-t border-border pt-4">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <div>
-                                <p className="text-[11px] font-medium text-muted-foreground">
-                                  Preview rows
-                                </p>
-                                <p className="text-xs text-muted-foreground">
-                                  {selectedPreviewCount} selected for import
-                                </p>
-                              </div>
-                              <Select
-                                value={previewStatusFilter}
-                                onValueChange={setPreviewStatusFilter}
-                              >
-                                <SelectTrigger className="h-8 w-[190px]">
-                                  <SelectValue placeholder="Filter rows" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {previewStatusOptions.map((option) => (
-                                    <SelectItem key={option.value} value={option.value}>
-                                      {option.label}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
+                        {!previewHasProblems && previewIssues.length === 0 ? (
+                          <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-2.5 py-1.5">
+                            <IssueTable
+                              issues={[]}
+                              emptyTitle="Looks good"
+                              emptyMessage="Every row is ready. Confirm to import."
+                              emptyTone="success"
+                              dense
+                            />
+                          </div>
+                        ) : null}
 
-                            <div className="max-h-64 overflow-auto rounded-xl border border-border/60">
-                              <table className="min-w-full text-xs">
-                                <thead className="sticky top-0 bg-background/95 backdrop-blur">
-                                  <tr className="border-b border-border/60 text-left text-muted-foreground">
-                                    <th className="px-3 py-2 font-medium">Import</th>
-                                    <th className="px-3 py-2 font-medium">Row</th>
-                                    <th className="px-3 py-2 font-medium">Employee</th>
-                                    <th className="px-3 py-2 font-medium">Number</th>
-                                    <th className="px-3 py-2 font-medium">Status</th>
-                                    <th className="px-3 py-2 font-medium">Details</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {filteredPreviewRows.map((row) => {
-                                    const checked =
-                                      row.rowId !== null && selectedPreviewRowIds.includes(row.rowId)
-                                    const detailText = previewRowDetailText(row)
-                                    const deviceSummary = previewRowDeviceSummary(row)
-
-                                    return (
-                                      <tr key={`${row.rowId ?? "row"}-${row.rowNumber}`} className="border-b border-border/40 align-top">
-                                        <td className="px-3 py-2">
-                                          <Checkbox
-                                            checked={checked}
-                                            disabled={!row.selectable || row.rowId === null}
-                                            onCheckedChange={(nextChecked) => {
-                                              if (!row.selectable || row.rowId === null) return
-                                              setSelectedPreviewRowIds((current) => {
-                                                if (nextChecked) {
-                                                  return current.includes(row.rowId)
-                                                    ? current
-                                                    : [...current, row.rowId]
-                                                }
-                                                return current.filter((value) => value !== row.rowId)
-                                              })
-                                            }}
-                                            aria-label={`Select preview row ${row.rowNumber}`}
-                                          />
-                                        </td>
-                                        <td className="px-3 py-2 tabular-nums">{row.rowNumber}</td>
-                                        <td className="px-3 py-2">
-                                          <div className="min-w-0">
-                                            <p className="truncate font-medium text-foreground">{row.identifier}</p>
-                                            {row.matchedBy.length > 0 ? (
-                                              <p className="truncate text-[11px] text-muted-foreground">
-                                                Matched by {row.matchedBy.join(", ")}
-                                              </p>
-                                            ) : null}
-                                            {deviceSummary ? (
-                                              <p className="truncate text-[11px] text-muted-foreground">
-                                                {deviceSummary}
-                                              </p>
-                                            ) : null}
-                                          </div>
-                                        </td>
-                                        <td className="px-3 py-2">{row.employeeNumber || "—"}</td>
-                                        <td className="px-3 py-2">
-                                          <StatusText value={row.status} />
-                                        </td>
-                                        <td className="px-3 py-2 text-muted-foreground">{detailText}</td>
-                                      </tr>
-                                    )
-                                  })}
-                                </tbody>
-                              </table>
-                            </div>
+                        <div className="space-y-1.5">
+                          <div className="flex flex-wrap items-center justify-between gap-1.5">
+                            <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                              Rows
+                              <span className="ml-1.5 font-normal normal-case tracking-normal text-muted-foreground/80">
+                                {selectedPreviewCount} selected
+                              </span>
+                            </p>
+                            <Select
+                              value={previewStatusFilter}
+                              onValueChange={setPreviewStatusFilter}
+                            >
+                              <SelectTrigger className="h-7 w-[150px] text-[11px]">
+                                <SelectValue placeholder="Filter" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {previewStatusOptions.map((option) => (
+                                  <SelectItem key={option.value} value={option.value}>
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                           </div>
 
-                          <div className="space-y-2 border-t border-border pt-4">
-                            <div className="flex flex-wrap gap-2">
-                              <Button
-                                type="button"
-                                size="sm"
-                                className="h-8"
-                                onClick={handleConfirm}
-                                disabled={
-                                  confirming ||
-                                  !token ||
-                                  !previewDetails!.previewToken ||
-                                  !previewCanProceed
-                                }
-                                title={
-                                  !previewCanProceed
-                                    ? "No ready rows to import"
-                                    : "Import only the rows that passed validation"
-                                }
-                              >
-                                {confirming ? (
-                                  <Loader2Icon className="size-3.5 animate-spin" />
-                                ) : (
-                                  <SendIcon className="size-3.5" />
-                                )}
-                                Confirm &amp; import
-                              </Button>
-                            </div>
-                            {!previewCanProceed ? (
-                              <p className="flex items-start gap-1.5 text-[11px] leading-relaxed text-sky-700 dark:text-sky-300">
-                                <InfoIcon className="mt-0.5 size-3.5 shrink-0 text-sky-600 dark:text-sky-400" />
-                                <span>
-                                  Import actions stay off until at least one row is ready.
-                                </span>
-                              </p>
-                            ) : null}
+                          <div className="max-h-[min(40vh,16rem)] overflow-auto rounded-lg border border-border/60">
+                            <table className="min-w-full text-[11px]">
+                              <thead className="sticky top-0 z-[1] bg-muted/90 backdrop-blur">
+                                <tr className="border-b border-border/60 text-left text-muted-foreground">
+                                  <th className="w-8 px-2 py-1.5 font-medium"> </th>
+                                  <th className="w-10 px-1.5 py-1.5 font-medium">#</th>
+                                  <th className="px-1.5 py-1.5 font-medium">Employee</th>
+                                  <th className="hidden px-1.5 py-1.5 font-medium sm:table-cell">
+                                    Number
+                                  </th>
+                                  <th className="px-1.5 py-1.5 font-medium">Status</th>
+                                  <th className="hidden px-1.5 py-1.5 font-medium md:table-cell">
+                                    Details
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {filteredPreviewRows.map((row) => {
+                                  const checked =
+                                    row.rowId !== null &&
+                                    selectedPreviewRowIds.includes(row.rowId)
+                                  const detailText = previewRowDetailText(row)
+                                  const deviceSummary = previewRowDeviceSummary(row)
+
+                                  return (
+                                    <tr
+                                      key={`${row.rowId ?? "row"}-${row.rowNumber}`}
+                                      className="border-b border-border/40 last:border-0"
+                                    >
+                                      <td className="px-2 py-1 align-middle">
+                                        <Checkbox
+                                          checked={checked}
+                                          disabled={
+                                            importInProgress ||
+                                            !row.selectable ||
+                                            row.rowId === null
+                                          }
+                                          onCheckedChange={(nextChecked) => {
+                                            if (!row.selectable || row.rowId === null) return
+                                            setSelectedPreviewRowIds((current) => {
+                                              if (nextChecked) {
+                                                return current.includes(row.rowId)
+                                                  ? current
+                                                  : [...current, row.rowId]
+                                              }
+                                              return current.filter(
+                                                (value) => value !== row.rowId
+                                              )
+                                            })
+                                          }}
+                                          aria-label={`Select preview row ${row.rowNumber}`}
+                                        />
+                                      </td>
+                                      <td className="px-1.5 py-1 align-middle tabular-nums text-muted-foreground">
+                                        {row.rowNumber}
+                                      </td>
+                                      <td className="max-w-[10rem] px-1.5 py-1 align-middle">
+                                        <div className="min-w-0">
+                                          <p
+                                            className="truncate font-medium text-foreground"
+                                            title={row.identifier}
+                                          >
+                                            {row.identifier}
+                                          </p>
+                                          {deviceSummary ? (
+                                            <p
+                                              className="truncate text-[10px] text-muted-foreground"
+                                              title={deviceSummary}
+                                            >
+                                              {deviceSummary}
+                                            </p>
+                                          ) : null}
+                                        </div>
+                                      </td>
+                                      <td className="hidden px-1.5 py-1 align-middle tabular-nums sm:table-cell">
+                                        {row.employeeNumber || "—"}
+                                      </td>
+                                      <td className="px-1.5 py-1 align-middle">
+                                        <StatusText value={row.status} />
+                                      </td>
+                                      <td
+                                        className="hidden max-w-[12rem] truncate px-1.5 py-1 align-middle text-muted-foreground md:table-cell"
+                                        title={detailText}
+                                      >
+                                        {detailText}
+                                      </td>
+                                    </tr>
+                                  )
+                                })}
+                              </tbody>
+                            </table>
                           </div>
-                        </>
-                      )
-                    })()}
-                  </div>
-                </div>
+                        </div>
+                      </div>
+
+                      {/* Sticky footer action */}
+                      <div className="shrink-0 border-t border-border bg-card/95 px-3 py-2 backdrop-blur-sm">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-[11px] text-muted-foreground">
+                            {!previewCanProceed
+                              ? "Select at least one ready row to import."
+                              : `${selectedPreviewCount} row${selectedPreviewCount === 1 ? "" : "s"} will be imported.`}
+                          </p>
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="h-8 gap-1.5"
+                            onClick={handleConfirm}
+                            disabled={
+                              confirming ||
+                              !token ||
+                              !previewDetails!.previewToken ||
+                              !previewCanProceed
+                            }
+                            title={
+                              !previewCanProceed
+                                ? "No ready rows to import"
+                                : "Import only the rows that passed validation"
+                            }
+                          >
+                            {confirming ? (
+                              <Loader2Icon className="size-3.5 animate-spin" />
+                            ) : (
+                              <SendIcon className="size-3.5" />
+                            )}
+                            {confirming ? "Importing…" : "Confirm & import"}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })()}
               </FloatingFlowPanel>
             ) : null}
 
             {hasPreview && hasBatch ? <FlowStepArrow /> : null}
 
             {hasBatch ? (
-              <FloatingFlowPanel className="max-h-[min(85vh,40rem)] shadow-xl lg:max-h-[min(80vh,42rem)]">
-                <div className="flex max-h-[min(85vh,40rem)] flex-col lg:max-h-[min(80vh,42rem)]">
-                  <div className="shrink-0 border-b border-border px-4 pt-4 pb-3">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="min-w-0 space-y-0.5">
-                        <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                          {hasPreview ? "2 · Result" : "Result"}
-                        </p>
-                        <h3 className="text-base font-semibold tracking-tight">Last import</h3>
-                        <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[13px] text-muted-foreground">
-                          <span>
-                            {formatDateTime(
-                              latestBatch!.completedAt ||
-                                latestBatch!.updatedAt ||
-                                latestBatch!.createdAt
-                            )}
-                          </span>
-                          {latestBatch!.importMode ? (
-                            <>
-                              <span className="text-border">·</span>
-                              <ModeText value={latestBatch!.importMode} />
-                            </>
-                          ) : null}
-                        </p>
+              <FloatingFlowPanel
+                className={cn(
+                  "max-h-[min(70vh,32rem)] shadow-xl lg:max-h-full",
+                  hasPreview && hasBatch ? "lg:min-w-0 lg:flex-1" : "flex-1"
+                )}
+              >
+                <div className="flex min-h-0 flex-1 flex-col">
+                  <div className="shrink-0 border-b border-border px-3 py-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-muted-foreground">
+                          {hasPreview ? "2" : "·"}
+                        </span>
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                            <h3 className="text-sm font-semibold tracking-tight">
+                              Import result
+                            </h3>
+                            <StatusText value={latestBatch!.status || "Unknown"} />
+                          </div>
+                          <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[11px] text-muted-foreground">
+                            <span>
+                              {formatDateTime(
+                                latestBatch!.completedAt ||
+                                  latestBatch!.updatedAt ||
+                                  latestBatch!.createdAt
+                              )}
+                            </span>
+                            {latestBatch!.importMode ? (
+                              <>
+                                <span className="text-border">·</span>
+                                <ModeText value={latestBatch!.importMode} />
+                              </>
+                            ) : null}
+                          </p>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1.5">
-                        <StatusText value={latestBatch!.status || "Unknown"} />
+                      <div className="flex shrink-0 items-center gap-0.5">
                         <Button
                           type="button"
                           size="sm"
                           variant="ghost"
-                          className="h-8 w-8 shrink-0 p-0 text-muted-foreground"
+                          className="h-7 w-7 p-0 text-muted-foreground"
                           onClick={() => void inspectBatch(latestBatchId)}
                           disabled={checkingResult || !token || !latestBatchId}
                           aria-label="Refresh import details"
@@ -2572,19 +2885,24 @@ export function EmployeeImportView() {
                             type="button"
                             size="sm"
                             variant="ghost"
-                            className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
-                            onClick={() => setFlowDialogOpen(false)}
+                            className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                            onClick={closeFlowDialog}
+                            disabled={importInProgress}
                             aria-label="Close"
-                            title="Close"
+                            title={
+                              importInProgress
+                                ? "Cannot close while import is in progress"
+                                : "Close"
+                            }
                           >
-                            <XIcon className="size-4" />
+                            <XIcon className="size-3.5" />
                           </Button>
                         ) : null}
                       </div>
                     </div>
                   </div>
 
-                  <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+                  <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2.5">
                     <BatchDetailsBody
                       batch={latestBatch!}
                       checkingResult={checkingResult}
@@ -2594,6 +2912,7 @@ export function EmployeeImportView() {
                           ? () => void fetchResultReport(latestBatchId)
                           : undefined
                       }
+                      dense
                     />
                   </div>
                 </div>
