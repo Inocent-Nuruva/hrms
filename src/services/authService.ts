@@ -210,6 +210,23 @@ function normalizeUser(payload: unknown): AuthUser | undefined {
         email,
         role: readRole(candidate),
         employeeId,
+        requiresPasswordChange:
+          readBoolean(candidate, [
+            "requiresPasswordChange",
+            "requires_password_change",
+          ]) ??
+          readBoolean(root, [
+            "requiresPasswordChange",
+            "requires_password_change",
+          ]) ??
+          readBoolean(rootData, [
+            "requiresPasswordChange",
+            "requires_password_change",
+          ]) ??
+          readBoolean(rootResult, [
+            "requiresPasswordChange",
+            "requires_password_change",
+          ]),
         companyId:
           readNumber(candidate, ["companyId", "company_id"]) ??
           readNumber(resolvedCompanyRecord, ["companyId", "company_id", "id"]),
@@ -252,12 +269,23 @@ function normalizeLoginResponse(payload: unknown): LoginResponse {
 
   // Login step returns a temporary token when 2FA is required (no final JWT pair yet).
   const requiresOtp = explicitRequiresOtp === true || Boolean(tempToken && !tokens);
+  const requiresPasswordChange =
+    readBoolean(root, ["requiresPasswordChange", "requires_password_change"]) ??
+    readBoolean(rootData, ["requiresPasswordChange", "requires_password_change"]) ??
+    readBoolean(rootResult, ["requiresPasswordChange", "requires_password_change"]) ??
+    user?.requiresPasswordChange ??
+    false;
+
+  if (user) {
+    user.requiresPasswordChange = requiresPasswordChange;
+  }
 
   return {
     requiresOtp,
     tempToken,
     tokens,
     user,
+    requiresPasswordChange,
   };
 }
 
@@ -419,7 +447,10 @@ export const authService = {
   changePassword(payload: ChangePasswordRequest, token: string) {
     return apiRequest<void>("/api/users/me/change-password", {
       method: "POST",
-      body: payload,
+      body: {
+        old_password: payload.currentPassword,
+        new_password: payload.newPassword,
+      },
       token,
     });
   },

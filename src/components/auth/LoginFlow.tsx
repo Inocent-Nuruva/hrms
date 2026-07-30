@@ -68,7 +68,11 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
     return () => clearTimeout(t);
   }, []);
 
-  const finishLogin = async (accessToken: string, normalizedEmail: string) => {
+  const finishLogin = async (
+    accessToken: string,
+    normalizedEmail: string,
+    redirect: string,
+  ) => {
     if (typeof window !== "undefined") {
       if (rememberMe) {
         window.localStorage.setItem(AUTH_STORAGE_KEYS.rememberMe, "true");
@@ -81,21 +85,24 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
 
     // Hide form; keep loader only here while dashboard data is prefetched.
     setIsDone(true);
-    markDashboardFromLogin();
+    if (redirect === "/dashboard") {
+      markDashboardFromLogin();
+    }
 
     try {
       // Cap wait so a slow network still opens the app; snapshot is best-effort.
-      await Promise.race([
-        prefetchDashboardWarmCache(accessToken),
-        new Promise<void>((resolve) => {
-          window.setTimeout(resolve, 10_000);
-        }),
-      ]);
+      if (redirect === "/dashboard") {
+        await Promise.race([
+          prefetchDashboardWarmCache(accessToken),
+          new Promise<void>((resolve) => {
+            window.setTimeout(resolve, 10_000);
+          }),
+        ]);
+      }
     } catch {
       // Still redirect — dashboard will load normally if warm cache failed.
     }
 
-    const redirect = "/dashboard";
     if (onSuccess) onSuccess(redirect);
     else window.location.href = redirect;
   };
@@ -145,7 +152,13 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
         return;
       }
 
-      await finishLogin(response.tokens.accessToken, normalizedEmail);
+      await finishLogin(
+        response.tokens.accessToken,
+        normalizedEmail,
+        response.requiresPasswordChange || response.user?.requiresPasswordChange
+          ? "/change-password?required=1"
+          : "/dashboard",
+      );
     } catch (err) {
       const message = err instanceof Error ? err.message : "Login failed. Please try again.";
       setLoginError(message);
@@ -175,7 +188,13 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
 
     try {
       const response = await completeOtpLogin(tempToken, code);
-      await finishLogin(response.tokens.accessToken, normalizedEmail);
+      await finishLogin(
+        response.tokens.accessToken,
+        normalizedEmail,
+        response.user.requiresPasswordChange
+          ? "/change-password?required=1"
+          : "/dashboard",
+      );
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "2FA verification failed. Please try again.";

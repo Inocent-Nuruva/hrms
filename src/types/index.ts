@@ -8,6 +8,7 @@ export interface AuthUser {
   role?: UserRole | string;
   companyId?: number;
   companyName?: string;
+  requiresPasswordChange?: boolean;
 }
 
 export interface AuthTokens {
@@ -25,6 +26,7 @@ export interface LoginResponse {
   tempToken?: string;
   tokens?: AuthTokens;
   user?: AuthUser;
+  requiresPasswordChange?: boolean;
 }
 
 export interface VerifyOtpRequest {
