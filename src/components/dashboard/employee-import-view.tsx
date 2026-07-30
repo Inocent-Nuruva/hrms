@@ -2729,15 +2729,14 @@ export function EmployeeImportView() {
                                           }
                                           onCheckedChange={(nextChecked) => {
                                             if (!row.selectable || row.rowId === null) return
+                                            const rowId = row.rowId
                                             setSelectedPreviewRowIds((current) => {
                                               if (nextChecked) {
-                                                return current.includes(row.rowId)
+                                                return current.includes(rowId)
                                                   ? current
-                                                  : [...current, row.rowId]
+                                                  : [...current, rowId]
                                               }
-                                              return current.filter(
-                                                (value) => value !== row.rowId
-                                              )
+                                              return current.filter((value) => value !== rowId)
                                             })
                                           }}
                                           aria-label={`Select preview row ${row.rowNumber}`}
