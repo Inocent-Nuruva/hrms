@@ -1509,7 +1509,6 @@ export function DataTable({
     setPeopleDialogOpen(false)
     // Intentionally keyed on id/resource (not the whole editingEntity object) so that
     // in-place label updates don't reset the detail sheet's tab/search/picker state.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editingEntity?.id, editingEntity?.resource])
 
   React.useEffect(() => {
