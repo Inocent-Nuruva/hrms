@@ -275,6 +275,20 @@ function normalizeLoginResponse(payload: unknown): LoginResponse {
     readBoolean(rootResult, ["requiresPasswordChange", "requires_password_change"]) ??
     user?.requiresPasswordChange ??
     false;
+  const requiresEmailVerification =
+    readBoolean(root, ["requiresEmailVerification", "requires_email_verification"]) ??
+    readBoolean(rootData, ["requiresEmailVerification", "requires_email_verification"]) ??
+    readBoolean(rootResult, ["requiresEmailVerification", "requires_email_verification"]) ??
+    false;
+  const requires2FASetup =
+    readBoolean(root, ["requires2FASetup", "requires_2fa_setup"]) ??
+    readBoolean(rootData, ["requires2FASetup", "requires_2fa_setup"]) ??
+    readBoolean(rootResult, ["requires2FASetup", "requires_2fa_setup"]) ??
+    false;
+  const message =
+    readString(root, ["message"]) ??
+    readString(rootData, ["message"]) ??
+    readString(rootResult, ["message"]);
 
   if (user) {
     user.requiresPasswordChange = requiresPasswordChange;
@@ -286,6 +300,9 @@ function normalizeLoginResponse(payload: unknown): LoginResponse {
     tokens,
     user,
     requiresPasswordChange,
+    requiresEmailVerification,
+    requires2FASetup,
+    message,
   };
 }
 

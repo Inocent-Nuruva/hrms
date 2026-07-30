@@ -27,6 +27,9 @@ export interface LoginResponse {
   tokens?: AuthTokens;
   user?: AuthUser;
   requiresPasswordChange?: boolean;
+  requiresEmailVerification?: boolean;
+  requires2FASetup?: boolean;
+  message?: string;
 }
 
 export interface VerifyOtpRequest {

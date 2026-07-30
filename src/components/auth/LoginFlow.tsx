@@ -146,9 +146,16 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
       }
 
       if (!response.tokens) {
-        const message = "Login response did not include tokens.";
+        const message =
+          response.message ??
+          (response.requiresEmailVerification
+            ? "Please verify your email address before continuing."
+            : "Login response did not include tokens.");
         setLoginError(message);
-        showErrorAlert(message, "Invalid credentials");
+        showErrorAlert(
+          message,
+          response.requiresEmailVerification ? "Email verification required" : "Invalid credentials",
+        );
         return;
       }
 
