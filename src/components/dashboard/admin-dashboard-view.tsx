@@ -473,6 +473,12 @@ export default function AdminDashboardView({
         return ""
       }
       persistSessionTokens(nextAccessToken, nextRefreshToken)
+      if (response.user && typeof window !== "undefined") {
+        window.localStorage.setItem(
+          AUTH_STORAGE_KEYS.user,
+          JSON.stringify(response.user)
+        )
+      }
       return nextAccessToken
     } catch {
       return ""

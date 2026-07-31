@@ -39,6 +39,8 @@ type DashboardActorIdentityResolution = {
   isAdmin: boolean
 }
 
+const COMPANY_DASHBOARD_SWITCH_PERMISSION = "view_company_dashboard"
+
 const ADMIN_BYPASS_LABELS = new Set([
   "*",
   "*:*",
@@ -62,17 +64,14 @@ const ADMIN_BYPASS_LABELS = new Set([
  */
 export const COMPANY_DASHBOARD_PERMISSION: PermissionRequirement = {
   permissions: [
-    "view_company_data",
     "view_company_dashboard",
-    "company_dashboard:read",
-    "company_dashboard.view",
-    "dashboard:read",
-    "dashboard.view",
-    "analytics:read",
-    "analytics.view",
-    "hr_dashboard:read",
-    "hr_dashboard.view",
+    "view_company_data",
   ],
+  mode: "any",
+}
+
+const COMPANY_OPERATIONS_PERMISSION: PermissionRequirement = {
+  permissions: ["view_company_dashboard", "view_company_data"],
   mode: "any",
 }
 
@@ -334,10 +333,10 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   // Employee shell uses /dashboard without this gate (see canAccessDashboardRoute).
   "/dashboard/company-overview": COMPANY_DASHBOARD_PERMISSION,
   "/dashboard/operations/promotion": null,
-  "/dashboard/operations/recruitment": COMPANY_DASHBOARD_PERMISSION,
+  "/dashboard/operations/recruitment": COMPANY_OPERATIONS_PERMISSION,
   "/dashboard/operations/payroll": null,
-  "/dashboard/operations/reports": COMPANY_DASHBOARD_PERMISSION,
-  "/dashboard/operations/scheduled-reporting": COMPANY_DASHBOARD_PERMISSION,
+  "/dashboard/operations/reports": COMPANY_OPERATIONS_PERMISSION,
+  "/dashboard/operations/scheduled-reporting": COMPANY_OPERATIONS_PERMISSION,
   "/dashboard/access-control": {
     permissions: [
       "attendance_devices:read",
@@ -518,6 +517,87 @@ function normalizeIdentityHint(value: string) {
   return value.trim().toLowerCase().replace(/[_-]+/g, " ")
 }
 
+function normalizeDashboardAccessMode(value: unknown): DashboardAccessMode | null {
+  if (typeof value !== "string") {
+    return null
+  }
+
+  const normalized = value.trim().toLowerCase()
+  if (normalized === "admin" || normalized === "employee") {
+    return normalized
+  }
+
+  return null
+}
+
+function readExplicitDashboardAccessModeFromUnknown(value: unknown): DashboardAccessMode | null {
+  if (!value) {
+    return null
+  }
+
+  if (typeof value === "string") {
+    if (value.includes(".")) {
+      return readExplicitDashboardAccessModeFromUnknown(decodeJwtPayload(value))
+    }
+    return normalizeDashboardAccessMode(value)
+  }
+
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const resolved = readExplicitDashboardAccessModeFromUnknown(entry)
+      if (resolved) {
+        return resolved
+      }
+    }
+
+    return null
+  }
+
+  const record = asRecord(value)
+  if (!record) {
+    return null
+  }
+
+  const direct =
+    normalizeDashboardAccessMode(record.dashboard_type) ??
+    normalizeDashboardAccessMode(record.dashboardType) ??
+    normalizeDashboardAccessMode(record.access_mode) ??
+    normalizeDashboardAccessMode(record.accessMode)
+  if (direct) {
+    return direct
+  }
+
+  for (const key of [
+    "user",
+    "profile",
+    "data",
+    "result",
+    "results",
+    "tokens",
+    "accessToken",
+    "access_token",
+    "token",
+  ]) {
+    const resolved = readExplicitDashboardAccessModeFromUnknown(record[key])
+    if (resolved) {
+      return resolved
+    }
+  }
+
+  return null
+}
+
+function readExplicitDashboardAccessMode(...sources: unknown[]) {
+  for (let index = sources.length - 1; index >= 0; index -= 1) {
+    const resolved = readExplicitDashboardAccessModeFromUnknown(sources[index])
+    if (resolved) {
+      return resolved
+    }
+  }
+
+  return null
+}
+
 function collectDashboardIdentityHintsFromUnknown(
   value: unknown,
   sink: Set<string>
@@ -636,7 +716,7 @@ function resolveRequiredPermissions(url: string) {
 }
 
 export function canViewCompanyDashboard(permissionLabels: string[]) {
-  return hasPermission(permissionLabels, COMPANY_DASHBOARD_PERMISSION)
+  return hasPermission(permissionLabels, COMPANY_DASHBOARD_SWITCH_PERMISSION)
 }
 
 export function canAccessDashboardRoute(
@@ -712,20 +792,14 @@ export function canPerformPermission(
 }
 
 export function hasAdminDashboardAccess(permissionLabels: string[]) {
-  if (canViewCompanyDashboard(permissionLabels)) {
-    return true
-  }
-  return ADMIN_DASHBOARD_LANDING_ROUTES.some((route) =>
-    canAccessDashboardRoute(route, permissionLabels)
+  return (
+    ADMIN_DASHBOARD_LANDING_ROUTES.length > 0 &&
+    canViewCompanyDashboard(permissionLabels)
   )
 }
 
-/** Manage grants that unlock the HR employee directory (not self-service read). */
-function hasEmployeeDirectoryManageAccess(permissionLabels: string[]) {
-  return hasPermission(permissionLabels, EMPLOYEE_DIRECTORY_MANAGE_PERMISSIONS)
-}
-
 function resolveDashboardActorIdentity(...sources: unknown[]): DashboardActorIdentityResolution {
+  const explicitAccessMode = readExplicitDashboardAccessMode(...sources)
   const permissionLabels = readPermissionLabelsFromUnknown(...sources)
   const identityHints = readDashboardIdentityHintsFromUnknown(...sources)
   const hasExplicitAdminIdentity = Array.from(identityHints).some((hint) =>
@@ -734,23 +808,17 @@ function resolveDashboardActorIdentity(...sources: unknown[]): DashboardActorIde
   const hasExplicitEmployeeIdentity = Array.from(identityHints).some((hint) =>
     EMPLOYEE_IDENTITY_HINTS.has(hint)
   )
-  const hasPermissionBasedAdminAccess =
-    hasAdminDashboardAccess(permissionLabels) ||
-    hasEmployeeDirectoryManageAccess(permissionLabels)
-  // Prefer admin when the token has HR/admin route permissions, even if roles
-  // still include a generic "EMPLOYEE" label (common for company memberships).
-  // Pure self-service tokens keep employee mode: employees:read alone is not enough.
-  // Admin shell requires either an admin identity signal or at least one elevated
-  // permission — never accessMode=admin from empty/weak claims alone.
+  const hasPermissionBasedAdminAccess = hasAdminDashboardAccess(permissionLabels)
   const accessMode: DashboardAccessMode =
-    hasPermissionBasedAdminAccess || hasExplicitAdminIdentity
-      ? "admin"
-      : "employee"
+    explicitAccessMode ??
+    (hasPermissionBasedAdminAccess ? "admin" : "employee")
 
   return {
     permissionLabels,
-    hasExplicitAdminIdentity,
-    hasExplicitEmployeeIdentity,
+    hasExplicitAdminIdentity:
+      explicitAccessMode === "admin" || hasExplicitAdminIdentity,
+    hasExplicitEmployeeIdentity:
+      explicitAccessMode === "employee" || hasExplicitEmployeeIdentity,
     hasPermissionBasedAdminAccess,
     accessMode,
     isAdmin: accessMode === "admin",

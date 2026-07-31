@@ -1,4 +1,5 @@
 export type UserRole = "employee" | "hr" | "admin";
+export type DashboardType = "admin" | "employee"
 
 export interface AuthUser {
   id: string | number;
@@ -6,6 +7,7 @@ export interface AuthUser {
   fullName: string;
   email: string;
   role?: UserRole | string;
+  dashboardType?: DashboardType;
   companyId?: number;
   companyName?: string;
   requiresPasswordChange?: boolean;
@@ -44,6 +46,7 @@ export interface VerifyOtpResponse {
 
 export interface RefreshTokenResponse {
   tokens: AuthTokens;
+  user?: AuthUser;
 }
 
 export interface ChangePasswordRequest {

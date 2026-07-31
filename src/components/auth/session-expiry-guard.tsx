@@ -95,6 +95,13 @@ export function SessionExpiryGuard() {
           }
 
           persistSessionTokens(nextAccessToken, nextRefreshToken)
+          if (response.user) {
+            window.localStorage.setItem(
+              AUTH_STORAGE_KEYS.user,
+              JSON.stringify(response.user)
+            )
+          }
+          publishDashboardActorSnapshotFromBrowserStorage(response.user ?? nextAccessToken)
         } catch {
           expireSession()
         } finally {

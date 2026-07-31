@@ -1,5 +1,6 @@
 import type {
   ChangePasswordRequest,
+  DashboardType,
   ForgotPasswordRequest,
   LoginRequest,
   LoginResponse,
@@ -80,6 +81,19 @@ function readBoolean(record: UnknownRecord | null, keys: string[]): boolean | un
   }
 
   return undefined;
+}
+
+function normalizeDashboardType(value: unknown): DashboardType | undefined {
+  if (typeof value !== "string") {
+    return undefined
+  }
+
+  const normalized = value.trim().toLowerCase()
+  if (normalized === "admin" || normalized === "employee") {
+    return normalized
+  }
+
+  return undefined
 }
 
 function readRole(record: UnknownRecord | null): string | undefined {
@@ -211,6 +225,15 @@ function normalizeUser(payload: unknown): AuthUser | undefined {
         fullName,
         email,
         role: readRole(candidate),
+        dashboardType:
+          normalizeDashboardType(candidate.dashboard_type) ??
+          normalizeDashboardType(candidate.dashboardType) ??
+          normalizeDashboardType(root?.dashboard_type) ??
+          normalizeDashboardType(root?.dashboardType) ??
+          normalizeDashboardType(rootData?.dashboard_type) ??
+          normalizeDashboardType(rootData?.dashboardType) ??
+          normalizeDashboardType(rootResult?.dashboard_type) ??
+          normalizeDashboardType(rootResult?.dashboardType),
         employeeId,
         requiresPasswordChange:
           readBoolean(candidate, [
@@ -470,11 +493,12 @@ export const authService = {
     });
 
     const tokens = normalizeTokens(response);
+    const user = normalizeUser(response);
     if (!tokens) {
       throw new Error("Refresh response did not contain valid tokens.");
     }
 
-    return { tokens };
+    return { tokens, user };
   },
 
   changePassword(payload: ChangePasswordRequest, token: string) {
