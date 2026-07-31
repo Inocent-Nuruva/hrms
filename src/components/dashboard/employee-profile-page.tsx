@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
   ChevronLeftIcon,
@@ -31,13 +32,20 @@ import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 import { Textarea } from "@/components/ui/textarea"
 import {
   createEmployeeDocument,
+  createEmployeePosition,
   createEmployeeSectionItem,
   deleteEmployeeDocument,
   deleteEmployeeSectionItem,
   EMPLOYEE_STATUS_VALUES,
   getEmployeeById,
   isEmployeeStatusValue,
+  listDepartmentPositions,
+  listDepartments,
+  listEmployeePositions,
   listEmployees,
+  listPositions,
+  patchEmployeeById,
+  patchEmployeePosition,
   patchEmployeeStatus,
   patchEmployeeSectionItem,
   updateUserById,
@@ -380,6 +388,12 @@ function renderRecordFields(record: AdminRecord, sectionTitle: string) {
       }
       return value ? "Yes" : "No"
     }
+    if (
+      typeof value === "string" &&
+      (key.endsWith("_at") || key.endsWith("_date") || key === "date_of_birth")
+    ) {
+      return key.endsWith("_at") ? formatDateTime(value) : formatProfileDate(value)
+    }
     return String(value)
   }
 
@@ -420,6 +434,97 @@ function readNumber(value: unknown): number | null {
     }
   }
   return null
+}
+
+function readRelatedId(row: AdminRecord, recordKeys: string[], idKeys: string[]) {
+  for (const key of [...idKeys, ...recordKeys]) {
+    const value = row[key]
+    const id = readNumber(value)
+    if (id !== null) return id
+    const nested = asRecord(value)
+    if (nested) {
+      const nestedId = readNumber(
+        nested.id ?? nested.department_id ?? nested.departmentId ?? nested.position_id ?? nested.positionId
+      )
+      if (nestedId !== null) return nestedId
+    }
+  }
+  return null
+}
+
+function isPrimaryEmployeePosition(row: AdminRecord) {
+  const primary = row.is_primary ?? row.isPrimary
+  if (primary === true || primary === 1 || primary === "1") return true
+  if (typeof primary === "string" && primary.trim().toLowerCase() === "true") return true
+  const assignmentType = readString(row, ["assignment_type", "assignmentType"])
+  return assignmentType !== "-" && assignmentType.trim().toLowerCase() === "primary"
+}
+
+function relatedDepartmentIds(row: AdminRecord) {
+  const ids = new Set<number>()
+  const directId = readRelatedId(
+    row,
+    ["primary_department", "primaryDepartment", "department", "departmentDetail"],
+    ["primary_department_id", "primaryDepartmentId", "department_id", "departmentId"]
+  )
+  if (directId !== null) ids.add(directId)
+
+  const directIds = Array.isArray(row.department_ids)
+    ? row.department_ids
+    : Array.isArray(row.departmentIds)
+      ? row.departmentIds
+      : []
+  for (const value of directIds) {
+    const id = readNumber(value)
+    if (id !== null) ids.add(id)
+  }
+
+  const assignments = Array.isArray(row.departments) ? row.departments : []
+  for (const assignment of assignments) {
+    const record = asRecord(assignment)
+    if (!record) continue
+    const assignmentId = readRelatedId(
+      record,
+      ["department", "departmentDetail"],
+      ["department_id", "departmentId", "id"]
+    )
+    if (assignmentId !== null) ids.add(assignmentId)
+  }
+  return ids
+}
+
+function relatedDepartmentNames(row: AdminRecord) {
+  const names = new Set<string>()
+  const addName = (value: unknown) => {
+    if (typeof value === "string" && value.trim()) names.add(value.trim().toLowerCase())
+  }
+  addName(row.department_name)
+  addName(row.departmentName)
+  for (const key of ["primary_department", "primaryDepartment", "department", "departmentDetail"]) {
+    const record = asRecord(row[key])
+    if (record) addName(readString(record, ["name", "department_name", "departmentName"]))
+  }
+  const assignments = Array.isArray(row.departments) ? row.departments : []
+  for (const assignment of assignments) {
+    const record = asRecord(assignment)
+    const department = asRecord(record?.department)
+    if (department) addName(readString(department, ["name", "department_name", "departmentName"]))
+  }
+  return names
+}
+
+function recordOptionLabel(row: AdminRecord) {
+  return readString(row, [
+    "name",
+    "title",
+    "department_name",
+    "departmentName",
+    "position_name",
+    "positionName",
+    "display_name",
+    "displayName",
+    "code",
+  ])
 }
 
 function resolveCompanyUserId(employee: AdminRecord): number | null {
@@ -1631,7 +1736,7 @@ function Section({
           }
         }}
       >
-        <AlertDialogContent className="max-w-md">
+        <AlertDialogContent className="max-h-[90vh] max-w-xl overflow-y-auto">
           <AlertDialogHeader>
             <AlertDialogTitle>Confirm Delete</AlertDialogTitle>
             <AlertDialogDescription>
@@ -1776,6 +1881,13 @@ export function EmployeeProfilePage({
   const [email, setEmail] = React.useState("")
   const [profilePassword, setProfilePassword] = React.useState("")
   const [showProfilePassword, setShowProfilePassword] = React.useState(false)
+  const [departmentId, setDepartmentId] = React.useState("")
+  const [positionId, setPositionId] = React.useState("")
+  const [managerId, setManagerId] = React.useState("")
+  const [departmentOptions, setDepartmentOptions] = React.useState<AdminRecord[]>([])
+  const [positionOptions, setPositionOptions] = React.useState<AdminRecord[]>([])
+  const [managerOptions, setManagerOptions] = React.useState<AdminRecord[]>([])
+  const [organizationOptionsLoading, setOrganizationOptionsLoading] = React.useState(false)
   const [statusDialogOpen, setStatusDialogOpen] = React.useState(false)
   const [statusSubmitting, setStatusSubmitting] = React.useState(false)
   const [statusError, setStatusError] = React.useState<string | null>(null)
@@ -1798,6 +1910,31 @@ export function EmployeeProfilePage({
   const requestedRouteKey = React.useMemo(
     () => (requestedSectionTitle ? sectionTitleToRouteKey(requestedSectionTitle) : null),
     [requestedSectionTitle]
+  )
+  const selectedDepartmentName = React.useMemo(() => {
+    const selected = departmentOptions.find((row) => String(readNumber(row.id) ?? "") === departmentId)
+    const label = selected ? recordOptionLabel(selected) : ""
+    return label === "-" ? "" : label.trim().toLowerCase()
+  }, [departmentId, departmentOptions])
+  const departmentPositionOptions = React.useMemo(
+    () =>
+      positionOptions.filter(
+        (row) => Boolean(departmentId) && relatedDepartmentIds(row).has(Number(departmentId))
+      ),
+    [departmentId, positionOptions]
+  )
+  const filteredManagerOptions = React.useMemo(
+    () => {
+      const eligible = managerOptions.filter((row) => readNumber(row.id) !== readNumber(employee?.id))
+      return eligible.filter((row) => {
+        if (!departmentId) return false
+        return (
+          relatedDepartmentIds(row).has(Number(departmentId)) ||
+          (selectedDepartmentName !== "" && relatedDepartmentNames(row).has(selectedDepartmentName))
+        )
+      })
+    },
+    [departmentId, employee?.id, managerOptions, selectedDepartmentName]
   )
 
   const fetchEmployee = React.useCallback(async () => {
@@ -1842,6 +1979,51 @@ export function EmployeeProfilePage({
         setLoading(false)
       }
     }, [employeeNo])
+
+  const loadOrganizationOptions = React.useCallback(async (selectedDepartmentId = "") => {
+    const token = readStoredToken()
+    if (!token) return
+    setOrganizationOptionsLoading(true)
+    try {
+      const [departments, positions, managers] = await Promise.all([
+        listDepartments(token, { page: 1, limit: 100 }),
+         selectedDepartmentId
+           ? listDepartmentPositions(token, selectedDepartmentId).then((rows) => ({
+              rows: rows.map((row) => {
+                const nestedPosition =
+                  asRecord(row.position) ??
+                  asRecord(row.positionDetail) ??
+                  asRecord(row.primary_position) ??
+                  asRecord(row.primaryPosition)
+                const position = nestedPosition ? { ...row, ...nestedPosition } : row
+                return {
+                  ...position,
+                  department_ids: Array.from(
+                    new Set([
+                      ...(Array.isArray(position.department_ids) ? position.department_ids : []),
+                      Number(selectedDepartmentId),
+                    ])
+                  ),
+                }
+              }),
+            }))
+          : listPositions(token, { page: 1, limit: 100 }),
+        listEmployees(token, {
+          page: 1,
+          limit: 100,
+          sortBy: "created_at",
+          sortOrder: "DESC",
+        }),
+      ])
+      setDepartmentOptions(departments.rows)
+      setPositionOptions(positions.rows)
+      setManagerOptions(managers.rows)
+    } catch (errorObject) {
+      setIdentityError(errorObject instanceof Error ? errorObject.message : "Failed to load organization options.")
+    } finally {
+      setOrganizationOptionsLoading(false)
+    }
+  }, [])
 
   React.useEffect(() => {
     void fetchEmployee()
@@ -2006,14 +2188,41 @@ export function EmployeeProfilePage({
               className="px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
               onClick={() => {
                 const companyUser = resolveCompanyUserRecord(employee)
+                const currentDepartmentId = String(
+                  readRelatedId(
+                    employee,
+                    ["primary_department", "primaryDepartment", "department", "departmentDetail"],
+                    ["primary_department_id", "primaryDepartmentId", "department_id", "departmentId"]
+                  ) ?? ""
+                )
                 setFirstName(readString(companyUser ?? employee, ["first_name", "firstName"]) === "-" ? "" : readString(companyUser ?? employee, ["first_name", "firstName"]))
                 setLastName(readString(companyUser ?? employee, ["last_name", "lastName"]) === "-" ? "" : readString(companyUser ?? employee, ["last_name", "lastName"]))
                 setUsername(readString(companyUser ?? {}, ["username", "user_no"]) === "-" ? "" : readString(companyUser ?? {}, ["username", "user_no"]))
                 setEmail(readString(companyUser ?? {}, ["email"]) === "-" ? "" : readString(companyUser ?? {}, ["email"]))
                 setProfilePassword("")
                 setShowProfilePassword(false)
+                setDepartmentId(currentDepartmentId)
+                setPositionId(
+                  String(
+                    readRelatedId(
+                      employee,
+                      ["primary_position", "primaryPosition", "position", "positionDetail"],
+                      ["primary_position_id", "primaryPositionId", "position_id", "positionId"]
+                    ) ?? ""
+                  )
+                )
+                setManagerId(
+                  String(
+                    readRelatedId(
+                      employee,
+                      ["manager", "managerDetail", "reportsTo"],
+                      ["reports_to", "reportsToId", "manager_id", "managerId"]
+                    ) ?? ""
+                  )
+                )
                 setIdentityError(null)
                 setIdentityDialogOpen(true)
+                void loadOrganizationOptions(currentDepartmentId)
               }}
             >
               Update Profile
@@ -2232,20 +2441,20 @@ export function EmployeeProfilePage({
       </AlertDialog>
 
       <AlertDialog open={identityDialogOpen} onOpenChange={setIdentityDialogOpen}>
-        <AlertDialogContent className="max-w-md">
-          <AlertDialogHeader>
+        <AlertDialogContent className="max-h-[90vh] w-[calc(100%-2rem)] overflow-y-auto p-5 sm:max-w-2xl">
+          <AlertDialogHeader className="gap-1">
             <AlertDialogTitle>Update Profile</AlertDialogTitle>
             <AlertDialogDescription>
-              Update full name, username, email, and password for this employee account.
+              Update account details and the employee&apos;s department, position, and manager.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <div className="grid gap-3">
+          <div className="grid gap-2.5 sm:grid-cols-2">
             <label className="grid gap-1">
               <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">First Name</span>
               <input
                 value={firstName}
                 onChange={(event) => setFirstName(event.target.value)}
-                className="h-10 rounded-md border border-slate-300 px-3 text-sm"
+                className="h-9 rounded-md border border-slate-300 px-3 text-sm"
                 placeholder="Enter first name"
               />
             </label>
@@ -2254,7 +2463,7 @@ export function EmployeeProfilePage({
               <input
                 value={lastName}
                 onChange={(event) => setLastName(event.target.value)}
-                className="h-10 rounded-md border border-slate-300 px-3 text-sm"
+                className="h-9 rounded-md border border-slate-300 px-3 text-sm"
                 placeholder="Enter last name"
               />
             </label>
@@ -2263,7 +2472,7 @@ export function EmployeeProfilePage({
               <input
                 value={username}
                 onChange={(event) => setUsername(event.target.value)}
-                className="h-10 rounded-md border border-slate-300 px-3 text-sm"
+                className="h-9 rounded-md border border-slate-300 px-3 text-sm"
                 placeholder="Enter username"
               />
             </label>
@@ -2273,9 +2482,80 @@ export function EmployeeProfilePage({
                 type="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
-                className="h-10 rounded-md border border-slate-300 px-3 text-sm"
+                className="h-9 rounded-md border border-slate-300 px-3 text-sm"
                 placeholder="Enter email"
               />
+            </label>
+            <div className="grid gap-2.5 sm:col-span-2 sm:grid-cols-2">
+              <label className="grid gap-1">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Department</span>
+                <select
+                  value={departmentId}
+                  disabled={organizationOptionsLoading}
+                  onChange={(event) => {
+                     const nextDepartmentId = event.target.value
+                     setDepartmentId(nextDepartmentId)
+                     setPositionId("")
+                     setManagerId("")
+                    void loadOrganizationOptions(nextDepartmentId)
+                  }}
+                  className="h-9 min-w-0 rounded-md border border-slate-300 bg-background px-3 text-sm"
+                >
+                  <option value="">Select department</option>
+                  {departmentOptions.map((option) => {
+                    const id = readNumber(option.id)
+                    return id === null ? null : <option key={id} value={id}>{recordOptionLabel(option)}</option>
+                  })}
+                </select>
+              </label>
+              <label className="grid gap-1">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Position</span>
+                <select
+                  value={positionId}
+                  disabled={!departmentId || organizationOptionsLoading}
+                  onChange={(event) => setPositionId(event.target.value)}
+                  className="h-9 min-w-0 rounded-md border border-slate-300 bg-background px-3 text-sm"
+                >
+                   <option value="">
+                     {departmentPositionOptions.length === 0
+                       ? "No positions configured for this department"
+                       : "Select position"}
+                   </option>
+                   {departmentPositionOptions.map((option) => {
+                    const id = readNumber(option.id)
+                    return id === null ? null : <option key={id} value={id}>{recordOptionLabel(option)}</option>
+                  })}
+                </select>
+                {departmentPositionOptions.length === 0 ? (
+                  <span className="text-[11px] font-normal normal-case tracking-normal text-destructive">
+                    Create positions for this exact department in {" "}
+                    <Link href="/dashboard/positions" className="font-medium text-primary hover:underline">
+                      Positions
+                    </Link>
+                    .
+                  </span>
+                ) : null}
+              </label>
+            </div>
+            <label className="grid gap-1">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Manager</span>
+              <select
+                value={managerId}
+                disabled={!departmentId || organizationOptionsLoading}
+                onChange={(event) => setManagerId(event.target.value)}
+                className="h-9 min-w-0 rounded-md border border-slate-300 bg-background px-3 text-sm"
+              >
+                <option value="">No manager</option>
+                {filteredManagerOptions.map((option) => {
+                  const id = readNumber(option.id)
+                  return id === null ? null : (
+                    <option key={id} value={id}>{employeeDisplayNameFromLinkedUser(option)}</option>
+                  )
+                })}
+              </select>
+              <span className="text-[11px] font-normal normal-case tracking-normal text-muted-foreground">
+                Shows all other employees in the selected department.
+              </span>
             </label>
             <label className="grid gap-1">
               <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -2287,7 +2567,7 @@ export function EmployeeProfilePage({
                   value={profilePassword}
                   onChange={(event) => setProfilePassword(event.target.value)}
                   minLength={6}
-                  className="h-10 w-full rounded-md border border-slate-300 px-3 pr-10 text-sm"
+                  className="h-9 w-full rounded-md border border-slate-300 px-3 pr-10 text-sm"
                   placeholder="Leave blank to keep current password"
                 />
                 <button
@@ -2311,6 +2591,7 @@ export function EmployeeProfilePage({
               onClick={async () => {
                 const token = readStoredToken()
                 const userId = resolveCompanyUserId(employee)
+                const employeeId = readNumber(employee.id)
                 const trimmedFirstName = firstName.trim()
                 const trimmedLastName = lastName.trim()
                 const trimmedUsername = username.trim()
@@ -2321,8 +2602,8 @@ export function EmployeeProfilePage({
                   setIdentityError("Authentication required. Please log in again.")
                   return
                 }
-                if (userId === null) {
-                  setIdentityError("No linked user account found for this employee.")
+                if (employeeId === null) {
+                  setIdentityError("Unable to identify this employee record.")
                   return
                 }
                 if (!trimmedFirstName) {
@@ -2333,20 +2614,28 @@ export function EmployeeProfilePage({
                   setIdentityError("Last name is required.")
                   return
                 }
-                if (!trimmedUsername) {
+                if (userId !== null && !trimmedUsername) {
                   setIdentityError("Username is required.")
                   return
                 }
-                if (!trimmedEmail) {
+                if (userId !== null && !trimmedEmail) {
                   setIdentityError("Email is required.")
                   return
                 }
-                if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+                if (userId !== null && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
                   setIdentityError("Please enter a valid email address.")
                   return
                 }
                 if (trimmedPassword && trimmedPassword.length < 6) {
                   setIdentityError("Password must be at least 6 characters.")
+                  return
+                }
+                if (!departmentId) {
+                  setIdentityError("Department is required.")
+                  return
+                }
+                if (!positionId) {
+                  setIdentityError("Position is required.")
                   return
                 }
 
@@ -2362,9 +2651,67 @@ export function EmployeeProfilePage({
                   if (trimmedPassword) {
                     payload.password = trimmedPassword
                   }
-                  await updateUserById(userId, token, {
-                    ...payload,
+                  const employeePayload: AdminRecord = {
+                    first_name: trimmedFirstName,
+                    last_name: trimmedLastName,
+                    primary_department_id: Number(departmentId),
+                    primary_position_id: Number(positionId),
+                    position_id: Number(positionId),
+                    reports_to: managerId ? Number(managerId) : null,
+                    departments: [
+                      {
+                        department_id: Number(departmentId),
+                        is_primary: true,
+                      },
+                    ],
+                  }
+                  await patchEmployeeById(employeeId, token, employeePayload)
+
+                  const currentPositionId = readRelatedId(
+                    employee,
+                    ["primary_position", "primaryPosition", "position", "positionDetail"],
+                    ["primary_position_id", "primaryPositionId", "position_id", "positionId"]
+                  )
+                  const assignments = await listEmployeePositions(token, {
+                    employee_id: employeeId,
+                    page: 1,
+                    limit: 100,
                   })
+                  const primaryAssignment =
+                    assignments.rows.find(isPrimaryEmployeePosition) ??
+                    assignments.rows.find(
+                      (row) =>
+                        currentPositionId !== null &&
+                        readRelatedId(
+                          row,
+                          ["position", "positionDetail"],
+                          ["position_id", "positionId"]
+                        ) === currentPositionId
+                    ) ??
+                    assignments.rows.find((row) => {
+                      const status = readString(row, ["status"])
+                      return status === "-" || status.trim().toLowerCase() === "active"
+                    })
+                  const positionAssignmentPayload: AdminRecord = {
+                    employee_id: employeeId,
+                    department_id: Number(departmentId),
+                    position_id: Number(positionId),
+                    assignment_type: "primary",
+                    is_primary: true,
+                    status: "active",
+                  }
+                  const assignmentId = primaryAssignment ? readNumber(primaryAssignment.id) : null
+                  if (assignmentId !== null) {
+                    await patchEmployeePosition(token, assignmentId, positionAssignmentPayload)
+                  } else {
+                    await createEmployeePosition(token, {
+                      ...positionAssignmentPayload,
+                      effective_from: new Date().toISOString().slice(0, 10),
+                    })
+                  }
+                  if (userId !== null) {
+                    await updateUserById(userId, token, payload)
+                  }
                   setIdentityDialogOpen(false)
                   await fetchEmployee()
                 } catch (errorObject) {

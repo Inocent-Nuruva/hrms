@@ -1490,7 +1490,7 @@ export function EmployeeRegisterForm() {
           readRecordId(asRecord(row.department)) ??
           readNumberish(row.primary_department_id) ??
           readNumberish(row.department_id)
-        return relatedDepartmentId === null || relatedDepartmentId === selectedDepartmentId
+        return relatedDepartmentId === selectedDepartmentId
       })
       .map((row) => {
         const id = readRecordId(row)

@@ -10,6 +10,7 @@ import { useDebouncedValue } from "@/hooks/use-debounced-value"
 import {
   createPosition,
   deletePosition,
+  getPosition,
   listBranches,
   listDepartments,
   listPositions,
@@ -52,7 +53,7 @@ type PositionForm = {
   description: string
   status: string
   branch_id: string
-  department_id: string
+  department_ids: string[]
   reports_to_position_id: string
   level: string
   is_manager: string
@@ -125,6 +126,33 @@ function readBoolean(row: AdminRecord, keys: string[]) {
   return false
 }
 
+function readDepartmentIds(row: AdminRecord) {
+  const ids = new Set<number>()
+  const directIds = Array.isArray(row.department_ids)
+    ? row.department_ids
+    : Array.isArray(row.departmentIds)
+      ? row.departmentIds
+      : []
+  for (const value of directIds) {
+    const id = typeof value === "number" ? value : Number(value)
+    if (Number.isFinite(id)) ids.add(id)
+  }
+  const assignments = Array.isArray(row.departments) ? row.departments : []
+  for (const assignment of assignments) {
+    if (typeof assignment !== "object" || assignment === null) continue
+    const record = assignment as AdminRecord
+    const nested = typeof record.department === "object" && record.department !== null
+      ? (record.department as AdminRecord)
+      : null
+    const id = readNumber(record, ["department_id", "departmentId", "id"]) ??
+      (nested ? readNumber(nested, ["id", "department_id", "departmentId"]) : null)
+    if (id !== null) ids.add(id)
+  }
+  const legacyId = readNumber(row, ["department_id", "departmentId"])
+  if (legacyId !== null) ids.add(legacyId)
+  return Array.from(ids)
+}
+
 function emptyForm(): PositionForm {
   return {
     name: "",
@@ -132,7 +160,7 @@ function emptyForm(): PositionForm {
     description: "",
     status: "active",
     branch_id: "",
-    department_id: "",
+    department_ids: [],
     reports_to_position_id: "",
     level: "1",
     is_manager: "false",
@@ -171,6 +199,8 @@ export function PositionsView() {
   const [openForm, setOpenForm] = React.useState(false)
   const [form, setForm] = React.useState<PositionForm>(emptyForm())
   const [editingId, setEditingId] = React.useState<number | null>(null)
+  const [originalCode, setOriginalCode] = React.useState("")
+  const editLoadSequence = React.useRef(0)
   const [pendingDelete, setPendingDelete] = React.useState<AdminRecord | null>(null)
   const debouncedSearch = useDebouncedValue(query.search, 350)
 
@@ -183,6 +213,25 @@ export function PositionsView() {
     }),
     [debouncedSearch, query]
   )
+  const availableDepartments = React.useMemo(
+    () =>
+      departments.filter((department) => {
+        const branchId = readNumber(department, ["branch_id", "branchId"])
+        return !form.branch_id || branchId === null || String(branchId) === form.branch_id
+      }),
+    [departments, form.branch_id]
+  )
+  const availableDepartmentIds = React.useMemo(
+    () =>
+      availableDepartments
+        .map((department) => readNumber(department, ["id"]))
+        .filter((id): id is number => id !== null)
+        .map(String),
+    [availableDepartments]
+  )
+  const allAvailableDepartmentsSelected =
+    availableDepartmentIds.length > 0 &&
+    availableDepartmentIds.every((id) => form.department_ids.includes(id))
 
   const fetchPositions = React.useCallback(async (signal?: AbortSignal) => {
     const token = readStoredToken()
@@ -251,13 +300,16 @@ export function PositionsView() {
   }, [])
 
   function fillFormFromRow(row: AdminRecord) {
+    const code = readString(row, ["code"])
+    const normalizedCode = code === "-" ? "" : code
+    setOriginalCode(normalizedCode.trim())
     setForm({
       name: readString(row, ["name"]),
-      code: readString(row, ["code"]),
+      code: normalizedCode,
       description: readString(row, ["description"]),
       status: readString(row, ["status"]) === "-" ? "active" : readString(row, ["status"]),
       branch_id: String(readNumber(row, ["branch_id"]) ?? ""),
-      department_id: String(readNumber(row, ["department_id"]) ?? ""),
+      department_ids: readDepartmentIds(row).map(String),
       reports_to_position_id: String(readNumber(row, ["reports_to_position_id"]) ?? ""),
       level: String(readNumber(row, ["level"]) ?? 1),
       is_manager: String(readBoolean(row, ["is_manager"])),
@@ -293,13 +345,15 @@ export function PositionsView() {
       return
     }
 
+    editLoadSequence.current += 1
+    const nextCode = form.code.trim()
     const payload: AdminRecord = {
       name: form.name.trim(),
-      code: form.code.trim(),
+      ...(editingId === null || nextCode !== originalCode ? { code: nextCode } : {}),
       description: form.description.trim(),
       status: form.status || "active",
       branch_id: form.branch_id.trim() ? Number(form.branch_id) : 0,
-      department_id: form.department_id.trim() ? Number(form.department_id) : 0,
+      department_ids: form.department_ids.map(Number),
       reports_to_position_id: form.reports_to_position_id.trim() ? Number(form.reports_to_position_id) : 0,
       level: Math.min(100, Math.max(1, Number(form.level || "1"))),
       is_manager: form.is_manager === "true",
@@ -317,6 +371,7 @@ export function PositionsView() {
       }
       setOpenForm(false)
       setEditingId(null)
+      setOriginalCode("")
       setForm(emptyForm())
       await fetchPositions()
     } catch (errorObject) {
@@ -352,7 +407,15 @@ export function PositionsView() {
   const positionColumns: Column<AdminRecord>[] = [
     { key: "name", label: "Name", defaultWidth: 100, sortable: true, render: (r) => readString(r, ["name"]) },
     { key: "code", label: "Code", defaultWidth: 50, sortable: true, render: (r) => readString(r, ["code"]) },
-    { key: "department", label: "Dept", defaultWidth: 75, render: (r) => labelById(departments, readNumber(r, ["department_id"])) },
+    {
+      key: "department",
+      label: "Departments",
+      defaultWidth: 120,
+      render: (r) => {
+        const labels = readDepartmentIds(r).map((id) => labelById(departments, id))
+        return labels.length > 0 ? labels.join(", ") : "-"
+      },
+    },
     { key: "level", label: "Lvl", defaultWidth: 40, sortable: true, render: (r) => String(readNumber(r, ["level"]) ?? "-") },
     { key: "headcount", label: "HC", defaultWidth: 45, sortable: true, render: (r) => String(readNumber(r, ["headcount"]) ?? "-") },
     { key: "manager", label: "Mgr", defaultWidth: 40, render: (r) => (readBoolean(r, ["is_manager"]) ? "Y" : "N") },
@@ -371,9 +434,21 @@ export function PositionsView() {
                 type="button"
                 className="admin-table-icon-button"
                 onClick={() => {
+                  const loadSequence = ++editLoadSequence.current
+                  setError(null)
                   fillFormFromRow(row)
                   setEditingId(id)
                   setOpenForm(true)
+                  const token = readStoredToken()
+                  if (token && id !== null) {
+                    void getPosition(token, id)
+                      .then((detail) => {
+                        if (detail && editLoadSequence.current === loadSequence) {
+                          fillFormFromRow(detail)
+                        }
+                      })
+                      .catch(() => undefined)
+                  }
                 }}
                 aria-label="Edit position"
                 title="Edit position"
@@ -456,7 +531,10 @@ export function PositionsView() {
               type="button"
               className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white transition hover:brightness-95 disabled:opacity-60"
               onClick={() => {
+                editLoadSequence.current += 1
+                setError(null)
                 setEditingId(null)
+                setOriginalCode("")
                 setForm(emptyForm())
                 setOpenForm(true)
               }}
@@ -509,7 +587,7 @@ export function PositionsView() {
               </label>
               <label className="grid gap-1">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Branch</span>
-                <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={form.branch_id} onChange={(event) => setForm((prev) => ({ ...prev, branch_id: event.target.value }))}>
+                <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={form.branch_id} onChange={(event) => setForm((prev) => ({ ...prev, branch_id: event.target.value, department_ids: [] }))}>
                   <option value="">Select branch</option>
                   {branches.map((branch) => {
                     const id = readNumber(branch, ["id"])
@@ -524,23 +602,60 @@ export function PositionsView() {
                   })}
                 </select>
               </label>
-              <label className="grid gap-1">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Department</span>
-                <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={form.department_id} onChange={(event) => setForm((prev) => ({ ...prev, department_id: event.target.value }))}>
-                  <option value="">Select department</option>
-                  {departments.map((department) => {
-                    const id = readNumber(department, ["id"])
-                    if (id === null) {
-                      return null
-                    }
-                    return (
-                      <option key={id} value={String(id)}>
-                        {readString(department, ["name"])}
-                      </option>
-                    )
-                  })}
-                </select>
-              </label>
+              <fieldset className="grid gap-1 md:col-span-2">
+                <legend className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Departments
+                </legend>
+                <div className="max-h-40 overflow-y-auto rounded-md border border-slate-300 bg-white p-2">
+                  <label className="mb-1 flex items-center gap-2 rounded border-b border-slate-200 px-2 py-2 text-sm font-medium">
+                    <input
+                      type="checkbox"
+                      checked={allAvailableDepartmentsSelected}
+                      disabled={availableDepartmentIds.length === 0}
+                      onChange={(event) =>
+                        setForm((previous) => {
+                          const availableIds = new Set(availableDepartmentIds)
+                          return {
+                            ...previous,
+                            department_ids: event.target.checked
+                              ? Array.from(new Set([...previous.department_ids, ...availableDepartmentIds]))
+                              : previous.department_ids.filter((id) => !availableIds.has(id)),
+                          }
+                        })
+                      }
+                    />
+                    <span>Select all available departments</span>
+                  </label>
+                  <div className="grid gap-1 sm:grid-cols-2">
+                    {availableDepartments.map((department) => {
+                        const id = readNumber(department, ["id"])
+                        if (id === null) return null
+                        const value = String(id)
+                        const checked = form.department_ids.includes(value)
+                        return (
+                          <label key={id} className="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-slate-50">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(event) =>
+                                setForm((previous) => ({
+                                  ...previous,
+                                  department_ids: event.target.checked
+                                    ? Array.from(new Set([...previous.department_ids, value]))
+                                    : previous.department_ids.filter((entry) => entry !== value),
+                                }))
+                              }
+                            />
+                            <span>{readString(department, ["name", "code"])}</span>
+                          </label>
+                        )
+                      })}
+                  </div>
+                </div>
+                <span className="text-[11px] text-slate-500">
+                  Select every department where this position is available.
+                </span>
+              </fieldset>
               <label className="grid gap-1">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Reports To Position</span>
                 <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={form.reports_to_position_id} onChange={(event) => setForm((prev) => ({ ...prev, reports_to_position_id: event.target.value }))}>

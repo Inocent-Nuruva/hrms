@@ -2320,6 +2320,41 @@ export async function listEmployees(
   return { rows, ...pagination }
 }
 
+export async function listAllEmployees(
+  token: string,
+  params: EmployeesQueryParams = {},
+  options: ListRequestOptions & { pageSize?: number; maxPages?: number } = {}
+): Promise<AdminRecord[]> {
+  const pageSize = Math.min(
+    Math.max(1, options.pageSize ?? 100),
+    env.NEXT_PUBLIC_MAX_PAGE_SIZE || 100
+  )
+  const maxPages = Math.max(1, options.maxPages ?? 50)
+  const collected: AdminRecord[] = []
+
+  for (let page = 1; page <= maxPages; page += 1) {
+    const result = await listEmployees(
+      token,
+      {
+        ...params,
+        page,
+        limit: pageSize,
+        search: undefined,
+      },
+      options
+    )
+    collected.push(...result.rows)
+    const reachedEnd =
+      result.rows.length === 0 ||
+      result.rows.length < pageSize ||
+      (result.totalPages !== null && page >= result.totalPages) ||
+      (result.total !== null && collected.length >= result.total)
+    if (reachedEnd) break
+  }
+
+  return dedupeAdminRecordsById(collected)
+}
+
 function buildEmployeeImportHistoryQuery(params: { page?: number; limit?: number } = {}) {
   const searchParams = new URLSearchParams()
   if (typeof params.page === "number" && params.page > 0) {
@@ -5418,6 +5453,68 @@ export async function getEmployeeById(id: string | number, token: string) {
     return root
   }
   return normalizeSingle(payload)
+}
+
+function findPositionRecordById(payload: unknown, positionId: string | number): AdminRecord | null {
+  const targetId = String(positionId)
+  const candidates: AdminRecord[] = []
+  const visited = new Set<object>()
+
+  function visit(value: unknown) {
+    if (typeof value !== "object" || value === null || visited.has(value)) {
+      return
+    }
+    visited.add(value)
+    if (Array.isArray(value)) {
+      value.forEach(visit)
+      return
+    }
+
+    const record = value as AdminRecord
+    if (record.id !== undefined && String(record.id) === targetId) {
+      candidates.push(record)
+    }
+    Object.values(record).forEach(visit)
+  }
+
+  visit(payload)
+  return (
+    candidates.find(
+      (record) =>
+        "code" in record &&
+        ("level" in record ||
+          "is_manager" in record ||
+          "isManager" in record ||
+          "headcount" in record ||
+          "department_ids" in record ||
+          "departmentIds" in record ||
+          "reports_to_position_id" in record)
+    ) ??
+    candidates.find((record) => "code" in record || "name" in record) ??
+    null
+  )
+}
+
+export async function getPosition(token: string, id: string | number) {
+  const payload = await adminRequest<unknown>(`/api/positions/${id}`, { token })
+  return findPositionRecordById(payload, id) ?? normalizeSingle(payload)
+}
+
+export async function listDepartmentPositions(token: string, departmentId: string | number) {
+  const payload = await adminRequest<unknown>(`/api/departments/${departmentId}/positions`, { token })
+  return normalizeList(payload)
+}
+
+export async function patchEmployeeById(
+  id: string | number,
+  token: string,
+  data: AdminRecord
+) {
+  return adminRequest<unknown>(`/api/employees/${id}`, {
+    method: "PATCH",
+    token,
+    body: data,
+  })
 }
 
 export async function getCurrentEmployee(token: string) {

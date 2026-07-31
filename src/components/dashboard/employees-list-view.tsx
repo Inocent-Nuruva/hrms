@@ -24,6 +24,7 @@ import {
   buildUserTwoFactorMap,
   disableUserTwoFactor,
   enableUserTwoFactor,
+  listAllEmployees,
   listEmployees,
   readTwoFactorEnabled,
   withNormalizedTwoFactorFields,
@@ -161,6 +162,34 @@ function employeeDisplayName(row: AdminRecord) {
   return [first, middle, last].filter((part) => part !== "-").join(" ").trim() || "-"
 }
 
+function normalizeEmployeeSearchValue(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim()
+}
+
+function matchesEmployeeSearch(row: AdminRecord, search: string) {
+  const linkedUser =
+    asRecord(row.company_user) ??
+    asRecord(row.companyUser) ??
+    asRecord(row.user) ??
+    asRecord(row.account)
+  const values = [
+    employeeDisplayName(row),
+    readString(row, ["first_name", "firstName"]),
+    readString(row, ["middle_name", "middleName"]),
+    readString(row, ["last_name", "lastName"]),
+    readString(row, ["preferred_name", "preferredName", "display_name", "displayName"]),
+    readString(row, ["employee_no", "employeeNo", "employee_number", "employeeNumber"]),
+    readString(row, ["email", "work_email", "workEmail", "personal_email", "personalEmail"]),
+    readString(linkedUser ?? {}, ["first_name", "firstName"]),
+    readString(linkedUser ?? {}, ["middle_name", "middleName"]),
+    readString(linkedUser ?? {}, ["last_name", "lastName"]),
+    readString(linkedUser ?? {}, ["username", "user_no", "email"]),
+  ]
+  const haystack = normalizeEmployeeSearchValue(values.filter((value) => value !== "-").join(" "))
+  const terms = normalizeEmployeeSearchValue(search).split(/\s+/).filter(Boolean)
+  return terms.every((term) => haystack.includes(term))
+}
+
 function employeeProfileHref(employeeNo: string, missingItemKey?: string) {
   const params = new URLSearchParams()
   if (missingItemKey) {
@@ -236,6 +265,7 @@ export function EmployeesListView() {
   const [twoFactorBusy, setTwoFactorBusy] = React.useState(false)
   const debouncedSearch = useDebouncedValue(query.search, 350)
   const lastFetchAtRef = React.useRef(0)
+  const requestSequenceRef = React.useRef(0)
   const canManageTwoFactor = canPerformPermission(actor.permissionLabels, "users:update")
 
   // Defense in depth: never render the company directory for employee shell users.
@@ -281,74 +311,121 @@ export function EmployeesListView() {
   }, [queryCacheKey])
 
   const fetchEmployees = React.useCallback(async (signal?: AbortSignal) => {
+    const requestSequence = ++requestSequenceRef.current
     const token = readStoredToken()
     if (!token) {
       setError("Authentication required. Please log in again.")
       setRows([])
+      setLoading(false)
       return
     }
 
     setLoading(true)
     setError(null)
+    const requestController = new AbortController()
+    let timedOut = false
+    const forwardAbort = () => requestController.abort()
+    if (signal?.aborted) {
+      requestController.abort()
+    } else {
+      signal?.addEventListener("abort", forwardAbort, { once: true })
+    }
+    const timeoutId = globalThis.setTimeout(() => {
+      timedOut = true
+      requestController.abort()
+    }, 15_000)
     try {
-      const result = await listEmployees(
-        token,
-        {
-          ...normalizedQuery,
-          page,
-        },
-        {
-          signal,
-          cacheTtlMs: env.NEXT_PUBLIC_LIST_CACHE_TTL_SHORT_MS,
-        }
-      )
-
-      // 2FA lives on company users (GET /api/users), not always on employee rows.
-      // Merge user flags so the switch reflects the real account status.
-      const neededUserIds = result.rows
-        .map((row) => employeeUserId(row))
-        .filter((id): id is string | number => id != null)
-      let twoFactorByUserId = new Map<string, boolean>()
-      try {
-        twoFactorByUserId = await buildUserTwoFactorMap(token, neededUserIds, {
-          signal,
-          cacheTtlMs: env.NEXT_PUBLIC_LIST_CACHE_TTL_SHORT_MS,
-        })
-      } catch {
-        // Keep employee-payload flags when users list is unavailable.
+      const search = normalizedQuery.search.trim()
+      const requestOptions = {
+        signal: requestController.signal,
+        cacheTtlMs: env.NEXT_PUBLIC_LIST_CACHE_TTL_SHORT_MS,
+      }
+      const result = search
+        ? await listAllEmployees(token, normalizedQuery, requestOptions).then((directoryRows) => {
+            const matchingRows = directoryRows.filter((row) => matchesEmployeeSearch(row, search))
+            const start = (page - 1) * normalizedQuery.limit
+            return {
+              rows: matchingRows.slice(start, start + normalizedQuery.limit),
+              page,
+              limit: normalizedQuery.limit,
+              total: matchingRows.length,
+              totalPages: Math.max(1, Math.ceil(matchingRows.length / normalizedQuery.limit)),
+            }
+          })
+        : await listEmployees(
+            token,
+            {
+              ...normalizedQuery,
+              page,
+            },
+            requestOptions
+          )
+      if (requestSequenceRef.current !== requestSequence || signal?.aborted) {
+        return
       }
 
-      const rowsWithTwoFactor = result.rows.map((row) => {
-        const userId = employeeUserId(row)
-        const fromUser =
-          userId != null ? twoFactorByUserId.get(String(userId)) : undefined
-        const enabled =
-          typeof fromUser === "boolean" ? fromUser : readTwoFactorEnabled(row)
-        return withNormalizedTwoFactorFields({
-          ...row,
-          two_factor_enabled: enabled,
-          is_two_factor_enabled: enabled,
-          twoFactorEnabled: enabled,
-        })
-      })
-
+      const baseRows = result.rows.map((row) => withNormalizedTwoFactorFields(row))
       lastFetchAtRef.current = Date.now()
       writeSnapshot(queryCacheKey, {
-        rows: rowsWithTwoFactor,
+        rows: baseRows,
         totalPages: result.totalPages,
         total: result.total,
         cachedAt: Date.now(),
       })
-      setRows(rowsWithTwoFactor)
+      setRows(baseRows)
       setTotalPages(result.totalPages)
       setTotal(result.total)
+
+      // 2FA lives on company users. Enrich it independently so a slow users
+      // endpoint never blocks the employee directory from rendering.
+      const neededUserIds = result.rows
+        .map((row) => employeeUserId(row))
+        .filter((id): id is string | number => id != null)
+      void buildUserTwoFactorMap(token, neededUserIds, {
+          signal,
+          cacheTtlMs: env.NEXT_PUBLIC_LIST_CACHE_TTL_SHORT_MS,
+        })
+        .then((twoFactorByUserId) => {
+          if (requestSequenceRef.current !== requestSequence || signal?.aborted) {
+            return
+          }
+          const rowsWithTwoFactor = result.rows.map((row) => {
+            const userId = employeeUserId(row)
+            const fromUser = userId != null ? twoFactorByUserId.get(String(userId)) : undefined
+            const enabled = typeof fromUser === "boolean" ? fromUser : readTwoFactorEnabled(row)
+            return withNormalizedTwoFactorFields({
+              ...row,
+              two_factor_enabled: enabled,
+              is_two_factor_enabled: enabled,
+              twoFactorEnabled: enabled,
+            })
+          })
+          writeSnapshot(queryCacheKey, {
+            rows: rowsWithTwoFactor,
+            totalPages: result.totalPages,
+            total: result.total,
+            cachedAt: Date.now(),
+          })
+          setRows(rowsWithTwoFactor)
+        })
+        .catch(() => {
+          // Employee rows are already available; retain their own 2FA flags.
+        })
     } catch (errorObject) {
-      if (signal?.aborted) {
+      if (signal?.aborted || requestSequenceRef.current !== requestSequence) {
         return
       }
-      setError(errorObject instanceof Error ? errorObject.message : "Failed to load employees.")
+      setError(
+        timedOut
+          ? "Employee search took too long. Please try again."
+          : errorObject instanceof Error
+            ? errorObject.message
+            : "Failed to load employees."
+      )
     } finally {
-      if (!signal?.aborted) {
+      globalThis.clearTimeout(timeoutId)
+      signal?.removeEventListener("abort", forwardAbort)
+      if (!signal?.aborted && requestSequenceRef.current === requestSequence) {
         setLoading(false)
       }
     }

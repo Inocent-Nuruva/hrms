@@ -155,7 +155,9 @@ export function SiteHeader({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => void onRefresh()}
+            onClick={() => {
+              void Promise.resolve(onRefresh()).finally(() => window.location.reload())
+            }}
             disabled={loading}
             aria-label="Refresh page data"
             title="Refresh page data"

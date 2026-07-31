@@ -12,6 +12,8 @@ import {
   deleteDepartment,
   listBranches,
   listDepartments,
+  listDepartmentPositions,
+  listPositions,
   patchDepartment,
   type AdminRecord,
   type DepartmentsQueryParams,
@@ -51,6 +53,7 @@ type DepartmentForm = {
   status: string
   branch_id: string
   parent_id: string
+  position_ids: string[]
 }
 
 function readStoredToken() {
@@ -100,6 +103,27 @@ function readNumber(row: AdminRecord, keys: string[]) {
   return null
 }
 
+function readPositionIds(row: AdminRecord) {
+  const ids = new Set<number>()
+  const directIds = Array.isArray(row.position_ids)
+    ? row.position_ids
+    : Array.isArray(row.positionIds)
+      ? row.positionIds
+      : []
+  for (const value of directIds) {
+    const id = typeof value === "number" ? value : Number(value)
+    if (Number.isFinite(id)) ids.add(id)
+  }
+  const positions = Array.isArray(row.positions) ? row.positions : []
+  for (const position of positions) {
+    if (typeof position !== "object" || position === null) continue
+    const record = position as AdminRecord
+    const id = readNumber(record, ["position_id", "positionId", "id"])
+    if (id !== null) ids.add(id)
+  }
+  return Array.from(ids)
+}
+
 function emptyForm(): DepartmentForm {
   return {
     name: "",
@@ -107,6 +131,7 @@ function emptyForm(): DepartmentForm {
     status: "active",
     branch_id: "",
     parent_id: "",
+    position_ids: [],
   }
 }
 
@@ -140,6 +165,7 @@ export function DepartmentsView() {
   const [editingId, setEditingId] = React.useState<number | null>(null)
   const [branches, setBranches] = React.useState<AdminRecord[]>([])
   const [allDepartments, setAllDepartments] = React.useState<AdminRecord[]>([])
+  const [positions, setPositions] = React.useState<AdminRecord[]>([])
   const [pendingDelete, setPendingDelete] = React.useState<AdminRecord | null>(null)
   const debouncedSearch = useDebouncedValue(query.search, 350)
 
@@ -153,6 +179,25 @@ export function DepartmentsView() {
     }),
     [debouncedSearch, query]
   )
+  const availablePositions = React.useMemo(
+    () =>
+      positions.filter((position) => {
+        const branchId = readNumber(position, ["branch_id", "branchId"])
+        return !form.branch_id || branchId === null || String(branchId) === form.branch_id
+      }),
+    [form.branch_id, positions]
+  )
+  const availablePositionIds = React.useMemo(
+    () =>
+      availablePositions
+        .map((position) => readNumber(position, ["id"]))
+        .filter((id): id is number => id !== null)
+        .map(String),
+    [availablePositions]
+  )
+  const allAvailablePositionsSelected =
+    availablePositionIds.length > 0 &&
+    availablePositionIds.every((id) => form.position_ids.includes(id))
 
   const fetchDepartments = React.useCallback(async (signal?: AbortSignal) => {
     const token = readStoredToken()
@@ -218,6 +263,18 @@ export function DepartmentsView() {
 
   React.useEffect(() => {
     const token = readStoredToken()
+    if (!token) return
+    void listPositions(
+      token,
+      { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" },
+      { cacheTtlMs: env.NEXT_PUBLIC_LIST_CACHE_TTL_LONG_MS }
+    )
+      .then((result) => setPositions(result.rows))
+      .catch(() => setPositions([]))
+  }, [])
+
+  React.useEffect(() => {
+    const token = readStoredToken()
     if (!token) {
       return
     }
@@ -238,6 +295,7 @@ export function DepartmentsView() {
       status: readString(row, ["status"]) === "-" ? "active" : readString(row, ["status"]),
       branch_id: String(readNumber(row, ["branch_id"]) ?? ""),
       parent_id: String(readNumber(row, ["parent_id"]) ?? ""),
+      position_ids: readPositionIds(row).map(String),
     })
   }
 
@@ -285,6 +343,7 @@ export function DepartmentsView() {
       status: form.status || "active",
       branch_id: form.branch_id.trim() ? Number(form.branch_id) : 0,
       parent_id: form.parent_id.trim() ? Number(form.parent_id) : undefined,
+      position_ids: form.position_ids.map(Number),
     }
 
     setSaving(true)
@@ -353,6 +412,20 @@ export function DepartmentsView() {
                   fillFormFromRow(row)
                   setEditingId(id)
                   setOpenCreate(true)
+                  const token = readStoredToken()
+                  if (token && id !== null) {
+                    void listDepartmentPositions(token, id)
+                      .then((assigned) =>
+                        setForm((previous) => ({
+                          ...previous,
+                          position_ids: assigned
+                            .map((position) => readNumber(position, ["id", "position_id", "positionId"]))
+                            .filter((positionId): positionId is number => positionId !== null)
+                            .map(String),
+                        }))
+                      )
+                      .catch(() => undefined)
+                  }
                 }}
                 aria-label="Edit department"
                 title="Edit department"
@@ -459,7 +532,7 @@ export function DepartmentsView() {
                 <select
                   className="h-10 rounded-md border border-slate-300 px-3 text-sm"
                   value={form.branch_id}
-                  onChange={(event) => setForm((prev) => ({ ...prev, branch_id: event.target.value }))}
+                  onChange={(event) => setForm((prev) => ({ ...prev, branch_id: event.target.value, position_ids: [] }))}
                 >
                   <option value="">Select branch</option>
                   {branches.map((branch) => {
@@ -512,6 +585,59 @@ export function DepartmentsView() {
                     })}
                 </select>
               </label>
+              <fieldset className="grid gap-1 md:col-span-2">
+                <legend className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Assigned Positions
+                </legend>
+                <div className="max-h-40 overflow-y-auto rounded-md border border-slate-300 bg-white p-2">
+                  <label className="mb-1 flex items-center gap-2 rounded border-b border-slate-200 px-2 py-2 text-sm font-medium">
+                    <input
+                      type="checkbox"
+                      checked={allAvailablePositionsSelected}
+                      disabled={availablePositionIds.length === 0}
+                      onChange={(event) =>
+                        setForm((previous) => {
+                          const availableIds = new Set(availablePositionIds)
+                          return {
+                            ...previous,
+                            position_ids: event.target.checked
+                              ? Array.from(new Set([...previous.position_ids, ...availablePositionIds]))
+                              : previous.position_ids.filter((id) => !availableIds.has(id)),
+                          }
+                        })
+                      }
+                    />
+                    <span>Select all available positions</span>
+                  </label>
+                  <div className="grid gap-1 sm:grid-cols-2">
+                    {availablePositions.map((position) => {
+                        const id = readNumber(position, ["id"])
+                        if (id === null) return null
+                        const value = String(id)
+                        return (
+                          <label key={id} className="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-slate-50">
+                            <input
+                              type="checkbox"
+                              checked={form.position_ids.includes(value)}
+                              onChange={(event) =>
+                                setForm((previous) => ({
+                                  ...previous,
+                                  position_ids: event.target.checked
+                                    ? Array.from(new Set([...previous.position_ids, value]))
+                                    : previous.position_ids.filter((entry) => entry !== value),
+                                }))
+                              }
+                            />
+                            <span>{readString(position, ["name", "code"])}</span>
+                          </label>
+                        )
+                      })}
+                  </div>
+                </div>
+                <span className="text-[11px] text-slate-500">
+                  Select the existing positions assigned to this department.
+                </span>
+              </fieldset>
             </div>
             <div className="mt-4 flex justify-end gap-2">
               <button type="button" className="rounded-md border border-slate-300 px-3 py-2 text-sm" onClick={() => setOpenCreate(false)}>
