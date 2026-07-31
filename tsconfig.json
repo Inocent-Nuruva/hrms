@@ -31,5 +31,11 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules", "public/code/**/*", "android", "dist-desktop"]
+  "exclude": [
+    "node_modules",
+    "public/code/**/*",
+    "android",
+    "dist-desktop",
+    "vitest.config.ts"
+  ]
 }
