@@ -7635,8 +7635,6 @@ const SAFE_AVATAR_MIME = new Set([
   "image/png",
   "image/jpeg",
   "image/jpg",
-  "image/webp",
-  "image/gif",
 ])
 
 function sanitizeAvatarFileName(name: string, mimeType: string): string {

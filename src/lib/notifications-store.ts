@@ -131,6 +131,8 @@ let notificationAudioUnlocked = false
 let notificationSoundPending = false
 /** Avoid chime on the first unread-count fetch after login. */
 let unreadCountBaselineReady = false
+/** A malformed notification:new is followed by a REST counter refresh; avoid double audio. */
+let suppressUnreadIncreaseSoundUntil = 0
 
 let state: InternalNotificationsState = {
   items: [],
@@ -715,10 +717,12 @@ async function loadUnreadCount(
     }
     setState({ unreadCount })
 
-    // REST / poll path: chime when the badge goes up after the first baseline load.
-    // (Socket path also chimes on notification:new; duplicate-safe enough for UX.)
+    // REST/counter fallback: chime when the badge goes up after the first baseline load.
     if (unreadCountBaselineReady && unreadCount > previousUnread) {
-      playNotificationSound()
+      if (Date.now() >= suppressUnreadIncreaseSoundUntil) {
+        playNotificationSound()
+      }
+      suppressUnreadIncreaseSoundUntil = 0
     }
     unreadCountBaselineReady = true
 
@@ -1082,7 +1086,10 @@ function connectSocket(token: string) {
 
     const item = normalizeNotificationItemPayload(payload)
     if (!item) {
-      // Payload shape may be unexpected — still refresh the badge from REST.
+      // The event itself represents a newly delivered notification. Chime even
+      // when its payload shape is unfamiliar, then reconcile from REST.
+      playNotificationSound()
+      suppressUnreadIncreaseSoundUntil = Date.now() + 2_000
       void loadUnreadCount({ tokenOverride: token })
       return
     }
@@ -1092,7 +1099,9 @@ function connectSocket(token: string) {
     const alreadyPresent =
       itemId !== null && state.items.some((entry) => readItemId(entry) === itemId)
 
-    if (itemIsUnread && !alreadyPresent) {
+    // Sound is tied to delivery, not read state. This also covers notifications
+    // created as already-seen/read by a backend workflow.
+    if (!alreadyPresent) {
       playNotificationSound()
     }
 
@@ -1156,7 +1165,14 @@ function connectSocket(token: string) {
       return
     }
 
+    const previousUnread = state.unreadCount
     setState({ unreadCount })
+    if (unreadCount > previousUnread) {
+      if (Date.now() >= suppressUnreadIncreaseSoundUntil) {
+        playNotificationSound()
+      }
+      suppressUnreadIncreaseSoundUntil = 0
+    }
   })
 
   nextSocket.on("notification:bulk-updated", (payload: unknown) => {

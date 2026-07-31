@@ -5,7 +5,6 @@ import { toast } from "sonner"
 import { showSuccessAlert } from "@/lib/success-alert"
 import { env } from "@/lib/env"
 import ReactFlagsSelect from "react-flags-select"
-import Image from "next/image"
 import {
   BadgeCheckIcon,
   CalendarDaysIcon,
@@ -1316,7 +1315,6 @@ function MultiSelectChecklist({
 }
 
 export function EmployeeRegisterForm() {
-  const profilePhotoInputRef = React.useRef<HTMLInputElement | null>(null)
   const [currentStep, setCurrentStep] = React.useState<RegisterStep>("details")
   const [tabDirection, setTabDirection] = React.useState<"forward" | "backward">("forward")
   const [form, setForm] = React.useState<RegisterFormState>(EMPTY_FORM)
@@ -1389,8 +1387,8 @@ export function EmployeeRegisterForm() {
   const [accessOrganizationRecords, setAccessOrganizationRecords] = React.useState<AdminRecord[]>([])
   const [attendanceDeviceRecords, setAttendanceDeviceRecords] = React.useState<AdminRecord[]>([])
   const [onboarding, setOnboarding] = React.useState<OnboardingFormState>(createEmptyOnboardingForm)
-  const [rolesLoading, setRolesLoading] = React.useState(false)
-  const [rolesError, setRolesError] = React.useState<string | null>(null)
+  const [, setRolesLoading] = React.useState(false)
+  const [, setRolesError] = React.useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = React.useState(false)
   const [createdEmployeeResult, setCreatedEmployeeResult] = React.useState<CreateEmployeeResponse | null>(null)
   const [initializedFields, setInitializedFields] = React.useState<InitializedRegistrationFields>(
@@ -1400,11 +1398,6 @@ export function EmployeeRegisterForm() {
   const [registrationContextResolved, setRegistrationContextResolved] = React.useState(false)
   const [selfRegistrationStatus, setSelfRegistrationStatus] = React.useState("")
 
-  const selectedRoleLabel = React.useMemo(
-    () => roles.find((role) => role.id === form.roleId)?.label ?? "",
-    [roles, form.roleId]
-  )
-  const roleDisplayValue = selectedRoleLabel || initializedFields.roleId
   const lockedFields = React.useMemo(
     () => ({
       employeeNo: !isRegisteringOthers && Boolean(initializedFields.employeeNo),
@@ -1477,7 +1470,7 @@ export function EmployeeRegisterForm() {
             readNumberish(row.branch_id) ??
             readNumberish(row.primary_branch_id)
           const matchesDepartment =
-            selectedDepartmentId === null || relatedDepartmentId === null || relatedDepartmentId === selectedDepartmentId
+            selectedDepartmentId === null || relatedDepartmentId === selectedDepartmentId
           const matchesBranch =
             selectedBranchId === null || relatedBranchId === null || relatedBranchId === selectedBranchId
           return matchesDepartment && matchesBranch
@@ -1522,14 +1515,17 @@ export function EmployeeRegisterForm() {
       })
       .filter((o): o is { id: number; label: string } => o !== null)
   }, [reportsToRecords, selectedDepartmentId])
+  const selectedReportsToLabel = React.useMemo(
+    () =>
+      reportsToOptions.find((option) => String(option.id) === String(form.reportsTo))?.label ?? "",
+    [form.reportsTo, reportsToOptions]
+  )
   const selectedEmploymentTypeLabel = React.useMemo(
     () =>
       EMPLOYMENT_TYPE_OPTIONS.find((option) => option.value === (form.employmentType || "full_time"))
         ?.label ?? "Full Time",
     [form.employmentType]
   )
-  const profilePhotoPreview = form.profilePhotoUrl.trim()
-
   React.useEffect(() => {
     if (form.branch && !branchOptions.includes(form.branch)) {
       updateField("branch", "")
@@ -1567,7 +1563,7 @@ export function EmployeeRegisterForm() {
           }
           return {
             id,
-            label: readString(row, ["name", "title"]),
+            label: readString(row, ["name", "title", "workflow_name", "workflowName", "code"]),
           }
         })
         .filter((option): option is { id: number; label: string } => option !== null && option.label !== "-"),
@@ -1581,7 +1577,10 @@ export function EmployeeRegisterForm() {
           if (id === null) {
             return null
           }
-          return { id, label: readString(row, ["name", "title", "code"]) }
+          return {
+            id,
+            label: readString(row, ["name", "title", "shift_name", "shiftName", "code"]),
+          }
         })
         .filter((option): option is { id: number; label: string } => option !== null && option.label !== "-"),
     [shiftRecords]
@@ -1623,7 +1622,10 @@ export function EmployeeRegisterForm() {
           if (id === null) {
             return null
           }
-          return { id, label: readString(row, ["name", "title", "code"]) }
+          return {
+            id,
+            label: readString(row, ["name", "title", "timetable_name", "timetableName", "code"]),
+          }
         })
         .filter((option): option is { id: number; label: string } => option !== null && option.label !== "-"),
     [timetableRecords]
@@ -1828,37 +1830,6 @@ export function EmployeeRegisterForm() {
     }))
   }
 
-  const handleProfilePhotoImport = React.useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0]
-      if (!file) {
-        return
-      }
-
-      if (!file.type.startsWith("image/")) {
-        toast.error("Please choose an image file.")
-        event.target.value = ""
-        return
-      }
-
-      const reader = new FileReader()
-      reader.onload = () => {
-        const result = typeof reader.result === "string" ? reader.result : ""
-        if (!result) {
-          toast.error("Failed to read the selected image.")
-          return
-        }
-        updateField("profilePhotoUrl", result)
-      }
-      reader.onerror = () => {
-        toast.error("Failed to read the selected image.")
-      }
-      reader.readAsDataURL(file)
-      event.target.value = ""
-    },
-    []
-  )
-
   const updateOnboardingField = <K extends keyof OnboardingFormState>(
     field: K,
     value: OnboardingFormState[K]
@@ -1919,21 +1890,6 @@ export function EmployeeRegisterForm() {
         ...previous.deviceAssignment,
         [field]: value,
       },
-    }))
-  }
-
-  const setAttendanceMode = (mode: "" | OnboardingAttendanceMode) => {
-    setOnboarding((previous) => ({
-      ...previous,
-      attendanceMode: mode,
-      shiftAssignment:
-        mode === "shift"
-          ? previous.shiftAssignment
-          : { ...EMPTY_ONBOARDING_SHIFT_ASSIGNMENT },
-      timetableAssignment:
-        mode === "timetable"
-          ? previous.timetableAssignment
-          : { ...EMPTY_ONBOARDING_TIMETABLE_ASSIGNMENT },
     }))
   }
 
@@ -3276,7 +3232,9 @@ export function EmployeeRegisterForm() {
                   <Field label="Reports To" htmlFor="reportsTo" delayMs={255}>
                     <Select value={form.reportsTo} onValueChange={(value) => updateField("reportsTo", value ?? "")}>
                       <SelectTrigger id="reportsTo" className="w-full">
-                        <SelectValue placeholder="Select manager (optional)" />
+                        <SelectValue placeholder="Select manager (optional)">
+                          {form.reportsTo ? selectedReportsToLabel || "Selected manager" : undefined}
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="">— None —</SelectItem>
@@ -3311,61 +3269,6 @@ export function EmployeeRegisterForm() {
                     />
                   </Field>
 
-                  <Field label="Profile Photo" htmlFor="profilePhotoUrl" delayMs={262}>
-                    <div className="grid gap-3">
-                      <input
-                        ref={profilePhotoInputRef}
-                        id="profilePhotoUrl"
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={handleProfilePhotoImport}
-                      />
-                      <div className="flex flex-wrap items-center gap-3">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => profilePhotoInputRef.current?.click()}
-                        >
-                          Import Profile Photo
-                        </Button>
-                        {profilePhotoPreview ? (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            className="text-muted-foreground"
-                            onClick={() => updateField("profilePhotoUrl", "")}
-                          >
-                            Remove
-                          </Button>
-                        ) : null}
-                      </div>
-                      {profilePhotoPreview ? (
-                        <div className="overflow-hidden rounded-xl border border-border/70 bg-muted/10 p-2">
-                          <div className="relative aspect-square w-24 overflow-hidden rounded-lg border border-border/60 bg-background">
-                            <Image
-                              src={profilePhotoPreview}
-                              alt="Selected profile photo preview"
-                              fill
-                              className="object-cover"
-                              unoptimized
-                            />
-                          </div>
-                        </div>
-                      ) : null}
-                      <div className="flex items-center">
-                        <InfoTooltip
-                          label="Profile photo help"
-                          content={
-                            profilePhotoPreview
-                              ? "Current profile photo is shown here. Import another image to replace it."
-                              : "Import a profile photo from your device."
-                          }
-                        />
-                      </div>
-                    </div>
-                  </Field>
-
                   <Field label="Hire Date" htmlFor="hire-date" delayMs={265}>
                     <DatePickerPresets
                       value={hireDate ? hireDate.toISOString().slice(0, 10) : ""}
@@ -3396,7 +3299,13 @@ export function EmployeeRegisterForm() {
                           onValueChange={(value) => updateInviteWorkflowAssignment(value ?? "none")}
                         >
                           <SelectTrigger id="invite-workflow" className="w-full">
-                            <SelectValue placeholder="Select workflow assignment" />
+                            <SelectValue placeholder="Select workflow assignment">
+                              {onboarding.enabled && onboarding.workflowId && onboarding.workflowId !== "none"
+                                ? onboardingWorkflowOptions.find(
+                                    (option) => String(option.id) === String(onboarding.workflowId)
+                                  )?.label || "Selected workflow"
+                                : "No workflow assigned"}
+                            </SelectValue>
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="none">No workflow assigned</SelectItem>
@@ -3523,31 +3432,6 @@ export function EmployeeRegisterForm() {
                         </div>
                       </Field>
 
-                      <Field
-                        label="Roles"
-                        htmlFor="roleId"
-                        delayMs={400}
-                        hint={
-                          rolesError ? (
-                            <span
-                              className={cn(
-                                rolesError.includes("unavailable") ? "text-muted-foreground" : "text-destructive"
-                              )}
-                            >
-                              {rolesError}
-                            </span>
-                          ) : undefined
-                        }
-                        reserveHintSpace
-                      >
-                        <Input
-                          id="roleId"
-                          value={roleDisplayValue}
-                          placeholder={rolesLoading ? "Loading role..." : "Assigned automatically"}
-                          disabled
-                        />
-                      </Field>
-
                       <AnimatedField delayMs={440}>
                         <div className="grid gap-2 md:col-span-2 xl:col-span-3">
                           <Label htmlFor="dob-trigger">Date of Birth</Label>
@@ -3614,7 +3498,13 @@ export function EmployeeRegisterForm() {
                               onValueChange={(value) => updateOnboardingField("workflowId", value ?? "")}
                             >
                               <SelectTrigger id="onboarding-workflow" className="w-full">
-                                <SelectValue placeholder="Select workflow" />
+                                <SelectValue placeholder="Select workflow">
+                                  {onboarding.workflowId && onboarding.workflowId !== "none"
+                                    ? onboardingWorkflowOptions.find(
+                                        (option) => String(option.id) === String(onboarding.workflowId)
+                                      )?.label || "Selected workflow"
+                                    : "No workflow"}
+                                </SelectValue>
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="none">No workflow</SelectItem>
@@ -3623,28 +3513,6 @@ export function EmployeeRegisterForm() {
                                     {option.label}
                                   </SelectItem>
                                 ))}
-                              </SelectContent>
-                            </Select>
-                          </Field>
-
-                          <Field label="Attendance Mode" htmlFor="onboarding-attendance-mode" delayMs={40}>
-                            <Select
-                              value={onboarding.attendanceMode || "none"}
-                              onValueChange={(value) =>
-                                setAttendanceMode(
-                                  value === "shift" || value === "timetable"
-                                    ? value
-                                    : ""
-                                )
-                              }
-                            >
-                              <SelectTrigger id="onboarding-attendance-mode" className="w-full">
-                                <SelectValue placeholder="Select attendance mode" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="none">No attendance provisioning</SelectItem>
-                                <SelectItem value="shift">Shift</SelectItem>
-                                <SelectItem value="timetable">Timetable</SelectItem>
                               </SelectContent>
                             </Select>
                           </Field>
@@ -3884,7 +3752,15 @@ export function EmployeeRegisterForm() {
                                 }
                               >
                                 <SelectTrigger id="provisioning-timetable" className="w-full">
-                                  <SelectValue placeholder="Select timetable" />
+                                  <SelectValue placeholder="Select timetable">
+                                    {onboarding.timetableAssignment.timetableId
+                                      ? timetableOptions.find(
+                                          (option) =>
+                                            String(option.id) ===
+                                            String(onboarding.timetableAssignment.timetableId)
+                                        )?.label || "Selected timetable"
+                                      : "Select timetable"}
+                                  </SelectValue>
                                 </SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value="none">Select timetable</SelectItem>

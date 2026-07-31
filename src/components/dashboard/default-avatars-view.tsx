@@ -263,10 +263,11 @@ export function DefaultAvatarsView() {
   const handleFilePicked = (file: File | null) => {
     if (!file) return
     const isImage =
-      file.type.startsWith("image/") ||
-      /\.(png|jpe?g|webp|gif|svg)$/i.test(file.name)
+      ["image/png", "image/jpeg", "image/jpg", "image/svg+xml"].includes(
+        file.type.toLowerCase()
+      ) || /\.(png|jpe?g|svg)$/i.test(file.name)
     if (!isImage) {
-      toast.error("Please choose an image file (PNG, JPG, WEBP, or SVG).")
+      toast.error("Please choose a PNG, JPG, JPEG, or SVG image.")
       return
     }
     if (/\.heic$|\.heif$/i.test(file.name) || /heic|heif/i.test(file.type)) {
@@ -311,8 +312,8 @@ export function DefaultAvatarsView() {
         avatar_name: form.avatar_name.trim(),
         gender_category: form.gender_category,
         display_order: Number.isFinite(displayOrder) ? Math.max(0, displayOrder) : 0,
-        // Prefer dedicated set-default endpoint after save for a reliable default flag.
-        is_default: false,
+        // Creation supports is_default directly, even when the API returns no record body.
+        is_default: form.is_default,
         status: form.status,
       }
 
@@ -332,6 +333,7 @@ export function DefaultAvatarsView() {
           gender_category: payloadBase.gender_category,
           display_order: payloadBase.display_order,
           status: payloadBase.status,
+          is_default: form.is_default,
         }
         if (form.file) {
           body.image_file = await fileToBase64FileDto(form.file)
@@ -341,8 +343,8 @@ export function DefaultAvatarsView() {
         showSuccessAlert("Default avatar updated.")
       }
 
-      // POST /api/default-avatars/{id}/set-default when user marked default
-      if (form.is_default && savedId != null) {
+      // Existing avatars also use the dedicated set-default operation.
+      if (editingId != null && form.is_default && savedId != null) {
         try {
           await setDefaultAvatarAsDefault(token, savedId)
         } catch (setDefaultErr) {
@@ -614,7 +616,7 @@ export function DefaultAvatarsView() {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/*,.svg"
+                  accept=".png,.jpg,.jpeg,.svg,image/png,image/jpeg,image/svg+xml"
                   className="hidden"
                   onChange={(e) => handleFilePicked(e.target.files?.[0] ?? null)}
                 />
@@ -629,8 +631,8 @@ export function DefaultAvatarsView() {
                 </Button>
                 <p className="text-[11px] text-muted-foreground">
                   {editingId == null
-                    ? "Required. PNG, JPG, WEBP or SVG, up to 5 MB."
-                    : "Optional on edit. PNG, JPG, WEBP or SVG, up to 5 MB."}
+                    ? "Required. PNG, JPG, JPEG or SVG, up to 5 MB."
+                    : "Optional on edit. PNG, JPG, JPEG or SVG, up to 5 MB."}
                 </p>
               </div>
             </div>
