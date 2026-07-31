@@ -16,33 +16,30 @@ const EMPTY_SNAPSHOT: DashboardActorSnapshot = {
   version: 0,
 }
 
-function readInitialSnapshot(): DashboardActorSnapshot {
-  if (typeof window === "undefined") {
-    return EMPTY_SNAPSHOT
-  }
-  // Hydrate from session/local storage immediately so nav tabs do not flash empty
-  // (ready:false) on every soft navigation remount.
-  return readDashboardActorSnapshotFromBrowser()
+function snapshotsEqual(a: DashboardActorSnapshot, b: DashboardActorSnapshot) {
+  return (
+    a.ready === b.ready &&
+    a.accessMode === b.accessMode &&
+    a.isAdmin === b.isAdmin &&
+    a.permissionLabels.length === b.permissionLabels.length &&
+    a.permissionLabels.every((label, index) => label === b.permissionLabels[index])
+  )
 }
 
+/**
+ * Dashboard actor (permissions + access mode).
+ *
+ * Initial state is always the empty snapshot so SSR HTML matches the first
+ * client render (reading sessionStorage in useState caused hydration mismatches).
+ * Browser storage is applied in an effect after mount.
+ */
 export function useDashboardActor() {
-  const [snapshot, setSnapshot] = React.useState<DashboardActorSnapshot>(readInitialSnapshot)
+  const [snapshot, setSnapshot] = React.useState<DashboardActorSnapshot>(EMPTY_SNAPSHOT)
 
   React.useEffect(() => {
     const syncSnapshot = () => {
       const nextSnapshot = readDashboardActorSnapshotFromBrowser()
-      setSnapshot((current) => {
-        if (
-          current.ready === nextSnapshot.ready &&
-          current.accessMode === nextSnapshot.accessMode &&
-          current.isAdmin === nextSnapshot.isAdmin &&
-          current.permissionLabels.length === nextSnapshot.permissionLabels.length &&
-          current.permissionLabels.every((label, index) => label === nextSnapshot.permissionLabels[index])
-        ) {
-          return current
-        }
-        return nextSnapshot
-      })
+      setSnapshot((current) => (snapshotsEqual(current, nextSnapshot) ? current : nextSnapshot))
     }
 
     syncSnapshot()

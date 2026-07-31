@@ -8,7 +8,6 @@ import {
 } from "framer-motion"
 import {
   AlarmClockCheckIcon,
-  Clock3Icon,
   Filter,
   PlusIcon,
   RefreshCwIcon,
@@ -36,17 +35,17 @@ import {
   getMyAttendanceSchedule,
   getMyAttendanceToday,
   listMyAttendanceCorrectionRequests,
-  rebuildAttendanceDailySummaries,
+  refreshAttendanceDailySummaries,
   listAttendanceDailySummariesPage,
   listAttendanceProcessingJobs,
   listAttendanceUnmatchedLogs,
   listBranches,
   listEmployees,
   listMyAttendanceHistory,
-  processAttendanceRange,
   runPendingAttendanceProcessingJobs,
   submitMyAttendanceCorrectionRequest,
   type AdminRecord,
+  type RefreshAttendanceDailySummariesInput,
 } from "@/lib/admin-api"
 import { cn } from "@/lib/utils"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
@@ -1627,34 +1626,50 @@ function asNumber(value: string | undefined): number | undefined {
   return parsed
 }
 
-function buildRecalculatePayload(values: Record<string, string>) {
+/**
+ * Build POST /api/attendance/daily-summaries/refresh body as documented
+ * (RefreshAttendanceDailySummariesDto), including legacy fields for compatibility.
+ */
+function buildRefreshSummariesPayload(values: Record<string, string>): RefreshAttendanceDailySummariesInput {
   if (!values.start_date.trim() || !values.end_date.trim()) {
     throw new Error("Start date and end date are required.")
   }
 
-  return {
+  const processingSource =
+    values.processing_source === "fetch_and_process" || values.processing_source === "database_only"
+      ? values.processing_source
+      : "database_only"
+  const executionMode =
+    values.execution_mode === "immediate" || values.execution_mode === "background"
+      ? values.execution_mode
+      : "background"
+  const mode =
+    values.mode === "summaries_only" || values.mode === "from_raw_logs"
+      ? values.mode
+      : processingSource === "fetch_and_process"
+        ? "from_raw_logs"
+        : "summaries_only"
+  const execution = executionMode === "immediate" ? "sync" : "async"
+
+  const payload: RefreshAttendanceDailySummariesInput = {
     start_date: values.start_date.trim(),
     end_date: values.end_date.trim(),
-    employee_id: asNumber(values.employee_id),
-    force_rebuild: values.force_rebuild === "true",
-    reason: values.reason.trim() || undefined,
-    async: values.async === "true",
-  }
-}
-
-function buildRangePayload(values: Record<string, string>) {
-  if (!values.start_date.trim() || !values.end_date.trim()) {
-    throw new Error("Start date and end date are required.")
+    processing_source: processingSource,
+    mode,
+    execution_mode: executionMode,
+    execution,
   }
 
-  return {
-    start_date: values.start_date.trim(),
-    end_date: values.end_date.trim(),
-    employee_id: asNumber(values.employee_id),
-    rebuild_summaries: values.rebuild_summaries === "true",
-    force_rebuild_summaries: values.force_rebuild_summaries === "true",
-    batch_size: asNumber(values.batch_size) ?? 500,
+  const employeeId = asNumber(values.employee_id)
+  if (employeeId !== undefined) {
+    payload.employee_id = employeeId
   }
+  const deviceId = asNumber(values.device_id)
+  if (deviceId !== undefined) {
+    payload.device_id = deviceId
+  }
+
+  return payload
 }
 
 function AttendanceViewLoader({ label = "Loading attendance data…" }: { label?: string }) {
@@ -1770,7 +1785,6 @@ export function AttendanceActivityView({ section }: { section: string }) {
   const [hasAppliedDailySummaryFilters, setHasAppliedDailySummaryFilters] = React.useState(true)
   const [dailySummaryFiltersOpen, setDailySummaryFiltersOpen] = React.useState(false)
   const [rebuildFormOpen, setRebuildFormOpen] = React.useState(false)
-  const [processRangeFormOpen, setProcessRangeFormOpen] = React.useState(false)
   const [recalcActionBusy, setRecalcActionBusy] = React.useState(false)
   const [historyFilters, setHistoryFilters] = React.useState<Record<string, string>>(() => ({
     from_date: "",
@@ -1859,21 +1873,16 @@ export function AttendanceActivityView({ section }: { section: string }) {
     setDailySummaryFiltersOpen(false)
   }, [])
 
+  /** Form state for POST /api/attendance/daily-summaries/refresh */
   const [recalculateValues, setRecalculateValues] = React.useState<Record<string, string>>({
     start_date: "",
     end_date: "",
     employee_id: "",
-    reason: "",
-    force_rebuild: "true",
-    async: "true",
-  })
-  const [rangeValues, setRangeValues] = React.useState<Record<string, string>>({
-    start_date: "",
-    end_date: "",
-    employee_id: "",
-    rebuild_summaries: "true",
-    force_rebuild_summaries: "false",
-    batch_size: "500",
+    device_id: "",
+    processing_source: "database_only",
+    mode: "from_raw_logs",
+    execution_mode: "background",
+    execution: "async",
   })
 
   React.useEffect(() => {
@@ -2195,33 +2204,18 @@ export function AttendanceActivityView({ section }: { section: string }) {
     }
     setRecalcActionBusy(true)
     try {
-      await rebuildAttendanceDailySummaries(token, buildRecalculatePayload(recalculateValues))
-      setMessage("Attendance summary rebuild started successfully.")
+      const payload = buildRefreshSummariesPayload(recalculateValues)
+      await refreshAttendanceDailySummaries(token, payload)
+      setMessage(
+        payload.execution_mode === "immediate"
+          ? "Attendance refresh completed."
+          : "Attendance refresh started in the background."
+      )
       setError(null)
       setRebuildFormOpen(false)
       await fetchSectionData(true)
     } catch (errorObject) {
-      setError(formatLoadError(errorObject, "Could not start the attendance summary rebuild."))
-    } finally {
-      setRecalcActionBusy(false)
-    }
-  }
-
-  const runRange = async () => {
-    const token = readStoredToken()
-    if (!token) {
-      setError("Authentication required. Please log in again.")
-      return
-    }
-    setRecalcActionBusy(true)
-    try {
-      await processAttendanceRange(token, buildRangePayload(rangeValues))
-      setMessage("Attendance range processing started successfully.")
-      setError(null)
-      setProcessRangeFormOpen(false)
-      await fetchSectionData(true)
-    } catch (errorObject) {
-      setError(formatLoadError(errorObject, "Could not process this attendance range."))
+      setError(formatLoadError(errorObject, "Could not refresh attendance daily summaries."))
     } finally {
       setRecalcActionBusy(false)
     }
@@ -3811,16 +3805,16 @@ export function AttendanceActivityView({ section }: { section: string }) {
                 <Popover open={rebuildFormOpen} onOpenChange={setRebuildFormOpen}>
                   <PopoverTrigger
                     className="inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-border px-2 text-xs font-medium text-foreground transition hover:bg-muted"
-                    aria-label="Rebuild daily summaries"
-                    title="Rebuild daily summaries"
+                    aria-label="Refresh daily summaries"
+                    title="Refresh daily summaries"
                   >
                     <TimerResetIcon className="size-3.5 text-primary" />
                     <span className="hidden sm:inline">Rebuild</span>
                   </PopoverTrigger>
-                  <PopoverContent className="w-[min(100vw-1.5rem,18.5rem)] p-2.5" align="end">
+                  <PopoverContent className="w-[min(100vw-1.5rem,19rem)] p-2.5" align="end">
                     <div className="space-y-1.5">
                       <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                        Rebuild summaries
+                        Refresh summaries
                       </div>
                       <div className="grid grid-cols-2 gap-1.5">
                         <label className="grid min-w-0 gap-0.5 text-[10px]">
@@ -3859,40 +3853,66 @@ export function AttendanceActivityView({ section }: { section: string }) {
                       />
                       <input
                         className="h-7 w-full rounded-md border border-slate-300 bg-white px-2 text-[11px] text-slate-900 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100"
-                        placeholder="Reason"
-                        value={recalculateValues.reason}
+                        placeholder="Device ID (optional)"
+                        value={recalculateValues.device_id}
                         onChange={(event) =>
                           setRecalculateValues((current) => ({
                             ...current,
-                            reason: event.target.value,
+                            device_id: event.target.value,
                           }))
                         }
                       />
                       <select
                         className="h-7 w-full rounded-md border border-slate-300 bg-white px-1.5 text-[11px] text-slate-900 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100"
-                        value={recalculateValues.force_rebuild}
-                        onChange={(event) =>
+                        value={recalculateValues.processing_source}
+                        onChange={(event) => {
+                          const processing_source = event.target.value
                           setRecalculateValues((current) => ({
                             ...current,
-                            force_rebuild: event.target.value,
+                            processing_source,
+                            // Keep legacy mode in sync with processing_source defaults from the API sample.
+                            mode:
+                              processing_source === "fetch_and_process"
+                                ? "from_raw_logs"
+                                : current.mode === "from_raw_logs"
+                                  ? "from_raw_logs"
+                                  : "summaries_only",
                           }))
-                        }
+                        }}
+                        aria-label="Processing source"
                       >
-                        <option value="true">Force rebuild</option>
-                        <option value="false">Upsert only</option>
+                        <option value="database_only">Database only</option>
+                        <option value="fetch_and_process">Fetch from device &amp; process</option>
                       </select>
                       <select
                         className="h-7 w-full rounded-md border border-slate-300 bg-white px-1.5 text-[11px] text-slate-900 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100"
-                        value={recalculateValues.async}
+                        value={recalculateValues.mode}
                         onChange={(event) =>
                           setRecalculateValues((current) => ({
                             ...current,
-                            async: event.target.value,
+                            mode: event.target.value,
                           }))
                         }
+                        aria-label="Refresh mode"
                       >
-                        <option value="true">Queue in background</option>
-                        <option value="false">Run synchronously</option>
+                        <option value="from_raw_logs">From raw logs</option>
+                        <option value="summaries_only">Summaries only</option>
+                      </select>
+                      <select
+                        className="h-7 w-full rounded-md border border-slate-300 bg-white px-1.5 text-[11px] text-slate-900 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100"
+                        value={recalculateValues.execution_mode}
+                        onChange={(event) => {
+                          const execution_mode = event.target.value
+                          setRecalculateValues((current) => ({
+                            ...current,
+                            execution_mode,
+                            execution: execution_mode === "immediate" ? "sync" : "async",
+                          }))
+                        }}
+                        aria-label="Execution mode"
+                      >
+                        <option value="background">Background</option>
+                        <option value="immediate">Immediate</option>
                       </select>
                       <button
                         type="button"
@@ -3901,104 +3921,6 @@ export function AttendanceActivityView({ section }: { section: string }) {
                         onClick={() => void queueRecalculation()}
                       >
                         {recalcActionBusy ? "Starting…" : "Start rebuild"}
-                      </button>
-                    </div>
-                  </PopoverContent>
-                </Popover>
-
-                <Popover open={processRangeFormOpen} onOpenChange={setProcessRangeFormOpen}>
-                  <PopoverTrigger
-                    className="inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-border px-2 text-xs font-medium text-foreground transition hover:bg-muted"
-                    aria-label="Process attendance range"
-                    title="Process attendance range"
-                  >
-                    <Clock3Icon className="size-3.5 text-primary" />
-                    <span className="hidden sm:inline">Process</span>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[min(100vw-1.5rem,18.5rem)] p-2.5" align="end">
-                    <div className="space-y-1.5">
-                      <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                        Process range
-                      </div>
-                      <div className="grid grid-cols-2 gap-1.5">
-                        <label className="grid min-w-0 gap-0.5 text-[10px]">
-                          <span className="font-medium text-slate-600 dark:text-slate-300">Start</span>
-                          <DatePickerPresets
-                            value={rangeValues.start_date}
-                            onChange={(value) =>
-                              setRangeValues((current) => ({ ...current, start_date: value }))
-                            }
-                            placeholder="Start"
-                            className="h-7 gap-1 border-slate-300 bg-white px-2 text-[11px] text-slate-900 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100 [&_svg]:size-3"
-                          />
-                        </label>
-                        <label className="grid min-w-0 gap-0.5 text-[10px]">
-                          <span className="font-medium text-slate-600 dark:text-slate-300">End</span>
-                          <DatePickerPresets
-                            value={rangeValues.end_date}
-                            onChange={(value) =>
-                              setRangeValues((current) => ({ ...current, end_date: value }))
-                            }
-                            placeholder="End"
-                            className="h-7 gap-1 border-slate-300 bg-white px-2 text-[11px] text-slate-900 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100 [&_svg]:size-3"
-                          />
-                        </label>
-                      </div>
-                      <input
-                        className="h-7 w-full rounded-md border border-slate-300 bg-white px-2 text-[11px] text-slate-900 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100"
-                        placeholder="Employee ID (optional)"
-                        value={rangeValues.employee_id}
-                        onChange={(event) =>
-                          setRangeValues((current) => ({
-                            ...current,
-                            employee_id: event.target.value,
-                          }))
-                        }
-                      />
-                      <input
-                        className="h-7 w-full rounded-md border border-slate-300 bg-white px-2 text-[11px] text-slate-900 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100"
-                        placeholder="Batch size"
-                        value={rangeValues.batch_size}
-                        onChange={(event) =>
-                          setRangeValues((current) => ({
-                            ...current,
-                            batch_size: event.target.value,
-                          }))
-                        }
-                      />
-                      <select
-                        className="h-7 w-full rounded-md border border-slate-300 bg-white px-1.5 text-[11px] text-slate-900 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100"
-                        value={rangeValues.rebuild_summaries}
-                        onChange={(event) =>
-                          setRangeValues((current) => ({
-                            ...current,
-                            rebuild_summaries: event.target.value,
-                          }))
-                        }
-                      >
-                        <option value="true">Rebuild summaries</option>
-                        <option value="false">Keep summaries</option>
-                      </select>
-                      <select
-                        className="h-7 w-full rounded-md border border-slate-300 bg-white px-1.5 text-[11px] text-slate-900 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100"
-                        value={rangeValues.force_rebuild_summaries}
-                        onChange={(event) =>
-                          setRangeValues((current) => ({
-                            ...current,
-                            force_rebuild_summaries: event.target.value,
-                          }))
-                        }
-                      >
-                        <option value="false">Normal rebuild</option>
-                        <option value="true">Force rebuild</option>
-                      </select>
-                      <button
-                        type="button"
-                        className="inline-flex h-7 w-full items-center justify-center rounded-md bg-primary px-2 text-[11px] font-semibold !text-white transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
-                        disabled={recalcActionBusy}
-                        onClick={() => void runRange()}
-                      >
-                        {recalcActionBusy ? "Starting…" : "Process range"}
                       </button>
                     </div>
                   </PopoverContent>

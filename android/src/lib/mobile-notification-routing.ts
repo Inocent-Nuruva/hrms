@@ -144,7 +144,6 @@ function resolveProfileSection(row: MobileRecord, metadata: MobileRecord | null)
     sectionHints.includes('branch') ||
     sectionHints.includes('department') ||
     sectionHints.includes('position') ||
-    sectionHints.includes('designation') ||
     sectionHints.includes('work')
   ) {
     return 'work';

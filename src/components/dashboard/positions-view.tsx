@@ -12,7 +12,6 @@ import {
   deletePosition,
   listBranches,
   listDepartments,
-  listDesignations,
   listPositions,
   patchPosition,
   type AdminRecord,
@@ -54,7 +53,6 @@ type PositionForm = {
   status: string
   branch_id: string
   department_id: string
-  designation_id: string
   reports_to_position_id: string
   level: string
   is_manager: string
@@ -135,7 +133,6 @@ function emptyForm(): PositionForm {
     status: "active",
     branch_id: "",
     department_id: "",
-    designation_id: "",
     reports_to_position_id: "",
     level: "1",
     is_manager: "false",
@@ -164,7 +161,6 @@ export function PositionsView() {
   const [rows, setRows] = React.useState<AdminRecord[]>([])
   const [branches, setBranches] = React.useState<AdminRecord[]>([])
   const [departments, setDepartments] = React.useState<AdminRecord[]>([])
-  const [designations, setDesignations] = React.useState<AdminRecord[]>([])
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -243,17 +239,14 @@ export function PositionsView() {
     void Promise.all([
       listBranches(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }, { cacheTtlMs: env.NEXT_PUBLIC_LIST_CACHE_TTL_LONG_MS }),
       listDepartments(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }, { cacheTtlMs: env.NEXT_PUBLIC_LIST_CACHE_TTL_LONG_MS }),
-      listDesignations(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }, { cacheTtlMs: env.NEXT_PUBLIC_LIST_CACHE_TTL_LONG_MS }),
     ])
-      .then(([branchResult, departmentResult, designationResult]) => {
+      .then(([branchResult, departmentResult]) => {
         setBranches(branchResult.rows)
         setDepartments(departmentResult.rows)
-        setDesignations(designationResult.rows)
       })
       .catch(() => {
         setBranches([])
         setDepartments([])
-        setDesignations([])
       })
   }, [])
 
@@ -265,7 +258,6 @@ export function PositionsView() {
       status: readString(row, ["status"]) === "-" ? "active" : readString(row, ["status"]),
       branch_id: String(readNumber(row, ["branch_id"]) ?? ""),
       department_id: String(readNumber(row, ["department_id"]) ?? ""),
-      designation_id: String(readNumber(row, ["designation_id"]) ?? ""),
       reports_to_position_id: String(readNumber(row, ["reports_to_position_id"]) ?? ""),
       level: String(readNumber(row, ["level"]) ?? 1),
       is_manager: String(readBoolean(row, ["is_manager"])),
@@ -308,7 +300,6 @@ export function PositionsView() {
       status: form.status || "active",
       branch_id: form.branch_id.trim() ? Number(form.branch_id) : 0,
       department_id: form.department_id.trim() ? Number(form.department_id) : 0,
-      designation_id: form.designation_id.trim() ? Number(form.designation_id) : 0,
       reports_to_position_id: form.reports_to_position_id.trim() ? Number(form.reports_to_position_id) : 0,
       level: Math.min(100, Math.max(1, Number(form.level || "1"))),
       is_manager: form.is_manager === "true",
@@ -362,7 +353,6 @@ export function PositionsView() {
     { key: "name", label: "Name", defaultWidth: 100, sortable: true, render: (r) => readString(r, ["name"]) },
     { key: "code", label: "Code", defaultWidth: 50, sortable: true, render: (r) => readString(r, ["code"]) },
     { key: "department", label: "Dept", defaultWidth: 75, render: (r) => labelById(departments, readNumber(r, ["department_id"])) },
-    { key: "designation", label: "Desig", defaultWidth: 70, render: (r) => labelById(designations, readNumber(r, ["designation_id"])) },
     { key: "level", label: "Lvl", defaultWidth: 40, sortable: true, render: (r) => String(readNumber(r, ["level"]) ?? "-") },
     { key: "headcount", label: "HC", defaultWidth: 45, sortable: true, render: (r) => String(readNumber(r, ["headcount"]) ?? "-") },
     { key: "manager", label: "Mgr", defaultWidth: 40, render: (r) => (readBoolean(r, ["is_manager"]) ? "Y" : "N") },
@@ -546,23 +536,6 @@ export function PositionsView() {
                     return (
                       <option key={id} value={String(id)}>
                         {readString(department, ["name"])}
-                      </option>
-                    )
-                  })}
-                </select>
-              </label>
-              <label className="grid gap-1">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Designation</span>
-                <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={form.designation_id} onChange={(event) => setForm((prev) => ({ ...prev, designation_id: event.target.value }))}>
-                  <option value="">Select designation</option>
-                  {designations.map((designation) => {
-                    const id = readNumber(designation, ["id"])
-                    if (id === null) {
-                      return null
-                    }
-                    return (
-                      <option key={id} value={String(id)}>
-                        {readString(designation, ["name"])}
                       </option>
                     )
                   })}

@@ -1,7 +1,15 @@
 "use client"
 
 import * as React from "react"
-import { PencilIcon, PlusIcon, RefreshCwIcon, Trash2Icon } from "lucide-react"
+import {
+  DownloadIcon,
+  Loader2Icon,
+  PencilIcon,
+  PlusIcon,
+  RefreshCwIcon,
+  Trash2Icon,
+  UploadIcon,
+} from "lucide-react"
 import {
   Dialog,
   DialogDescription,
@@ -14,18 +22,26 @@ import { ResizableTable } from "@/components/ui/resizable-table"
 import { Textarea } from "@/components/ui/textarea"
 import {
   createAccessControlResource,
+  createAccessScheduleTemplate,
   deleteAccessControlResourceById,
+  deleteAccessScheduleTemplate,
   getAccessControlResourceById,
+  getAccessScheduleTemplate,
   listAttendanceDevices,
   listAccessControlResources,
+  listAccessScheduleTemplates,
   listBranches,
   listDepartments,
+  syncAccessScheduleTemplateToDevice,
+  syncAccessScheduleTemplatesFromDevice,
   type AccessControlResourceKey,
   type AdminRecord,
   updateAccessControlResourceById,
+  updateAccessScheduleTemplate,
 } from "@/lib/admin-api"
 import { canPerformPermission } from "@/lib/dashboard-permissions"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
+import { useDebouncedValue } from "@/hooks/use-debounced-value"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import { readStoredCompanyName } from "@/components/dashboard/admin-view-shared"
 
@@ -90,10 +106,15 @@ const SECTION_FIELDS: Record<AccessControlSectionKey, FieldConfig[]> = {
     { key: "hikvision_week_plan_no", label: "Hikvision Week Plan No", type: "text", required: true },
     { key: "branch_id", label: "Branch", type: "number" },
     { key: "holiday_group_no", label: "Holiday Group No", type: "text" },
-    { key: "schedule_type", label: "Schedule Type", type: "select", options: ["DOOR", "ATTENDANCE", "MIXED"] },
-    { key: "status", label: "Status", type: "select", options: ["ACTIVE", "INACTIVE"] },
-    { key: "name", label: "Display Name", type: "text" },
-    { key: "metadata", label: "Metadata", type: "json", placeholder: "{\"days\":[\"MONDAY\"]}" },
+    {
+      key: "schedule_type",
+      label: "Schedule Type",
+      type: "select",
+      options: ["DOOR", "ATTENDANCE", "MIXED"],
+      required: true,
+    },
+    { key: "status", label: "Status", type: "select", options: ["ACTIVE", "INACTIVE"], required: true },
+    { key: "metadata", label: "Metadata", type: "json", placeholder: "{}" },
   ],
   organizations: [
     { key: "org_name", label: "Organization Name", type: "text", required: true },
@@ -394,37 +415,59 @@ function stringifyValue(value: unknown): string {
   return "-"
 }
 
-function resolveVisibleColumns(rows: AdminRecord[]) {
-  const preferred = [
-    "id",
-    "door_name",
-    "doorName",
-    "door_no",
-    "doorNo",
-    "group_name",
-    "groupName",
-    "org_name",
-    "orgName",
-    "template_name",
-    "templateName",
-    "name",
-    "group_code",
-    "groupCode",
-    "org_code",
-    "orgCode",
-    "hikvision_template_no",
-    "hikvisionTemplateNo",
-    "status",
-    "description",
-    "device_id",
-    "deviceId",
-    "branch_id",
-    "branchId",
-    "company_id",
-    "companyId",
-    "created_at",
-    "updated_at",
-  ]
+function resolveVisibleColumns(rows: AdminRecord[], section?: AccessControlSectionKey) {
+  const preferred =
+    section === "templates"
+      ? [
+          "template_name",
+          "templateName",
+          "hikvision_template_no",
+          "hikvisionTemplateNo",
+          "schedule_type",
+          "scheduleType",
+          "status",
+          "device_id",
+          "deviceId",
+          "week_plan_id",
+          "weekPlanId",
+          "hikvision_week_plan_no",
+          "hikvisionWeekPlanNo",
+          "branch_id",
+          "branchId",
+          "holiday_group_no",
+          "holidayGroupNo",
+          "id",
+        ]
+      : [
+          "id",
+          "door_name",
+          "doorName",
+          "door_no",
+          "doorNo",
+          "group_name",
+          "groupName",
+          "org_name",
+          "orgName",
+          "template_name",
+          "templateName",
+          "name",
+          "group_code",
+          "groupCode",
+          "org_code",
+          "orgCode",
+          "hikvision_template_no",
+          "hikvisionTemplateNo",
+          "status",
+          "description",
+          "device_id",
+          "deviceId",
+          "branch_id",
+          "branchId",
+          "company_id",
+          "companyId",
+          "created_at",
+          "updated_at",
+        ]
   const keySet = new Set<string>()
   rows.forEach((row) => Object.keys(row).forEach((key) => keySet.add(key)))
   const ordered = preferred.filter((key) => keySet.has(key))
@@ -438,8 +481,43 @@ function getAccessControlColumnLabel(key: string) {
   if (key === "device_id" || key === "deviceId") return "Device"
   if (key === "department_id" || key === "departmentId") return "Department"
   if (key === "parent_id" || key === "parentId") return "Parent Organization"
+  if (key === "week_plan_id" || key === "weekPlanId") return "Week Plan"
+  if (key === "hikvision_template_no" || key === "hikvisionTemplateNo") return "Hik Template #"
+  if (key === "hikvision_week_plan_no" || key === "hikvisionWeekPlanNo") return "Hik Week Plan #"
+  if (key === "schedule_type" || key === "scheduleType") return "Type"
+  if (key === "template_name" || key === "templateName") return "Template"
+  if (key === "holiday_group_no" || key === "holidayGroupNo") return "Holiday Group"
 
   return prettifyLabel ? prettifyLabel(key) : key.replace(/_/g, " ").slice(0, 12)
+}
+
+function emptyTemplateCreateValues() {
+  return {
+    device_id: "",
+    template_name: "",
+    hikvision_template_no: "",
+    week_plan_id: "",
+    hikvision_week_plan_no: "",
+    branch_id: "",
+    holiday_group_no: "",
+    schedule_type: "DOOR",
+    status: "ACTIVE",
+    metadata: "{}",
+  }
+}
+
+function resolveWeekPlanHikvisionNo(plan: AdminRecord | null | undefined) {
+  if (!plan) return ""
+  return (
+    readStringFromRecord(plan, [
+      "hikvision_plan_no",
+      "hikvisionPlanNo",
+      "hikvision_week_plan_no",
+      "hikvisionWeekPlanNo",
+      "plan_no",
+      "planNo",
+    ]) ?? ""
+  )
 }
 
 function resolveRowId(row: AdminRecord, fallbackIndex: number) {
@@ -490,6 +568,7 @@ function FieldInput({
   organizations = [],
   weekPlans = [],
   lookupLoading = false,
+  onWeekPlanSelected,
 }: {
   field: FieldConfig
   value: string
@@ -500,6 +579,7 @@ function FieldInput({
   organizations?: AdminRecord[]
   weekPlans?: AdminRecord[]
   lookupLoading?: boolean
+  onWeekPlanSelected?: (plan: AdminRecord | null) => void
 }) {
   if (field.key === "branch_id") {
     return (
@@ -594,18 +674,34 @@ function FieldInput({
       <select
         className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
         value={value}
-        onChange={(event) => onChange(event.target.value)}
+        onChange={(event) => {
+          const next = event.target.value
+          onChange(next)
+          if (!onWeekPlanSelected) return
+          if (!next.trim()) {
+            onWeekPlanSelected(null)
+            return
+          }
+          const selected =
+            weekPlans.find((plan) => {
+              const id = readNumberFromRecord(plan, ["id", "week_plan_id", "weekPlanId"])
+              return id !== null && String(id) === next
+            }) ?? null
+          onWeekPlanSelected(selected)
+        }}
       >
         <option value="">{lookupLoading ? "Loading week plans..." : "Select week plan"}</option>
         {weekPlans.map((plan, index) => {
           const id = readNumberFromRecord(plan, ["id", "week_plan_id", "weekPlanId"])
           if (id === null) return null
+          const hikNo = resolveWeekPlanHikvisionNo(plan)
           const name =
-            readStringFromRecord(plan, ["name", "hikvision_plan_no", "hikvisionPlanNo"]) ??
+            readStringFromRecord(plan, ["name", "plan_name", "planName"]) ??
+            (hikNo ? `Week Plan ${hikNo}` : null) ??
             `Week Plan ${id}`
           return (
             <option key={`week-plan-${id}-${index}`} value={String(id)}>
-              {name}
+              {hikNo ? `${name} (#${hikNo})` : name}
             </option>
           )
         })}
@@ -694,23 +790,41 @@ export function AccessControlManagementView({
   const [error, setError] = React.useState<string | null>(null)
   const [formError, setFormError] = React.useState<string | null>(null)
   const [message, setMessage] = React.useState<string | null>(null)
-  const [createValues, setCreateValues] = React.useState<Record<string, string>>(() => buildInitialState(fields))
+  const [createValues, setCreateValues] = React.useState<Record<string, string>>(() =>
+    activeSection === "templates" ? emptyTemplateCreateValues() : buildInitialState(fields)
+  )
   const [editValues, setEditValues] = React.useState<Record<string, string>>(() => buildInitialState(fields))
   const [editingId, setEditingId] = React.useState("")
   const [deletingId, setDeletingId] = React.useState("")
   const [createOpen, setCreateOpen] = React.useState(false)
   const [editOpen, setEditOpen] = React.useState(false)
   const [deleteOpen, setDeleteOpen] = React.useState(false)
+  const [templateSearch, setTemplateSearch] = React.useState("")
+  const debouncedTemplateSearch = useDebouncedValue(templateSearch, 350)
+  const [templateStatusFilter, setTemplateStatusFilter] = React.useState("")
+  const [templateTypeFilter, setTemplateTypeFilter] = React.useState("")
+  const [syncFromDeviceId, setSyncFromDeviceId] = React.useState("")
+  const [syncToOpen, setSyncToOpen] = React.useState(false)
+  const [syncToTemplateId, setSyncToTemplateId] = React.useState("")
+  const [syncToDeviceId, setSyncToDeviceId] = React.useState("")
+  const [syncing, setSyncing] = React.useState(false)
 
   React.useEffect(() => {
-    setCreateValues(buildInitialState(fields))
+    setCreateValues(activeSection === "templates" ? emptyTemplateCreateValues() : buildInitialState(fields))
     setEditValues(buildInitialState(fields))
     setEditingId("")
     setDeletingId("")
     setError(null)
     setFormError(null)
     setMessage(null)
-  }, [fields])
+    setTemplateSearch("")
+    setTemplateStatusFilter("")
+    setTemplateTypeFilter("")
+    setSyncFromDeviceId("")
+    setSyncToOpen(false)
+    setSyncToTemplateId("")
+    setSyncToDeviceId("")
+  }, [activeSection, fields])
 
   React.useEffect(() => {
     const neededKeys = new Set(fields.map((field) => field.key))
@@ -819,20 +933,33 @@ export function AccessControlManagementView({
     setLoading(true)
     setError(null)
     try {
-      const result = await listAccessControlResources(token, resource, {
-        page: 1,
-        limit: 100,
-        sortBy: "created_at",
-        sortOrder: "DESC",
-      })
-      setRows(result.rows)
+      if (activeSection === "templates") {
+        const result = await listAccessScheduleTemplates(token, {
+          page: 1,
+          limit: 100,
+          sortBy: "created_at",
+          sortOrder: "DESC",
+          search: debouncedTemplateSearch.trim() || undefined,
+          status: templateStatusFilter || undefined,
+          schedule_type: templateTypeFilter || undefined,
+        })
+        setRows(result.rows)
+      } else {
+        const result = await listAccessControlResources(token, resource, {
+          page: 1,
+          limit: 100,
+          sortBy: "created_at",
+          sortOrder: "DESC",
+        })
+        setRows(result.rows)
+      }
     } catch (errorObject) {
       setRows([])
       setError(formatLoadError(errorObject, `Failed to load ${title.toLowerCase()}.`))
     } finally {
       setLoading(false)
     }
-  }, [resource, title])
+  }, [activeSection, debouncedTemplateSearch, resource, templateStatusFilter, templateTypeFilter, title])
 
   React.useEffect(() => {
     void fetchRows()
@@ -842,7 +969,7 @@ export function AccessControlManagementView({
     setCurrentCompanyName(readStoredCompanyName())
   }, [])
 
-  const columns = React.useMemo(() => resolveVisibleColumns(rows), [rows])
+  const columns = React.useMemo(() => resolveVisibleColumns(rows, activeSection), [activeSection, rows])
   const branchNameById = React.useMemo(
     () =>
       toLookupMap(branches, ["id", "branch_id"], (row, id) =>
@@ -872,6 +999,30 @@ export function AccessControlManagementView({
         readStringFromRecord(row, ["org_name", "orgName", "name"]) ?? `Organization ${id}`
       ),
     [organizations]
+  )
+  const weekPlanNameById = React.useMemo(
+    () =>
+      toLookupMap(weekPlans, ["id", "week_plan_id", "weekPlanId"], (row, id) => {
+        const hikNo = resolveWeekPlanHikvisionNo(row)
+        const name =
+          readStringFromRecord(row, ["name", "plan_name", "planName"]) ??
+          (hikNo ? `Week Plan ${hikNo}` : null) ??
+          `Week Plan ${id}`
+        return hikNo ? `${name} (#${hikNo})` : name
+      }),
+    [weekPlans]
+  )
+
+  const applyWeekPlanAutoFill = React.useCallback(
+    (setter: React.Dispatch<React.SetStateAction<Record<string, string>>>, plan: AdminRecord | null) => {
+      const hikNo = resolveWeekPlanHikvisionNo(plan)
+      if (!hikNo) return
+      setter((prev) => ({
+        ...prev,
+        hikvision_week_plan_no: prev.hikvision_week_plan_no?.trim() ? prev.hikvision_week_plan_no : hikNo,
+      }))
+    },
+    []
   )
 
   const resolveDisplayValue = React.useCallback(
@@ -920,9 +1071,24 @@ export function AccessControlManagementView({
         return organizationNameById.get(parentId) ?? `Organization ${parentId}`
       }
 
+      const weekPlanId =
+        column === "week_plan_id" || column === "weekPlanId"
+          ? readNumberFromRecord(row, [column])
+          : null
+      if (weekPlanId !== null) {
+        return weekPlanNameById.get(weekPlanId) ?? `Week Plan ${weekPlanId}`
+      }
+
       return stringifyValue(row[column])
     },
-    [branchNameById, currentCompanyName, departmentNameById, deviceNameById, organizationNameById]
+    [
+      branchNameById,
+      currentCompanyName,
+      departmentNameById,
+      deviceNameById,
+      organizationNameById,
+      weekPlanNameById,
+    ]
   )
 
   const onCreate = async () => {
@@ -937,10 +1103,17 @@ export function AccessControlManagementView({
     }
     try {
       const payload = toPayload(fields, createValues)
-      await createAccessControlResource(token, resource, payload)
+      if (activeSection === "templates") {
+        if (!payload.metadata || typeof payload.metadata !== "object") {
+          payload.metadata = {}
+        }
+        await createAccessScheduleTemplate(token, payload)
+      } else {
+        await createAccessControlResource(token, resource, payload)
+      }
       setMessage("Created successfully.")
       setCreateOpen(false)
-      setCreateValues(buildInitialState(fields))
+      setCreateValues(activeSection === "templates" ? emptyTemplateCreateValues() : buildInitialState(fields))
       setFormError(null)
       await fetchRows()
     } catch (errorObject) {
@@ -964,7 +1137,11 @@ export function AccessControlManagementView({
     }
     try {
       const payload = toPayload(fields, editValues)
-      await updateAccessControlResourceById(token, resource, editingId.trim(), payload)
+      if (activeSection === "templates") {
+        await updateAccessScheduleTemplate(token, editingId.trim(), payload)
+      } else {
+        await updateAccessControlResourceById(token, resource, editingId.trim(), payload)
+      }
       setMessage("Updated successfully.")
       setEditOpen(false)
       setFormError(null)
@@ -989,7 +1166,11 @@ export function AccessControlManagementView({
       return
     }
     try {
-      await deleteAccessControlResourceById(token, resource, deletingId.trim())
+      if (activeSection === "templates") {
+        await deleteAccessScheduleTemplate(token, deletingId.trim())
+      } else {
+        await deleteAccessControlResourceById(token, resource, deletingId.trim())
+      }
       setMessage("Deleted successfully.")
       setDeleteOpen(false)
       setDeletingId("")
@@ -997,6 +1178,70 @@ export function AccessControlManagementView({
       await fetchRows()
     } catch (errorObject) {
       setFormError(errorObject instanceof Error ? errorObject.message : "Delete failed.")
+    }
+  }
+
+  const openSyncToDevice = (row: AdminRecord, fallbackIndex: number) => {
+    const rowId = String(resolveRowId(row, fallbackIndex))
+    const deviceId = readNumberFromRecord(row, ["device_id", "deviceId"])
+    setSyncToTemplateId(rowId)
+    setSyncToDeviceId(deviceId !== null ? String(deviceId) : "")
+    setFormError(null)
+    setSyncToOpen(true)
+  }
+
+  const onSyncTemplateToDevice = async () => {
+    const token = readStoredToken()
+    if (!token) {
+      setFormError("Authentication required. Please log in again.")
+      return
+    }
+    if (!syncToTemplateId.trim()) {
+      setFormError("Template id is missing.")
+      return
+    }
+    const deviceId = Number(syncToDeviceId)
+    if (!Number.isFinite(deviceId) || deviceId < 1) {
+      setFormError("Select a valid device to sync to.")
+      return
+    }
+    setSyncing(true)
+    setFormError(null)
+    try {
+      await syncAccessScheduleTemplateToDevice(token, syncToTemplateId.trim(), { device_id: deviceId })
+      setMessage("Template synced to device.")
+      setSyncToOpen(false)
+      setSyncToTemplateId("")
+      setSyncToDeviceId("")
+      await fetchRows()
+    } catch (errorObject) {
+      setFormError(errorObject instanceof Error ? errorObject.message : "Sync to device failed.")
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  const onSyncTemplatesFromDevice = async () => {
+    const token = readStoredToken()
+    if (!token) {
+      setError("Authentication required. Please log in again.")
+      return
+    }
+    const deviceId = Number(syncFromDeviceId)
+    if (!Number.isFinite(deviceId) || deviceId < 1) {
+      setError("Select a device to pull templates from.")
+      return
+    }
+    setSyncing(true)
+    setError(null)
+    try {
+      await syncAccessScheduleTemplatesFromDevice(token, deviceId)
+      setMessage("Templates synced from device.")
+      await fetchRows()
+    } catch (errorObject) {
+      setError(errorObject instanceof Error ? errorObject.message : "Sync from device failed.")
+    } finally {
+      setSyncing(false)
     }
   }
 
@@ -1015,7 +1260,10 @@ export function AccessControlManagementView({
 
     void (async () => {
       try {
-        const latest = await getAccessControlResourceById(token, resource, rowId)
+        const latest =
+          activeSection === "templates"
+            ? await getAccessScheduleTemplate(token, rowId)
+            : await getAccessControlResourceById(token, resource, rowId)
         setEditValues(buildEditState(fields, latest ? { ...row, ...latest } : row, fieldAliases))
       } catch {
         setEditValues(buildEditState(fields, row, fieldAliases))
@@ -1055,15 +1303,27 @@ export function AccessControlManagementView({
             sortable: true,
             render: (row: AdminRecord) => resolveDisplayValue(row, c),
           })),
-          ...(canUpdate || canDelete
+          ...(canUpdate || canDelete || activeSection === "templates"
             ? [
                 {
                   key: "actions",
                   label: "Actions",
-                  defaultWidth: 55,
+                  defaultWidth: activeSection === "templates" ? 90 : 55,
                   sortable: false,
                   render: (row: AdminRecord) => (
                     <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+                      {activeSection === "templates" && canUpdate ? (
+                        <button
+                          type="button"
+                          className="admin-table-icon-button"
+                          aria-label="Sync template to device"
+                          title="Sync to device"
+                          onClick={() => openSyncToDevice(row, rows.indexOf(row))}
+                          disabled={syncing}
+                        >
+                          <UploadIcon className="h-3.5 w-3.5" />
+                        </button>
+                      ) : null}
                       {canUpdate ? (
                         <button
                           type="button"
@@ -1109,11 +1369,82 @@ export function AccessControlManagementView({
         }
         toolbarActions={
           <>
+            {activeSection === "templates" ? (
+              <>
+                <input
+                  className="h-8 w-32 rounded-lg border border-border bg-background px-2 text-xs sm:w-40"
+                  placeholder="Search templates…"
+                  value={templateSearch}
+                  onChange={(event) => setTemplateSearch(event.target.value)}
+                />
+                <select
+                  className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
+                  value={templateStatusFilter}
+                  onChange={(event) => setTemplateStatusFilter(event.target.value)}
+                  aria-label="Filter by status"
+                >
+                  <option value="">All statuses</option>
+                  <option value="ACTIVE">Active</option>
+                  <option value="INACTIVE">Inactive</option>
+                </select>
+                <select
+                  className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
+                  value={templateTypeFilter}
+                  onChange={(event) => setTemplateTypeFilter(event.target.value)}
+                  aria-label="Filter by schedule type"
+                >
+                  <option value="">All types</option>
+                  <option value="DOOR">Door</option>
+                  <option value="ATTENDANCE">Attendance</option>
+                  <option value="MIXED">Mixed</option>
+                </select>
+                <select
+                  className="h-8 max-w-[10rem] rounded-lg border border-border bg-background px-2 text-xs"
+                  value={syncFromDeviceId}
+                  onChange={(event) => setSyncFromDeviceId(event.target.value)}
+                  aria-label="Device for sync from"
+                >
+                  <option value="">Device to pull…</option>
+                  {devices.map((device, index) => {
+                    const id = readNumberFromRecord(device, ["id", "device_id"])
+                    if (id === null) return null
+                    const name =
+                      readStringFromRecord(device, ["device_name", "deviceName", "name"]) ??
+                      `Device ${id}`
+                    return (
+                      <option key={`sync-from-device-${id}-${index}`} value={String(id)}>
+                        {name}
+                      </option>
+                    )
+                  })}
+                </select>
+                <button
+                  type="button"
+                  className="inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-border px-2.5 text-xs font-medium transition hover:bg-muted disabled:opacity-60"
+                  onClick={() => void onSyncTemplatesFromDevice()}
+                  disabled={syncing || !syncFromDeviceId}
+                  title="Pull templates from device"
+                >
+                  {syncing ? (
+                    <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <DownloadIcon className="h-3.5 w-3.5" />
+                  )}
+                  <span className="hidden sm:inline">From device</span>
+                </button>
+              </>
+            ) : null}
             {canCreate ? (
               <button
                 type="button"
                 className="inline-flex h-8 items-center justify-center gap-1 rounded-lg bg-primary px-2.5 text-xs font-semibold !text-white transition hover:brightness-95"
-                onClick={() => setCreateOpen(true)}
+                onClick={() => {
+                  setFormError(null)
+                  setCreateValues(
+                    activeSection === "templates" ? emptyTemplateCreateValues() : buildInitialState(fields)
+                  )
+                  setCreateOpen(true)
+                }}
                 aria-label={`Create ${title}`}
                 title="Create"
               >
@@ -1158,6 +1489,11 @@ export function AccessControlManagementView({
                   organizations={organizations}
                   weekPlans={weekPlans}
                   lookupLoading={lookupLoading}
+                  onWeekPlanSelected={
+                    activeSection === "templates"
+                      ? (plan) => applyWeekPlanAutoFill(setCreateValues, plan)
+                      : undefined
+                  }
                   onChange={(next) => setCreateValues((prev) => ({ ...prev, [field.key]: next }))}
                 />
               </label>
@@ -1208,6 +1544,11 @@ export function AccessControlManagementView({
                   organizations={organizations}
                   weekPlans={weekPlans}
                   lookupLoading={lookupLoading}
+                  onWeekPlanSelected={
+                    activeSection === "templates"
+                      ? (plan) => applyWeekPlanAutoFill(setEditValues, plan)
+                      : undefined
+                  }
                   onChange={(next) => setEditValues((prev) => ({ ...prev, [field.key]: next }))}
                 />
               </label>
@@ -1262,6 +1603,63 @@ export function AccessControlManagementView({
               className="rounded-md border border-red-300 px-3 py-1.5 text-sm text-red-700"
             >
               Delete
+            </button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
+
+      <Dialog open={syncToOpen} onOpenChange={setSyncToOpen}>
+        <DialogPopup className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Sync template to device</DialogTitle>
+            <DialogDescription>
+              Push schedule template #{syncToTemplateId || "—"} to a Hikvision device.
+            </DialogDescription>
+          </DialogHeader>
+          {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
+          <label className="grid gap-1">
+            <span className="text-xs font-medium uppercase text-slate-600">Device *</span>
+            <select
+              className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+              value={syncToDeviceId}
+              onChange={(event) => setSyncToDeviceId(event.target.value)}
+            >
+              <option value="">Select device</option>
+              {devices.map((device, index) => {
+                const id = readNumberFromRecord(device, ["id", "device_id"])
+                if (id === null) return null
+                const name =
+                  readStringFromRecord(device, ["device_name", "deviceName", "name"]) ??
+                  `Device ${id}`
+                const code = readStringFromRecord(device, ["device_code", "deviceCode"])
+                return (
+                  <option key={`sync-to-device-${id}-${index}`} value={String(id)}>
+                    {code ? `${name} (${code})` : name}
+                  </option>
+                )
+              })}
+            </select>
+          </label>
+          <DialogFooter>
+            <button
+              type="button"
+              className="rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+              onClick={() => {
+                setSyncToOpen(false)
+                setFormError(null)
+              }}
+              disabled={syncing}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => void onSyncTemplateToDevice()}
+              disabled={syncing || !syncToDeviceId}
+              className="inline-flex items-center gap-1.5 rounded-md bg-[var(--primary)] px-3 py-1.5 text-sm !text-white transition hover:brightness-95 disabled:opacity-60"
+            >
+              {syncing ? <Loader2Icon className="h-3.5 w-3.5 animate-spin" /> : <UploadIcon className="h-3.5 w-3.5" />}
+              {syncing ? "Syncing…" : "Sync to device"}
             </button>
           </DialogFooter>
         </DialogPopup>

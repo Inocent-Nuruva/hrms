@@ -3,7 +3,6 @@
 import * as React from "react"
 import {
   Loader2Icon,
-  MailIcon,
   PencilIcon,
   PlusIcon,
   RefreshCwIcon,
@@ -73,8 +72,10 @@ const DATE_RANGE_STRATEGIES = [
   "CURRENT_MONTH",
   "PREVIOUS_MONTH",
   "CUSTOM",
+  "SCHEDULE_RELATIVE",
 ] as const
-const SECURITY_TYPES = ["NONE", "SSL", "TLS", "STARTTLS"] as const
+const SECURITY_TYPES = ["NONE", "STARTTLS", "SSL_TLS", "AUTO"] as const
+const MISFIRE_HANDLING = ["SKIP", "RUN_IMMEDIATELY", "DEFER_TO_NEXT_WINDOW"] as const
 const WEEKDAYS = ["SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"] as const
 const EXECUTION_STATUSES = [
   "PENDING",
@@ -137,8 +138,41 @@ function readBool(row: AdminRecord | null | undefined, keys: string[]): boolean 
   return false
 }
 
+function enumValue<T extends readonly string[]>(
+  value: string,
+  values: T,
+  fallback: T[number]
+): T[number] {
+  return (values as readonly string[]).includes(value) ? (value as T[number]) : fallback
+}
+
 function getRowId(row: AdminRecord): string {
-  const id = readNumber(row, ["id"])
+  const id = readNumber(row, ["id", "smtpConfigurationId", "smtp_configuration_id", "templateId", "template_id"])
+  return id !== null ? String(id) : ""
+}
+
+function smtpConfigId(row: AdminRecord): number | null {
+  return readNumber(row, ["id", "smtpConfigurationId", "smtp_configuration_id"])
+}
+
+function definitionId(row: AdminRecord): number | null {
+  return readNumber(row, ["id", "reportDefinitionId", "report_definition_id", "definitionId", "definition_id"])
+}
+
+function pickDefaultSmtpId(configs: AdminRecord[]): string {
+  if (!configs.length) return ""
+  const active = configs.filter((row) => {
+    // Prefer explicitly active rows; treat missing status as usable.
+    if (Object.prototype.hasOwnProperty.call(row, "isActive") || Object.prototype.hasOwnProperty.call(row, "is_active")) {
+      return readBool(row, ["isActive", "is_active"])
+    }
+    const status = readString(row, ["status"]).toUpperCase()
+    return !status || status === "ACTIVE"
+  })
+  const pool = active.length ? active : configs
+  const preferred =
+    pool.find((row) => readBool(row, ["isDefault", "is_default"])) ?? pool[0]
+  const id = smtpConfigId(preferred)
   return id !== null ? String(id) : ""
 }
 
@@ -279,23 +313,27 @@ export function ScheduledReportingView() {
   const [executionSheetOpen, setExecutionSheetOpen] = React.useState(false)
   const [executionDetail, setExecutionDetail] = React.useState<AdminRecord | null>(null)
   const [executionLoading, setExecutionLoading] = React.useState(false)
-  const [testEmail, setTestEmail] = React.useState("")
+  const [smtpTestOpen, setSmtpTestOpen] = React.useState(false)
+  const [smtpTestId, setSmtpTestId] = React.useState("")
+  const [smtpTestRecipient, setSmtpTestRecipient] = React.useState("")
   const [testingSmtpId, setTestingSmtpId] = React.useState("")
   const loadRequestIdRef = React.useRef(0)
 
   const loadLookups = React.useCallback(async (token: string) => {
-    const [defs, tmpl, smtp] = await Promise.all([
-      listScheduledReportDefinitions(token).catch(() => [] as AdminRecord[]),
-      listScheduledReportTemplates(token, { page: 1, limit: 100 }).catch(() => ({
-        rows: [] as AdminRecord[],
-      })),
-      listScheduledReportSmtpConfigurations(token, { page: 1, limit: 100 }).catch(() => ({
-        rows: [] as AdminRecord[],
-      })),
+    const [defsResult, tmplResult, smtpResult] = await Promise.allSettled([
+      listScheduledReportDefinitions(token),
+      listScheduledReportTemplates(token, { page: 1, limit: 100 }),
+      listScheduledReportSmtpConfigurations(token, { page: 1, limit: 100 }),
     ])
-    setDefinitions(Array.isArray(defs) ? defs : [])
-    setTemplates(tmpl.rows ?? [])
-    setSmtpConfigs(smtp.rows ?? [])
+    setDefinitions(
+      defsResult.status === "fulfilled"
+        ? Array.isArray(defsResult.value)
+          ? defsResult.value
+          : []
+        : []
+    )
+    setTemplates(tmplResult.status === "fulfilled" ? (tmplResult.value.rows ?? []) : [])
+    setSmtpConfigs(smtpResult.status === "fulfilled" ? (smtpResult.value.rows ?? []) : [])
   }, [])
 
   const loadRows = React.useCallback(async () => {
@@ -375,11 +413,46 @@ export function ScheduledReportingView() {
 
   const openCreate = () => {
     setFormError(null)
-    setTemplateForm(emptyTemplateForm())
+    const nextTemplate = emptyTemplateForm()
+    // Prefill SMTP when only one config exists or a default is marked.
+    nextTemplate.smtpConfigurationId = pickDefaultSmtpId(smtpConfigs)
+    if (definitions.length === 1) {
+      const onlyId = definitionId(definitions[0])
+      if (onlyId !== null) {
+        nextTemplate.reportDefinitionId = String(onlyId)
+      }
+    }
+    setTemplateForm(nextTemplate)
     setScheduleForm(emptyScheduleForm())
     setSmtpForm(emptySmtpForm())
     setCreateOpen(true)
+
+    // Refresh lookups if SMTP options are empty so newly created configs appear.
+    if (tab === "templates" && smtpConfigs.length === 0) {
+      const token = readStoredToken()
+      if (token) {
+        void loadLookups(token).then(() => {
+          setTemplateForm((prev) => {
+            if (prev.smtpConfigurationId) return prev
+            // re-read from latest state via a second set after loadLookups finishes
+            return prev
+          })
+        })
+      }
+    }
   }
+
+  // When SMTP configs load while create dialog is open, prefill if still empty.
+  React.useEffect(() => {
+    if (!createOpen || tab !== "templates") return
+    if (smtpConfigs.length === 0) return
+    setTemplateForm((prev) => {
+      if (prev.smtpConfigurationId) return prev
+      const defaultId = pickDefaultSmtpId(smtpConfigs)
+      if (!defaultId) return prev
+      return { ...prev, smtpConfigurationId: defaultId }
+    })
+  }, [createOpen, smtpConfigs, tab])
 
   const fillEditFromRow = React.useCallback((row: AdminRecord) => {
     setEditingId(getRowId(row))
@@ -390,11 +463,11 @@ export function ScheduledReportingView() {
         smtpConfigurationId: String(readNumber(row, ["smtpConfigurationId", "smtp_configuration_id"]) ?? ""),
         name: readString(row, ["name"]),
         description: readString(row, ["description"]),
-        outputFormat: readString(row, ["outputFormat", "output_format"], "PDF"),
+        outputFormat: enumValue(readString(row, ["outputFormat", "output_format"], "PDF"), OUTPUT_FORMATS, "PDF"),
         filenamePattern: readString(row, ["filenamePattern", "filename_pattern"]),
         emailSubjectTemplate: readString(row, ["emailSubjectTemplate", "email_subject_template"]),
         emailBodyTemplate: readString(row, ["emailBodyTemplate", "email_body_template"]),
-        dateRangeStrategy: readString(row, ["dateRangeStrategy", "date_range_strategy"], "CURRENT_DAY"),
+        dateRangeStrategy: enumValue(readString(row, ["dateRangeStrategy", "date_range_strategy"], "CURRENT_DAY"), DATE_RANGE_STRATEGIES, "CURRENT_DAY"),
         attachReport: readBool(row, ["attachReport", "attach_report"]) ? "true" : "false",
         isActive: readBool(row, ["isActive", "is_active"]) ? "true" : "false",
         recipientEmail: "",
@@ -407,7 +480,7 @@ export function ScheduledReportingView() {
       setScheduleForm({
         templateId: String(readNumber(row, ["templateId", "template_id"]) ?? ""),
         name: readString(row, ["name"]),
-        scheduleType: readString(row, ["scheduleType", "schedule_type"], "DAILY"),
+        scheduleType: enumValue(readString(row, ["scheduleType", "schedule_type"], "DAILY"), SCHEDULE_TYPES, "DAILY"),
         executionTime: readString(row, ["executionTime", "execution_time"], "08:00"),
         dayOfMonth: String(readNumber(row, ["dayOfMonth", "day_of_month"]) ?? 1),
         timezone: readString(row, ["timezone"], "Africa/Dar_es_Salaam"),
@@ -415,7 +488,7 @@ export function ScheduledReportingView() {
         endDate: readString(row, ["endDate", "end_date"]).slice(0, 10),
         oneTimeRunAt: readString(row, ["oneTimeRunAt", "one_time_run_at"]),
         cronExpression: readString(row, ["cronExpression", "cron_expression"]),
-        misfireHandling: readString(row, ["misfireHandling", "misfire_handling"], "SKIP"),
+        misfireHandling: enumValue(readString(row, ["misfireHandling", "misfire_handling"], "SKIP"), MISFIRE_HANDLING, "SKIP"),
         maxRetryAttempts: String(readNumber(row, ["maxRetryAttempts", "max_retry_attempts"]) ?? 0),
         isActive: readBool(row, ["isActive", "is_active"]) ? "true" : "false",
         weekdays: weekdayValue,
@@ -425,7 +498,7 @@ export function ScheduledReportingView() {
         name: readString(row, ["name"]),
         host: readString(row, ["host"]),
         port: String(readNumber(row, ["port"]) ?? 587),
-        securityType: readString(row, ["securityType", "security_type"], "STARTTLS"),
+        securityType: enumValue(readString(row, ["securityType", "security_type"], "STARTTLS"), SECURITY_TYPES, "STARTTLS"),
         username: readString(row, ["username"]),
         password: "",
         senderName: readString(row, ["senderName", "sender_name"]),
@@ -445,11 +518,11 @@ export function ScheduledReportingView() {
       smtpConfigurationId: Number(form.smtpConfigurationId),
       name: form.name.trim(),
       description: form.description.trim() || undefined,
-      outputFormat: form.outputFormat,
+      outputFormat: enumValue(form.outputFormat, OUTPUT_FORMATS, "PDF"),
       filenamePattern: form.filenamePattern.trim() || undefined,
       emailSubjectTemplate: form.emailSubjectTemplate.trim() || undefined,
       emailBodyTemplate: form.emailBodyTemplate.trim() || undefined,
-      dateRangeStrategy: form.dateRangeStrategy,
+      dateRangeStrategy: enumValue(form.dateRangeStrategy, DATE_RANGE_STRATEGIES, "CURRENT_DAY"),
       attachReport: form.attachReport === "true",
       isActive: form.isActive === "true",
     }
@@ -474,7 +547,7 @@ export function ScheduledReportingView() {
     return {
       templateId: Number(form.templateId),
       name: form.name.trim(),
-      scheduleType: form.scheduleType,
+      scheduleType: enumValue(form.scheduleType, SCHEDULE_TYPES, "DAILY"),
       executionTime: form.executionTime.trim() || undefined,
       dayOfMonth: form.scheduleType === "MONTHLY" ? Number(form.dayOfMonth) || 1 : undefined,
       timezone: form.timezone.trim() || undefined,
@@ -482,7 +555,7 @@ export function ScheduledReportingView() {
       endDate: form.endDate || undefined,
       oneTimeRunAt: form.oneTimeRunAt || undefined,
       cronExpression: form.cronExpression.trim() || undefined,
-      misfireHandling: form.misfireHandling,
+      misfireHandling: enumValue(form.misfireHandling, MISFIRE_HANDLING, "SKIP"),
       maxRetryAttempts: Number(form.maxRetryAttempts) || 0,
       isActive: form.isActive === "true",
       weekdays: form.scheduleType === "WEEKLY" ? weekdays : undefined,
@@ -494,7 +567,7 @@ export function ScheduledReportingView() {
       name: form.name.trim(),
       host: form.host.trim(),
       port: Number(form.port) || 587,
-      securityType: form.securityType,
+      securityType: enumValue(form.securityType, SECURITY_TYPES, "STARTTLS"),
       username: form.username.trim() || undefined,
       senderName: form.senderName.trim() || undefined,
       senderEmail: form.senderEmail.trim(),
@@ -519,8 +592,18 @@ export function ScheduledReportingView() {
     setFormError(null)
     try {
       if (tab === "templates") {
-        if (!templateForm.name.trim() || !templateForm.reportDefinitionId || !templateForm.smtpConfigurationId) {
-          throw new Error("Name, report definition, and SMTP configuration are required.")
+        const missing: string[] = []
+        if (!templateForm.name.trim()) missing.push("Name")
+        if (!templateForm.reportDefinitionId) missing.push("Report definition")
+        if (!templateForm.smtpConfigurationId) {
+          missing.push(
+            smtpConfigs.length === 0
+              ? "SMTP configuration (create one under the SMTP tab first)"
+              : "SMTP configuration"
+          )
+        }
+        if (missing.length) {
+          throw new Error(`${missing.join(", ")} ${missing.length === 1 ? "is" : "are"} required.`)
         }
         await createScheduledReportTemplate(token, buildTemplatePayload(templateForm))
       } else if (tab === "schedules") {
@@ -611,27 +694,36 @@ export function ScheduledReportingView() {
     }
   }, [])
 
-  const onTestSmtp = React.useCallback(async (row: AdminRecord) => {
-    const token = readStoredToken()
+  const openSmtpTest = React.useCallback((row: AdminRecord) => {
     const id = getRowId(row)
+    if (!id) return
+    setSmtpTestId(id)
+    setSmtpTestRecipient("")
+    setSmtpTestOpen(true)
+  }, [])
+
+  const onTestSmtp = React.useCallback(async () => {
+    const token = readStoredToken()
+    const id = smtpTestId
     if (!token || !id) return
-    if (!testEmail.trim()) {
-      toast.error("Enter a test email address first.")
+    if (!smtpTestRecipient.trim()) {
+      toast.error("Enter a test recipient email address.")
       return
     }
     setTestingSmtpId(id)
     try {
       await testScheduledReportSmtpConfiguration(token, id, {
-        toEmail: testEmail.trim(),
+        toEmail: smtpTestRecipient.trim(),
         sendTestEmail: true,
       })
       toast.success("SMTP test sent.")
+      setSmtpTestOpen(false)
     } catch (errorObject) {
       toast.error(errorObject instanceof Error ? errorObject.message : "SMTP test failed.")
     } finally {
       setTestingSmtpId("")
     }
-  }, [testEmail])
+  }, [smtpTestId, smtpTestRecipient])
 
   const templateNameById = React.useMemo(() => {
     const map = new Map<number, string>()
@@ -876,15 +968,15 @@ export function ScheduledReportingView() {
       {
         key: "name",
         label: "Name",
-        defaultWidth: 140,
-        render: (row) => <span className="text-xs font-medium">{readString(row, ["name"], "—")}</span>,
+        defaultWidth: 80,
+        render: (row) => <span className="block truncate text-xs font-medium">{readString(row, ["name"], "—")}</span>,
       },
       {
         key: "host",
         label: "Host",
-        defaultWidth: 140,
+        defaultWidth: 100,
         render: (row) => (
-          <span className="text-xs text-muted-foreground">
+          <span className="block truncate text-xs text-muted-foreground">
             {readString(row, ["host"], "—")}:{readString(row, ["port"], "")}
           </span>
         ),
@@ -892,41 +984,30 @@ export function ScheduledReportingView() {
       {
         key: "senderEmail",
         label: "Sender",
-        defaultWidth: 150,
+        defaultWidth: 110,
         render: (row) => (
-          <span className="text-xs">{readString(row, ["senderEmail", "sender_email"], "—")}</span>
+          <span className="block truncate text-xs">{readString(row, ["senderEmail", "sender_email"], "—")}</span>
         ),
       },
       {
-        key: "isDefault",
-        label: "Default",
-        defaultWidth: 70,
-        render: (row) =>
-          readBool(row, ["isDefault", "is_default"]) ? (
-            <Badge variant="outline" className="text-[10px]">
-              Default
-            </Badge>
-          ) : (
-            <span className="text-xs text-muted-foreground">—</span>
-          ),
-      },
-      {
-        key: "isActive",
-        label: "Active",
+        key: "status",
+        label: "Status",
         defaultWidth: 80,
         render: (row) => {
           const active = readBool(row, ["isActive", "is_active"])
+          const isDefault = readBool(row, ["isDefault", "is_default"])
           return (
-            <Badge variant="outline" className={cn("text-[10px]", statusTone(active ? "ACTIVE" : "INACTIVE"))}>
-              {active ? "Active" : "Inactive"}
-            </Badge>
+            <div className="flex items-center gap-1" title={`${isDefault ? "Default, " : ""}${active ? "active" : "inactive"}`}>
+              {isDefault ? <Badge variant="outline" className="px-1 text-[9px]">Default</Badge> : null}
+              <span className={cn("size-2 shrink-0 rounded-full", active ? "bg-emerald-500" : "bg-muted-foreground/40")} />
+            </div>
           )
         },
       },
       {
         key: "actions",
         label: "Actions",
-        defaultWidth: 100,
+        defaultWidth: 95,
         sortable: false,
         render: (row) => (
           <div className="flex justify-end gap-1" onClick={(event) => event.stopPropagation()}>
@@ -935,7 +1016,7 @@ export function ScheduledReportingView() {
               type="button"
               aria-label="Test SMTP"
               title="Test"
-              onClick={() => void onTestSmtp(row)}
+              onClick={() => openSmtpTest(row)}
               disabled={testingSmtpId === getRowId(row)}
             >
               {testingSmtpId === getRowId(row) ? (
@@ -966,7 +1047,7 @@ export function ScheduledReportingView() {
   }, [
     definitionNameById,
     fillEditFromRow,
-    onTestSmtp,
+    openSmtpTest,
     openExecution,
     tab,
     templateNameById,
@@ -1000,13 +1081,13 @@ export function ScheduledReportingView() {
       </Field>
       <Field label="Report definition *">
         <select
-          className={selectClass}
+          className={cn(selectClass, !form.reportDefinitionId && "border-amber-400")}
           value={form.reportDefinitionId}
           onChange={(e) => setForm((c) => ({ ...c, reportDefinitionId: e.target.value }))}
         >
           <option value="">Select definition</option>
           {definitions.map((row, index) => {
-            const id = readNumber(row, ["id"])
+            const id = definitionId(row)
             if (id === null) return null
             return (
               <option key={`def-${id}-${index}`} value={String(id)}>
@@ -1015,24 +1096,51 @@ export function ScheduledReportingView() {
             )
           })}
         </select>
+        {definitions.length === 0 ? (
+          <span className="text-[11px] text-amber-700 dark:text-amber-300">
+            No report definitions loaded. Refresh the page or check permissions.
+          </span>
+        ) : null}
       </Field>
       <Field label="SMTP configuration *">
         <select
-          className={selectClass}
+          className={cn(selectClass, !form.smtpConfigurationId && "border-amber-400")}
           value={form.smtpConfigurationId}
           onChange={(e) => setForm((c) => ({ ...c, smtpConfigurationId: e.target.value }))}
         >
           <option value="">Select SMTP</option>
           {smtpConfigs.map((row, index) => {
-            const id = readNumber(row, ["id"])
+            const id = smtpConfigId(row)
             if (id === null) return null
+            const label = optionLabel(row)
+            const isDefault = readBool(row, ["isDefault", "is_default"])
             return (
               <option key={`smtp-${id}-${index}`} value={String(id)}>
-                {optionLabel(row)}
+                {isDefault ? `${label} (default)` : label}
               </option>
             )
           })}
         </select>
+        {smtpConfigs.length === 0 ? (
+          <span className="text-[11px] text-amber-700 dark:text-amber-300">
+            No SMTP settings yet. Open the{" "}
+            <button
+              type="button"
+              className="font-semibold underline underline-offset-2"
+              onClick={() => {
+                setCreateOpen(false)
+                setTab("smtp")
+              }}
+            >
+              SMTP tab
+            </button>{" "}
+            and create one first, then return to create the template.
+          </span>
+        ) : !form.smtpConfigurationId ? (
+          <span className="text-[11px] text-amber-700 dark:text-amber-300">
+            Choose which SMTP server should send this report.
+          </span>
+        ) : null}
       </Field>
       <Field label="Date range strategy">
         <select
@@ -1170,8 +1278,8 @@ export function ScheduledReportingView() {
       <Field label="Misfire handling">
         <select className={selectClass} value={form.misfireHandling} onChange={(e) => setForm((c) => ({ ...c, misfireHandling: e.target.value }))}>
           <option value="SKIP">Skip</option>
-          <option value="FIRE_NOW">Fire now</option>
-          <option value="FIRE_ONCE">Fire once</option>
+          <option value="RUN_IMMEDIATELY">Run immediately</option>
+          <option value="DEFER_TO_NEXT_WINDOW">Defer to next window</option>
         </select>
       </Field>
       <Field label="Max retries">
@@ -1307,20 +1415,6 @@ export function ScheduledReportingView() {
         </div>
       ) : null}
 
-      {tab === "smtp" ? (
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-muted/20 px-2.5 py-2">
-          <MailIcon className="size-3.5 text-primary" />
-          <input
-            className="h-8 min-w-[14rem] flex-1 rounded-md border border-border bg-background px-2.5 text-xs"
-            type="email"
-            placeholder="Test recipient email"
-            value={testEmail}
-            onChange={(event) => setTestEmail(event.target.value)}
-          />
-          <span className="text-[11px] text-muted-foreground">Used by the SMTP test action on each row.</span>
-        </div>
-      ) : null}
-
       <ResizableTable
         title={sectionTitle}
         data={rows}
@@ -1398,7 +1492,11 @@ export function ScheduledReportingView() {
         <DialogPopup className="flex max-h-[90vh] w-[min(920px,96vw)] flex-col overflow-hidden sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>Create {sectionTitle.toLowerCase()}</DialogTitle>
-            <DialogDescription>Fill in the required fields and save.</DialogDescription>
+            <DialogDescription>
+              {tab === "smtp"
+                ? "Fill in SMTP details and save. You can test a saved configuration from its row."
+                : "Fill in the required fields and save."}
+            </DialogDescription>
           </DialogHeader>
           {formError ? <p className="text-sm text-rose-600">{formError}</p> : null}
           <div className="min-h-0 flex-1 overflow-y-auto pr-1">
@@ -1410,22 +1508,24 @@ export function ScheduledReportingView() {
                   ? renderSmtpFields(smtpForm, setSmtpForm, false)
                   : null}
           </div>
-          <DialogFooter>
-            <button
-              type="button"
-              className="inline-flex h-9 items-center rounded-lg border border-border px-3 text-sm font-medium"
-              onClick={() => setCreateOpen(false)}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="inline-flex h-9 items-center rounded-lg bg-primary px-3 text-sm font-semibold !text-white disabled:opacity-60"
-              disabled={saving}
-              onClick={() => void onCreate()}
-            >
-              {saving ? "Saving…" : "Create"}
-            </button>
+          <DialogFooter className="flex-col gap-2 sm:flex-col sm:space-x-0">
+            <div className="flex w-full flex-wrap items-center justify-end gap-2">
+              <button
+                type="button"
+                className="inline-flex h-9 items-center rounded-lg border border-border px-3 text-sm font-medium"
+                onClick={() => setCreateOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="inline-flex h-9 items-center rounded-lg bg-primary px-3 text-sm font-semibold !text-white disabled:opacity-60"
+                disabled={saving}
+                onClick={() => void onCreate()}
+              >
+                {saving ? "Saving…" : "Create"}
+              </button>
+            </div>
           </DialogFooter>
         </DialogPopup>
       </Dialog>
@@ -1446,21 +1546,70 @@ export function ScheduledReportingView() {
                   ? renderSmtpFields(smtpForm, setSmtpForm, true)
                   : null}
           </div>
+          <DialogFooter className="flex-col gap-2 sm:flex-col sm:space-x-0">
+            <div className="flex w-full flex-wrap items-center justify-end gap-2">
+              <button
+                type="button"
+                className="inline-flex h-9 items-center rounded-lg border border-border px-3 text-sm font-medium"
+                onClick={() => setEditOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="inline-flex h-9 items-center rounded-lg bg-primary px-3 text-sm font-semibold !text-white disabled:opacity-60"
+                disabled={saving}
+                onClick={() => void onEdit()}
+              >
+                {saving ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
+
+      <Dialog
+        open={smtpTestOpen}
+        onOpenChange={(open) => {
+          setSmtpTestOpen(open)
+          if (!open) setSmtpTestRecipient("")
+        }}
+      >
+        <DialogPopup className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Test SMTP</DialogTitle>
+            <DialogDescription>
+              Send a test message using this saved SMTP configuration.
+            </DialogDescription>
+          </DialogHeader>
+          <Field label="Test recipient email">
+            <input
+              className={inputClass}
+              type="email"
+              placeholder="name@example.com"
+              value={smtpTestRecipient}
+              onChange={(event) => setSmtpTestRecipient(event.target.value)}
+              autoComplete="email"
+              autoFocus
+            />
+          </Field>
           <DialogFooter>
             <button
               type="button"
               className="inline-flex h-9 items-center rounded-lg border border-border px-3 text-sm font-medium"
-              onClick={() => setEditOpen(false)}
+              disabled={testingSmtpId === smtpTestId}
+              onClick={() => setSmtpTestOpen(false)}
             >
               Cancel
             </button>
             <button
               type="button"
-              className="inline-flex h-9 items-center rounded-lg bg-primary px-3 text-sm font-semibold !text-white disabled:opacity-60"
-              disabled={saving}
-              onClick={() => void onEdit()}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-semibold !text-white disabled:opacity-60"
+              disabled={testingSmtpId === smtpTestId || !smtpTestRecipient.trim()}
+              onClick={() => void onTestSmtp()}
             >
-              {saving ? "Saving…" : "Save"}
+              {testingSmtpId === smtpTestId ? <Loader2Icon className="size-3.5 animate-spin" /> : <SendIcon className="size-3.5" />}
+              {testingSmtpId === smtpTestId ? "Testing…" : "Send test"}
             </button>
           </DialogFooter>
         </DialogPopup>

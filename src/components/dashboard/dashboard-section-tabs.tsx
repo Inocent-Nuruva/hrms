@@ -26,16 +26,24 @@ export function DashboardSectionTabs({
   const pathname = usePathname()
   const currentPath = pathname ?? ""
   const actor = useDashboardActor()
+  // Defer permission-filtered UI until after mount so SSR and the first client
+  // paint both render the same placeholder (avoids hydration mismatch).
+  const [mounted, setMounted] = React.useState(false)
+  React.useEffect(() => {
+    setMounted(true)
+  }, [])
+
   // Stick under the site header inside the main scroll pane (header is outside scroll).
   // min-w-0 keeps horizontal tab rails scrollable inside the overflow-x-hidden main pane.
-  // Solid bg-background so content never shows through the sticky rail on mobile.
+  // Solid bg-card so content never shows through the sticky rail on mobile.
   // Negative margins match parent content padding (px-3 / sm:px-4 / md:px-4).
   const stickyClassName =
     "sticky top-0 z-40 -mx-3 min-w-0 border-b border-border/80 bg-card px-3 py-1.5 sm:-mx-4 sm:px-4 md:-mx-4 md:px-4"
 
   const filteredGroups = React.useMemo(() => {
-    // Filter immediately from stored actor state (hook hydrates sync). Do not
-    // return [] while ready flips — that remounts/refreshes the whole tab rail.
+    if (!mounted || !actor.ready) {
+      return [] as DashboardSectionTabGroup[]
+    }
     return groups
       .map((group) => ({
         ...group,
@@ -44,10 +52,22 @@ export function DashboardSectionTabs({
         ),
       }))
       .filter((group) => group.items.length > 0)
-  }, [actor.accessMode, actor.permissionLabels, groups])
+  }, [actor.accessMode, actor.permissionLabels, actor.ready, groups, mounted])
 
   const hasGroupedTabs =
     filteredGroups.length > 1 && filteredGroups.every((group) => Boolean(group.title))
+
+  // Stable shell height during SSR → client so layout does not jump hard.
+  if (!mounted || !actor.ready) {
+    return (
+      <div
+        className={cn("flex flex-col gap-1.5", stickyClassName, className)}
+        aria-hidden
+      >
+        <div className="h-8 w-full animate-pulse rounded-md bg-muted/50" />
+      </div>
+    )
+  }
 
   if (filteredGroups.length === 0) {
     return null

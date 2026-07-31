@@ -1954,9 +1954,6 @@ function ProfileAssignmentsTab({ employee, assignmentSummaryRows, scheduleDays }
   const positionAssignments = Array.isArray(employee.position_assignments)
     ? employee.position_assignments
     : []
-  const designationAssignments = Array.isArray(employee.designation_assignments)
-    ? employee.designation_assignments
-    : []
   const previewDays = scheduleDays.slice(0, 7)
   const offDaysCount = previewDays.filter(
     (day) => day.is_off_day === true || day.is_off_day === "true"
@@ -1965,7 +1962,6 @@ function ProfileAssignmentsTab({ employee, assignmentSummaryRows, scheduleDays }
   const snapshotChips = [
     { key: "dept", label: "Departments", value: String(departments.length) },
     { key: "pos", label: "Positions", value: String(positionAssignments.length) },
-    { key: "des", label: "Designations", value: String(designationAssignments.length) },
     { key: "sched", label: "Schedule days", value: String(previewDays.length) },
     {
       key: "off",
@@ -2068,7 +2064,6 @@ function ProfileAssignmentsTab({ employee, assignmentSummaryRows, scheduleDays }
               positionAssignments.map((entry, index) => {
                 const record = asRecord(entry)
                 const position = asRecord(record?.position)
-                const designation = asRecord(record?.designation)
                 const positionName = readString(position, ["name", "position_name"], "Position")
                 const status = readString(record, ["status"], "active")
                 const isActive = status.toLowerCase() === "active"
@@ -2083,10 +2078,6 @@ function ProfileAssignmentsTab({ employee, assignmentSummaryRows, scheduleDays }
                       </AssignmentBadge>
                     }
                   >
-                    <AssignmentField
-                      label="Designation"
-                      value={readString(designation, ["name", "designation_name"], "—")}
-                    />
                     <AssignmentField
                       label="Type"
                       value={readString(record, ["assignment_type"], "—")}
@@ -2107,45 +2098,6 @@ function ProfileAssignmentsTab({ employee, assignmentSummaryRows, scheduleDays }
           </AssignmentSection>
         </motion.div>
       </div>
-
-      <motion.div variants={assignmentsItem}>
-        <AssignmentSection
-          title="Designation"
-          subtitle="Current and historical titles"
-          icon={BriefcaseIcon}
-          count={designationAssignments.length}
-        >
-          {designationAssignments.length ? (
-            designationAssignments.map((entry, index) => {
-              const record = asRecord(entry)
-              const designation = asRecord(record?.designation)
-              const designationName = readString(
-                designation,
-                ["name", "designation_name"],
-                "Designation"
-              )
-              const isCurrent = formatUnknownValue(record?.is_current) === "Yes"
-              return (
-                <AssignmentItemCard
-                  key={`designation-assignment-${index}`}
-                  title={designationName}
-                  barClassName={isCurrent ? "bg-sky-500" : "bg-slate-300 dark:bg-slate-600"}
-                  badge={
-                    isCurrent ? <AssignmentBadge tone="primary">Current</AssignmentBadge> : null
-                  }
-                >
-                  <AssignmentField label="Code" value={readString(designation, ["code"], "—")} />
-                  <AssignmentField label="Start" value={formatDate(record?.start_date)} />
-                  <AssignmentField label="End" value={formatDate(record?.end_date)} />
-                  <AssignmentField label="Remarks" value={readString(record, ["remarks"], "—")} />
-                </AssignmentItemCard>
-              )
-            })
-          ) : (
-            <EmptyAssignmentState message="No designation assigned." />
-          )}
-        </AssignmentSection>
-      </motion.div>
 
       <motion.div variants={assignmentsItem}>
         <AssignmentSection
@@ -4522,7 +4474,6 @@ export function EmployeeOrganizationView() {
                 <InfoRow label="Branch" value={readString(asRecord(employee.branch), ["name", "branch_name"])} />
                 <InfoRow label="Department" value={readString(asRecord(employee.department), ["name", "department_name"])} />
                 <InfoRow label="Position" value={readString(asRecord(employee.position), ["name", "position_name"])} />
-                <InfoRow label="Designation" value={readString(asRecord(employee.designation), ["name", "designation_name"])} />
               </div>
               <div>
                 <InfoRow label="Employment Status" value={readString(employee, ["employment_status", "status"])} />

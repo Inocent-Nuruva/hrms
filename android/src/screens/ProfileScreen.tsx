@@ -90,7 +90,6 @@ export function ProfileScreen({ auth }: Props) {
   const branch = readString(employee, ['branch_name']) || readString(employee?.branch || {}, ['name']) || readString(employee?.primary_branch || {}, ['name']) || 'Not assigned';
   const department = readString(employee, ['department_name']) || readString(employee?.department || {}, ['name']) || readString(employee?.primary_department || {}, ['name']) || 'Not assigned';
   const position = readString(employee, ['position_name']) || readString(employee?.position || {}, ['name']) || readString(employee?.primary_position || {}, ['name']) || 'Not assigned';
-  const designation = readString(employee, ['designation_name']) || readString(employee?.designation || {}, ['name']) || readString(employee?.primary_designation || {}, ['name']) || 'Not assigned';
   const employeeNo = readString(employee, ['employee_no', 'user_no']) || readString(user, ['employeeId']) || '—';
   const email = readString(user, ['email']) || '—';
   const phoneDisplay = readString(employee, ['phone', 'phone_number'], '—');
@@ -253,8 +252,6 @@ export function ProfileScreen({ auth }: Props) {
               <InfoRow icon={<Building2 size={16} color={mutedColor} />} label="Department" value={department} textColor={textColor} mutedColor={mutedColor} />
               <View style={{ height: 1, backgroundColor: isDark ? '#3f3f46' : '#e5e7eb', marginVertical: 2 }} />
               <InfoRow icon={<BriefcaseBusiness size={16} color={mutedColor} />} label="Position" value={position} textColor={textColor} mutedColor={mutedColor} />
-              <View style={{ height: 1, backgroundColor: isDark ? '#3f3f46' : '#e5e7eb', marginVertical: 2 }} />
-              <InfoRow icon={<BriefcaseBusiness size={16} color={mutedColor} />} label="Designation" value={designation} textColor={textColor} mutedColor={mutedColor} />
             </View>
           ) : null}
 

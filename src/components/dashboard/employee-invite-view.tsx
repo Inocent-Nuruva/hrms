@@ -495,24 +495,12 @@ export function EmployeeInviteView() {
       return
     }
 
-    const selectedPosition = positions.find((row) => getId(row) === positionId) ?? null
-    const designationId = selectedPosition
-      ? readRelatedId(selectedPosition, [
-          "primary_designation_id",
-          "designation_id",
-          "primaryDesignationId",
-          "designationId",
-          "designation",
-        ]) ?? undefined
-      : undefined
-
     const payload: CreateEmployeePayload = {
       employee_no: undefined,
       gender,
       primary_branch_id: branchId,
       primary_department_id: departmentId,
       primary_position_id: positionId,
-      primary_designation_id: designationId,
       position_id: positionId,
       employment_status: "onboarding",
       employment_type: employmentType as CreateEmployeePayload["employment_type"],

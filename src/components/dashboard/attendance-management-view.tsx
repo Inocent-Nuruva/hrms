@@ -653,10 +653,13 @@ function readStoredToken() {
 }
 
 function listRowsForSection(key: AttendanceSectionKey, token: string) {
+  // Policies: do not send sortBy=created_at (API docs describe User fields; it can empty the list).
+  if (key === "settings" || key === "policies") {
+    return listAttendancePolicies(token, { page: 1, limit: 100 })
+  }
+
   const params = { page: 1, limit: 50, sortBy: "created_at", sortOrder: "DESC" as const }
 
-  if (key === "settings") return listAttendanceSettings(token, params)
-  if (key === "policies") return listAttendancePolicies(token, params)
   if (key === "devices") return listAttendanceDevices(token, params)
   if (key === "checkpoints") return listAttendanceCheckpoints(token, params)
   if (key === "geofences") return listAttendanceGeofences(token, params)
@@ -764,18 +767,28 @@ function resolveVisibleColumns(section: AttendanceSectionKey, rows: AdminRecord[
     settings: [
       "name",
       "is_active",
+      "isActive",
       "grace_period_minutes",
+      "gracePeriodMinutes",
       "late_after_minutes",
+      "lateAfterMinutes",
       "auto_calculate_attendance",
+      "autoCalculateAttendance",
       "require_geo_fencing",
+      "requireGeoFencing",
     ],
     policies: [
       "name",
       "is_active",
+      "isActive",
       "grace_period_minutes",
+      "gracePeriodMinutes",
       "late_after_minutes",
+      "lateAfterMinutes",
       "auto_calculate_attendance",
+      "autoCalculateAttendance",
       "require_geo_fencing",
+      "requireGeoFencing",
     ],
     devices: ["device_code", "device_serial_number", "device_model", "branch_id", "vendor_name", "integration_type", "status", "ip_address"],
     checkpoints: ["name", "type", "policy_set_id", "status"],
@@ -793,9 +806,26 @@ function resolveVisibleColumns(section: AttendanceSectionKey, rows: AdminRecord[
   if (section === "mobile-punches") {
     return preferred
   }
+  // Prefer snake_case labels when both camelCase and snake_case exist.
   const ordered = preferred.filter((key) => keySet.has(key))
-  const extras = Array.from(keySet).filter((key) => !ordered.includes(key)).sort((a, b) => a.localeCompare(b))
-  return [...ordered, ...extras].slice(0, Math.max(ordered.length, 4))
+  const seenNormalized = new Set(
+    ordered.map((key) => key.replace(/([A-Z])/g, "_$1").toLowerCase().replace(/^_/, ""))
+  )
+  const extras = Array.from(keySet)
+    .filter((key) => {
+      if (ordered.includes(key)) return false
+      const normalized = key.replace(/([A-Z])/g, "_$1").toLowerCase().replace(/^_/, "")
+      if (seenNormalized.has(normalized)) return false
+      seenNormalized.add(normalized)
+      return true
+    })
+    .sort((a, b) => a.localeCompare(b))
+  // Always keep at least the preferred policy columns so an empty first paint
+  // still has a stable table header before rows arrive.
+  if (ordered.length === 0 && rows.length === 0 && (section === "policies" || section === "settings")) {
+    return ["name", "is_active", "grace_period_minutes", "late_after_minutes"]
+  }
+  return [...ordered, ...extras].slice(0, Math.max(ordered.length, 6))
 }
 
 function getAttendanceDeviceLink(row: AdminRecord) {
@@ -1872,7 +1902,14 @@ export function AttendanceManagementView({ section }: { section: string }) {
     setError(null)
     try {
       const result = await listRowsForSection(activeSection, token)
-      setRows(result.rows)
+      setRows(Array.isArray(result.rows) ? result.rows : [])
+      if (
+        (activeSection === "policies" || activeSection === "settings") &&
+        (!result.rows || result.rows.length === 0)
+      ) {
+        // Keep the table empty but make empty-state actionable (no silent failure).
+        setMessage(null)
+      }
     } catch (errorObject) {
       setRows([])
       setError(
@@ -2022,8 +2059,6 @@ export function AttendanceManagementView({ section }: { section: string }) {
           listAttendancePolicies(token, {
             page: 1,
             limit: 100,
-            sortBy: "created_at",
-            sortOrder: "DESC",
           }),
           listAttendanceDevices(token, {
             page: 1,
@@ -2864,7 +2899,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
           ...(supportsEditDelete ? [{ key: "actions", label: "Actions", defaultWidth: 55, sortable: false, render: (row: AdminRecord) => (
             <div className="flex justify-end gap-1" onClick={e=>e.stopPropagation()}>
               {(activeSection === "policies" || activeSection === "settings") &&
-              !row.is_active ? (
+              !(row.is_active === true || row.isActive === true) ? (
                 <button
                   className="admin-table-icon-button"
                   disabled={activatingId === String(row.id)}

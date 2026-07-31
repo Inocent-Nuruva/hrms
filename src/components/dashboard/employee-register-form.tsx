@@ -26,7 +26,6 @@ import {
   listAttendanceDevices,
   listBranches,
   listDepartments,
-  listDesignations,
   listEmployees,
   listOnboardingWorkflows,
   listPositions,
@@ -103,7 +102,6 @@ type RegisterFormState = {
   branch: string
   department: string
   position: string
-  designation: string
   gender: string
   maritalStatus: string
   nationality: string
@@ -271,7 +269,6 @@ const EMPTY_FORM: RegisterFormState = {
   branch: "",
   department: "",
   position: "",
-  designation: "",
   gender: "",
   maritalStatus: "",
   nationality: "",
@@ -963,7 +960,7 @@ function resolveInitializedRegistrationFields(
   const position =
     readString(asRecord(currentEmployee?.primary_position), ["name", "position_name"]) ??
     readString(asRecord(currentEmployee?.position), ["name", "position_name"]) ??
-    readString(currentEmployee, ["position_name", "position", "designation_name"]) ??
+    readString(currentEmployee, ["position_name", "position"]) ??
     ""
 
   const profilePhotoUrl =
@@ -1383,7 +1380,6 @@ export function EmployeeRegisterForm() {
   const [branchRecords, setBranchRecords] = React.useState<AdminRecord[]>([])
   const [departmentRecords, setDepartmentRecords] = React.useState<AdminRecord[]>([])
   const [positionRecords, setPositionRecords] = React.useState<AdminRecord[]>([])
-  const [designationRecords, setDesignationRecords] = React.useState<AdminRecord[]>([])
   const [reportsToRecords, setReportsToRecords] = React.useState<AdminRecord[]>([])
   const [onboardingWorkflows, setOnboardingWorkflows] = React.useState<AdminRecord[]>([])
   const [shiftRecords, setShiftRecords] = React.useState<AdminRecord[]>([])
@@ -1419,7 +1415,6 @@ export function EmployeeRegisterForm() {
       branch: !isRegisteringOthers && Boolean(initializedFields.branch),
       department: !isRegisteringOthers && Boolean(initializedFields.department),
       position: !isRegisteringOthers && Boolean(initializedFields.position),
-      designation: false,
       reportsTo: false,
       employmentType: false,
       roleId: true,
@@ -1490,13 +1485,6 @@ export function EmployeeRegisterForm() {
         .map((row) => readString(row, ["name", "title"]))
         .filter((name) => name !== "-"),
     [positionRecords, selectedBranchId, selectedDepartmentId]
-  )
-  const designationOptions = React.useMemo(
-    () =>
-      designationRecords
-        .map((row) => readString(row, ["name", "title", "designation_name"]))
-        .filter((name) => name !== "-"),
-    [designationRecords]
   )
   const reportsToOptions = React.useMemo(() => {
     return reportsToRecords
@@ -1762,7 +1750,6 @@ export function EmployeeRegisterForm() {
               form.branch,
               form.department,
               form.position,
-              form.designation,
               form.gender,
               form.maritalStatus,
               form.nationality,
@@ -1800,7 +1787,6 @@ export function EmployeeRegisterForm() {
       experienceDetails.length,
       form.branch,
       form.department,
-      form.designation,
       form.employeeNo,
       form.employmentType,
       form.firstName,
@@ -2424,7 +2410,6 @@ export function EmployeeRegisterForm() {
         branchResult,
         departmentResult,
         positionResult,
-        designationResult,
         employeesResult,
         workflowResult,
         shiftResult,
@@ -2438,7 +2423,6 @@ export function EmployeeRegisterForm() {
         listBranches(accessToken, { page: 1, limit: 100 }),
         listDepartments(accessToken, { page: 1, limit: 100 }),
         listPositions(accessToken, { page: 1, limit: 100 }),
-        listDesignations(accessToken, { page: 1, limit: 100 }),
         listEmployees(accessToken, { page: 1, limit: 200, sortBy: "first_name", sortOrder: "ASC" }),
         listOnboardingWorkflows(accessToken, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
         listShiftResources(accessToken, "shifts", { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
@@ -2459,7 +2443,6 @@ export function EmployeeRegisterForm() {
       const resolvedDepartments =
         departmentResult.status === "fulfilled" ? departmentResult.value.rows : []
       const resolvedPositions = positionResult.status === "fulfilled" ? positionResult.value.rows : []
-      const resolvedDesignations = designationResult.status === "fulfilled" ? designationResult.value.rows : []
       const resolvedReportsTo = employeesResult.status === "fulfilled" ? employeesResult.value.rows : []
       const resolvedWorkflows = workflowResult.status === "fulfilled" ? workflowResult.value.rows : []
       const resolvedShifts = shiftResult.status === "fulfilled" ? shiftResult.value.rows : []
@@ -2477,7 +2460,6 @@ export function EmployeeRegisterForm() {
       setBranchRecords(resolvedBranches)
       setDepartmentRecords(resolvedDepartments)
       setPositionRecords(resolvedPositions)
-      setDesignationRecords(resolvedDesignations)
       setReportsToRecords(resolvedReportsTo)
       setOnboardingWorkflows(resolvedWorkflows)
       setShiftRecords(resolvedShifts)
@@ -2912,21 +2894,10 @@ export function EmployeeRegisterForm() {
     const selectedBranchRecord = findRecordByName(branchRecords, form.branch)
     const selectedDepartmentRecord = findRecordByName(departmentRecords, form.department)
     const selectedPositionRecord = findRecordByName(positionRecords, form.position)
-    const selectedDesignationRecord = findRecordByName(designationRecords, form.designation)
     const selectedReportsToRecord = findRecordByName(reportsToRecords, form.reportsTo) || reportsToRecords.find((r) => String(readRecordId(r)) === String(form.reportsTo))
     const selectedBranchId = readRecordId(selectedBranchRecord)
     const selectedDepartmentId = readRecordId(selectedDepartmentRecord)
     const selectedPositionId = readRecordId(selectedPositionRecord)
-    const selectedDesignationId = readRecordId(selectedDesignationRecord) || (() => {
-      if (!selectedPositionRecord) return null
-      const raw = selectedPositionRecord.designation_id
-      if (typeof raw === "number" && Number.isFinite(raw)) return raw
-      if (typeof raw === "string" && raw.trim()) {
-        const parsed = Number(raw)
-        return Number.isFinite(parsed) ? parsed : null
-      }
-      return null
-    })()
     const selectedReportsToId = readRecordId(selectedReportsToRecord ?? null) ?? (form.reportsTo ? (Number(form.reportsTo) || null) : null)
 
     const { error: onboardingError, onboarding: onboardingPayload } =
@@ -2954,7 +2925,6 @@ export function EmployeeRegisterForm() {
         primary_branch_id: selectedBranchId ?? undefined,
         primary_department_id: selectedDepartmentId ?? undefined,
         primary_position_id: selectedPositionId ?? undefined,
-        primary_designation_id: selectedDesignationId ?? undefined,
         position_id: selectedPositionId ?? undefined,
         employment_status: "onboarding",
         employment_type: (form.employmentType || "full_time") as
@@ -2997,7 +2967,6 @@ export function EmployeeRegisterForm() {
           branch_name: form.branch || undefined,
           department_name: form.department || undefined,
           position_name: form.position || undefined,
-          designation_name: form.designation || undefined,
           role_id: form.roleId || undefined,
           registration_mode: isInviteMode ? "send_invite" : "full_registration",
         },
@@ -3302,24 +3271,6 @@ export function EmployeeRegisterForm() {
                         </SelectContent>
                       </Select>
                     )}
-                  </Field>
-
-                  <Field label="Designation" htmlFor="designation" delayMs={250}>
-                    <Select value={form.designation} onValueChange={(value) => updateField("designation", value ?? "")}>
-                      <SelectTrigger id="designation" className="w-full">
-                        <SelectValue placeholder="Select designation (optional)" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {designationOptions.length === 0 && (
-                          <div className="px-2 py-1 text-xs text-muted-foreground">No designations loaded</div>
-                        )}
-                        {designationOptions.map((option) => (
-                          <SelectItem key={option} value={option}>
-                            {option}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
                   </Field>
 
                   <Field label="Reports To" htmlFor="reportsTo" delayMs={255}>

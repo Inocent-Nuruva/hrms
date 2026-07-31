@@ -89,11 +89,6 @@ export interface PositionsQueryParams extends UsersQueryParams {
   department_id?: number
 }
 
-export interface DesignationsQueryParams extends UsersQueryParams {
-  status?: string
-  department_id?: number
-}
-
 export interface LeaveTypesQueryParams extends UsersQueryParams {
   status?: string
 }
@@ -159,6 +154,8 @@ export interface AttendanceQueryParams extends UsersQueryParams {
   timetable_id?: number
   status?: string
   attendance_status?: string
+  /** Filter attendance policies by active flag (GET /api/attendance/config/policies). */
+  is_active?: boolean
 }
 
 export interface AttendanceReportDownloadParams extends AttendanceQueryParams {
@@ -271,15 +268,8 @@ export interface TeamAttendanceQueryParams extends UsersQueryParams {
 export interface EmployeePositionsQueryParams extends UsersQueryParams {
   employee_id?: number
   position_id?: number
-  designation_id?: number
   status?: string
   assignment_type?: string
-}
-
-export interface EmployeeDesignationsQueryParams extends UsersQueryParams {
-  employee_id?: number
-  designation_id?: number
-  is_current?: boolean
 }
 
 export type AttendanceResourceKey =
@@ -441,7 +431,6 @@ export interface CreateEmployeePayload {
   primary_branch_id?: number
   primary_department_id?: number
   primary_position_id?: number
-  primary_designation_id?: number
   position_id?: number
   employment_status?: EmployeeStatusValue
   employment_type?: "full_time" | "part_time" | "contract" | "probation" | "intern" | "consultant" | "temporary"
@@ -598,6 +587,7 @@ const PREFERRED_LIST_KEYS = [
   "records",
   "rows",
   "list",
+  "content", // Spring Data Page
   "users",
   "role_users",
   "roleUsers",
@@ -605,10 +595,42 @@ const PREFERRED_LIST_KEYS = [
   "branches",
   "departments",
   "positions",
-  "designations",
   "roles",
   "permissions",
   "companies",
+  // Attendance config collections
+  "policies",
+  "policy_sets",
+  "policySets",
+  "attendance_policies",
+  "attendancePolicies",
+  "checkpoints",
+  "geofences",
+  "wifi_networks",
+  "wifiNetworks",
+  "holidays",
+  "holiday_groups",
+  "holidayGroups",
+  "devices",
+] as const
+
+/** Keys that look like collection payloads (used for deep fallback search). */
+const POLICY_LIKE_FIELD_HINTS = [
+  "name",
+  "is_active",
+  "isActive",
+  "late_after_minutes",
+  "lateAfterMinutes",
+  "grace_period_minutes",
+  "gracePeriodMinutes",
+  "half_day_after_minutes",
+  "halfDayAfterMinutes",
+  "absent_after_minutes",
+  "absentAfterMinutes",
+  "weekend_days",
+  "weekendDays",
+  "authentication_modes",
+  "authenticationModes",
 ] as const
 
 const SKIP_NESTED_KEYS = new Set([
@@ -733,6 +755,55 @@ function readNumberFromRecord(record: AdminRecord | null, keys: string[]): numbe
   return null
 }
 
+function scoreRecordArray(rows: AdminRecord[]): number {
+  if (rows.length === 0) {
+    return 0
+  }
+  let score = rows.length
+  for (const row of rows.slice(0, 8)) {
+    for (const hint of POLICY_LIKE_FIELD_HINTS) {
+      if (hint in row) {
+        score += 3
+      }
+    }
+    if ("id" in row) {
+      score += 1
+    }
+  }
+  return score
+}
+
+/**
+ * Walk nested envelopes for the best array-of-records candidate.
+ * Used when preferred-key extraction fails for unfamiliar API shapes.
+ */
+function deepFindRecordArrays(value: unknown, depth = 0, maxDepth = 6): AdminRecord[][] {
+  if (depth > maxDepth || value == null) {
+    return []
+  }
+
+  const asList = asArray(value)
+  if (asList) {
+    return asList.length > 0 ? [asList] : []
+  }
+
+  const record = asRecord(value)
+  if (!record) {
+    return []
+  }
+
+  const preferredKeySet = new Set<string>(PREFERRED_LIST_KEYS)
+  const found: AdminRecord[][] = []
+  for (const [key, child] of Object.entries(record)) {
+    // Skip pure metadata, but never skip known collection keys.
+    if (SKIP_NESTED_KEYS.has(key) && !preferredKeySet.has(key)) {
+      continue
+    }
+    found.push(...deepFindRecordArrays(child, depth + 1, maxDepth))
+  }
+  return found
+}
+
 function normalizeList(payload: unknown): AdminRecord[] {
   const direct = asArray(payload)
   if (direct) {
@@ -744,7 +815,38 @@ function normalizeList(payload: unknown): AdminRecord[] {
     return []
   }
 
-  return extractListFromRecord(record) ?? []
+  const list = extractListFromRecord(record)
+  if (list && list.length > 0) {
+    return list
+  }
+
+  // Deep search: pick the highest-scoring array of plain records.
+  const candidates = deepFindRecordArrays(record)
+  if (candidates.length > 0) {
+    const best = [...candidates].sort((a, b) => scoreRecordArray(b) - scoreRecordArray(a))[0]
+    if (best && best.length > 0) {
+      return best
+    }
+  }
+
+  // Some list endpoints return a single record under data/result when only one row exists.
+  const single =
+    asRecord(record.data) ??
+    asRecord(record.result) ??
+    asRecord(record.payload) ??
+    asRecord(record.policy) ??
+    asRecord(record.item)
+  if (
+    single &&
+    (single.id !== undefined ||
+      single.name !== undefined ||
+      single.display_name !== undefined ||
+      single.displayName !== undefined)
+  ) {
+    return [single]
+  }
+
+  return list ?? []
 }
 
 const LEAVE_APPROVAL_LIST_KEYS = [
@@ -1253,33 +1355,6 @@ function buildPositionsQuery(params: PositionsQueryParams) {
   return query ? `?${query}` : ""
 }
 
-function buildDesignationsQuery(params: DesignationsQueryParams) {
-  const searchParams = new URLSearchParams()
-  if (typeof params.page === "number" && params.page > 0) {
-    searchParams.set("page", String(params.page))
-  }
-  if (typeof params.limit === "number" && params.limit > 0) {
-    searchParams.set("limit", String(params.limit))
-  }
-  if (params.sortBy && params.sortBy.trim()) {
-    searchParams.set("sortBy", params.sortBy.trim())
-  }
-  if (params.sortOrder === "ASC" || params.sortOrder === "DESC") {
-    searchParams.set("sortOrder", params.sortOrder)
-  }
-  if (params.search && params.search.trim()) {
-    searchParams.set("search", params.search.trim())
-  }
-  if (params.status && params.status.trim()) {
-    searchParams.set("status", params.status.trim())
-  }
-  if (typeof params.department_id === "number" && params.department_id > 0) {
-    searchParams.set("department_id", String(params.department_id))
-  }
-  const query = searchParams.toString()
-  return query ? `?${query}` : ""
-}
-
 function buildLeaveTypesQuery(params: LeaveTypesQueryParams) {
   const searchParams = new URLSearchParams()
   if (typeof params.page === "number" && params.page > 0) {
@@ -1477,44 +1552,11 @@ function buildEmployeePositionsQuery(params: EmployeePositionsQueryParams) {
   if (typeof params.position_id === "number" && params.position_id > 0) {
     searchParams.set("position_id", String(params.position_id))
   }
-  if (typeof params.designation_id === "number" && params.designation_id > 0) {
-    searchParams.set("designation_id", String(params.designation_id))
-  }
   if (params.status && params.status.trim()) {
     searchParams.set("status", params.status.trim())
   }
   if (params.assignment_type && params.assignment_type.trim()) {
     searchParams.set("assignment_type", params.assignment_type.trim())
-  }
-  const query = searchParams.toString()
-  return query ? `?${query}` : ""
-}
-
-function buildEmployeeDesignationsQuery(params: EmployeeDesignationsQueryParams) {
-  const searchParams = new URLSearchParams()
-  if (typeof params.page === "number" && params.page > 0) {
-    searchParams.set("page", String(params.page))
-  }
-  if (typeof params.limit === "number" && params.limit > 0) {
-    searchParams.set("limit", String(params.limit))
-  }
-  if (params.sortBy && params.sortBy.trim()) {
-    searchParams.set("sortBy", params.sortBy.trim())
-  }
-  if (params.sortOrder === "ASC" || params.sortOrder === "DESC") {
-    searchParams.set("sortOrder", params.sortOrder)
-  }
-  if (params.search && params.search.trim()) {
-    searchParams.set("search", params.search.trim())
-  }
-  if (typeof params.employee_id === "number" && params.employee_id > 0) {
-    searchParams.set("employee_id", String(params.employee_id))
-  }
-  if (typeof params.designation_id === "number" && params.designation_id > 0) {
-    searchParams.set("designation_id", String(params.designation_id))
-  }
-  if (typeof params.is_current === "boolean") {
-    searchParams.set("is_current", String(params.is_current))
   }
   const query = searchParams.toString()
   return query ? `?${query}` : ""
@@ -2685,25 +2727,6 @@ export async function listPositions(
   return { rows, ...pagination }
 }
 
-export async function listDesignations(
-  token: string,
-  params: DesignationsQueryParams = {},
-  options: ListRequestOptions = {}
-): Promise<PaginatedUsersResult> {
-  const fallbackPage = params.page && params.page > 0 ? params.page : 1
-  const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20
-  const query = buildDesignationsQuery(params)
-  const payload = await adminRequest<unknown>(`/api/designations${query}`, {
-    token,
-    signal: options.signal,
-    cacheTtlMs: options.cacheTtlMs,
-    dedupe: options.dedupe,
-  })
-  const rows = normalizeList(payload)
-  const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit)
-  return { rows, ...pagination }
-}
-
 export async function listLeaveTypes(
   token: string,
   params: LeaveTypesQueryParams = {}
@@ -2885,6 +2908,9 @@ function buildAttendanceQuery(params: AttendanceQueryParams) {
   if (params.attendance_status && params.attendance_status.trim()) {
     searchParams.set("attendance_status", params.attendance_status.trim())
   }
+  if (typeof params.is_active === "boolean") {
+    searchParams.set("is_active", params.is_active ? "true" : "false")
+  }
   const query = searchParams.toString()
   return query ? `?${query}` : ""
 }
@@ -2958,12 +2984,144 @@ async function listAllAttendanceCollection(
   }
 }
 
-export async function listAttendanceSettings(token: string, params: AttendanceQueryParams = {}) {
-  return listAllAttendanceCollection("/api/attendance/config/policies", token, params)
+/**
+ * List attendance policies (GET /api/attendance/config/policies).
+ *
+ * Tries several query shapes because backends differ on pagination/sort support.
+ * Never sends sortBy=created_at (OpenAPI documents User fields; that sort can
+ * empty or break the policy list).
+ */
+export async function listAttendancePolicies(
+  token: string,
+  params: AttendanceQueryParams = {}
+): Promise<PaginatedUsersResult> {
+  const page = params.page && params.page > 0 ? params.page : 1
+  const limit = params.limit && params.limit > 0 ? Math.min(params.limit, 100) : 100
+
+  const queryAttempts: AttendanceQueryParams[] = [
+    // Documented pagination only
+    {
+      page,
+      limit,
+      search: params.search,
+      is_active: params.is_active,
+    },
+    // Safe name sort (when backends accept non-User sort fields)
+    {
+      page,
+      limit,
+      search: params.search,
+      is_active: params.is_active,
+      sortBy: "name",
+      sortOrder: "ASC",
+    },
+    // Caller-provided sort if it is not the broken created_at default
+    ...(params.sortBy && params.sortBy.trim() && params.sortBy.trim() !== "created_at"
+      ? [
+          {
+            page,
+            limit,
+            search: params.search,
+            is_active: params.is_active,
+            sortBy: params.sortBy.trim(),
+            sortOrder: params.sortOrder ?? ("ASC" as const),
+          } satisfies AttendanceQueryParams,
+        ]
+      : []),
+  ]
+
+  let lastError: unknown = null
+  let lastEmpty: PaginatedUsersResult | null = null
+
+  for (const attempt of queryAttempts) {
+    try {
+      const result = await listAttendanceCollectionPage(
+        "/api/attendance/config/policies",
+        token,
+        attempt
+      )
+      if (result.rows.length > 0) {
+        // If more pages exist, walk them without re-applying risky sorts.
+        if (
+          (result.totalPages !== null && result.totalPages > 1) ||
+          (result.total !== null && result.total > result.rows.length) ||
+          result.rows.length >= (attempt.limit ?? limit)
+        ) {
+          const all = await listAllAttendanceCollection(
+            "/api/attendance/config/policies",
+            token,
+            {
+              page: 1,
+              limit: attempt.limit ?? limit,
+              search: attempt.search,
+              is_active: attempt.is_active,
+              sortBy: attempt.sortBy,
+              sortOrder: attempt.sortOrder,
+            }
+          )
+          if (all.rows.length > 0) {
+            return all
+          }
+        }
+        return result
+      }
+      lastEmpty = result
+      lastError = null
+    } catch (errorObject) {
+      lastError = errorObject
+    }
+  }
+
+  // Raw GET with no query string — some environments reject pagination/sort entirely.
+  try {
+    const payload = await adminRequest<unknown>("/api/attendance/config/policies", { token })
+    if (process.env.NODE_ENV === "development") {
+      const keys =
+        payload && typeof payload === "object" && !Array.isArray(payload)
+          ? Object.keys(payload as object)
+          : Array.isArray(payload)
+            ? [`array(${payload.length})`]
+            : [typeof payload]
+      console.debug("[listAttendancePolicies] raw payload keys:", keys)
+    }
+    const rows = normalizeList(payload)
+    if (rows.length > 0) {
+      return {
+        rows,
+        page: 1,
+        limit: rows.length,
+        total: rows.length,
+        totalPages: 1,
+      }
+    }
+  } catch (errorObject) {
+    lastError = errorObject
+  }
+
+  if (lastError) {
+    throw lastError
+  }
+
+  return (
+    lastEmpty ?? {
+      rows: [],
+      page,
+      limit,
+      total: 0,
+      totalPages: 0,
+    }
+  )
 }
 
-export async function listAttendancePolicies(token: string, params: AttendanceQueryParams = {}) {
-  return listAllAttendanceCollection("/api/attendance/config/policies", token, params)
+export async function listAttendanceSettings(token: string, params: AttendanceQueryParams = {}) {
+  return listAttendancePolicies(token, params)
+}
+
+export async function getAttendancePolicy(token: string, id: string | number) {
+  const payload = await adminRequest<unknown>(`/api/attendance/config/policies/${id}`, {
+    token,
+  })
+  return normalizeSingle(payload)
 }
 
 export async function listAttendanceDevices(token: string, params: AttendanceQueryParams = {}) {
@@ -3058,14 +3216,45 @@ export async function runPendingAttendanceProcessingJobs(token: string) {
   })
 }
 
-export async function rebuildAttendanceDailySummaries(token: string, data: AdminRecord) {
-  return adminRequest<unknown>("/api/attendance/daily-summaries/rebuild", {
+/**
+ * POST /api/attendance/daily-summaries/refresh
+ * RefreshAttendanceDailySummariesDto — rebuild summaries and/or reprocess from raw logs.
+ */
+export type RefreshAttendanceDailySummariesInput = {
+  start_date: string
+  end_date: string
+  device_id?: number
+  employee_id?: number
+  /** Prefer for new clients: background | immediate */
+  execution_mode?: "background" | "immediate"
+  /** Legacy: sync | async */
+  execution?: "sync" | "async"
+  /** Prefer for new clients: fetch_and_process | database_only */
+  processing_source?: "fetch_and_process" | "database_only"
+  /** Legacy: summaries_only | from_raw_logs */
+  mode?: "summaries_only" | "from_raw_logs"
+}
+
+export async function refreshAttendanceDailySummaries(
+  token: string,
+  data: RefreshAttendanceDailySummariesInput
+) {
+  return adminRequest<unknown>("/api/attendance/daily-summaries/refresh", {
     method: "POST",
     token,
     body: data,
   })
 }
 
+/** @deprecated Use refreshAttendanceDailySummaries — maps to the same refresh endpoint. */
+export async function rebuildAttendanceDailySummaries(
+  token: string,
+  data: AdminRecord | RefreshAttendanceDailySummariesInput
+) {
+  return refreshAttendanceDailySummaries(token, data as RefreshAttendanceDailySummariesInput)
+}
+
+/** @deprecated Prefer refreshAttendanceDailySummaries with processing_source. */
 export async function processAttendanceRange(token: string, data: AdminRecord) {
   return adminRequest<unknown>("/api/attendance/processing/run-range", {
     method: "POST",
@@ -3395,6 +3584,120 @@ export async function syncAccessControlDeviceTemplates(token: string, id: string
   })
 }
 
+export type AccessScheduleType = "DOOR" | "ATTENDANCE" | "MIXED"
+export type AccessScheduleTemplateStatus = "ACTIVE" | "INACTIVE"
+
+export interface AccessScheduleTemplatesQueryParams extends UsersQueryParams {
+  status?: AccessScheduleTemplateStatus | string
+  schedule_type?: AccessScheduleType | string
+}
+
+function buildAccessScheduleTemplatesQuery(params: AccessScheduleTemplatesQueryParams) {
+  const searchParams = new URLSearchParams()
+  if (typeof params.page === "number" && params.page > 0) {
+    searchParams.set("page", String(params.page))
+  }
+  if (typeof params.limit === "number" && params.limit > 0) {
+    searchParams.set("limit", String(params.limit))
+  }
+  if (params.sortBy && params.sortBy.trim()) {
+    searchParams.set("sortBy", params.sortBy.trim())
+  }
+  if (params.sortOrder === "ASC" || params.sortOrder === "DESC") {
+    searchParams.set("sortOrder", params.sortOrder)
+  }
+  if (params.search && params.search.trim()) {
+    searchParams.set("search", params.search.trim())
+  }
+  if (params.status && params.status.trim()) {
+    searchParams.set("status", params.status.trim())
+  }
+  if (params.schedule_type && params.schedule_type.trim()) {
+    searchParams.set("schedule_type", params.schedule_type.trim())
+  }
+  const query = searchParams.toString()
+  return query ? `?${query}` : ""
+}
+
+/** List access schedule templates (GET /api/access-control/schedule-templates). */
+export async function listAccessScheduleTemplates(
+  token: string,
+  params: AccessScheduleTemplatesQueryParams = {}
+): Promise<PaginatedUsersResult> {
+  const fallbackPage = params.page && params.page > 0 ? params.page : 1
+  const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20
+  const query = buildAccessScheduleTemplatesQuery(params)
+  const payload = await adminRequest<unknown>(`/api/access-control/schedule-templates${query}`, {
+    token,
+  })
+  const rows = normalizeList(payload)
+  const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit)
+  return { rows, ...pagination }
+}
+
+/** Get one access schedule template by id. */
+export async function getAccessScheduleTemplate(token: string, id: string | number) {
+  const payload = await adminRequest<unknown>(`/api/access-control/schedule-templates/${id}`, {
+    token,
+  })
+  return normalizeSingle(payload)
+}
+
+/**
+ * Create access schedule template.
+ * Body: CreateAccessScheduleTemplateDto
+ * (device_id, hikvision_template_no, hikvision_week_plan_no, template_name, week_plan_id, …)
+ */
+export async function createAccessScheduleTemplate(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/access-control/schedule-templates", {
+    method: "POST",
+    token,
+    body: data,
+  })
+}
+
+/** Partially update an access schedule template. */
+export async function updateAccessScheduleTemplate(
+  token: string,
+  id: string | number,
+  data: AdminRecord
+) {
+  return adminRequest<unknown>(`/api/access-control/schedule-templates/${id}`, {
+    method: "PATCH",
+    token,
+    body: data,
+  })
+}
+
+/** Delete an access schedule template. */
+export async function deleteAccessScheduleTemplate(token: string, id: string | number) {
+  return adminRequest<unknown>(`/api/access-control/schedule-templates/${id}`, {
+    method: "DELETE",
+    token,
+  })
+}
+
+/** Push one schedule template to a Hikvision device. */
+export async function syncAccessScheduleTemplateToDevice(
+  token: string,
+  id: string | number,
+  data: { device_id: number }
+) {
+  return adminRequest<unknown>(`/api/access-control/schedule-templates/${id}/sync-to-device`, {
+    method: "POST",
+    token,
+    body: data,
+  })
+}
+
+/** Pull schedule templates from a Hikvision device and upsert locally. */
+export async function syncAccessScheduleTemplatesFromDevice(
+  token: string,
+  deviceId: string | number
+) {
+  return syncAccessControlDeviceTemplates(token, deviceId)
+}
+
 export async function syncHikvisionDeviceFingerprints(token: string, deviceId: string | number) {
   return adminRequest<unknown>(`/api/hikvision/devices/${deviceId}/sync-fingerprints`, {
     method: "POST",
@@ -3459,47 +3762,6 @@ export async function patchEmployeePosition(token: string, id: string | number, 
 
 export async function deleteEmployeePosition(token: string, id: string | number) {
   return adminRequest<unknown>(`/api/employee-positions/${id}`, {
-    method: "DELETE",
-    token,
-  })
-}
-
-export async function listEmployeeDesignations(
-  token: string,
-  params: EmployeeDesignationsQueryParams = {}
-): Promise<PaginatedUsersResult> {
-  const fallbackPage = params.page && params.page > 0 ? params.page : 1
-  const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20
-  const query = buildEmployeeDesignationsQuery(params)
-  const payload = await adminRequest<unknown>(`/api/employee-designations${query}`, { token })
-  const rows = normalizeList(payload)
-  const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit)
-  return { rows, ...pagination }
-}
-
-export async function getEmployeeDesignation(token: string, id: string | number) {
-  const payload = await adminRequest<unknown>(`/api/employee-designations/${id}`, { token })
-  return normalizeSingle(payload)
-}
-
-export async function createEmployeeDesignation(token: string, data: AdminRecord) {
-  return adminRequest<unknown>("/api/employee-designations", {
-    method: "POST",
-    token,
-    body: data,
-  })
-}
-
-export async function patchEmployeeDesignation(token: string, id: string | number, data: AdminRecord) {
-  return adminRequest<unknown>(`/api/employee-designations/${id}`, {
-    method: "PATCH",
-    token,
-    body: data,
-  })
-}
-
-export async function deleteEmployeeDesignation(token: string, id: string | number) {
-  return adminRequest<unknown>(`/api/employee-designations/${id}`, {
     method: "DELETE",
     token,
   })
@@ -4168,33 +4430,6 @@ export async function patchPosition(
 
 export async function deletePosition(token: string, id: string | number) {
   return adminRequest<unknown>(`/api/positions/${id}`, {
-    method: "DELETE",
-    token,
-  })
-}
-
-export async function createDesignation(token: string, data: AdminRecord) {
-  return adminRequest<unknown>("/api/designations", {
-    method: "POST",
-    token,
-    body: data,
-  })
-}
-
-export async function patchDesignation(
-  token: string,
-  id: string | number,
-  data: AdminRecord
-) {
-  return adminRequest<unknown>(`/api/designations/${id}`, {
-    method: "PATCH",
-    token,
-    body: data,
-  })
-}
-
-export async function deleteDesignation(token: string, id: string | number) {
-  return adminRequest<unknown>(`/api/designations/${id}`, {
     method: "DELETE",
     token,
   })
@@ -7060,6 +7295,18 @@ export async function testScheduledReportSmtpConfiguration(
   data: { toEmail?: string; sendTestEmail?: boolean } = {}
 ) {
   return adminRequest<unknown>(`/api/scheduled-reporting/smtp-configurations/${id}/test`, {
+    method: "POST",
+    token,
+    body: data,
+  })
+}
+
+/** Test SMTP using form values before the configuration is saved. */
+export async function testScheduledReportSmtpConfigurationDraft(
+  token: string,
+  data: AdminRecord & { toEmail?: string; sendTestEmail?: boolean }
+) {
+  return adminRequest<unknown>("/api/scheduled-reporting/smtp-configurations/test", {
     method: "POST",
     token,
     body: data,
