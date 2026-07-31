@@ -24,6 +24,7 @@ import {
   listAccessControlResources,
   listAttendanceDevices,
   listBranches,
+  listDepartmentPositions,
   listDepartments,
   listEmployees,
   listOnboardingWorkflows,
@@ -764,6 +765,95 @@ function readNumberish(value: unknown) {
   return null
 }
 
+function relatedDepartmentIds(record: AdminRecord) {
+  const ids = new Set<number>()
+  for (const value of [record.department_id, record.departmentId, record.primary_department_id, record.primaryDepartmentId]) {
+    const id = readNumberish(value)
+    if (id !== null) ids.add(id)
+  }
+  for (const key of ["department", "departmentDetail", "primary_department", "primaryDepartment"]) {
+    const id = readRecordId(asRecord(record[key]))
+    if (id !== null) ids.add(id)
+  }
+
+  const directIds = Array.isArray(record.department_ids)
+    ? record.department_ids
+    : Array.isArray(record.departmentIds)
+      ? record.departmentIds
+      : []
+  for (const value of directIds) {
+    const id = readNumberish(value)
+    if (id !== null) ids.add(id)
+  }
+
+  const assignments = Array.isArray(record.departments) ? record.departments : []
+  for (const value of assignments) {
+    // Some APIs return department id arrays like [1, 2] instead of assignment objects.
+    const directAssignmentId = readNumberish(value)
+    if (directAssignmentId !== null && (typeof value === "number" || typeof value === "string")) {
+      ids.add(directAssignmentId)
+      continue
+    }
+    const assignment = asRecord(value)
+    if (!assignment) continue
+    const nestedDepartment = asRecord(assignment.department) ?? asRecord(assignment.departmentDetail)
+    const id =
+      readNumberish(assignment.department_id) ??
+      readNumberish(assignment.departmentId) ??
+      readRecordId(nestedDepartment) ??
+      readRecordId(assignment)
+    if (id !== null) ids.add(id)
+  }
+  return ids
+}
+
+function relatedBranchId(record: AdminRecord) {
+  return (
+    readRecordId(asRecord(record.branch)) ??
+    readRecordId(asRecord(record.primary_branch)) ??
+    readRecordId(asRecord(record.primaryBranch)) ??
+    readNumberish(record.branch_id) ??
+    readNumberish(record.branchId) ??
+    readNumberish(record.primary_branch_id) ??
+    readNumberish(record.primaryBranchId)
+  )
+}
+
+function recordOptionLabel(record: AdminRecord, extraKeys: string[] = []) {
+  return (
+    readString(record, [
+      ...extraKeys,
+      "name",
+      "title",
+      "department_name",
+      "departmentName",
+      "position_name",
+      "positionName",
+      "branch_name",
+      "branchName",
+      "code",
+    ]) ?? null
+  )
+}
+
+function normalizeDepartmentPositionRows(rows: AdminRecord[], departmentId: number) {
+  return rows.map((row) => {
+    const nestedPosition =
+      asRecord(row.position) ??
+      asRecord(row.positionDetail) ??
+      asRecord(row.primary_position) ??
+      asRecord(row.primaryPosition)
+    const position = nestedPosition ? ({ ...row, ...nestedPosition } as AdminRecord) : row
+    const existingIds = relatedDepartmentIds(position)
+    existingIds.add(departmentId)
+    return {
+      ...position,
+      department_id: position.department_id ?? departmentId,
+      department_ids: Array.from(existingIds),
+    } as AdminRecord
+  })
+}
+
 function toggleNumericId(currentValues: number[], id: number, checked: boolean) {
   if (checked) {
     return currentValues.includes(id) ? currentValues : [...currentValues, id]
@@ -778,11 +868,24 @@ function findRecordByName(records: AdminRecord[], selectedName: string) {
   }
 
   return (
-    records.find(
-      (record) => (readString(record, ["name", "title"]) ?? "").trim().toLowerCase() === normalized
-    ) ??
-    null
+    records.find((record) => {
+      const label = recordOptionLabel(record)
+      return (label ?? "").trim().toLowerCase() === normalized
+    }) ?? null
   )
+}
+
+function uniqueOptionLabels(values: Array<string | null | undefined>) {
+  const seen = new Set<string>()
+  const unique: string[] = []
+  for (const value of values) {
+    if (typeof value !== "string") continue
+    const key = value.trim().toLowerCase()
+    if (!key || seen.has(key)) continue
+    seen.add(key)
+    unique.push(value)
+  }
+  return unique
 }
 
 function toRoleOption(record: AdminRecord): RoleOption | null {
@@ -1378,6 +1481,9 @@ export function EmployeeRegisterForm() {
   const [branchRecords, setBranchRecords] = React.useState<AdminRecord[]>([])
   const [departmentRecords, setDepartmentRecords] = React.useState<AdminRecord[]>([])
   const [positionRecords, setPositionRecords] = React.useState<AdminRecord[]>([])
+  const [departmentPositionRecords, setDepartmentPositionRecords] = React.useState<AdminRecord[]>([])
+  const [departmentPositionsLoading, setDepartmentPositionsLoading] = React.useState(false)
+  const [departmentPositionsLoaded, setDepartmentPositionsLoaded] = React.useState(false)
   const [reportsToRecords, setReportsToRecords] = React.useState<AdminRecord[]>([])
   const [onboardingWorkflows, setOnboardingWorkflows] = React.useState<AdminRecord[]>([])
   const [shiftRecords, setShiftRecords] = React.useState<AdminRecord[]>([])
@@ -1416,9 +1522,11 @@ export function EmployeeRegisterForm() {
   )
   const branchOptions = React.useMemo(
     () =>
-      branchRecords
-        .map((row) => readString(row, ["name", "title"]))
-        .filter((name) => name !== "-"),
+      uniqueOptionLabels(
+        branchRecords
+          .map((row) => recordOptionLabel(row, ["branch_name", "branchName"]))
+          .filter((name) => name !== null && name !== "-")
+      ),
     [branchRecords]
   )
   const selectedBranchRecord = React.useMemo(
@@ -1429,68 +1537,133 @@ export function EmployeeRegisterForm() {
     () => readRecordId(selectedBranchRecord),
     [selectedBranchRecord]
   )
+  const departmentsForSelectedBranch = React.useMemo(() => {
+    if (selectedBranchId === null) {
+      return []
+    }
+    const matching = departmentRecords.filter((row) => relatedBranchId(row) === selectedBranchId)
+    if (matching.length > 0) {
+      return matching
+    }
+    // Fallback for legacy records with no branch link.
+    return departmentRecords.filter((row) => relatedBranchId(row) === null)
+  }, [departmentRecords, selectedBranchId])
   const departmentOptions = React.useMemo(
     () =>
-      departmentRecords
-        .filter((row) => {
-          if (selectedBranchId === null) {
-            return true
-          }
-          const relatedBranchId =
-            readRecordId(asRecord(row.branch)) ??
-            readNumberish(row.branch_id) ??
-            readNumberish(row.primary_branch_id)
-          return relatedBranchId === null || relatedBranchId === selectedBranchId
-        })
-        .map((row) => readString(row, ["name", "title"]))
-        .filter((name) => name !== "-"),
-    [departmentRecords, selectedBranchId]
+      uniqueOptionLabels(
+        departmentsForSelectedBranch
+          .map((row) => recordOptionLabel(row, ["department_name", "departmentName"]))
+          .filter((name) => name !== null && name !== "-")
+      ),
+    [departmentsForSelectedBranch]
   )
   const selectedDepartmentRecord = React.useMemo(
-    () => findRecordByName(departmentRecords, form.department),
-    [departmentRecords, form.department]
+    () => findRecordByName(departmentsForSelectedBranch, form.department),
+    [departmentsForSelectedBranch, form.department]
   )
   const selectedDepartmentId = React.useMemo(
     () => readRecordId(selectedDepartmentRecord),
     [selectedDepartmentRecord]
   )
-  const positionOptions = React.useMemo(
-    () =>
+
+  React.useEffect(() => {
+    if (selectedDepartmentId === null) {
+      setDepartmentPositionRecords([])
+      setDepartmentPositionsLoaded(false)
+      setDepartmentPositionsLoading(false)
+      return
+    }
+
+    const accessToken = resolveAccessTokenFromStorage()
+    if (!accessToken) {
+      setDepartmentPositionRecords([])
+      setDepartmentPositionsLoaded(false)
+      setDepartmentPositionsLoading(false)
+      return
+    }
+
+    let cancelled = false
+    setDepartmentPositionsLoading(true)
+    setDepartmentPositionsLoaded(false)
+    void listDepartmentPositions(accessToken, selectedDepartmentId)
+      .then((rows) => {
+        if (cancelled) return
+        setDepartmentPositionRecords(normalizeDepartmentPositionRows(rows, selectedDepartmentId))
+        setDepartmentPositionsLoaded(true)
+      })
+      .catch(() => {
+        if (cancelled) return
+        // Fall back to client-side filtering of the full positions list.
+        setDepartmentPositionRecords([])
+        setDepartmentPositionsLoaded(false)
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setDepartmentPositionsLoading(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [selectedDepartmentId])
+
+  const positionOptions = React.useMemo(() => {
+    // Cascade: positions only after a department is selected.
+    if (selectedDepartmentId === null) {
+      return []
+    }
+
+    // Prefer department-scoped API results when the endpoint succeeds (even if empty).
+    if (departmentPositionsLoaded) {
+      return uniqueOptionLabels(
+        departmentPositionRecords
+          .map((row) => recordOptionLabel(row, ["position_name", "positionName"]))
+          .filter((name) => name !== null && name !== "-")
+      )
+    }
+
+    // Fallback: filter full positions list by department (and branch when known).
+    const byDepartment = positionRecords.filter((row) => {
+      const departmentIds = relatedDepartmentIds(row)
+      return departmentIds.has(selectedDepartmentId)
+    })
+    if (byDepartment.length > 0) {
+      return uniqueOptionLabels(
+        byDepartment
+          .map((row) => recordOptionLabel(row, ["position_name", "positionName"]))
+          .filter((name) => name !== null && name !== "-")
+      )
+    }
+
+    // Last resort: positions with no department link, optionally constrained by branch.
+    return uniqueOptionLabels(
       positionRecords
         .filter((row) => {
-          if (selectedDepartmentId === null && selectedBranchId === null) {
-            return true
+          const departmentIds = relatedDepartmentIds(row)
+          if (departmentIds.size > 0) {
+            return false
           }
-          const relatedDepartmentId =
-            readRecordId(asRecord(row.department)) ??
-            readNumberish(row.department_id) ??
-            readNumberish(row.primary_department_id)
-          const relatedBranchId =
-            readRecordId(asRecord(row.branch)) ??
-            readNumberish(row.branch_id) ??
-            readNumberish(row.primary_branch_id)
-          const matchesDepartment =
-            selectedDepartmentId === null || relatedDepartmentId === selectedDepartmentId
-          const matchesBranch =
-            selectedBranchId === null || relatedBranchId === null || relatedBranchId === selectedBranchId
-          return matchesDepartment && matchesBranch
+          const branchId = relatedBranchId(row)
+          return selectedBranchId === null || branchId === null || branchId === selectedBranchId
         })
-        .map((row) => readString(row, ["name", "title"]))
-        .filter((name) => name !== "-"),
-    [positionRecords, selectedBranchId, selectedDepartmentId]
-  )
+        .map((row) => recordOptionLabel(row, ["position_name", "positionName"]))
+        .filter((name) => name !== null && name !== "-")
+    )
+  }, [
+    departmentPositionRecords,
+    departmentPositionsLoaded,
+    positionRecords,
+    selectedBranchId,
+    selectedDepartmentId,
+  ])
   const reportsToOptions = React.useMemo(() => {
     return reportsToRecords
       .filter((row) => {
         if (selectedDepartmentId === null) {
           return true
         }
-        const relatedDepartmentId =
-          readRecordId(asRecord(row.primary_department)) ??
-          readRecordId(asRecord(row.department)) ??
-          readNumberish(row.primary_department_id) ??
-          readNumberish(row.department_id)
-        return relatedDepartmentId === selectedDepartmentId
+        return relatedDepartmentIds(row).has(selectedDepartmentId)
       })
       .map((row) => {
         const id = readRecordId(row)
@@ -2847,12 +3020,27 @@ export function EmployeeRegisterForm() {
       }))
       .filter((e) => e.company_name || e.job_title)
 
-    const selectedBranchRecord = findRecordByName(branchRecords, form.branch)
-    const selectedDepartmentRecord = findRecordByName(departmentRecords, form.department)
-    const selectedPositionRecord = findRecordByName(positionRecords, form.position)
+    const selectedBranchRecordForSubmit = findRecordByName(branchRecords, form.branch)
+    const selectedBranchIdForSubmit = readRecordId(selectedBranchRecordForSubmit)
+    const departmentsForSubmit = (() => {
+      if (selectedBranchIdForSubmit === null) {
+        return departmentRecords
+      }
+      const matching = departmentRecords.filter(
+        (row) => relatedBranchId(row) === selectedBranchIdForSubmit
+      )
+      if (matching.length > 0) {
+        return matching
+      }
+      return departmentRecords.filter((row) => relatedBranchId(row) === null)
+    })()
+    const selectedDepartmentRecordForSubmit = findRecordByName(departmentsForSubmit, form.department)
+    const selectedPositionRecord =
+      findRecordByName(departmentPositionRecords, form.position) ??
+      findRecordByName(positionRecords, form.position)
     const selectedReportsToRecord = findRecordByName(reportsToRecords, form.reportsTo) || reportsToRecords.find((r) => String(readRecordId(r)) === String(form.reportsTo))
-    const selectedBranchId = readRecordId(selectedBranchRecord)
-    const selectedDepartmentId = readRecordId(selectedDepartmentRecord)
+    const selectedBranchId = selectedBranchIdForSubmit
+    const selectedDepartmentId = readRecordId(selectedDepartmentRecordForSubmit)
     const selectedPositionId = readRecordId(selectedPositionRecord)
     const selectedReportsToId = readRecordId(selectedReportsToRecord ?? null) ?? (form.reportsTo ? (Number(form.reportsTo) || null) : null)
 
@@ -3173,7 +3361,14 @@ export function EmployeeRegisterForm() {
                     {lockedFields.branch ? (
                       <Input id="branch" value={form.branch} disabled />
                     ) : (
-                      <Select value={form.branch} onValueChange={(value) => updateField("branch", value ?? "")}>
+                      <Select
+                        value={form.branch}
+                        onValueChange={(value) => {
+                          updateField("branch", value ?? "")
+                          updateField("department", "")
+                          updateField("position", "")
+                        }}
+                      >
                         <SelectTrigger id="branch" className="w-full">
                           <SelectValue placeholder="Select branch" />
                         </SelectTrigger>
@@ -3194,12 +3389,25 @@ export function EmployeeRegisterForm() {
                     ) : (
                       <Select
                         value={form.department}
-                        onValueChange={(value) => updateField("department", value ?? "")}
+                        onValueChange={(value) => {
+                          updateField("department", value ?? "")
+                          updateField("position", "")
+                        }}
+                        disabled={!form.branch}
                       >
                         <SelectTrigger id="department" className="w-full">
-                          <SelectValue placeholder="Select department" />
+                          <SelectValue
+                            placeholder={form.branch ? "Select department" : "Select branch first"}
+                          />
                         </SelectTrigger>
                         <SelectContent>
+                          {departmentOptions.length === 0 ? (
+                            <div className="px-2 py-2 text-xs text-muted-foreground">
+                              {form.branch
+                                ? "No departments for this branch"
+                                : "Select a branch first"}
+                            </div>
+                          ) : null}
                           {departmentOptions.map((option) => (
                             <SelectItem key={option} value={option}>
                               {option}
@@ -3214,11 +3422,32 @@ export function EmployeeRegisterForm() {
                     {lockedFields.position ? (
                       <Input id="position" value={form.position} disabled />
                     ) : (
-                      <Select value={form.position} onValueChange={(value) => updateField("position", value ?? "")}>
+                      <Select
+                        value={form.position}
+                        onValueChange={(value) => updateField("position", value ?? "")}
+                        disabled={!form.department || departmentPositionsLoading}
+                      >
                         <SelectTrigger id="position" className="w-full">
-                          <SelectValue placeholder="Select position" />
+                          <SelectValue
+                            placeholder={
+                              !form.department
+                                ? "Select department first"
+                                : departmentPositionsLoading
+                                  ? "Loading positions..."
+                                  : "Select position"
+                            }
+                          />
                         </SelectTrigger>
                         <SelectContent>
+                          {positionOptions.length === 0 ? (
+                            <div className="px-2 py-2 text-xs text-muted-foreground">
+                              {!form.department
+                                ? "Select a department first"
+                                : departmentPositionsLoading
+                                  ? "Loading positions..."
+                                  : "No positions for this department"}
+                            </div>
+                          ) : null}
                           {positionOptions.map((option) => (
                             <SelectItem key={option} value={option}>
                               {option}
