@@ -44,8 +44,10 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
   const [inputsMounted, setInputsMounted] = useState(false);
   const [step, setStep] = useState<LoginStep>("credentials");
   const [tempToken, setTempToken] = useState<string | null>(null);
+  /** Email bound to the current 2FA challenge — never reuse a previous account's email. */
+  const [twoFactorAccountEmail, setTwoFactorAccountEmail] = useState("");
   const [twoFactorCode, setTwoFactorCode] = useState("");
-  const { login, completeOtpLogin, isLoading } = useAuth();
+  const { login, completeOtpLogin, isLoading, clearSession } = useAuth();
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -110,6 +112,13 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
   const handleLogin = async () => {
     const normalizedEmail = email.trim().toLowerCase();
     setLoginError(null);
+    // Drop any prior session (e.g. forced password-change then browser Back) so a
+    // second account cannot inherit the previous user's identity in the UI/storage.
+    clearSession();
+    setTempToken(null);
+    setTwoFactorAccountEmail("");
+    setTwoFactorCode("");
+    setStep("credentials");
 
     if (!normalizedEmail) {
       const message = "Email is required.";
@@ -138,6 +147,11 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
           showErrorAlert(message, "2FA required");
           return;
         }
+        // Prefer the email used for this attempt; fall back to API user email if present.
+        const challengeEmail =
+          (response.user?.email && String(response.user.email).trim()) || normalizedEmail;
+        setEmail(challengeEmail);
+        setTwoFactorAccountEmail(challengeEmail);
         setTempToken(response.tempToken);
         setTwoFactorCode("");
         setStep("two-factor");
@@ -174,7 +188,7 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
   };
 
   const handleVerifyTwoFactor = async () => {
-    const normalizedEmail = email.trim().toLowerCase();
+    const accountEmail = (twoFactorAccountEmail || email).trim().toLowerCase();
     setLoginError(null);
 
     if (!tempToken) {
@@ -182,6 +196,7 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
       setLoginError(message);
       showErrorAlert(message, "2FA expired");
       setStep("credentials");
+      setTwoFactorAccountEmail("");
       return;
     }
 
@@ -195,9 +210,11 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
 
     try {
       const response = await completeOtpLogin(tempToken, code);
+      const completedEmail =
+        (response.user?.email && String(response.user.email).trim()) || accountEmail;
       await finishLogin(
         response.tokens.accessToken,
-        normalizedEmail,
+        completedEmail,
         response.user.requiresPasswordChange
           ? "/change-password?required=1"
           : "/dashboard",
@@ -223,10 +240,16 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
     event?.preventDefault();
     event?.stopPropagation();
     // Always leave the OTP step, even if a verify request is in flight.
+    const challengeEmail = twoFactorAccountEmail.trim();
     setStep("credentials");
     setTempToken(null);
+    setTwoFactorAccountEmail("");
     setTwoFactorCode("");
     setLoginError(null);
+    // Keep the email field on the account that attempted 2FA so the user can retry.
+    if (challengeEmail) {
+      setEmail(challengeEmail);
+    }
   };
 
   if (isDone) {
@@ -249,6 +272,7 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
   }
 
   if (step === "two-factor") {
+    const challengeEmail = (twoFactorAccountEmail || email).trim();
     return (
       <div className="w-full">
         <form onSubmit={handleSubmit} className="space-y-3">
@@ -258,10 +282,10 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
               <p className="text-[11px] font-medium text-foreground">Two-factor authentication</p>
               <p className="text-[10px] text-muted-foreground">
                 Enter the code from your authenticator app
-                {email.trim() ? (
+                {challengeEmail ? (
                   <>
                     {" "}
-                    for <span className="font-medium text-foreground">{email.trim()}</span>
+                    for <span className="font-medium text-foreground">{challengeEmail}</span>
                   </>
                 ) : null}
                 .

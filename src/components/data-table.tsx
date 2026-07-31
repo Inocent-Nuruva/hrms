@@ -1,9 +1,11 @@
 "use client"
 
 import * as React from "react"
+import { motion, useReducedMotion } from "framer-motion"
 import { toast } from "sonner"
 import { showErrorAlert } from "@/lib/error-alert"
 import { showSuccessAlert } from "@/lib/success-alert"
+import { cn } from "@/lib/utils"
 
 import {
   AlertDialog,
@@ -79,11 +81,11 @@ import {
   listRolePermissions,
   readDefaultAvatarId,
   listRoleUsers,
+  readTwoFactorEnabled,
   revokePermissionFromCurrentCompanyUser,
   revokePermissionFromRole,
   revokeUserFromRole,
 } from "@/lib/admin-api"
-import { cn } from "@/lib/utils"
 import {
   PermissionPicker,
   permissionGroupFromName,
@@ -139,6 +141,8 @@ interface DataTableProps {
     addRoleIds: (string | number)[],
     removeRoleIds: (string | number)[]
   ) => Promise<void>
+  /** Reload list after side-effect mutations (e.g. admin 2FA toggle). */
+  onRefresh?: () => Promise<void>
 }
 
 function hasActorPermission(actorPermissions: string[] | undefined, required: string) {
@@ -276,6 +280,7 @@ function getVisibleColumns(rows: AdminRecord[]) {
     "company_name",
     "company_slug",
     "status",
+    "two_factor_enabled",
     "created_at",
   ]
 
@@ -284,14 +289,62 @@ function getVisibleColumns(rows: AdminRecord[]) {
     Object.keys(row).forEach((key) => rowKeys.add(key))
   })
 
-  const ordered = preferredOrder.filter((key) => rowKeys.has(key))
+  // Always surface a normalized 2FA column for users when any 2FA-like flag exists
+  // (or after listUsers normalization which always sets two_factor_enabled).
+  const twoFactorAliases = [
+    "two_factor_enabled",
+    "is_two_factor_enabled",
+    "twoFactorEnabled",
+    "isTwoFactorEnabled",
+    "is_2fa_enabled",
+    "mfa_enabled",
+    "totp_enabled",
+  ]
+  const hasTwoFactorSignal =
+    twoFactorAliases.some((key) => rowKeys.has(key)) ||
+    rows.some((row) => readTwoFactorEnabled(row) || "two_factor_enabled" in row)
+
+  const ordered = preferredOrder.filter((key) => rowKeys.has(key) || (key === "two_factor_enabled" && hasTwoFactorSignal))
   const remaining = Array.from(rowKeys)
-    .filter((key) => !ordered.includes(key))
+    .filter(
+      (key) =>
+        !ordered.includes(key) &&
+        !twoFactorAliases.includes(key) // collapse aliases into two_factor_enabled
+    )
     .sort((a, b) => a.localeCompare(b))
-  return [...ordered, ...remaining].slice(0, 8)
+  const columns = [...ordered, ...remaining]
+  if (hasTwoFactorSignal && !columns.includes("two_factor_enabled")) {
+    columns.splice(Math.min(columns.length, 7), 0, "two_factor_enabled")
+  }
+  return columns.slice(0, 8)
+}
+
+function formatTwoFactorCell(row: AdminRecord): React.ReactNode {
+  const enabled = readTwoFactorEnabled(row)
+  return (
+    <Badge
+      variant={enabled ? "default" : "secondary"}
+      className={cn(
+        "text-[10px] font-semibold",
+        enabled
+          ? "bg-emerald-600/90 text-white hover:bg-emerald-600/90"
+          : "bg-muted text-muted-foreground"
+      )}
+    >
+      {enabled ? "On" : "Off"}
+    </Badge>
+  )
 }
 
 function prettifyKey(key: string) {
+  if (
+    key === "two_factor_enabled" ||
+    key === "is_two_factor_enabled" ||
+    key === "twoFactorEnabled" ||
+    key === "isTwoFactorEnabled"
+  ) {
+    return "2FA"
+  }
   return key
     .replace(/_/g, " ")
     .replace(/\b\w/g, (char) => char.toUpperCase())
@@ -832,6 +885,28 @@ function toEntityForm(row: AdminRecord): BasicEntityForm {
   }
 }
 
+/** Match ResizableTable row population animation (per-row delay, valid HTML). */
+const adminTableRowHidden = {
+  opacity: 0,
+  y: 12,
+  scale: 0.985,
+  filter: "blur(3px)",
+}
+
+const adminTableRowVisible = (index: number) => ({
+  opacity: 1,
+  y: 0,
+  scale: 1,
+  filter: "blur(0px)",
+  transition: {
+    type: "spring" as const,
+    stiffness: 420,
+    damping: 26,
+    mass: 0.65,
+    delay: 0.05 + index * 0.03,
+  },
+})
+
 export function DataTable({
   token,
   activeResource,
@@ -851,7 +926,10 @@ export function DataTable({
   onUpdateUser,
   onSetUserPassword,
   onSyncUserRoles,
+  onRefresh,
 }: DataTableProps) {
+  const shouldReduceMotion = useReducedMotion()
+  const shouldAnimateRows = !shouldReduceMotion
   const [searchInput, setSearchInput] = React.useState(usersQuery.search)
   const [createUserForm, setCreateUserForm] = React.useState<UserFormState>(EMPTY_USER_FORM)
   const [editingUser, setEditingUser] = React.useState<{ id: string | number; label: string } | null>(null)
@@ -1430,7 +1508,7 @@ export function DataTable({
       if (twoFactorUser.mode === "enable") {
         await enableUserTwoFactor(token, twoFactorUser.id)
         showSuccessAlert(
-          "2FA enabled. The user must complete setup during their next login."
+          "2FA required for this user. They complete setup during their next login."
         )
       } else {
         await disableUserTwoFactor(token, twoFactorUser.id, twoFactorReason)
@@ -1438,6 +1516,9 @@ export function DataTable({
       }
       setTwoFactorUser(null)
       setTwoFactorReason("")
+      if (onRefresh) {
+        await onRefresh()
+      }
     } catch (errorObject) {
       const message =
         errorObject instanceof Error ? errorObject.message : "Failed to update 2FA."
@@ -2331,7 +2412,7 @@ export function DataTable({
                   itemsPerPage={20}
                   showExport={false}
                   enableColumnVisibility
-                  enableAnimations={false}
+                  enableAnimations
                   storageKey={`access-control-${activeResource}`}
                   toolbarStart={
                     <div className="min-w-0 flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -2434,12 +2515,32 @@ export function DataTable({
                       rows.map((row, index) => {
                         const rowId = getRowId(row, index + 1)
                         const rowLabel = stringifyValue(row.name ?? row.email ?? rowId)
+                        const twoFactorOn = activeResource === "users" ? readTwoFactorEnabled(row) : false
 
                         return (
-                          <TableRow key={`${rowId}`}>
+                          <motion.tr
+                            key={`${activeResource}-${usersQuery.page}-${rowId}`}
+                            data-slot="table-row"
+                            className={cn(
+                              "border-0 transition-colors hover:bg-[color:var(--section-tab-rail-bg)] has-aria-expanded:bg-[color:var(--section-tab-rail-bg)] data-[state=selected]:bg-[color:var(--section-tab-rail-bg)]"
+                            )}
+                            initial={shouldAnimateRows ? adminTableRowHidden : false}
+                            animate={
+                              shouldAnimateRows ? adminTableRowVisible(index) : { opacity: 1 }
+                            }
+                          >
                             {columns.map((column) => (
                               <TableCell key={`${rowId}-${column}`}>
-                                <span className="block max-w-[24rem] truncate">{stringifyValue(row[column])}</span>
+                                {column === "two_factor_enabled" ||
+                                column === "is_two_factor_enabled" ||
+                                column === "twoFactorEnabled" ||
+                                column === "isTwoFactorEnabled" ? (
+                                  formatTwoFactorCell(row)
+                                ) : (
+                                  <span className="block max-w-[24rem] truncate">
+                                    {stringifyValue(row[column])}
+                                  </span>
+                                )}
                               </TableCell>
                             ))}
                             <TableCell className="text-right">
@@ -2502,7 +2603,7 @@ export function DataTable({
                                     </DropdownMenuItem>
                                   ) : null}
 
-                                  {activeResource === "users" ? (
+                                  {activeResource === "users" && !twoFactorOn ? (
                                     <DropdownMenuItem
                                       onClick={() => {
                                         setTwoFactorUser({
@@ -2518,7 +2619,7 @@ export function DataTable({
                                     </DropdownMenuItem>
                                   ) : null}
 
-                                  {activeResource === "users" ? (
+                                  {activeResource === "users" && twoFactorOn ? (
                                     <DropdownMenuItem
                                       onClick={() => {
                                         setTwoFactorUser({
@@ -2550,7 +2651,7 @@ export function DataTable({
                                 </DropdownMenuContent>
                               </DropdownMenu>
                             </TableCell>
-                          </TableRow>
+                          </motion.tr>
                         )
                       })
                     )}

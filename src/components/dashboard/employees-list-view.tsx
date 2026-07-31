@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation"
 
 import {
   AlertDialog,
+  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -13,19 +14,30 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { Switch } from "@/components/ui/switch"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 import {
   EmployeeAccessRemovalDialog,
   type EmployeeAccessRemovalTarget,
 } from "@/components/dashboard/employee-access-removal-dialog"
-import { listEmployees, type AdminRecord, type EmployeesQueryParams } from "@/lib/admin-api"
+import {
+  buildUserTwoFactorMap,
+  disableUserTwoFactor,
+  enableUserTwoFactor,
+  listEmployees,
+  readTwoFactorEnabled,
+  withNormalizedTwoFactorFields,
+  type AdminRecord,
+  type EmployeesQueryParams,
+} from "@/lib/admin-api"
 import { useDebouncedValue } from "@/hooks/use-debounced-value"
 import { useRenderDiagnostics } from "@/hooks/use-render-diagnostics"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
-import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
+import { canAccessDashboardRoute, canPerformPermission } from "@/lib/dashboard-permissions"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import { env } from "@/lib/env"
 import { Trash2 } from "lucide-react"
+import { toast } from "sonner"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 const EMPLOYEE_STATUS_REFRESH_KEY = "hrms.employees.status.updatedAt"
@@ -86,6 +98,29 @@ function readString(row: AdminRecord, keys: string[]) {
     }
   }
   return "-"
+}
+
+function employeeUserId(row: AdminRecord): string | number | null {
+  const value =
+    row.user_id ??
+    row.userId ??
+    row.account_id ??
+    row.accountId ??
+    // Nested user objects from employee payloads
+    (typeof row.user === "object" && row.user !== null
+      ? (row.user as AdminRecord).id ??
+        (row.user as AdminRecord).user_id ??
+        (row.user as AdminRecord).userId
+      : null)
+  return typeof value === "string" && value.trim()
+    ? value
+    : typeof value === "number" && Number.isFinite(value)
+      ? value
+      : null
+}
+
+function employeeTwoFactorEnabled(row: AdminRecord): boolean {
+  return readTwoFactorEnabled(row)
 }
 
 function asRecord(value: unknown): AdminRecord | null {
@@ -193,8 +228,15 @@ export function EmployeesListView() {
   const [missingDialog, setMissingDialog] = React.useState<{ employeeNo: string; missing: Array<{ key: string; label: string }> } | null>(null)
   const [removalOpen, setRemovalOpen] = React.useState(false)
   const [removalTarget, setRemovalTarget] = React.useState<EmployeeAccessRemovalTarget | null>(null)
+  const [twoFactorTarget, setTwoFactorTarget] = React.useState<{
+    userId: string | number
+    employeeName: string
+    enabled: boolean
+  } | null>(null)
+  const [twoFactorBusy, setTwoFactorBusy] = React.useState(false)
   const debouncedSearch = useDebouncedValue(query.search, 350)
   const lastFetchAtRef = React.useRef(0)
+  const canManageTwoFactor = canPerformPermission(actor.permissionLabels, "users:update")
 
   // Defense in depth: never render the company directory for employee shell users.
   React.useEffect(() => {
@@ -260,14 +302,44 @@ export function EmployeesListView() {
           cacheTtlMs: env.NEXT_PUBLIC_LIST_CACHE_TTL_SHORT_MS,
         }
       )
+
+      // 2FA lives on company users (GET /api/users), not always on employee rows.
+      // Merge user flags so the switch reflects the real account status.
+      const neededUserIds = result.rows
+        .map((row) => employeeUserId(row))
+        .filter((id): id is string | number => id != null)
+      let twoFactorByUserId = new Map<string, boolean>()
+      try {
+        twoFactorByUserId = await buildUserTwoFactorMap(token, neededUserIds, {
+          signal,
+          cacheTtlMs: env.NEXT_PUBLIC_LIST_CACHE_TTL_SHORT_MS,
+        })
+      } catch {
+        // Keep employee-payload flags when users list is unavailable.
+      }
+
+      const rowsWithTwoFactor = result.rows.map((row) => {
+        const userId = employeeUserId(row)
+        const fromUser =
+          userId != null ? twoFactorByUserId.get(String(userId)) : undefined
+        const enabled =
+          typeof fromUser === "boolean" ? fromUser : readTwoFactorEnabled(row)
+        return withNormalizedTwoFactorFields({
+          ...row,
+          two_factor_enabled: enabled,
+          is_two_factor_enabled: enabled,
+          twoFactorEnabled: enabled,
+        })
+      })
+
       lastFetchAtRef.current = Date.now()
       writeSnapshot(queryCacheKey, {
-        rows: result.rows,
+        rows: rowsWithTwoFactor,
         totalPages: result.totalPages,
         total: result.total,
         cachedAt: Date.now(),
       })
-      setRows(result.rows)
+      setRows(rowsWithTwoFactor)
       setTotalPages(result.totalPages)
       setTotal(result.total)
     } catch (errorObject) {
@@ -342,6 +414,48 @@ export function EmployeesListView() {
     })
     setRemovalOpen(true)
   }, [])
+
+  const requestTwoFactorChange = React.useCallback((row: AdminRecord) => {
+    if (!canManageTwoFactor) {
+      toast.error("You do not have permission to manage user 2FA.")
+      return
+    }
+    const userId = employeeUserId(row)
+    if (userId == null) {
+      toast.error("This employee does not have a linked user account.")
+      return
+    }
+    setTwoFactorTarget({
+      userId,
+      employeeName: employeeDisplayName(row),
+      enabled: employeeTwoFactorEnabled(row),
+    })
+  }, [canManageTwoFactor])
+
+  const confirmTwoFactorChange = React.useCallback(async () => {
+    if (!twoFactorTarget) return
+    const token = readStoredToken()
+    if (!token) {
+      toast.error("Authentication required. Please log in again.")
+      return
+    }
+    setTwoFactorBusy(true)
+    try {
+      if (twoFactorTarget.enabled) {
+        await disableUserTwoFactor(token, twoFactorTarget.userId)
+        toast.success("2FA has been disabled for this user.")
+      } else {
+        await enableUserTwoFactor(token, twoFactorTarget.userId)
+        toast.success("2FA enabled. The user must complete setup during their next login.")
+      }
+      setTwoFactorTarget(null)
+      void fetchEmployees()
+    } catch (errorObject) {
+      toast.error(errorObject instanceof Error ? errorObject.message : "Failed to update 2FA.")
+    } finally {
+      setTwoFactorBusy(false)
+    }
+  }, [fetchEmployees, twoFactorTarget])
 
   const employeeColumns = React.useMemo<Column<AdminRecord>[]>(() => [
     {
@@ -448,21 +562,44 @@ export function EmployeesListView() {
       defaultWidth: 80,
       sortable: false,
       render: (row: AdminRecord) => (
-        <button
-          type="button"
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-rose-200 text-rose-600 hover:bg-rose-50"
-          title="Remove / disable access"
-          aria-label="Remove or disable access"
-          onClick={(event) => {
-            event.stopPropagation()
-            openRemovalDialog(row)
-          }}
+        <div
+          className="flex items-center justify-end gap-2"
+          onClick={(event) => event.stopPropagation()}
         >
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
+          <span className="text-xs font-medium text-muted-foreground">2FA</span>
+          <Switch
+            size="sm"
+            checked={employeeTwoFactorEnabled(row)}
+            disabled={!canManageTwoFactor || employeeUserId(row) == null}
+            aria-label={`Toggle 2FA for ${employeeDisplayName(row)}`}
+            title={
+              !canManageTwoFactor
+                ? "You do not have permission to manage user 2FA"
+                : employeeUserId(row) == null
+                  ? "No linked user account"
+                  : employeeTwoFactorEnabled(row)
+                    ? "2FA is enabled — click to disable"
+                    : "2FA is off — click to require setup on next login"
+            }
+            onCheckedChange={() => requestTwoFactorChange(row)}
+            onClick={(event) => event.stopPropagation()}
+          />
+          <button
+            type="button"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-rose-200 text-rose-600 hover:bg-rose-50"
+            title="Remove / disable access"
+            aria-label="Remove or disable access"
+            onClick={(event) => {
+              event.stopPropagation()
+              openRemovalDialog(row)
+            }}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
       ),
     },
-  ], [openRemovalDialog])
+  ], [canManageTwoFactor, openRemovalDialog, requestTwoFactorChange])
 
   return (
     <div className="space-y-2">
@@ -508,7 +645,7 @@ export function EmployeesListView() {
         }}
         loading={loading}
         storageKey="employees"
-        enableAnimations={false}
+        enableAnimations
         itemsPerPage={query.limit}
         page={page}
         totalPages={totalPages}
@@ -527,6 +664,30 @@ export function EmployeesListView() {
           void fetchEmployees()
         }}
       />
+
+      <AlertDialog
+        open={Boolean(twoFactorTarget)}
+        onOpenChange={(open) => {
+          if (!open && !twoFactorBusy) setTwoFactorTarget(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{twoFactorTarget?.enabled ? "Disable 2FA" : "Enable 2FA"}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {twoFactorTarget?.enabled
+                ? `Disable two-factor authentication for ${twoFactorTarget.employeeName}? This revokes recovery data and may invalidate active sessions.`
+                : `Enable two-factor authentication for ${twoFactorTarget?.employeeName}? They will complete setup on their next login.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={twoFactorBusy}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={(event) => { event.preventDefault(); void confirmTwoFactorChange() }} disabled={twoFactorBusy}>
+              {twoFactorBusy ? "Updating…" : twoFactorTarget?.enabled ? "Disable 2FA" : "Enable 2FA"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog
         open={Boolean(missingDialog)}

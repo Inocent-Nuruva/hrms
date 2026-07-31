@@ -2112,7 +2112,8 @@ export async function listUsers(
     cacheTtlMs: options.cacheTtlMs,
     dedupe: options.dedupe,
   })
-  const rows = normalizeList(payload)
+  // Flatten 2FA flags so UI always has consistent top-level fields regardless of API naming.
+  const rows = normalizeList(payload).map((row) => withNormalizedTwoFactorFields(row))
   const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit)
   return { rows, ...pagination }
 }
@@ -2769,6 +2770,61 @@ export async function listOffboardingWorkflows(
   return { rows, ...pagination }
 }
 
+/** Shared query string for attendance list endpoints (date range, employee, status, etc.). */
+function buildAttendanceQuery(params: AttendanceQueryParams) {
+  const searchParams = new URLSearchParams()
+  if (typeof params.page === "number" && params.page > 0) {
+    searchParams.set("page", String(params.page))
+  }
+  if (typeof params.limit === "number" && params.limit > 0) {
+    searchParams.set("limit", String(params.limit))
+  }
+  if (params.sortBy && params.sortBy.trim()) {
+    searchParams.set("sortBy", params.sortBy.trim())
+  }
+  if (params.sortOrder === "ASC" || params.sortOrder === "DESC") {
+    searchParams.set("sortOrder", params.sortOrder)
+  }
+  if (params.search && params.search.trim()) {
+    searchParams.set("search", params.search.trim())
+  }
+  if (typeof params.employee_id === "number" && params.employee_id > 0) {
+    searchParams.set("employee_id", String(params.employee_id))
+  }
+  if (params.employee_no && params.employee_no.trim()) {
+    searchParams.set("employee_no", params.employee_no.trim())
+  }
+  if (params.from_date && params.from_date.trim()) {
+    searchParams.set("from_date", params.from_date.trim())
+  }
+  if (params.to_date && params.to_date.trim()) {
+    searchParams.set("to_date", params.to_date.trim())
+  }
+  if (typeof params.organization_id === "number" && params.organization_id > 0) {
+    searchParams.set("organization_id", String(params.organization_id))
+  }
+  if (typeof params.branch_id === "number" && params.branch_id > 0) {
+    searchParams.set("branch_id", String(params.branch_id))
+  }
+  if (typeof params.department_id === "number" && params.department_id > 0) {
+    searchParams.set("department_id", String(params.department_id))
+  }
+  if (typeof params.shift_id === "number" && params.shift_id > 0) {
+    searchParams.set("shift_id", String(params.shift_id))
+  }
+  if (typeof params.timetable_id === "number" && params.timetable_id > 0) {
+    searchParams.set("timetable_id", String(params.timetable_id))
+  }
+  if (params.status && params.status.trim()) {
+    searchParams.set("status", params.status.trim())
+  }
+  if (params.attendance_status && params.attendance_status.trim()) {
+    searchParams.set("attendance_status", params.attendance_status.trim())
+  }
+  const query = searchParams.toString()
+  return query ? `?${query}` : ""
+}
+
 async function listAttendanceCollectionPage(
   path: string,
   token: string,
@@ -2776,7 +2832,7 @@ async function listAttendanceCollectionPage(
 ): Promise<PaginatedUsersResult> {
   const fallbackPage = params.page && params.page > 0 ? params.page : 1
   const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20
-  const query = buildUsersQuery(params)
+  const query = buildAttendanceQuery(params)
   const payload = await adminRequest<unknown>(`${path}${query}`, { token })
   const rows = normalizeList(payload)
   const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit)
@@ -2893,7 +2949,7 @@ export async function listAttendanceDailySummaries(
   return listAllAttendanceCollection("/api/attendance/daily-summaries", token, params)
 }
 
-/** Single-page daily summaries — for dashboards that only need a sample rate, not full history. */
+/** Single-page daily summaries — use for paged UI and dashboard samples (not full history). */
 export async function listAttendanceDailySummariesPage(
   token: string,
   params: AttendanceQueryParams = {},
@@ -2901,7 +2957,7 @@ export async function listAttendanceDailySummariesPage(
 ): Promise<PaginatedUsersResult> {
   const fallbackPage = params.page && params.page > 0 ? params.page : 1
   const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20
-  const query = buildUsersQuery(params)
+  const query = buildAttendanceQuery(params)
   const payload = await adminRequest<unknown>(`/api/attendance/daily-summaries${query}`, {
     token,
     signal: options.signal,
@@ -6148,6 +6204,243 @@ export async function assignUserAvatar(
     token,
     body: { avatar_id: avatarId },
   })
+}
+
+const TWO_FACTOR_FLAG_KEYS = [
+  "is_two_factor_enabled",
+  "isTwoFactorEnabled",
+  "two_factor_enabled",
+  "twoFactorEnabled",
+  "is_2fa_enabled",
+  "is2faEnabled",
+  "is2FAEnabled",
+  "two_factor_active",
+  "twoFactorActive",
+  "mfa_enabled",
+  "mfaEnabled",
+  "totp_enabled",
+  "totpEnabled",
+  "has_two_factor",
+  "hasTwoFactor",
+  "two_factor",
+  "twoFactor",
+] as const
+
+const TWO_FACTOR_STATUS_KEYS = [
+  "two_factor_status",
+  "twoFactorStatus",
+  "mfa_status",
+  "mfaStatus",
+  "two_factor_state",
+  "twoFactorState",
+] as const
+
+const TWO_FACTOR_NEST_KEYS = [
+  "user",
+  "account",
+  "company_user",
+  "companyUser",
+  "security",
+  "auth",
+  "profile",
+  "settings",
+] as const
+
+function coerceTwoFactorFlag(value: unknown): boolean | null {
+  if (typeof value === "boolean") {
+    return value
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value !== 0
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase()
+    if (!normalized) {
+      return null
+    }
+    if (
+      [
+        "true",
+        "1",
+        "yes",
+        "y",
+        "on",
+        "enabled",
+        "active",
+        "activated",
+        "verified",
+        "complete",
+        "completed",
+        "setup_complete",
+        "setup-complete",
+        "enforced",
+        "required_and_enabled",
+      ].includes(normalized)
+    ) {
+      return true
+    }
+    if (
+      [
+        "false",
+        "0",
+        "no",
+        "n",
+        "off",
+        "disabled",
+        "inactive",
+        "none",
+        "pending",
+        "not_setup",
+        "not-setup",
+        "not_enabled",
+        "not-enabled",
+        "unverified",
+      ].includes(normalized)
+    ) {
+      return false
+    }
+  }
+  return null
+}
+
+function readTwoFactorFlagFromRecord(record: AdminRecord, depth: number): boolean | null {
+  for (const key of TWO_FACTOR_FLAG_KEYS) {
+    if (!(key in record)) {
+      continue
+    }
+    const coerced = coerceTwoFactorFlag(record[key])
+    if (coerced !== null) {
+      return coerced
+    }
+  }
+
+  for (const key of TWO_FACTOR_STATUS_KEYS) {
+    if (!(key in record)) {
+      continue
+    }
+    const coerced = coerceTwoFactorFlag(record[key])
+    if (coerced !== null) {
+      return coerced
+    }
+  }
+
+  // Some APIs only expose whether a secret / TOTP method exists.
+  for (const key of [
+    "two_factor_secret",
+    "twoFactorSecret",
+    "totp_secret",
+    "totpSecret",
+    "two_factor_secret_set",
+    "twoFactorSecretSet",
+    "has_totp_secret",
+    "hasTotpSecret",
+  ] as const) {
+    const value = record[key]
+    if (typeof value === "string" && value.trim()) {
+      return true
+    }
+    if (value === true) {
+      return true
+    }
+  }
+
+  if (depth >= 2) {
+    return null
+  }
+
+  for (const nestKey of TWO_FACTOR_NEST_KEYS) {
+    const nested = asRecord(record[nestKey])
+    if (!nested) {
+      continue
+    }
+    const nestedFlag = readTwoFactorFlagFromRecord(nested, depth + 1)
+    if (nestedFlag !== null) {
+      return nestedFlag
+    }
+  }
+
+  return null
+}
+
+/**
+ * Resolve whether 2FA is enabled for a user/employee-like record.
+ * Handles camelCase/snake_case, status strings, and nested `user` / `security` objects.
+ */
+export function readTwoFactorEnabled(record: AdminRecord | null | undefined): boolean {
+  if (!record) {
+    return false
+  }
+  return readTwoFactorFlagFromRecord(record, 0) ?? false
+}
+
+/** Attach consistent top-level 2FA fields for tables and toggles. */
+export function withNormalizedTwoFactorFields(record: AdminRecord): AdminRecord {
+  const enabled = readTwoFactorEnabled(record)
+  return {
+    ...record,
+    two_factor_enabled: enabled,
+    is_two_factor_enabled: enabled,
+    twoFactorEnabled: enabled,
+  }
+}
+
+/**
+ * Build a userId → 2FA-enabled map from GET /api/users (paginated).
+ * Stops early once every needed id is resolved (or the catalog ends).
+ */
+export async function buildUserTwoFactorMap(
+  token: string,
+  neededUserIds: Iterable<string | number> = [],
+  options: { signal?: AbortSignal; maxPages?: number; cacheTtlMs?: number } = {}
+): Promise<Map<string, boolean>> {
+  const needed = new Set(
+    Array.from(neededUserIds)
+      .map((id) => String(id).trim())
+      .filter(Boolean)
+  )
+  const map = new Map<string, boolean>()
+  const maxPages = options.maxPages && options.maxPages > 0 ? options.maxPages : 20
+  let page = 1
+
+  while (page <= maxPages) {
+    const result = await listUsers(
+      token,
+      { page, limit: 100, sortBy: "created_at", sortOrder: "ASC" },
+      {
+        signal: options.signal,
+        cacheTtlMs: options.cacheTtlMs,
+        dedupe: true,
+      }
+    )
+
+    for (const user of result.rows) {
+      const id =
+        user.id ??
+        user.user_id ??
+        user.userId ??
+        user.company_user_id ??
+        user.companyUserId
+      if (id === null || id === undefined || id === "") {
+        continue
+      }
+      map.set(String(id), readTwoFactorEnabled(user))
+    }
+
+    const allNeededFound =
+      needed.size === 0 ? false : [...needed].every((id) => map.has(id))
+    const reachedEnd =
+      result.rows.length === 0 ||
+      result.rows.length < 100 ||
+      (typeof result.totalPages === "number" && page >= result.totalPages) ||
+      (typeof result.total === "number" && map.size >= result.total)
+
+    if (allNeededFound || reachedEnd) {
+      break
+    }
+    page += 1
+  }
+
+  return map
 }
 
 /** PATCH /api/users/{userId}/two-factor/enable — admin enables 2FA (user completes setup on next login). */

@@ -170,7 +170,7 @@ const ATTENDANCE_POLICY_FIELDS: FieldConfig[] = [
   {
     key: "weekend_days",
     label: "Weekend Days",
-    description: "Comma-separated day codes (API format).",
+    description: "Comma-separated day codes, for example SAT,SUN.",
     type: "text",
     placeholder: "e.g SAT,SUN",
     defaultValue: "SAT,SUN",
@@ -197,7 +197,7 @@ const ATTENDANCE_POLICY_FIELDS: FieldConfig[] = [
   {
     key: "authentication_modes",
     label: "Allowed Check-In Methods",
-    description: "Comma-separated modes employees may use.",
+    description: "Comma-separated methods employees may use, for example MOBILE_APP,WEB.",
     type: "text",
     placeholder: "e.g MOBILE_APP,WEB",
     defaultValue: "MOBILE_APP,WEB",
@@ -844,10 +844,10 @@ function getSectionFormDescription(section: AttendanceSectionKey) {
 function getSectionSetupGuidance(section: AttendanceSectionKey) {
   if (section === "policies" || section === "settings") {
     return [
-      "Policies map to POST/GET /api/attendance/config/policies for the active company.",
+      "These rules apply to the active company.",
       "Create a policy first, then use Activate so only one policy is active company-wide.",
       "Timing order must be: Late After ≤ Half Day After ≤ Absent After.",
-      "Weekend days use short codes like SAT,SUN. Auth modes use values like MOBILE_APP,WEB.",
+      "Weekend days use short codes like SAT,SUN. Check-in methods use values like MOBILE_APP,WEB.",
     ]
   }
 

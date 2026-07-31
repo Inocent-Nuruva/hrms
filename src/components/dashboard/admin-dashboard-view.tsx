@@ -990,6 +990,7 @@ export default function AdminDashboardView({
                   onUpdateUser={handleUpdateUser}
                   onSetUserPassword={handleSetUserPassword}
                   onSyncUserRoles={handleSyncUserRoles}
+                  onRefresh={refreshCurrentResource}
                 />
               ) : null}
               {resolvedShowSettings ? (

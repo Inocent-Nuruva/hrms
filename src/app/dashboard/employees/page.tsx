@@ -5,7 +5,7 @@ export default function EmployeesPage() {
   return (
     <DashboardSectionRootRedirect
       groups={employeeSectionTabGroups}
-      fallbackHref="/dashboard"
+      fallbackHref="/dashboard/employees/all"
     />
   )
 }

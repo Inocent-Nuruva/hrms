@@ -419,7 +419,15 @@ export const authService = {
         "isTwoFactorEnabled" in candidate ||
         "two_factor_enabled" in candidate ||
         "twoFactorEnabled" in candidate ||
-        "is_2fa_enabled" in candidate;
+        "is_2fa_enabled" in candidate ||
+        "is2faEnabled" in candidate ||
+        "is2FAEnabled" in candidate ||
+        "mfa_enabled" in candidate ||
+        "mfaEnabled" in candidate ||
+        "totp_enabled" in candidate ||
+        "totpEnabled" in candidate ||
+        "two_factor_status" in candidate ||
+        "twoFactorStatus" in candidate;
       const hasEmailField =
         "is_email_verified" in candidate ||
         "isEmailVerified" in candidate ||
@@ -434,6 +442,12 @@ export const authService = {
             "two_factor_enabled",
             "twoFactorEnabled",
             "is_2fa_enabled",
+            "is2faEnabled",
+            "is2FAEnabled",
+            "mfa_enabled",
+            "mfaEnabled",
+            "totp_enabled",
+            "totpEnabled",
           ]) ?? false,
         isEmailVerified:
           readBoolean(candidate, [

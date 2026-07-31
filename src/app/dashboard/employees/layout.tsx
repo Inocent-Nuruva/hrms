@@ -16,8 +16,8 @@ export default function EmployeesLayout({
   const pathname = usePathname()
   const router = useRouter()
 
-  // Employee shell users who still land on the HR Employees section (e.g. old
-  // offboarding bookmarks) should not see the All Employees directory chrome.
+  // Self-service shell users who still land on the HR Employees section
+  // (e.g. old offboarding bookmarks) should leave this layout immediately.
   React.useEffect(() => {
     if (!actor.ready || actor.accessMode !== "employee") return
     // Self-service offboarding lives under /dashboard/me/offboarding.
@@ -31,6 +31,7 @@ export default function EmployeesLayout({
     }
   }, [actor.accessMode, actor.ready, pathname, router])
 
+  // Avoid a blank flash for true self-service users; HR/admin keeps rendering.
   if (actor.ready && actor.accessMode === "employee") {
     return null
   }

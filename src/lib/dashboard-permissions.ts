@@ -102,6 +102,12 @@ export function isAdminOnlyEmployeeDirectoryRoute(url: string) {
   )
 }
 
+/** Entire HR Employees section — not for self-service employee shell. */
+export function isHrEmployeesSectionRoute(url: string) {
+  const path = url.split("?")[0] ?? url
+  return path === "/dashboard/employees" || path.startsWith("/dashboard/employees/")
+}
+
 const ADMIN_IDENTITY_HINTS = new Set([
   "admin",
   "administrator",
@@ -178,8 +184,11 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/attendance/attendance-history": null,
   "/dashboard/attendance/schedule-preview": null,
   "/dashboard/attendance/corrections": null,
+  // Section root + directory: employees:read is enough in the admin shell.
+  // The employee shell is hard-blocked in canAccessDashboardRoute.
   "/dashboard/employees": {
     permissions: [
+      "employees:read",
       "employees:create",
       "employees:update",
       "employees:delete",
@@ -199,10 +208,10 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   // requirement; manage permissions keep pure self-service tokens out of the directory.
   "/dashboard/employees/all": {
     permissions: [
+      "employees:read",
       "employees:create",
       "employees:update",
       "employees:delete",
-      "employees:read",
       "company_users:create",
       "users:create",
       "create_company_user",
@@ -607,13 +616,13 @@ export function canAccessDashboardRoute(
   permissionLabels: string[],
   accessMode?: DashboardAccessMode
 ) {
-  // Hard block: employee shell never reaches the company employee directory
-  // even if the token still includes a broad employees:read claim.
-  if (accessMode === "employee" && isAdminOnlyEmployeeDirectoryRoute(url)) {
+  // Hard block: self-service shell never opens the HR Employees section
+  // even when the JWT includes a broad employees:read claim.
+  if (accessMode === "employee" && isHrEmployeesSectionRoute(url)) {
     return false
   }
 
-  // Admin / HR shell: allow directory with employees:read (manage grants preferred).
+  // Admin / HR shell: allow directory (and section root) with employees:read.
   if (accessMode === "admin" && isAdminOnlyEmployeeDirectoryRoute(url)) {
     return hasPermission(permissionLabels, {
       permissions: [
@@ -627,6 +636,27 @@ export function canAccessDashboardRoute(
         "self_service_requests:approve",
         "onboarding_requests:read",
         "onboarding_workflows:read",
+      ],
+      mode: "any",
+    })
+  }
+
+  // Section root under admin: same bar as directory so the sidebar item works.
+  if (accessMode === "admin" && (url.split("?")[0] ?? url) === "/dashboard/employees") {
+    return hasPermission(permissionLabels, {
+      permissions: [
+        "employees:read",
+        "employees:create",
+        "employees:update",
+        "employees:delete",
+        "company_users:create",
+        "users:create",
+        "create_company_user",
+        "self_service_requests:approve",
+        "onboarding_requests:read",
+        "onboarding_workflows:read",
+        "offboarding_requests:read",
+        "offboarding_workflows:read",
       ],
       mode: "any",
     })
@@ -648,6 +678,11 @@ export function hasAdminDashboardAccess(permissionLabels: string[]) {
   )
 }
 
+/** Manage grants that unlock the HR employee directory (not self-service read). */
+function hasEmployeeDirectoryManageAccess(permissionLabels: string[]) {
+  return hasPermission(permissionLabels, EMPLOYEE_DIRECTORY_MANAGE_PERMISSIONS)
+}
+
 function resolveDashboardActorIdentity(...sources: unknown[]): DashboardActorIdentityResolution {
   const permissionLabels = readPermissionLabelsFromUnknown(...sources)
   const identityHints = readDashboardIdentityHintsFromUnknown(...sources)
@@ -657,14 +692,16 @@ function resolveDashboardActorIdentity(...sources: unknown[]): DashboardActorIde
   const hasExplicitEmployeeIdentity = Array.from(identityHints).some((hint) =>
     EMPLOYEE_IDENTITY_HINTS.has(hint)
   )
-  const hasPermissionBasedAdminAccess = hasAdminDashboardAccess(permissionLabels)
-  const accessMode: DashboardAccessMode = hasExplicitAdminIdentity
-    ? "admin"
-    : hasExplicitEmployeeIdentity
-      ? "employee"
-      : hasPermissionBasedAdminAccess
-        ? "admin"
-        : "employee"
+  const hasPermissionBasedAdminAccess =
+    hasAdminDashboardAccess(permissionLabels) ||
+    hasEmployeeDirectoryManageAccess(permissionLabels)
+  // Prefer admin when the token has HR/admin route permissions, even if roles
+  // still include a generic "EMPLOYEE" label (common for company memberships).
+  // Pure self-service tokens keep employee mode: employees:read alone is not enough.
+  const accessMode: DashboardAccessMode =
+    hasExplicitAdminIdentity || hasPermissionBasedAdminAccess
+      ? "admin"
+      : "employee"
 
   return {
     permissionLabels,
@@ -856,22 +893,23 @@ export function readDashboardActorSnapshotFromBrowser(): DashboardActorSnapshot 
         Array.isArray(parsed) ? parsed.filter((entry) => typeof entry === "string") : []
       )
       const rawAccessMode = window.sessionStorage.getItem(DASHBOARD_ACCESS_MODE_STORAGE_KEY)
-      const rawIsAdmin = window.sessionStorage.getItem(DASHBOARD_IS_ADMIN_STORAGE_KEY)
       const derivedSnapshot = buildDashboardActorSnapshotFromSources(
         permissionLabels,
         ...readDashboardActorBrowserSources()
       )
+      // Prefer live derivation over a stale session accessMode so an old
+      // "employee" snapshot cannot keep blocking HR Employees after permissions load.
+      const accessMode: DashboardAccessMode =
+        derivedSnapshot.accessMode === "admin"
+          ? "admin"
+          : rawAccessMode === "admin" || rawAccessMode === "employee"
+            ? rawAccessMode
+            : derivedSnapshot.accessMode
       return {
-        permissionLabels,
-        accessMode: rawAccessMode === "admin" || rawAccessMode === "employee"
-          ? rawAccessMode
-          : derivedSnapshot.accessMode,
-        isAdmin:
-          rawIsAdmin === "1"
-            ? true
-            : rawIsAdmin === "0"
-              ? false
-              : derivedSnapshot.isAdmin,
+        permissionLabels:
+          permissionLabels.length > 0 ? permissionLabels : derivedSnapshot.permissionLabels,
+        accessMode,
+        isAdmin: accessMode === "admin" ? true : derivedSnapshot.isAdmin,
         ready: true,
         version: Date.now(),
       }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { motion, useReducedMotion, AnimatePresence, type Variants } from "framer-motion";
 import { Download, ChevronDown } from "lucide-react";
 import { Resizable } from "react-resizable";
@@ -661,13 +661,13 @@ export function ResizableTable<T = Record<string, unknown>>({
     };
   }, []);
 
-  const getRowIdentifier = (item: T, index: number): string => {
+  const getRowIdentifier = useCallback((item: T, index: number): string => {
     if (getRowId) return getRowId(item, index);
     const record = item as Record<string, unknown>;
     return String(
       record?.id ?? record?.employee_id ?? record?.user_id ?? record?.employeeNo ?? record?.no ?? record?.key ?? index
     );
-  };
+  }, [getRowId]);
 
   const handleRowSelect = (rowId: string, item?: T) => {
     setSelectedIds((prev) => {
@@ -947,7 +947,21 @@ export function ResizableTable<T = Record<string, unknown>>({
 
   const shouldAnimate = enableAnimations && !shouldReduceMotion;
 
+  // Re-run enter animations when page changes or when async data arrives
+  // (same page key alone would skip the stagger after loading finishes).
+  const populationKey = useMemo(() => {
+    if (loading && tableData.length === 0) {
+      return `loading-${activePage}`
+    }
+    const head = paginatedData
+      .slice(0, 12)
+      .map((item, index) => getRowIdentifier(item, index))
+      .join("|")
+    return `${activePage}:${paginatedData.length}:${head}`
+  }, [activePage, getRowIdentifier, loading, paginatedData, tableData.length])
+
   const containerVariants: Variants = {
+    hidden: {},
     visible: {
       transition: {
         staggerChildren: 0.03,
@@ -956,16 +970,15 @@ export function ResizableTable<T = Record<string, unknown>>({
     },
   };
 
+  // Keep enter motion inside the row box (no y/scale/blur) so overflow containers
+  // don't flash a temporary scrollbar while rows stagger in.
   const rowVariants: Variants = {
-    hidden: { opacity: 0, y: 12, scale: 0.985, filter: "blur(3px)" },
+    hidden: { opacity: 0 },
     visible: {
       opacity: 1,
-      y: 0,
-      scale: 1,
-      filter: "blur(0px)",
-      transition: { type: "spring", stiffness: 420, damping: 26, mass: 0.65 },
+      transition: { duration: 0.18, ease: "easeOut" },
     },
-    exit: { opacity: 0, y: -8, transition: { duration: 0.15 } },
+    exit: { opacity: 0, transition: { duration: 0.12 } },
   };
 
   // Cell renderer helper
@@ -1175,7 +1188,11 @@ export function ResizableTable<T = Record<string, unknown>>({
       ) : null}
 
       <div className="relative max-w-full overflow-hidden rounded-lg border border-border/50 bg-background">
-        <div className="max-w-full overflow-x-auto overscroll-x-contain" ref={overflowRef}>
+        {/* overflow-y-clip: overflow-x-auto alone promotes y to auto and flashes a scrollbar during row enter animations */}
+        <div
+          className="max-w-full overflow-x-auto overflow-y-clip overscroll-x-contain"
+          ref={overflowRef}
+        >
           <div className="min-w-full align-top" style={{ minWidth: containerWidth ? `${containerWidth}px` : undefined }}>
             {/* Header */}
             <div className="flex py-1 text-base font-semibold text-muted-foreground/70 bg-muted/5 border-b border-border w-full">
@@ -1242,7 +1259,8 @@ export function ResizableTable<T = Record<string, unknown>>({
             {/* Rows */}
             <AnimatePresence mode="wait">
               <motion.div
-                key={`page-${activePage}`}
+                key={populationKey}
+                className="overflow-hidden"
                 variants={shouldAnimate ? containerVariants : undefined}
                 initial={shouldAnimate ? "hidden" : false}
                 animate="visible"
@@ -1252,7 +1270,12 @@ export function ResizableTable<T = Record<string, unknown>>({
                   const isSelected = selectedIds.includes(rowId);
 
                   return (
-                    <motion.div key={rowId} variants={shouldAnimate ? rowVariants : undefined}>
+                    <motion.div
+                      key={rowId}
+                      variants={shouldAnimate ? rowVariants : undefined}
+                      initial={shouldAnimate ? "hidden" : false}
+                      animate="visible"
+                    >
                       <div
                         className={`py-1 group relative transition-all duration-150 border-b border-border flex cursor-pointer w-full ${
                           isSelected ? "bg-muted/30" : "bg-muted/5 hover:bg-muted/20"

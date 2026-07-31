@@ -3146,7 +3146,7 @@ export function EmployeeImportView() {
           storageKey="employee-import-history"
           itemsPerPage={historyLimit}
           showCheckboxes={false}
-          enableAnimations={false}
+          enableAnimations
           getRowId={(row) => row.id}
           onRowSelect={(id) => {
             if (!id || id.startsWith("import-row-")) return
