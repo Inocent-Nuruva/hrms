@@ -116,7 +116,12 @@ export function Tabs2({ groups, currentPath, className }: Tabs2Props) {
                       <DropdownMenuItem
                         key={item.url}
                         className="justify-between gap-2 py-1.5 text-xs"
-                        onClick={() => router.push(item.url)}
+                        onClick={() => {
+                          // Soft client navigation only — avoid full remounts of the tab rail.
+                          if (currentPath !== item.url) {
+                            router.push(item.url)
+                          }
+                        }}
                       >
                         <span>{item.title}</span>
                         {isActive ? (

@@ -1,8 +1,10 @@
 import type {
   ChangePasswordRequest,
+  ForgotPasswordRequest,
   LoginRequest,
   LoginResponse,
   RefreshTokenResponse,
+  ResetPasswordRequest,
   TwoFactorSetupResponse,
   UserSecurityFlags,
   VerifyOtpRequest,
@@ -10,7 +12,7 @@ import type {
   AuthUser,
   AuthTokens,
 } from "@/types";
-import { apiRequest } from "@/services/api";
+import { apiRequest, ApiError } from "@/services/api";
 import { isLikelyRefreshToken } from "@/utils/token-utils";
 
 type UnknownRecord = Record<string, unknown>;
@@ -484,6 +486,56 @@ export const authService = {
       },
       token,
     });
+  },
+
+  /**
+   * Request a password-reset email.
+   * POST /api/auth/forgot-password  body: { email }
+   * Always resolves on success; backends may return 200 with an empty body.
+   */
+  async forgotPassword(payload: ForgotPasswordRequest): Promise<void> {
+    const email = payload.email.trim().toLowerCase();
+    if (!email) {
+      throw new Error("Email is required.");
+    }
+    await apiRequest<unknown>("/api/auth/forgot-password", {
+      method: "POST",
+      body: { email },
+    });
+  },
+
+  /**
+   * Complete password reset with the email token.
+   * POST /api/auth/reset-password  body: { token, new_password }
+   * 410 → token expired; 400 → validation error.
+   */
+  async resetPassword(payload: ResetPasswordRequest): Promise<void> {
+    const token = payload.token.trim();
+    const newPassword = payload.new_password;
+    if (!token) {
+      throw new Error("Reset token is missing. Open the link from your email again.");
+    }
+    if (!newPassword || newPassword.length < 8) {
+      throw new Error("Password must be at least 8 characters.");
+    }
+    try {
+      await apiRequest<unknown>("/api/auth/reset-password", {
+        method: "POST",
+        body: {
+          token,
+          new_password: newPassword,
+        },
+      });
+    } catch (error) {
+      if (error instanceof ApiError && error.statusCode === 410) {
+        throw new ApiError(
+          error.message || "This reset link has expired or is no longer valid.",
+          410,
+          error.details
+        );
+      }
+      throw error;
+    }
   },
 
   async getCurrentUser(token: string) {

@@ -52,6 +52,17 @@ export interface ChangePasswordRequest {
   confirmPassword: string;
 }
 
+/** POST /api/auth/forgot-password */
+export interface ForgotPasswordRequest {
+  email: string;
+}
+
+/** POST /api/auth/reset-password — ResetPasswordDto */
+export interface ResetPasswordRequest {
+  token: string;
+  new_password: string;
+}
+
 export interface TwoFactorSetupResponse {
   secret: string;
   qrCode?: string;

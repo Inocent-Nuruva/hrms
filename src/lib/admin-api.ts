@@ -2082,9 +2082,73 @@ export interface ListRequestOptions {
   dedupe?: boolean
 }
 
-export async function listResource(resource: AdminResourceKey, token: string) {
-  const payload = await adminRequest<unknown>(RESOURCE_PATHS[resource], { token })
-  return normalizeList(payload)
+function dedupeAdminRecordsById(rows: AdminRecord[]): AdminRecord[] {
+  const seen = new Set<string>()
+  const out: AdminRecord[] = []
+  for (const row of rows) {
+    const id = row.id ?? row.role_id ?? row.roleId ?? row.permission_id ?? row.permissionId
+    if (id === null || id === undefined || id === "") {
+      out.push(row)
+      continue
+    }
+    const key = String(id)
+    if (seen.has(key)) {
+      continue
+    }
+    seen.add(key)
+    out.push(row)
+  }
+  return out
+}
+
+/**
+ * Fetch every page of a catalog resource (roles/permissions/…).
+ * A single GET often only returns the first page (default limit 10–20), which
+ * hides system roles such as "company user" that sit later in the list.
+ */
+export async function listResource(
+  resource: AdminResourceKey,
+  token: string,
+  options: { pageAll?: boolean; pageSize?: number; maxPages?: number } = {}
+) {
+  const pageAll = options.pageAll !== false
+  const pageSize =
+    options.pageSize && options.pageSize > 0
+      ? Math.min(options.pageSize, env.NEXT_PUBLIC_MAX_PAGE_SIZE || 100)
+      : Math.min(100, env.NEXT_PUBLIC_MAX_PAGE_SIZE || 100)
+  const maxPages = options.maxPages && options.maxPages > 0 ? options.maxPages : 50
+
+  if (!pageAll) {
+    const payload = await adminRequest<unknown>(RESOURCE_PATHS[resource], { token })
+    return dedupeAdminRecordsById(normalizeList(payload))
+  }
+
+  const collected: AdminRecord[] = []
+  let page = 1
+
+  while (page <= maxPages) {
+    // Only page/limit — avoid sortBy so backends that don't index roles by created_at still work.
+    const query = buildUsersQuery({ page, limit: pageSize })
+    const payload = await adminRequest<unknown>(`${RESOURCE_PATHS[resource]}${query}`, {
+      token,
+    })
+    const rows = normalizeList(payload)
+    const pagination = extractUsersPagination(payload, page, pageSize)
+    collected.push(...rows)
+
+    const reachedEnd =
+      rows.length === 0 ||
+      rows.length < pageSize ||
+      (pagination.totalPages !== null && page >= pagination.totalPages) ||
+      (pagination.total !== null && collected.length >= pagination.total)
+
+    if (reachedEnd) {
+      break
+    }
+    page += 1
+  }
+
+  return dedupeAdminRecordsById(collected)
 }
 
 export async function listAllResources(token: string): Promise<AdminResourceCollections> {

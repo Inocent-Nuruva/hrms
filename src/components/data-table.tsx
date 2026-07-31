@@ -766,7 +766,42 @@ type AccessControlTableRow = AdminRecord & {
   description: string
   type: string
   permissions_count?: number
+  /** Users assigned to this role (from API field or GET /roles/{id}/users). */
+  users_count?: number
   __source: AdminRecord
+}
+
+function readEmbeddedRoleUserCount(row: AdminRecord): number | null {
+  for (const key of [
+    "users_count",
+    "user_count",
+    "usersCount",
+    "userCount",
+    "members_count",
+    "membersCount",
+    "assigned_users_count",
+    "assignedUsersCount",
+    "total_users",
+    "totalUsers",
+  ]) {
+    const value = row[key]
+    if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+      return Math.floor(value)
+    }
+    if (typeof value === "string" && value.trim()) {
+      const parsed = Number(value)
+      if (Number.isFinite(parsed) && parsed >= 0) {
+        return Math.floor(parsed)
+      }
+    }
+  }
+  for (const key of ["users", "members", "assigned_users", "assignedUsers"]) {
+    const value = row[key]
+    if (Array.isArray(value)) {
+      return value.length
+    }
+  }
+  return null
 }
 
 function rolePermissionNamesFromRecord(row: AdminRecord): string[] {
@@ -987,6 +1022,8 @@ export function DataTable({
     displayName: string
   } | null>(null)
   const [peopleDialogOpen, setPeopleDialogOpen] = React.useState(false)
+  /** roleId → assigned user count for the roles table. */
+  const [roleUserCounts, setRoleUserCounts] = React.useState<Record<string, number>>({})
 
   const columns = React.useMemo(() => {
     const baseColumns = getVisibleColumns(rows)
@@ -1032,7 +1069,7 @@ export function DataTable({
     if (activeResource !== "roles" && activeResource !== "permissions") {
       return []
     }
-    return filteredAccessControlRows.map((row, index) => {
+    const mapped = filteredAccessControlRows.map((row, index) => {
       const id = String(getRowId(row, index + 1))
       if (activeResource === "permissions") {
         const key = permissionKey(row)
@@ -1047,6 +1084,10 @@ export function DataTable({
           __source: row,
         }
       }
+      const embeddedUsers = readEmbeddedRoleUserCount(row)
+      const usersCount =
+        roleUserCounts[id] ??
+        (embeddedUsers !== null ? embeddedUsers : undefined)
       return {
         ...row,
         __id: id,
@@ -1056,10 +1097,55 @@ export function DataTable({
         description: readRecordString(row, ["description"]) || "—",
         type: isSystemGenerated(row) ? "System" : "Custom",
         permissions_count: rolePermissionNamesFromRecord(row).length,
+        users_count: usersCount ?? 0,
         __source: row,
       }
     })
-  }, [activeResource, filteredAccessControlRows])
+    // Stable alphabetical order so system roles (e.g. "Company User") are easy to find.
+    return mapped.sort((a, b) =>
+      String(a.display).localeCompare(String(b.display), undefined, {
+        sensitivity: "base",
+        numeric: true,
+      })
+    )
+  }, [activeResource, filteredAccessControlRows, roleUserCounts])
+
+  // Load assigned-user counts for each role (prefer API total; fall back to embedded fields).
+  React.useEffect(() => {
+    if (activeResource !== "roles" || !token || filteredAccessControlRows.length === 0) {
+      return
+    }
+
+    let cancelled = false
+
+    const loadCounts = async () => {
+      const next: Record<string, number> = {}
+      await Promise.all(
+        filteredAccessControlRows.map(async (row, index) => {
+          const id = String(getRowId(row, index + 1))
+          const embedded = readEmbeddedRoleUserCount(row)
+          if (embedded !== null) {
+            next[id] = embedded
+            return
+          }
+          try {
+            const result = await listRoleUsers(token, id, { page: 1, limit: 1 })
+            next[id] = result.total ?? result.rows.length
+          } catch {
+            next[id] = 0
+          }
+        })
+      )
+      if (!cancelled) {
+        setRoleUserCounts(next)
+      }
+    }
+
+    void loadCounts()
+    return () => {
+      cancelled = true
+    }
+  }, [activeResource, filteredAccessControlRows, token])
 
   const openAccessControlRow = React.useCallback(
     (row: AdminRecord) => {
@@ -1425,18 +1511,31 @@ export function DataTable({
         ),
       },
       {
-        key: "permissions_count",
-        label: "Permissions",
-        defaultWidth: 120,
+        key: "users_count",
+        label: "Users",
+        defaultWidth: 90,
         sortable: true,
         render: (row) => (
-          <span className="text-sm text-slate-700 dark:text-slate-300">{row.permissions_count ?? 0}</span>
+          <span className="text-sm tabular-nums text-slate-700 dark:text-slate-300">
+            {row.users_count ?? 0}
+          </span>
+        ),
+      },
+      {
+        key: "permissions_count",
+        label: "Permissions",
+        defaultWidth: 110,
+        sortable: true,
+        render: (row) => (
+          <span className="text-sm tabular-nums text-slate-700 dark:text-slate-300">
+            {row.permissions_count ?? 0}
+          </span>
         ),
       },
       {
         key: "description",
         label: "Description",
-        defaultWidth: 260,
+        defaultWidth: 240,
         sortable: true,
         render: (row) => (
           <span className="line-clamp-2 text-xs text-slate-600 dark:text-slate-400">{row.description}</span>
@@ -1878,6 +1977,11 @@ export function DataTable({
             ? `Assigned ${selected.name} to this role.`
             : "Role assigned to user."
         )
+        const roleId = String(editingEntity.id)
+        setRoleUserCounts((prev) => ({
+          ...prev,
+          [roleId]: (prev[roleId] ?? 0) + 1,
+        }))
         // Reload from GET /api/roles/{roleId}/users so the list stays accurate.
         setMembersRefreshKey((key) => key + 1)
       }
@@ -1936,6 +2040,11 @@ export function DataTable({
         }
         await revokeUserFromRole(token, editingEntity.id, resolvedUserId)
         showSuccessAlert(`Removed ${personLabel} from this role.`)
+        const roleId = String(editingEntity.id)
+        setRoleUserCounts((prev) => ({
+          ...prev,
+          [roleId]: Math.max(0, (prev[roleId] ?? 1) - 1),
+        }))
         setMembersRefreshKey((key) => key + 1)
       }
       setRevokeConfirm(null)

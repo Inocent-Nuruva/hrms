@@ -11,7 +11,8 @@ import {
   markDashboardFromLogin,
   prefetchDashboardWarmCache,
 } from "@/lib/dashboard-warm-cache";
-import { AUTH_STORAGE_KEYS } from "@/utils/constants";
+import { AUTH_STORAGE_KEYS, ROUTES } from "@/utils/constants";
+import Link from "next/link";
 
 interface LoginFlowProps {
   defaultEmail?: string;
@@ -407,7 +408,7 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
           </div>
         )}
 
-        <div className="flex items-center justify-between text-[10px]">
+        <div className="flex items-center justify-between gap-2 text-[10px]">
           <label className="flex cursor-pointer items-center gap-1 text-muted-foreground">
             <Checkbox
               checked={rememberMe}
@@ -425,6 +426,16 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
             />
             Remember me
           </label>
+          <Link
+            href={
+              email.trim()
+                ? `${ROUTES.forgotPassword}?email=${encodeURIComponent(email.trim().toLowerCase())}`
+                : ROUTES.forgotPassword
+            }
+            className="font-medium text-primary transition hover:underline"
+          >
+            Forgot password?
+          </Link>
         </div>
 
         <button

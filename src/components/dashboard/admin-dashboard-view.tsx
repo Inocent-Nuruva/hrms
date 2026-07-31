@@ -6,7 +6,9 @@ import { usePathname, useRouter } from "next/navigation"
 import { AppSidebar } from "@/components/app-sidebar"
 import { DataTable } from "@/components/data-table"
 import { AccountSettingsPanel } from "@/components/dashboard/account-settings-panel"
+import { DashboardSectionTabs } from "@/components/dashboard/dashboard-section-tabs"
 import { SiteHeader } from "@/components/site-header"
+import { accessControlSectionTabGroups } from "@/lib/dashboard-sections"
 import dynamic from "next/dynamic"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 
@@ -60,6 +62,7 @@ import { useMyProfilePhoto } from "@/lib/my-profile-photo"
 import {
   buildDashboardActorSnapshotFromSources,
   canAccessDashboardRoute,
+  canViewCompanyDashboard,
   clearDashboardActorSnapshot,
   persistDashboardAccessToken,
   publishDashboardActorSnapshot,
@@ -334,6 +337,13 @@ export default function AdminDashboardView({
   const resolvedShowOverview = showOverview || currentPath === "/dashboard"
   const resolvedShowSettings = showSettings || currentPath === "/dashboard/settings"
   const resolvedUseApis = useApis || Boolean(resolvedActiveResource)
+  // Keep Access Control tabs mounted in the shell so switching Devices → Roles
+  // (different route trees) does not remount/refresh the tab rail.
+  const showAccessControlTabs =
+    currentPath === "/dashboard/roles" ||
+    currentPath === "/dashboard/permissions" ||
+    currentPath === "/dashboard/access-control" ||
+    currentPath.startsWith("/dashboard/access-control/")
   const [token, setToken] = React.useState("")
   const [collections, setCollections] = React.useState<AdminResourceCollections>({
     users: [],
@@ -501,6 +511,8 @@ export default function AdminDashboardView({
       setError(null)
 
       try {
+        // Always load full collections once; switching roles ↔ permissions only
+        // swaps the visible rows (see effect below) — no full-page tab refresh.
         const [usersResult, roles, permissions, admin] = await Promise.all([
           listUsers(accessToken, usersQuery),
           listResource("roles", accessToken).catch(() => []),
@@ -516,11 +528,6 @@ export default function AdminDashboardView({
           companies: [],
         }
         setCollections(fetchedCollections)
-        setRows(
-          resolvedActiveResource
-            ? fetchedCollections[resolvedActiveResource] ?? []
-            : []
-        )
         setCurrentAdmin(admin)
         setMyCompany(null)
         setUsersTotal(usersResult.total)
@@ -557,7 +564,6 @@ export default function AdminDashboardView({
     [
       attemptRefreshToken,
       clearStoredSession,
-      resolvedActiveResource,
       resolvedUseApis,
       router,
       token,
@@ -883,6 +889,8 @@ export default function AdminDashboardView({
   )
   const accessMode = actorSnapshot.accessMode
   const effectivePermissionLabels = actorSnapshot.permissionLabels
+  const showCompanyDashboard =
+    accessMode === "admin" && canViewCompanyDashboard(effectivePermissionLabels)
 
   React.useEffect(() => {
     if (!identityReady) {
@@ -960,8 +968,8 @@ export default function AdminDashboardView({
         />
         <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain">
           <div className="@container/main flex min-w-0 max-w-full flex-col">
-            {/* Overview sits flush under the top bar (full width of the content pane). */}
-            {resolvedShowOverview && accessMode === "admin" ? (
+            {/* Company overview is permission-gated (view_company_data / related labels). */}
+            {resolvedShowOverview && showCompanyDashboard ? (
               <HrAnalyticsDashboard
                 refreshKey={overviewRefreshKey}
                 companyName={companyName}
@@ -969,6 +977,9 @@ export default function AdminDashboardView({
               />
             ) : null}
             <div className="flex min-w-0 max-w-full flex-col gap-3 px-3 py-3 sm:px-4 md:gap-4 md:px-4 md:py-4">
+              {showAccessControlTabs ? (
+                <DashboardSectionTabs groups={accessControlSectionTabGroups} />
+              ) : null}
               {children}
               {resolvedActiveResource && resolvedUseApis ? (
                 <DataTable

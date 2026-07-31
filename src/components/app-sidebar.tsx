@@ -294,6 +294,25 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
   onSelectResource?: (resource: AdminResourceKey) => void
 }
 
+function canAccessNavTarget(
+  url: string | undefined,
+  matchUrls: string[] | undefined,
+  normalizedPermissions: string[],
+  accessMode: AppSidebarAccessMode
+) {
+  const candidates = [
+    ...(url ? [url] : []),
+    ...(Array.isArray(matchUrls) ? matchUrls : []),
+  ]
+  if (candidates.length === 0) {
+    return false
+  }
+  // Show a section if the user may open the section root or any linked sub-route.
+  return candidates.some((candidate) =>
+    canAccessDashboardRoute(candidate, normalizedPermissions, accessMode)
+  )
+}
+
 function filterNavByPermissions(
   navMain: SidebarNavItem[],
   normalizedPermissions: string[],
@@ -302,9 +321,12 @@ function filterNavByPermissions(
   return navMain
     .map((item) => {
       const hasChildren = Array.isArray(item.items) && item.items.length > 0
-      const directAccess = item.url
-        ? canAccessDashboardRoute(item.url, normalizedPermissions, accessMode)
-        : !hasChildren
+      const directAccess = canAccessNavTarget(
+        item.url,
+        item.matchUrls,
+        normalizedPermissions,
+        accessMode
+      )
 
       if (!hasChildren) {
         return directAccess ? item : null
@@ -315,7 +337,8 @@ function filterNavByPermissions(
         normalizedPermissions,
         accessMode
       )
-      if (!directAccess && filteredItems.length === 0) {
+      // Never show a section with zero visible children (no empty menus).
+      if (filteredItems.length === 0) {
         return null
       }
       return {

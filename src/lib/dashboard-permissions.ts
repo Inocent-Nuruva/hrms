@@ -55,6 +55,27 @@ const ADMIN_BYPASS_LABELS = new Set([
   "root:*",
 ])
 
+/**
+ * Company-wide overview (HR analytics on `/dashboard`).
+ * Driven only by permission labels from the API — not role name hardcoding.
+ * Aligns with other company-level routes that already use `view_company_data`.
+ */
+export const COMPANY_DASHBOARD_PERMISSION: PermissionRequirement = {
+  permissions: [
+    "view_company_data",
+    "view_company_dashboard",
+    "company_dashboard:read",
+    "company_dashboard.view",
+    "dashboard:read",
+    "dashboard.view",
+    "analytics:read",
+    "analytics.view",
+    "hr_dashboard:read",
+    "hr_dashboard.view",
+  ],
+  mode: "any",
+}
+
 const ADMIN_DASHBOARD_LANDING_ROUTES = [
   "/dashboard/branches",
   "/dashboard/departments",
@@ -309,11 +330,14 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   },
   "/dashboard/leave-management/policies": "leave_policies:read",
   "/dashboard/leave-management/workflows": "leave_workflows:read",
+  // Company HR analytics overview — not the employee self-service home.
+  // Employee shell uses /dashboard without this gate (see canAccessDashboardRoute).
+  "/dashboard/company-overview": COMPANY_DASHBOARD_PERMISSION,
   "/dashboard/operations/promotion": null,
-  "/dashboard/operations/recruitment": "view_company_data",
+  "/dashboard/operations/recruitment": COMPANY_DASHBOARD_PERMISSION,
   "/dashboard/operations/payroll": null,
-  "/dashboard/operations/reports": "view_company_data",
-  "/dashboard/operations/scheduled-reporting": "view_company_data",
+  "/dashboard/operations/reports": COMPANY_DASHBOARD_PERMISSION,
+  "/dashboard/operations/scheduled-reporting": COMPANY_DASHBOARD_PERMISSION,
   "/dashboard/access-control": {
     permissions: [
       "attendance_devices:read",
@@ -611,15 +635,30 @@ function resolveRequiredPermissions(url: string) {
   return matchedEntry?.[1]
 }
 
+export function canViewCompanyDashboard(permissionLabels: string[]) {
+  return hasPermission(permissionLabels, COMPANY_DASHBOARD_PERMISSION)
+}
+
 export function canAccessDashboardRoute(
   url: string,
   permissionLabels: string[],
   accessMode?: DashboardAccessMode
 ) {
+  const path = url.split("?")[0] ?? url
+
   // Hard block: self-service shell never opens the HR Employees section
   // even when the JWT includes a broad employees:read claim.
   if (accessMode === "employee" && isHrEmployeesSectionRoute(url)) {
     return false
+  }
+
+  // Company overview analytics is never open to the employee self-service shell,
+  // and in the admin shell requires the company-dashboard permission set.
+  if (path === "/dashboard/company-overview") {
+    if (accessMode === "employee") {
+      return false
+    }
+    return canViewCompanyDashboard(permissionLabels)
   }
 
   // Admin / HR shell: allow directory (and section root) with employees:read.
@@ -673,6 +712,9 @@ export function canPerformPermission(
 }
 
 export function hasAdminDashboardAccess(permissionLabels: string[]) {
+  if (canViewCompanyDashboard(permissionLabels)) {
+    return true
+  }
   return ADMIN_DASHBOARD_LANDING_ROUTES.some((route) =>
     canAccessDashboardRoute(route, permissionLabels)
   )
@@ -698,8 +740,10 @@ function resolveDashboardActorIdentity(...sources: unknown[]): DashboardActorIde
   // Prefer admin when the token has HR/admin route permissions, even if roles
   // still include a generic "EMPLOYEE" label (common for company memberships).
   // Pure self-service tokens keep employee mode: employees:read alone is not enough.
+  // Admin shell requires either an admin identity signal or at least one elevated
+  // permission — never accessMode=admin from empty/weak claims alone.
   const accessMode: DashboardAccessMode =
-    hasExplicitAdminIdentity || hasPermissionBasedAdminAccess
+    hasPermissionBasedAdminAccess || hasExplicitAdminIdentity
       ? "admin"
       : "employee"
 
@@ -892,24 +936,18 @@ export function readDashboardActorSnapshotFromBrowser(): DashboardActorSnapshot 
       const permissionLabels = normalizePermissionLabels(
         Array.isArray(parsed) ? parsed.filter((entry) => typeof entry === "string") : []
       )
-      const rawAccessMode = window.sessionStorage.getItem(DASHBOARD_ACCESS_MODE_STORAGE_KEY)
       const derivedSnapshot = buildDashboardActorSnapshotFromSources(
         permissionLabels,
         ...readDashboardActorBrowserSources()
       )
-      // Prefer live derivation over a stale session accessMode so an old
-      // "employee" snapshot cannot keep blocking HR Employees after permissions load.
-      const accessMode: DashboardAccessMode =
-        derivedSnapshot.accessMode === "admin"
-          ? "admin"
-          : rawAccessMode === "admin" || rawAccessMode === "employee"
-            ? rawAccessMode
-            : derivedSnapshot.accessMode
+      // Always prefer live derivation. A stale session "admin" must not keep
+      // showing the company dashboard after company-dashboard permission is removed.
+      const accessMode = derivedSnapshot.accessMode
       return {
         permissionLabels:
           permissionLabels.length > 0 ? permissionLabels : derivedSnapshot.permissionLabels,
         accessMode,
-        isAdmin: accessMode === "admin" ? true : derivedSnapshot.isAdmin,
+        isAdmin: accessMode === "admin",
         ready: true,
         version: Date.now(),
       }

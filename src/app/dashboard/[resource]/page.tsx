@@ -1,8 +1,6 @@
 import { redirect } from "next/navigation"
 
-import { DashboardSectionTabs } from "@/components/dashboard/dashboard-section-tabs"
 import type { AdminResourceKey } from "@/lib/admin-api"
-import { accessControlSectionTabGroups } from "@/lib/dashboard-sections"
 
 const ALLOWED_RESOURCES: AdminResourceKey[] = [
   "users",
@@ -27,9 +25,7 @@ export default async function DashboardResourcePage({
     redirect("/dashboard/users")
   }
 
-  if (normalized === "roles" || normalized === "permissions") {
-    return <DashboardSectionTabs groups={accessControlSectionTabGroups} />
-  }
-
+  // Roles/permissions tables render in AdminDashboardView (DataTable).
+  // Access Control tabs also live in that shell so they do not remount here.
   return null
 }

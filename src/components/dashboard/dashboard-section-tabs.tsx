@@ -34,10 +34,8 @@ export function DashboardSectionTabs({
     "sticky top-0 z-40 -mx-3 min-w-0 border-b border-border/80 bg-card px-3 py-1.5 sm:-mx-4 sm:px-4 md:-mx-4 md:px-4"
 
   const filteredGroups = React.useMemo(() => {
-    if (!actor.ready) {
-      return []
-    }
-
+    // Filter immediately from stored actor state (hook hydrates sync). Do not
+    // return [] while ready flips — that remounts/refreshes the whole tab rail.
     return groups
       .map((group) => ({
         ...group,
@@ -46,12 +44,12 @@ export function DashboardSectionTabs({
         ),
       }))
       .filter((group) => group.items.length > 0)
-  }, [actor.accessMode, actor.permissionLabels, actor.ready, groups])
+  }, [actor.accessMode, actor.permissionLabels, groups])
 
   const hasGroupedTabs =
     filteredGroups.length > 1 && filteredGroups.every((group) => Boolean(group.title))
 
-  if (!actor.ready || filteredGroups.length === 0) {
+  if (filteredGroups.length === 0) {
     return null
   }
 
