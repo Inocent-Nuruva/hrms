@@ -2,21 +2,27 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import {
   CheckCircle2,
   Copy,
   ImageIcon,
   KeyRound,
+  LogOut,
   Loader2,
   MailCheck,
+  RefreshCw,
   ShieldCheck,
   ShieldOff,
   Smartphone,
+  Trash2,
 } from "lucide-react"
 import { toast } from "sonner"
+import { clearStoredSession, readStoredSessionTokens } from "@/lib/session-client"
 import { showSuccessAlert } from "@/lib/success-alert"
 import { authService } from "@/services/authService"
-import type { TwoFactorSetupResponse } from "@/types"
+import type { AuthSessionRecord, TwoFactorSetupResponse } from "@/types"
+import { AUTH_STORAGE_KEYS, ROUTES } from "@/utils/constants"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -65,49 +71,52 @@ function normalizeTotpCode(value: string) {
   return value.replace(/\D/g, "").slice(0, 6)
 }
 
-/**
- * Read `?tab=` without useSearchParams — avoids Next.js static prerender bailout
- * ("useSearchParams() should be wrapped in a suspense boundary").
- */
-function useSettingsTabFromLocation(): string | null {
-  const [tabQuery, setTabQuery] = React.useState<string | null>(null)
+function formatSessionTimestamp(value?: string) {
+  if (!value?.trim()) {
+    return null
+  }
 
-  React.useEffect(() => {
-    const readTab = () => {
-      try {
-        setTabQuery(new URLSearchParams(window.location.search).get("tab"))
-      } catch {
-        setTabQuery(null)
-      }
-    }
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) {
+    return value
+  }
 
-    readTab()
-
-    window.addEventListener("popstate", readTab)
-
-    // App Router client navigations update history without popstate.
-    const { pushState, replaceState } = window.history
-    const patch =
-      (original: typeof pushState) =>
-      (...args: Parameters<typeof pushState>) => {
-        const result = original.apply(window.history, args)
-        readTab()
-        return result
-      }
-    window.history.pushState = patch(pushState)
-    window.history.replaceState = patch(replaceState)
-
-    return () => {
-      window.removeEventListener("popstate", readTab)
-      window.history.pushState = pushState
-      window.history.replaceState = replaceState
-    }
-  }, [])
-
-  return tabQuery
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(parsed)
 }
 
-export function AccountSettingsPanel({
+function resolveFreshAccessToken(fallbackToken: string) {
+  if (typeof window === "undefined") {
+    return fallbackToken.trim()
+  }
+  const stored = readStoredSessionTokens().accessToken.trim()
+  return stored || fallbackToken.trim()
+}
+
+function buildSettingsTabHref(pathname: string | null, searchParams: ReturnType<typeof useSearchParams>, tab: SecurityTab) {
+  const params = new URLSearchParams(searchParams?.toString() ?? "")
+  params.set("tab", tab)
+  const query = params.toString()
+  const safePathname = pathname?.trim() || "/dashboard"
+  return query ? `${safePathname}?${query}` : safePathname
+}
+
+function AccountSettingsPanelLoadingFallback() {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Security & Authentication</CardTitle>
+      </CardHeader>
+      <CardContent className="text-sm text-muted-foreground">
+        Loading security settings...
+      </CardContent>
+    </Card>
+  )
+}
+
+function AccountSettingsPanelContent({
   token,
   loading,
   onChangeMyPassword,
@@ -115,8 +124,10 @@ export function AccountSettingsPanel({
   displayName,
   profilePictureHref,
 }: AccountSettingsPanelProps) {
-  const tabQuery = useSettingsTabFromLocation()
-  const [activeTab, setActiveTab] = React.useState<SecurityTab>("reset-password")
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const activeTab = securityTabFromQuery(searchParams?.get("tab") ?? null)
   const [currentPassword, setCurrentPassword] = React.useState("")
   const [newPassword, setNewPassword] = React.useState("")
 
@@ -127,18 +138,37 @@ export function AccountSettingsPanel({
   const [setupData, setSetupData] = React.useState<TwoFactorSetupResponse | null>(null)
   const [verifyCode, setVerifyCode] = React.useState("")
   const [disableCode, setDisableCode] = React.useState("")
+  const [accountEmail, setAccountEmail] = React.useState("")
+  const [emailBusy, setEmailBusy] = React.useState(false)
+  const [sessions, setSessions] = React.useState<AuthSessionRecord[]>([])
+  const [sessionsLoading, setSessionsLoading] = React.useState(false)
+  const [sessionActionId, setSessionActionId] = React.useState<string | null>(null)
+  const [sessionMessage, setSessionMessage] = React.useState<string | null>(null)
+  const [sessionError, setSessionError] = React.useState<string | null>(null)
+  const [logoutAllBusy, setLogoutAllBusy] = React.useState(false)
 
-  React.useEffect(() => {
-    setActiveTab(securityTabFromQuery(tabQuery))
-  }, [tabQuery])
+  const handleTabChange = React.useCallback(
+    (tab: SecurityTab) => {
+      const nextHref = buildSettingsTabHref(pathname, searchParams, tab)
+      router.replace(nextHref, { scroll: false })
+    },
+    [pathname, router, searchParams]
+  )
 
   const refreshSecurityFlags = React.useCallback(async () => {
-    if (!token) return
+    const accessToken = resolveFreshAccessToken(token)
+    if (!accessToken) return
     setSecurityLoading(true)
     try {
-      const flags = await authService.getSecurityFlags(token)
+      const [flags, currentUser] = await Promise.all([
+        authService.getSecurityFlags(accessToken),
+        authService.getCurrentUser(accessToken).catch(() => null),
+      ])
       setTwoFactorEnabled(flags.isTwoFactorEnabled)
       setEmailVerified(flags.isEmailVerified)
+      if (currentUser?.email) {
+        setAccountEmail(currentUser.email)
+      }
     } catch {
       // Keep last known state if status fetch fails.
     } finally {
@@ -149,6 +179,50 @@ export function AccountSettingsPanel({
   React.useEffect(() => {
     void refreshSecurityFlags()
   }, [refreshSecurityFlags])
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") {
+      return
+    }
+
+    try {
+      const raw = window.localStorage.getItem(AUTH_STORAGE_KEYS.user)
+      if (!raw) {
+        return
+      }
+      const parsed = JSON.parse(raw) as { email?: unknown }
+      if (typeof parsed.email === "string" && parsed.email.trim()) {
+        setAccountEmail(parsed.email.trim())
+      }
+    } catch {
+      // Ignore malformed local session cache and fall back to API refresh.
+    }
+  }, [])
+
+  const loadSessions = React.useCallback(async () => {
+    const accessToken = resolveFreshAccessToken(token)
+    if (!accessToken) return
+    setSessionsLoading(true)
+    setSessionError(null)
+    setSessionMessage(null)
+    try {
+      const nextSessions = await authService.listSessions(accessToken)
+      setSessions(nextSessions)
+    } catch (errorObject) {
+      setSessions([])
+      setSessionError(
+        errorObject instanceof Error ? errorObject.message : "Could not load active sessions."
+      )
+    } finally {
+      setSessionsLoading(false)
+    }
+  }, [token])
+
+  React.useEffect(() => {
+    if (activeTab === "devices") {
+      void loadSessions()
+    }
+  }, [activeTab, loadSessions])
 
   const tabIndex =
     activeTab === "reset-password"
@@ -170,7 +244,8 @@ export function AccountSettingsPanel({
   const qrImageSrc = resolveQrImageSrc(setupData?.qrCode)
 
   const handleChangePassword = async () => {
-    if (!token) {
+    const accessToken = resolveFreshAccessToken(token)
+    if (!accessToken) {
       toast.error("Your session expired. Please sign in again.")
       return
     }
@@ -191,13 +266,14 @@ export function AccountSettingsPanel({
   }
 
   const handleStartTwoFactorSetup = async () => {
-    if (!token) {
+    const accessToken = resolveFreshAccessToken(token)
+    if (!accessToken) {
       toast.error("Your session expired. Please sign in again.")
       return
     }
     setTwoFactorBusy(true)
     try {
-      const setup = await authService.setupTwoFactor(token)
+      const setup = await authService.setupTwoFactor(accessToken)
       setSetupData(setup)
       setVerifyCode("")
       toast.message("Scan the QR code with your authenticator app, then enter the 6-digit code.")
@@ -210,7 +286,8 @@ export function AccountSettingsPanel({
   }
 
   const handleVerifyTwoFactor = async () => {
-    if (!token) {
+    const accessToken = resolveFreshAccessToken(token)
+    if (!accessToken) {
       toast.error("Your session expired. Please sign in again.")
       return
     }
@@ -221,7 +298,7 @@ export function AccountSettingsPanel({
     }
     setTwoFactorBusy(true)
     try {
-      await authService.verifyTwoFactor(token, code)
+      await authService.verifyTwoFactor(accessToken, code)
       setSetupData(null)
       setVerifyCode("")
       setTwoFactorEnabled(true)
@@ -236,7 +313,8 @@ export function AccountSettingsPanel({
   }
 
   const handleDisableTwoFactor = async () => {
-    if (!token) {
+    const accessToken = resolveFreshAccessToken(token)
+    if (!accessToken) {
       toast.error("Your session expired. Please sign in again.")
       return
     }
@@ -247,7 +325,7 @@ export function AccountSettingsPanel({
     }
     setTwoFactorBusy(true)
     try {
-      await authService.disableTwoFactor(token, code)
+      await authService.disableTwoFactor(accessToken, code)
       setDisableCode("")
       setSetupData(null)
       setTwoFactorEnabled(false)
@@ -274,6 +352,73 @@ export function AccountSettingsPanel({
   const handleCancelSetup = () => {
     setSetupData(null)
     setVerifyCode("")
+  }
+
+  const handleResendVerification = async () => {
+    if (!accountEmail.trim()) {
+      toast.error("We could not determine which email address to verify.")
+      return
+    }
+    setEmailBusy(true)
+    try {
+      await authService.resendVerification(accountEmail)
+      showSuccessAlert(`Verification link sent to ${accountEmail}.`)
+    } catch (errorObject) {
+      const message =
+        errorObject instanceof Error ? errorObject.message : "Could not resend verification email."
+      toast.error(message)
+    } finally {
+      setEmailBusy(false)
+    }
+  }
+
+  const handleRevokeSession = async (sessionId: string, isCurrent: boolean) => {
+    const accessToken = resolveFreshAccessToken(token)
+    if (!accessToken) {
+      toast.error("Your session expired. Please sign in again.")
+      return
+    }
+    setSessionActionId(sessionId)
+    setSessionError(null)
+    setSessionMessage(null)
+    try {
+      await authService.revokeSession(accessToken, sessionId)
+      if (isCurrent) {
+        clearStoredSession()
+        window.location.assign(ROUTES.login)
+        return
+      }
+      setSessionMessage("Session revoked.")
+      await loadSessions()
+    } catch (errorObject) {
+      const message = errorObject instanceof Error ? errorObject.message : "Could not revoke session."
+      setSessionError(message)
+      toast.error(message)
+    } finally {
+      setSessionActionId(null)
+    }
+  }
+
+  const handleLogoutAllSessions = async () => {
+    const accessToken = resolveFreshAccessToken(token)
+    if (!accessToken) {
+      toast.error("Your session expired. Please sign in again.")
+      return
+    }
+    setLogoutAllBusy(true)
+    setSessionError(null)
+    setSessionMessage(null)
+    try {
+      await authService.logoutAll(accessToken)
+      clearStoredSession()
+      window.location.assign(ROUTES.login)
+    } catch (errorObject) {
+      const message = errorObject instanceof Error ? errorObject.message : "Could not sign out all sessions."
+      setSessionError(message)
+      toast.error(message)
+    } finally {
+      setLogoutAllBusy(false)
+    }
   }
 
   return (
@@ -347,7 +492,7 @@ export function AccountSettingsPanel({
               type="button"
               variant="ghost"
               className="relative z-10 justify-center gap-2 px-2 text-xs sm:text-sm"
-              onClick={() => setActiveTab("reset-password")}
+              onClick={() => handleTabChange("reset-password")}
             >
               <KeyRound
                 className={`size-4 transition-all duration-300 ${
@@ -362,7 +507,7 @@ export function AccountSettingsPanel({
               type="button"
               variant="ghost"
               className="relative z-10 justify-center gap-2 px-2 text-xs sm:text-sm"
-              onClick={() => setActiveTab("two-factor")}
+              onClick={() => handleTabChange("two-factor")}
             >
               <ShieldCheck
                 className={`size-4 transition-all duration-300 ${
@@ -377,7 +522,7 @@ export function AccountSettingsPanel({
               type="button"
               variant="ghost"
               className="relative z-10 justify-center gap-2 px-2 text-xs sm:text-sm"
-              onClick={() => setActiveTab("devices")}
+              onClick={() => handleTabChange("devices")}
             >
               <Smartphone
                 className={`size-4 transition-all duration-300 ${
@@ -392,7 +537,7 @@ export function AccountSettingsPanel({
               type="button"
               variant="ghost"
               className="relative z-10 justify-center gap-2 px-2 text-xs sm:text-sm"
-              onClick={() => setActiveTab("email")}
+              onClick={() => handleTabChange("email")}
             >
               <MailCheck
                 className={`size-4 transition-all duration-300 ${
@@ -606,7 +751,113 @@ export function AccountSettingsPanel({
               </div>
 
               <div className="w-full shrink-0 p-4">
-                <p className="text-sm text-muted-foreground">Connected device management will appear here.</p>
+                <div className="space-y-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium text-foreground">Active sessions</p>
+                      <p className="text-xs text-muted-foreground">
+                        Review the devices and browsers currently signed in to your account.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => void loadSessions()}
+                        disabled={sessionsLoading || !token}
+                      >
+                        {sessionsLoading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+                        Refresh
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        onClick={handleLogoutAllSessions}
+                        disabled={logoutAllBusy || !token}
+                      >
+                        {logoutAllBusy ? <Loader2 className="size-4 animate-spin" /> : <LogOut className="size-4" />}
+                        Sign out all
+                      </Button>
+                    </div>
+                  </div>
+
+                  {sessionMessage ? (
+                    <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300">
+                      {sessionMessage}
+                    </div>
+                  ) : null}
+                  {sessionError ? (
+                    <div className="rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-xs text-rose-700 dark:text-rose-300">
+                      {sessionError}
+                    </div>
+                  ) : null}
+
+                  {sessionsLoading ? (
+                    <div className="flex items-center gap-2 rounded-lg border bg-muted/20 px-3 py-4 text-sm text-muted-foreground">
+                      <Loader2 className="size-4 animate-spin" />
+                      Loading active sessions...
+                    </div>
+                  ) : sessions.length === 0 ? (
+                    <div className="rounded-lg border border-dashed px-3 py-4 text-sm text-muted-foreground">
+                      No active sessions were returned for this account.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {sessions.map((session) => {
+                        const createdAt = formatSessionTimestamp(session.createdAt)
+                        const lastUsedAt = formatSessionTimestamp(session.lastUsedAt)
+                        const expiresAt = formatSessionTimestamp(session.expiresAt)
+                        const isActing = sessionActionId === session.id
+                        return (
+                          <div
+                            key={session.id}
+                            className="rounded-lg border bg-background px-3 py-3 shadow-sm"
+                          >
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                              <div className="space-y-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <p className="text-sm font-medium text-foreground">{session.label}</p>
+                                  {session.isCurrent ? (
+                                    <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
+                                      Current
+                                    </span>
+                                  ) : null}
+                                </div>
+                                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                                  {session.deviceName ? <span>Device: {session.deviceName}</span> : null}
+                                  {session.browser ? <span>Browser: {session.browser}</span> : null}
+                                  {session.os ? <span>OS: {session.os}</span> : null}
+                                  {session.ipAddress ? <span>IP: {session.ipAddress}</span> : null}
+                                  {session.location ? <span>Location: {session.location}</span> : null}
+                                </div>
+                                <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+                                  {createdAt ? <span>Created: {createdAt}</span> : null}
+                                  {lastUsedAt ? <span>Last used: {lastUsedAt}</span> : null}
+                                  {expiresAt ? <span>Expires: {expiresAt}</span> : null}
+                                </div>
+                              </div>
+                              <Button
+                                type="button"
+                                variant={session.isCurrent ? "destructive" : "outline"}
+                                onClick={() => void handleRevokeSession(session.id, session.isCurrent)}
+                                disabled={isActing || logoutAllBusy}
+                              >
+                                {isActing ? (
+                                  <Loader2 className="size-4 animate-spin" />
+                                ) : session.isCurrent ? (
+                                  <LogOut className="size-4" />
+                                ) : (
+                                  <Trash2 className="size-4" />
+                                )}
+                                {session.isCurrent ? "Sign out this device" : "Revoke session"}
+                              </Button>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="w-full shrink-0 p-4">
@@ -634,6 +885,38 @@ export function AccountSettingsPanel({
                       </p>
                     </div>
                   </div>
+                  <div className="rounded-lg border bg-muted/20 px-3 py-3 text-xs text-muted-foreground">
+                    {accountEmail
+                      ? `Verification email address: ${accountEmail}`
+                      : "We will use the email address attached to your account for verification and recovery."}
+                  </div>
+                  {!emailVerified ? (
+                    <div className="space-y-3">
+                      <p className="text-sm text-muted-foreground">
+                        Request a fresh verification link if you still have not confirmed your email.
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          onClick={handleResendVerification}
+                          disabled={emailBusy || !accountEmail}
+                        >
+                          {emailBusy ? <Loader2 className="size-4 animate-spin" /> : <MailCheck className="size-4" />}
+                          Resend verification
+                        </Button>
+                        <Link
+                          href={ROUTES.verifyEmail}
+                          className="inline-flex h-10 items-center justify-center rounded-md border border-input bg-background px-4 text-sm font-medium text-foreground shadow-xs transition-colors hover:bg-accent hover:text-accent-foreground"
+                        >
+                          Open verification page
+                        </Link>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-3 text-xs text-emerald-700 dark:text-emerald-300">
+                      Email verification is complete. Recovery and security notifications can be sent to this address.
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -641,5 +924,13 @@ export function AccountSettingsPanel({
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+export function AccountSettingsPanel(props: AccountSettingsPanelProps) {
+  return (
+    <React.Suspense fallback={<AccountSettingsPanelLoadingFallback />}>
+      <AccountSettingsPanelContent {...props} />
+    </React.Suspense>
   )
 }

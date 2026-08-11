@@ -4389,6 +4389,33 @@ export async function deleteDepartment(token: string, id: string | number) {
   })
 }
 
+export async function listDepartmentAccess(token: string, id: string | number) {
+  const payload = await adminRequest<unknown>(`/api/departments/${id}/access`, { token })
+  return normalizeList(payload)
+}
+
+export async function grantDepartmentAccess(
+  token: string,
+  departmentId: string | number,
+  userId: string | number
+) {
+  return adminRequest<unknown>(`/api/departments/${departmentId}/access/${userId}`, {
+    method: "POST",
+    token,
+  })
+}
+
+export async function revokeDepartmentAccess(
+  token: string,
+  departmentId: string | number,
+  userId: string | number
+) {
+  return adminRequest<unknown>(`/api/departments/${departmentId}/access/${userId}`, {
+    method: "DELETE",
+    token,
+  })
+}
+
 export async function createBranch(token: string, data: AdminRecord) {
   return adminRequest<unknown>("/api/branches", {
     method: "POST",
@@ -5427,6 +5454,44 @@ export async function getAdminCompany(token: string) {
   const payload = await adminRequest<unknown>("/api/companies/my", { token })
   const companies = normalizeList(payload)
   return companies[0] ?? normalizeSingle(payload)
+}
+
+export async function getCompanyById(token: string, id: string | number) {
+  const payload = await adminRequest<unknown>(`/api/companies/${id}`, { token })
+  return normalizeSingle(payload)
+}
+
+export async function updateCompanyById(
+  token: string,
+  id: string | number,
+  data: AdminRecord
+) {
+  return adminRequest<unknown>(`/api/companies/${id}`, {
+    method: "PATCH",
+    token,
+    body: data,
+  })
+}
+
+export async function activateCompany(token: string, id: string | number) {
+  return adminRequest<unknown>(`/api/companies/${id}/activate`, {
+    method: "POST",
+    token,
+  })
+}
+
+export async function suspendCompany(token: string, id: string | number) {
+  return adminRequest<unknown>(`/api/companies/${id}/suspend`, {
+    method: "POST",
+    token,
+  })
+}
+
+export async function getCurrentCompanyOnboardingStatus(token: string) {
+  const payload = await adminRequest<unknown>("/api/companies/current/onboarding-status", {
+    token,
+  })
+  return normalizeSingle(payload) ?? asRecord(payload)
 }
 
 export async function createResource(resource: AdminResourceKey, token: string, data: AdminRecord) {

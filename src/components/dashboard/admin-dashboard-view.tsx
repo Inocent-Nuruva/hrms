@@ -987,7 +987,7 @@ export default function AdminDashboardView({
                 <DashboardSectionTabs groups={accessControlSectionTabGroups} />
               ) : null}
               {children}
-              {resolvedActiveResource && resolvedUseApis ? (
+              {resolvedActiveResource && resolvedUseApis && resolvedActiveResource !== "companies" ? (
                 <DataTable
                   token={token}
                   activeResource={resolvedActiveResource}

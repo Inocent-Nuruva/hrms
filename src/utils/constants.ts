@@ -17,6 +17,7 @@ export const AUTH_STORAGE_KEYS = {
 
 export const ROUTES = {
   login: "/login",
+  verifyEmail: "/verify-email",
   changePassword: "/change-password",
   forgotPassword: "/forgot-password",
   resetPassword: "/reset-password",

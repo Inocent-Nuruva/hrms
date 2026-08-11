@@ -24,6 +24,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api, normalizeList } from '../lib/api';
 import { COLORS } from '../lib/config';
+import {
+  buildLeaveWorkflowSummary,
+  formatLeaveWorkflowStatus,
+  leaveWorkflowStatusTone,
+} from '../lib/leave-workflow';
 import { Button } from '../components/ui/button';
 import { SegmentedControl } from '../components/ui/segmented-control';
 import { MobileTopBar } from '../components/layout/MobileTopBar';
@@ -58,11 +63,14 @@ export function LeaveScreen({ auth, requestId }: Props) {
   const { isDark } = useThemePreference();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<LeaveTab>('requests');
+  const [selectedRequestId, setSelectedRequestId] = useState('');
+  const [requestDetailVisible, setRequestDetailVisible] = useState(false);
   const [showApplyForm, setShowApplyForm] = useState(false);
   const [selectingDateField, setSelectingDateField] = useState<DateFieldKey | null>(null);
   const [selectingLeaveType, setSelectingLeaveType] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(startOfMonth(new Date()));
   const [form, setForm] = useState({ leave_type_id: '', start_date: '', end_date: '', reason: '' });
+  const openedHighlightedRequestRef = React.useRef('');
 
   const toast = useToast();
 
@@ -129,23 +137,71 @@ export function LeaveScreen({ auth, requestId }: Props) {
   });
 
   const onRefresh = React.useCallback(async () => {
-    await Promise.all([
+    const refreshTasks: Array<Promise<unknown>> = [
       balancesQuery.refetch(),
       requestsQuery.refetch(),
       typesQuery.refetch(),
       holidaysQuery.refetch(),
       policiesQuery.refetch(),
-    ]);
-  }, [balancesQuery, holidaysQuery, policiesQuery, requestsQuery, typesQuery]);
+    ];
+    if (requestDetailVisible && selectedRequestId) {
+      refreshTasks.push(
+        queryClient.refetchQueries({ queryKey: ['mobileLeaveRequestDetail', selectedRequestId] })
+      );
+    }
+    await Promise.all(refreshTasks);
+  }, [
+    balancesQuery,
+    holidaysQuery,
+    policiesQuery,
+    queryClient,
+    requestDetailVisible,
+    requestsQuery,
+    selectedRequestId,
+    typesQuery,
+  ]);
 
   const leaveTypes = useMemo(
     () => (typesQuery.data || []).map((item) => asRecord(item)).filter((item): item is MobileRecord => Boolean(item)),
     [typesQuery.data]
   );
+  const leaveRequests = useMemo(
+    () => (requestsQuery.data || []).map((item) => asRecord(item)).filter((item): item is MobileRecord => Boolean(item)),
+    [requestsQuery.data]
+  );
   const selectedLeaveType = leaveTypes.find((item) => String(item.id ?? '') === form.leave_type_id);
   const selectedLeaveTypeLabel =
     readString(selectedLeaveType, ['name', 'display_name']) || 'Select leave type';
   const highlightedRequestId = requestId ? String(requestId) : '';
+  const selectedRequestFromList = useMemo(
+    () =>
+      leaveRequests.find((item) => {
+        const rowRequestId = readRequestId(item);
+        return rowRequestId !== '' && rowRequestId === selectedRequestId;
+      }) || null,
+    [leaveRequests, selectedRequestId]
+  );
+  const requestDetailQuery = useQuery({
+    queryKey: ['mobileLeaveRequestDetail', selectedRequestId],
+    queryFn: async () => {
+      if (!selectedRequestId) return null;
+      return asRecord(await api.getMyLeaveRequest(selectedRequestId));
+    },
+    enabled: auth.isAuthenticated && requestDetailVisible && Boolean(selectedRequestId),
+  });
+  const selectedRequest = asRecord(requestDetailQuery.data) || selectedRequestFromList;
+  const requestWorkflow = useMemo(
+    () => buildLeaveWorkflowSummary(selectedRequest),
+    [selectedRequest]
+  );
+  const selectedRequestStatus = readString(selectedRequest, ['status']) || 'pending';
+  const selectedRequestTypeLabel =
+    readString(asRecord(selectedRequest?.leave_type), ['name', 'display_name']) ||
+    readString(selectedRequest, ['leave_type_name', 'leave_type', 'type_name']) ||
+    'Leave request';
+  const selectedRequestReason =
+    readString(selectedRequest, ['reason', 'comments', 'comment', 'description', 'notes']) ||
+    'No reason provided.';
 
   const activeQuery =
     activeTab === 'requests'
@@ -177,11 +233,26 @@ export function LeaveScreen({ auth, requestId }: Props) {
     setCalendarMonth(startOfMonth(parseIsoDate(seedValue) || new Date()));
   };
 
+  const openRequestDetails = React.useCallback((request: MobileRecord | null, requestIdOverride?: string) => {
+    const resolvedRequestId = requestIdOverride || readRequestId(request);
+    if (!resolvedRequestId) return;
+    setActiveTab('requests');
+    setSelectedRequestId(resolvedRequestId);
+    setRequestDetailVisible(true);
+  }, []);
+
   React.useEffect(() => {
     if (highlightedRequestId) {
       setActiveTab('requests');
     }
   }, [highlightedRequestId]);
+
+  React.useEffect(() => {
+    if (!highlightedRequestId) return;
+    if (openedHighlightedRequestRef.current === highlightedRequestId) return;
+    openedHighlightedRequestRef.current = highlightedRequestId;
+    openRequestDetails(null, highlightedRequestId);
+  }, [highlightedRequestId, openRequestDetails]);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor }} edges={[]}>
@@ -223,24 +294,25 @@ export function LeaveScreen({ auth, requestId }: Props) {
           {activeTab === 'requests' ? (
             <>
               <SectionHeader title="My requests" icon={<FileText size={18} color={mutedColor} />} textColor={textColor} />
-              {requestsQuery.data?.length ? (
-                requestsQuery.data.map((request, index: number) => {
-                  const item = asRecord(request);
+              {leaveRequests.length ? (
+                leaveRequests.map((item, index: number) => {
                   const leaveType = asRecord(item?.leave_type);
-                  const rowRequestId = String(item?.id ?? '');
+                  const rowRequestId = readRequestId(item);
                   const isHighlighted = highlightedRequestId === rowRequestId;
                   return (
-                    <View
-                      key={index}
+                    <TouchableScale
+                      key={rowRequestId || index}
+                      onPress={() => openRequestDetails(item, rowRequestId)}
                       style={[
                         styles.listRow,
-                        isHighlighted
-                          ? {
-                              paddingHorizontal: 4,
-                            }
-                          : null,
+                        {
+                          borderColor: isHighlighted ? COLORS.primary : 'transparent',
+                          borderWidth: isHighlighted ? 1.5 : 0,
+                        },
+                        isHighlighted ? { paddingHorizontal: 14 } : null,
                         index !== 0 && !isHighlighted ? [styles.withTopBorder, { borderTopColor: outlineColor }] : null,
                       ]}
+                      pressedScale={0.985}
                     >
                       <View style={{ flex: 1, paddingRight: 12 }}>
                         <Text style={[styles.primaryText, { color: textColor }]}>
@@ -251,7 +323,7 @@ export function LeaveScreen({ auth, requestId }: Props) {
                         </Text>
                       </View>
                       <StatusPill label={readString(item, ['status']) || 'pending'} tone={statusTone(readString(item, ['status']))} />
-                    </View>
+                    </TouchableScale>
                   );
                 })
               ) : (
@@ -498,6 +570,183 @@ export function LeaveScreen({ auth, requestId }: Props) {
           </View>
         </View>
       </Modal>
+
+      <Modal visible={requestDetailVisible} animationType="slide" transparent onRequestClose={() => setRequestDetailVisible(false)}>
+        <View style={[styles.modalOverlay, { backgroundColor: overlayColor }]}>
+          <View
+            style={{
+              backgroundColor: isDark ? COLORS.surfaceDark : COLORS.surface,
+              padding: 20,
+              borderRadius: 16,
+              maxHeight: '88%',
+            }}
+          >
+            <View style={styles.modalHeader}>
+              <View style={{ flex: 1, paddingRight: 12 }}>
+                <Text style={[styles.sectionTitle, { color: textColor }]}>Leave request progress</Text>
+                <Text style={[styles.secondaryText, { color: mutedColor }]}>
+                  {selectedRequestId ? `Request #${selectedRequestId}` : 'Leave request'}
+                </Text>
+              </View>
+              <TouchableScale
+                onPress={() => setRequestDetailVisible(false)}
+                style={[styles.closeButton, { backgroundColor: subtleBlock }]}
+                pressedScale={0.95}
+              >
+                <X size={16} color={textColor} />
+              </TouchableScale>
+            </View>
+
+            {requestDetailQuery.isFetching && !selectedRequest ? (
+              <View style={styles.loadingState}>
+                <LoadingIndicator type="dot-circle" size="md" />
+              </View>
+            ) : null}
+
+            {selectedRequest ? (
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.detailContent}>
+                <View
+                  style={[
+                    styles.detailHero,
+                    {
+                      backgroundColor: isDark ? COLORS.surfaceVariantDark : '#eef2ff',
+                      borderColor: outlineColor,
+                    },
+                  ]}
+                >
+                  <View style={{ flex: 1, paddingRight: 12 }}>
+                    <Text style={[styles.detailHeroTitle, { color: textColor }]}>{selectedRequestTypeLabel}</Text>
+                    <Text style={[styles.secondaryText, { color: mutedColor }]}>
+                      {formatDate(readString(selectedRequest, ['start_date']))} - {formatDate(readString(selectedRequest, ['end_date']))}
+                    </Text>
+                  </View>
+                  <StatusPill
+                    label={formatLeaveWorkflowStatus(selectedRequestStatus)}
+                    tone={statusTone(selectedRequestStatus)}
+                  />
+                </View>
+
+                <View style={styles.detailGrid}>
+                  <DetailCard
+                    label="Current step"
+                    value={requestWorkflow.currentLevel > 0 ? `Level ${requestWorkflow.currentLevel}` : 'Complete'}
+                    textColor={textColor}
+                    mutedColor={mutedColor}
+                    outlineColor={outlineColor}
+                  />
+                  <DetailCard
+                    label="Waiting on"
+                    value={requestWorkflow.waitingLabel}
+                    textColor={textColor}
+                    mutedColor={mutedColor}
+                    outlineColor={outlineColor}
+                  />
+                  <DetailCard
+                    label="Approved"
+                    value={`${requestWorkflow.approvedCount}/${requestWorkflow.totalCount || 0}`}
+                    textColor={textColor}
+                    mutedColor={mutedColor}
+                    outlineColor={outlineColor}
+                  />
+                  <DetailCard
+                    label="Updated"
+                    value={formatDateTime(readString(selectedRequest, ['updated_at', 'updatedAt', 'created_at', 'createdAt']))}
+                    textColor={textColor}
+                    mutedColor={mutedColor}
+                    outlineColor={outlineColor}
+                  />
+                </View>
+
+                <View
+                  style={[
+                    styles.detailSection,
+                    {
+                      borderColor: outlineColor,
+                      backgroundColor: isDark ? COLORS.surfaceDark : COLORS.surface,
+                    },
+                  ]}
+                >
+                  <Text style={[styles.detailSectionTitle, { color: textColor }]}>Reason</Text>
+                  <Text style={[styles.detailBodyText, { color: mutedColor }]}>{selectedRequestReason}</Text>
+                </View>
+
+                <View
+                  style={[
+                    styles.detailSection,
+                    {
+                      borderColor: outlineColor,
+                      backgroundColor: isDark ? COLORS.surfaceDark : COLORS.surface,
+                    },
+                  ]}
+                >
+                  <View style={styles.workflowHeader}>
+                    <Text style={[styles.detailSectionTitle, { color: textColor }]}>Approval workflow</Text>
+                    <Text style={[styles.workflowSummaryText, { color: mutedColor }]}>
+                      {requestWorkflow.progressPercent}% complete
+                    </Text>
+                  </View>
+                  <View style={[styles.progressTrack, { backgroundColor: subtleBlock }]}>
+                    <View
+                      style={[
+                        styles.progressFill,
+                        { width: `${requestWorkflow.totalCount > 0 ? Math.max(8, requestWorkflow.progressPercent) : 0}%` },
+                      ]}
+                    />
+                  </View>
+                  {requestWorkflow.approvals.length ? (
+                    requestWorkflow.approvals.map((approval, index) => (
+                      <View
+                        key={`${approval.level}-${approval.companyUserId ?? approval.id ?? index}`}
+                        style={[
+                          styles.workflowStep,
+                          index !== 0 ? [styles.withTopBorder, { borderTopColor: outlineColor }] : null,
+                        ]}
+                      >
+                        <View style={{ flex: 1, paddingRight: 12 }}>
+                          <Text style={[styles.primaryText, { color: textColor }]}>
+                            {approval.name || 'Approver'}
+                          </Text>
+                          <Text style={[styles.secondaryText, { color: mutedColor }]}>
+                            Level {approval.level} • {approval.roleLabel || 'Approver'}
+                          </Text>
+                          {approval.actedAt ? (
+                            <Text style={[styles.workflowMetaText, { color: mutedColor }]}>
+                              {formatDateTime(approval.actedAt)}
+                            </Text>
+                          ) : null}
+                          {approval.comments ? (
+                            <Text style={[styles.workflowMetaText, { color: mutedColor }]}>
+                              {approval.comments}
+                            </Text>
+                          ) : null}
+                        </View>
+                        <StatusPill
+                          label={formatLeaveWorkflowStatus(approval.status)}
+                          tone={workflowToneToStatusPill(approval.status)}
+                        />
+                      </View>
+                    ))
+                  ) : (
+                    <Text style={[styles.detailBodyText, { color: mutedColor }]}>
+                      Approval steps will appear here as the workflow data becomes available.
+                    </Text>
+                  )}
+                </View>
+
+                {requestDetailQuery.error instanceof Error ? (
+                  <Text style={[styles.detailErrorText, { color: '#dc2626' }]}>
+                    {requestDetailQuery.error.message}
+                  </Text>
+                ) : null}
+              </ScrollView>
+            ) : (
+              <Text style={[styles.emptyText, { color: mutedColor }]}>
+                We could not find that leave request right now.
+              </Text>
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -591,8 +840,42 @@ function NativeTextArea({
   );
 }
 
+function DetailCard({
+  label,
+  value,
+  textColor,
+  mutedColor,
+  outlineColor,
+}: {
+  label: string;
+  value: string;
+  textColor: string;
+  mutedColor: string;
+  outlineColor: string;
+}) {
+  return (
+    <View style={[styles.detailCard, { borderColor: outlineColor }]}>
+      <Text style={[styles.detailCardLabel, { color: mutedColor }]}>{label}</Text>
+      <Text style={[styles.detailCardValue, { color: textColor }]}>{value}</Text>
+    </View>
+  );
+}
+
 function asRecord(value: unknown): MobileRecord | null {
   return value && typeof value === 'object' ? (value as MobileRecord) : null;
+}
+
+function readRequestId(value: unknown) {
+  const record = asRecord(value);
+  if (!record) return '';
+
+  for (const key of ['id', 'request_id', 'requestId', 'leave_request_id', 'leaveRequestId']) {
+    const candidate = record[key];
+    if (typeof candidate === 'number' && Number.isFinite(candidate)) return String(candidate);
+    if (typeof candidate === 'string' && candidate.trim()) return candidate.trim();
+  }
+
+  return '';
 }
 
 function readString(value: unknown, keys: string[]) {
@@ -629,11 +912,34 @@ function formatDate(value?: string) {
   }
 }
 
+function formatDateTime(value?: string) {
+  if (!value) return '—';
+  try {
+    return new Date(value).toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  } catch {
+    return String(value);
+  }
+}
+
 function statusTone(status?: string): 'neutral' | 'success' | 'warning' | 'danger' {
   const value = String(status || '').toLowerCase();
   if (value.includes('approve')) return 'success';
   if (value.includes('reject') || value.includes('cancel')) return 'danger';
   return 'warning';
+}
+
+function workflowToneToStatusPill(status?: string): 'neutral' | 'success' | 'warning' | 'danger' {
+  const tone = leaveWorkflowStatusTone(String(status || ''));
+  if (tone === 'good') return 'success';
+  if (tone === 'bad') return 'danger';
+  if (tone === 'warn') return 'warning';
+  return 'neutral';
 }
 
 function parseIsoDate(value: string) {
@@ -695,6 +1001,63 @@ const styles = StyleSheet.create({
     paddingVertical: 24,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  detailContent: {
+    gap: 14,
+    paddingBottom: 4,
+  },
+  detailHero: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  detailHeroTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  detailGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  detailCard: {
+    width: '47%',
+    minWidth: 140,
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 12,
+  },
+  detailCardLabel: {
+    fontSize: 11,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 6,
+    fontWeight: '700',
+  },
+  detailCardValue: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  detailSection: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 16,
+    gap: 10,
+  },
+  detailSectionTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  detailBodyText: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  detailErrorText: {
+    fontSize: 13,
+    lineHeight: 18,
   },
   modalOverlay: {
     flex: 1,
@@ -830,6 +1193,36 @@ const styles = StyleSheet.create({
   dayLabel: {
     fontSize: 14,
     fontWeight: '600',
+  },
+  workflowHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+  },
+  workflowSummaryText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  progressTrack: {
+    height: 8,
+    borderRadius: 999,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 999,
+    backgroundColor: COLORS.primary,
+  },
+  workflowStep: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: 12,
+  },
+  workflowMetaText: {
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 4,
   },
   listRow: {
     paddingVertical: 14,

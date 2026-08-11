@@ -483,6 +483,11 @@ export const api = {
     return request<unknown>(`/api/me/leave/requests${q}`);
   },
 
+  async getMyLeaveRequest(id: string | number) {
+    const payload = await request<unknown>(`/api/me/leave/requests/${id}`);
+    return normalizeSingle(payload);
+  },
+
   async createMyLeaveRequest(data: Record<string, unknown>) {
     return request<unknown>('/api/me/leave/requests', {
       method: 'POST',

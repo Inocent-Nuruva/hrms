@@ -1,4 +1,6 @@
 import type {
+  AuthSessionRecord,
+  AuthSwitchCompanyResponse,
   ChangePasswordRequest,
   DashboardType,
   ForgotPasswordRequest,
@@ -78,9 +80,114 @@ function readBoolean(record: UnknownRecord | null, keys: string[]): boolean | un
     if (typeof value === "boolean") {
       return value;
     }
+    if (typeof value === "string") {
+      const normalized = value.trim().toLowerCase();
+      if (normalized === "true") {
+        return true;
+      }
+      if (normalized === "false") {
+        return false;
+      }
+    }
   }
 
   return undefined;
+}
+
+function readSessionId(record: UnknownRecord | null): string | undefined {
+  if (!record) {
+    return undefined;
+  }
+
+  for (const key of ["id", "session_id", "sessionId", "sid"]) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return String(value);
+    }
+  }
+
+  return undefined;
+}
+
+function normalizeAuthSessionLabel(record: UnknownRecord) {
+  const direct =
+    readString(record, [
+      "device_name",
+      "deviceName",
+      "session_name",
+      "sessionName",
+      "label",
+      "title",
+      "browser",
+      "user_agent",
+      "userAgent",
+    ]) ?? "";
+  if (direct) {
+    return direct;
+  }
+
+  const browser = readString(record, ["browser"]);
+  const os = readString(record, ["os", "platform"]);
+  if (browser && os) {
+    return `${browser} on ${os}`;
+  }
+  if (browser) {
+    return browser;
+  }
+  if (os) {
+    return os;
+  }
+
+  return "Session";
+}
+
+function normalizeAuthSessions(payload: unknown): AuthSessionRecord[] {
+  const root = asRecord(payload);
+  const rootData = asRecord(root?.data);
+  const listCandidates = [
+    payload,
+    root?.sessions,
+    root?.items,
+    root?.rows,
+    rootData?.sessions,
+    rootData?.items,
+    rootData?.rows,
+    rootData,
+  ];
+
+  const seen = new Set<string>();
+  const sessions: AuthSessionRecord[] = [];
+
+  for (const candidate of listCandidates) {
+    for (const record of asRecordArray(candidate)) {
+      const id = readSessionId(record);
+      if (!id || seen.has(id)) {
+        continue;
+      }
+      seen.add(id);
+      sessions.push({
+        id,
+        label: normalizeAuthSessionLabel(record),
+        isCurrent:
+          readBoolean(record, ["is_current", "isCurrent", "current"]) ?? false,
+        createdAt: readString(record, ["created_at", "createdAt", "issued_at", "issuedAt"]),
+        lastUsedAt: readString(record, ["last_used_at", "lastUsedAt", "updated_at", "updatedAt"]),
+        expiresAt: readString(record, ["expires_at", "expiresAt"]),
+        ipAddress: readString(record, ["ip_address", "ipAddress"]),
+        userAgent: readString(record, ["user_agent", "userAgent"]),
+        deviceName: readString(record, ["device_name", "deviceName"]),
+        browser: readString(record, ["browser"]),
+        os: readString(record, ["os", "platform"]),
+        location: readString(record, ["location"]),
+        raw: record,
+      });
+    }
+  }
+
+  return sessions;
 }
 
 function normalizeDashboardType(value: unknown): DashboardType | undefined {
@@ -365,6 +472,28 @@ function normalizeVerifyOtpResponse(payload: unknown): VerifyOtpResponse {
   return { tokens, user };
 }
 
+function normalizeSwitchCompanyResponse(payload: unknown): AuthSwitchCompanyResponse {
+  const root = asRecord(payload);
+  const rootData = asRecord(root?.data);
+  const accessToken =
+    readString(root, ["access_token", "accessToken", "token"]) ??
+    readString(rootData, ["access_token", "accessToken", "token"]);
+
+  if (!accessToken) {
+    throw new Error("Company switch response did not include a new access token.");
+  }
+
+  return {
+    accessToken,
+    companyId:
+      readNumber(root, ["company_id", "companyId"]) ??
+      readNumber(rootData, ["company_id", "companyId"]),
+    companyName:
+      readString(root, ["company_name", "companyName"]) ??
+      readString(rootData, ["company_name", "companyName"]),
+  };
+}
+
 export const authService = {
   async login(payload: LoginRequest) {
     const body = {
@@ -484,6 +613,82 @@ export const authService = {
       };
     }
     return { isTwoFactorEnabled: false, isEmailVerified: false };
+  },
+
+  async resendVerification(email: string): Promise<void> {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) {
+      throw new Error("Email is required.");
+    }
+    await apiRequest<unknown>("/api/auth/resend-verification", {
+      method: "POST",
+      body: { email: normalizedEmail },
+    });
+  },
+
+  async verifyEmail(token: string): Promise<void> {
+    const normalizedToken = token.trim();
+    if (!normalizedToken) {
+      throw new Error("Verification token is missing.");
+    }
+    const searchParams = new URLSearchParams({ token: normalizedToken });
+    await apiRequest<unknown>(`/api/auth/verify-email?${searchParams.toString()}`, {
+      method: "GET",
+    });
+  },
+
+  async logoutAll(token: string): Promise<void> {
+    const accessToken = token.trim();
+    if (!accessToken) {
+      throw new Error("Authentication required. Please sign in again.");
+    }
+    await apiRequest<unknown>("/api/auth/logout-all", {
+      method: "POST",
+      token: accessToken,
+    });
+  },
+
+  async listSessions(token: string): Promise<AuthSessionRecord[]> {
+    const accessToken = token.trim();
+    if (!accessToken) {
+      throw new Error("Authentication required. Please sign in again.");
+    }
+    const response = await apiRequest<unknown>("/api/auth/sessions", {
+      method: "GET",
+      token: accessToken,
+    });
+    return normalizeAuthSessions(response);
+  },
+
+  async revokeSession(token: string, sessionId: string): Promise<void> {
+    const accessToken = token.trim();
+    const normalizedSessionId = sessionId.trim();
+    if (!accessToken) {
+      throw new Error("Authentication required. Please sign in again.");
+    }
+    if (!normalizedSessionId) {
+      throw new Error("Session id is required.");
+    }
+    await apiRequest<unknown>(`/api/auth/sessions/${encodeURIComponent(normalizedSessionId)}`, {
+      method: "DELETE",
+      token: accessToken,
+    });
+  },
+
+  async switchCompany(token: string, companyId: number): Promise<AuthSwitchCompanyResponse> {
+    const accessToken = token.trim();
+    if (!accessToken) {
+      throw new Error("Authentication required. Please sign in again.");
+    }
+    if (!Number.isFinite(companyId) || companyId <= 0) {
+      throw new Error("A valid company id is required.");
+    }
+    const response = await apiRequest<unknown>("/api/auth/switch-company", {
+      method: "POST",
+      token: accessToken,
+      body: { company_id: companyId },
+    });
+    return normalizeSwitchCompanyResponse(response);
   },
 
   async refresh(refreshToken: string): Promise<RefreshTokenResponse> {

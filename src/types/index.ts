@@ -77,6 +77,28 @@ export interface UserSecurityFlags {
   isEmailVerified: boolean;
 }
 
+export interface AuthSessionRecord {
+  id: string;
+  label: string;
+  isCurrent: boolean;
+  createdAt?: string;
+  lastUsedAt?: string;
+  expiresAt?: string;
+  ipAddress?: string;
+  userAgent?: string;
+  deviceName?: string;
+  browser?: string;
+  os?: string;
+  location?: string;
+  raw: Record<string, unknown>;
+}
+
+export interface AuthSwitchCompanyResponse {
+  accessToken: string;
+  companyId?: number;
+  companyName?: string;
+}
+
 export interface OnboardingStep {
   id: string;
   title: string;

@@ -8,8 +8,10 @@ import {
 } from "@/lib/session-client";
 import { publishDashboardActorSnapshotFromSources } from "@/lib/dashboard-permissions";
 import type {
+  AuthSessionRecord,
   AuthTokens,
   AuthUser,
+  AuthSwitchCompanyResponse,
   LoginRequest,
   LoginResponse,
   VerifyOtpResponse,
@@ -116,6 +118,50 @@ export function useAuth() {
     clearSession();
   };
 
+  const logoutAll = async () => {
+    if (!accessToken) {
+      clearSession();
+      return;
+    }
+    await authService.logoutAll(accessToken);
+    clearSession();
+  };
+
+  const listSessions = async (): Promise<AuthSessionRecord[]> => {
+    if (!accessToken) {
+      return [];
+    }
+    return authService.listSessions(accessToken);
+  };
+
+  const revokeSession = async (sessionId: string) => {
+    if (!accessToken) {
+      throw new Error("Authentication required. Please sign in again.");
+    }
+    await authService.revokeSession(accessToken, sessionId);
+  };
+
+  const switchCompany = async (companyId: number): Promise<AuthSwitchCompanyResponse> => {
+    if (!accessToken || !storedTokens) {
+      throw new Error("Authentication required. Please sign in again.");
+    }
+    const response = await authService.switchCompany(accessToken, companyId);
+    saveSession(
+      {
+        accessToken: response.accessToken,
+        refreshToken: storedTokens.refreshToken,
+      },
+      storedUser
+        ? {
+            ...storedUser,
+            companyId: response.companyId ?? storedUser.companyId,
+            companyName: response.companyName ?? storedUser.companyName,
+          }
+        : undefined
+    );
+    return response;
+  };
+
   const state: AuthState = {
     user: storedUser,
     tokens: storedTokens,
@@ -130,6 +176,10 @@ export function useAuth() {
     completeOtpLogin,
     refreshCurrentUser,
     logout,
+    logoutAll,
+    listSessions,
+    revokeSession,
+    switchCompany,
     clearSession,
   };
 }

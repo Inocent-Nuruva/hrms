@@ -16,6 +16,7 @@ import {
   createEmployeeProfile,
   getOnboardingRequest,
   listBranches,
+  listDepartmentPositions,
   listDepartments,
   listEmployees,
   listOnboardingWorkflows,
@@ -76,6 +77,10 @@ type LookupOption = {
   departmentId: number | null
 }
 
+function asRecord(value: unknown): AdminRecord | null {
+  return typeof value === "object" && value !== null ? (value as AdminRecord) : null
+}
+
 function readStoredToken(): string {
   if (typeof window === "undefined") return ""
   const direct = window.localStorage.getItem(TOKEN_STORAGE_KEY)?.trim() ?? ""
@@ -132,6 +137,16 @@ function getName(record: AdminRecord, ...keys: string[]): string {
   return id !== null ? `Employee #${id}` : "—"
 }
 
+function readNumberish(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value
+  }
+  if (typeof value === "string" && value.trim() && !Number.isNaN(Number(value))) {
+    return Number(value)
+  }
+  return null
+}
+
 function readRelatedId(record: AdminRecord, keys: string[]) {
   for (const key of keys) {
     const direct = record[key]
@@ -149,6 +164,86 @@ function readRelatedId(record: AdminRecord, keys: string[]) {
     }
   }
   return null
+}
+
+function relatedDepartmentIds(record: AdminRecord) {
+  const ids = new Set<number>()
+
+  for (const value of [
+    record.department_id,
+    record.departmentId,
+    record.primary_department_id,
+    record.primaryDepartmentId,
+  ]) {
+    const id = readNumberish(value)
+    if (id !== null) ids.add(id)
+  }
+
+  for (const key of ["department", "departmentDetail", "primary_department", "primaryDepartment"]) {
+    const nestedId = getId(asRecord(record[key]) ?? {})
+    if (nestedId !== null) ids.add(nestedId)
+  }
+
+  const directIds = Array.isArray(record.department_ids)
+    ? record.department_ids
+    : Array.isArray(record.departmentIds)
+      ? record.departmentIds
+      : []
+  for (const value of directIds) {
+    const id = readNumberish(value)
+    if (id !== null) ids.add(id)
+  }
+
+  const assignments = Array.isArray(record.departments) ? record.departments : []
+  for (const value of assignments) {
+    const directAssignmentId = readNumberish(value)
+    if (directAssignmentId !== null && (typeof value === "number" || typeof value === "string")) {
+      ids.add(directAssignmentId)
+      continue
+    }
+    const assignment = asRecord(value)
+    if (!assignment) continue
+    const nestedDepartment =
+      asRecord(assignment.department) ?? asRecord(assignment.departmentDetail)
+    const id =
+      readNumberish(assignment.department_id) ??
+      readNumberish(assignment.departmentId) ??
+      getId(nestedDepartment ?? {}) ??
+      getId(assignment)
+    if (id !== null) ids.add(id)
+  }
+
+  return ids
+}
+
+function relatedBranchId(record: AdminRecord) {
+  return (
+    getId(asRecord(record.branch) ?? {}) ??
+    getId(asRecord(record.primary_branch) ?? {}) ??
+    getId(asRecord(record.primaryBranch) ?? {}) ??
+    readNumberish(record.branch_id) ??
+    readNumberish(record.branchId) ??
+    readNumberish(record.primary_branch_id) ??
+    readNumberish(record.primaryBranchId)
+  )
+}
+
+function normalizeDepartmentPositionRows(rows: AdminRecord[], departmentId: number) {
+  return rows.map((row) => {
+    const nestedPosition =
+      asRecord(row.position) ??
+      asRecord(row.positionDetail) ??
+      asRecord(row.primary_position) ??
+      asRecord(row.primaryPosition)
+    const position = nestedPosition ? ({ ...row, ...nestedPosition } as AdminRecord) : row
+    const existingIds = relatedDepartmentIds(position)
+    existingIds.add(departmentId)
+    return {
+      ...position,
+      department_id: position.department_id ?? departmentId,
+      department_ids: Array.from(existingIds),
+    } as AdminRecord
+  })
 }
 
 function getSelectedLabel(options: LookupOption[], id: number | null, fallback: string) {
@@ -228,10 +323,13 @@ export function EmployeeInviteView() {
   const [branches, setBranches] = React.useState<AdminRecord[]>([])
   const [departments, setDepartments] = React.useState<AdminRecord[]>([])
   const [positions, setPositions] = React.useState<AdminRecord[]>([])
+  const [departmentPositions, setDepartmentPositions] = React.useState<AdminRecord[]>([])
   const [employees, setEmployees] = React.useState<AdminRecord[]>([])
   const [workflows, setWorkflows] = React.useState<AdminRecord[]>([])
 
   const [loading, setLoading] = React.useState(false)
+  const [departmentPositionsLoading, setDepartmentPositionsLoading] = React.useState(false)
+  const [departmentPositionsLoaded, setDepartmentPositionsLoaded] = React.useState(false)
   const [submitting, setSubmitting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [token, setToken] = React.useState("")
@@ -374,46 +472,120 @@ export function EmployeeInviteView() {
 
   const positionOptions = React.useMemo(() => {
     if (departmentId === null) return []
-    const byDepartment = allPositionOptions.filter((option) => option.departmentId === departmentId)
+    if (departmentPositionsLoaded) {
+      return toLookupOptions(
+        departmentPositions,
+        ["position_name", "positionName", "name", "title"],
+        ["branch_id", "branchId", "primary_branch_id", "primaryBranchId", "branch"],
+        ["department_id", "departmentId", "primary_department_id", "primaryDepartmentId", "department"]
+      )
+    }
+    const byDepartment = positions
+      .filter((record) => relatedDepartmentIds(record).has(departmentId))
+      .map((record) => ({
+        id: getId(record),
+        label: getName(record, "position_name", "positionName", "name", "title"),
+        branchId: relatedBranchId(record),
+        departmentId,
+      }))
+      .filter((option): option is LookupOption => option.id !== null)
     if (byDepartment.length > 0) return byDepartment
-    // Positions with no department set still constrained by branch when possible.
     return allPositionOptions.filter(
       (option) =>
         option.departmentId === null &&
         (option.branchId === null || option.branchId === branchId)
     )
-  }, [allPositionOptions, branchId, departmentId])
-
-  const allEmployeeOptions = React.useMemo(
-    () =>
-      toLookupOptions(
-        employees,
-        ["fullName", "full_name", "displayName", "display_name", "name", "firstName", "first_name"],
-        ["primary_branch_id", "branch_id", "primaryBranchId", "primary_branch", "branch"],
-        [
-          "primary_department_id",
-          "department_id",
-          "primaryDepartmentId",
-          "departmentId",
-          "primary_department",
-          "department",
-        ]
-      ),
-    [employees]
-  )
+  }, [
+    allPositionOptions,
+    branchId,
+    departmentId,
+    departmentPositions,
+    departmentPositionsLoaded,
+    positions,
+  ])
 
   const employeeOptions = React.useMemo(() => {
-    if (departmentId === null) return allEmployeeOptions
-    const filtered = allEmployeeOptions.filter(
-      (option) => option.departmentId === null || option.departmentId === departmentId
-    )
-    return filtered.length > 0 ? filtered : allEmployeeOptions
-  }, [allEmployeeOptions, departmentId])
+    if (departmentId === null) return []
+    return employees
+      .filter((record) => {
+        if (!relatedDepartmentIds(record).has(departmentId)) {
+          return false
+        }
+        const employeeBranchId = relatedBranchId(record)
+        return branchId === null || employeeBranchId === null || employeeBranchId === branchId
+      })
+      .map((record) => {
+        const id = getId(record)
+        if (id === null) return null
+        return {
+          id,
+          label: getName(
+            record,
+            "fullName",
+            "full_name",
+            "displayName",
+            "display_name",
+            "name",
+            "firstName",
+            "first_name"
+          ),
+          branchId: relatedBranchId(record),
+          departmentId,
+        } satisfies LookupOption
+      })
+      .filter((option): option is LookupOption => option !== null)
+  }, [branchId, departmentId, employees])
 
   const workflowOptions = React.useMemo(
     () => toLookupOptions(workflows, ["name", "title", "workflow_name", "workflowName"], [], []),
     [workflows]
   )
+
+  React.useEffect(() => {
+    if (departmentId === null || !token) {
+      setDepartmentPositions([])
+      setDepartmentPositionsLoaded(false)
+      setDepartmentPositionsLoading(false)
+      return
+    }
+
+    let cancelled = false
+    setDepartmentPositionsLoading(true)
+    setDepartmentPositionsLoaded(false)
+
+    void listDepartmentPositions(token, departmentId)
+      .then((rows) => {
+        if (cancelled) return
+        setDepartmentPositions(normalizeDepartmentPositionRows(rows, departmentId))
+        setDepartmentPositionsLoaded(true)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setDepartmentPositions([])
+        setDepartmentPositionsLoaded(false)
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setDepartmentPositionsLoading(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [departmentId, token])
+
+  React.useEffect(() => {
+    if (positionId !== null && !positionOptions.some((option) => option.id === positionId)) {
+      setPositionId(null)
+    }
+  }, [positionId, positionOptions])
+
+  React.useEffect(() => {
+    if (reportsToId !== null && !employeeOptions.some((option) => option.id === reportsToId)) {
+      setReportsToId(null)
+    }
+  }, [employeeOptions, reportsToId])
 
   const handleBranchChange = (value: string | null) => {
     const next = value ? Number(value) : null
@@ -421,6 +593,9 @@ export function EmployeeInviteView() {
     setDepartmentId(null)
     setPositionId(null)
     setReportsToId(null)
+    setDepartmentPositions([])
+    setDepartmentPositionsLoaded(false)
+    setDepartmentPositionsLoading(false)
   }
 
   const handleDepartmentChange = (value: string | null) => {
@@ -428,6 +603,9 @@ export function EmployeeInviteView() {
     setDepartmentId(Number.isFinite(next as number) ? next : null)
     setPositionId(null)
     setReportsToId(null)
+    setDepartmentPositions([])
+    setDepartmentPositionsLoaded(false)
+    setDepartmentPositionsLoading(false)
   }
 
   const handlePositionChange = (value: string | null) => {
@@ -619,7 +797,8 @@ export function EmployeeInviteView() {
   }
 
   const departmentDisabled = branchId === null || loading
-  const positionDisabled = departmentId === null || loading
+  const positionDisabled = departmentId === null || loading || departmentPositionsLoading
+  const reportsToDisabled = departmentId === null || loading
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 pb-8">
@@ -779,11 +958,17 @@ export function EmployeeInviteView() {
                 <SelectTrigger className="w-full">
                   <SelectValue
                     placeholder={
-                      departmentId === null ? "Select department first" : "Select position"
+                      departmentId === null
+                        ? "Select department first"
+                        : departmentPositionsLoading
+                          ? "Loading positions..."
+                          : "Select position"
                     }
                   >
                     {departmentId === null
                       ? "Select department first"
+                      : departmentPositionsLoading
+                        ? "Loading positions..."
                       : getSelectedLabel(positionOptions, positionId, "Select position")}
                   </SelectValue>
                 </SelectTrigger>
@@ -792,6 +977,8 @@ export function EmployeeInviteView() {
                     <div className="px-2 py-2 text-xs text-muted-foreground">
                       {departmentId === null
                         ? "Select a department first"
+                        : departmentPositionsLoading
+                          ? "Loading positions..."
                         : "No positions for this department"}
                     </div>
                   ) : null}
@@ -808,17 +995,29 @@ export function EmployeeInviteView() {
               <Select
                 value={reportsToId != null ? String(reportsToId) : null}
                 onValueChange={(value) => setReportsToId(value ? Number(value) : null)}
-                disabled={loading}
+                disabled={reportsToDisabled}
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select manager (optional)">
-                    {getSelectedLabel(employeeOptions, reportsToId, "Select manager (optional)")}
+                  <SelectValue
+                    placeholder={
+                      departmentId === null
+                        ? "Select department first"
+                        : "Select manager (optional)"
+                    }
+                  >
+                    {departmentId === null
+                      ? "Select department first"
+                      : getSelectedLabel(employeeOptions, reportsToId, "Select manager (optional)")}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {employeeOptions.length === 0 ? (
                     <div className="px-2 py-2 text-xs text-muted-foreground">
-                      {loading ? "Loading employees…" : "No employees found"}
+                      {departmentId === null
+                        ? "Select a department first"
+                        : loading
+                          ? "Loading employees..."
+                          : "No managers found in this department"}
                     </div>
                   ) : null}
                   {employeeOptions.map((option) => (
