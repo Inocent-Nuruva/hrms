@@ -1,9 +1,10 @@
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  confirmEmployeeImport,
   downloadEmployeeImportResult,
   getEmployeeImportPreview,
   getEmployeeImportResult,
-} from "./admin-api"
+} from "./admin-api";
 
 function jsonResponse(payload: unknown, init?: ResponseInit) {
   return new Response(JSON.stringify(payload), {
@@ -12,14 +13,14 @@ function jsonResponse(payload: unknown, init?: ResponseInit) {
       "content-type": "application/json",
     },
     ...init,
-  })
+  });
 }
 
 describe("employee import admin API helpers", () => {
   afterEach(() => {
-    vi.unstubAllGlobals()
-    vi.restoreAllMocks()
-  })
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
 
   it("loads the stored preview payload for the mapped workbook batch", async () => {
     const previewPayload = {
@@ -64,12 +65,15 @@ describe("employee import admin API helpers", () => {
           effective_device_employee_number: "AICL-00068",
         },
       ],
-    }
+    };
 
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(previewPayload))
-    vi.stubGlobal("fetch", fetchMock)
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(previewPayload));
+    vi.stubGlobal("fetch", fetchMock);
 
-    const result = await getEmployeeImportPreview("token", "IMPORT-20260730-MAPPED")
+    const result = await getEmployeeImportPreview(
+      "token",
+      "IMPORT-20260730-MAPPED",
+    );
 
     expect(fetchMock).toHaveBeenCalledWith(
       "http://localhost:8888/api/employees/import/IMPORT-20260730-MAPPED/preview",
@@ -79,10 +83,10 @@ describe("employee import admin API helpers", () => {
           "Content-Type": "application/json",
           Authorization: "Bearer token",
         }),
-      })
-    )
-    expect(result).toEqual(previewPayload)
-  })
+      }),
+    );
+    expect(result).toEqual(previewPayload);
+  });
 
   it("returns a JSON import result summary for the mapped workbook batch", async () => {
     const resultPayload = {
@@ -100,21 +104,52 @@ describe("employee import admin API helpers", () => {
           status: "INVALID_RECORD",
         },
       ],
-    }
+    };
 
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(resultPayload))
-    vi.stubGlobal("fetch", fetchMock)
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(resultPayload));
+    vi.stubGlobal("fetch", fetchMock);
 
-    const result = await getEmployeeImportResult("token", "IMPORT-20260730-MAPPED")
+    const result = await getEmployeeImportResult(
+      "token",
+      "IMPORT-20260730-MAPPED",
+    );
 
     expect(result).toEqual({
       type: "json",
       payload: resultPayload,
-    })
-  })
+    });
+  });
+
+  it("passes execution_mode when confirming an employee import", async () => {
+    const confirmPayload = {
+      batchId: "IMPORT-20260812-CONFIRM",
+      status: "QUEUED",
+    };
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(confirmPayload));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await confirmEmployeeImport("token", {
+      preview_token: "preview-token",
+      process_valid_rows_only: true,
+      execution_mode: "SYNC",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8888/api/employees/import/confirm",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          preview_token: "preview-token",
+          process_valid_rows_only: true,
+          execution_mode: "SYNC",
+        }),
+      }),
+    );
+    expect(result).toEqual(confirmPayload);
+  });
 
   it("treats a result endpoint workbook response as a downloadable file", async () => {
-    const workbookBytes = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x14, 0x00])
+    const workbookBytes = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x14, 0x00]);
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(workbookBytes, {
         status: 200,
@@ -124,24 +159,27 @@ describe("employee import admin API helpers", () => {
           "content-disposition":
             'attachment; filename="employee-import-result-IMPORT-20260730-MAPPED.xlsx"',
         },
-      })
-    )
-    vi.stubGlobal("fetch", fetchMock)
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
 
-    const result = await getEmployeeImportResult("token", "IMPORT-20260730-MAPPED")
+    const result = await getEmployeeImportResult(
+      "token",
+      "IMPORT-20260730-MAPPED",
+    );
 
-    expect(result.type).toBe("file")
+    expect(result.type).toBe("file");
     if (result.type !== "file") {
-      throw new Error("Expected a file response")
+      throw new Error("Expected a file response");
     }
     expect(result.filename).toBe(
-      "employee-import-result-IMPORT-20260730-MAPPED.xlsx"
-    )
-    expect(result.blob.size).toBe(workbookBytes.byteLength)
-  })
+      "employee-import-result-IMPORT-20260730-MAPPED.xlsx",
+    );
+    expect(result.blob.size).toBe(workbookBytes.byteLength);
+  });
 
   it("downloads the dedicated Excel error report route", async () => {
-    const workbookBytes = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x14, 0x00])
+    const workbookBytes = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x14, 0x00]);
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(workbookBytes, {
         status: 200,
@@ -151,22 +189,22 @@ describe("employee import admin API helpers", () => {
           "content-disposition":
             'attachment; filename="IMPORT-20260730-MAPPED-result.xlsx"',
         },
-      })
-    )
-    vi.stubGlobal("fetch", fetchMock)
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
 
     const result = await downloadEmployeeImportResult(
       "token",
-      "IMPORT-20260730-MAPPED"
-    )
+      "IMPORT-20260730-MAPPED",
+    );
 
     expect(fetchMock).toHaveBeenCalledWith(
       "http://localhost:8888/api/employees/import/IMPORT-20260730-MAPPED/errors/download",
       expect.objectContaining({
         method: "GET",
-      })
-    )
-    expect(result.filename).toBe("IMPORT-20260730-MAPPED-result.xlsx")
-    expect(result.blob.size).toBe(workbookBytes.byteLength)
-  })
-})
+      }),
+    );
+    expect(result.filename).toBe("IMPORT-20260730-MAPPED-result.xlsx");
+    expect(result.blob.size).toBe(workbookBytes.byteLength);
+  });
+});
