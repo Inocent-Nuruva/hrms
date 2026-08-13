@@ -822,6 +822,40 @@ function normalizeIssue(row: AdminRecord): ImportIssue | null {
   };
 }
 
+function buildIssueContext(record: AdminRecord) {
+  const rowNumber =
+    readNumber(record, [
+      "row_number",
+      "rowNumber",
+      "row",
+      "index",
+      "line_number",
+      "lineNumber",
+    ]) ?? null;
+  const employeeLabel =
+    readString(
+      record,
+      [
+        "employee_no",
+        "employeeNo",
+        "employee_number",
+        "employeeNumber",
+        "email",
+        "full_name",
+        "fullName",
+        "employee_name",
+        "employeeName",
+        "identifier",
+      ],
+      "",
+    ) || "—";
+
+  return {
+    rowLabel: rowNumber !== null ? `Row ${rowNumber}` : "—",
+    employeeLabel,
+  };
+}
+
 function extractIssues(
   root: AdminRecord | null,
   records: AdminRecord[],
@@ -857,9 +891,10 @@ function extractIssues(
             return issues;
           }
           if (typeof entry === "string" && entry.trim()) {
+            const context = buildIssueContext(record);
             issues.push({
-              rowLabel: "—",
-              employeeLabel: "—",
+              rowLabel: context.rowLabel,
+              employeeLabel: context.employeeLabel,
               fieldLabel: "—",
               message: entry.trim(),
             });
