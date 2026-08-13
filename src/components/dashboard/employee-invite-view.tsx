@@ -482,13 +482,17 @@ export function EmployeeInviteView() {
     }
     const byDepartment = positions
       .filter((record) => relatedDepartmentIds(record).has(departmentId))
-      .map((record) => ({
-        id: getId(record),
-        label: getName(record, "position_name", "positionName", "name", "title"),
-        branchId: relatedBranchId(record),
-        departmentId,
-      }))
-      .filter((option): option is LookupOption => option.id !== null)
+      .map<LookupOption | null>((record) => {
+        const id = getId(record)
+        if (id === null) return null
+        return {
+          id,
+          label: getName(record, "position_name", "positionName", "name", "title"),
+          branchId: relatedBranchId(record),
+          departmentId,
+        } satisfies LookupOption
+      })
+      .filter((option): option is LookupOption => option !== null)
     if (byDepartment.length > 0) return byDepartment
     return allPositionOptions.filter(
       (option) =>
@@ -514,7 +518,7 @@ export function EmployeeInviteView() {
         const employeeBranchId = relatedBranchId(record)
         return branchId === null || employeeBranchId === null || employeeBranchId === branchId
       })
-      .map((record) => {
+      .map<LookupOption | null>((record) => {
         const id = getId(record)
         if (id === null) return null
         return {
