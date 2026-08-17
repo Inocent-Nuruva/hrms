@@ -21,6 +21,7 @@ import {
   addLeaveRequestDocument,
   adjustLeaveBalance,
   cancelLeaveRequest,
+  carryForwardLeaveBalances,
   createLeaveHoliday,
   createLeavePolicy,
   createLeaveRequest,
@@ -42,6 +43,9 @@ import {
   listBranches,
   listDepartments,
   listEmployees,
+  generateLeaveBalances,
+  listLeaveBalanceAdjustments,
+  listLeaveBalanceTransactions,
   listLeaveBalances,
   listLeaveHolidays,
   listLeavePolicies,
@@ -56,6 +60,8 @@ import {
   patchLeaveRequestMedicalDetail,
   patchLeaveType,
   patchLeaveWorkflow,
+  resubmitLeaveRequest,
+  submitLeaveRequest,
   patchLeaveWorkflowStep,
   type AdminRecord,
 } from "@/lib/admin-api"
@@ -980,6 +986,8 @@ export function LeaveManagementView({
   const [typeSearch, setTypeSearch] = React.useState("")
   const [typeStatusFilter, setTypeStatusFilter] = React.useState("all")
   const [balances, setBalances] = React.useState<AdminRecord[]>([])
+  const [balanceAdjustments, setBalanceAdjustments] = React.useState<AdminRecord[]>([])
+  const [balanceTransactions, setBalanceTransactions] = React.useState<AdminRecord[]>([])
   const [holidays, setHolidays] = React.useState<AdminRecord[]>([])
   const [policies, setPolicies] = React.useState<AdminRecord[]>([])
   const [workflows, setWorkflows] = React.useState<AdminRecord[]>([])
@@ -1274,6 +1282,12 @@ export function LeaveManagementView({
         case "balances": {
           const result = await listLeaveBalances(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" })
           setBalances(result.rows)
+          const [adjustments, transactions] = await Promise.all([
+            listLeaveBalanceAdjustments(token, { limit: 50 }).catch(() => []),
+            listLeaveBalanceTransactions(token, { limit: 50 }).catch(() => []),
+          ])
+          setBalanceAdjustments(adjustments)
+          setBalanceTransactions(transactions)
           break
         }
         case "holidays": {
@@ -3384,6 +3398,32 @@ export function LeaveManagementView({
                               Reject
                             </DropdownMenuItem>
                             <DropdownMenuItem
+                              disabled={saving}
+                              onClick={() => {
+                                const token = readStoredToken()
+                                const id = readNumber(row, ["id"])
+                                if (!token || id === null) return
+                                void submitLeaveRequest(token, id)
+                                  .then(() => { showSuccessAlert("Leave request submitted."); return reloadAll("requests", true) })
+                                  .catch((errorObject) => showErrorAlert(errorObject instanceof Error ? errorObject.message : "Submit failed."))
+                              }}
+                            >
+                              Submit draft
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              disabled={saving}
+                              onClick={() => {
+                                const token = readStoredToken()
+                                const id = readNumber(row, ["id"])
+                                if (!token || id === null) return
+                                void resubmitLeaveRequest(token, id)
+                                  .then(() => { showSuccessAlert("Leave request resubmitted."); return reloadAll("requests", true) })
+                                  .catch((errorObject) => showErrorAlert(errorObject instanceof Error ? errorObject.message : "Resubmit failed."))
+                              }}
+                            >
+                              Resubmit
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
                               variant="destructive"
                               disabled={!permissions.canCancel || saving}
                               onClick={() => {
@@ -4134,6 +4174,32 @@ export function LeaveManagementView({
           <div className="flex flex-wrap items-center justify-end gap-1.5">
             <button
               type="button"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-medium"
+              onClick={() => {
+                const token = readStoredToken()
+                if (!token) return
+                void generateLeaveBalances(token, { force_recalculate: true })
+                  .then(() => { showSuccessAlert("Leave balances generated."); return reloadAll("balances", true) })
+                  .catch((errorObject) => showErrorAlert(errorObject instanceof Error ? errorObject.message : "Generate failed."))
+              }}
+            >
+              Generate
+            </button>
+            <button
+              type="button"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-medium"
+              onClick={() => {
+                const token = readStoredToken()
+                if (!token) return
+                void carryForwardLeaveBalances(token, {})
+                  .then(() => { showSuccessAlert("Carry-forward calculated."); return reloadAll("balances", true) })
+                  .catch((errorObject) => showErrorAlert(errorObject instanceof Error ? errorObject.message : "Carry-forward failed."))
+              }}
+            >
+              Carry forward
+            </button>
+            <button
+              type="button"
               className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white"
               onClick={() => void openBalanceDialog()}
             >
@@ -4164,6 +4230,32 @@ export function LeaveManagementView({
             itemsPerPage={20}
             loading={loading}
             storageKey="leave-balances"
+          />
+          <ResizableTable
+            title="Balance adjustments"
+            data={balanceAdjustments}
+            columns={[
+              { key: "employee", label: "Employee", render: (r) => employeeLabelFromRow(r) },
+              { key: "days", label: "Days", render: (r) => readString(r, ["days", "adjustment_days", "amount"]) },
+              { key: "reason", label: "Reason", render: (r) => readString(r, ["reason", "remarks"]) },
+            ]}
+            itemsPerPage={10}
+            loading={false}
+            showExport={false}
+            storageKey="leave-balance-adjustments"
+          />
+          <ResizableTable
+            title="Balance transactions"
+            data={balanceTransactions}
+            columns={[
+              { key: "employee", label: "Employee", render: (r) => employeeLabelFromRow(r) },
+              { key: "type", label: "Type", render: (r) => readString(r, ["transaction_type", "type"]) },
+              { key: "days", label: "Days", render: (r) => readString(r, ["days", "amount"]) },
+            ]}
+            itemsPerPage={10}
+            loading={false}
+            showExport={false}
+            storageKey="leave-balance-transactions"
           />
         </div>
       ) : null}

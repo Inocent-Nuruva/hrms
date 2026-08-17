@@ -66,6 +66,9 @@ import {
   type EmployeeProfileSection,
 } from "@/lib/admin-api"
 import { hasDashboardAdminIdentity } from "@/lib/dashboard-identity"
+import { useDashboardActor } from "@/hooks/use-dashboard-actor"
+import { useForbiddenPrefixes } from "@/hooks/use-forbidden-route-guard"
+import { canSeeDashboardPage } from "@/lib/forbidden-routes"
 import { useMyProfilePhoto } from "@/lib/my-profile-photo"
 import { cn } from "@/lib/utils"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
@@ -1696,6 +1699,8 @@ export function EmployeeDashboardView({
   payslips,
 }: EmployeeDashboardViewProps) {
   const { url: myProfilePhotoUrl } = useMyProfilePhoto()
+  const actor = useDashboardActor()
+  useForbiddenPrefixes()
 
   if (!isEmployeeDashboardData(dashboardData)) {
     return (
@@ -2052,8 +2057,16 @@ export function EmployeeDashboardView({
               { href: "/dashboard/me/probation", title: "My probation", icon: <BadgeCheck /> },
               { href: "/dashboard/me/field/visits", title: "My field", icon: <MapPin /> },
               { href: "/dashboard/me/finance", title: "My finance", icon: <Landmark /> },
+              { href: "/dashboard/me/activities/today", title: "My activities", icon: <FileText /> },
+              { href: "/dashboard/me/movements", title: "My movements", icon: <Users /> },
+              { href: "/dashboard/me/team/overview", title: "My team", icon: <UserCheck /> },
+              { href: "/dashboard/me/insights", title: "My insights", icon: <Sparkles /> },
+              { href: "/dashboard/me/requests/actions", title: "My requests", icon: <FileText /> },
               { href: holidaysHref, title: "Holidays", icon: <CalendarIcon /> },
-            ].map((action, index) => (
+            ].filter((action) =>
+              !actor.ready ||
+              canSeeDashboardPage(action.href, actor.permissionLabels, actor.accessMode)
+            ).map((action, index) => (
               <motion.div
                 key={action.href}
                 initial={{ opacity: 0, y: 10 }}

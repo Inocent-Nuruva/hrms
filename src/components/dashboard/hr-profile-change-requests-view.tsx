@@ -1,0 +1,243 @@
+"use client"
+
+import * as React from "react"
+import { Loader2Icon, RefreshCwIcon } from "lucide-react"
+import { toast } from "sonner"
+
+import { SearchToggleField } from "@/components/common/search-toggle-field"
+import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared"
+import {
+  HeroBand,
+  MetricTile,
+  StatusChip,
+  TalentDoodleSprites,
+  actionButtonClass,
+  employeeLabel,
+  formatDate,
+  optionLabel,
+  prettify,
+  primaryButtonClass,
+  readString,
+  rowId,
+  secondaryButtonClass,
+  textareaClass,
+} from "@/components/dashboard/talent-visuals"
+import {
+  Dialog,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogPopup,
+  DialogTitle,
+} from "@/components/animate-ui/components/base/dialog"
+import { useDashboardActor } from "@/hooks/use-dashboard-actor"
+import {
+  approveHrProfileChangeRequest,
+  getHrProfileChangeRequest,
+  listHrProfileChangeRequests,
+  rejectHrProfileChangeRequest,
+  requestHrProfileChangeCorrection,
+  startHrProfileChangeReview,
+  type AdminRecord,
+} from "@/lib/admin-api"
+import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
+import { useForbiddenRouteGuard, useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
+import { readStoredSessionTokens } from "@/lib/session-client"
+import { ResizableTable, type Column } from "@/components/ui/resizable-table"
+
+function readStoredToken() {
+  return readStoredSessionTokens().accessToken.trim()
+}
+
+export function HrProfileChangeRequestsView() {
+  const actor = useDashboardActor()
+  const canAccess =
+    !actor.ready ||
+    canAccessDashboardRoute("/dashboard/employees/profile-change-requests", actor.permissionLabels, actor.accessMode)
+  const leaveIfForbidden = useLeaveIfForbidden()
+  useForbiddenRouteGuard(canAccess)
+
+  const [rows, setRows] = React.useState<AdminRecord[]>([])
+  const [loading, setLoading] = React.useState(true)
+  const [error, setError] = React.useState<string | null>(null)
+  const [search, setSearch] = React.useState("")
+  const [detail, setDetail] = React.useState<AdminRecord | null>(null)
+  const [formOpen, setFormOpen] = React.useState(false)
+  const [form, setForm] = React.useState<Record<string, string>>({})
+  const [formError, setFormError] = React.useState<string | null>(null)
+  const [saving, setSaving] = React.useState(false)
+  const [busyId, setBusyId] = React.useState("")
+
+  const load = React.useCallback(async () => {
+    const token = readStoredToken()
+    if (!token) {
+      setError("Authentication required. Please log in again.")
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    setError(null)
+    try {
+      setRows(await listHrProfileChangeRequests(token, { limit: 50 }))
+    } catch (errorObject) {
+      if (leaveIfForbidden(errorObject)) {
+        setLoading(false)
+        return
+      }
+      setRows([])
+      setError(errorObject instanceof Error ? errorObject.message : "Could not load profile change requests.")
+    } finally {
+      setLoading(false)
+    }
+  }, [leaveIfForbidden])
+
+  React.useEffect(() => {
+    if (!canAccess) return
+    void load()
+  }, [canAccess, load])
+
+  const visible = rows.filter((row) => !search || JSON.stringify(row).toLowerCase().includes(search.toLowerCase()))
+
+  async function onDecide() {
+    const token = readStoredToken()
+    if (!token || !form.id) return
+    setSaving(true)
+    setFormError(null)
+    try {
+      if (form.mode === "approve") await approveHrProfileChangeRequest(token, form.id, { comment: form.comment || undefined })
+      else if (form.mode === "reject") {
+        if (!form.rejection_reason) throw new Error("Rejection reason is required.")
+        await rejectHrProfileChangeRequest(token, form.id, {
+          rejection_reason: form.rejection_reason,
+          comment: form.comment || undefined,
+        })
+      } else {
+        if (!form.correction_instructions) throw new Error("Correction instructions are required.")
+        await requestHrProfileChangeCorrection(token, form.id, {
+          correction_instructions: form.correction_instructions,
+          comment: form.comment || undefined,
+        })
+      }
+      toast.success("Saved.")
+      setFormOpen(false)
+      await load()
+    } catch (errorObject) {
+      setFormError(errorObject instanceof Error ? errorObject.message : "Could not save.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const columns = React.useMemo<Column<AdminRecord>[]>(() => [
+    {
+      key: "req",
+      label: "Request",
+      render: (row) => (
+        <div className="space-y-0.5">
+          <p className="font-medium">{employeeLabel(row)}</p>
+          <p className="text-xs text-muted-foreground">{prettify(readString(row, ["requestType", "request_type"], "Change"))}</p>
+        </div>
+      ),
+    },
+    { key: "status", label: "Status", render: (row) => <StatusChip value={readString(row, ["status"], "SUBMITTED")} /> },
+    { key: "when", label: "Submitted", render: (row) => formatDate(row.submittedAt ?? row.submitted_at ?? row.createdAt) },
+    {
+      key: "actions",
+      label: "Actions",
+      render: (row) => {
+        const id = rowId(row)
+        return (
+          <div className="flex flex-wrap gap-1">
+            <button type="button" className={actionButtonClass} disabled={busyId === `rev-${id}`} onClick={() => {
+              const token = readStoredToken()
+              if (!token || !id) return
+              setBusyId(`rev-${id}`)
+              void startHrProfileChangeReview(token, id, {})
+                .then(() => { toast.success("Review started."); return load() })
+                .catch((errorObject) => toast.error(errorObject instanceof Error ? errorObject.message : "Could not start review."))
+                .finally(() => setBusyId(""))
+            }}>Start review</button>
+            <button type="button" className={actionButtonClass} onClick={() => { setForm({ id, mode: "approve" }); setFormOpen(true) }}>Approve</button>
+            <button type="button" className={actionButtonClass} onClick={() => { setForm({ id, mode: "correct" }); setFormOpen(true) }}>Return</button>
+            <button type="button" className={actionButtonClass} onClick={() => { setForm({ id, mode: "reject" }); setFormOpen(true) }}>Reject</button>
+          </div>
+        )
+      },
+    },
+  ], [busyId, load])
+
+  if (!canAccess) return null
+
+  return (
+    <section className="space-y-4">
+      <TalentDoodleSprites />
+      <HeroBand
+        eyebrow="Employees"
+        title="Profile change requests"
+        description="Review employee requests to change name, phone, address, or emergency contact. This is separate from older profile-update approvals."
+        actions={
+          <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
+            {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+            Refresh
+          </button>
+        }
+      />
+      <div className="grid gap-3 sm:grid-cols-3">
+        <MetricTile label="Requests" value={rows.length} />
+        <MetricTile label="Open" value={rows.filter((row) => !["APPROVED", "REJECTED", "CANCELLED"].includes(readString(row, ["status"]).toUpperCase())).length} />
+        <MetricTile label="Approved" value={rows.filter((row) => readString(row, ["status"]).toUpperCase() === "APPROVED").length} />
+      </div>
+      <SearchToggleField value={search} onChange={setSearch} placeholder="Search" />
+      {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div> : null}
+      <div className="overflow-hidden rounded-xl border border-border bg-card">
+        <ResizableTable
+          title="Profile change requests"
+          data={visible}
+          columns={columns}
+          loading={loading}
+          itemsPerPage={20}
+          showExport={false}
+          storageKey="hr-profile-change-requests"
+          onRowSelect={(_, row) => {
+            if (!row) return
+            setDetail(row)
+            const token = readStoredToken()
+            const id = rowId(row)
+            if (token && id) {
+              void getHrProfileChangeRequest(token, id).then((record) => record && setDetail(record)).catch(() => undefined)
+            }
+          }}
+        />
+      </div>
+      <RecordDetailsDialog open={Boolean(detail)} onOpenChange={(open) => !open && setDetail(null)} title={optionLabel(detail)} row={detail} />
+      <Dialog open={formOpen} onOpenChange={setFormOpen}>
+        <DialogPopup className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>{form.mode === "approve" ? "Approve" : form.mode === "reject" ? "Reject" : "Return for correction"}</DialogTitle>
+            <DialogDescription>
+              {form.mode === "approve"
+                ? "Confirm this change. It will be applied to the employee record."
+                : form.mode === "reject"
+                  ? "Tell the employee why this cannot be applied."
+                  : "Ask the employee to correct the request and send it again."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3">
+            {form.mode === "reject" ? (
+              <label className="grid gap-1.5 text-sm"><span className="font-medium">Rejection reason</span><textarea className={textareaClass} value={form.rejection_reason ?? ""} onChange={(event) => setForm((current) => ({ ...current, rejection_reason: event.target.value }))} /></label>
+            ) : null}
+            {form.mode === "correct" ? (
+              <label className="grid gap-1.5 text-sm"><span className="font-medium">Correction instructions</span><textarea className={textareaClass} value={form.correction_instructions ?? ""} onChange={(event) => setForm((current) => ({ ...current, correction_instructions: event.target.value }))} /></label>
+            ) : null}
+            <label className="grid gap-1.5 text-sm"><span className="font-medium">Comment</span><textarea className={textareaClass} value={form.comment ?? ""} onChange={(event) => setForm((current) => ({ ...current, comment: event.target.value }))} /></label>
+            {formError ? <p className="text-sm text-rose-600">{formError}</p> : null}
+          </div>
+          <DialogFooter>
+            <button type="button" className={secondaryButtonClass} onClick={() => setFormOpen(false)}>Cancel</button>
+            <button type="button" className={primaryButtonClass} onClick={() => void onDecide()} disabled={saving}>{saving ? <Loader2Icon className="size-4 animate-spin" /> : "Save"}</button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
+    </section>
+  )
+}

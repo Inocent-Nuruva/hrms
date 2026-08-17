@@ -22,15 +22,19 @@ import { ChartColumn } from "@/components/animate-ui/icons/chart-column"
 import { ChartSpline } from "@/components/animate-ui/icons/chart-spline"
 import { BadgeCheck } from "@/components/animate-ui/icons/badge-check"
 import { MapPin } from "@/components/animate-ui/icons/map-pin"
+import { ChartBar } from "@/components/animate-ui/icons/chart-bar"
+import { Bell } from "@/components/animate-ui/icons/bell"
+import { LayoutDashboard } from "@/components/animate-ui/icons/layout-dashboard"
 import { Settings } from "@/components/animate-ui/icons/settings"
 import { Search } from "@/components/animate-ui/icons/search"
 import { MessageCircleQuestion } from "@/components/animate-ui/icons/message-circle-question"
 import { Kanban } from "@/components/animate-ui/icons/kanban"
 import type { AdminResourceKey } from "@/lib/admin-api"
 import {
-  canAccessDashboardRoute,
   normalizePermissionLabels,
 } from "@/lib/dashboard-permissions"
+import { canSeeDashboardPage } from "@/lib/forbidden-routes"
+import { useForbiddenPrefixes } from "@/hooks/use-forbidden-route-guard"
 
 const IUsers = <UsersRound size={48} animation="path-loop" />
 const ILeave = <Route size={48} animation="path-loop" />
@@ -39,6 +43,12 @@ const IAttendance = <ChartColumn size={48} animation="path-loop" />
 const IPerformance = <ChartSpline size={48} animation="default-loop" />
 const IProbation = <BadgeCheck size={48} animation="default" />
 const IField = <MapPin size={48} animation="default" />
+const IActivities = <ChartBar size={48} animation="default" />
+const IMovements = <Route size={48} animation="default" />
+const ISms = <Bell size={48} animation="default" />
+const ITeam = <UsersRound size={48} animation="default" />
+const IStructure = <Kanban size={48} animation="default" />
+const IInsights = <LayoutDashboard size={48} animation="default" />
 const IDepartments = <Kanban size={48} animation="default" />
 const ISettings = <Settings size={48} animation="path-loop" />
 const IHelp = <MessageCircleQuestion size={48} animation="path-loop" />
@@ -113,6 +123,7 @@ const adminData: SidebarData = {
         "/dashboard/employees/offboarding",
         "/dashboard/employees/onboarding",
         "/dashboard/employees/profile-update-approvals",
+        "/dashboard/employees/profile-change-requests",
       ],
       icon: IUsers,
     },
@@ -182,9 +193,55 @@ const adminData: SidebarData = {
       icon: IUsers,
     },
     {
+      title: "Activities",
+      url: "/dashboard/activities",
+      matchUrls: [
+        "/dashboard/activities",
+        "/dashboard/activities/overview",
+        "/dashboard/activities/reports",
+        "/dashboard/activities/reviews",
+        "/dashboard/activities/exceptions",
+        "/dashboard/activities/setup",
+      ],
+      icon: IActivities,
+    },
+    {
+      title: "Movements",
+      url: "/dashboard/movements",
+      matchUrls: [
+        "/dashboard/movements",
+        "/dashboard/movements/overview",
+        "/dashboard/movements/cases",
+        "/dashboard/movements/operations",
+      ],
+      icon: IMovements,
+    },
+    {
       title: "Positions",
       url: "/dashboard/positions",
       icon: IUsers,
+    },
+    {
+      title: "Structure",
+      url: "/dashboard/structure",
+      matchUrls: [
+        "/dashboard/structure",
+        "/dashboard/structure/cost-centers",
+        "/dashboard/structure/grades",
+      ],
+      icon: IStructure,
+    },
+    {
+      title: "Insights",
+      url: "/dashboard/insights",
+      matchUrls: [
+        "/dashboard/insights",
+        "/dashboard/insights/hr",
+        "/dashboard/insights/management",
+        "/dashboard/insights/manager",
+        "/dashboard/insights/readiness",
+      ],
+      icon: IInsights,
     },
     {
       title: "Recruitment",
@@ -210,6 +267,18 @@ const adminData: SidebarData = {
       url: "/dashboard/operations/notifications",
       icon: IUsers,
     },
+    {
+      title: "SMS",
+      url: "/dashboard/sms",
+      matchUrls: [
+        "/dashboard/sms",
+        "/dashboard/sms/overview",
+        "/dashboard/sms/registry",
+        "/dashboard/sms/logs",
+        "/dashboard/sms/platform",
+      ],
+      icon: ISms,
+    },
   ],
   navSecondary: [
     {
@@ -234,6 +303,7 @@ const adminSearchIndex = [
   { title: "Dashboard", url: "/dashboard", section: "General", keywords: ["home", "overview"] },
   { title: "Employees / All Employees", url: "/dashboard/employees/all", section: "Employees", keywords: ["employee", "directory", "staff"] },
   { title: "Employees / Profile Updates", url: "/dashboard/employees/profile-update-approvals", section: "Employees", keywords: ["employee", "profile", "changes", "approval"] },
+  { title: "Employees / Profile Changes", url: "/dashboard/employees/profile-change-requests", section: "Employees", keywords: ["employee", "profile", "change request"] },
   { title: "Employees / Offboarding", url: "/dashboard/employees/offboarding", section: "Employees", keywords: ["employee", "exit"] },
   { title: "Employees / Onboarding", url: "/dashboard/employees/onboarding", section: "Employees", keywords: ["employee", "workflow", "request", "approve"] },
   { title: "Attendance / Attendance Setup / Policies", url: "/dashboard/attendance/policies", section: "Attendance Setup", keywords: ["attendance", "policies"] },
@@ -291,6 +361,20 @@ const adminSearchIndex = [
   { title: "Finance / Products", url: "/dashboard/finance/products", section: "Finance", keywords: ["loan", "advance", "product"] },
   { title: "Finance / Applications", url: "/dashboard/finance/applications", section: "Finance", keywords: ["loan", "advance", "application"] },
   { title: "Finance / Accounts", url: "/dashboard/finance/accounts", section: "Finance", keywords: ["loan", "repayment", "disbursement"] },
+  { title: "Activities / Overview", url: "/dashboard/activities/overview", section: "Activities", keywords: ["activity", "daily", "report"] },
+  { title: "Activities / Reports", url: "/dashboard/activities/reports", section: "Activities", keywords: ["activity", "report"] },
+  { title: "Activities / Reviews", url: "/dashboard/activities/reviews", section: "Activities", keywords: ["activity", "review", "approve"] },
+  { title: "Activities / Exceptions", url: "/dashboard/activities/exceptions", section: "Activities", keywords: ["activity", "exception"] },
+  { title: "Movements / Overview", url: "/dashboard/movements/overview", section: "Movements", keywords: ["movement", "transfer", "promotion"] },
+  { title: "Movements / Cases", url: "/dashboard/movements/cases", section: "Movements", keywords: ["movement", "approve", "apply"] },
+  { title: "Movements / Operations", url: "/dashboard/movements/operations", section: "Movements", keywords: ["movement", "retry", "operation"] },
+  { title: "SMS / Overview", url: "/dashboard/sms/overview", section: "SMS", keywords: ["sms", "text", "message"] },
+  { title: "SMS / Registry", url: "/dashboard/sms/registry", section: "SMS", keywords: ["sms", "template", "registry"] },
+  { title: "SMS / Logs", url: "/dashboard/sms/logs", section: "SMS", keywords: ["sms", "log", "retry"] },
+  { title: "Structure / Cost centers", url: "/dashboard/structure/cost-centers", section: "Structure", keywords: ["cost center", "grade"] },
+  { title: "Structure / Grades", url: "/dashboard/structure/grades", section: "Structure", keywords: ["grade", "level"] },
+  { title: "Insights / HR", url: "/dashboard/insights/hr", section: "Insights", keywords: ["dashboard", "hr", "analytics"] },
+  { title: "Insights / Readiness", url: "/dashboard/insights/readiness", section: "Insights", keywords: ["launch", "health", "security"] },
   { title: "Companies", url: "/dashboard/companies", section: "Organization", keywords: ["company", "organization", "tenant"] },
   { title: "Departments", url: "/dashboard/departments", section: "Organization", keywords: ["department", "org"] },
   { title: "Branches", url: "/dashboard/branches", section: "Organization", keywords: ["branch", "location"] },
@@ -372,6 +456,51 @@ const employeeData: SidebarData = {
       url: "/dashboard/me/finance",
     },
     {
+      title: "My Activities",
+      icon: IActivities,
+      url: "/dashboard/me/activities/today",
+      matchUrls: [
+        "/dashboard/me/activities",
+        "/dashboard/me/activities/today",
+        "/dashboard/me/activities/reports",
+      ],
+    },
+    {
+      title: "My Movements",
+      icon: IMovements,
+      url: "/dashboard/me/movements",
+    },
+    {
+      title: "My Team",
+      icon: ITeam,
+      url: "/dashboard/me/team/overview",
+      matchUrls: [
+        "/dashboard/me/team",
+        "/dashboard/me/team/overview",
+        "/dashboard/me/team/members",
+        "/dashboard/me/team/attendance",
+        "/dashboard/me/team/actions",
+      ],
+    },
+    {
+      title: "My Insights",
+      icon: IInsights,
+      url: "/dashboard/me/insights",
+    },
+    {
+      title: "My Requests",
+      icon: ILeave,
+      url: "/dashboard/me/requests/actions",
+      matchUrls: [
+        "/dashboard/me/requests",
+        "/dashboard/me/requests/actions",
+        "/dashboard/me/requests/timeline",
+        "/dashboard/me/requests/documents",
+        "/dashboard/me/requests/profile-changes",
+        "/dashboard/me/requests/resignation",
+      ],
+    },
+    {
       title: "Field",
       url: "/dashboard/field",
       matchUrls: [
@@ -395,6 +524,64 @@ const employeeData: SidebarData = {
         "/dashboard/finance/accounts",
       ],
       icon: IUsers,
+    },
+    {
+      title: "Activities",
+      url: "/dashboard/activities",
+      matchUrls: [
+        "/dashboard/activities",
+        "/dashboard/activities/overview",
+        "/dashboard/activities/reports",
+        "/dashboard/activities/reviews",
+        "/dashboard/activities/exceptions",
+        "/dashboard/activities/setup",
+      ],
+      icon: IActivities,
+    },
+    {
+      title: "Movements",
+      url: "/dashboard/movements",
+      matchUrls: [
+        "/dashboard/movements",
+        "/dashboard/movements/overview",
+        "/dashboard/movements/cases",
+        "/dashboard/movements/operations",
+      ],
+      icon: IMovements,
+    },
+    {
+      title: "SMS",
+      url: "/dashboard/sms",
+      matchUrls: [
+        "/dashboard/sms",
+        "/dashboard/sms/overview",
+        "/dashboard/sms/registry",
+        "/dashboard/sms/logs",
+        "/dashboard/sms/platform",
+      ],
+      icon: ISms,
+    },
+    {
+      title: "Structure",
+      url: "/dashboard/structure",
+      matchUrls: [
+        "/dashboard/structure",
+        "/dashboard/structure/cost-centers",
+        "/dashboard/structure/grades",
+      ],
+      icon: IStructure,
+    },
+    {
+      title: "Insights",
+      url: "/dashboard/insights",
+      matchUrls: [
+        "/dashboard/insights",
+        "/dashboard/insights/hr",
+        "/dashboard/insights/management",
+        "/dashboard/insights/manager",
+        "/dashboard/insights/readiness",
+      ],
+      icon: IInsights,
     },
     {
       title: "My Leave",
@@ -451,8 +638,18 @@ const employeeSearchIndex = [
   { title: "My Probation", url: "/dashboard/me/probation", section: "Probation", keywords: ["probation", "confirmation", "self assessment"] },
   { title: "My Field", url: "/dashboard/me/field/visits", section: "Field", keywords: ["field", "visit", "check in", "plan"] },
   { title: "My Finance", url: "/dashboard/me/finance", section: "Finance", keywords: ["loan", "advance", "application"] },
+  { title: "My Activities", url: "/dashboard/me/activities/today", section: "Activities", keywords: ["activity", "daily", "report"] },
+  { title: "My Movements", url: "/dashboard/me/movements", section: "Movements", keywords: ["movement", "transfer", "acknowledge"] },
+  { title: "My Team", url: "/dashboard/me/team/overview", section: "Team", keywords: ["team", "manager", "direct reports", "action items"] },
+  { title: "My Insights", url: "/dashboard/me/insights", section: "Insights", keywords: ["dashboard", "overview"] },
+  { title: "My Requests", url: "/dashboard/me/requests/actions", section: "Requests", keywords: ["request", "document", "resignation", "profile change"] },
+  { title: "Structure", url: "/dashboard/structure/cost-centers", section: "Structure", keywords: ["cost center", "grade"] },
+  { title: "Insights", url: "/dashboard/insights/hr", section: "Insights", keywords: ["dashboard", "hr"] },
+  { title: "SMS", url: "/dashboard/sms/overview", section: "SMS", keywords: ["sms", "text"] },
   { title: "Field", url: "/dashboard/field/overview", section: "Field", keywords: ["field", "visit"] },
   { title: "Finance", url: "/dashboard/finance/overview", section: "Finance", keywords: ["finance", "loan", "advance"] },
+  { title: "Activities", url: "/dashboard/activities/overview", section: "Activities", keywords: ["activity", "report"] },
+  { title: "Movements", url: "/dashboard/movements/overview", section: "Movements", keywords: ["movement", "transfer"] },
   { title: "Offboarding", url: "/dashboard/me/offboarding", section: "Employees", keywords: ["employee", "exit"] },
   { title: "Settings", url: "/dashboard/settings", section: "General", keywords: ["preferences", "account"] },
 ]
@@ -482,7 +679,7 @@ function canAccessNavTarget(
   }
   // Show a section if the user may open the section root or any linked sub-route.
   return candidates.some((candidate) =>
-    canAccessDashboardRoute(candidate, normalizedPermissions, accessMode)
+    canSeeDashboardPage(candidate, normalizedPermissions, accessMode)
   )
 }
 
@@ -528,7 +725,7 @@ function filterAdminSearchByPermissions(
   accessMode: AppSidebarAccessMode
 ) {
   return searchItems.filter((item) =>
-    canAccessDashboardRoute(item.url, normalizedPermissions, accessMode)
+    canSeeDashboardPage(item.url, normalizedPermissions, accessMode)
   )
 }
 
@@ -562,6 +759,11 @@ export function AppSidebar({
     [permissionLabels]
   )
   const resolvedAccessMode = accessMode
+  const forbiddenVersion = useForbiddenPrefixes()
+  const [navReady, setNavReady] = React.useState(false)
+  React.useEffect(() => {
+    setNavReady(true)
+  }, [])
 
   // Close the mobile drawer after any navigation (link click or programmatic push).
   React.useEffect(() => {
@@ -571,36 +773,36 @@ export function AppSidebar({
   }, [pathname, isMobile, setOpenMobile])
 
   const navData = React.useMemo(() => {
-    if (resolvedAccessMode === "employee") {
-      return {
-        ...employeeData,
-        navMain: filterNavByPermissions(
-          employeeData.navMain,
-          normalizedPermissions,
-          resolvedAccessMode
-        ),
-      }
+    const source = resolvedAccessMode === "employee" ? employeeData : adminData
+    // First paint must match SSR. sessionStorage forbidden-routes only exist
+    // in the browser, so filtering here would swap "My Performance" for
+    // "My Probation" and fail hydration.
+    if (!navReady) {
+      return source
     }
+    void forbiddenVersion
     return {
-      ...adminData,
-      navMain: filterNavByPermissions(adminData.navMain, normalizedPermissions, resolvedAccessMode),
-    }
-  }, [normalizedPermissions, resolvedAccessMode])
-
-  const searchIndex = React.useMemo(() => {
-    if (resolvedAccessMode === "employee") {
-      return filterAdminSearchByPermissions(
-        employeeSearchIndex,
+      ...source,
+      navMain: filterNavByPermissions(
+        source.navMain,
         normalizedPermissions,
         resolvedAccessMode
-      )
+      ),
     }
+  }, [forbiddenVersion, navReady, normalizedPermissions, resolvedAccessMode])
+
+  const searchIndex = React.useMemo(() => {
+    const source = resolvedAccessMode === "employee" ? employeeSearchIndex : adminSearchIndex
+    if (!navReady) {
+      return source
+    }
+    void forbiddenVersion
     return filterAdminSearchByPermissions(
-      adminSearchIndex,
+      source,
       normalizedPermissions,
       resolvedAccessMode
     )
-  }, [normalizedPermissions, resolvedAccessMode])
+  }, [forbiddenVersion, navReady, normalizedPermissions, resolvedAccessMode])
 
   return (
     <Sidebar collapsible="offcanvas" className="app-sidebar" {...props}>

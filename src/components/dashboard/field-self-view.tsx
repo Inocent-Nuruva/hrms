@@ -29,6 +29,7 @@ import {
   DialogTitle,
 } from "@/components/animate-ui/components/base/dialog"
 import {
+  addMyFieldVisitEvidence,
   addMyFieldVisitExpense,
   checkInMyFieldVisit,
   checkOutMyFieldVisit,
@@ -40,8 +41,10 @@ import {
   listMyFieldVisitPlans,
   listMyFieldVisits,
   submitMyFieldVisitPlan,
+  syncMyFieldWork,
   type AdminRecord,
 } from "@/lib/admin-api"
+import { useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
 import { readStoredSessionTokens } from "@/lib/session-client"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 
@@ -78,6 +81,7 @@ async function currentPosition() {
 }
 
 export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
+  const leaveIfForbidden = useLeaveIfForbidden()
   const [visits, setVisits] = React.useState<AdminRecord[]>([])
   const [plans, setPlans] = React.useState<AdminRecord[]>([])
   const [followUps, setFollowUps] = React.useState<AdminRecord[]>([])
@@ -85,7 +89,7 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [createOpen, setCreateOpen] = React.useState(false)
-  const [createMode, setCreateMode] = React.useState<"plan" | "unplanned" | "expense" | "checkout">("plan")
+  const [createMode, setCreateMode] = React.useState<"plan" | "unplanned" | "expense" | "checkout" | "evidence">("plan")
   const [form, setForm] = React.useState<Record<string, string>>({})
   const [saving, setSaving] = React.useState(false)
   const [formError, setFormError] = React.useState<string | null>(null)
@@ -112,10 +116,14 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
     const results = await Promise.allSettled(tasks)
     const first = results.find((result) => result.status === "rejected")
     if (first && first.status === "rejected") {
+      if (leaveIfForbidden(first.reason)) {
+        setLoading(false)
+        return
+      }
       setError(first.reason instanceof Error ? first.reason.message : "Could not load your field visits.")
     }
     setLoading(false)
-  }, [])
+  }, [leaveIfForbidden])
 
   React.useEffect(() => {
     void load()
@@ -181,6 +189,14 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
           amount: form.amount,
           currency: form.currency || "TZS",
           description: form.description,
+        })
+      } else if (createMode === "evidence") {
+        if (!form.id || !form.document_id) throw new Error("Document id is required.")
+        await addMyFieldVisitEvidence(token, form.id, {
+          evidence_type: form.evidence_type || "DOCUMENT",
+          document_id: Number(form.document_id),
+          description: form.description || undefined,
+          client_request_id: newRequestId(),
         })
       } else if (createMode === "checkout") {
         if (!form.id || !form.discussion_notes || !form.outcome) throw new Error("Notes and outcome are required.")
@@ -284,6 +300,12 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
                 setForm({ id, expense_type: "TRANSPORT", currency: "TZS" })
                 setCreateOpen(true)
               }}>Expense</button>
+              <button type="button" className={actionButtonClass} onClick={(event) => {
+                event.stopPropagation()
+                setCreateMode("evidence")
+                setForm({ id, evidence_type: "DOCUMENT" })
+                setCreateOpen(true)
+              }}>Evidence</button>
             </div>
           )
         },
@@ -300,10 +322,21 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
           title="Today's visits"
           description="Check in, add expenses, and close the visit when you leave the site."
           actions={
-            <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
-              {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
-              Refresh
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
+                {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+                Refresh
+              </button>
+              <button type="button" className={actionButtonClass} onClick={() => {
+                const token = readStoredToken()
+                if (!token) return
+                void syncMyFieldWork(token, {
+                  sync_request_id: newRequestId(),
+                  device_identifier: "web-dashboard",
+                  items: [],
+                }).then(() => toast.success("Field sync queued.")).catch((errorObject) => toast.error(errorObject instanceof Error ? errorObject.message : "Sync failed."))
+              }}>Sync</button>
+            </div>
           }
         />
       ) : (
@@ -360,9 +393,9 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
         <DialogPopup className="max-w-xl">
           <DialogHeader>
             <DialogTitle>
-              {createMode === "plan" ? "New visit plan" : createMode === "unplanned" ? "Unplanned visit" : createMode === "expense" ? "Visit expense" : "Check out"}
+              {createMode === "plan" ? "New visit plan" : createMode === "unplanned" ? "Unplanned visit" : createMode === "expense" ? "Visit expense" : createMode === "evidence" ? "Visit evidence" : "Check out"}
             </DialogTitle>
-            <DialogDescription>Uses the documented My Field Visit payloads.</DialogDescription>
+            <DialogDescription>Add or update this field visit.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-3">
             {createMode === "plan" || createMode === "unplanned" ? (
@@ -389,6 +422,21 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
               <>
                 <label className="grid gap-1.5 text-sm"><span className="font-medium">Amount</span><input className={inputClass} value={form.amount ?? ""} onChange={(event) => setForm((current) => ({ ...current, amount: event.target.value }))} /></label>
                 <label className="grid gap-1.5 text-sm"><span className="font-medium">Description</span><input className={inputClass} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></label>
+              </>
+            ) : null}
+            {createMode === "evidence" ? (
+              <>
+                <label className="grid gap-1.5 text-sm"><span className="font-medium">Document id</span><input className={inputClass} value={form.document_id ?? ""} onChange={(event) => setForm((current) => ({ ...current, document_id: event.target.value }))} /></label>
+                <label className="grid gap-1.5 text-sm">
+                  <span className="font-medium">Type</span>
+                  <select className={inputClass} value={form.evidence_type ?? "DOCUMENT"} onChange={(event) => setForm((current) => ({ ...current, evidence_type: event.target.value }))}>
+                    <option value="DOCUMENT">Document</option>
+                    <option value="PHOTO">Photo</option>
+                    <option value="MEETING_NOTE">Meeting note</option>
+                    <option value="RECEIPT">Receipt</option>
+                    <option value="OTHER">Other</option>
+                  </select>
+                </label>
               </>
             ) : null}
             {createMode === "checkout" ? (

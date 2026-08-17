@@ -1215,7 +1215,7 @@ export function PerformanceManagementView({
         <DialogPopup className="max-w-xl">
           <DialogHeader>
             <DialogTitle>{createLabel}</DialogTitle>
-            <DialogDescription>Uses the documented Performance Management payloads.</DialogDescription>
+            <DialogDescription>Save this performance record.</DialogDescription>
           </DialogHeader>
           <div className="grid max-h-[60vh] gap-3 overflow-auto pr-1">
             {createMode === "year" ? (

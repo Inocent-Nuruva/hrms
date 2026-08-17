@@ -31,6 +31,7 @@ import {
   submitMyProbationSelfAssessment,
   type AdminRecord,
 } from "@/lib/admin-api"
+import { useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
 import { readStoredSessionTokens } from "@/lib/session-client"
 
 function readStoredToken() {
@@ -38,6 +39,7 @@ function readStoredToken() {
 }
 
 export function ProbationSelfView() {
+  const leaveIfForbidden = useLeaveIfForbidden()
   const [record, setRecord] = React.useState<AdminRecord | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
@@ -85,6 +87,11 @@ export function ProbationSelfView() {
         })),
       )
     } catch (errorObject) {
+      if (leaveIfForbidden(errorObject)) {
+        window.clearTimeout(timeout)
+        setLoading(false)
+        return
+      }
       setRecord(null)
       const aborted =
         (errorObject instanceof DOMException && errorObject.name === "AbortError") ||
@@ -100,7 +107,7 @@ export function ProbationSelfView() {
       window.clearTimeout(timeout)
       setLoading(false)
     }
-  }, [])
+  }, [leaveIfForbidden])
 
   React.useEffect(() => {
     void load()

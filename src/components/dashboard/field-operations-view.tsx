@@ -48,6 +48,7 @@ import {
   listFieldParties,
   listHrFieldLocationAccessLogs,
   listHrFieldVisits,
+  listManagerFieldPlannedVsActual,
   listManagerFieldVisitPlans,
   listManagerFieldVisits,
   reviewManagerFieldVisit,
@@ -56,6 +57,7 @@ import {
   type AdminRecord,
 } from "@/lib/admin-api"
 import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
+import { useForbiddenRouteGuard, useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
 import { readStoredSessionTokens } from "@/lib/session-client"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 
@@ -83,10 +85,13 @@ export function FieldOperationsView({ activeTab }: { activeTab: FieldOpsTab }) {
   const canAccess =
     !actor.ready ||
     canAccessDashboardRoute("/dashboard/field/overview", actor.permissionLabels, actor.accessMode)
+  const leaveIfForbidden = useLeaveIfForbidden()
+  useForbiddenRouteGuard(canAccess)
 
   const [dashboard, setDashboard] = React.useState<AdminRecord | null>(null)
   const [exceptions, setExceptions] = React.useState<AdminRecord | null>(null)
   const [visits, setVisits] = React.useState<AdminRecord[]>([])
+  const [plannedVsActual, setPlannedVsActual] = React.useState<AdminRecord[]>([])
   const [managerVisits, setManagerVisits] = React.useState<AdminRecord[]>([])
   const [plans, setPlans] = React.useState<AdminRecord[]>([])
   const [parties, setParties] = React.useState<AdminRecord[]>([])
@@ -127,6 +132,7 @@ export function FieldOperationsView({ activeTab }: { activeTab: FieldOpsTab }) {
         listHrFieldVisits(token, { limit: 100 }).then(setVisits).catch(() => setVisits([])),
         listManagerFieldVisits(token).then(setManagerVisits).catch(() => setManagerVisits([])),
         listManagerFieldVisitPlans(token).then(setPlans).catch(() => setPlans([])),
+        listManagerFieldPlannedVsActual(token, { limit: 50 }).then(setPlannedVsActual).catch(() => setPlannedVsActual([])),
       )
     }
     if (activeTab === "map") {
@@ -148,10 +154,14 @@ export function FieldOperationsView({ activeTab }: { activeTab: FieldOpsTab }) {
     const results = await Promise.allSettled(tasks)
     const first = results.find((result) => result.status === "rejected")
     if (first && first.status === "rejected") {
+      if (leaveIfForbidden(first.reason)) {
+        setLoading(false)
+        return
+      }
       setError(first.reason instanceof Error ? first.reason.message : "Could not load field data.")
     }
     setLoading(false)
-  }, [activeTab])
+  }, [activeTab, leaveIfForbidden])
 
   React.useEffect(() => {
     if (!canAccess) return
@@ -373,6 +383,25 @@ export function FieldOperationsView({ activeTab }: { activeTab: FieldOpsTab }) {
               onRowSelect={(_, row) => row && setDetail(row)}
             />
           </div>
+          {activeTab === "visits" && plannedVsActual.length > 0 ? (
+            <div className="overflow-hidden rounded-xl border border-border bg-card">
+              <ResizableTable
+                title="Planned vs actual"
+                data={plannedVsActual}
+                columns={[
+                  { key: "employee", label: "Employee", render: (row) => employeeLabel(row) },
+                  { key: "planned", label: "Planned", render: (row) => readString(row, ["planned", "plannedCount", "planned_count"], "—") },
+                  { key: "actual", label: "Actual", render: (row) => readString(row, ["actual", "actualCount", "actual_count"], "—") },
+                  { key: "status", label: "Status", render: (row) => <StatusChip value={readString(row, ["status"], "—")} /> },
+                ]}
+                loading={false}
+                itemsPerPage={20}
+                showExport={false}
+                storageKey="field-planned-vs-actual"
+                onRowSelect={(_, row) => row && setDetail(row)}
+              />
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -382,7 +411,7 @@ export function FieldOperationsView({ activeTab }: { activeTab: FieldOpsTab }) {
         <DialogPopup className="max-w-xl">
           <DialogHeader>
             <DialogTitle>{createMode === "party" ? "Field party" : createMode === "review" ? "Review" : createMode === "policy" ? "Activity policy" : "Activity category"}</DialogTitle>
-            <DialogDescription>Uses the documented field payloads.</DialogDescription>
+            <DialogDescription>Save this field setup item.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-3">
             {createMode === "party" ? (

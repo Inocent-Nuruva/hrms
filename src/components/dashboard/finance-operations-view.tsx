@@ -53,6 +53,7 @@ import {
   type AdminRecord,
 } from "@/lib/admin-api"
 import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
+import { useForbiddenRouteGuard, useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
 import { readStoredSessionTokens } from "@/lib/session-client"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 
@@ -67,6 +68,8 @@ export function FinanceOperationsView({ activeTab }: { activeTab: FinanceOpsTab 
   const canAccess =
     !actor.ready ||
     canAccessDashboardRoute("/dashboard/finance/overview", actor.permissionLabels, actor.accessMode)
+  const leaveIfForbidden = useLeaveIfForbidden()
+  useForbiddenRouteGuard(canAccess)
 
   const [dashboard, setDashboard] = React.useState<AdminRecord | null>(null)
   const [products, setProducts] = React.useState<AdminRecord[]>([])
@@ -107,10 +110,14 @@ export function FinanceOperationsView({ activeTab }: { activeTab: FinanceOpsTab 
     const results = await Promise.allSettled(tasks)
     const first = results.find((result) => result.status === "rejected")
     if (first && first.status === "rejected") {
+      if (leaveIfForbidden(first.reason)) {
+        setLoading(false)
+        return
+      }
       setError(first.reason instanceof Error ? first.reason.message : "Could not load finance data.")
     }
     setLoading(false)
-  }, [activeTab])
+  }, [activeTab, leaveIfForbidden])
 
   React.useEffect(() => {
     if (!canAccess) return
@@ -378,7 +385,7 @@ export function FinanceOperationsView({ activeTab }: { activeTab: FinanceOpsTab 
             <DialogTitle>
               {createMode === "product" ? "New product" : createMode === "disburse" ? "Disburse" : createMode === "repay" ? "Repayment" : createMode === "defer" ? "Deferment" : "Reschedule"}
             </DialogTitle>
-            <DialogDescription>Uses the documented employee finance payloads.</DialogDescription>
+            <DialogDescription>Save this finance record for the employee.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-3">
             {createMode === "product" ? (

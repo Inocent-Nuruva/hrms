@@ -2,12 +2,19 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
+import { AnimatePresence, motion } from "framer-motion"
 import {
   CalendarClockIcon,
-  ChartColumnIcon,
-  ChevronRightIcon,
+  ChevronDownIcon,
+  DownloadIcon,
+  FileSpreadsheetIcon,
   Loader2Icon,
+  MailIcon,
+  PlayIcon,
   RefreshCwIcon,
+  ScaleIcon,
+  ScrollTextIcon,
+  XIcon,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -31,6 +38,9 @@ import {
   type AdminRecord,
 } from "@/lib/admin-api"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
+import { hasAnalyticsAccess } from "@/lib/dashboard-permissions"
+import { useDashboardActor } from "@/hooks/use-dashboard-actor"
+import { isPermissionError } from "@/components/dashboard/talent-visuals"
 import { cn } from "@/lib/utils"
 import {
   Dialog,
@@ -55,6 +65,22 @@ import {
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 
+const DEFAULT_DIMENSIONS = [
+  "department_name",
+  "branch_name",
+  "employment_status",
+  "job_title",
+  "grade",
+  "gender",
+  "month",
+  "week",
+  "date",
+  "employee_name",
+  "shift_name",
+  "location",
+  "cost_center",
+] as const
+
 const FORMAT_OPTIONS = [
   { value: "xlsx", label: "Excel (.xlsx)" },
   { value: "csv", label: "CSV (.csv)" },
@@ -72,81 +98,49 @@ const STATUS_OPTIONS = [
   { value: "ON_LEAVE", label: "On leave" },
 ] as const
 
-type ReportId = "attendance-download" | "scheduled-reporting"
+const EMPLOYMENT_STATUS_OPTIONS = [
+  { value: "", label: "All employment statuses" },
+  { value: "active", label: "Active" },
+  { value: "onboarding", label: "Onboarding" },
+  { value: "pending", label: "Pending" },
+  { value: "suspended", label: "Suspended" },
+  { value: "terminated", label: "Terminated" },
+  { value: "exited", label: "Exited" },
+] as const
 
-type ReportTone = "sky" | "emerald" | "amber" | "violet"
+type ReportId = "attendance-download"
 
-type ReportDefinition = {
-  id: ReportId
-  title: string
-  description: string
-  tone: ReportTone
-  icon: React.ReactNode
-  href?: string
-}
-
-type ReportGroup = {
-  id: string
-  title: string
-  reports: ReportDefinition[]
-}
-
-const REPORT_TONE_CLASSES: Record<
-  ReportTone,
-  { card: string; icon: string; chevron: string }
-> = {
-  sky: {
-    card: "border-sky-200 bg-sky-50/70 hover:border-sky-300 hover:bg-sky-50 dark:border-sky-900/60 dark:bg-sky-950/30 dark:hover:border-sky-800 dark:hover:bg-sky-950/45",
-    icon: "bg-sky-100 text-sky-700 dark:bg-sky-900/70 dark:text-sky-300",
-    chevron: "text-sky-600 dark:text-sky-400",
-  },
-  emerald: {
-    card: "border-emerald-200 bg-emerald-50/70 hover:border-emerald-300 hover:bg-emerald-50 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:hover:border-emerald-800 dark:hover:bg-emerald-950/45",
-    icon: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/70 dark:text-emerald-300",
-    chevron: "text-emerald-600 dark:text-emerald-400",
-  },
-  amber: {
-    card: "border-amber-200 bg-amber-50/70 hover:border-amber-300 hover:bg-amber-50 dark:border-amber-900/60 dark:bg-amber-950/30 dark:hover:border-amber-800 dark:hover:bg-amber-950/45",
-    icon: "bg-amber-100 text-amber-700 dark:bg-amber-900/70 dark:text-amber-300",
-    chevron: "text-amber-600 dark:text-amber-400",
-  },
-  violet: {
-    card: "border-violet-200 bg-violet-50/70 hover:border-violet-300 hover:bg-violet-50 dark:border-violet-900/60 dark:bg-violet-950/30 dark:hover:border-violet-800 dark:hover:bg-violet-950/45",
-    icon: "bg-violet-100 text-violet-700 dark:bg-violet-900/70 dark:text-violet-300",
-    chevron: "text-violet-600 dark:text-violet-400",
+const pageStagger = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: { staggerChildren: 0.07, delayChildren: 0.04 },
   },
 }
 
-const REPORT_GROUPS: ReportGroup[] = [
-  {
-    id: "attendance",
-    title: "Attendance",
-    reports: [
-      {
-        id: "attendance-download",
-        title: "Attendance report",
-        description: "Download filtered attendance summaries as XLSX, CSV, or PDF.",
-        tone: "sky",
-        icon: <ChartColumnIcon className="size-5" />,
-      },
-    ],
+const pageItem = {
+  hidden: { opacity: 0, y: 12, scale: 0.99 },
+  show: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: { type: "spring" as const, stiffness: 380, damping: 28, mass: 0.7 },
   },
-  {
-    id: "scheduled",
-    title: "Scheduled Reporting",
-    reports: [
-      {
-        id: "scheduled-reporting",
-        title: "Scheduled reporting",
-        description:
-          "Manage report templates, delivery schedules, SMTP settings, and execution history.",
-        tone: "violet",
-        icon: <CalendarClockIcon className="size-5" />,
-        href: "/dashboard/operations/scheduled-reporting",
-      },
-    ],
+}
+
+const listStagger = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.035, delayChildren: 0.02 } },
+}
+
+const listItem = {
+  hidden: { opacity: 0, x: -8 },
+  show: {
+    opacity: 1,
+    x: 0,
+    transition: { duration: 0.22, ease: [0.22, 1, 0.36, 1] as const },
   },
-]
+}
 
 type LookupOption = { id: number; label: string; branchId: number | null }
 
@@ -190,7 +184,8 @@ function getName(record: AdminRecord, ...keys: string[]): string {
   return id !== null ? `#${id}` : "—"
 }
 
-function readStringValue(record: AdminRecord, keys: string[]): string {
+function readStringValue(record: AdminRecord | null | undefined, keys: string[]): string {
+  if (!record) return ""
   for (const key of keys) {
     const value = record[key]
     if (typeof value === "string" && value.trim()) return value.trim()
@@ -303,6 +298,203 @@ function toEmployeeOptions(rows: AdminRecord[]): EmployeeOption[] {
       }
     })
     .filter((option): option is EmployeeOption => option !== null)
+}
+
+function uniqueCodes(values: Array<string | null | undefined>) {
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const value of values) {
+    const code = value?.trim()
+    if (!code) continue
+    const key = code.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    result.push(code)
+  }
+  return result
+}
+
+function SuggestField({
+  id,
+  label,
+  value,
+  onChange,
+  options,
+  placeholder,
+  hint,
+}: {
+  id: string
+  label: string
+  value: string
+  onChange: (next: string) => void
+  options: string[]
+  placeholder?: string
+  hint?: string
+}) {
+  const rootRef = React.useRef<HTMLDivElement>(null)
+  const [query, setQuery] = React.useState("")
+  const [open, setOpen] = React.useState(false)
+  const [activeIndex, setActiveIndex] = React.useState(0)
+  const selected = React.useMemo(() => splitCsvInput(value), [value])
+  const selectedSet = React.useMemo(
+    () => new Set(selected.map((entry) => entry.toLowerCase())),
+    [selected],
+  )
+
+  const matches = React.useMemo(() => {
+    const needle = query.trim().toLowerCase().replace(/\s+/g, "_")
+    return options
+      .filter((option) => !selectedSet.has(option.toLowerCase()))
+      .filter((option) => {
+        if (!needle) return true
+        const haystack = option.toLowerCase()
+        return haystack.includes(needle) || haystack.replace(/_/g, " ").includes(query.trim().toLowerCase())
+      })
+      .slice(0, 12)
+  }, [options, query, selectedSet])
+
+  React.useEffect(() => {
+    setActiveIndex(0)
+  }, [query, open])
+
+  React.useEffect(() => {
+    if (!open) return
+    const onPointerDown = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener("pointerdown", onPointerDown)
+    return () => document.removeEventListener("pointerdown", onPointerDown)
+  }, [open])
+
+  const commit = (token: string) => {
+    const next = token.trim()
+    if (!next) return
+    onChange(toggleCsvValue(value, next))
+    setQuery("")
+    setOpen(true)
+  }
+
+  const commitQuery = () => {
+    const token = query.trim().replace(/,+$/, "")
+    if (!token) return
+    const exact = matches.find((option) => option.toLowerCase() === token.toLowerCase())
+    commit(exact ?? token)
+  }
+
+  return (
+    <div ref={rootRef} className="flex min-w-0 flex-col gap-1.5">
+      <Label htmlFor={id} className="text-sm font-medium text-foreground">
+        {label}
+      </Label>
+      {selected.length > 0 ? (
+        <div className="flex flex-wrap gap-1.5">
+          {selected.map((entry) => (
+            <button
+              key={entry}
+              type="button"
+              className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-xs font-medium text-foreground"
+              onClick={() => onChange(toggleCsvValue(value, entry))}
+            >
+              {entry.replace(/_/g, " ")}
+              <XIcon className="size-3 opacity-70" />
+            </button>
+          ))}
+        </div>
+      ) : null}
+      <div className="relative">
+        <Input
+          id={id}
+          value={query}
+          placeholder={placeholder}
+          autoComplete="off"
+          autoCorrect="off"
+          spellCheck={false}
+          onFocus={() => setOpen(true)}
+          onChange={(event) => {
+            setQuery(event.target.value)
+            setOpen(true)
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "ArrowDown") {
+              event.preventDefault()
+              setOpen(true)
+              setActiveIndex((current) => Math.min(current + 1, Math.max(matches.length - 1, 0)))
+              return
+            }
+            if (event.key === "ArrowUp") {
+              event.preventDefault()
+              setActiveIndex((current) => Math.max(current - 1, 0))
+              return
+            }
+            if (event.key === "Enter") {
+              event.preventDefault()
+              if (matches[activeIndex]) {
+                commit(matches[activeIndex])
+                return
+              }
+              commitQuery()
+              return
+            }
+            if (event.key === "Escape") {
+              setOpen(false)
+              return
+            }
+            if (event.key === "Backspace" && !query && selected.length > 0) {
+              onChange(selected.slice(0, -1).join(", "))
+              return
+            }
+            if (event.key === "," || event.key === "Tab") {
+              if (query.trim()) {
+                event.preventDefault()
+                commitQuery()
+              }
+            }
+          }}
+        />
+        <AnimatePresence>
+          {open && matches.length > 0 ? (
+            <motion.ul
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 4 }}
+              transition={{ duration: 0.16 }}
+              className="absolute top-[calc(100%+0.35rem)] z-40 max-h-56 w-full overflow-auto rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10"
+              role="listbox"
+            >
+              {matches.map((option, index) => (
+                <li key={option}>
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={index === activeIndex}
+                    className={cn(
+                      "flex w-full items-center justify-between rounded-md px-2.5 py-2 text-left text-sm",
+                      index === activeIndex ? "bg-muted text-foreground" : "hover:bg-muted/70",
+                    )}
+                    onMouseEnter={() => setActiveIndex(index)}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => commit(option)}
+                  >
+                    <span>{option.replace(/_/g, " ")}</span>
+                    <span className="text-[11px] text-muted-foreground">{option}</span>
+                  </button>
+                </li>
+              ))}
+            </motion.ul>
+          ) : null}
+        </AnimatePresence>
+      </div>
+      {open && query.trim() && matches.length === 0 ? (
+        <p className="text-xs text-muted-foreground">
+          No match. Press Enter to use “{query.trim()}”.
+        </p>
+      ) : hint ? (
+        <p className="text-xs text-muted-foreground">{hint}</p>
+      ) : null}
+    </div>
+  )
 }
 
 function Field({
@@ -790,6 +982,73 @@ function splitCsvInput(value: string) {
     .filter(Boolean)
 }
 
+function toggleCsvValue(value: string, token: string) {
+  const parts = splitCsvInput(value)
+  if (parts.includes(token)) return parts.filter((entry) => entry !== token).join(", ")
+  return [...parts, token].join(", ")
+}
+
+function catalogCodes(row: AdminRecord | null | undefined, keys: string[]) {
+  if (!row) return []
+  for (const key of keys) {
+    const value = row[key]
+    if (typeof value === "string" && value.trim()) {
+      const parts = splitCsvInput(value)
+      if (parts.length > 0) return parts
+    }
+    if (!Array.isArray(value)) continue
+    return value
+      .map((entry) => {
+        if (typeof entry === "string") return entry.trim()
+        if (entry && typeof entry === "object") {
+          return readStringValue(entry as AdminRecord, [
+            "code",
+            "metric_code",
+            "metricCode",
+            "name",
+            "field",
+            "key",
+            "id",
+          ])
+        }
+        return ""
+      })
+      .filter(Boolean)
+  }
+  return []
+}
+
+function datasetCodeOf(row: AdminRecord | null | undefined) {
+  if (!row) return ""
+  return (
+    readStringValue(row, [
+      "code",
+      "dataset_code",
+      "datasetCode",
+      "slug",
+      "key",
+      "name",
+      "display_name",
+      "displayName",
+    ]) || (getId(row) !== null ? String(getId(row)) : "")
+  )
+}
+
+function metricCode(row: AdminRecord) {
+  return readStringValue(row, ["code", "metric_code", "metricCode", "name", "key", "field"])
+}
+
+function metricKind(row: AdminRecord): "dimension" | "measure" {
+  const kind = readStringValue(row, ["kind", "type", "role", "category", "metric_kind"]).toLowerCase()
+  if (kind.includes("dimension") || kind.includes("group")) return "dimension"
+  if (kind.includes("measure") || kind.includes("metric") || kind.includes("fact")) return "measure"
+  const code = metricCode(row).toLowerCase()
+  if (/(department|branch|employee|month|week|date|status|grade|gender|job|title|unit|location)/.test(code)) {
+    return "dimension"
+  }
+  return "measure"
+}
+
 function readSummaryNumber(row: AdminRecord | null | undefined, keys: string[]) {
   if (!row) return null
   for (const key of keys) {
@@ -803,18 +1062,11 @@ function readSummaryNumber(row: AdminRecord | null | undefined, keys: string[]) 
   return null
 }
 
-function readSummaryString(row: AdminRecord | null | undefined, keys: string[]) {
-  if (!row) return ""
-  for (const key of keys) {
-    const value = row[key]
-    if (typeof value === "string" && value.trim()) return value.trim()
-  }
-  return ""
-}
-
 export function AttendanceReportView() {
   const router = useRouter()
+  const actor = useDashboardActor()
   const [activeReport, setActiveReport] = React.useState<ReportId | null>(null)
+  const [catalogAllowed, setCatalogAllowed] = React.useState(true)
   const [token, setToken] = React.useState("")
   const [loadingAnalytics, setLoadingAnalytics] = React.useState(true)
   const [analyticsError, setAnalyticsError] = React.useState<string | null>(null)
@@ -829,7 +1081,14 @@ export function AttendanceReportView() {
   const [datasetCode, setDatasetCode] = React.useState("")
   const [dimensions, setDimensions] = React.useState("")
   const [measures, setMeasures] = React.useState("")
-  const [filtersJson, setFiltersJson] = React.useState("")
+  const [filterBranchId, setFilterBranchId] = React.useState<number | null>(null)
+  const [filterDepartmentId, setFilterDepartmentId] = React.useState<number | null>(null)
+  const [filterEmployeeId, setFilterEmployeeId] = React.useState<number | null>(null)
+  const [filterEmploymentStatus, setFilterEmploymentStatus] = React.useState("")
+  const [branches, setBranches] = React.useState<AdminRecord[]>([])
+  const [departments, setDepartments] = React.useState<AdminRecord[]>([])
+  const [employees, setEmployees] = React.useState<AdminRecord[]>([])
+  const [loadingFilters, setLoadingFilters] = React.useState(false)
   const [limit, setLimit] = React.useState("1000")
   const [outputFormat, setOutputFormat] = React.useState<"CSV" | "JSON">("CSV")
   const [reportCode, setReportCode] = React.useState("PAYE")
@@ -841,6 +1100,9 @@ export function AttendanceReportView() {
   const [customRows, setCustomRows] = React.useState<AdminRecord[]>([])
   const [customSummary, setCustomSummary] = React.useState<AdminRecord | null>(null)
   const [actionSummary, setActionSummary] = React.useState<AdminRecord | null>(null)
+  const [showAdvanced, setShowAdvanced] = React.useState(false)
+  const [showAllMetrics, setShowAllMetrics] = React.useState(false)
+  const loadGenerationRef = React.useRef(0)
 
   const loadAnalytics = React.useCallback(async () => {
     const accessToken = readStoredToken()
@@ -851,6 +1113,8 @@ export function AttendanceReportView() {
       return
     }
 
+    const generation = loadGenerationRef.current + 1
+    loadGenerationRef.current = generation
     setLoadingAnalytics(true)
     setAnalyticsError(null)
     try {
@@ -863,6 +1127,15 @@ export function AttendanceReportView() {
           getAnalyticsFreshness(accessToken),
         ])
 
+      if (loadGenerationRef.current !== generation) return
+
+      const catalogError =
+        datasetsResult.status === "rejected"
+          ? datasetsResult.reason
+          : metricsResult.status === "rejected"
+            ? metricsResult.reason
+            : null
+
       setDashboardSummary(
         summaryResult.status === "fulfilled" && summaryResult.value ? summaryResult.value : null,
       )
@@ -870,57 +1143,209 @@ export function AttendanceReportView() {
       setMetrics(metricsResult.status === "fulfilled" ? metricsResult.value : [])
       setSources(sourcesResult.status === "fulfilled" ? sourcesResult.value : [])
       setFreshness(freshnessResult.status === "fulfilled" ? freshnessResult.value : [])
+      if (catalogError && isPermissionError(catalogError)) {
+        setCatalogAllowed(false)
+        setAnalyticsError(null)
+      } else if (catalogError) {
+        setAnalyticsError(
+          catalogError instanceof Error
+            ? catalogError.message
+            : "Could not load the analytics catalog.",
+        )
+      }
     } catch (errorObject) {
-      setAnalyticsError(
-        errorObject instanceof Error ? errorObject.message : "Failed to load analytics workspace.",
-      )
+      if (loadGenerationRef.current !== generation) return
+      if (isPermissionError(errorObject)) {
+        setCatalogAllowed(false)
+        setAnalyticsError(null)
+      } else {
+        setAnalyticsError(
+          errorObject instanceof Error ? errorObject.message : "Failed to load analytics workspace.",
+        )
+      }
     } finally {
-      setLoadingAnalytics(false)
+      if (loadGenerationRef.current === generation) {
+        setLoadingAnalytics(false)
+      }
     }
   }, [])
 
-  React.useEffect(() => {
-    void loadAnalytics()
-  }, [loadAnalytics])
+  const canBuildCustomReport =
+    actor.ready && hasAnalyticsAccess(actor.permissionLabels) && catalogAllowed
 
   React.useEffect(() => {
-    if (!datasetCode && datasets.length > 0) {
-      const firstCode = readStringValue(datasets[0], ["code", "dataset_code", "name"])
-      if (firstCode) {
-        setDatasetCode(firstCode)
+    if (!actor.ready) return
+    if (!hasAnalyticsAccess(actor.permissionLabels)) {
+      setCatalogAllowed(false)
+      setLoadingAnalytics(false)
+      return
+    }
+    void loadAnalytics()
+  }, [actor.permissionLabels, actor.ready, loadAnalytics])
+
+  React.useEffect(() => {
+    if (!token) return
+    let cancelled = false
+    async function loadFilters() {
+      setLoadingFilters(true)
+      try {
+        const [br, de, em] = await Promise.allSettled([
+          listBranches(token, { page: 1, limit: 100, sortBy: "name", sortOrder: "ASC" }),
+          listDepartments(token, { page: 1, limit: 200, sortBy: "name", sortOrder: "ASC" }),
+          listEmployees(token, { page: 1, limit: 200, sortBy: "first_name", sortOrder: "ASC" }),
+        ])
+        if (cancelled) return
+        setBranches(br.status === "fulfilled" ? br.value.rows || [] : [])
+        setDepartments(de.status === "fulfilled" ? de.value.rows || [] : [])
+        setEmployees(em.status === "fulfilled" ? em.value.rows || [] : [])
+      } finally {
+        if (!cancelled) setLoadingFilters(false)
       }
     }
+    void loadFilters()
+    return () => {
+      cancelled = true
+    }
+  }, [token])
+
+  React.useEffect(() => {
+    if (datasetCode || datasets.length === 0) return
+    const firstCode = datasetCodeOf(datasets[0])
+    if (firstCode) setDatasetCode(firstCode)
   }, [datasetCode, datasets])
 
-  const activeDatasetLabel = React.useMemo(() => {
-    return (
-      datasets.find((row) => readStringValue(row, ["code", "dataset_code", "name"]) === datasetCode)
-        ? getName(
-            datasets.find(
-              (row) => readStringValue(row, ["code", "dataset_code", "name"]) === datasetCode,
-            ) as AdminRecord,
-            "name",
-            "display_name",
-            "code",
-            "dataset_code",
-          )
-        : datasetCode || "No dataset selected"
-    )
-  }, [datasetCode, datasets])
+  const selectedDataset = React.useMemo(
+    () => datasets.find((row) => datasetCodeOf(row) === datasetCode) ?? null,
+    [datasetCode, datasets],
+  )
+
+  const activeDatasetLabel = selectedDataset
+    ? getName(selectedDataset, "name", "display_name", "displayName", "code", "dataset_code", "datasetCode")
+    : datasetCode || "No dataset selected"
 
   const freshnessRecord = React.useMemo(() => {
     if (!datasetCode) return freshness[0] ?? null
     return (
-      freshness.find(
-        (row) =>
-          readStringValue(row, ["dataset_code", "datasetCode", "code"]) === datasetCode,
-      ) ??
+      freshness.find((row) => datasetCodeOf(row) === datasetCode) ??
       freshness[0] ??
       null
     )
   }, [datasetCode, freshness])
 
-  const summaryCards = React.useMemo(() => {
+  const dimensionChoices = React.useMemo(() => {
+    const fromDataset = catalogCodes(selectedDataset, [
+      "dimensions",
+      "dimension_fields",
+      "dimensionFields",
+      "group_by",
+      "groupBy",
+      "available_dimensions",
+      "availableDimensions",
+      "fields",
+      "columns",
+    ])
+    const fromMetrics = metrics.filter((row) => metricKind(row) === "dimension").map(metricCode)
+    const fromDatasetKeys = selectedDataset
+      ? Object.keys(selectedDataset).filter((key) => {
+          const value = selectedDataset[key]
+          return typeof value !== "object" || value === null
+        })
+      : []
+    return uniqueCodes([...fromDataset, ...fromMetrics, ...fromDatasetKeys, ...DEFAULT_DIMENSIONS])
+  }, [metrics, selectedDataset])
+
+  const measureChoices = React.useMemo(() => {
+    const fromDataset = catalogCodes(selectedDataset, [
+      "measures",
+      "measure_fields",
+      "measureFields",
+      "facts",
+      "available_measures",
+      "availableMeasures",
+    ])
+    const fromMetrics = metrics.filter((row) => metricKind(row) === "measure").map(metricCode)
+    return Array.from(new Set([...fromDataset, ...fromMetrics].filter(Boolean)))
+  }, [metrics, selectedDataset])
+
+  const isRefreshingDataset = refreshingDatasetCode.length > 0 && refreshingDatasetCode === datasetCode
+
+  const selectedDimensions = React.useMemo(() => splitCsvInput(dimensions), [dimensions])
+  const selectedMeasures = React.useMemo(() => splitCsvInput(measures), [measures])
+  const stepComplete = {
+    dataset: Boolean(datasetCode.trim()),
+    columns: selectedDimensions.length > 0 && selectedMeasures.length > 0,
+  }
+
+  const branchOptions = React.useMemo(
+    () => toOptions(branches, ["name", "branch_name", "branchName"]),
+    [branches],
+  )
+  const allDepartmentOptions = React.useMemo(
+    () =>
+      toOptions(
+        departments,
+        ["name", "department_name", "departmentName"],
+        ["branch_id", "branchId", "branch"],
+      ),
+    [departments],
+  )
+  const departmentOptions = React.useMemo(() => {
+    if (filterBranchId === null) return allDepartmentOptions
+    return allDepartmentOptions.filter((option) => option.branchId === filterBranchId)
+  }, [allDepartmentOptions, filterBranchId])
+  const allEmployeeOptions = React.useMemo(() => toEmployeeOptions(employees), [employees])
+  const employeeOptions = React.useMemo(() => {
+    let options = allEmployeeOptions
+    if (filterBranchId !== null) {
+      const byBranch = options.filter(
+        (option) => option.branchId === null || option.branchId === filterBranchId,
+      )
+      if (byBranch.length > 0) options = byBranch
+    }
+    if (filterDepartmentId !== null) {
+      const byDepartment = options.filter(
+        (option) => option.departmentId === null || option.departmentId === filterDepartmentId,
+      )
+      if (byDepartment.length > 0) options = byDepartment
+    }
+    return options
+  }, [allEmployeeOptions, filterBranchId, filterDepartmentId])
+  const selectedFilterEmployee = React.useMemo(
+    () => employeeOptions.find((option) => option.id === filterEmployeeId) ?? null,
+    [employeeOptions, filterEmployeeId],
+  )
+
+  React.useEffect(() => {
+    if (filterDepartmentId === null) return
+    if (!departmentOptions.some((option) => option.id === filterDepartmentId)) {
+      setFilterDepartmentId(null)
+    }
+  }, [departmentOptions, filterDepartmentId])
+
+  React.useEffect(() => {
+    if (filterEmployeeId === null) return
+    if (!employeeOptions.some((option) => option.id === filterEmployeeId)) {
+      setFilterEmployeeId(null)
+    }
+  }, [employeeOptions, filterEmployeeId])
+
+  function analyticsScope() {
+    const filters: Record<string, unknown> = {}
+    if (filterEmploymentStatus.trim()) {
+      filters.employment_status = filterEmploymentStatus.trim()
+    }
+    return {
+      date_from: fromDate || undefined,
+      date_to: toDate || undefined,
+      purpose: purpose.trim() || undefined,
+      branch_id: filterBranchId ?? undefined,
+      department_id: filterDepartmentId ?? undefined,
+      employee_id: filterEmployeeId ?? undefined,
+      filters: Object.keys(filters).length > 0 ? filters : undefined,
+    }
+  }
+
+  const snapshotStats = React.useMemo(() => {
     const headcount = readSummaryNumber(dashboardSummary, [
       "headcount",
       "employee_count",
@@ -932,42 +1357,11 @@ export function AttendanceReportView() {
       "attendance_percentage",
       "present_rate",
     ])
-    const pendingLeave = readSummaryNumber(dashboardSummary, [
-      "pending_leave",
-      "pending_leaves",
-      "leave_pending",
-    ])
-    const openOnboarding = readSummaryNumber(dashboardSummary, [
-      "pending_onboarding",
-      "open_onboarding_requests",
-      "onboarding_pending",
-    ])
-
-    return [
-      {
-        label: "Datasets",
-        value: String(datasets.length),
-        help: "Analytics datasets returned by the backend catalog.",
-      },
-      {
-        label: "Metrics",
-        value: String(metrics.length),
-        help: "Metric definitions available for custom reports and dashboards.",
-      },
-      {
-        label: "Headcount",
-        value: headcount !== null ? String(headcount) : "—",
-        help: "HR dashboard summary from the analytics endpoint.",
-      },
-      {
-        label: "Attendance",
-        value: attendanceRate !== null ? `${attendanceRate}%` : "—",
-        help: pendingLeave !== null || openOnboarding !== null
-          ? `Pending leave ${pendingLeave ?? 0} • onboarding ${openOnboarding ?? 0}`
-          : "No summary metric returned for the selected snapshot.",
-      },
-    ]
-  }, [dashboardSummary, datasets.length, metrics.length])
+    return {
+      headcount: headcount !== null ? String(headcount) : "",
+      attendance: attendanceRate !== null ? `${attendanceRate}%` : "",
+    }
+  }, [dashboardSummary])
 
   const customResultColumns = React.useMemo(() => {
     const sample = customRows[0]
@@ -989,27 +1383,14 @@ export function AttendanceReportView() {
       return
     }
 
-    let parsedFilters: Record<string, unknown> | undefined
-    if (filtersJson.trim()) {
-      try {
-        parsedFilters = JSON.parse(filtersJson) as Record<string, unknown>
-      } catch {
-        toast.error("Filters must be valid JSON.")
-        return
-      }
-    }
-
     setRunningCustom(true)
     setActionSummary(null)
     try {
       const result = await runAnalyticsCustomReport(token, {
-        date_from: fromDate || undefined,
-        date_to: toDate || undefined,
-        purpose: purpose.trim() || undefined,
+        ...analyticsScope(),
         dataset_code: datasetCode.trim(),
         dimensions: parsedDimensions,
         measures: parsedMeasures,
-        filters: parsedFilters,
         limit: limit.trim() ? Number(limit) : undefined,
       })
 
@@ -1047,26 +1428,13 @@ export function AttendanceReportView() {
       return
     }
 
-    let parsedFilters: Record<string, unknown> | undefined
-    if (filtersJson.trim()) {
-      try {
-        parsedFilters = JSON.parse(filtersJson) as Record<string, unknown>
-      } catch {
-        toast.error("Filters must be valid JSON.")
-        return
-      }
-    }
-
     setExporting(true)
     try {
       const result = await exportAnalyticsReport(token, {
-        date_from: fromDate || undefined,
-        date_to: toDate || undefined,
-        purpose: purpose.trim() || undefined,
+        ...analyticsScope(),
         dataset_code: datasetCode.trim(),
         dimensions: parsedDimensions,
         measures: parsedMeasures,
-        filters: parsedFilters,
         limit: limit.trim() ? Number(limit) : undefined,
         output_format: outputFormat,
         idempotency_key: `analytics-export-${datasetCode.trim()}-${Date.now()}`,
@@ -1091,11 +1459,9 @@ export function AttendanceReportView() {
     setRefreshingDatasetCode(datasetCode)
     try {
       const result = await refreshAnalyticsDataset(token, {
+        ...analyticsScope(),
         dataset_code: datasetCode.trim(),
         refresh_mode: "MANUAL",
-        date_from: fromDate || undefined,
-        date_to: toDate || undefined,
-        purpose: purpose.trim() || undefined,
       })
       setActionSummary(result as AdminRecord)
       await loadAnalytics()
@@ -1138,10 +1504,8 @@ export function AttendanceReportView() {
     setRunningStatutory(true)
     try {
       const result = await runStatutoryReport(token, {
+        ...analyticsScope(),
         report_code: reportCode.trim(),
-        date_from: fromDate || undefined,
-        date_to: toDate || undefined,
-        purpose: purpose.trim() || undefined,
       })
       setActionSummary(result as AdminRecord)
       toast.success("Statutory report run created.")
@@ -1154,80 +1518,86 @@ export function AttendanceReportView() {
     }
   }
 
+  const lastRefresh =
+    readStringValue(freshnessRecord, ["refreshed_at", "updated_at", "last_refreshed_at"]) ||
+    readStringValue(freshness[0], ["refreshed_at", "updated_at", "last_refreshed_at"])
+
+  const visibleMeasures = showAllMetrics ? measureChoices : measureChoices.slice(0, 10)
+  const hasMoreChoices = measureChoices.length > 10
+  const freshnessLabel =
+    readStringValue(freshnessRecord, ["status", "freshness_status", "state"]) || ""
+
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 pb-8">
-      <div className="flex flex-col gap-1">
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">Reports</h1>
-        <p className="text-sm text-muted-foreground">
-          Download on-demand attendance files, manage scheduled delivery, and work directly with the new analytics/reporting APIs.
+    <motion.div
+      className="mx-auto flex w-full max-w-6xl flex-col gap-8 pb-12"
+      initial="hidden"
+      animate="show"
+      variants={pageStagger}
+    >
+      <motion.header variants={pageItem} className="space-y-1">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+          Operations
         </p>
-      </div>
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Reports</h1>
+        <p className="max-w-2xl text-sm text-muted-foreground">
+          {canBuildCustomReport
+            ? "Download a ready-made attendance file, or build a custom report from a dataset."
+            : "Download a filtered attendance file, or set up email delivery."}
+        </p>
+      </motion.header>
 
-      <div className="flex flex-col gap-8">
-        {REPORT_GROUPS.map((group) => (
-          <section key={group.id} className="flex flex-col gap-3">
-            <h2 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-              {group.title}
-            </h2>
-            <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {group.reports.map((report) => {
-                const tone = REPORT_TONE_CLASSES[report.tone]
-                return (
-                  <li key={report.id}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (report.href) {
-                          router.push(report.href)
-                          return
-                        }
-                        setActiveReport(report.id)
-                      }}
-                      className={cn(
-                        "group flex w-full items-start gap-3 rounded-2xl border p-4 text-left shadow-sm transition-all",
-                        "hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
-                        tone.card,
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          "mt-0.5 inline-flex size-10 shrink-0 items-center justify-center rounded-xl",
-                          tone.icon,
-                        )}
-                      >
-                        {report.icon}
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-sm font-semibold text-foreground">
-                          {report.title}
-                        </span>
-                        <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
-                          {report.description}
-                        </span>
-                      </span>
-                      <ChevronRightIcon
-                        className={cn(
-                          "mt-1 size-4 shrink-0 transition-transform group-hover:translate-x-0.5",
-                          tone.chevron,
-                        )}
-                      />
-                    </button>
-                  </li>
-                )
-              })}
-            </ul>
-          </section>
-        ))}
-      </div>
+      <motion.section variants={pageItem} className="space-y-3">
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 className="text-sm font-semibold tracking-tight text-foreground">Start here</h2>
+          <p className="text-xs text-muted-foreground">Ready-made files — no setup</p>
+        </div>
+        <div className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">
+          <motion.button
+            type="button"
+            className="flex w-full items-center gap-4 px-5 py-4 text-left transition-colors hover:bg-muted/50"
+            whileHover={{ x: 2 }}
+            whileTap={{ scale: 0.995 }}
+            onClick={() => setActiveReport("attendance-download")}
+          >
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <FileSpreadsheetIcon className="size-5" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-medium text-foreground">Download attendance</span>
+              <span className="mt-0.5 block text-sm text-muted-foreground">
+                Filter by people, branch, and dates. Save as Excel, CSV, or PDF.
+              </span>
+            </span>
+            <DownloadIcon className="size-4 shrink-0 text-muted-foreground" />
+          </motion.button>
+          <motion.button
+            type="button"
+            className="flex w-full items-center gap-4 px-5 py-4 text-left transition-colors hover:bg-muted/50"
+            whileHover={{ x: 2 }}
+            whileTap={{ scale: 0.995 }}
+            onClick={() => router.push("/dashboard/operations/scheduled-reporting")}
+          >
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted text-foreground">
+              <MailIcon className="size-5" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-medium text-foreground">Email reports on a schedule</span>
+              <span className="mt-0.5 block text-sm text-muted-foreground">
+                Templates, SMTP, and delivery history.
+              </span>
+            </span>
+            <CalendarClockIcon className="size-4 shrink-0 text-muted-foreground" />
+          </motion.button>
+        </div>
+      </motion.section>
 
-      <section className="space-y-4 rounded-3xl border border-border bg-card p-5 shadow-sm">
-        <div className="flex flex-wrap items-end justify-between gap-3">
+      {canBuildCustomReport ? (
+      <motion.section variants={pageItem} className="rounded-2xl border border-border bg-card">
+        <div className="flex flex-wrap items-start justify-between gap-3 px-5 py-4">
           <div>
-            <h2 className="text-lg font-semibold tracking-tight text-foreground">
-              Analytics Studio
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              Catalog datasets and metrics, refresh analytics sources, run custom reports, queue exports, and start statutory reporting from one place.
+            <h2 className="text-sm font-semibold tracking-tight text-foreground">Build a custom report</h2>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              Choose data, click the columns you want, then run.
             </p>
           </div>
           <button
@@ -1237,426 +1607,547 @@ export function AttendanceReportView() {
             onClick={() => void loadAnalytics()}
           >
             <RefreshCwIcon className={cn("size-4", loadingAnalytics && "animate-spin")} />
-            Refresh analytics
+            Refresh catalog
           </button>
         </div>
 
+        <ol className="flex flex-wrap items-center gap-2 border-y border-border px-5 py-2.5 text-xs">
+          {[
+            { n: "1", label: "Pick data", done: stepComplete.dataset },
+            { n: "2", label: "Choose columns", done: stepComplete.columns },
+            { n: "3", label: "Run", done: Boolean(customSummary) },
+          ].map((step, index) => (
+            <li key={step.n} className="flex items-center gap-2">
+              {index > 0 ? <span className="hidden h-px w-6 bg-border sm:block" /> : null}
+              <span
+                className={cn(
+                  "inline-flex size-5 items-center justify-center rounded-full text-[10px] font-semibold",
+                  step.done
+                    ? "bg-primary text-primary-foreground"
+                    : "border border-border text-muted-foreground",
+                )}
+              >
+                {step.n}
+              </span>
+              <span className={cn(step.done ? "font-medium text-foreground" : "text-muted-foreground")}>
+                {step.label}
+              </span>
+            </li>
+          ))}
+        </ol>
+
         {analyticsError ? (
-          <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300">
+          <div className="mx-5 mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300">
             {analyticsError}
           </div>
         ) : null}
 
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          {summaryCards.map((card) => (
-            <div key={card.label} className="rounded-2xl border border-border bg-background/70 p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                {card.label}
-              </p>
-              <p className="mt-2 text-2xl font-semibold tracking-tight text-foreground">
-                {loadingAnalytics ? "…" : card.value}
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">{card.help}</p>
-            </div>
-          ))}
-        </div>
+        <p className="flex flex-wrap gap-x-4 gap-y-1 px-5 py-2.5 text-xs text-muted-foreground">
+          <span>
+            <strong className="font-medium text-foreground">{loadingAnalytics ? "…" : datasets.length}</strong>{" "}
+            datasets
+          </span>
+          <span>
+            <strong className="font-medium text-foreground">{loadingAnalytics ? "…" : metrics.length}</strong>{" "}
+            metrics
+          </span>
+          {sources.length > 0 ? (
+            <span>
+              <strong className="font-medium text-foreground">{sources.length}</strong> sources
+            </span>
+          ) : null}
+          {snapshotStats.headcount ? (
+            <span>
+              Headcount <strong className="font-medium text-foreground">{snapshotStats.headcount}</strong>
+            </span>
+          ) : null}
+          {snapshotStats.attendance ? (
+            <span>
+              Attendance <strong className="font-medium text-foreground">{snapshotStats.attendance}</strong>
+            </span>
+          ) : null}
+          {lastRefresh ? <span>Last refresh {lastRefresh}</span> : null}
+        </p>
 
-        <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
-          <div className="space-y-4 rounded-2xl border border-border bg-background/60 p-4">
-            <div>
-              <h3 className="text-base font-semibold tracking-tight text-foreground">
-                Catalog and freshness
-              </h3>
-              <p className="text-sm text-muted-foreground">
-                Review the analytics assets the backend has published for reporting.
+        <div className="grid gap-0 border-t border-border lg:grid-cols-[minmax(15rem,18.5rem)_minmax(0,1fr)]">
+          <aside className="border-b border-border lg:border-r lg:border-b-0">
+            <div className="px-5 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                1 · Dataset
               </p>
             </div>
-
-            <div className="grid gap-4 lg:grid-cols-2">
-              <div className="rounded-xl border border-border bg-card p-3">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <h4 className="text-sm font-semibold text-foreground">Datasets</h4>
-                  <span className="text-xs text-muted-foreground">{datasets.length}</span>
-                </div>
-                {loadingAnalytics ? (
-                  <p className="text-sm text-muted-foreground">Loading datasets…</p>
-                ) : datasets.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No datasets returned yet.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {datasets.slice(0, 6).map((row, index) => {
-                      const code = readStringValue(row, ["code", "dataset_code", "name"])
-                      return (
+            <div className="max-h-[28rem] overflow-y-auto px-2 pb-3">
+              {loadingAnalytics ? (
+                <p className="px-3 py-6 text-sm text-muted-foreground">Loading datasets…</p>
+              ) : datasets.length === 0 ? (
+                <p className="px-3 py-6 text-sm text-muted-foreground">No datasets published yet.</p>
+              ) : (
+                <motion.ul variants={listStagger} initial="hidden" animate="show">
+                  {datasets.map((row, index) => {
+                    const code = datasetCodeOf(row)
+                    const selected = Boolean(code) && datasetCode === code
+                    return (
+                      <motion.li key={`dataset-${code || index}`} variants={listItem}>
                         <button
-                          key={`dataset-${code || index}`}
                           type="button"
                           className={cn(
-                            "flex w-full items-start justify-between gap-3 rounded-lg border px-3 py-2 text-left transition hover:bg-muted/40",
-                            datasetCode === code ? "border-primary bg-primary/5" : "border-border",
+                            "relative flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-left transition",
+                            selected ? "bg-primary/10 text-foreground" : "hover:bg-muted/60",
                           )}
                           onClick={() => {
+                            if (!code) return
                             setDatasetCode(code)
                             setCustomRows([])
                             setCustomSummary(null)
                           }}
                         >
-                          <div>
-                            <p className="text-sm font-medium text-foreground">
-                              {getName(row, "name", "display_name", "code", "dataset_code")}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {code || "No dataset code"}
-                            </p>
-                          </div>
-                          <ChevronRightIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                          {selected ? (
+                            <motion.span
+                              layoutId="dataset-indicator"
+                              className="absolute inset-y-1 left-0 w-0.5 rounded-full bg-primary"
+                            />
+                          ) : null}
+                          <span className="min-w-0">
+                            <span className="block truncate text-sm font-medium">
+                              {getName(
+                                row,
+                                "name",
+                                "display_name",
+                                "displayName",
+                                "code",
+                                "dataset_code",
+                                "datasetCode",
+                              )}
+                            </span>
+                            <span className="block truncate text-xs text-muted-foreground">
+                              {code || "No code"}
+                            </span>
+                          </span>
                         </button>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-
-              <div className="rounded-xl border border-border bg-card p-3">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <h4 className="text-sm font-semibold text-foreground">Freshness</h4>
-                  <span className="text-xs text-muted-foreground">{freshness.length}</span>
-                </div>
-                {loadingAnalytics ? (
-                  <p className="text-sm text-muted-foreground">Loading freshness…</p>
-                ) : freshness.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No freshness records were returned.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {freshness.slice(0, 6).map((row, index) => {
-                      const code = readStringValue(row, ["dataset_code", "datasetCode", "code", "name"])
-                      return (
-                        <div
-                          key={`freshness-${code || index}`}
-                          className={cn(
-                            "rounded-lg border px-3 py-2",
-                            datasetCode && datasetCode === code ? "border-primary bg-primary/5" : "border-border",
-                          )}
-                        >
-                          <p className="text-sm font-medium text-foreground">{code || "Dataset"}</p>
-                          <p className="text-xs text-muted-foreground">
-                            Last update:{" "}
-                            {readStringValue(row, ["refreshed_at", "updated_at", "last_refreshed_at", "lastUpdatedAt"]) ||
-                              "Not provided"}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            Status:{" "}
-                            {readStringValue(row, ["status", "freshness_status", "state"]) || "Unknown"}
-                          </p>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
+                      </motion.li>
+                    )
+                  })}
+                </motion.ul>
+              )}
             </div>
+          </aside>
 
-            <div className="grid gap-4 lg:grid-cols-2">
-              <div className="rounded-xl border border-border bg-card p-3">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <h4 className="text-sm font-semibold text-foreground">Metrics</h4>
-                  <span className="text-xs text-muted-foreground">{metrics.length}</span>
-                </div>
-                {loadingAnalytics ? (
-                  <p className="text-sm text-muted-foreground">Loading metrics…</p>
-                ) : metrics.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No metric definitions returned.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {metrics.slice(0, 6).map((row, index) => (
-                      <div key={`metric-${index}`} className="rounded-lg border border-border px-3 py-2">
-                        <p className="text-sm font-medium text-foreground">
-                          {getName(row, "name", "display_name", "code", "metric_code")}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {readStringValue(row, ["code", "metric_code", "slug"]) || "No metric code"}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="rounded-xl border border-border bg-card p-3">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <h4 className="text-sm font-semibold text-foreground">Sources</h4>
-                  <span className="text-xs text-muted-foreground">{sources.length}</span>
-                </div>
-                {loadingAnalytics ? (
-                  <p className="text-sm text-muted-foreground">Loading sources…</p>
-                ) : sources.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No analytics sources were returned.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {sources.slice(0, 6).map((row, index) => (
-                      <div key={`source-${index}`} className="rounded-lg border border-border px-3 py-2">
-                        <p className="text-sm font-medium text-foreground">
-                          {getName(row, "name", "display_name", "code", "source_code")}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {readStringValue(row, ["status", "state", "mode", "type"]) || "Source metadata"}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-4 rounded-2xl border border-border bg-background/60 p-4">
+          <div className="space-y-5 px-5 py-4">
             <div>
-              <h3 className="text-base font-semibold tracking-tight text-foreground">
-                Report builder
-              </h3>
-              <p className="text-sm text-muted-foreground">
-                Build a custom analytics run, queue an export, refresh a dataset, or trigger statutory and reconciliation flows.
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                2 · Columns and period
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Using <span className="font-medium text-foreground">{activeDatasetLabel}</span>
+                {freshnessLabel ? ` · ${freshnessLabel}` : null}
               </p>
             </div>
 
-            <div className="grid gap-3">
-              <Field label="Dataset">
+            <div className="space-y-3">
+              <SuggestField
+                id="report-group-by"
+                label="Group by"
+                value={dimensions}
+                onChange={setDimensions}
+                options={dimensionChoices}
+                placeholder="Type to search columns"
+                hint="How rows should be split — type to search, click to add or remove."
+              />
+
+              <Field label="Numbers to show">
+                <Input
+                  value={measures}
+                  onChange={(event) => setMeasures(event.target.value)}
+                  placeholder="headcount, attendance_rate"
+                />
+              </Field>
+              {visibleMeasures.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {visibleMeasures.map((code) => {
+                    const selected = selectedMeasures.includes(code)
+                    return (
+                      <button
+                        key={`measure-${code}`}
+                        type="button"
+                        className={cn(
+                          "rounded-full border px-2.5 py-1 text-xs font-medium transition",
+                          selected
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-border bg-background text-foreground hover:bg-muted",
+                        )}
+                        onClick={() => setMeasures((current) => toggleCsvValue(current, code))}
+                      >
+                        {code.replace(/_/g, " ")}
+                      </button>
+                    )
+                  })}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  The values calculated for each group. Type them here if no metrics are listed yet.
+                </p>
+              )}
+
+              {hasMoreChoices ? (
+                <button
+                  type="button"
+                  className="text-xs font-medium text-primary hover:underline"
+                  onClick={() => setShowAllMetrics((current) => !current)}
+                >
+                  {showAllMetrics ? "Show fewer columns" : "Show all catalog columns"}
+                </button>
+              ) : null}
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="From">
+                <DatePickerPresets value={fromDate} onChange={setFromDate} placeholder="Optional start date" />
+              </Field>
+              <Field label="To">
+                <DatePickerPresets value={toDate} onChange={setToDate} placeholder="Optional end date" />
+              </Field>
+              <Field label="Branch">
                 <Select
-                  value={datasetCode || "none"}
-                  onValueChange={(value) =>
-                    setDatasetCode(!value || value === "none" ? "" : value)
-                  }
-                  disabled={loadingAnalytics}
+                  value={filterBranchId != null ? String(filterBranchId) : "all"}
+                  onValueChange={(value) => {
+                    setFilterBranchId(value && value !== "all" ? Number(value) : null)
+                    setFilterDepartmentId(null)
+                    setFilterEmployeeId(null)
+                  }}
+                  disabled={loadingFilters}
                 >
                   <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select dataset">
-                      {activeDatasetLabel}
+                    <SelectValue placeholder="All branches">
+                      {selectedLabel(branchOptions, filterBranchId, "All branches")}
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">Select dataset</SelectItem>
-                    {datasets.map((row, index) => {
-                      const code = readStringValue(row, ["code", "dataset_code", "name"])
-                      if (!code) return null
-                      return (
-                        <SelectItem key={`builder-dataset-${code}-${index}`} value={code}>
-                          {getName(row, "name", "display_name", "code", "dataset_code")}
-                        </SelectItem>
-                      )
-                    })}
+                    <SelectItem value="all">All branches</SelectItem>
+                    {branchOptions.map((option) => (
+                      <SelectItem key={option.id} value={String(option.id)}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </Field>
-
-              <div className="grid gap-3 md:grid-cols-2">
-                <Field label="Date from">
-                  <DatePickerPresets value={fromDate} onChange={setFromDate} placeholder="Optional start date" />
-                </Field>
-                <Field label="Date to">
-                  <DatePickerPresets value={toDate} onChange={setToDate} placeholder="Optional end date" />
-                </Field>
-              </div>
-
-              <Field label="Purpose">
-                <Input value={purpose} onChange={(event) => setPurpose(event.target.value)} placeholder="reporting" />
+              <Field label="Department">
+                <Select
+                  value={filterDepartmentId != null ? String(filterDepartmentId) : "all"}
+                  onValueChange={(value) => {
+                    setFilterDepartmentId(value && value !== "all" ? Number(value) : null)
+                    setFilterEmployeeId(null)
+                  }}
+                  disabled={loadingFilters}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="All departments">
+                      {selectedLabel(departmentOptions, filterDepartmentId, "All departments")}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All departments</SelectItem>
+                    {departmentOptions.map((option) => (
+                      <SelectItem key={option.id} value={String(option.id)}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </Field>
-              <Field label="Dimensions (comma separated)">
-                <Input value={dimensions} onChange={(event) => setDimensions(event.target.value)} placeholder="department_name,branch_name" />
+              <Field label="Employee">
+                <Select
+                  value={filterEmployeeId != null ? String(filterEmployeeId) : "all"}
+                  onValueChange={(value) => {
+                    setFilterEmployeeId(value && value !== "all" ? Number(value) : null)
+                  }}
+                  disabled={loadingFilters}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="All employees">
+                      {selectedFilterEmployee?.label ?? "All employees"}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all" data-search-text="all employees">
+                      All employees
+                    </SelectItem>
+                    {employeeOptions.map((option) => (
+                      <SelectItem
+                        key={option.id}
+                        value={String(option.id)}
+                        data-search-text={`${option.label} ${option.employeeNo}`}
+                      >
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </Field>
-              <Field label="Measures (comma separated)">
-                <Input value={measures} onChange={(event) => setMeasures(event.target.value)} placeholder="headcount,attendance_rate" />
-              </Field>
-              <div className="grid gap-3 md:grid-cols-2">
-                <Field label="Row limit">
-                  <Input value={limit} onChange={(event) => setLimit(event.target.value)} placeholder="1000" />
-                </Field>
-                <Field label="Export format">
-                  <Select
-                    value={outputFormat}
-                    onValueChange={(value) => {
-                      if (value === "CSV" || value === "JSON") setOutputFormat(value)
-                    }}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue>{outputFormat}</SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="CSV">CSV</SelectItem>
-                      <SelectItem value="JSON">JSON</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </Field>
-              </div>
-              <Field label="Filters JSON">
-                <textarea
-                  className="min-h-24 rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none transition placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-                  value={filtersJson}
-                  onChange={(event) => setFiltersJson(event.target.value)}
-                  placeholder='{"employment_status":"active"}'
-                />
-              </Field>
-              <Field label="Statutory report code">
-                <Input value={reportCode} onChange={(event) => setReportCode(event.target.value)} placeholder="PAYE" />
+              <Field label="Employment status">
+                <Select
+                  value={filterEmploymentStatus || "all"}
+                  onValueChange={(value) => setFilterEmploymentStatus(value === "all" ? "" : value || "")}
+                  disabled={loadingFilters}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="All employment statuses">
+                      {EMPLOYMENT_STATUS_OPTIONS.find((option) => option.value === filterEmploymentStatus)?.label ??
+                        "All employment statuses"}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {EMPLOYMENT_STATUS_OPTIONS.map((option) => (
+                      <SelectItem key={option.label} value={option.value || "all"}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </Field>
             </div>
 
-            {freshnessRecord ? (
-              <div className="rounded-xl border border-border bg-card px-3 py-2">
-                <p className="text-sm font-medium text-foreground">Selected dataset freshness</p>
-                <p className="text-xs text-muted-foreground">
-                  {readStringValue(freshnessRecord, ["dataset_code", "datasetCode", "code"]) || datasetCode || "Dataset"}
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {readStringValue(freshnessRecord, ["refreshed_at", "updated_at", "last_refreshed_at"]) || "No freshness timestamp"}
-                </p>
-              </div>
-            ) : null}
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition hover:text-foreground"
+              onClick={() => setShowAdvanced((current) => !current)}
+              aria-expanded={showAdvanced}
+            >
+              <ChevronDownIcon
+                className={cn("size-4 transition-transform", showAdvanced ? "rotate-180" : "rotate-0")}
+              />
+              More options
+            </button>
 
-            <div className="flex flex-wrap gap-2">
+            <AnimatePresence initial={false}>
+              {showAdvanced ? (
+                <motion.div
+                  key="advanced"
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                  className="overflow-hidden"
+                >
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label="Purpose">
+                      <Input
+                        value={purpose}
+                        onChange={(event) => setPurpose(event.target.value)}
+                        placeholder="reporting"
+                      />
+                    </Field>
+                    <div className="grid grid-cols-2 gap-3">
+                      <Field label="Row limit">
+                        <Input value={limit} onChange={(event) => setLimit(event.target.value)} placeholder="1000" />
+                      </Field>
+                      <Field label="Export as">
+                        <Select
+                          value={outputFormat}
+                          onValueChange={(value) => {
+                            if (value === "CSV" || value === "JSON") setOutputFormat(value)
+                          }}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue>{outputFormat}</SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="CSV">CSV</SelectItem>
+                            <SelectItem value="JSON">JSON</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </Field>
+                    </div>
+                    <div className="space-y-3 rounded-xl border border-dashed border-border px-3 py-3">
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                        Specialized
+                      </p>
+                      <Field label="Statutory code">
+                        <Input
+                          value={reportCode}
+                          onChange={(event) => setReportCode(event.target.value)}
+                          placeholder="PAYE"
+                        />
+                      </Field>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => void onRunStatutory()}
+                          disabled={runningStatutory}
+                        >
+                          {runningStatutory ? (
+                            <Loader2Icon data-icon="inline-start" className="animate-spin" />
+                          ) : (
+                            <ScrollTextIcon data-icon="inline-start" />
+                          )}
+                          Run statutory
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => void onRunReconciliation()}
+                          disabled={reconciling}
+                        >
+                          {reconciling ? (
+                            <Loader2Icon data-icon="inline-start" className="animate-spin" />
+                          ) : (
+                            <ScaleIcon data-icon="inline-start" />
+                          )}
+                          Reconcile warehouse
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
+
+            <div className="flex flex-wrap items-center gap-2 border-t border-border pt-4">
+              <p className="w-full text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                3 · Run
+              </p>
               <Button type="button" onClick={() => void onRunCustomReport()} disabled={runningCustom}>
                 {runningCustom ? (
-                  <>
-                    <Loader2Icon data-icon="inline-start" className="animate-spin" />
-                    Running…
-                  </>
+                  <Loader2Icon data-icon="inline-start" className="animate-spin" />
                 ) : (
-                  "Run custom report"
+                  <PlayIcon data-icon="inline-start" />
                 )}
+                {runningCustom ? "Running…" : "Run report"}
               </Button>
               <Button type="button" variant="outline" onClick={() => void onExportReport()} disabled={exporting}>
                 {exporting ? (
-                  <>
-                    <Loader2Icon data-icon="inline-start" className="animate-spin" />
-                    Exporting…
-                  </>
+                  <Loader2Icon data-icon="inline-start" className="animate-spin" />
                 ) : (
-                  `Queue ${outputFormat} export`
+                  <DownloadIcon data-icon="inline-start" />
                 )}
+                {exporting ? "Exporting…" : `Export ${outputFormat}`}
               </Button>
-              <Button type="button" variant="outline" onClick={() => void onRefreshDataset()} disabled={refreshingDatasetCode === datasetCode || !datasetCode.trim()}>
-                {refreshingDatasetCode === datasetCode ? (
-                  <>
-                    <Loader2Icon data-icon="inline-start" className="animate-spin" />
-                    Refreshing…
-                  </>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => void onRefreshDataset()}
+                disabled={isRefreshingDataset || !datasetCode.trim()}
+              >
+                {isRefreshingDataset ? (
+                  <Loader2Icon data-icon="inline-start" className="animate-spin" />
                 ) : (
-                  "Refresh dataset"
+                  <RefreshCwIcon data-icon="inline-start" />
                 )}
-              </Button>
-              <Button type="button" variant="outline" onClick={() => void onRunReconciliation()} disabled={reconciling}>
-                {reconciling ? (
-                  <>
-                    <Loader2Icon data-icon="inline-start" className="animate-spin" />
-                    Reconciling…
-                  </>
-                ) : (
-                  "Run reconciliation"
-                )}
-              </Button>
-              <Button type="button" variant="outline" onClick={() => void onRunStatutory()} disabled={runningStatutory}>
-                {runningStatutory ? (
-                  <>
-                    <Loader2Icon data-icon="inline-start" className="animate-spin" />
-                    Running…
-                  </>
-                ) : (
-                  "Run statutory report"
-                )}
+                {isRefreshingDataset ? "Refreshing…" : "Refresh data"}
               </Button>
             </div>
+
+            <AnimatePresence initial={false}>
+              {customSummary ? (
+                <motion.div
+                  key="custom-result"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 8 }}
+                  transition={{ duration: 0.24 }}
+                  className="border-t border-border pt-4"
+                >
+                  <h3 className="text-sm font-semibold tracking-tight">Result</h3>
+                  <p className="mt-0.5 text-sm text-muted-foreground">
+                    First 20 rows for {activeDatasetLabel}.
+                  </p>
+                  {customRows.length > 0 ? (
+                    <div className="mt-3 overflow-x-auto rounded-lg border border-border">
+                      <table className="min-w-full text-sm">
+                        <thead className="border-b border-border bg-muted/40 text-left text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                          <tr>
+                            {customResultColumns.map((column) => (
+                              <th key={column} className="px-3 py-2">
+                                {column.replace(/_/g, " ")}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border text-foreground">
+                          {customRows.slice(0, 20).map((row, index) => (
+                            <tr key={`custom-row-${index}`}>
+                              {customResultColumns.map((column) => (
+                                <td key={`${index}-${column}`} className="px-3 py-2 align-top text-xs">
+                                  {typeof row[column] === "object" && row[column] !== null
+                                    ? readStringValue(row[column] as AdminRecord, [
+                                        "name",
+                                        "label",
+                                        "title",
+                                        "code",
+                                      ]) || "Structured value"
+                                    : String(row[column] ?? "—")}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <dl className="mt-3 grid gap-x-6 gap-y-2 sm:grid-cols-[10rem_1fr]">
+                      {keyValueEntries(customSummary).map(([key, value]) => (
+                        <React.Fragment key={key}>
+                          <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                            {key.replace(/_/g, " ")}
+                          </dt>
+                          <dd className="text-sm text-foreground">
+                            {typeof value === "object" && value !== null
+                              ? readStringValue(value as AdminRecord, ["name", "label", "title", "code"]) ||
+                                "Structured response"
+                              : String(value)}
+                          </dd>
+                        </React.Fragment>
+                      ))}
+                    </dl>
+                  )}
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
+
+            <AnimatePresence initial={false}>
+              {actionSummary ? (
+                <motion.div
+                  key="action-result"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 8 }}
+                  transition={{ duration: 0.24 }}
+                  className="border-t border-border pt-4"
+                >
+                  <h3 className="text-sm font-semibold tracking-tight">Latest action</h3>
+                  <p className="mt-0.5 text-sm text-muted-foreground">
+                    Export, refresh, statutory, or reconcile response.
+                  </p>
+                  <dl className="mt-3 grid gap-x-6 gap-y-2 sm:grid-cols-[10rem_1fr]">
+                    {keyValueEntries(actionSummary).map(([key, value]) => (
+                      <React.Fragment key={key}>
+                        <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                          {key.replace(/_/g, " ")}
+                        </dt>
+                        <dd className="text-sm text-foreground">
+                          {typeof value === "object" && value !== null
+                            ? readStringValue(value as AdminRecord, [
+                                "name",
+                                "label",
+                                "title",
+                                "code",
+                                "status",
+                              ]) || "Structured response"
+                            : String(value)}
+                        </dd>
+                      </React.Fragment>
+                    ))}
+                  </dl>
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
           </div>
         </div>
-
-        {customSummary ? (
-          <div className="space-y-3 rounded-2xl border border-border bg-background/60 p-4">
-            <div>
-              <h3 className="text-base font-semibold tracking-tight text-foreground">
-                Custom report result
-              </h3>
-              <p className="text-sm text-muted-foreground">
-                The custom-report endpoint returned the result below for the currently selected dataset.
-              </p>
-            </div>
-
-            {Array.isArray(customRows) && customRows.length > 0 ? (
-              <div className="overflow-x-auto rounded-lg border border-border">
-                <table className="min-w-full text-sm">
-                  <thead className="border-b border-border bg-muted/40 text-left text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                    <tr>
-                      {customResultColumns.map((column) => (
-                        <th key={column} className="px-3 py-2">
-                          {column.replace(/_/g, " ")}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border text-foreground">
-                    {customRows.slice(0, 20).map((row, index) => (
-                      <tr key={`custom-row-${index}`}>
-                        {customResultColumns.map((column) => (
-                          <td key={`${index}-${column}`} className="px-3 py-2 align-top text-xs">
-                            {typeof row[column] === "object" && row[column] !== null
-                              ? readStringValue(row[column] as AdminRecord, [
-                                  "name",
-                                  "label",
-                                  "title",
-                                  "code",
-                                ]) || "Structured value"
-                              : String(row[column] ?? "—")}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="grid gap-x-6 gap-y-3 md:grid-cols-[minmax(10rem,13rem)_1fr]">
-                {keyValueEntries(customSummary).map(([key, value]) => (
-                  <React.Fragment key={key}>
-                    <div className="border-b border-border py-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                      {key.replace(/_/g, " ")}
-                    </div>
-                    <div className="border-b border-border py-2 text-sm text-foreground">
-                      {typeof value === "object" && value !== null
-                        ? readStringValue(value as AdminRecord, ["name", "label", "title", "code"]) ||
-                          "Structured response"
-                        : String(value)}
-                    </div>
-                  </React.Fragment>
-                ))}
-              </div>
-            )}
-          </div>
-        ) : null}
-
-        {actionSummary ? (
-          <div className="space-y-3 rounded-2xl border border-border bg-background/60 p-4">
-            <div>
-              <h3 className="text-base font-semibold tracking-tight text-foreground">
-                Latest backend action
-              </h3>
-              <p className="text-sm text-muted-foreground">
-                The most recent export, refresh, reconciliation, or statutory action response is summarized below.
-              </p>
-            </div>
-            <div className="grid gap-x-6 gap-y-3 md:grid-cols-[minmax(10rem,13rem)_1fr]">
-              {keyValueEntries(actionSummary).map(([key, value]) => (
-                <React.Fragment key={key}>
-                  <div className="border-b border-border py-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                    {key.replace(/_/g, " ")}
-                  </div>
-                  <div className="border-b border-border py-2 text-sm text-foreground">
-                    {typeof value === "object" && value !== null
-                      ? readStringValue(value as AdminRecord, ["name", "label", "title", "code", "status"]) ||
-                        "Structured response"
-                      : String(value)}
-                  </div>
-                </React.Fragment>
-              ))}
-            </div>
-          </div>
-        ) : null}
-      </section>
+      </motion.section>
+      ) : null}
 
       <AttendanceReportDialog
         open={activeReport === "attendance-download"}
@@ -1664,7 +2155,7 @@ export function AttendanceReportView() {
           if (!open) setActiveReport(null)
         }}
       />
-    </div>
+    </motion.div>
   )
 }
 

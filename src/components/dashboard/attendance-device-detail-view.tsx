@@ -37,6 +37,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import {
   assignEmployeeDevices,
   captureEmployeeDeviceFingerprint,
+  createEmployeeDeviceCard,
   createEmployeeDevicePassword,
   deleteEmployeeDeviceFingerprint,
   disableEmployeeDeviceFingerprint,
@@ -48,6 +49,7 @@ import {
   listAttendanceDeviceAssignmentMatches,
   listAttendanceDeviceEmployees,
   listEmployeeDeviceFingerprints,
+  listHikvisionDeviceAttendanceLogs,
   listEmployees,
   registerEmployeeDeviceUser,
   resyncEmployeeDeviceFingerprint,
@@ -55,6 +57,7 @@ import {
   syncAccessControlDeviceDoors,
   syncAccessControlDeviceTemplates,
   syncAccessControlDeviceWeekPlans,
+  syncHikvisionAttendanceByDate,
   syncHikvisionDeviceFingerprints,
   syncHikvisionDeviceUsers,
   syncEmployeeDeviceFingerprint,
@@ -2491,6 +2494,26 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
                               </button>
                               <button
                                 type="button"
+                                className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs font-medium text-primary hover:bg-[color:rgb(var(--primary-rgb)/0.08)]"
+                                onClick={() => {
+                                  const token = readStoredToken()
+                                  const employeeId = readNumberFromRecord(emp, ["id", "employee_id", "employeeId"])
+                                  const cardNo = window.prompt("Card number")
+                                  if (!token || employeeId === null || !cardNo) return
+                                  void createEmployeeDeviceCard(token, employeeId, deviceId, {
+                                    card_no: cardNo,
+                                    sync_to_device: true,
+                                  })
+                                    .then(() => showSuccessAlert("Card created."))
+                                    .catch((errorObject) => showErrorAlert(errorObject instanceof Error ? errorObject.message : "Card create failed."))
+                                }}
+                                title="Add card"
+                              >
+                                <CreditCardIcon className="h-3.5 w-3.5" />
+                                <span className="hidden sm:inline">Card</span>
+                              </button>
+                              <button
+                                type="button"
                                 className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs font-medium text-rose-600 hover:bg-rose-50"
                                 onClick={() => requestRemoveEmployee(emp)}
                                 title="Remove"
@@ -2570,6 +2593,27 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
                 </div>
               )
             })}
+            <div className="flex flex-wrap items-center justify-between gap-3 py-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-slate-900">Hikvision attendance</p>
+                <p className="text-xs text-slate-500">Pull device attendance logs for a date, then list the latest page.</p>
+              </div>
+              <button
+                type="button"
+                className="shrink-0 rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                onClick={() => {
+                  const token = readStoredToken()
+                  const date = window.prompt("Attendance date (YYYY-MM-DD)", new Date().toISOString().slice(0, 10))
+                  if (!token || !date) return
+                  void syncHikvisionAttendanceByDate(token, deviceId, { date })
+                    .then(() => listHikvisionDeviceAttendanceLogs(token, deviceId, { page: 1, limit: 20 }))
+                    .then((rows) => showSuccessAlert(`Attendance sync started. ${rows.length} log rows on this page.`))
+                    .catch((errorObject) => showErrorAlert(errorObject instanceof Error ? errorObject.message : "Attendance sync failed."))
+                }}
+              >
+                Sync attendance
+              </button>
+            </div>
           </div>
         ) : null}
       </div>

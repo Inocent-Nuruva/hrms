@@ -36,6 +36,7 @@ import {
   withdrawMyFinanceApplication,
   type AdminRecord,
 } from "@/lib/admin-api"
+import { useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
 import { readStoredSessionTokens } from "@/lib/session-client"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 
@@ -44,6 +45,7 @@ function readStoredToken() {
 }
 
 export function FinanceSelfView() {
+  const leaveIfForbidden = useLeaveIfForbidden()
   const [applications, setApplications] = React.useState<AdminRecord[]>([])
   const [products, setProducts] = React.useState<AdminRecord[]>([])
   const [loading, setLoading] = React.useState(true)
@@ -69,11 +71,15 @@ export function FinanceSelfView() {
     ])
     const first = results.find((result) => result.status === "rejected")
     if (first && first.status === "rejected") {
+      if (leaveIfForbidden(first.reason)) {
+        setLoading(false)
+        return
+      }
       setApplications([])
       setError(first.reason instanceof Error ? first.reason.message : "Could not load your finance applications.")
     }
     setLoading(false)
-  }, [])
+  }, [leaveIfForbidden])
 
   React.useEffect(() => {
     void load()

@@ -6,7 +6,8 @@ import { usePathname } from "next/navigation"
 
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { Tabs2 } from "@/components/ui/tabs-2"
-import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
+import { canSeeDashboardPage } from "@/lib/forbidden-routes"
+import { useForbiddenPrefixes } from "@/hooks/use-forbidden-route-guard"
 import { cn } from "@/lib/utils"
 import type { DashboardSectionTabGroup } from "@/lib/dashboard-sections"
 
@@ -26,6 +27,7 @@ export function DashboardSectionTabs({
   const pathname = usePathname()
   const currentPath = pathname ?? ""
   const actor = useDashboardActor()
+  const forbiddenVersion = useForbiddenPrefixes()
   // Defer permission-filtered UI until after mount so SSR and the first client
   // paint both render the same placeholder (avoids hydration mismatch).
   const [mounted, setMounted] = React.useState(false)
@@ -48,11 +50,11 @@ export function DashboardSectionTabs({
       .map((group) => ({
         ...group,
         items: group.items.filter((item) =>
-          canAccessDashboardRoute(item.url, actor.permissionLabels, actor.accessMode)
+          canSeeDashboardPage(item.url, actor.permissionLabels, actor.accessMode)
         ),
       }))
       .filter((group) => group.items.length > 0)
-  }, [actor.accessMode, actor.permissionLabels, actor.ready, groups, mounted])
+  }, [actor.accessMode, actor.permissionLabels, actor.ready, forbiddenVersion, groups, mounted])
 
   const hasGroupedTabs =
     filteredGroups.length > 1 && filteredGroups.every((group) => Boolean(group.title))

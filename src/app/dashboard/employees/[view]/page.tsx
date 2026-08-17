@@ -5,6 +5,7 @@ import { EmployeeRegistrationView } from "@/components/dashboard/employee-regist
 import { OnboardingView } from "@/components/dashboard/onboarding-view"
 import { OffboardingView } from "@/components/dashboard/offboarding-view"
 import { HrProfileUpdateApprovalsView } from "@/components/dashboard/hr-profile-update-approvals-view"
+import { HrProfileChangeRequestsView } from "@/components/dashboard/hr-profile-change-requests-view"
 
 const ALLOWED_VIEWS = new Set([
   "all",
@@ -12,6 +13,7 @@ const ALLOWED_VIEWS = new Set([
   "offboarding",
   "onboarding",
   "profile-update-approvals",
+  "profile-change-requests",
   "attendance",
 ])
 
@@ -66,6 +68,10 @@ export default async function EmployeesViewPage({
 
   if (normalized === "profile-update-approvals") {
     return <HrProfileUpdateApprovalsView />
+  }
+
+  if (normalized === "profile-change-requests") {
+    return <HrProfileChangeRequestsView />
   }
 
   return null

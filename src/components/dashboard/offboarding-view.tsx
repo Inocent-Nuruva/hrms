@@ -21,8 +21,11 @@ import {
   createOffboardingRequest,
   createOffboardingSettlement,
   createOffboardingTask,
+  createEmployeeFinanceOffboardingRecoveries,
   createOffboardingWorkflow,
   createOffboardingWorkflowStep,
+  delegateOffboardingApproval,
+  emergencyOffboardingAccessTermination,
   downloadOffboardingDocument,
   extractOffboardingItemsFromRecord,
   finalizeOffboardingRequest,
@@ -49,10 +52,13 @@ import {
   listOffboardingRequests,
   listOffboardingSettlements,
   listOffboardingWorkflows,
+  reassignOffboardingTask,
   reopenOffboardingTask,
   rejectOffboardingRequest,
+  retryOffboardingAccessTermination,
   submitOffboardingRequest,
   updateOffboardingExitInterview,
+  updateOffboardingSettlement,
   type AdminRecord,
 } from "@/lib/admin-api"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
@@ -3168,6 +3174,7 @@ export function OffboardingView() {
                               </div>
                               <div className="flex flex-wrap items-center gap-2">
                                 {normalizedStatus !== "completed" && normalizedStatus !== "done" ? (
+                                  <>
                                   <Button
                                     type="button"
                                     variant="outline"
@@ -3177,6 +3184,26 @@ export function OffboardingView() {
                                   >
                                     Complete
                                   </Button>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="h-7 px-2 text-[11px]"
+                                    disabled={saving}
+                                    onClick={() => {
+                                      const token = readStoredToken()
+                                      const requestId = readNumber(selectedRequest, ["id"])
+                                      const target = window.prompt("Reassign to company user id")
+                                      if (!token || requestId === null || taskId === null || !target) return
+                                      void reassignOffboardingTask(token, requestId, taskId, {
+                                        assigned_to_company_user_id: Number(target),
+                                      })
+                                        .then(() => showSuccessAlert("Task reassigned."))
+                                        .catch((errorObject) => showErrorAlert(errorObject instanceof Error ? errorObject.message : "Reassign failed."))
+                                    }}
+                                  >
+                                    Reassign
+                                  </Button>
+                                  </>
                                 ) : canManage ? (
                                   <Button
                                     type="button"
@@ -3460,6 +3487,26 @@ export function OffboardingView() {
                                 {readString(approvalRow, ["comments", "remark", "remarks", "notes"])}
                               </p>
                             </div>
+                            <button
+                              type="button"
+                              className="justify-self-start text-xs font-medium text-primary"
+                              onClick={() => {
+                                const token = readStoredToken()
+                                const requestId = readNumber(selectedRequest, ["id"])
+                                const approvalId = readNumber(approvalRow, ["id", "approval_id"])
+                                const target = window.prompt("Delegate to company user id")
+                                const reason = window.prompt("Reason")
+                                if (!token || requestId === null || approvalId === null || !target || !reason) return
+                                void delegateOffboardingApproval(token, requestId, approvalId, {
+                                  target_company_user_id: Number(target),
+                                  reason,
+                                })
+                                  .then(() => showSuccessAlert("Approval delegated."))
+                                  .catch((errorObject) => showErrorAlert(errorObject instanceof Error ? errorObject.message : "Delegate failed."))
+                              }}
+                            >
+                              Delegate
+                            </button>
                           </div>
                         </div>
                       ))}
@@ -4163,7 +4210,25 @@ export function OffboardingView() {
                             <p className="text-sm font-medium text-foreground">
                               {readString(settlementRow, ["title", "name"])}
                             </p>
-                            <StatusDot status={readString(settlementRow, ["status"])} />
+                            <div className="flex items-center gap-2">
+                              <StatusDot status={readString(settlementRow, ["status"])} />
+                              <button
+                                type="button"
+                                className="text-xs font-medium text-primary"
+                                onClick={() => {
+                                  const token = readStoredToken()
+                                  const requestId = readNumber(selectedRequest, ["id"])
+                                  const itemId = readNumber(settlementRow, ["id", "item_id"])
+                                  const status = window.prompt("New settlement status", readString(settlementRow, ["status"]) || "PENDING")
+                                  if (!token || requestId === null || itemId === null || !status) return
+                                  void updateOffboardingSettlement(token, requestId, itemId, { status })
+                                    .then(() => showSuccessAlert("Settlement updated."))
+                                    .catch((errorObject) => showErrorAlert(errorObject instanceof Error ? errorObject.message : "Update failed."))
+                                }}
+                              >
+                                Update
+                              </button>
+                            </div>
                           </div>
                           <div className="mt-2 grid gap-2 text-xs">
                             <div>
@@ -4230,11 +4295,58 @@ export function OffboardingView() {
                 </div>
 
                 <div className="space-y-3 rounded-lg border border-border p-4">
-                  <div>
-                    <p className="text-sm font-semibold text-foreground">Access operations</p>
-                    <p className="text-xs text-muted-foreground">
-                      Technical access-termination operations tracked for this exit.
-                    </p>
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">Access operations</p>
+                      <p className="text-xs text-muted-foreground">
+                        Technical access-termination operations tracked for this exit.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      <button
+                        type="button"
+                        className="text-xs font-medium text-primary"
+                        onClick={() => {
+                          const token = readStoredToken()
+                          const requestId = readNumber(selectedRequest, ["id"])
+                          const reason = window.prompt("Emergency termination reason")
+                          if (!token || requestId === null || !reason) return
+                          void emergencyOffboardingAccessTermination(token, requestId, { reason })
+                            .then(() => showSuccessAlert("Emergency access termination started."))
+                            .catch((errorObject) => showErrorAlert(errorObject instanceof Error ? errorObject.message : "Emergency termination failed."))
+                        }}
+                      >
+                        Emergency terminate
+                      </button>
+                      <button
+                        type="button"
+                        className="text-xs font-medium text-primary"
+                        onClick={() => {
+                          const token = readStoredToken()
+                          const requestId = readNumber(selectedRequest, ["id"])
+                          if (!token || requestId === null) return
+                          void retryOffboardingAccessTermination(token, requestId)
+                            .then(() => showSuccessAlert("Access termination retried."))
+                            .catch((errorObject) => showErrorAlert(errorObject instanceof Error ? errorObject.message : "Retry failed."))
+                        }}
+                      >
+                        Retry
+                      </button>
+                      <button
+                        type="button"
+                        className="text-xs font-medium text-primary"
+                        onClick={() => {
+                          const token = readStoredToken()
+                          const requestId = readNumber(selectedRequest, ["id"])
+                          if (!token || requestId === null) return
+                          void createEmployeeFinanceOffboardingRecoveries(token, requestId)
+                            .then(() => showSuccessAlert("Finance recoveries created."))
+                            .catch((errorObject) => showErrorAlert(errorObject instanceof Error ? errorObject.message : "Recoveries failed."))
+                        }}
+                      >
+                        Finance recoveries
+                      </button>
+                    </div>
                   </div>
                   {requestAccessOperations.length === 0 ? (
                     <p className="text-sm text-muted-foreground">No access operations were returned for this request.</p>

@@ -670,7 +670,7 @@ export function ProbationManagementView({
                   ? "Manager review"
                   : "HR decision"}
             </DialogTitle>
-            <DialogDescription>Uses the documented probation payloads.</DialogDescription>
+            <DialogDescription>Save the details for this probation record.</DialogDescription>
           </DialogHeader>
           <div className="grid max-h-[60vh] gap-3 overflow-auto pr-1">
             {formMode === "policy" ? (

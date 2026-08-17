@@ -17,6 +17,7 @@ export const employeeSectionTabGroups: DashboardSectionTabGroup[] = [
       { title: "Registration", url: "/dashboard/employees/registration" },
       { title: "Onboarding", url: "/dashboard/employees/onboarding" },
       { title: "Profile Updates", url: "/dashboard/employees/profile-update-approvals" },
+      { title: "Profile Changes", url: "/dashboard/employees/profile-change-requests" },
       { title: "Offboarding", url: "/dashboard/employees/offboarding" },
     ],
   },
@@ -79,6 +80,18 @@ export const employeeAttendanceSectionTabGroups: DashboardSectionTabGroup[] = [
       { title: "Attendance History", url: "/dashboard/attendance/attendance-history" },
       { title: "Schedule Preview", url: "/dashboard/attendance/schedule-preview" },
       { title: "Correction Requests", url: "/dashboard/attendance/corrections" },
+    ],
+  },
+]
+
+export const selfRequestSectionTabGroups: DashboardSectionTabGroup[] = [
+  {
+    items: [
+      { title: "To do", url: "/dashboard/me/requests/actions" },
+      { title: "History", url: "/dashboard/me/requests/timeline" },
+      { title: "Documents", url: "/dashboard/me/requests/documents" },
+      { title: "Update details", url: "/dashboard/me/requests/profile-changes" },
+      { title: "Resignation", url: "/dashboard/me/requests/resignation" },
     ],
   },
 ]
@@ -171,6 +184,79 @@ export const financeSectionTabGroups: DashboardSectionTabGroup[] = [
   },
 ]
 
+export const activitySectionTabGroups: DashboardSectionTabGroup[] = [
+  {
+    items: [
+      { title: "Overview", url: "/dashboard/activities/overview" },
+      { title: "Reports", url: "/dashboard/activities/reports" },
+      { title: "Reviews", url: "/dashboard/activities/reviews" },
+      { title: "Exceptions", url: "/dashboard/activities/exceptions" },
+      { title: "Setup", url: "/dashboard/activities/setup" },
+    ],
+  },
+]
+
+export const selfActivitySectionTabGroups: DashboardSectionTabGroup[] = [
+  {
+    items: [
+      { title: "Today", url: "/dashboard/me/activities/today" },
+      { title: "Reports", url: "/dashboard/me/activities/reports" },
+    ],
+  },
+]
+
+export const movementSectionTabGroups: DashboardSectionTabGroup[] = [
+  {
+    items: [
+      { title: "Overview", url: "/dashboard/movements/overview" },
+      { title: "Cases", url: "/dashboard/movements/cases" },
+      { title: "Operations", url: "/dashboard/movements/operations" },
+    ],
+  },
+]
+
+export const smsSectionTabGroups: DashboardSectionTabGroup[] = [
+  {
+    items: [
+      { title: "Overview", url: "/dashboard/sms/overview" },
+      { title: "Registry", url: "/dashboard/sms/registry" },
+      { title: "Logs", url: "/dashboard/sms/logs" },
+      { title: "Platform", url: "/dashboard/sms/platform" },
+    ],
+  },
+]
+
+export const selfTeamSectionTabGroups: DashboardSectionTabGroup[] = [
+  {
+    items: [
+      { title: "Overview", url: "/dashboard/me/team/overview" },
+      { title: "Members", url: "/dashboard/me/team/members" },
+      { title: "Attendance", url: "/dashboard/me/team/attendance" },
+      { title: "Actions", url: "/dashboard/me/team/actions" },
+    ],
+  },
+]
+
+export const structureSectionTabGroups: DashboardSectionTabGroup[] = [
+  {
+    items: [
+      { title: "Cost centers", url: "/dashboard/structure/cost-centers" },
+      { title: "Grades", url: "/dashboard/structure/grades" },
+    ],
+  },
+]
+
+export const insightsSectionTabGroups: DashboardSectionTabGroup[] = [
+  {
+    items: [
+      { title: "HR", url: "/dashboard/insights/hr" },
+      { title: "Management", url: "/dashboard/insights/management" },
+      { title: "Manager", url: "/dashboard/insights/manager" },
+      { title: "Readiness", url: "/dashboard/insights/readiness" },
+    ],
+  },
+]
+
 export const leaveManagementSectionTabGroups: DashboardSectionTabGroup[] = [
   {
     items: [
@@ -203,6 +289,32 @@ export const accessControlSectionTabGroups: DashboardSectionTabGroup[] = [
     ],
   },
 ]
+
+export function allDashboardSectionTabGroups(): DashboardSectionTabGroup[] {
+  return [
+    employeeSectionTabGroups,
+    attendanceSectionTabGroups,
+    employeeAttendanceSectionTabGroups,
+    selfRequestSectionTabGroups,
+    selfLeaveSectionTabGroups,
+    positionsSectionTabGroups,
+    performanceSectionTabGroups,
+    selfPerformanceSectionTabGroups,
+    probationSectionTabGroups,
+    fieldSectionTabGroups,
+    selfFieldSectionTabGroups,
+    financeSectionTabGroups,
+    activitySectionTabGroups,
+    selfActivitySectionTabGroups,
+    movementSectionTabGroups,
+    smsSectionTabGroups,
+    selfTeamSectionTabGroups,
+    structureSectionTabGroups,
+    insightsSectionTabGroups,
+    leaveManagementSectionTabGroups,
+    accessControlSectionTabGroups,
+  ].flat()
+}
 
 export function findFirstAccessibleSectionUrl(
   groups: DashboardSectionTabGroup[],

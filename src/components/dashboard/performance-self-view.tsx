@@ -28,6 +28,7 @@ import {
   statusChartItems,
   textareaClass,
 } from "@/components/dashboard/talent-visuals"
+import { useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
 import {
   Dialog,
   DialogDescription,
@@ -74,6 +75,7 @@ export function PerformanceSelfView({
 }: {
   activeTab: PerformanceSelfTab
 }) {
+  const leaveIfForbidden = useLeaveIfForbidden()
   const [summary, setSummary] = React.useState<AdminRecord | null>(null)
   const [managerSummary, setManagerSummary] = React.useState<AdminRecord | null>(null)
   const [assignments, setAssignments] = React.useState<AdminRecord[]>([])
@@ -134,14 +136,16 @@ export function PerformanceSelfView({
       const results = await Promise.allSettled(tasks)
       const firstError = results.find((result) => result.status === "rejected")
       if (firstError && firstError.status === "rejected" && activeTab !== "team") {
+        if (leaveIfForbidden(firstError.reason)) return
         setError(firstError.reason instanceof Error ? firstError.reason.message : "Could not load your performance.")
       }
     } catch (errorObject) {
+      if (leaveIfForbidden(errorObject)) return
       setError(errorObject instanceof Error ? errorObject.message : "Could not load your performance.")
     } finally {
       setLoading(false)
     }
-  }, [activeTab])
+  }, [activeTab, leaveIfForbidden])
 
   React.useEffect(() => {
     void load()

@@ -62,7 +62,6 @@ import {
 import { useMyProfilePhoto } from "@/lib/my-profile-photo"
 import {
   buildDashboardActorSnapshotFromSources,
-  canAccessDashboardRoute,
   canViewCompanyDashboard,
   clearDashboardActorSnapshot,
   persistDashboardAccessToken,
@@ -72,6 +71,8 @@ import { authService } from "@/services/authService"
 import { asRecord, isLikelyRefreshToken, readString } from "@/utils/token-utils"
 import { env } from "@/lib/env"
 import { AUTH_STORAGE_KEYS, ROUTES } from "@/utils/constants"
+import { canSeeDashboardPage } from "@/lib/forbidden-routes"
+import { useHideRememberedForbiddenPath } from "@/hooks/use-forbidden-route-guard"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 const LEGACY_TOKEN_STORAGE_KEY = "ess_auth_token"
@@ -333,6 +334,7 @@ export default function AdminDashboardView({
   const router = useRouter()
   const pathname = usePathname()
   const currentPath = pathname ?? ""
+  useHideRememberedForbiddenPath()
   const inferredActiveResource = React.useMemo(() => {
     const match = currentPath.match(
       /^\/dashboard\/(?:(?:access-control\/)?(roles|permissions)|users)(?:\/|$)/
@@ -1006,7 +1008,7 @@ export default function AdminDashboardView({
       return
     }
 
-    if (!canAccessDashboardRoute(currentPath, effectivePermissionLabels, accessMode)) {
+    if (!canSeeDashboardPage(currentPath, effectivePermissionLabels, accessMode)) {
       router.replace(SELF_SERVICE_HOME_ROUTE)
       return
     }

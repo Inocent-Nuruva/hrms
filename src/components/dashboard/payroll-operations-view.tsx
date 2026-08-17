@@ -32,10 +32,12 @@ import {
   generatePayrollBankingBatch,
   generatePayrollPayslipsForRun,
   generatePayrollPeriod,
+  calculatePayrollFinalSettlement,
   getPayrollDashboard,
   getPayrollRun,
   getPayrollSalaryStructure,
   listEmployeePayrollProfiles,
+  listOffboardingRequests,
   listPayrollAccountingMappings,
   listPayrollCalendars,
   listPayrollComponents,
@@ -47,6 +49,8 @@ import {
   listPayrollStatutorySchemes,
   lockPayrollRun,
   processPayrollRun,
+  runPayrollReconciliation,
+  runPayrollRunVariance,
   type AdminRecord,
   upsertEmployeePayrollProfile,
 } from "@/lib/admin-api"
@@ -69,6 +73,7 @@ type PayrollTab =
   | "inputs"
   | "profiles"
   | "periods"
+  | "reports"
   | "configuration"
 
 type PayrollConfigTab =
@@ -95,6 +100,7 @@ const TABS: Array<{ id: PayrollTab; label: string }> = [
   { id: "inputs", label: "Inputs" },
   { id: "profiles", label: "Profiles" },
   { id: "periods", label: "Periods" },
+  { id: "reports", label: "Reports" },
   { id: "configuration", label: "Configuration" },
 ]
 
@@ -915,6 +921,12 @@ export function PayrollOperationsView() {
   const [schemes, setSchemes] = React.useState<AdminRecord[]>([])
   const [mappings, setMappings] = React.useState<AdminRecord[]>([])
   const [recentRuns, setRecentRuns] = React.useState<AdminRecord[]>([])
+  const [offboardingRequests, setOffboardingRequests] = React.useState<AdminRecord[]>([])
+  const [varianceRunId, setVarianceRunId] = React.useState("")
+  const [comparisonRunId, setComparisonRunId] = React.useState("")
+  const [settlementRequestId, setSettlementRequestId] = React.useState("")
+  const [reportBusy, setReportBusy] = React.useState("")
+  const [reportResult, setReportResult] = React.useState<AdminRecord | null>(null)
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [search, setSearch] = React.useState("")
@@ -1057,6 +1069,18 @@ export function PayrollOperationsView() {
         return
       }
 
+      if (tab === "reports") {
+        const [runsResult, offboardingResult] = await Promise.allSettled([
+          listPayrollRuns(token, { page: 1, limit: 20 }),
+          listOffboardingRequests(token, { page: 1, limit: 20 }),
+        ])
+        if (requestIdRef.current !== requestId) return
+        if (runsResult.status === "fulfilled") setRecentRuns(runsResult.value.rows ?? [])
+        if (offboardingResult.status === "fulfilled") setOffboardingRequests(offboardingResult.value.rows ?? [])
+        setRows([])
+        return
+      }
+
       if (tab === "runs") {
         const result = await listPayrollRuns(token, {
           page: 1,
@@ -1177,10 +1201,13 @@ export function PayrollOperationsView() {
             ? "Employee payroll profiles"
             : tab === "periods"
               ? "Payroll periods"
+              : tab === "reports"
+                ? "Payroll reports"
               : `Payroll ${CONFIG_TABS.find((entry) => entry.id === configTab)?.label.toLowerCase()}`
 
   const canCreate =
     tab !== "overview" &&
+    tab !== "reports" &&
     (tab !== "configuration" ||
       ["components", "calendars", "structures", "schemes", "mappings"].includes(configTab))
 
@@ -1766,6 +1793,57 @@ export function PayrollOperationsView() {
       toast.error(errorObject instanceof Error ? errorObject.message : "Failed to generate payslips.")
     } finally {
       setPayslipRunId("")
+    }
+  }
+
+  async function onRunReconciliation() {
+    const token = readStoredToken()
+    if (!token) return
+    setReportBusy("reconciliation")
+    try {
+      const result = await runPayrollReconciliation(token)
+      setReportResult((result as AdminRecord | null) ?? { status: "queued" })
+      toast.success("Payroll reconciliation started.")
+    } catch (errorObject) {
+      toast.error(errorObject instanceof Error ? errorObject.message : "Failed to run reconciliation.")
+    } finally {
+      setReportBusy("")
+    }
+  }
+
+  async function onRunVariance() {
+    const token = readStoredToken()
+    if (!token || !varianceRunId || !comparisonRunId) {
+      toast.error("Choose both payroll runs.")
+      return
+    }
+    setReportBusy("variance")
+    try {
+      const result = await runPayrollRunVariance(token, varianceRunId, comparisonRunId)
+      setReportResult((result as AdminRecord | null) ?? { status: "queued" })
+      toast.success("Variance report started.")
+    } catch (errorObject) {
+      toast.error(errorObject instanceof Error ? errorObject.message : "Failed to run variance.")
+    } finally {
+      setReportBusy("")
+    }
+  }
+
+  async function onCalculateSettlement() {
+    const token = readStoredToken()
+    if (!token || !settlementRequestId) {
+      toast.error("Choose an offboarding request.")
+      return
+    }
+    setReportBusy("settlement")
+    try {
+      const result = await calculatePayrollFinalSettlement(token, settlementRequestId)
+      setReportResult((result as AdminRecord | null) ?? { status: "queued" })
+      toast.success("Final settlement calculated.")
+    } catch (errorObject) {
+      toast.error(errorObject instanceof Error ? errorObject.message : "Failed to calculate settlement.")
+    } finally {
+      setReportBusy("")
     }
   }
 
@@ -2959,6 +3037,57 @@ export function PayrollOperationsView() {
               </div>
             </div>
           </div>
+        </div>
+      ) : tab === "reports" ? (
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="space-y-3 rounded-xl border border-border bg-card p-4">
+            <h2 className="text-sm font-semibold">Reconciliation</h2>
+            <p className="text-sm text-muted-foreground">Runs /api/payroll/reports/reconciliation/run.</p>
+            <button type="button" className={primaryButtonClass} disabled={reportBusy === "reconciliation"} onClick={() => void onRunReconciliation()}>
+              {reportBusy === "reconciliation" ? <Loader2Icon className="h-3.5 w-3.5 animate-spin" /> : null}
+              Run reconciliation
+            </button>
+          </div>
+          <div className="space-y-3 rounded-xl border border-border bg-card p-4">
+            <h2 className="text-sm font-semibold">Run variance</h2>
+            <p className="text-sm text-muted-foreground">Compare two payroll runs.</p>
+            <select className={inputClass} value={varianceRunId} onChange={(event) => setVarianceRunId(event.target.value)}>
+              <option value="">Primary run</option>
+              {recentRuns.map((row) => (
+                <option key={rowId(row)} value={rowId(row)}>{readPeriodLabel(row) !== "-" ? readPeriodLabel(row) : `Run #${rowId(row)}`}</option>
+              ))}
+            </select>
+            <select className={inputClass} value={comparisonRunId} onChange={(event) => setComparisonRunId(event.target.value)}>
+              <option value="">Comparison run</option>
+              {recentRuns.map((row) => (
+                <option key={`cmp-${rowId(row)}`} value={rowId(row)}>{readPeriodLabel(row) !== "-" ? readPeriodLabel(row) : `Run #${rowId(row)}`}</option>
+              ))}
+            </select>
+            <button type="button" className={primaryButtonClass} disabled={reportBusy === "variance"} onClick={() => void onRunVariance()}>
+              {reportBusy === "variance" ? <Loader2Icon className="h-3.5 w-3.5 animate-spin" /> : null}
+              Run variance
+            </button>
+          </div>
+          <div className="space-y-3 rounded-xl border border-border bg-card p-4">
+            <h2 className="text-sm font-semibold">Final settlement</h2>
+            <p className="text-sm text-muted-foreground">Calculate settlement for one offboarding request.</p>
+            <select className={inputClass} value={settlementRequestId} onChange={(event) => setSettlementRequestId(event.target.value)}>
+              <option value="">Offboarding request</option>
+              {offboardingRequests.map((row) => (
+                <option key={rowId(row)} value={rowId(row)}>#{rowId(row)} {readString(row, ["employeeName", "employee_name", "status"], "")}</option>
+              ))}
+            </select>
+            <button type="button" className={primaryButtonClass} disabled={reportBusy === "settlement"} onClick={() => void onCalculateSettlement()}>
+              {reportBusy === "settlement" ? <Loader2Icon className="h-3.5 w-3.5 animate-spin" /> : null}
+              Calculate
+            </button>
+          </div>
+          {reportResult ? (
+            <div className="rounded-xl border border-border bg-card p-4 lg:col-span-2">
+              <h2 className="text-sm font-semibold">Last report response</h2>
+              <pre className="mt-2 overflow-auto text-xs">{JSON.stringify(reportResult, null, 2)}</pre>
+            </div>
+          ) : null}
         </div>
       ) : (
         <ResizableTable

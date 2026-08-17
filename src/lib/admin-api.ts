@@ -3880,6 +3880,40 @@ export async function listCostCenters(token: string) {
   return normalizeList(payload);
 }
 
+export async function getCostCenter(token: string, id: string | number) {
+  const payload = await adminRequest<unknown>(`/api/cost-centers/${id}`, {
+    token,
+  });
+  return normalizeSingle(payload);
+}
+
+export async function createCostCenter(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/cost-centers", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function patchCostCenter(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/cost-centers/${id}`, {
+    method: "PATCH",
+    token,
+    body: data,
+  });
+}
+
+export async function deleteCostCenter(token: string, id: string | number) {
+  return adminRequest<unknown>(`/api/cost-centers/${id}`, {
+    method: "DELETE",
+    token,
+  });
+}
+
 export async function listLeaveTypes(
   token: string,
   params: LeaveTypesQueryParams = {},
@@ -5486,6 +5520,118 @@ export async function syncHikvisionDeviceUsers(
   );
 }
 
+export async function listHikvisionAttendanceLogs(
+  token: string,
+  params: Record<string, string | number | undefined> = {},
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/hikvision/attendance/logs${buildRecordQuery(params)}`,
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function listHikvisionDeviceAttendanceLogs(
+  token: string,
+  deviceId: string | number,
+  params: Record<string, string | number | undefined> = {},
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/hikvision/devices/${deviceId}/attendance/logs${buildRecordQuery(params)}`,
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function getHikvisionAttendanceCapabilities(
+  token: string,
+  deviceId: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/hikvision/devices/${deviceId}/attendance/capabilities`,
+    { token },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function getHikvisionAttendanceSyncStatus(
+  token: string,
+  deviceId: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/hikvision/devices/${deviceId}/attendance/sync/status`,
+    { token },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function listHikvisionAttendanceSyncHistory(
+  token: string,
+  deviceId: string | number,
+  params: Record<string, string | number | undefined> = {},
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/hikvision/devices/${deviceId}/attendance/sync-history${buildRecordQuery(params)}`,
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function syncHikvisionAttendance(
+  token: string,
+  deviceId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    `/api/hikvision/devices/${deviceId}/attendance/sync`,
+    { method: "POST", token, body: data },
+  );
+}
+
+export async function syncHikvisionAttendanceByDate(
+  token: string,
+  deviceId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    `/api/hikvision/devices/${deviceId}/attendance/sync-date`,
+    { method: "POST", token, body: data },
+  );
+}
+
+export async function syncHikvisionAttendanceByEmployee(
+  token: string,
+  deviceId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    `/api/hikvision/devices/${deviceId}/attendance/sync-employee`,
+    { method: "POST", token, body: data },
+  );
+}
+
+export async function syncHikvisionAttendanceByRange(
+  token: string,
+  deviceId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    `/api/hikvision/devices/${deviceId}/attendance/sync-range`,
+    { method: "POST", token, body: data },
+  );
+}
+
+export async function pullHikvisionAttendancePage(
+  token: string,
+  deviceId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    `/api/hikvision/devices/${deviceId}/attendance/pull-page`,
+    { method: "POST", token, body: data },
+  );
+}
+
 export async function syncAccessControlDeviceWeekPlans(
   token: string,
   id: string | number,
@@ -5762,6 +5908,60 @@ export async function cancelEmployeeMovement(
     method: "POST",
     token,
   });
+}
+
+export async function approveEmployeeMovement(
+  token: string,
+  id: string | number,
+  data: AdminRecord = {},
+) {
+  return adminRequest<unknown>(`/api/employee-movements/${id}/approve`, {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function rejectEmployeeMovement(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/employee-movements/${id}/reject`, {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function returnEmployeeMovement(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/employee-movements/${id}/return`, {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function applyEmployeeMovement(token: string, id: string | number) {
+  return adminRequest<unknown>(`/api/employee-movements/${id}/apply`, {
+    method: "POST",
+    token,
+  });
+}
+
+export async function retryEmployeeMovementOperation(
+  token: string,
+  id: string | number,
+  operationId: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/employee-movements/${id}/operations/${operationId}/retry`,
+    { method: "POST", token },
+  );
 }
 
 export async function getEmployeePosition(token: string, id: string | number) {
@@ -6477,6 +6677,125 @@ export async function enableEmployeeDeviceFingerprint(
   );
 }
 
+export async function listEmployeeDeviceCards(
+  token: string,
+  employeeId: string | number,
+  deviceId: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/access-control/employees/${employeeId}/devices/${deviceId}/users/cards`,
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function createEmployeeDeviceCard(
+  token: string,
+  employeeId: string | number,
+  deviceId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    `/api/access-control/employees/${employeeId}/devices/${deviceId}/users/cards`,
+    { method: "POST", token, body: data },
+  );
+}
+
+export async function updateEmployeeDeviceCard(
+  token: string,
+  employeeId: string | number,
+  deviceId: string | number,
+  cardId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    `/api/access-control/employees/${employeeId}/devices/${deviceId}/users/cards/${cardId}`,
+    { method: "PATCH", token, body: data },
+  );
+}
+
+export async function deleteEmployeeDeviceCard(
+  token: string,
+  employeeId: string | number,
+  deviceId: string | number,
+  cardId: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/access-control/employees/${employeeId}/devices/${deviceId}/users/cards/${cardId}`,
+    { method: "DELETE", token },
+  );
+}
+
+export async function enableEmployeeDeviceCard(
+  token: string,
+  employeeId: string | number,
+  deviceId: string | number,
+  cardId: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/access-control/employees/${employeeId}/devices/${deviceId}/users/cards/${cardId}/enable`,
+    { method: "PATCH", token },
+  );
+}
+
+export async function disableEmployeeDeviceCard(
+  token: string,
+  employeeId: string | number,
+  deviceId: string | number,
+  cardId: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/access-control/employees/${employeeId}/devices/${deviceId}/users/cards/${cardId}/disable`,
+    { method: "PATCH", token },
+  );
+}
+
+export async function syncEmployeeDeviceCard(
+  token: string,
+  employeeId: string | number,
+  deviceId: string | number,
+  cardId: string | number,
+  data: AdminRecord = {},
+) {
+  return adminRequest<unknown>(
+    `/api/access-control/employees/${employeeId}/devices/${deviceId}/users/cards/${cardId}/sync`,
+    { method: "POST", token, body: data },
+  );
+}
+
+export async function enableEmployeeDeviceUser(
+  token: string,
+  employeeId: string | number,
+  deviceId: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/access-control/employees/${employeeId}/devices/${deviceId}/users/enable`,
+    { method: "PATCH", token },
+  );
+}
+
+export async function disableEmployeeDeviceUser(
+  token: string,
+  employeeId: string | number,
+  deviceId: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/access-control/employees/${employeeId}/devices/${deviceId}/users/disable`,
+    { method: "PATCH", token },
+  );
+}
+
+export async function removeEmployeeDeviceDoorPermission(
+  token: string,
+  employeeId: string | number,
+  deviceId: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/access-control/employees/${employeeId}/devices/${deviceId}/users/remove-door-permission`,
+    { method: "PATCH", token },
+  );
+}
+
 export async function deleteEmployeeDeviceFingerprint(
   token: string,
   employeeId: string | number,
@@ -6796,6 +7115,241 @@ export async function acknowledgeMyMovement(
   });
 }
 
+export async function listMyActionItems(
+  token: string,
+  params: Record<string, string | number | undefined> = {},
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/me/action-items${buildRecordQuery(params)}`,
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function listMyRequests(
+  token: string,
+  params: Record<string, string | number | undefined> = {},
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/me/requests${buildRecordQuery(params)}`,
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function listMyDocuments(token: string) {
+  const payload = await adminRequest<unknown>("/api/me/documents", { token });
+  return normalizeList(payload);
+}
+
+export async function uploadMyDocument(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/me/documents", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function downloadMyDocument(
+  token: string,
+  id: string | number,
+): Promise<{ blob: Blob; filename: string; contentType: string | null }> {
+  const response = await fetch(buildUrl(`/api/me/documents/${id}/download`), {
+    method: "GET",
+    headers: {
+      accept: "*/*",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    let payload: unknown = null;
+    if (text) {
+      try {
+        payload = JSON.parse(text) as unknown;
+      } catch {
+        payload = { message: text };
+      }
+    }
+    const error = new Error(extractMessage(payload, response.status)) as Error & {
+      status?: number;
+    };
+    error.status = response.status;
+    throw error;
+  }
+  const blob = await response.blob();
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const filenameMatch = disposition.match(/filename\*?=(?:UTF-8''|"?)([^";]+)/i);
+  return {
+    blob,
+    filename: filenameMatch?.[1] ? decodeURIComponent(filenameMatch[1]) : `document-${id}`,
+    contentType: response.headers.get("content-type"),
+  };
+}
+
+export async function submitMyResignation(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/me/resignation", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function listMyProfileChangeRequests(
+  token: string,
+  params: Record<string, string | number | undefined> = {},
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/me/profile-change-requests${buildRecordQuery(params)}`,
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function createMyProfileChangeRequest(
+  token: string,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>("/api/me/profile-change-requests", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function validateMyProfileChangeRequest(
+  token: string,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>("/api/me/profile-change-requests/validate", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function getMyProfileChangeRequest(
+  token: string,
+  id: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/me/profile-change-requests/${id}`,
+    { token },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function updateMyProfileChangeRequest(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/me/profile-change-requests/${id}`, {
+    method: "PATCH",
+    token,
+    body: data,
+  });
+}
+
+export async function deleteMyProfileChangeRequest(
+  token: string,
+  id: string | number,
+) {
+  return adminRequest<unknown>(`/api/me/profile-change-requests/${id}`, {
+    method: "DELETE",
+    token,
+  });
+}
+
+export async function submitMyProfileChangeRequest(
+  token: string,
+  id: string | number,
+) {
+  return adminRequest<unknown>(`/api/me/profile-change-requests/${id}/submit`, {
+    method: "POST",
+    token,
+  });
+}
+
+export async function cancelMyProfileChangeRequest(
+  token: string,
+  id: string | number,
+) {
+  return adminRequest<unknown>(`/api/me/profile-change-requests/${id}/cancel`, {
+    method: "POST",
+    token,
+  });
+}
+
+export async function listHrProfileChangeRequests(
+  token: string,
+  params: Record<string, string | number | undefined> = {},
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/hr/profile-change-requests${buildRecordQuery(params)}`,
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function getHrProfileChangeRequest(
+  token: string,
+  id: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/hr/profile-change-requests/${id}`,
+    { token },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function startHrProfileChangeReview(
+  token: string,
+  id: string | number,
+  data: AdminRecord = {},
+) {
+  return adminRequest<unknown>(
+    `/api/hr/profile-change-requests/${id}/start-review`,
+    { method: "POST", token, body: data },
+  );
+}
+
+export async function approveHrProfileChangeRequest(
+  token: string,
+  id: string | number,
+  data: AdminRecord = {},
+) {
+  return adminRequest<unknown>(`/api/hr/profile-change-requests/${id}/approve`, {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function rejectHrProfileChangeRequest(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/hr/profile-change-requests/${id}/reject`, {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function requestHrProfileChangeCorrection(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    `/api/hr/profile-change-requests/${id}/request-correction`,
+    { method: "POST", token, body: data },
+  );
+}
+
 export async function listMyPayslips(token: string) {
   const payload = await adminRequest<unknown>("/api/me/payslips", { token });
   return normalizeList(payload);
@@ -6992,6 +7546,61 @@ export async function adjustLeaveBalance(token: string, data: AdminRecord) {
     method: "PATCH",
     token,
     body: data,
+  });
+}
+
+export async function generateLeaveBalances(token: string, data: AdminRecord = {}) {
+  return adminRequest<unknown>("/api/leave/balances/generate", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function carryForwardLeaveBalances(
+  token: string,
+  data: AdminRecord = {},
+) {
+  return adminRequest<unknown>("/api/leave/balances/carry-forward", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function listLeaveBalanceAdjustments(
+  token: string,
+  params: Record<string, string | number | undefined> = {},
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/leave/balances/adjustments${buildRecordQuery(params)}`,
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function listLeaveBalanceTransactions(
+  token: string,
+  params: Record<string, string | number | undefined> = {},
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/leave/balances/transactions${buildRecordQuery(params)}`,
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function submitLeaveRequest(token: string, id: string | number) {
+  return adminRequest<unknown>(`/api/leave/requests/${id}/submit`, {
+    method: "POST",
+    token,
+  });
+}
+
+export async function resubmitLeaveRequest(token: string, id: string | number) {
+  return adminRequest<unknown>(`/api/leave/requests/${id}/resubmit`, {
+    method: "POST",
+    token,
   });
 }
 
@@ -8490,6 +9099,73 @@ export async function reopenOffboardingTask(
       token,
       body: data,
     },
+  );
+}
+
+export async function emergencyOffboardingAccessTermination(
+  token: string,
+  requestId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    `/api/offboarding/requests/${requestId}/access-termination/emergency`,
+    { method: "POST", token, body: data },
+  );
+}
+
+export async function retryOffboardingAccessTermination(
+  token: string,
+  requestId: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/offboarding/requests/${requestId}/access-termination/retry`,
+    { method: "POST", token },
+  );
+}
+
+export async function delegateOffboardingApproval(
+  token: string,
+  requestId: string | number,
+  approvalId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    `/api/offboarding/requests/${requestId}/approvals/${approvalId}/delegate`,
+    { method: "POST", token, body: data },
+  );
+}
+
+export async function updateOffboardingSettlement(
+  token: string,
+  requestId: string | number,
+  itemId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    `/api/offboarding/requests/${requestId}/settlements/${itemId}`,
+    { method: "PATCH", token, body: data },
+  );
+}
+
+export async function reassignOffboardingTask(
+  token: string,
+  requestId: string | number,
+  taskId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    `/api/offboarding/requests/${requestId}/tasks/${taskId}/reassign`,
+    { method: "PATCH", token, body: data },
+  );
+}
+
+export async function createEmployeeFinanceOffboardingRecoveries(
+  token: string,
+  offboardingRequestId: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/finance/employee-finance/offboarding/${offboardingRequestId}/recoveries`,
+    { method: "POST", token },
   );
 }
 
@@ -11109,6 +11785,34 @@ export async function getPayrollDashboard(token: string) {
   return normalizeSingle(payload) ?? asRecord(payload);
 }
 
+export async function calculatePayrollFinalSettlement(
+  token: string,
+  offboardingRequestId: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/payroll/reports/final-settlements/${offboardingRequestId}/calculate`,
+    { method: "POST", token },
+  );
+}
+
+export async function runPayrollReconciliation(token: string) {
+  return adminRequest<unknown>("/api/payroll/reports/reconciliation/run", {
+    method: "POST",
+    token,
+  });
+}
+
+export async function runPayrollRunVariance(
+  token: string,
+  runId: string | number,
+  comparisonRunId: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/payroll/reports/runs/${runId}/variance?comparison_run_id=${encodeURIComponent(String(comparisonRunId))}`,
+    { method: "POST", token },
+  );
+}
+
 export async function listPayrollRuns(
   token: string,
   params: PayrollListParams = {},
@@ -12041,13 +12745,25 @@ export async function listHrFieldLocationAccessLogs(token: string) {
   return normalizeList(payload);
 }
 
-export async function listHrActivities(token: string) {
-  const payload = await adminRequest<unknown>("/api/hr/activities", { token });
+export async function listHrActivities(
+  token: string,
+  params: Record<string, string | number | undefined> = {},
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/hr/activities${buildRecordQuery(params)}`,
+    { token },
+  );
   return normalizeList(payload);
 }
 
-export async function listHrActivityExceptions(token: string) {
-  const payload = await adminRequest<unknown>("/api/hr/activity-exceptions", { token });
+export async function listHrActivityExceptions(
+  token: string,
+  params: Record<string, string | number | undefined> = {},
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/hr/activity-exceptions${buildRecordQuery(params)}`,
+    { token },
+  );
   return normalizeList(payload);
 }
 
@@ -12064,6 +12780,28 @@ export async function createActivityCategory(token: string, data: AdminRecord) {
   });
 }
 
+export async function updateActivityCategory(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/activity-categories/${id}`, {
+    method: "PATCH",
+    token,
+    body: data,
+  });
+}
+
+export async function deactivateActivityCategory(
+  token: string,
+  id: string | number,
+) {
+  return adminRequest<unknown>(`/api/activity-categories/${id}/deactivate`, {
+    method: "POST",
+    token,
+  });
+}
+
 export async function listActivityPolicies(token: string) {
   const payload = await adminRequest<unknown>("/api/activity-policies", { token });
   return normalizeList(payload);
@@ -12072,6 +12810,18 @@ export async function listActivityPolicies(token: string) {
 export async function createActivityPolicy(token: string, data: AdminRecord) {
   return adminRequest<unknown>("/api/activity-policies", {
     method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function updateActivityPolicy(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/activity-policies/${id}`, {
+    method: "PATCH",
     token,
     body: data,
   });
@@ -12261,6 +13011,67 @@ export async function completeMyFieldFollowUp(
     token,
     body: data,
   });
+}
+
+export async function syncMyFieldWork(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/me/field-sync", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function getMyFieldSync(
+  token: string,
+  syncRequestId: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/me/field-sync/${syncRequestId}`,
+    { token },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function syncMyFieldVisits(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/me/field-visits/sync", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function getMyFieldVisitSync(
+  token: string,
+  syncRequestId: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/me/field-visits/sync/${syncRequestId}`,
+    { token },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function addMyFieldVisitEvidence(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/me/field-visits/${id}/evidence`, {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function listManagerFieldPlannedVsActual(
+  token: string,
+  params: Record<string, string | number | undefined> = {},
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/manager/field-visits/planned-vs-actual${buildRecordQuery(params)}`,
+    { token },
+  );
+  return normalizeList(payload);
 }
 
 export async function getEmployeeFinanceDashboard(token: string) {
@@ -12503,6 +13314,335 @@ export async function getMyFinanceAccountStatement(
   return normalizeSingle(payload) ?? asRecord(payload);
 }
 
+export async function listMyActivities(
+  token: string,
+  params: Record<string, string | number | undefined> = {},
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/me/activities${buildRecordQuery(params)}`,
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function getMyActivitiesToday(token: string) {
+  const payload = await adminRequest<unknown>("/api/me/activities/today", {
+    token,
+  });
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function createMyActivityReport(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/me/activities/reports", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function getMyActivityReport(token: string, id: string | number) {
+  const payload = await adminRequest<unknown>(
+    `/api/me/activities/reports/${id}`,
+    { token },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function addMyActivityEntry(
+  token: string,
+  reportId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/me/activities/reports/${reportId}/entries`, {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function updateMyActivityEntry(
+  token: string,
+  reportId: string | number,
+  entryId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    `/api/me/activities/reports/${reportId}/entries/${entryId}`,
+    { method: "PATCH", token, body: data },
+  );
+}
+
+export async function deleteMyActivityEntry(
+  token: string,
+  reportId: string | number,
+  entryId: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/me/activities/reports/${reportId}/entries/${entryId}`,
+    { method: "DELETE", token },
+  );
+}
+
+export async function addMyActivityEvidence(
+  token: string,
+  entryId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/me/activities/entries/${entryId}/evidence`, {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function submitMyActivityReport(
+  token: string,
+  reportId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    `/api/me/activities/reports/${reportId}/submit`,
+    { method: "POST", token, body: data },
+  );
+}
+
+export async function getManagerActivitiesDashboard(
+  token: string,
+  params: Record<string, string | number | undefined> = {},
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/manager/activities/dashboard${buildRecordQuery(params)}`,
+    { token },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function listManagerPendingActivityReviews(
+  token: string,
+  params: Record<string, string | number | undefined> = {},
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/manager/activities/pending-reviews${buildRecordQuery(params)}`,
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function listManagerTeamActivities(
+  token: string,
+  params: Record<string, string | number | undefined> = {},
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/manager/activities/team${buildRecordQuery(params)}`,
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function getManagerActivityReport(
+  token: string,
+  id: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/manager/activities/reports/${id}`,
+    { token },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function reviewManagerActivityReport(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/manager/activities/reports/${id}/review`, {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function getManagerDashboard(
+  token: string,
+  params: Record<string, string | number | undefined> = {},
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/manager/dashboard${buildRecordQuery(params)}`,
+    { token },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function listManagerActionItems(
+  token: string,
+  params: Record<string, string | number | undefined> = {},
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/manager/action-items${buildRecordQuery(params)}`,
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function listManagerTeam(
+  token: string,
+  params: Record<string, string | number | boolean | undefined> = {},
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/manager/team${buildRecordQuery(params)}`,
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function getManagerTeamMember(
+  token: string,
+  employeeId: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/manager/team/${employeeId}`,
+    { token },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function listManagerTeamAttendance(
+  token: string,
+  params: Record<string, string | number | undefined> = {},
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/manager/team/attendance${buildRecordQuery(params)}`,
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function getSmsGlobalSetting(token: string) {
+  const payload = await adminRequest<unknown>("/api/sms/global", { token });
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function updateSmsGlobalSetting(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/sms/global", {
+    method: "PATCH",
+    token,
+    body: data,
+  });
+}
+
+export async function listSmsLogs(
+  token: string,
+  params: Record<string, string | number | undefined> = {},
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/sms/logs${buildRecordQuery(params)}`,
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function retrySmsLog(token: string, id: string | number) {
+  return adminRequest<unknown>(`/api/sms/logs/${id}/retry`, {
+    method: "POST",
+    token,
+  });
+}
+
+export async function listSmsRegistry(token: string) {
+  const payload = await adminRequest<unknown>("/api/sms/registry", { token });
+  return normalizeList(payload);
+}
+
+export async function getSmsRegistryItem(token: string, code: string) {
+  const payload = await adminRequest<unknown>(
+    `/api/sms/registry/${encodeURIComponent(code)}`,
+    { token },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function updateSmsRegistryItem(
+  token: string,
+  code: string,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/sms/registry/${encodeURIComponent(code)}`, {
+    method: "PATCH",
+    token,
+    body: data,
+  });
+}
+
+export async function sendTestSms(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/sms/test", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function getPlatformSmsGlobalSetting(token: string) {
+  const payload = await adminRequest<unknown>("/api/sms/platform/global", {
+    token,
+  });
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function updatePlatformSmsGlobalSetting(
+  token: string,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>("/api/sms/platform/global", {
+    method: "PATCH",
+    token,
+    body: data,
+  });
+}
+
+export async function listPlatformSmsLogs(
+  token: string,
+  params: Record<string, string | number | undefined> = {},
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/sms/platform/logs${buildRecordQuery(params)}`,
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function retryPlatformSmsLog(token: string, id: string | number) {
+  return adminRequest<unknown>(`/api/sms/platform/logs/${id}/retry`, {
+    method: "POST",
+    token,
+  });
+}
+
+export async function listPlatformSmsRegistry(token: string) {
+  const payload = await adminRequest<unknown>("/api/sms/platform/registry", {
+    token,
+  });
+  return normalizeList(payload);
+}
+
+export async function getPlatformSmsRegistryItem(token: string, code: string) {
+  const payload = await adminRequest<unknown>(
+    `/api/sms/platform/registry/${encodeURIComponent(code)}`,
+    { token },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function updatePlatformSmsRegistryItem(
+  token: string,
+  code: string,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    `/api/sms/platform/registry/${encodeURIComponent(code)}`,
+    { method: "PATCH", token, body: data },
+  );
+}
+
 export interface AnalyticsQueryParams {
   date_from?: string;
   date_to?: string;
@@ -12568,6 +13708,100 @@ function buildAnalyticsQuery(params: AnalyticsQueryParams = {}) {
   }
   const query = searchParams.toString();
   return query ? `?${query}` : "";
+}
+
+export type HrDashboardKind = "employee" | "hr" | "management" | "manager";
+
+export async function getHrDashboard(
+  token: string,
+  kind: HrDashboardKind,
+  params: Record<string, string | number | undefined> = {},
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/dashboards/${kind}${kind === "employee" ? "" : buildRecordQuery(params)}`,
+    { token },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function getSystemHealth(token?: string) {
+  const payload = await adminRequest<unknown>("/api/health", {
+    token: token ?? "",
+  });
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function getSystemHealthLive(token?: string) {
+  const payload = await adminRequest<unknown>("/api/health/live", {
+    token: token ?? "",
+  });
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function getSystemHealthReady(token?: string) {
+  const payload = await adminRequest<unknown>("/api/health/ready", {
+    token: token ?? "",
+  });
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function listSecurityEvents(
+  token: string,
+  params: Record<string, string | number | undefined> = {},
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/security-events${buildRecordQuery({
+      page: params.page ?? 1,
+      limit: params.limit ?? 20,
+      ...params,
+    })}`,
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function getHrLaunchReadiness(token: string) {
+  const payload = await adminRequest<unknown>("/api/hr/launch-readiness", {
+    token,
+  });
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function getHrLaunchReadinessEmployees(token: string) {
+  const payload = await adminRequest<unknown>(
+    "/api/hr/launch-readiness/employees",
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function getHrAttendanceSetupStatus(token: string) {
+  const payload = await adminRequest<unknown>("/api/hr/attendance/setup/status", {
+    token,
+  });
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function runHrAttendanceSetupWizard(
+  token: string,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>("/api/hr/attendance/setup/wizard", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function getHrAttendanceSchedulePreview(
+  token: string,
+  params: Record<string, string | number | boolean | undefined> = {},
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/hr/attendance/schedules/preview${buildRecordQuery(params)}`,
+    { token },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
 }
 
 export async function getAnalyticsDashboard(

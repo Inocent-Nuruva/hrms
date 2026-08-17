@@ -26,8 +26,9 @@ import {
   updateAccessCredentialStatus,
   type AdminRecord,
 } from "@/lib/admin-api"
-import { canPerformPermission } from "@/lib/dashboard-permissions"
+import { canAccessDashboardRoute, canPerformPermission } from "@/lib/dashboard-permissions"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
+import { useForbiddenRouteGuard, useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
 import { useDebouncedValue } from "@/hooks/use-debounced-value"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 
@@ -49,8 +50,8 @@ const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 
 const SECTION_CONFIG: Record<AccessControlActivitySectionKey, SectionConfig> = {
   "access-credentials": {
-    title: "Access Credentials",
-    description: "Review backend-managed employee credentials across devices and update their lifecycle state.",
+    title: "Cards and fingerprints",
+    description: "See the cards, fingerprints, and PINs assigned to people, and turn them on or off.",
     preferredColumns: [
       "credential_type",
       "credential_status",
@@ -63,18 +64,18 @@ const SECTION_CONFIG: Record<AccessControlActivitySectionKey, SectionConfig> = {
     ],
   },
   "audit-logs": {
-    title: "Audit Logs",
-    description: "Review access-control actions recorded by the backend for employee and device access changes.",
+    title: "Audit log",
+    description: "A history of who changed access for people and devices.",
     preferredColumns: ["action", "status", "employee_no", "employee_name", "device_name", "created_at"],
   },
   "device-command-logs": {
-    title: "Command Logs",
-    description: "Inspect Hikvision command execution history returned by the backend integration layer.",
+    title: "Device commands",
+    description: "Commands sent to door devices, and whether they succeeded.",
     preferredColumns: ["commandType", "status", "device_name", "created_at", "updated_at"],
   },
   "hikvision-sync-logs": {
-    title: "Sync Logs",
-    description: "Track push and pull sync jobs for users, doors, week plans, templates, and other device data.",
+    title: "Device sync",
+    description: "When people, doors, and schedules were copied to or from devices.",
     preferredColumns: ["syncType", "direction", "status", "device_name", "created_at", "updated_at"],
   },
 }
@@ -416,10 +417,16 @@ export function AccessControlActivityView({
   moduleTitle?: string
 }) {
   const actor = useDashboardActor()
+  const leaveIfForbidden = useLeaveIfForbidden()
   const activeSection = (
     Object.keys(SECTION_CONFIG).includes(section) ? section : "access-credentials"
   ) as AccessControlActivitySectionKey
   const config = SECTION_CONFIG[activeSection]
+  const sectionPath = `/dashboard/access-control/${activeSection}`
+  const canAccess =
+    !actor.ready ||
+    canAccessDashboardRoute(sectionPath, actor.permissionLabels, actor.accessMode)
+  useForbiddenRouteGuard(canAccess)
 
   const [rows, setRows] = React.useState<AdminRecord[]>([])
   const [loading, setLoading] = React.useState(false)
@@ -504,16 +511,21 @@ export function AccessControlActivityView({
       })
       setRows(result.rows)
     } catch (errorObject) {
+      if (leaveIfForbidden(errorObject)) {
+        setLoading(false)
+        return
+      }
       setRows([])
       setError(errorObject instanceof Error ? errorObject.message : `Failed to load ${config.title.toLowerCase()}.`)
     } finally {
       setLoading(false)
     }
-  }, [activeSection, config.title, debouncedSearch, directionFilter, statusFilter, typeFilter])
+  }, [activeSection, config.title, debouncedSearch, directionFilter, leaveIfForbidden, statusFilter, typeFilter])
 
   React.useEffect(() => {
+    if (!canAccess) return
     void loadRows()
-  }, [loadRows])
+  }, [canAccess, loadRows])
 
   const filteredRows = React.useMemo(() => {
     const searchTerm = debouncedSearch.trim().toLowerCase()
@@ -613,6 +625,8 @@ export function AccessControlActivityView({
       setActionLoading(false)
     }
   }
+
+  if (!canAccess) return null
 
   return (
     <div className="w-full space-y-2">
