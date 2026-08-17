@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { usePathname, useRouter } from "next/navigation"
+import { AnimatePresence, motion } from "framer-motion"
 
 import { AppSidebar } from "@/components/app-sidebar"
 import { DataTable } from "@/components/data-table"
@@ -71,8 +72,9 @@ import { authService } from "@/services/authService"
 import { asRecord, isLikelyRefreshToken, readString } from "@/utils/token-utils"
 import { env } from "@/lib/env"
 import { AUTH_STORAGE_KEYS, ROUTES } from "@/utils/constants"
-import { canSeeDashboardPage } from "@/lib/forbidden-routes"
+import { canSeeDashboardPage, firstVisibleSiblingOrHome, rememberForbiddenRoute } from "@/lib/forbidden-routes"
 import { useHideRememberedForbiddenPath } from "@/hooks/use-forbidden-route-guard"
+import { useDashboardMotion } from "@/lib/dashboard-motion"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 const LEGACY_TOKEN_STORAGE_KEY = "ess_auth_token"
@@ -101,7 +103,6 @@ const RESOURCE_ROUTE_MAP: Record<AdminResourceKey, string> = {
   companies: "/dashboard/companies",
 }
 
-const SELF_SERVICE_HOME_ROUTE = "/dashboard"
 function decodeBase64Url(input: string) {
   try {
     const normalized = input.replace(/-/g, "+").replace(/_/g, "/")
@@ -294,7 +295,6 @@ function resolvePermissionLabels(root: AdminRecord | null) {
     collectPermissionLabelsFromUnknown(root[key], labels)
   }
 
-  collectPermissionLabelsFromUnknown(root.role, labels)
   collectPermissionLabelsFromUnknown(root.roles, labels)
 
   return labels
@@ -334,6 +334,7 @@ export default function AdminDashboardView({
   const router = useRouter()
   const pathname = usePathname()
   const currentPath = pathname ?? ""
+  const motionPreset = useDashboardMotion()
   useHideRememberedForbiddenPath()
   const inferredActiveResource = React.useMemo(() => {
     const match = currentPath.match(
@@ -1009,8 +1010,10 @@ export default function AdminDashboardView({
     }
 
     if (!canSeeDashboardPage(currentPath, effectivePermissionLabels, accessMode)) {
-      router.replace(SELF_SERVICE_HOME_ROUTE)
-      return
+      rememberForbiddenRoute(currentPath)
+      router.replace(
+        firstVisibleSiblingOrHome(currentPath, effectivePermissionLabels, accessMode)
+      )
     }
   }, [accessMode, currentPath, effectivePermissionLabels, identityReady, router])
 
@@ -1055,7 +1058,17 @@ export default function AdminDashboardView({
               {showAccessControlTabs ? (
                 <DashboardSectionTabs groups={accessControlSectionTabGroups} />
               ) : null}
-              {children}
+              <AnimatePresence mode="popLayout" initial={false}>
+                <motion.div
+                  key={currentPath}
+                  variants={motionPreset.page}
+                  initial="hidden"
+                  animate="show"
+                  className="min-w-0"
+                >
+                  {children}
+                </motion.div>
+              </AnimatePresence>
               {resolvedActiveResource && resolvedUseApis && resolvedActiveResource !== "companies" ? (
                 <DataTable
                   token={token}

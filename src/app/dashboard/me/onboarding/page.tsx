@@ -1,11 +1,11 @@
 "use client"
 
-import { OnboardingView } from "@/components/dashboard/onboarding-view"
+import { OnboardingSelfView } from "@/components/dashboard/onboarding-self-view"
 
 /**
- * Self-service onboarding for employees.
- * Kept under /dashboard/me so it does not mount the HR Employees section tabs.
+ * Employee onboarding — /api/me/onboarding only.
+ * The HR OnboardingView stays on /dashboard/employees/onboarding.
  */
 export default function MeOnboardingPage() {
-  return <OnboardingView />
+  return <OnboardingSelfView />
 }

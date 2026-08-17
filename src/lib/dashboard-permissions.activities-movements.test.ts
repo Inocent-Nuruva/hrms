@@ -22,13 +22,19 @@ describe("activity and movement route access", () => {
     expect(hasActivitiesAccess(COMPANY_ADMIN_PERMISSIONS)).toBe(false)
   })
 
-  it("shows activity operations for activities:read regardless of access mode", () => {
-    expect(
-      canAccessDashboardRoute("/dashboard/activities/reviews", ["activities:read"], "admin"),
-    ).toBe(true)
+  it("shows activity reports for activities:read but not reviews or setup", () => {
     expect(
       canAccessDashboardRoute("/dashboard/activities/reports", ["activities:read"], "employee"),
     ).toBe(true)
+    expect(
+      canAccessDashboardRoute("/dashboard/activities/reviews", ["activities:read"], "admin"),
+    ).toBe(false)
+    expect(
+      canAccessDashboardRoute("/dashboard/activities/reviews", ["activities:update"], "admin"),
+    ).toBe(true)
+    expect(
+      canAccessDashboardRoute("/dashboard/activities/setup", ["activities:read"], "admin"),
+    ).toBe(false)
   })
 
   it("hides movement operations without an employee-movements permission", () => {
@@ -38,12 +44,15 @@ describe("activity and movement route access", () => {
     expect(hasMovementsAccess(COMPANY_ADMIN_PERMISSIONS)).toBe(false)
   })
 
-  it("shows movement operations for employee_movements:read regardless of access mode", () => {
+  it("shows movement cases for read and operations only for update/approve", () => {
     expect(
       canAccessDashboardRoute("/dashboard/movements/cases", ["employee_movements:read"], "admin"),
     ).toBe(true)
     expect(
       canAccessDashboardRoute("/dashboard/movements/operations", ["employee_movements:read"], "employee"),
+    ).toBe(false)
+    expect(
+      canAccessDashboardRoute("/dashboard/movements/operations", ["employee_movements:approve"], "admin"),
     ).toBe(true)
   })
 

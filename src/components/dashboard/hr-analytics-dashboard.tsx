@@ -49,6 +49,8 @@ import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
+import { motion } from "framer-motion"
+import { useDashboardMotion } from "@/lib/dashboard-motion"
 
 const EMPLOYMENT_STATUS_COLORS: Record<string, string> = {
   active: "var(--primary)",
@@ -1162,6 +1164,7 @@ export default function HrAnalyticsDashboard({
 
   const statusOrder = ["active", "onboarding", "suspended", "terminated", "exited"]
   const dashboardTitle = companyName?.trim() || "HRMS"
+  const motionPreset = useDashboardMotion()
   const latestAnalyticsRefresh =
     analyticsFreshness
       .map((row) =>
@@ -1175,24 +1178,50 @@ export default function HrAnalyticsDashboard({
       .find(Boolean) || ""
 
   return (
-    <div className="w-full pb-6">
+    <motion.div
+      className="w-full pb-6"
+      variants={motionPreset.container}
+      initial="hidden"
+      animate="show"
+    >
       <DoodleSprites />
       {/* Full-bleed identity strip — flush under the site header */}
-      <div
+      <motion.div
         className="relative w-full overflow-hidden border-b border-primary/20 px-4 py-4 text-white md:px-6 md:py-5"
         style={{ backgroundColor: "var(--primary)" }}
+        variants={motionPreset.rise}
       >
+        <motion.div
+          aria-hidden
+          className="pointer-events-none absolute -left-10 top-0 h-36 w-36 rounded-full bg-white/10"
+          animate={
+            motionPreset.reduce
+              ? undefined
+              : { x: [0, 16, 0], y: [0, 8, 0], opacity: [0.35, 0.55, 0.35] }
+          }
+          transition={{ duration: 11, repeat: Infinity, ease: "easeInOut" }}
+        />
         <Doodle name="doodle-circles" />
         <div className="relative z-10 flex w-full flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
           <div className="min-w-0">
             {adminRolesLabel ? (
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/70">
+              <motion.p
+                className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/70"
+                initial={motionPreset.reduce ? false : { opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.32 }}
+              >
                 {adminRolesLabel}
-              </p>
+              </motion.p>
             ) : null}
-            <h1 className="mt-0.5 truncate text-base font-semibold tracking-tight text-white sm:text-lg">
+            <motion.h1
+              className="mt-0.5 truncate text-base font-semibold tracking-tight text-white sm:text-lg"
+              initial={motionPreset.reduce ? false : { opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.38, delay: 0.05 }}
+            >
               {dashboardTitle}
-            </h1>
+            </motion.h1>
             {latestAnalyticsRefresh ? (
               <p className="mt-1 text-[11px] text-white/70">
                 Analytics snapshot refreshed {formatDateShort(latestAnalyticsRefresh)}
@@ -1237,19 +1266,22 @@ export default function HrAnalyticsDashboard({
             </button>
           </div>
         </div>
-      </div>
+      </motion.div>
 
       <div className="px-3 md:px-4 lg:px-6">
-      <section className="border-b border-border pt-3 pb-3 md:pt-4">
+      <motion.section className="border-b border-border pt-3 pb-3 md:pt-4" variants={motionPreset.item}>
         <div className="flex flex-col gap-3">
-          <div
+          <motion.div
             className="grid gap-x-4 gap-y-2 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-7"
             aria-busy={loading}
             aria-live="polite"
+            variants={motionPreset.fast}
           >
             {metrics.map((m, idx) => (
-              <div
-                key={idx}
+              <motion.div
+                key={m.label}
+                variants={motionPreset.item}
+                whileHover={motionPreset.hover}
                 className="min-w-0 border-b border-border pb-2 last:border-b-0 sm:last:border-b xl:border-b-0"
               >
                 <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
@@ -1267,21 +1299,24 @@ export default function HrAnalyticsDashboard({
                     ) : null}
                   </>
                 )}
-              </div>
+              </motion.div>
             ))}
-          </div>
+          </motion.div>
         </div>
-      </section>
+      </motion.section>
 
       {error ? (
-        <div className="mt-4 flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300">
+        <motion.div
+          variants={motionPreset.item}
+          className="mt-4 flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300"
+        >
           <AlertCircleIcon className="mt-0.5 h-4 w-4 shrink-0" />
           <span>{error}</span>
-        </div>
+        </motion.div>
       ) : null}
 
       <div className="mt-5 grid grid-cols-1 gap-x-6 gap-y-6 lg:grid-cols-12 lg:items-start">
-        <section className="self-start lg:col-span-6">
+        <motion.section className="self-start lg:col-span-6" variants={motionPreset.item}>
           <div className="flex items-center justify-between border-b border-border pb-2">
             <div>
               <div className="text-sm font-semibold text-foreground">Leave requests</div>
@@ -1321,7 +1356,13 @@ export default function HrAnalyticsDashboard({
                       const empNo = getLeaveEmployeeNo(lr)
                       const canOpenLeaveLink = canOpenLeaveRequests && Boolean(href)
                       return (
-                        <tr key={getLeaveId(lr) ?? i} className="transition hover:bg-muted/40">
+                        <motion.tr
+                          key={getLeaveId(lr) ?? i}
+                          className="transition hover:bg-muted/40"
+                          initial={motionPreset.reduce ? false : { opacity: 0, x: -8 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ duration: 0.28, delay: i * 0.04 }}
+                        >
                           <td className="px-2.5 py-1.5 font-medium">
                             {canOpenLeaveLink ? (
                               <Link href={href} className="hover:text-primary hover:underline">
@@ -1346,7 +1387,7 @@ export default function HrAnalyticsDashboard({
                               {getLeaveStatus(lr)}
                             </span>
                           </td>
-                        </tr>
+                        </motion.tr>
                       )
                     })}
                   </tbody>
@@ -1356,9 +1397,9 @@ export default function HrAnalyticsDashboard({
               <div className="py-2 text-sm text-muted-foreground">No leave requests to display.</div>
             )}
           </div>
-        </section>
+        </motion.section>
 
-        <section className="self-start lg:col-span-6">
+        <motion.section className="self-start lg:col-span-6" variants={motionPreset.item}>
           <div className="border-b border-border pb-2">
             <div className="text-sm font-semibold text-foreground">Employment status</div>
           </div>
@@ -1425,10 +1466,13 @@ export default function HrAnalyticsDashboard({
                     </div>
 
                     <div className="w-full min-w-0 flex-1 space-y-2">
-                      {chartRows.map((row) => (
-                        <div
+                      {chartRows.map((row, index) => (
+                        <motion.div
                           key={row.status}
                           className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2"
+                          initial={motionPreset.reduce ? false : { opacity: 0, x: 10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ duration: 0.3, delay: 0.08 + index * 0.05 }}
                         >
                           <div className="flex min-w-0 items-center gap-2">
                             <span
@@ -1443,7 +1487,7 @@ export default function HrAnalyticsDashboard({
                             <div className="text-sm font-semibold text-primary">{row.count}</div>
                             <div className="text-[11px] text-muted-foreground">{row.pct}%</div>
                           </div>
-                        </div>
+                        </motion.div>
                       ))}
                     </div>
                   </div>
@@ -1451,9 +1495,9 @@ export default function HrAnalyticsDashboard({
               })()
             )}
           </div>
-        </section>
+        </motion.section>
 
-        <section className="lg:col-span-12">
+        <motion.section className="lg:col-span-12" variants={motionPreset.item}>
           <div className="flex items-center justify-between border-b border-border pb-2">
             <div>
               <div className="text-sm font-semibold text-foreground">Recent people</div>
@@ -1493,12 +1537,15 @@ export default function HrAnalyticsDashboard({
                       const href = employeeProfileHref(emp)
                       const canOpenEmployeeLink = canOpenEmployeeProfiles && Boolean(href)
                       return (
-                        <tr
+                        <motion.tr
                           key={idx}
                           className={cn(
                             "transition",
                             canOpenEmployeeLink ? "cursor-pointer hover:bg-muted/40" : null
                           )}
+                          initial={motionPreset.reduce ? false : { opacity: 0, y: 6 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.26, delay: idx * 0.045 }}
                           onClick={() => {
                             if (canOpenEmployeeLink && href) router.push(href)
                           }}
@@ -1527,7 +1574,7 @@ export default function HrAnalyticsDashboard({
                           <td className="px-2.5 py-2 text-muted-foreground">
                             {getDepartmentNameFromEmployee(emp) || "—"}
                           </td>
-                        </tr>
+                        </motion.tr>
                       )
                     })}
                   </tbody>
@@ -1535,9 +1582,9 @@ export default function HrAnalyticsDashboard({
               </div>
             )}
           </div>
-        </section>
+        </motion.section>
 
-        <section className="self-start lg:col-span-12">
+        <motion.section className="self-start lg:col-span-12" variants={motionPreset.item}>
           <div className="flex items-center justify-between border-b border-border pb-2">
             <div className="text-sm font-semibold text-foreground">Employees by department</div>
             {departmentSectionReady && resolvedDepartmentHeadcounts.length > 0 ? (
@@ -1651,9 +1698,9 @@ export default function HrAnalyticsDashboard({
               })()
             )}
           </div>
-        </section>
+        </motion.section>
       </div>
       </div>
-    </div>
+    </motion.div>
   )
 }

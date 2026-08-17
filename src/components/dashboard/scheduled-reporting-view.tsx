@@ -41,6 +41,8 @@ import {
   updateScheduledReportTemplate,
   type AdminRecord,
 } from "@/lib/admin-api"
+import { useDashboardActor } from "@/hooks/use-dashboard-actor"
+import { canPerformPermission } from "@/lib/dashboard-permissions"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import { cn } from "@/lib/utils"
 import {
@@ -520,6 +522,17 @@ const textareaClass =
   "min-h-20 w-full rounded-md border border-border bg-background px-2.5 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
 
 export function ScheduledReportingView() {
+  const actor = useDashboardActor()
+  const canMutateReports = canPerformPermission(actor.permissionLabels, {
+    permissions: [
+      "scheduled_reporting:create",
+      "scheduled_reporting:update",
+      "report_schedules:create",
+      "report_templates:create",
+      "manage_scheduled_reports",
+    ],
+    mode: "any",
+  })
   const [tab, setTab] = React.useState<ReportingTab>("templates")
   const [rows, setRows] = React.useState<AdminRecord[]>([])
   const [definitions, setDefinitions] = React.useState<AdminRecord[]>([])
@@ -1839,7 +1852,7 @@ export function ScheduledReportingView() {
             ? "Executions"
             : "SMTP configurations"
 
-  const canCreate = tab !== "definitions" && tab !== "executions"
+  const canCreate = canMutateReports && tab !== "definitions" && tab !== "executions"
 
   const renderTemplateFields = (form: ReturnType<typeof emptyTemplateForm>, setForm: typeof setTemplateForm) => (
     <div className="grid gap-3 md:grid-cols-2">

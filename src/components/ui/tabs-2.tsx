@@ -14,6 +14,8 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import type { DashboardSectionTabGroup } from "@/lib/dashboard-sections"
+import { motion } from "framer-motion"
+import { useDashboardMotion } from "@/lib/dashboard-motion"
 
 type Tabs2Props = {
   groups: DashboardSectionTabGroup[]
@@ -27,11 +29,26 @@ function isActivePath(currentPath: string, url: string) {
 
 const tabTriggerClass = (active: boolean) =>
   cn(
-    "inline-flex min-w-0 shrink-0 items-center gap-1 border-b-2 px-1.5 py-1.5 text-left text-xs font-medium outline-none transition-colors",
+    "relative inline-flex min-w-0 shrink-0 items-center gap-1 px-1.5 py-1.5 text-left text-xs font-medium outline-none transition-colors",
     active
-      ? "border-[var(--primary)] text-[var(--primary)]"
-      : "border-transparent text-muted-foreground hover:text-foreground dark:text-slate-100 dark:hover:text-white"
+      ? "text-[var(--primary)]"
+      : "text-muted-foreground hover:text-foreground dark:text-slate-100 dark:hover:text-white"
   )
+
+function TabUnderline({ active }: { active: boolean }) {
+  const motionPreset = useDashboardMotion()
+  if (!active) return null
+  if (motionPreset.reduce) {
+    return <span className="absolute inset-x-1 -bottom-px h-0.5 rounded-full bg-[var(--primary)]" />
+  }
+  return (
+    <motion.span
+      layoutId="dashboard-grouped-tab"
+      className="absolute inset-x-1 -bottom-px h-0.5 rounded-full bg-[var(--primary)]"
+      transition={{ type: "spring", stiffness: 420, damping: 32 }}
+    />
+  )
+}
 
 export function Tabs2({ groups, currentPath, className }: Tabs2Props) {
   const router = useRouter()
@@ -75,6 +92,7 @@ export function Tabs2({ groups, currentPath, className }: Tabs2Props) {
                 className={tabTriggerClass(isActivePath(currentPath, only.url))}
               >
                 <span className="truncate whitespace-nowrap">{label}</span>
+                <TabUnderline active={isActivePath(currentPath, only.url)} />
               </Link>
             )
           }
@@ -106,6 +124,7 @@ export function Tabs2({ groups, currentPath, className }: Tabs2Props) {
                   </span>
                 ) : null}
                 <ChevronDownIcon className="size-3.5 shrink-0 opacity-70" />
+                <TabUnderline active={isActiveGroup} />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="min-w-48">
                 <DropdownMenuGroup>

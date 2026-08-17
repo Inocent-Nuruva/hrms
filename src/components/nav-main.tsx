@@ -16,6 +16,8 @@ import {
 import type { AdminResourceKey } from "@/lib/admin-api"
 import { ChevronDownIcon } from "lucide-react"
 import { LayoutDashboard } from "@/components/animate-ui/icons/layout-dashboard"
+import { motion } from "framer-motion"
+import { useDashboardMotion } from "@/lib/dashboard-motion"
 
 type NavMainNode = {
   title: string
@@ -51,6 +53,21 @@ const SIDEBAR_ITEM_BASE =
 const SIDEBAR_ITEM_ACTIVE =
   "data-active:!bg-primary/10 dark:data-active:!bg-[#262626] data-active:!text-[var(--sidebar-active-link-color)] data-active:[&_svg]:!text-[var(--sidebar-active-link-color)]"
 const SIDEBAR_ITEM_ICON = "[&_svg]:!size-[1.125rem] [&_svg]:!text-[var(--sidebar-icon-color)]"
+
+function NavActiveGlow({ active }: { active: boolean }) {
+  const motionPreset = useDashboardMotion()
+  if (!active) return null
+  if (motionPreset.reduce) {
+    return <span className="pointer-events-none absolute inset-0 rounded-lg bg-primary/10" />
+  }
+  return (
+    <motion.span
+      layoutId="admin-nav-active"
+      className="pointer-events-none absolute inset-0 rounded-lg bg-primary/10"
+      transition={{ type: "spring", stiffness: 380, damping: 32 }}
+    />
+  )
+}
 
 function collectOpenableNodes(nodes: NavMainNode[]): string[] {
   return nodes.flatMap((node) => [
@@ -243,7 +260,7 @@ export function NavMain({
           <SidebarMenuItem className="flex items-center gap-1.5">
             <SidebarMenuButton
               tooltip="Dashboard"
-              className={`${SIDEBAR_ITEM_BASE} min-w-0 flex-1 bg-transparent ${SIDEBAR_ITEM_ACTIVE} ${SIDEBAR_ITEM_ICON}`}
+              className={`relative ${SIDEBAR_ITEM_BASE} min-w-0 flex-1 bg-transparent ${SIDEBAR_ITEM_ACTIVE} ${SIDEBAR_ITEM_ICON}`}
               isActive={currentPath === "/dashboard"}
               onClick={() => {
                 navigateTo("/dashboard")
@@ -251,8 +268,9 @@ export function NavMain({
               onMouseEnter={() => setHoveredLink("__dashboard")}
               onMouseLeave={() => setHoveredLink((value) => (value === "__dashboard" ? null : value))}
             >
+              <NavActiveGlow active={currentPath === "/dashboard"} />
               <LayoutDashboard size={20} animation="path-loop" animate={hoveredLink === "__dashboard" ? "path-loop" : false} />
-              <span className="min-w-0 flex-1 truncate text-left">Dashboard</span>
+              <span className="relative z-[1] min-w-0 flex-1 truncate text-left">Dashboard</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
@@ -261,7 +279,7 @@ export function NavMain({
             <SidebarMenuItem key={item.title}>
               <SidebarMenuButton
                 tooltip={item.title}
-                className={`${SIDEBAR_ITEM_BASE} ${SIDEBAR_ITEM_ACTIVE} ${SIDEBAR_ITEM_ICON}`}
+                className={`relative ${SIDEBAR_ITEM_BASE} ${SIDEBAR_ITEM_ACTIVE} ${SIDEBAR_ITEM_ICON}`}
                 isActive={nodeContainsCurrentPath(item, currentPath)}
                 onClick={() => {
                   if (item.items?.length) {
@@ -283,14 +301,15 @@ export function NavMain({
                 onMouseEnter={() => setHoveredLink(item.title)}
                 onMouseLeave={() => setHoveredLink((value) => (value === item.title ? null : value))}
               >
+                <NavActiveGlow active={nodeContainsCurrentPath(item, currentPath)} />
                 {renderAnimatedIcon(item.icon, item.title)}
-                <span className="min-w-0 flex-1 truncate text-left">{item.title}</span>
+                <span className="relative z-[1] min-w-0 flex-1 truncate text-left">{item.title}</span>
                 {item.items ? (
                   <ChevronDownIcon
                     className={
                       openGroups[item.title]
-                        ? "ml-auto size-3.5 shrink-0 transition-transform duration-300 rotate-180"
-                        : "ml-auto size-3.5 shrink-0 transition-transform duration-300"
+                        ? "relative z-[1] ml-auto size-3.5 shrink-0 transition-transform duration-300 rotate-180"
+                        : "relative z-[1] ml-auto size-3.5 shrink-0 transition-transform duration-300"
                     }
                   />
                 ) : null}
@@ -320,7 +339,7 @@ export function NavMain({
             <SidebarMenuItem key={item.title}>
               <SidebarMenuButton
                 tooltip={item.title}
-                className={`${SIDEBAR_ITEM_BASE} ${SIDEBAR_ITEM_ACTIVE} ${SIDEBAR_ITEM_ICON}`}
+                className={`relative ${SIDEBAR_ITEM_BASE} ${SIDEBAR_ITEM_ACTIVE} ${SIDEBAR_ITEM_ICON}`}
                 isActive={nodeContainsCurrentPath(item, currentPath)}
                 onClick={() => {
                   if (!item.items) {
@@ -337,8 +356,9 @@ export function NavMain({
                 onMouseEnter={() => setHoveredLink(item.title)}
                 onMouseLeave={() => setHoveredLink((value) => (value === item.title ? null : value))}
               >
+                <NavActiveGlow active={nodeContainsCurrentPath(item, currentPath)} />
                 {renderAnimatedIcon(item.icon, item.title)}
-                <span className="min-w-0 flex-1 truncate text-left">{item.title}</span>
+                <span className="relative z-[1] min-w-0 flex-1 truncate text-left">{item.title}</span>
                 {item.items ? (
                   <ChevronDownIcon
                     className={

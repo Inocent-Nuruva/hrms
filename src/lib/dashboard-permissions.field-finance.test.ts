@@ -22,12 +22,18 @@ describe("field and finance route access", () => {
     expect(hasFieldAccess(COMPANY_ADMIN_PERMISSIONS)).toBe(false)
   })
 
-  it("shows field operations for field_visits:read regardless of access mode", () => {
+  it("shows field visits for field_visits:read but not parties", () => {
     expect(
       canAccessDashboardRoute("/dashboard/field/visits", ["field_visits:read"], "admin"),
     ).toBe(true)
     expect(
       canAccessDashboardRoute("/dashboard/field/visits", ["field_visits:read"], "employee"),
+    ).toBe(true)
+    expect(
+      canAccessDashboardRoute("/dashboard/field/parties", ["field_visits:read"], "admin"),
+    ).toBe(false)
+    expect(
+      canAccessDashboardRoute("/dashboard/field/parties", ["field_parties:read"], "admin"),
     ).toBe(true)
   })
 
@@ -38,12 +44,21 @@ describe("field and finance route access", () => {
     expect(hasFinanceAccess(COMPANY_ADMIN_PERMISSIONS)).toBe(false)
   })
 
-  it("shows finance operations for employee_finance:read regardless of access mode", () => {
+  it("shows finance applications for read, not products or accounts", () => {
     expect(
       canAccessDashboardRoute("/dashboard/finance/applications", ["employee_finance:read"], "admin"),
     ).toBe(true)
     expect(
       canAccessDashboardRoute("/dashboard/finance/accounts", ["employee_finance:read"], "employee"),
+    ).toBe(false)
+    expect(
+      canAccessDashboardRoute("/dashboard/finance/accounts", ["employee_finance:update"], "admin"),
+    ).toBe(true)
+    expect(
+      canAccessDashboardRoute("/dashboard/finance/products", ["employee_finance:read"], "admin"),
+    ).toBe(false)
+    expect(
+      canAccessDashboardRoute("/dashboard/finance/products", ["employee_finance:create"], "admin"),
     ).toBe(true)
   })
 

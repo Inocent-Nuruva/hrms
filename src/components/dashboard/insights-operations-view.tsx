@@ -39,6 +39,8 @@ import {
   type HrDashboardKind,
 } from "@/lib/admin-api"
 import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
+import { motion } from "framer-motion"
+import { useDashboardMotion } from "@/lib/dashboard-motion"
 import { useForbiddenRouteGuard, useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
 import { readStoredSessionTokens } from "@/lib/session-client"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
@@ -68,6 +70,7 @@ function metricEntries(record: AdminRecord | null) {
 
 export function InsightsOperationsView({ activeTab }: { activeTab: InsightsOpsTab }) {
   const actor = useDashboardActor()
+  const motionPreset = useDashboardMotion()
   const canAccess =
     !actor.ready ||
     canAccessDashboardRoute("/dashboard/insights/hr", actor.permissionLabels, actor.accessMode)
@@ -204,7 +207,12 @@ export function InsightsOperationsView({ activeTab }: { activeTab: InsightsOpsTa
   if (!canAccess) return null
 
   return (
-    <section className="space-y-4">
+    <motion.section
+      className="space-y-4"
+      variants={motionPreset.container}
+      initial="hidden"
+      animate="show"
+    >
       <TalentDoodleSprites />
       <HeroBand
         eyebrow="Insights"
@@ -229,13 +237,13 @@ export function InsightsOperationsView({ activeTab }: { activeTab: InsightsOpsTa
             <input type="date" className={inputClass + " max-w-40"} value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
             <input type="date" className={inputClass + " max-w-40"} value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
           </div>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <motion.div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" variants={motionPreset.fast}>
             {metrics.length > 0 ? metrics.map((item) => (
               <MetricTile key={item.label} label={item.label} value={item.value} />
             )) : (
               <MetricTile label="Records" value={dashboard ? "Loaded" : "—"} hint="No numeric tiles in this payload." />
             )}
-          </div>
+          </motion.div>
           {dashboard ? (
             <div className="rounded-xl border border-border bg-card p-4">
               <button type="button" className="text-sm font-semibold underline-offset-2 hover:underline" onClick={() => setDetail(dashboard)}>
@@ -246,12 +254,12 @@ export function InsightsOperationsView({ activeTab }: { activeTab: InsightsOpsTa
         </>
       ) : (
         <>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <motion.div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" variants={motionPreset.fast}>
             <MetricTile label="Health" value={readString(health, ["status", "state"], health ? "OK" : "—")} />
             <MetricTile label="Live" value={readString(live, ["status", "state"], live ? "OK" : "—")} />
             <MetricTile label="Ready" value={readString(ready, ["status", "state"], ready ? "OK" : "—")} />
             <MetricTile label="Blockers" value={readNumber(readiness, ["blockerCount", "blocker_count", "blockers"]) ?? blockers.length} />
-          </div>
+          </motion.div>
           <div className="rounded-xl border border-border bg-card p-4">
             <h2 className="text-sm font-semibold">Attendance setup</h2>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -271,13 +279,17 @@ export function InsightsOperationsView({ activeTab }: { activeTab: InsightsOpsTa
             </div>
           </div>
           {blockers.length > 0 ? (
-            <ul className="grid gap-2">
+            <motion.ul className="grid gap-2" variants={motionPreset.fast}>
               {blockers.map((item, index) => (
-                <li key={rowId(item) || index} className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                <motion.li
+                  key={rowId(item) || index}
+                  variants={motionPreset.item}
+                  className="border-l-2 border-amber-400 px-3 py-2 text-sm text-amber-900 dark:text-amber-200"
+                >
                   {readString(item, ["message", "title", "code"], optionLabel(item))}
-                </li>
+                </motion.li>
               ))}
-            </ul>
+            </motion.ul>
           ) : null}
           <SearchToggleField value={search} onChange={setSearch} placeholder="Search employees or events" />
           <div className="overflow-hidden rounded-xl border border-border bg-card">
@@ -308,6 +320,6 @@ export function InsightsOperationsView({ activeTab }: { activeTab: InsightsOpsTa
       )}
 
       <RecordDetailsDialog open={Boolean(detail)} onOpenChange={(open) => !open && setDetail(null)} title={optionLabel(detail) || "Details"} row={detail} />
-    </section>
+    </motion.section>
   )
 }

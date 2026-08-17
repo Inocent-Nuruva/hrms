@@ -57,7 +57,7 @@ import {
   updateProbationPolicy,
   type AdminRecord,
 } from "@/lib/admin-api"
-import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
+import { canAccessDashboardRoute, canPerformPermission } from "@/lib/dashboard-permissions"
 import { readStoredSessionTokens } from "@/lib/session-client"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 import {
@@ -124,6 +124,14 @@ export function ProbationManagementView({
   const canAccess =
     !actor.ready ||
     canAccessDashboardRoute("/dashboard/probation/overview", actor.permissionLabels, actor.accessMode)
+  const canCreatePolicy = canPerformPermission(actor.permissionLabels, {
+    permissions: ["probation:create", "probation:update", "probation_policies:create", "manage_probation"],
+    mode: "any",
+  })
+  const canReviewCases = canPerformPermission(actor.permissionLabels, {
+    permissions: ["probation:update", "probation_cases:update", "manage_probation"],
+    mode: "any",
+  })
 
   React.useEffect(() => {
     if (!actor.ready || canAccess) return
@@ -494,7 +502,7 @@ export function ProbationManagementView({
               {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
               Refresh
             </button>
-            {activeTab === "policies" ? (
+            {activeTab === "policies" && canCreatePolicy ? (
               <button type="button" className={primaryButtonClass} onClick={() => openForm("policy")}>
                 <PlusIcon className="size-4" />
                 New policy
@@ -611,30 +619,34 @@ export function ProbationManagementView({
             </div>
           ) : null}
           <SheetFooter className="gap-2">
-            <button
-              type="button"
-              className={secondaryButtonClass}
-              onClick={() =>
-                openForm("manager-review", {
-                  case_id: rowId(caseDetail),
-                  recommendation: "CONFIRM",
-                })
-              }
-            >
-              Manager review
-            </button>
-            <button
-              type="button"
-              className={secondaryButtonClass}
-              onClick={() =>
-                openForm("hr-decision", {
-                  case_id: rowId(caseDetail),
-                  decision: "CONFIRMED",
-                })
-              }
-            >
-              HR decision
-            </button>
+            {canReviewCases ? (
+              <button
+                type="button"
+                className={secondaryButtonClass}
+                onClick={() =>
+                  openForm("manager-review", {
+                    case_id: rowId(caseDetail),
+                    recommendation: "CONFIRM",
+                  })
+                }
+              >
+                Manager review
+              </button>
+            ) : null}
+            {canReviewCases ? (
+              <button
+                type="button"
+                className={secondaryButtonClass}
+                onClick={() =>
+                  openForm("hr-decision", {
+                    case_id: rowId(caseDetail),
+                    decision: "CONFIRMED",
+                  })
+                }
+              >
+                HR decision
+              </button>
+            ) : null}
             <button
               type="button"
               className={primaryButtonClass}

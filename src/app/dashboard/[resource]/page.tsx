@@ -22,7 +22,7 @@ export default async function DashboardResourcePage({
   const normalized = resource?.toLowerCase()
 
   if (!ALLOWED_RESOURCES.includes(normalized as AdminResourceKey)) {
-    redirect("/dashboard/users")
+    redirect("/dashboard")
   }
 
   // Roles/permissions tables render in AdminDashboardView (DataTable).

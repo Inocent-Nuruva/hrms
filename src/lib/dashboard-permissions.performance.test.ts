@@ -36,7 +36,7 @@ describe("performance and probation route access", () => {
     ).toBe(true)
   })
 
-  it("treats performance_reviews:read as enough to open the HR route", () => {
+  it("treats performance_reviews:read as enough to open reviews, not setup", () => {
     expect(hasPerformanceAccess(["performance_reviews:read"])).toBe(true)
     expect(
       canAccessDashboardRoute(
@@ -45,6 +45,13 @@ describe("performance and probation route access", () => {
         "admin",
       ),
     ).toBe(true)
+    expect(
+      canAccessDashboardRoute(
+        "/dashboard/performance/setup",
+        ["performance_reviews:read"],
+        "admin",
+      ),
+    ).toBe(false)
   })
 
   it("shows performance and probation whenever the actor has the permission", () => {
@@ -58,7 +65,8 @@ describe("performance and probation route access", () => {
 
   it("leaves personal performance and probation available without HR permissions", () => {
     expect(canAccessDashboardRoute("/dashboard/me/performance/overview", [], "employee")).toBe(true)
-    expect(canAccessDashboardRoute("/dashboard/me/performance/team", [], "employee")).toBe(true)
+    expect(canAccessDashboardRoute("/dashboard/me/performance/team", [], "employee")).toBe(false)
+    expect(canAccessDashboardRoute("/dashboard/me/performance/team", ["manager:read"], "employee")).toBe(true)
     expect(canAccessDashboardRoute("/dashboard/me/probation", [], "employee")).toBe(true)
   })
 
@@ -69,10 +77,16 @@ describe("performance and probation route access", () => {
     expect(hasProbationAccess(COMPANY_ADMIN_PERMISSIONS)).toBe(false)
   })
 
-  it("keeps HR probation for actors with probation_cases:read", () => {
+  it("keeps HR probation cases for probation_cases:read but not the team tab", () => {
     expect(hasProbationAccess(["probation_cases:read"])).toBe(true)
     expect(
       canAccessDashboardRoute("/dashboard/probation/cases", ["probation_cases:read"], "admin"),
+    ).toBe(true)
+    expect(
+      canAccessDashboardRoute("/dashboard/probation/team", ["probation_cases:read"], "admin"),
+    ).toBe(false)
+    expect(
+      canAccessDashboardRoute("/dashboard/probation/team", ["manager:read"], "admin"),
     ).toBe(true)
   })
 })

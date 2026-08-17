@@ -26,8 +26,20 @@ describe("sms and manager route access", () => {
     expect(canAccessDashboardRoute("/dashboard/sms/registry", ["sms:read"], "employee")).toBe(true)
   })
 
-  it("leaves personal team pages available without operations permissions", () => {
-    expect(canAccessDashboardRoute("/dashboard/me/team/overview", [], "employee")).toBe(true)
-    expect(canAccessDashboardRoute("/dashboard/me/team/actions", [], "admin")).toBe(true)
+  it("hides personal team pages without a manager grant", () => {
+    expect(canAccessDashboardRoute("/dashboard/me/team/overview", [], "employee")).toBe(false)
+    expect(canAccessDashboardRoute("/dashboard/me/team/actions", [], "admin")).toBe(false)
+  })
+
+  it("shows personal team pages for manager:read", () => {
+    expect(canAccessDashboardRoute("/dashboard/me/team/overview", ["manager:read"], "employee")).toBe(true)
+    expect(canAccessDashboardRoute("/dashboard/me/team/actions", ["view_team"], "admin")).toBe(true)
+  })
+
+  it("does not treat sms:read as platform SMS access", () => {
+    expect(canAccessDashboardRoute("/dashboard/sms/platform", ["sms:read"], "admin")).toBe(false)
+    expect(
+      canAccessDashboardRoute("/dashboard/sms/platform", ["sms:read", "companies:read"], "admin"),
+    ).toBe(true)
   })
 })

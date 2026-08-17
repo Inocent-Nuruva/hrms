@@ -11,7 +11,7 @@ import { toast } from "sonner"
 
 import { SearchToggleField } from "@/components/common/search-toggle-field"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
-import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
+import { canAccessDashboardRoute, canPerformPermission } from "@/lib/dashboard-permissions"
 import {
   RecordDetailsDialog,
   formatAdminValue,
@@ -1205,7 +1205,23 @@ export function PayrollOperationsView() {
                 ? "Payroll reports"
               : `Payroll ${CONFIG_TABS.find((entry) => entry.id === configTab)?.label.toLowerCase()}`
 
+  const canMutatePayroll = canPerformPermission(actor.permissionLabels, {
+    permissions: [
+      "payroll:create",
+      "payroll:update",
+      "payroll_runs:create",
+      "payroll_inputs:create",
+      "payroll_configuration:create",
+      "manage_payroll",
+    ],
+    mode: "any",
+  })
+  const canApprovePayroll = canPerformPermission(actor.permissionLabels, {
+    permissions: ["payroll:update", "payroll_runs:update", "payroll_runs:approve", "payroll_inputs:approve", "manage_payroll"],
+    mode: "any",
+  })
   const canCreate =
+    canMutatePayroll &&
     tab !== "overview" &&
     tab !== "reports" &&
     (tab !== "configuration" ||
@@ -1306,29 +1322,33 @@ export function PayrollOperationsView() {
                 >
                   View
                 </button>
-                <button
-                  type="button"
-                  className={actionButtonClass}
-                  disabled={processingRunId === id}
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    void onProcessRun(row)
-                  }}
-                >
-                  {processingRunId === id ? <Loader2Icon className="size-3.5 animate-spin" /> : "Process"}
-                </button>
-                <button
-                  type="button"
-                  className={actionButtonClass}
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    setApproveRunId(id)
-                    setApproveForm(emptyApproveRunForm())
-                    setApproveOpen(true)
-                  }}
-                >
-                  Approve
-                </button>
+                {canMutatePayroll ? (
+                  <button
+                    type="button"
+                    className={actionButtonClass}
+                    disabled={processingRunId === id}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      void onProcessRun(row)
+                    }}
+                  >
+                    {processingRunId === id ? <Loader2Icon className="size-3.5 animate-spin" /> : "Process"}
+                  </button>
+                ) : null}
+                {canApprovePayroll ? (
+                  <button
+                    type="button"
+                    className={actionButtonClass}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      setApproveRunId(id)
+                      setApproveForm(emptyApproveRunForm())
+                      setApproveOpen(true)
+                    }}
+                  >
+                    Approve
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className={actionButtonClass}
@@ -1709,6 +1729,8 @@ export function PayrollOperationsView() {
     journalRunId,
     lockingRunId,
     payslipRunId,
+    canApprovePayroll,
+    canMutatePayroll,
     processingRunId,
     tab,
   ])

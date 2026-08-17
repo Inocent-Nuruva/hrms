@@ -3,6 +3,8 @@
 import * as React from "react"
 import { useSearchParams } from "next/navigation"
 
+import { useDashboardActor } from "@/hooks/use-dashboard-actor"
+import { canPerformPermission } from "@/lib/dashboard-permissions"
 import { ResizableTable } from "@/components/ui/resizable-table"
 import { Textarea } from "@/components/ui/textarea"
 import {
@@ -970,6 +972,32 @@ export function LeaveManagementView({
   showTabButtons = true,
 }: LeaveManagementViewProps) {
   const searchParams = useSearchParams()
+  const actor = useDashboardActor()
+  const canCreateTypes = canPerformPermission(actor.permissionLabels, {
+    permissions: ["leave_types:create", "leave_types:update"],
+    mode: "any",
+  })
+  const canDeleteTypes = canPerformPermission(actor.permissionLabels, "leave_types:delete")
+  const canCreateRequests = canPerformPermission(actor.permissionLabels, {
+    permissions: ["leave_requests:create", "leave_requests:update"],
+    mode: "any",
+  })
+  const canAdjustBalances = canPerformPermission(actor.permissionLabels, {
+    permissions: ["leave_balances:update", "leave_balances:create", "leave-balances.manage"],
+    mode: "any",
+  })
+  const canMutateHolidays = canPerformPermission(actor.permissionLabels, {
+    permissions: ["holidays:create", "holidays:update", "attendance_holidays:create"],
+    mode: "any",
+  })
+  const canMutatePolicies = canPerformPermission(actor.permissionLabels, {
+    permissions: ["leave_policies:create", "leave_policies:update"],
+    mode: "any",
+  })
+  const canMutateWorkflows = canPerformPermission(actor.permissionLabels, {
+    permissions: ["leave_workflows:create", "leave_workflows:update"],
+    mode: "any",
+  })
   const highlightedRequestId = React.useMemo(
     () =>
       searchParams?.get("highlight") ??
@@ -2969,14 +2997,16 @@ export function LeaveManagementView({
               <option value="inactive">Inactive</option>
             </select>
             <div className="ml-auto flex flex-wrap items-center gap-1.5">
-              <button
-                type="button"
-                className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white"
-                onClick={() => openTypeDialogForCreate()}
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Create Leave Type
-              </button>
+              {canCreateTypes ? (
+                <button
+                  type="button"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white"
+                  onClick={() => openTypeDialogForCreate()}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Create Leave Type
+                </button>
+              ) : null}
               {refreshButton}
             </div>
           </div>
@@ -3003,31 +3033,37 @@ export function LeaveManagementView({
                   const isActive = readString(row, ["status"]) === "active";
                   return (
                     <div className="flex items-center justify-end gap-1.5" onClick={e => e.stopPropagation()}>
-                      <Switch
-                        size="sm"
-                        checked={isActive}
-                        onCheckedChange={() => void toggleTypeStatus(row)}
-                        aria-label="Toggle Status"
-                        className="scale-90"
-                      />
-                      <button
-                        type="button"
-                        className="group rounded-md border border-sky-200 p-1.5 text-sky-600 transition-all duration-300 hover:-translate-y-0.5 hover:scale-110 hover:bg-sky-50 hover:shadow-sm active:scale-95"
-                        onClick={() => openTypeDialogForEdit(row)}
-                        aria-label="Edit leave type"
-                        title="Edit leave type"
-                      >
-                        <Pencil className="size-3.5 transition-transform duration-300 group-hover:scale-110" />
-                      </button>
-                      <button
-                        type="button"
-                        className="group rounded-md border border-rose-200 p-1.5 text-rose-600 transition-all duration-300 hover:-translate-y-0.5 hover:scale-110 hover:bg-rose-50 hover:shadow-sm active:scale-95"
-                        onClick={() => setPendingTypeDelete(row)}
-                        aria-label="Delete leave type"
-                        title="Delete leave type"
-                      >
-                        <Trash2 className="size-3.5 transition-transform duration-300 group-hover:rotate-12 group-hover:scale-110" />
-                      </button>
+                      {canCreateTypes ? (
+                        <Switch
+                          size="sm"
+                          checked={isActive}
+                          onCheckedChange={() => void toggleTypeStatus(row)}
+                          aria-label="Toggle Status"
+                          className="scale-90"
+                        />
+                      ) : null}
+                      {canCreateTypes ? (
+                        <button
+                          type="button"
+                          className="group rounded-md border border-sky-200 p-1.5 text-sky-600 transition-all duration-300 hover:-translate-y-0.5 hover:scale-110 hover:bg-sky-50 hover:shadow-sm active:scale-95"
+                          onClick={() => openTypeDialogForEdit(row)}
+                          aria-label="Edit leave type"
+                          title="Edit leave type"
+                        >
+                          <Pencil className="size-3.5 transition-transform duration-300 group-hover:scale-110" />
+                        </button>
+                      ) : null}
+                      {canDeleteTypes ? (
+                        <button
+                          type="button"
+                          className="group rounded-md border border-rose-200 p-1.5 text-rose-600 transition-all duration-300 hover:-translate-y-0.5 hover:scale-110 hover:bg-rose-50 hover:shadow-sm active:scale-95"
+                          onClick={() => setPendingTypeDelete(row)}
+                          aria-label="Delete leave type"
+                          title="Delete leave type"
+                        >
+                          <Trash2 className="size-3.5 transition-transform duration-300 group-hover:rotate-12 group-hover:scale-110" />
+                        </button>
+                      ) : null}
                     </div>
                   );
                 } },
@@ -3179,14 +3215,16 @@ export function LeaveManagementView({
               </select>
             </div>
             <div className="flex flex-wrap items-center gap-1.5 sm:ml-auto">
-              <button
-                type="button"
-                className="inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white sm:flex-none"
-                onClick={() => void openRequestDialog()}
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Create Leave Request
-              </button>
+              {canCreateRequests ? (
+                <button
+                  type="button"
+                  className="inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white sm:flex-none"
+                  onClick={() => void openRequestDialog()}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Create Leave Request
+                </button>
+              ) : null}
               {refreshButton}
             </div>
           </div>
@@ -4198,14 +4236,16 @@ export function LeaveManagementView({
             >
               Carry forward
             </button>
-            <button
-              type="button"
-              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white"
-              onClick={() => void openBalanceDialog()}
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Adjust Leave Balance
-            </button>
+            {canAdjustBalances ? (
+              <button
+                type="button"
+                className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white"
+                onClick={() => void openBalanceDialog()}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Adjust Leave Balance
+              </button>
+            ) : null}
             {refreshButton}
           </div>
 
@@ -4279,14 +4319,16 @@ export function LeaveManagementView({
               <Trash2 className="h-3.5 w-3.5" />
               Remove Country
             </button>
-            <button
-              type="button"
-              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white"
-              onClick={() => setHolidayDialogOpen(true)}
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Add Holiday
-            </button>
+            {canMutateHolidays ? (
+              <button
+                type="button"
+                className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white"
+                onClick={() => setHolidayDialogOpen(true)}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add Holiday
+              </button>
+            ) : null}
             {refreshButton}
           </div>
 
@@ -4328,14 +4370,16 @@ export function LeaveManagementView({
       {tab === "policies" ? (
         <div className="space-y-2">
           <div className="flex flex-wrap items-center justify-end gap-1.5">
-            <button
-              type="button"
-              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white"
-              onClick={openCreatePolicySheet}
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Create Policy
-            </button>
+            {canMutatePolicies ? (
+              <button
+                type="button"
+                className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white"
+                onClick={openCreatePolicySheet}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Create Policy
+              </button>
+            ) : null}
             {refreshButton}
           </div>
 
@@ -4524,14 +4568,16 @@ export function LeaveManagementView({
       {tab === "workflows" ? (
         <div className="space-y-2">
           <div className="flex flex-wrap items-center justify-end gap-1.5">
-            <button
-              type="button"
-              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white"
-              onClick={openCreateWorkflowSheet}
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Create Workflow
-            </button>
+            {canMutateWorkflows ? (
+              <button
+                type="button"
+                className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white"
+                onClick={openCreateWorkflowSheet}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Create Workflow
+              </button>
+            ) : null}
             {refreshButton}
           </div>
 

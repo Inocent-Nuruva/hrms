@@ -79,7 +79,7 @@ import {
   syncPerformanceSystemKpis,
   type AdminRecord,
 } from "@/lib/admin-api"
-import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
+import { canAccessDashboardRoute, canPerformPermission } from "@/lib/dashboard-permissions"
 import { readStoredSessionTokens } from "@/lib/session-client"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 
@@ -250,6 +250,19 @@ export function PerformanceManagementView({
   const canAccess =
     !actor.ready ||
     canAccessDashboardRoute("/dashboard/performance/overview", actor.permissionLabels, actor.accessMode)
+  const canCreatePerformance = canPerformPermission(actor.permissionLabels, {
+    permissions: ["performance:create", "performance:update", "manage_performance"],
+    mode: "any",
+  })
+  const canModerateReviews = canPerformPermission(actor.permissionLabels, {
+    permissions: [
+      "performance:update",
+      "performance_reviews:update",
+      "performance_reviews:approve",
+      "manage_performance",
+    ],
+    mode: "any",
+  })
 
   React.useEffect(() => {
     if (!actor.ready || canAccess) return
@@ -1086,7 +1099,7 @@ export function PerformanceManagementView({
               {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
               Refresh
             </button>
-            {activeTab === "setup" ? (
+            {activeTab === "setup" && canCreatePerformance ? (
               <>
                 {setupTab === "kpis" ? (
                   <button
@@ -1127,7 +1140,7 @@ export function PerformanceManagementView({
                 </button>
               </>
             ) : null}
-            {activeTab === "plans" ? (
+            {activeTab === "plans" && canCreatePerformance ? (
               <>
                 <button type="button" className={secondaryButtonClass} onClick={() => openCreate("generate-plan")}>
                   Generate from rules
@@ -1138,7 +1151,7 @@ export function PerformanceManagementView({
                 </button>
               </>
             ) : null}
-            {activeTab === "reviews" ? (
+            {activeTab === "reviews" && canModerateReviews ? (
               <>
                 <button type="button" className={secondaryButtonClass} onClick={() => openCreate("moderate")}>
                   Moderate
@@ -1151,7 +1164,7 @@ export function PerformanceManagementView({
                 </button>
               </>
             ) : null}
-            {activeTab === "improvement" ? (
+            {activeTab === "improvement" && canCreatePerformance ? (
               <button type="button" className={primaryButtonClass} onClick={() => openCreate("pip")}>
                 <PlusIcon className="size-4" />
                 New PIP

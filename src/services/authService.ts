@@ -16,6 +16,7 @@ import type {
   AuthTokens,
 } from "@/types";
 import { extractBackupCodes } from "@/lib/admin-api";
+import { readPermissionLabelsFromUnknown } from "@/lib/dashboard-permissions";
 import { apiRequest, ApiError } from "@/services/api";
 import { isLikelyRefreshToken } from "@/utils/token-utils";
 
@@ -366,6 +367,7 @@ function normalizeUser(payload: unknown): AuthUser | undefined {
         companyName:
           readString(candidate, ["companyName", "company_name", "organization_name"]) ??
           readString(resolvedCompanyRecord, ["companyName", "company_name", "name", "display_name"]),
+        permissions: readPermissionLabelsFromUnknown(candidate, root, rootData, rootResult),
       };
     }
   }

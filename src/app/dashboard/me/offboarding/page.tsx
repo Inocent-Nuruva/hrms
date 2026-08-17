@@ -1,12 +1,11 @@
 "use client"
 
-import { OffboardingView } from "@/components/dashboard/offboarding-view"
+import { OffboardingSelfView } from "@/components/dashboard/offboarding-self-view"
 
 /**
- * Self-service offboarding for employees.
- * Intentionally under /dashboard/me so it does not use the HR Employees layout
- * (which exposes All Employees / Registration tabs).
+ * Employee offboarding — /api/me/offboarding plus assigned tasks/clearances.
+ * The HR OffboardingView stays on /dashboard/employees/offboarding.
  */
 export default function MeOffboardingPage() {
-  return <OffboardingView />
+  return <OffboardingSelfView />
 }

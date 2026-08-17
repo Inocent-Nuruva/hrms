@@ -41,21 +41,8 @@ type DashboardActorIdentityResolution = {
 
 const COMPANY_DASHBOARD_SWITCH_PERMISSION = "view_company_dashboard"
 
-const ADMIN_BYPASS_LABELS = new Set([
-  "*",
-  "*:*",
-  "all",
-  "admin",
-  "administrator",
-  "super_admin",
-  "super-admin",
-  "root",
-  "owner",
-  "admin:*",
-  "super_admin:*",
-  "super-admin:*",
-  "root:*",
-])
+/** Only true platform wildcards grant every route. Role names and `employees:*` do not. */
+const GLOBAL_BYPASS_LABELS = new Set(["*", "*:*", "all"])
 
 /**
  * Company-wide overview (HR analytics on `/dashboard`).
@@ -67,11 +54,6 @@ export const COMPANY_DASHBOARD_PERMISSION: PermissionRequirement = {
     "view_company_dashboard",
     "view_company_data",
   ],
-  mode: "any",
-}
-
-const COMPANY_OPERATIONS_PERMISSION: PermissionRequirement = {
-  permissions: ["view_company_dashboard", "view_company_data"],
   mode: "any",
 }
 
@@ -105,20 +87,53 @@ export const PAYROLL_ROUTE_PERMISSION: PermissionRequirement = {
  * HR Performance (`/dashboard/performance/*`).
  * Company dashboard access is not enough — /api/performance/* is its own grant.
  */
+const PERFORMANCE_MODULE_WIDE = [
+  "performance:read",
+  "performance:create",
+  "performance:update",
+  "manage_performance",
+  "view_performance",
+]
+
 export const PERFORMANCE_ROUTE_PERMISSION: PermissionRequirement = {
   permissions: [
-    "performance:read",
-    "performance:create",
-    "performance:update",
+    ...PERFORMANCE_MODULE_WIDE,
     "performance_years:read",
     "performance_periods:read",
     "performance_kpis:read",
     "performance_plans:read",
     "performance_reviews:read",
     "performance_improvement_plans:read",
-    "manage_performance",
-    "view_performance",
   ],
+  mode: "any",
+}
+
+export const PERFORMANCE_SETUP_PERMISSION: PermissionRequirement = {
+  permissions: [
+    ...PERFORMANCE_MODULE_WIDE,
+    "performance_years:read",
+    "performance_periods:read",
+    "performance_kpis:read",
+    "performance_templates:read",
+    "kpi_templates:read",
+    "performance_rating_scales:read",
+    "kpi_rules:read",
+  ],
+  mode: "any",
+}
+
+export const PERFORMANCE_PLANS_PERMISSION: PermissionRequirement = {
+  permissions: [...PERFORMANCE_MODULE_WIDE, "performance_plans:read"],
+  mode: "any",
+}
+
+export const PERFORMANCE_REVIEWS_PERMISSION: PermissionRequirement = {
+  permissions: [...PERFORMANCE_MODULE_WIDE, "performance_reviews:read", "performance_appeals:read"],
+  mode: "any",
+}
+
+export const PERFORMANCE_IMPROVEMENT_PERMISSION: PermissionRequirement = {
+  permissions: [...PERFORMANCE_MODULE_WIDE, "performance_improvement_plans:read"],
   mode: "any",
 }
 
@@ -126,16 +141,31 @@ export const PERFORMANCE_ROUTE_PERMISSION: PermissionRequirement = {
  * HR Probation (`/dashboard/probation/*`).
  * Company dashboard access is not enough — /api/probation/* is its own grant.
  */
+const PROBATION_MODULE_WIDE = [
+  "probation:read",
+  "probation:create",
+  "probation:update",
+  "manage_probation",
+  "view_probation",
+]
+
 export const PROBATION_ROUTE_PERMISSION: PermissionRequirement = {
-  permissions: [
-    "probation:read",
-    "probation:create",
-    "probation:update",
-    "probation_policies:read",
-    "probation_cases:read",
-    "manage_probation",
-    "view_probation",
-  ],
+  permissions: [...PROBATION_MODULE_WIDE, "probation_policies:read", "probation_cases:read"],
+  mode: "any",
+}
+
+export const PROBATION_POLICIES_PERMISSION: PermissionRequirement = {
+  permissions: [...PROBATION_MODULE_WIDE, "probation_policies:read"],
+  mode: "any",
+}
+
+export const PROBATION_CASES_PERMISSION: PermissionRequirement = {
+  permissions: [...PROBATION_MODULE_WIDE, "probation_cases:read"],
+  mode: "any",
+}
+
+export const PROBATION_TEAM_PERMISSION: PermissionRequirement = {
+  permissions: [...PROBATION_MODULE_WIDE, "manager:read", "team:read", "view_team"],
   mode: "any",
 }
 
@@ -143,23 +173,39 @@ export const PROBATION_ROUTE_PERMISSION: PermissionRequirement = {
  * Field operations (`/dashboard/field/*`).
  * Shown when the actor has a field / work-activity grant — not by HR identity.
  */
+const FIELD_MODULE_WIDE = [
+  "field:read",
+  "field:create",
+  "view_field",
+  "manage_field",
+]
+
 export const FIELD_ROUTE_PERMISSION: PermissionRequirement = {
   permissions: [
-    "field:read",
-    "field:create",
+    ...FIELD_MODULE_WIDE,
     "field_visits:read",
     "field_visits:create",
     "field_parties:read",
     "field_parties:create",
-    "work_activities:read",
-    "activities:read",
-    "activity_categories:read",
-    "activity_policies:read",
-    "view_field",
-    "manage_field",
     "view_field_visits",
     "manage_field_visits",
   ],
+  mode: "any",
+}
+
+export const FIELD_VISITS_PERMISSION: PermissionRequirement = {
+  permissions: [
+    ...FIELD_MODULE_WIDE,
+    "field_visits:read",
+    "field_visits:create",
+    "view_field_visits",
+    "manage_field_visits",
+  ],
+  mode: "any",
+}
+
+export const FIELD_PARTIES_PERMISSION: PermissionRequirement = {
+  permissions: [...FIELD_MODULE_WIDE, "field_parties:read", "field_parties:create"],
   mode: "any",
 }
 
@@ -167,19 +213,44 @@ export const FIELD_ROUTE_PERMISSION: PermissionRequirement = {
  * Employee finance operations (`/dashboard/finance/*`).
  * Shown when the actor has a finance / loan / advance grant — not by HR identity.
  */
+const FINANCE_MODULE_WIDE = [
+  "finance:read",
+  "finance:create",
+  "view_finance",
+  "manage_finance",
+  "view_employee_finance",
+  "manage_employee_finance",
+]
+
 export const FINANCE_ROUTE_PERMISSION: PermissionRequirement = {
   permissions: [
-    "finance:read",
-    "finance:create",
+    ...FINANCE_MODULE_WIDE,
     "employee_finance:read",
     "employee_finance:create",
     "employee_finance:update",
     "staff_loans:read",
     "salary_advances:read",
-    "view_finance",
-    "manage_finance",
-    "view_employee_finance",
-    "manage_employee_finance",
+  ],
+  mode: "any",
+}
+
+export const FINANCE_PRODUCTS_PERMISSION: PermissionRequirement = {
+  permissions: [
+    ...FINANCE_MODULE_WIDE,
+    "employee_finance:create",
+    "employee_finance_products:read",
+    "finance_products:read",
+  ],
+  mode: "any",
+}
+
+export const FINANCE_ACCOUNTS_PERMISSION: PermissionRequirement = {
+  permissions: [
+    ...FINANCE_MODULE_WIDE,
+    "employee_finance:update",
+    "employee_finance_accounts:read",
+    "staff_loans:read",
+    "salary_advances:read",
   ],
   mode: "any",
 }
@@ -188,20 +259,47 @@ export const FINANCE_ROUTE_PERMISSION: PermissionRequirement = {
  * Daily activity operations (`/dashboard/activities/*`).
  * Shown when the actor has an activities / work-activity grant — not by HR identity.
  */
+const ACTIVITY_MODULE_WIDE = [
+  "activities:read",
+  "activities:create",
+  "activities:update",
+  "work_activities:read",
+  "work_activities:create",
+  "daily_activities:read",
+  "view_activities",
+  "manage_activities",
+  "view_daily_activities",
+  "manage_daily_activities",
+]
+
 export const ACTIVITY_ROUTE_PERMISSION: PermissionRequirement = {
   permissions: [
-    "activities:read",
-    "activities:create",
-    "activities:update",
-    "work_activities:read",
-    "work_activities:create",
-    "daily_activities:read",
+    ...ACTIVITY_MODULE_WIDE,
     "activity_categories:read",
     "activity_policies:read",
-    "view_activities",
+  ],
+  mode: "any",
+}
+
+export const ACTIVITY_REVIEWS_PERMISSION: PermissionRequirement = {
+  permissions: [
+    "activities:update",
+    "activities:approve",
+    "work_activities:update",
     "manage_activities",
-    "view_daily_activities",
     "manage_daily_activities",
+  ],
+  mode: "any",
+}
+
+export const ACTIVITY_SETUP_PERMISSION: PermissionRequirement = {
+  permissions: [
+    "activity_categories:read",
+    "activity_categories:create",
+    "activity_policies:read",
+    "activity_policies:create",
+    "activities:create",
+    "manage_activities",
   ],
   mode: "any",
 }
@@ -210,15 +308,29 @@ export const ACTIVITY_ROUTE_PERMISSION: PermissionRequirement = {
  * Employee movement operations (`/dashboard/movements/*`).
  * Shown when the actor has an employee-movements grant — not by HR identity.
  */
+const MOVEMENT_MODULE_WIDE = [
+  "employee_movements:read",
+  "employee_movements:create",
+  "movements:read",
+  "movements:create",
+  "view_employee_movements",
+]
+
 export const MOVEMENT_ROUTE_PERMISSION: PermissionRequirement = {
   permissions: [
-    "employee_movements:read",
-    "employee_movements:create",
+    ...MOVEMENT_MODULE_WIDE,
     "employee_movements:update",
     "employee_movements:approve",
-    "movements:read",
-    "movements:create",
-    "view_employee_movements",
+    "manage_employee_movements",
+  ],
+  mode: "any",
+}
+
+export const MOVEMENT_OPERATIONS_PERMISSION: PermissionRequirement = {
+  permissions: [
+    "employee_movements:update",
+    "employee_movements:approve",
+    "employee_movements:apply",
     "manage_employee_movements",
   ],
   mode: "any",
@@ -305,6 +417,92 @@ export const INSIGHTS_ROUTE_PERMISSION: PermissionRequirement = {
   mode: "any",
 }
 
+export const INSIGHTS_HR_PERMISSION: PermissionRequirement = {
+  permissions: [
+    "dashboards:read",
+    "hr_dashboards:read",
+    "view_dashboards",
+    "view_hr_dashboard",
+    "manage_dashboards",
+  ],
+  mode: "any",
+}
+
+export const INSIGHTS_MANAGEMENT_PERMISSION: PermissionRequirement = {
+  permissions: [
+    "dashboards:read",
+    "view_dashboards",
+    "view_management_dashboard",
+    "management_dashboards:read",
+    "manage_dashboards",
+  ],
+  mode: "any",
+}
+
+export const INSIGHTS_MANAGER_PERMISSION: PermissionRequirement = {
+  permissions: [
+    "dashboards:read",
+    "view_dashboards",
+    "view_manager_dashboard",
+    "manager_dashboards:read",
+    "manage_dashboards",
+  ],
+  mode: "any",
+}
+
+export const INSIGHTS_READINESS_PERMISSION: PermissionRequirement = {
+  permissions: ["launch_readiness:read", "security_events:read", "view_launch_readiness"],
+  mode: "any",
+}
+
+export const MANAGER_ROUTE_PERMISSION: PermissionRequirement = {
+  permissions: [
+    "manager:read",
+    "managers:read",
+    "team:read",
+    "teams:read",
+    "view_team",
+    "view_manager_dashboard",
+    "manager_dashboard:read",
+    "manager_team:read",
+  ],
+  mode: "any",
+}
+
+export const SCHEDULED_REPORTING_ROUTE_PERMISSION: PermissionRequirement = {
+  permissions: [
+    "scheduled_reporting:read",
+    "scheduled_reporting:create",
+    "report_schedules:read",
+    "report_templates:read",
+    "view_scheduled_reports",
+    "manage_scheduled_reports",
+  ],
+  mode: "any",
+}
+
+export const NOTIFICATIONS_ADMIN_ROUTE_PERMISSION: PermissionRequirement = {
+  permissions: [
+    "notifications:read",
+    "notifications:update",
+    "notifications:create",
+    "view_notifications",
+    "manage_notifications",
+  ],
+  mode: "any",
+}
+
+export const ATTENDANCE_REPORTS_ROUTE_PERMISSION: PermissionRequirement = {
+  permissions: [
+    "attendance_summaries:read",
+    "attendance_processing:read",
+    "attendance_reports:read",
+    "view_attendance_reports",
+    "view_company_data",
+  ],
+  mode: "any",
+}
+
 /**
  * Platform tenant registry at `/dashboard/companies`.
  * `company_users:*` is company-scoped membership management and must not
@@ -322,15 +520,42 @@ const ADMIN_DASHBOARD_LANDING_ROUTES = [
   // employees:read for self-service and must not flip into admin mode.
   "/dashboard/employees/registration",
   "/dashboard/employees/onboarding",
+  "/dashboard/employees/offboarding",
   "/dashboard/employees/profile-update-approvals",
+  "/dashboard/employees/profile-change-requests",
   "/dashboard/attendance/daily-summaries",
   "/dashboard/attendance/policies",
   "/dashboard/attendance/shifts",
+  "/dashboard/attendance/correction-requests",
   "/dashboard/access-control",
   "/dashboard/positions",
+  "/dashboard/leave-management",
   "/dashboard/performance/overview",
   "/dashboard/probation/overview",
+  "/dashboard/field/overview",
+  "/dashboard/finance/overview",
+  "/dashboard/activities/overview",
+  "/dashboard/movements/overview",
+  "/dashboard/sms/overview",
+  "/dashboard/structure",
+  "/dashboard/insights/hr",
+  "/dashboard/operations/payroll",
+  "/dashboard/operations/recruitment",
+  "/dashboard/operations/scheduled-reporting",
+  "/dashboard/operations/notifications",
+  "/dashboard/users",
+  "/dashboard/roles",
+  "/dashboard/permissions",
 ]
+
+/** HR employee routes an employee-shell actor may still open if they have the grant. */
+const EMPLOYEE_SHELL_HR_OVERRIDE_PREFIXES = [
+  "/dashboard/employees/registration",
+  "/dashboard/employees/onboarding",
+  "/dashboard/employees/offboarding",
+  "/dashboard/employees/profile-update-approvals",
+  "/dashboard/employees/profile-change-requests",
+] as const
 
 /**
  * HR/admin employee-directory routes. Blocked for accessMode === "employee"
@@ -453,7 +678,7 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/me/performance/reviews": null,
   "/dashboard/me/performance/achievements": null,
   "/dashboard/me/performance/improvement": null,
-  "/dashboard/me/performance/team": null,
+  "/dashboard/me/performance/team": MANAGER_ROUTE_PERMISSION,
   "/dashboard/me/probation": null,
   "/dashboard/me/field": null,
   "/dashboard/me/field/visits": null,
@@ -464,11 +689,11 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/me/activities/today": null,
   "/dashboard/me/activities/reports": null,
   "/dashboard/me/movements": null,
-  "/dashboard/me/team": null,
-  "/dashboard/me/team/overview": null,
-  "/dashboard/me/team/members": null,
-  "/dashboard/me/team/attendance": null,
-  "/dashboard/me/team/actions": null,
+  "/dashboard/me/team": MANAGER_ROUTE_PERMISSION,
+  "/dashboard/me/team/overview": MANAGER_ROUTE_PERMISSION,
+  "/dashboard/me/team/members": MANAGER_ROUTE_PERMISSION,
+  "/dashboard/me/team/attendance": MANAGER_ROUTE_PERMISSION,
+  "/dashboard/me/team/actions": MANAGER_ROUTE_PERMISSION,
   "/dashboard/me/insights": null,
   "/dashboard/me/requests": null,
   "/dashboard/me/requests/actions": null,
@@ -477,14 +702,7 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/me/requests/profile-changes": null,
   "/dashboard/me/requests/resignation": null,
   "/dashboard/me/onboarding": null,
-  "/dashboard/me/offboarding": {
-    permissions: [
-      "offboarding_requests:read",
-      "offboarding_workflows:read",
-      "offboarding_requests:create",
-    ],
-    mode: "any",
-  },
+  "/dashboard/me/offboarding": null,
   "/dashboard/me/leave": null,
   "/dashboard/me/leave/requests": null,
   "/dashboard/me/leave/balances": null,
@@ -626,57 +844,67 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   // Company HR analytics overview — not the employee self-service home.
   // Employee shell uses /dashboard without this gate (see canAccessDashboardRoute).
   "/dashboard/company-overview": COMPANY_DASHBOARD_PERMISSION,
-  "/dashboard/operations/promotion": null,
-  "/dashboard/operations/recruitment": COMPANY_OPERATIONS_PERMISSION,
+  "/dashboard/operations/promotion": MOVEMENT_ROUTE_PERMISSION,
+  "/dashboard/operations/recruitment": EMPLOYEE_DIRECTORY_MANAGE_PERMISSIONS,
   "/dashboard/operations/payroll": PAYROLL_ROUTE_PERMISSION,
-  "/dashboard/operations/reports": COMPANY_OPERATIONS_PERMISSION,
-  "/dashboard/operations/scheduled-reporting": COMPANY_OPERATIONS_PERMISSION,
-  "/dashboard/operations/notifications": COMPANY_OPERATIONS_PERMISSION,
+  "/dashboard/operations/reports": ATTENDANCE_REPORTS_ROUTE_PERMISSION,
+  "/dashboard/operations/scheduled-reporting": SCHEDULED_REPORTING_ROUTE_PERMISSION,
+  "/dashboard/operations/notifications": NOTIFICATIONS_ADMIN_ROUTE_PERMISSION,
   "/dashboard/performance": PERFORMANCE_ROUTE_PERMISSION,
   "/dashboard/performance/overview": PERFORMANCE_ROUTE_PERMISSION,
-  "/dashboard/performance/setup": PERFORMANCE_ROUTE_PERMISSION,
-  "/dashboard/performance/plans": PERFORMANCE_ROUTE_PERMISSION,
-  "/dashboard/performance/reviews": PERFORMANCE_ROUTE_PERMISSION,
-  "/dashboard/performance/improvement": PERFORMANCE_ROUTE_PERMISSION,
+  "/dashboard/performance/setup": PERFORMANCE_SETUP_PERMISSION,
+  "/dashboard/performance/plans": PERFORMANCE_PLANS_PERMISSION,
+  "/dashboard/performance/reviews": PERFORMANCE_REVIEWS_PERMISSION,
+  "/dashboard/performance/improvement": PERFORMANCE_IMPROVEMENT_PERMISSION,
   "/dashboard/probation": PROBATION_ROUTE_PERMISSION,
   "/dashboard/probation/overview": PROBATION_ROUTE_PERMISSION,
-  "/dashboard/probation/policies": PROBATION_ROUTE_PERMISSION,
-  "/dashboard/probation/cases": PROBATION_ROUTE_PERMISSION,
-  "/dashboard/probation/team": PROBATION_ROUTE_PERMISSION,
+  "/dashboard/probation/policies": PROBATION_POLICIES_PERMISSION,
+  "/dashboard/probation/cases": PROBATION_CASES_PERMISSION,
+  "/dashboard/probation/team": PROBATION_TEAM_PERMISSION,
   "/dashboard/field": FIELD_ROUTE_PERMISSION,
   "/dashboard/field/overview": FIELD_ROUTE_PERMISSION,
-  "/dashboard/field/visits": FIELD_ROUTE_PERMISSION,
-  "/dashboard/field/map": FIELD_ROUTE_PERMISSION,
-  "/dashboard/field/parties": FIELD_ROUTE_PERMISSION,
-  "/dashboard/field/setup": FIELD_ROUTE_PERMISSION,
+  "/dashboard/field/visits": FIELD_VISITS_PERMISSION,
+  "/dashboard/field/map": FIELD_VISITS_PERMISSION,
+  "/dashboard/field/parties": FIELD_PARTIES_PERMISSION,
+  "/dashboard/field/setup": FIELD_PARTIES_PERMISSION,
   "/dashboard/finance": FINANCE_ROUTE_PERMISSION,
   "/dashboard/finance/overview": FINANCE_ROUTE_PERMISSION,
-  "/dashboard/finance/products": FINANCE_ROUTE_PERMISSION,
+  "/dashboard/finance/products": FINANCE_PRODUCTS_PERMISSION,
   "/dashboard/finance/applications": FINANCE_ROUTE_PERMISSION,
-  "/dashboard/finance/accounts": FINANCE_ROUTE_PERMISSION,
+  "/dashboard/finance/accounts": FINANCE_ACCOUNTS_PERMISSION,
   "/dashboard/activities": ACTIVITY_ROUTE_PERMISSION,
   "/dashboard/activities/overview": ACTIVITY_ROUTE_PERMISSION,
   "/dashboard/activities/reports": ACTIVITY_ROUTE_PERMISSION,
-  "/dashboard/activities/reviews": ACTIVITY_ROUTE_PERMISSION,
+  "/dashboard/activities/reviews": ACTIVITY_REVIEWS_PERMISSION,
   "/dashboard/activities/exceptions": ACTIVITY_ROUTE_PERMISSION,
-  "/dashboard/activities/setup": ACTIVITY_ROUTE_PERMISSION,
+  "/dashboard/activities/setup": ACTIVITY_SETUP_PERMISSION,
   "/dashboard/movements": MOVEMENT_ROUTE_PERMISSION,
   "/dashboard/movements/overview": MOVEMENT_ROUTE_PERMISSION,
   "/dashboard/movements/cases": MOVEMENT_ROUTE_PERMISSION,
-  "/dashboard/movements/operations": MOVEMENT_ROUTE_PERMISSION,
+  "/dashboard/movements/operations": MOVEMENT_OPERATIONS_PERMISSION,
   "/dashboard/sms": SMS_ROUTE_PERMISSION,
   "/dashboard/sms/overview": SMS_ROUTE_PERMISSION,
   "/dashboard/sms/registry": SMS_ROUTE_PERMISSION,
   "/dashboard/sms/logs": SMS_ROUTE_PERMISSION,
-  "/dashboard/sms/platform": SMS_ROUTE_PERMISSION,
+  "/dashboard/sms/platform": COMPANY_MANAGEMENT_ROUTE_PERMISSION,
   "/dashboard/structure": STRUCTURE_ROUTE_PERMISSION,
   "/dashboard/structure/cost-centers": COST_CENTER_ROUTE_PERMISSION,
   "/dashboard/structure/grades": GRADE_ROUTE_PERMISSION,
   "/dashboard/insights": INSIGHTS_ROUTE_PERMISSION,
-  "/dashboard/insights/hr": INSIGHTS_ROUTE_PERMISSION,
-  "/dashboard/insights/management": INSIGHTS_ROUTE_PERMISSION,
-  "/dashboard/insights/manager": INSIGHTS_ROUTE_PERMISSION,
-  "/dashboard/insights/readiness": INSIGHTS_ROUTE_PERMISSION,
+  "/dashboard/insights/hr": INSIGHTS_HR_PERMISSION,
+  "/dashboard/insights/management": INSIGHTS_MANAGEMENT_PERMISSION,
+  "/dashboard/insights/manager": INSIGHTS_MANAGER_PERMISSION,
+  "/dashboard/insights/readiness": INSIGHTS_READINESS_PERMISSION,
+  "/dashboard/users": {
+    permissions: [
+      "users:read",
+      "users:create",
+      "users:update",
+      "company_users:read",
+      "company_users:create",
+    ],
+    mode: "any",
+  },
   "/dashboard/access-control": {
     permissions: [
       "attendance_devices:read",
@@ -684,7 +912,6 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
       "access_schedule_templates:read",
       "access_organizations:read",
       "access_groups:read",
-      "employees:read",
       "roles:read",
       "permissions:read",
     ],
@@ -722,7 +949,6 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
       "users:update",
       "employees:update",
       "employees:create",
-      "employees:read",
     ],
     mode: "any",
   },
@@ -745,18 +971,28 @@ export function canonicalizePermissionLabel(label: string) {
   return label.trim().toLowerCase().replace(/\./g, ":")
 }
 
-function isAdminBypassLabel(label: string) {
-  const normalized = canonicalizePermissionLabel(label)
-  if (ADMIN_BYPASS_LABELS.has(normalized)) {
+function isGlobalBypassLabel(label: string) {
+  return GLOBAL_BYPASS_LABELS.has(canonicalizePermissionLabel(label))
+}
+
+function permissionMatches(owned: string, required: string) {
+  if (owned === required) {
     return true
   }
-  return normalized.endsWith(":*")
+  if (isGlobalBypassLabel(owned)) {
+    return true
+  }
+  if (owned.endsWith(":*")) {
+    const resource = owned.slice(0, -2)
+    return Boolean(resource) && (required === resource || required.startsWith(`${resource}:`))
+  }
+  return false
 }
 
 function looksLikePermissionLabel(label: string) {
   const normalized = canonicalizePermissionLabel(label)
   return (
-    isAdminBypassLabel(normalized) ||
+    isGlobalBypassLabel(normalized) ||
     normalized.includes(":") ||
     normalized.startsWith("view_") ||
     normalized.startsWith("create_") ||
@@ -820,9 +1056,6 @@ export function collectPermissionLabelsFromUnknown(value: unknown, sink: Set<str
     "slug",
     "permission",
     "action",
-    "role",
-    "user_type",
-    "type",
   ])
   if (direct) {
     collectPermissionLabelsFromUnknown(direct, sink)
@@ -1039,7 +1272,7 @@ export function hasPermission(
   }
 
   const normalizedPermissions = normalizePermissionLabels(permissionLabels)
-  if (normalizedPermissions.some(isAdminBypassLabel)) {
+  if (normalizedPermissions.some(isGlobalBypassLabel)) {
     return true
   }
 
@@ -1053,10 +1286,14 @@ export function hasPermission(
   }
 
   if (resolved.mode === "all") {
-    return requiredPermissions.every((required) => normalizedPermissions.includes(required))
+    return requiredPermissions.every((required) =>
+      normalizedPermissions.some((owned) => permissionMatches(owned, required))
+    )
   }
 
-  return requiredPermissions.some((required) => normalizedPermissions.includes(required))
+  return requiredPermissions.some((required) =>
+    normalizedPermissions.some((owned) => permissionMatches(owned, required))
+  )
 }
 
 function resolveRequiredPermissions(url: string) {
@@ -1067,7 +1304,7 @@ function resolveRequiredPermissions(url: string) {
 
   const matchedEntry = Object.entries(DASHBOARD_ROUTE_PERMISSIONS)
     .sort(([left], [right]) => right.length - left.length)
-    .find(([route]) => url === route || url.startsWith(`${route}/`))
+    .find(([route]) => route !== "/dashboard" && (url === route || url.startsWith(`${route}/`)))
 
   return matchedEntry?.[1]
 }
@@ -1132,9 +1369,6 @@ export function hasFieldAccess(permissionLabels: string[]) {
     "field",
     "field_visit",
     "field_party",
-    "work_activit",
-    "activity_categor",
-    "activity_polic",
     "view_field",
     "manage_field",
   ])
@@ -1216,6 +1450,20 @@ export function hasMovementsAccess(permissionLabels: string[]) {
   ])
 }
 
+function isEmployeeShellHrOverride(url: string) {
+  const path = url.split("?")[0] ?? url
+  return EMPLOYEE_SHELL_HR_OVERRIDE_PREFIXES.some(
+    (prefix) => path === prefix || path.startsWith(`${prefix}/`)
+  )
+}
+
+export function hasSmsPlatformAccess(permissionLabels: string[]) {
+  return (
+    hasSmsAccess(permissionLabels) &&
+    hasPermission(permissionLabels, COMPANY_MANAGEMENT_ROUTE_PERMISSION)
+  )
+}
+
 export function canAccessDashboardRoute(
   url: string,
   permissionLabels: string[],
@@ -1223,14 +1471,21 @@ export function canAccessDashboardRoute(
 ) {
   const path = url.split("?")[0] ?? url
 
+  if (path === "/dashboard") {
+    return true
+  }
+
   if (accessMode === "employee" && isAdminOnlyFoundationRoute(url)) {
     return false
   }
 
-  // Hard block: self-service shell never opens the HR Employees section
-  // even when the JWT includes a broad employees:read claim.
+  // Self-service shell: employees:read must not open the HR directory.
+  // Approvers / registrars / onboarding owners can still open their grant.
   if (accessMode === "employee" && isHrEmployeesSectionRoute(url)) {
-    return false
+    if (!isEmployeeShellHrOverride(url)) {
+      return false
+    }
+    return hasPermission(permissionLabels, resolveRequiredPermissions(path))
   }
 
   // Company overview analytics is never open to the employee self-service shell,
@@ -1249,46 +1504,8 @@ export function canAccessDashboardRoute(
     return hasPayrollAccess(permissionLabels)
   }
 
-  if (path === "/dashboard/performance" || path.startsWith("/dashboard/performance/")) {
-    return hasPerformanceAccess(permissionLabels)
-  }
-
-  if (path === "/dashboard/probation" || path.startsWith("/dashboard/probation/")) {
-    return hasProbationAccess(permissionLabels)
-  }
-
-  if (path === "/dashboard/field" || path.startsWith("/dashboard/field/")) {
-    return hasFieldAccess(permissionLabels)
-  }
-
-  if (path === "/dashboard/finance" || path.startsWith("/dashboard/finance/")) {
-    return hasFinanceAccess(permissionLabels)
-  }
-
-  if (path === "/dashboard/activities" || path.startsWith("/dashboard/activities/")) {
-    return hasActivitiesAccess(permissionLabels)
-  }
-
-  if (path === "/dashboard/movements" || path.startsWith("/dashboard/movements/")) {
-    return hasMovementsAccess(permissionLabels)
-  }
-
-  if (path === "/dashboard/sms" || path.startsWith("/dashboard/sms/")) {
-    return hasSmsAccess(permissionLabels)
-  }
-
-  if (path === "/dashboard/structure/grades" || path.startsWith("/dashboard/structure/grades/")) {
-    return hasGradeAccess(permissionLabels)
-  }
-  if (path === "/dashboard/structure/cost-centers" || path.startsWith("/dashboard/structure/cost-centers/")) {
-    return hasCostCenterAccess(permissionLabels)
-  }
-  if (path === "/dashboard/structure" || path.startsWith("/dashboard/structure/")) {
-    return hasStructureAccess(permissionLabels)
-  }
-
-  if (path === "/dashboard/insights" || path.startsWith("/dashboard/insights/")) {
-    return hasInsightsAccess(permissionLabels)
+  if (path === "/dashboard/sms/platform" || path.startsWith("/dashboard/sms/platform/")) {
+    return hasSmsPlatformAccess(permissionLabels)
   }
 
   // Admin / HR shell: allow directory (and section root) with employees:read.
@@ -1311,7 +1528,7 @@ export function canAccessDashboardRoute(
   }
 
   // Section root under admin: same bar as directory so the sidebar item works.
-  if (accessMode === "admin" && (url.split("?")[0] ?? url) === "/dashboard/employees") {
+  if (accessMode === "admin" && path === "/dashboard/employees") {
     return hasPermission(permissionLabels, {
       permissions: [
         "employees:read",
@@ -1331,7 +1548,12 @@ export function canAccessDashboardRoute(
     })
   }
 
-  return hasPermission(permissionLabels, resolveRequiredPermissions(url))
+  const requirement = resolveRequiredPermissions(path)
+  if (requirement === undefined) {
+    return false
+  }
+
+  return hasPermission(permissionLabels, requirement)
 }
 
 export function canPerformPermission(
@@ -1342,11 +1564,36 @@ export function canPerformPermission(
 }
 
 export function hasAdminDashboardAccess(permissionLabels: string[]) {
-  return (
-    ADMIN_DASHBOARD_LANDING_ROUTES.length > 0 &&
-    (canViewCompanyDashboard(permissionLabels) ||
-      hasPermission(permissionLabels, COMPANY_MANAGEMENT_ROUTE_PERMISSION))
-  )
+  if (canViewCompanyDashboard(permissionLabels)) {
+    return true
+  }
+  if (hasPermission(permissionLabels, COMPANY_MANAGEMENT_ROUTE_PERMISSION)) {
+    return true
+  }
+  if (
+    hasPayrollAccess(permissionLabels) ||
+    hasPerformanceAccess(permissionLabels) ||
+    hasProbationAccess(permissionLabels) ||
+    hasFieldAccess(permissionLabels) ||
+    hasFinanceAccess(permissionLabels) ||
+    hasActivitiesAccess(permissionLabels) ||
+    hasMovementsAccess(permissionLabels) ||
+    hasSmsAccess(permissionLabels) ||
+    hasStructureAccess(permissionLabels) ||
+    hasInsightsAccess(permissionLabels) ||
+    hasAnalyticsAccess(permissionLabels) ||
+    hasPermission(permissionLabels, MANAGER_ROUTE_PERMISSION) ||
+    hasPermission(permissionLabels, SCHEDULED_REPORTING_ROUTE_PERMISSION) ||
+    hasPermission(permissionLabels, NOTIFICATIONS_ADMIN_ROUTE_PERMISSION) ||
+    hasPermission(permissionLabels, EMPLOYEE_DIRECTORY_MANAGE_PERMISSIONS)
+  ) {
+    return true
+  }
+
+  return ADMIN_DASHBOARD_LANDING_ROUTES.some((route) => {
+    const requirement = resolveRequiredPermissions(route)
+    return requirement != null && hasPermission(permissionLabels, requirement)
+  })
 }
 
 function resolveDashboardActorIdentity(...sources: unknown[]): DashboardActorIdentityResolution {
@@ -1360,9 +1607,9 @@ function resolveDashboardActorIdentity(...sources: unknown[]): DashboardActorIde
     EMPLOYEE_IDENTITY_HINTS.has(hint)
   )
   const hasPermissionBasedAdminAccess = hasAdminDashboardAccess(permissionLabels)
-  const accessMode: DashboardAccessMode =
-    explicitAccessMode ??
-    (hasPermissionBasedAdminAccess ? "admin" : "employee")
+  const accessMode: DashboardAccessMode = hasPermissionBasedAdminAccess
+    ? "admin"
+    : (explicitAccessMode ?? "employee")
 
   return {
     permissionLabels,

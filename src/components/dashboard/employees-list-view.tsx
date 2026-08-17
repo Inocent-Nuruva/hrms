@@ -267,6 +267,10 @@ export function EmployeesListView() {
   const lastFetchAtRef = React.useRef(0)
   const requestSequenceRef = React.useRef(0)
   const canManageTwoFactor = canPerformPermission(actor.permissionLabels, "users:update")
+  const canRemoveEmployee = canPerformPermission(actor.permissionLabels, {
+    permissions: ["employees:update", "employees:delete"],
+    mode: "any",
+  })
 
   // Defense in depth: never render the company directory for employee shell users.
   React.useEffect(() => {
@@ -661,22 +665,24 @@ export function EmployeesListView() {
             onCheckedChange={() => requestTwoFactorChange(row)}
             onClick={(event) => event.stopPropagation()}
           />
-          <button
-            type="button"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-rose-200 text-rose-600 hover:bg-rose-50"
-            title="Remove / disable access"
-            aria-label="Remove or disable access"
-            onClick={(event) => {
-              event.stopPropagation()
-              openRemovalDialog(row)
-            }}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
+          {canRemoveEmployee ? (
+            <button
+              type="button"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-rose-200 text-rose-600 hover:bg-rose-50"
+              title="Remove / disable access"
+              aria-label="Remove or disable access"
+              onClick={(event) => {
+                event.stopPropagation()
+                openRemovalDialog(row)
+              }}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          ) : null}
         </div>
       ),
     },
-  ], [canManageTwoFactor, openRemovalDialog, requestTwoFactorChange])
+  ], [canManageTwoFactor, canRemoveEmployee, openRemovalDialog, requestTwoFactorChange])
 
   return (
     <div className="space-y-2">

@@ -57,7 +57,7 @@ describe("forbidden route memory", () => {
     rememberForbiddenRoute("/dashboard/operations/reports")
     expect(isRememberedForbiddenRoute("/dashboard/operations/reports")).toBe(false)
     expect(
-      canSeeDashboardPage("/dashboard/operations/reports", ["view_company_dashboard"], "admin"),
+      canSeeDashboardPage("/dashboard/operations/reports", ["attendance_summaries:read"], "admin"),
     ).toBe(true)
   })
 })

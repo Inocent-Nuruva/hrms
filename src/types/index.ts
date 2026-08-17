@@ -11,6 +11,7 @@ export interface AuthUser {
   companyId?: number;
   companyName?: string;
   requiresPasswordChange?: boolean;
+  permissions?: string[];
 }
 
 export interface AuthTokens {

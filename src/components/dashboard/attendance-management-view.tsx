@@ -60,7 +60,7 @@ import {
   type AttendanceResourceKey,
 } from "@/lib/admin-api"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
-import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
+import { canAccessDashboardRoute, canPerformPermission } from "@/lib/dashboard-permissions"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
@@ -1967,6 +1967,23 @@ export function AttendanceManagementView({ section }: { section: string }) {
       actor.accessMode
     )
   const isReadOnlySection = READ_ONLY_SECTIONS.has(activeSection)
+  const attendanceWritePrefix: Record<string, string> = {
+    policies: "attendance_policies",
+    settings: "attendance_policies",
+    devices: "attendance_devices",
+    checkpoints: "attendance_checkpoints",
+    geofences: "attendance_geofences",
+    "wifi-networks": "attendance_wifi_networks",
+    "holiday-groups": "attendance_holiday_groups",
+    holidays: "attendance_holidays",
+  }
+  const writePrefix = attendanceWritePrefix[activeSection]
+  const canMutateSection =
+    Boolean(writePrefix) &&
+    canPerformPermission(actor.permissionLabels, {
+      permissions: [`${writePrefix}:create`, `${writePrefix}:update`, `${writePrefix}:delete`],
+      mode: "any",
+    })
   const [rows, setRows] = React.useState<AdminRecord[]>([])
   const [branches, setBranches] = React.useState<AdminRecord[]>([])
   const [employees, setEmployees] = React.useState<AdminRecord[]>([])
@@ -2076,8 +2093,8 @@ export function AttendanceManagementView({ section }: { section: string }) {
     setCurrentCompanyName(readStoredCompanyName())
   }, [])
 
-  const supportsEditDelete = !isReadOnlySection
-  const supportsCreate = !isReadOnlySection
+  const supportsEditDelete = !isReadOnlySection && canMutateSection
+  const supportsCreate = !isReadOnlySection && canMutateSection
 
   const fetchRows = React.useCallback(async () => {
     const token = readStoredToken()

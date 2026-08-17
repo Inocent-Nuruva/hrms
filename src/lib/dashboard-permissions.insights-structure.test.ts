@@ -48,9 +48,12 @@ describe("structure and insights route access", () => {
     expect(hasInsightsAccess(COMPANY_ADMIN_PERMISSIONS)).toBe(false)
   })
 
-  it("shows insights for dashboards:read regardless of access mode", () => {
+  it("shows HR insights for dashboards:read but not readiness", () => {
     expect(canAccessDashboardRoute("/dashboard/insights/hr", ["dashboards:read"], "admin")).toBe(true)
-    expect(canAccessDashboardRoute("/dashboard/insights/readiness", ["dashboards:read"], "employee")).toBe(true)
+    expect(canAccessDashboardRoute("/dashboard/insights/readiness", ["dashboards:read"], "employee")).toBe(false)
+    expect(
+      canAccessDashboardRoute("/dashboard/insights/readiness", ["launch_readiness:read"], "admin"),
+    ).toBe(true)
   })
 
   it("hides access credentials when the actor only has employees:read", () => {

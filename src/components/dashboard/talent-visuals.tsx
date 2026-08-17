@@ -1,10 +1,12 @@
 "use client"
 
 import * as React from "react"
+import { motion } from "framer-motion"
 
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import type { AdminRecord } from "@/lib/admin-api"
+import { fadeUp, useDashboardMotion } from "@/lib/dashboard-motion"
 
 export const inputClass =
   "h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40 dark:border-border dark:bg-background"
@@ -232,23 +234,65 @@ export function HeroBand({
   description: string
   actions?: React.ReactNode
 }) {
+  const motionPreset = useDashboardMotion()
   return (
-    <div
+    <motion.div
       className="relative overflow-hidden rounded-2xl px-5 py-5 text-white sm:px-6"
       style={{ backgroundColor: "var(--primary)" }}
+      variants={motionPreset.rise}
+      initial="hidden"
+      animate="show"
     >
+      <motion.div
+        aria-hidden
+        className="pointer-events-none absolute -right-8 -top-10 h-40 w-40 rounded-full bg-white/10"
+        animate={
+          motionPreset.reduce
+            ? undefined
+            : { x: [0, 10, 0], y: [0, 8, 0], scale: [1, 1.06, 1] }
+        }
+        transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
+      />
       <TalentDoodle />
       <div className="relative z-10 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="max-w-2xl space-y-1.5">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/70">
+          <motion.p
+            className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/70"
+            initial={motionPreset.reduce ? false : { opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.32 }}
+          >
             {eyebrow}
-          </p>
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{title}</h1>
-          <p className="text-sm text-white/75">{description}</p>
+          </motion.p>
+          <motion.h1
+            className="text-2xl font-semibold tracking-tight sm:text-3xl"
+            initial={motionPreset.reduce ? false : { opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.06 }}
+          >
+            {title}
+          </motion.h1>
+          <motion.p
+            className="text-sm text-white/75"
+            initial={motionPreset.reduce ? false : { opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.38, delay: 0.12 }}
+          >
+            {description}
+          </motion.p>
         </div>
-        {actions ? <div className="relative z-10 flex flex-wrap gap-2">{actions}</div> : null}
+        {actions ? (
+          <motion.div
+            className="relative z-10 flex flex-wrap gap-2"
+            initial={motionPreset.reduce ? false : { opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.32, delay: 0.16 }}
+          >
+            {actions}
+          </motion.div>
+        ) : null}
       </div>
-    </div>
+    </motion.div>
   )
 }
 
@@ -354,18 +398,25 @@ export function CycleRail({
   steps: string[]
   current?: string
 }) {
+  const motionPreset = useDashboardMotion()
   const activeIndex = Math.max(
     0,
     steps.findIndex((step) => step.toUpperCase() === (current ?? "").toUpperCase()),
   )
   return (
-    <ol className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+    <motion.ol
+      className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4"
+      variants={motionPreset.fast}
+      initial="hidden"
+      animate="show"
+    >
       {steps.map((step, index) => {
         const done = index < activeIndex
         const active = index === activeIndex
         return (
-          <li
+          <motion.li
             key={step}
+            variants={motionPreset.item}
             className={cn(
               "rounded-xl border px-3 py-2.5",
               active
@@ -379,10 +430,10 @@ export function CycleRail({
               Step {index + 1}
             </p>
             <p className="mt-1 text-sm font-medium text-foreground">{prettify(step)}</p>
-          </li>
+          </motion.li>
         )
       })}
-    </ol>
+    </motion.ol>
   )
 }
 
@@ -391,10 +442,11 @@ export function TimelineRail({
 }: {
   items: Array<{ label: string; value: string; hint?: string }>
 }) {
+  const motionPreset = useDashboardMotion()
   return (
-    <ol className="space-y-0">
+    <motion.ol className="space-y-0" variants={motionPreset.fast} initial="hidden" animate="show">
       {items.map((item, index) => (
-        <li key={`${item.label}-${index}`} className="flex gap-3">
+        <motion.li key={`${item.label}-${index}`} className="flex gap-3" variants={motionPreset.item}>
           <div className="flex flex-col items-center">
             <span className="mt-1 size-2.5 rounded-full bg-primary" />
             {index < items.length - 1 ? <span className="w-px flex-1 bg-border" /> : null}
@@ -406,9 +458,9 @@ export function TimelineRail({
             <p className="text-sm font-medium text-foreground">{item.value}</p>
             {item.hint ? <p className="text-xs text-muted-foreground">{item.hint}</p> : null}
           </div>
-        </li>
+        </motion.li>
       ))}
-    </ol>
+    </motion.ol>
   )
 }
 
@@ -421,14 +473,21 @@ export function MetricTile({
   value: React.ReactNode
   hint?: string
 }) {
+  const motionPreset = useDashboardMotion()
   return (
-    <div className="rounded-xl border border-border bg-card p-4">
+    <motion.div
+      className="rounded-xl border border-border bg-card p-4"
+      variants={fadeUp}
+      initial="hidden"
+      animate="show"
+      whileHover={motionPreset.hover}
+    >
       <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
         {label}
       </p>
       <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">{value}</p>
       {hint ? <p className="mt-1 text-xs text-muted-foreground">{hint}</p> : null}
-    </div>
+    </motion.div>
   )
 }
 

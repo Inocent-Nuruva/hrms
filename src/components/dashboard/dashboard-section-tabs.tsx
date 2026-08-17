@@ -10,6 +10,8 @@ import { canSeeDashboardPage } from "@/lib/forbidden-routes"
 import { useForbiddenPrefixes } from "@/hooks/use-forbidden-route-guard"
 import { cn } from "@/lib/utils"
 import type { DashboardSectionTabGroup } from "@/lib/dashboard-sections"
+import { motion } from "framer-motion"
+import { useDashboardMotion } from "@/lib/dashboard-motion"
 
 type DashboardSectionTabsProps = {
   groups: DashboardSectionTabGroup[]
@@ -27,6 +29,7 @@ export function DashboardSectionTabs({
   const pathname = usePathname()
   const currentPath = pathname ?? ""
   const actor = useDashboardActor()
+  const motionPreset = useDashboardMotion()
   const forbiddenVersion = useForbiddenPrefixes()
   // Defer permission-filtered UI until after mount so SSR and the first client
   // paint both render the same placeholder (avoids hydration mismatch).
@@ -98,13 +101,22 @@ export function DashboardSectionTabs({
                     key={item.url}
                     href={item.url}
                     className={cn(
-                      "shrink-0 border-b-2 px-1.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors duration-200",
+                      "relative shrink-0 px-1.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors duration-200",
                       isActive
-                        ? "border-[var(--primary)] text-[var(--primary)]"
-                        : "border-transparent text-muted-foreground hover:text-foreground"
+                        ? "text-[var(--primary)]"
+                        : "text-muted-foreground hover:text-foreground"
                     )}
                   >
                     {item.title}
+                    {isActive && !motionPreset.reduce ? (
+                      <motion.span
+                        layoutId="dashboard-section-tab"
+                        className="absolute inset-x-1 -bottom-px h-0.5 rounded-full bg-[var(--primary)]"
+                        transition={{ type: "spring", stiffness: 420, damping: 32 }}
+                      />
+                    ) : isActive ? (
+                      <span className="absolute inset-x-1 -bottom-px h-0.5 rounded-full bg-[var(--primary)]" />
+                    ) : null}
                   </Link>
                 )
               })}
