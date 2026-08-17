@@ -2,16 +2,32 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { CalendarClockIcon, ChartColumnIcon, ChevronRightIcon, Loader2Icon } from "lucide-react"
+import {
+  CalendarClockIcon,
+  ChartColumnIcon,
+  ChevronRightIcon,
+  Loader2Icon,
+  RefreshCwIcon,
+} from "lucide-react"
 import { toast } from "sonner"
 
 import {
   downloadAttendanceReport,
+  exportAnalyticsReport,
+  getAnalyticsDashboard,
+  getAnalyticsFreshness,
+  listAnalyticsDatasets,
+  listAnalyticsMetrics,
+  listAnalyticsSources,
   listBranches,
   listDepartments,
   listEmployees,
   listShiftResources,
   listTimetableResources,
+  refreshAnalyticsDataset,
+  runAnalyticsCustomReport,
+  runAnalyticsReconciliation,
+  runStatutoryReport,
   type AdminRecord,
 } from "@/lib/admin-api"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
@@ -757,16 +773,393 @@ function AttendanceReportDialog({
   )
 }
 
+function keyValueEntries(row: AdminRecord | null | undefined) {
+  if (!row) return []
+  return Object.entries(row).filter(([, value]) => {
+    if (value === null || value === undefined) return false
+    if (Array.isArray(value)) return value.length > 0
+    if (typeof value === "object") return true
+    return String(value).trim().length > 0
+  })
+}
+
+function splitCsvInput(value: string) {
+  return value
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+}
+
+function readSummaryNumber(row: AdminRecord | null | undefined, keys: string[]) {
+  if (!row) return null
+  for (const key of keys) {
+    const value = row[key]
+    if (typeof value === "number" && Number.isFinite(value)) return value
+    if (typeof value === "string" && value.trim()) {
+      const parsed = Number(value)
+      if (Number.isFinite(parsed)) return parsed
+    }
+  }
+  return null
+}
+
+function readSummaryString(row: AdminRecord | null | undefined, keys: string[]) {
+  if (!row) return ""
+  for (const key of keys) {
+    const value = row[key]
+    if (typeof value === "string" && value.trim()) return value.trim()
+  }
+  return ""
+}
+
 export function AttendanceReportView() {
   const router = useRouter()
   const [activeReport, setActiveReport] = React.useState<ReportId | null>(null)
+  const [token, setToken] = React.useState("")
+  const [loadingAnalytics, setLoadingAnalytics] = React.useState(true)
+  const [analyticsError, setAnalyticsError] = React.useState<string | null>(null)
+  const [dashboardSummary, setDashboardSummary] = React.useState<AdminRecord | null>(null)
+  const [datasets, setDatasets] = React.useState<AdminRecord[]>([])
+  const [metrics, setMetrics] = React.useState<AdminRecord[]>([])
+  const [sources, setSources] = React.useState<AdminRecord[]>([])
+  const [freshness, setFreshness] = React.useState<AdminRecord[]>([])
+  const [fromDate, setFromDate] = React.useState("")
+  const [toDate, setToDate] = React.useState("")
+  const [purpose, setPurpose] = React.useState("reporting")
+  const [datasetCode, setDatasetCode] = React.useState("")
+  const [dimensions, setDimensions] = React.useState("")
+  const [measures, setMeasures] = React.useState("")
+  const [filtersJson, setFiltersJson] = React.useState("")
+  const [limit, setLimit] = React.useState("1000")
+  const [outputFormat, setOutputFormat] = React.useState<"CSV" | "JSON">("CSV")
+  const [reportCode, setReportCode] = React.useState("PAYE")
+  const [runningCustom, setRunningCustom] = React.useState(false)
+  const [exporting, setExporting] = React.useState(false)
+  const [refreshingDatasetCode, setRefreshingDatasetCode] = React.useState("")
+  const [reconciling, setReconciling] = React.useState(false)
+  const [runningStatutory, setRunningStatutory] = React.useState(false)
+  const [customRows, setCustomRows] = React.useState<AdminRecord[]>([])
+  const [customSummary, setCustomSummary] = React.useState<AdminRecord | null>(null)
+  const [actionSummary, setActionSummary] = React.useState<AdminRecord | null>(null)
+
+  const loadAnalytics = React.useCallback(async () => {
+    const accessToken = readStoredToken()
+    setToken(accessToken)
+    if (!accessToken) {
+      setAnalyticsError("Authentication required. Please log in again.")
+      setLoadingAnalytics(false)
+      return
+    }
+
+    setLoadingAnalytics(true)
+    setAnalyticsError(null)
+    try {
+      const [summaryResult, datasetsResult, metricsResult, sourcesResult, freshnessResult] =
+        await Promise.allSettled([
+          getAnalyticsDashboard(accessToken, "hr", { purpose: "reports" }),
+          listAnalyticsDatasets(accessToken),
+          listAnalyticsMetrics(accessToken),
+          listAnalyticsSources(accessToken),
+          getAnalyticsFreshness(accessToken),
+        ])
+
+      setDashboardSummary(
+        summaryResult.status === "fulfilled" && summaryResult.value ? summaryResult.value : null,
+      )
+      setDatasets(datasetsResult.status === "fulfilled" ? datasetsResult.value : [])
+      setMetrics(metricsResult.status === "fulfilled" ? metricsResult.value : [])
+      setSources(sourcesResult.status === "fulfilled" ? sourcesResult.value : [])
+      setFreshness(freshnessResult.status === "fulfilled" ? freshnessResult.value : [])
+    } catch (errorObject) {
+      setAnalyticsError(
+        errorObject instanceof Error ? errorObject.message : "Failed to load analytics workspace.",
+      )
+    } finally {
+      setLoadingAnalytics(false)
+    }
+  }, [])
+
+  React.useEffect(() => {
+    void loadAnalytics()
+  }, [loadAnalytics])
+
+  React.useEffect(() => {
+    if (!datasetCode && datasets.length > 0) {
+      const firstCode = readStringValue(datasets[0], ["code", "dataset_code", "name"])
+      if (firstCode) {
+        setDatasetCode(firstCode)
+      }
+    }
+  }, [datasetCode, datasets])
+
+  const activeDatasetLabel = React.useMemo(() => {
+    return (
+      datasets.find((row) => readStringValue(row, ["code", "dataset_code", "name"]) === datasetCode)
+        ? getName(
+            datasets.find(
+              (row) => readStringValue(row, ["code", "dataset_code", "name"]) === datasetCode,
+            ) as AdminRecord,
+            "name",
+            "display_name",
+            "code",
+            "dataset_code",
+          )
+        : datasetCode || "No dataset selected"
+    )
+  }, [datasetCode, datasets])
+
+  const freshnessRecord = React.useMemo(() => {
+    if (!datasetCode) return freshness[0] ?? null
+    return (
+      freshness.find(
+        (row) =>
+          readStringValue(row, ["dataset_code", "datasetCode", "code"]) === datasetCode,
+      ) ??
+      freshness[0] ??
+      null
+    )
+  }, [datasetCode, freshness])
+
+  const summaryCards = React.useMemo(() => {
+    const headcount = readSummaryNumber(dashboardSummary, [
+      "headcount",
+      "employee_count",
+      "employees_total",
+      "total_headcount",
+    ])
+    const attendanceRate = readSummaryNumber(dashboardSummary, [
+      "attendance_rate",
+      "attendance_percentage",
+      "present_rate",
+    ])
+    const pendingLeave = readSummaryNumber(dashboardSummary, [
+      "pending_leave",
+      "pending_leaves",
+      "leave_pending",
+    ])
+    const openOnboarding = readSummaryNumber(dashboardSummary, [
+      "pending_onboarding",
+      "open_onboarding_requests",
+      "onboarding_pending",
+    ])
+
+    return [
+      {
+        label: "Datasets",
+        value: String(datasets.length),
+        help: "Analytics datasets returned by the backend catalog.",
+      },
+      {
+        label: "Metrics",
+        value: String(metrics.length),
+        help: "Metric definitions available for custom reports and dashboards.",
+      },
+      {
+        label: "Headcount",
+        value: headcount !== null ? String(headcount) : "—",
+        help: "HR dashboard summary from the analytics endpoint.",
+      },
+      {
+        label: "Attendance",
+        value: attendanceRate !== null ? `${attendanceRate}%` : "—",
+        help: pendingLeave !== null || openOnboarding !== null
+          ? `Pending leave ${pendingLeave ?? 0} • onboarding ${openOnboarding ?? 0}`
+          : "No summary metric returned for the selected snapshot.",
+      },
+    ]
+  }, [dashboardSummary, datasets.length, metrics.length])
+
+  const customResultColumns = React.useMemo(() => {
+    const sample = customRows[0]
+    if (!sample) return []
+    return Object.keys(sample)
+      .filter((key) => key !== "id")
+      .slice(0, 6)
+  }, [customRows])
+
+  async function onRunCustomReport() {
+    if (!token) {
+      toast.error("Authentication required. Please log in again.")
+      return
+    }
+    const parsedDimensions = splitCsvInput(dimensions)
+    const parsedMeasures = splitCsvInput(measures)
+    if (!datasetCode.trim() || parsedDimensions.length === 0 || parsedMeasures.length === 0) {
+      toast.error("Dataset, dimensions, and measures are required.")
+      return
+    }
+
+    let parsedFilters: Record<string, unknown> | undefined
+    if (filtersJson.trim()) {
+      try {
+        parsedFilters = JSON.parse(filtersJson) as Record<string, unknown>
+      } catch {
+        toast.error("Filters must be valid JSON.")
+        return
+      }
+    }
+
+    setRunningCustom(true)
+    setActionSummary(null)
+    try {
+      const result = await runAnalyticsCustomReport(token, {
+        date_from: fromDate || undefined,
+        date_to: toDate || undefined,
+        purpose: purpose.trim() || undefined,
+        dataset_code: datasetCode.trim(),
+        dimensions: parsedDimensions,
+        measures: parsedMeasures,
+        filters: parsedFilters,
+        limit: limit.trim() ? Number(limit) : undefined,
+      })
+
+      if (Array.isArray(result)) {
+        setCustomRows(result)
+        setCustomSummary({
+          dataset_code: datasetCode.trim(),
+          row_count: result.length,
+          dimensions: parsedDimensions.join(", "),
+          measures: parsedMeasures.join(", "),
+        })
+      } else {
+        setCustomRows([])
+        setCustomSummary(result as AdminRecord)
+      }
+      toast.success("Custom report executed.")
+    } catch (errorObject) {
+      toast.error(
+        errorObject instanceof Error ? errorObject.message : "Failed to run custom report.",
+      )
+    } finally {
+      setRunningCustom(false)
+    }
+  }
+
+  async function onExportReport() {
+    if (!token) {
+      toast.error("Authentication required. Please log in again.")
+      return
+    }
+    const parsedDimensions = splitCsvInput(dimensions)
+    const parsedMeasures = splitCsvInput(measures)
+    if (!datasetCode.trim() || parsedDimensions.length === 0 || parsedMeasures.length === 0) {
+      toast.error("Dataset, dimensions, and measures are required before export.")
+      return
+    }
+
+    let parsedFilters: Record<string, unknown> | undefined
+    if (filtersJson.trim()) {
+      try {
+        parsedFilters = JSON.parse(filtersJson) as Record<string, unknown>
+      } catch {
+        toast.error("Filters must be valid JSON.")
+        return
+      }
+    }
+
+    setExporting(true)
+    try {
+      const result = await exportAnalyticsReport(token, {
+        date_from: fromDate || undefined,
+        date_to: toDate || undefined,
+        purpose: purpose.trim() || undefined,
+        dataset_code: datasetCode.trim(),
+        dimensions: parsedDimensions,
+        measures: parsedMeasures,
+        filters: parsedFilters,
+        limit: limit.trim() ? Number(limit) : undefined,
+        output_format: outputFormat,
+        idempotency_key: `analytics-export-${datasetCode.trim()}-${Date.now()}`,
+      })
+      setActionSummary(result as AdminRecord)
+      toast.success(`Analytics export queued (${outputFormat}).`)
+    } catch (errorObject) {
+      toast.error(
+        errorObject instanceof Error ? errorObject.message : "Failed to queue analytics export.",
+      )
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  async function onRefreshDataset() {
+    if (!token || !datasetCode.trim()) {
+      toast.error("Select a dataset before refreshing.")
+      return
+    }
+
+    setRefreshingDatasetCode(datasetCode)
+    try {
+      const result = await refreshAnalyticsDataset(token, {
+        dataset_code: datasetCode.trim(),
+        refresh_mode: "MANUAL",
+        date_from: fromDate || undefined,
+        date_to: toDate || undefined,
+        purpose: purpose.trim() || undefined,
+      })
+      setActionSummary(result as AdminRecord)
+      await loadAnalytics()
+      toast.success("Dataset refresh requested.")
+    } catch (errorObject) {
+      toast.error(
+        errorObject instanceof Error ? errorObject.message : "Failed to refresh dataset.",
+      )
+    } finally {
+      setRefreshingDatasetCode("")
+    }
+  }
+
+  async function onRunReconciliation() {
+    if (!token) {
+      toast.error("Authentication required. Please log in again.")
+      return
+    }
+    setReconciling(true)
+    try {
+      const result = await runAnalyticsReconciliation(token)
+      setActionSummary(result as AdminRecord)
+      toast.success("Analytics reconciliation started.")
+    } catch (errorObject) {
+      toast.error(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to start analytics reconciliation.",
+      )
+    } finally {
+      setReconciling(false)
+    }
+  }
+
+  async function onRunStatutory() {
+    if (!token || !reportCode.trim()) {
+      toast.error("Report code is required.")
+      return
+    }
+    setRunningStatutory(true)
+    try {
+      const result = await runStatutoryReport(token, {
+        report_code: reportCode.trim(),
+        date_from: fromDate || undefined,
+        date_to: toDate || undefined,
+        purpose: purpose.trim() || undefined,
+      })
+      setActionSummary(result as AdminRecord)
+      toast.success("Statutory report run created.")
+    } catch (errorObject) {
+      toast.error(
+        errorObject instanceof Error ? errorObject.message : "Failed to run statutory report.",
+      )
+    } finally {
+      setRunningStatutory(false)
+    }
+  }
 
   return (
-    <div className="mx-auto flex w-full max-w-4xl flex-col gap-8 pb-8">
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 pb-8">
       <div className="flex flex-col gap-1">
         <h1 className="text-xl font-semibold tracking-tight text-foreground">Reports</h1>
         <p className="text-sm text-muted-foreground">
-          Download on-demand reports or manage scheduled report delivery.
+          Download on-demand attendance files, manage scheduled delivery, and work directly with the new analytics/reporting APIs.
         </p>
       </div>
 
@@ -793,13 +1186,13 @@ export function AttendanceReportView() {
                       className={cn(
                         "group flex w-full items-start gap-3 rounded-2xl border p-4 text-left shadow-sm transition-all",
                         "hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
-                        tone.card
+                        tone.card,
                       )}
                     >
                       <span
                         className={cn(
                           "mt-0.5 inline-flex size-10 shrink-0 items-center justify-center rounded-xl",
-                          tone.icon
+                          tone.icon,
                         )}
                       >
                         {report.icon}
@@ -815,7 +1208,7 @@ export function AttendanceReportView() {
                       <ChevronRightIcon
                         className={cn(
                           "mt-1 size-4 shrink-0 transition-transform group-hover:translate-x-0.5",
-                          tone.chevron
+                          tone.chevron,
                         )}
                       />
                     </button>
@@ -826,6 +1219,444 @@ export function AttendanceReportView() {
           </section>
         ))}
       </div>
+
+      <section className="space-y-4 rounded-3xl border border-border bg-card p-5 shadow-sm">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight text-foreground">
+              Analytics Studio
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Catalog datasets and metrics, refresh analytics sources, run custom reports, queue exports, and start statutory reporting from one place.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="inline-flex h-9 items-center gap-2 rounded-lg border border-border px-3 text-sm font-medium transition hover:bg-muted disabled:opacity-60"
+            disabled={loadingAnalytics}
+            onClick={() => void loadAnalytics()}
+          >
+            <RefreshCwIcon className={cn("size-4", loadingAnalytics && "animate-spin")} />
+            Refresh analytics
+          </button>
+        </div>
+
+        {analyticsError ? (
+          <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300">
+            {analyticsError}
+          </div>
+        ) : null}
+
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {summaryCards.map((card) => (
+            <div key={card.label} className="rounded-2xl border border-border bg-background/70 p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                {card.label}
+              </p>
+              <p className="mt-2 text-2xl font-semibold tracking-tight text-foreground">
+                {loadingAnalytics ? "…" : card.value}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">{card.help}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+          <div className="space-y-4 rounded-2xl border border-border bg-background/60 p-4">
+            <div>
+              <h3 className="text-base font-semibold tracking-tight text-foreground">
+                Catalog and freshness
+              </h3>
+              <p className="text-sm text-muted-foreground">
+                Review the analytics assets the backend has published for reporting.
+              </p>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="rounded-xl border border-border bg-card p-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <h4 className="text-sm font-semibold text-foreground">Datasets</h4>
+                  <span className="text-xs text-muted-foreground">{datasets.length}</span>
+                </div>
+                {loadingAnalytics ? (
+                  <p className="text-sm text-muted-foreground">Loading datasets…</p>
+                ) : datasets.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No datasets returned yet.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {datasets.slice(0, 6).map((row, index) => {
+                      const code = readStringValue(row, ["code", "dataset_code", "name"])
+                      return (
+                        <button
+                          key={`dataset-${code || index}`}
+                          type="button"
+                          className={cn(
+                            "flex w-full items-start justify-between gap-3 rounded-lg border px-3 py-2 text-left transition hover:bg-muted/40",
+                            datasetCode === code ? "border-primary bg-primary/5" : "border-border",
+                          )}
+                          onClick={() => {
+                            setDatasetCode(code)
+                            setCustomRows([])
+                            setCustomSummary(null)
+                          }}
+                        >
+                          <div>
+                            <p className="text-sm font-medium text-foreground">
+                              {getName(row, "name", "display_name", "code", "dataset_code")}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {code || "No dataset code"}
+                            </p>
+                          </div>
+                          <ChevronRightIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-xl border border-border bg-card p-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <h4 className="text-sm font-semibold text-foreground">Freshness</h4>
+                  <span className="text-xs text-muted-foreground">{freshness.length}</span>
+                </div>
+                {loadingAnalytics ? (
+                  <p className="text-sm text-muted-foreground">Loading freshness…</p>
+                ) : freshness.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No freshness records were returned.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {freshness.slice(0, 6).map((row, index) => {
+                      const code = readStringValue(row, ["dataset_code", "datasetCode", "code", "name"])
+                      return (
+                        <div
+                          key={`freshness-${code || index}`}
+                          className={cn(
+                            "rounded-lg border px-3 py-2",
+                            datasetCode && datasetCode === code ? "border-primary bg-primary/5" : "border-border",
+                          )}
+                        >
+                          <p className="text-sm font-medium text-foreground">{code || "Dataset"}</p>
+                          <p className="text-xs text-muted-foreground">
+                            Last update:{" "}
+                            {readStringValue(row, ["refreshed_at", "updated_at", "last_refreshed_at", "lastUpdatedAt"]) ||
+                              "Not provided"}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Status:{" "}
+                            {readStringValue(row, ["status", "freshness_status", "state"]) || "Unknown"}
+                          </p>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="rounded-xl border border-border bg-card p-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <h4 className="text-sm font-semibold text-foreground">Metrics</h4>
+                  <span className="text-xs text-muted-foreground">{metrics.length}</span>
+                </div>
+                {loadingAnalytics ? (
+                  <p className="text-sm text-muted-foreground">Loading metrics…</p>
+                ) : metrics.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No metric definitions returned.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {metrics.slice(0, 6).map((row, index) => (
+                      <div key={`metric-${index}`} className="rounded-lg border border-border px-3 py-2">
+                        <p className="text-sm font-medium text-foreground">
+                          {getName(row, "name", "display_name", "code", "metric_code")}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {readStringValue(row, ["code", "metric_code", "slug"]) || "No metric code"}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-xl border border-border bg-card p-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <h4 className="text-sm font-semibold text-foreground">Sources</h4>
+                  <span className="text-xs text-muted-foreground">{sources.length}</span>
+                </div>
+                {loadingAnalytics ? (
+                  <p className="text-sm text-muted-foreground">Loading sources…</p>
+                ) : sources.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No analytics sources were returned.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {sources.slice(0, 6).map((row, index) => (
+                      <div key={`source-${index}`} className="rounded-lg border border-border px-3 py-2">
+                        <p className="text-sm font-medium text-foreground">
+                          {getName(row, "name", "display_name", "code", "source_code")}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {readStringValue(row, ["status", "state", "mode", "type"]) || "Source metadata"}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-4 rounded-2xl border border-border bg-background/60 p-4">
+            <div>
+              <h3 className="text-base font-semibold tracking-tight text-foreground">
+                Report builder
+              </h3>
+              <p className="text-sm text-muted-foreground">
+                Build a custom analytics run, queue an export, refresh a dataset, or trigger statutory and reconciliation flows.
+              </p>
+            </div>
+
+            <div className="grid gap-3">
+              <Field label="Dataset">
+                <Select
+                  value={datasetCode || "none"}
+                  onValueChange={(value) =>
+                    setDatasetCode(!value || value === "none" ? "" : value)
+                  }
+                  disabled={loadingAnalytics}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select dataset">
+                      {activeDatasetLabel}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Select dataset</SelectItem>
+                    {datasets.map((row, index) => {
+                      const code = readStringValue(row, ["code", "dataset_code", "name"])
+                      if (!code) return null
+                      return (
+                        <SelectItem key={`builder-dataset-${code}-${index}`} value={code}>
+                          {getName(row, "name", "display_name", "code", "dataset_code")}
+                        </SelectItem>
+                      )
+                    })}
+                  </SelectContent>
+                </Select>
+              </Field>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <Field label="Date from">
+                  <DatePickerPresets value={fromDate} onChange={setFromDate} placeholder="Optional start date" />
+                </Field>
+                <Field label="Date to">
+                  <DatePickerPresets value={toDate} onChange={setToDate} placeholder="Optional end date" />
+                </Field>
+              </div>
+
+              <Field label="Purpose">
+                <Input value={purpose} onChange={(event) => setPurpose(event.target.value)} placeholder="reporting" />
+              </Field>
+              <Field label="Dimensions (comma separated)">
+                <Input value={dimensions} onChange={(event) => setDimensions(event.target.value)} placeholder="department_name,branch_name" />
+              </Field>
+              <Field label="Measures (comma separated)">
+                <Input value={measures} onChange={(event) => setMeasures(event.target.value)} placeholder="headcount,attendance_rate" />
+              </Field>
+              <div className="grid gap-3 md:grid-cols-2">
+                <Field label="Row limit">
+                  <Input value={limit} onChange={(event) => setLimit(event.target.value)} placeholder="1000" />
+                </Field>
+                <Field label="Export format">
+                  <Select
+                    value={outputFormat}
+                    onValueChange={(value) => {
+                      if (value === "CSV" || value === "JSON") setOutputFormat(value)
+                    }}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue>{outputFormat}</SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="CSV">CSV</SelectItem>
+                      <SelectItem value="JSON">JSON</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+              </div>
+              <Field label="Filters JSON">
+                <textarea
+                  className="min-h-24 rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none transition placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                  value={filtersJson}
+                  onChange={(event) => setFiltersJson(event.target.value)}
+                  placeholder='{"employment_status":"active"}'
+                />
+              </Field>
+              <Field label="Statutory report code">
+                <Input value={reportCode} onChange={(event) => setReportCode(event.target.value)} placeholder="PAYE" />
+              </Field>
+            </div>
+
+            {freshnessRecord ? (
+              <div className="rounded-xl border border-border bg-card px-3 py-2">
+                <p className="text-sm font-medium text-foreground">Selected dataset freshness</p>
+                <p className="text-xs text-muted-foreground">
+                  {readStringValue(freshnessRecord, ["dataset_code", "datasetCode", "code"]) || datasetCode || "Dataset"}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {readStringValue(freshnessRecord, ["refreshed_at", "updated_at", "last_refreshed_at"]) || "No freshness timestamp"}
+                </p>
+              </div>
+            ) : null}
+
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" onClick={() => void onRunCustomReport()} disabled={runningCustom}>
+                {runningCustom ? (
+                  <>
+                    <Loader2Icon data-icon="inline-start" className="animate-spin" />
+                    Running…
+                  </>
+                ) : (
+                  "Run custom report"
+                )}
+              </Button>
+              <Button type="button" variant="outline" onClick={() => void onExportReport()} disabled={exporting}>
+                {exporting ? (
+                  <>
+                    <Loader2Icon data-icon="inline-start" className="animate-spin" />
+                    Exporting…
+                  </>
+                ) : (
+                  `Queue ${outputFormat} export`
+                )}
+              </Button>
+              <Button type="button" variant="outline" onClick={() => void onRefreshDataset()} disabled={refreshingDatasetCode === datasetCode || !datasetCode.trim()}>
+                {refreshingDatasetCode === datasetCode ? (
+                  <>
+                    <Loader2Icon data-icon="inline-start" className="animate-spin" />
+                    Refreshing…
+                  </>
+                ) : (
+                  "Refresh dataset"
+                )}
+              </Button>
+              <Button type="button" variant="outline" onClick={() => void onRunReconciliation()} disabled={reconciling}>
+                {reconciling ? (
+                  <>
+                    <Loader2Icon data-icon="inline-start" className="animate-spin" />
+                    Reconciling…
+                  </>
+                ) : (
+                  "Run reconciliation"
+                )}
+              </Button>
+              <Button type="button" variant="outline" onClick={() => void onRunStatutory()} disabled={runningStatutory}>
+                {runningStatutory ? (
+                  <>
+                    <Loader2Icon data-icon="inline-start" className="animate-spin" />
+                    Running…
+                  </>
+                ) : (
+                  "Run statutory report"
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {customSummary ? (
+          <div className="space-y-3 rounded-2xl border border-border bg-background/60 p-4">
+            <div>
+              <h3 className="text-base font-semibold tracking-tight text-foreground">
+                Custom report result
+              </h3>
+              <p className="text-sm text-muted-foreground">
+                The custom-report endpoint returned the result below for the currently selected dataset.
+              </p>
+            </div>
+
+            {Array.isArray(customRows) && customRows.length > 0 ? (
+              <div className="overflow-x-auto rounded-lg border border-border">
+                <table className="min-w-full text-sm">
+                  <thead className="border-b border-border bg-muted/40 text-left text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                    <tr>
+                      {customResultColumns.map((column) => (
+                        <th key={column} className="px-3 py-2">
+                          {column.replace(/_/g, " ")}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border text-foreground">
+                    {customRows.slice(0, 20).map((row, index) => (
+                      <tr key={`custom-row-${index}`}>
+                        {customResultColumns.map((column) => (
+                          <td key={`${index}-${column}`} className="px-3 py-2 align-top text-xs">
+                            {typeof row[column] === "object" && row[column] !== null
+                              ? readStringValue(row[column] as AdminRecord, [
+                                  "name",
+                                  "label",
+                                  "title",
+                                  "code",
+                                ]) || "Structured value"
+                              : String(row[column] ?? "—")}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="grid gap-x-6 gap-y-3 md:grid-cols-[minmax(10rem,13rem)_1fr]">
+                {keyValueEntries(customSummary).map(([key, value]) => (
+                  <React.Fragment key={key}>
+                    <div className="border-b border-border py-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                      {key.replace(/_/g, " ")}
+                    </div>
+                    <div className="border-b border-border py-2 text-sm text-foreground">
+                      {typeof value === "object" && value !== null
+                        ? readStringValue(value as AdminRecord, ["name", "label", "title", "code"]) ||
+                          "Structured response"
+                        : String(value)}
+                    </div>
+                  </React.Fragment>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : null}
+
+        {actionSummary ? (
+          <div className="space-y-3 rounded-2xl border border-border bg-background/60 p-4">
+            <div>
+              <h3 className="text-base font-semibold tracking-tight text-foreground">
+                Latest backend action
+              </h3>
+              <p className="text-sm text-muted-foreground">
+                The most recent export, refresh, reconciliation, or statutory action response is summarized below.
+              </p>
+            </div>
+            <div className="grid gap-x-6 gap-y-3 md:grid-cols-[minmax(10rem,13rem)_1fr]">
+              {keyValueEntries(actionSummary).map(([key, value]) => (
+                <React.Fragment key={key}>
+                  <div className="border-b border-border py-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                    {key.replace(/_/g, " ")}
+                  </div>
+                  <div className="border-b border-border py-2 text-sm text-foreground">
+                    {typeof value === "object" && value !== null
+                      ? readStringValue(value as AdminRecord, ["name", "label", "title", "code", "status"]) ||
+                        "Structured response"
+                      : String(value)}
+                  </div>
+                </React.Fragment>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </section>
 
       <AttendanceReportDialog
         open={activeReport === "attendance-download"}

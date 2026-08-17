@@ -28,6 +28,8 @@ import {
 } from "recharts"
 
 import {
+  getAnalyticsDashboard,
+  getAnalyticsFreshness,
   listEmployees,
   listDepartments,
   listLeaveRequests,
@@ -41,6 +43,8 @@ import {
   consumeDashboardWarmCache,
   type DashboardWarmSnapshot,
 } from "@/lib/dashboard-warm-cache"
+import { useDashboardActor } from "@/hooks/use-dashboard-actor"
+import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
@@ -107,6 +111,143 @@ function asRecord(value: unknown): AdminRecord | null {
     return value as AdminRecord
   }
   return null
+}
+
+function readDeepValue(
+  row: AdminRecord | null | undefined,
+  keys: string[],
+  depth = 0,
+): unknown {
+  if (!row) return null
+  for (const key of keys) {
+    if (row[key] !== null && row[key] !== undefined) {
+      return row[key]
+    }
+  }
+  if (depth >= 3) return null
+  for (const value of Object.values(row)) {
+    const nested = asRecord(value)
+    if (!nested) continue
+    const found = readDeepValue(nested, keys, depth + 1)
+    if (found !== null && found !== undefined) {
+      return found
+    }
+  }
+  return null
+}
+
+function readNumberDeep(row: AdminRecord | null | undefined, keys: string[]) {
+  const value = readDeepValue(row, keys)
+  if (typeof value === "number" && Number.isFinite(value)) return value
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return null
+}
+
+function readStringDeep(row: AdminRecord | null | undefined, keys: string[]) {
+  const value = readDeepValue(row, keys)
+  return typeof value === "string" && value.trim() ? value.trim() : ""
+}
+
+function extractStatusCountsFromAnalytics(
+  row: AdminRecord | null | undefined,
+): Record<string, number> {
+  if (!row) return {}
+
+  const direct = [
+    "employment_status_counts",
+    "status_counts",
+    "headcount_by_status",
+    "statusBreakdown",
+    "employmentStatusBreakdown",
+  ]
+    .map((key) => readDeepValue(row, [key]))
+    .find((value) => value !== null && value !== undefined)
+
+  if (Array.isArray(direct)) {
+    const counts: Record<string, number> = {}
+    for (const entry of direct) {
+      const record = asRecord(entry)
+      if (!record) continue
+      const label =
+        readString(record, ["status", "label", "name", "employment_status"]).toLowerCase()
+      const count =
+        readNumber(record, ["count", "value", "headcount", "total"]) ?? 0
+      if (label) counts[label] = count
+    }
+    return counts
+  }
+
+  const record = asRecord(direct)
+  if (!record) return {}
+  const counts: Record<string, number> = {}
+  for (const [key, value] of Object.entries(record)) {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      counts[key.toLowerCase()] = value
+      continue
+    }
+    if (typeof value === "string" && value.trim()) {
+      const parsed = Number(value)
+      if (Number.isFinite(parsed)) {
+        counts[key.toLowerCase()] = parsed
+      }
+    }
+  }
+  return counts
+}
+
+function extractDepartmentHeadcountsFromAnalytics(
+  row: AdminRecord | null | undefined,
+): Array<[string, number]> {
+  if (!row) return []
+
+  const direct = [
+    "department_headcounts",
+    "department_counts",
+    "headcount_by_department",
+    "departmentBreakdown",
+    "departments_breakdown",
+  ]
+    .map((key) => readDeepValue(row, [key]))
+    .find((value) => value !== null && value !== undefined)
+
+  if (Array.isArray(direct)) {
+    return direct
+      .map((entry) => {
+        const record = asRecord(entry)
+        if (!record) return null
+        const label = readString(record, [
+          "name",
+          "department_name",
+          "departmentName",
+          "department",
+          "label",
+        ])
+        const count = readNumber(record, ["count", "headcount", "value", "total"])
+        if (!label || count === null) return null
+        return [label, count] as [string, number]
+      })
+      .filter((entry): entry is [string, number] => Boolean(entry))
+  }
+
+  const record = asRecord(direct)
+  if (!record) return []
+  return Object.entries(record)
+    .map(([key, value]) => {
+      if (typeof value === "number" && Number.isFinite(value)) {
+        return [key, value] as [string, number]
+      }
+      if (typeof value === "string" && value.trim()) {
+        const parsed = Number(value)
+        if (Number.isFinite(parsed)) {
+          return [key, parsed] as [string, number]
+        }
+      }
+      return null
+    })
+    .filter((entry): entry is [string, number] => Boolean(entry))
 }
 
 function formatDateShort(value: unknown): string {
@@ -585,6 +726,7 @@ export default function HrAnalyticsDashboard({
   adminRolesLabel,
 }: HrAnalyticsDashboardProps) {
   const router = useRouter()
+  const actor = useDashboardActor()
   // Lazy state (not a ref) so initial warm cache can seed UI without reading refs during render.
   const [warm] = React.useState<DashboardWarmSnapshot | null>(readInitialWarmSnapshot)
 
@@ -619,11 +761,34 @@ export default function HrAnalyticsDashboard({
   const [offboardingRequests, setOffboardingRequests] = React.useState<AdminRecord[]>(
     warm?.offboardingRequests ?? []
   )
+  const [analyticsSummary, setAnalyticsSummary] = React.useState<AdminRecord | null>(null)
+  const [analyticsFreshness, setAnalyticsFreshness] = React.useState<AdminRecord[]>([])
 
   const employeesRef = React.useRef(employees)
   const departmentsRef = React.useRef(departments)
   const hydratedFromWarmRef = React.useRef(Boolean(warm))
   const firstFetchRef = React.useRef(true)
+  const canOpenLeaveRequests =
+    actor.ready &&
+    canAccessDashboardRoute(
+      "/dashboard/leave-management/requests",
+      actor.permissionLabels,
+      actor.accessMode
+    )
+  const canOpenEmployeeDirectory =
+    actor.ready &&
+    canAccessDashboardRoute(
+      "/dashboard/employees/all",
+      actor.permissionLabels,
+      actor.accessMode
+    )
+  const canOpenEmployeeProfiles =
+    actor.ready &&
+    canAccessDashboardRoute(
+      "/dashboard/employees/profile",
+      actor.permissionLabels,
+      actor.accessMode
+    )
 
   React.useEffect(() => {
     employeesRef.current = employees
@@ -682,6 +847,22 @@ export default function HrAnalyticsDashboard({
 
     // Progressive paint: each slice updates as soon as it resolves (no waiting on the slowest).
     const tasks: Promise<void>[] = [
+      getAnalyticsDashboard(token, "hr", {
+        date_from: from_date,
+        date_to: to_date,
+        purpose: "dashboard",
+      })
+        .catch(() => null)
+        .then((summary) => {
+          setAnalyticsSummary(summary)
+        }),
+
+      getAnalyticsFreshness(token)
+        .catch(() => [])
+        .then((freshnessRows) => {
+          setAnalyticsFreshness(freshnessRows)
+        }),
+
       listEmployees(token, { page: 1, limit: 200 }, listOpts)
         .catch((): PagedRowsResult => ({ rows: [], total: null }))
         .then((empRes) => {
@@ -747,8 +928,10 @@ export default function HrAnalyticsDashboard({
     }
   }, [refreshKey, fetchAll])
 
-  // Derived metrics
-  const totalHeadcount = employeesTotal ?? employees.length
+  const analyticsStatusCounts = React.useMemo(
+    () => extractStatusCountsFromAnalytics(analyticsSummary),
+    [analyticsSummary],
+  )
 
   const statusCounts = React.useMemo(() => {
     const counts: Record<string, number> = {}
@@ -759,15 +942,34 @@ export default function HrAnalyticsDashboard({
     return counts
   }, [employees])
 
-  const activeCount = statusCounts["active"] || 0
+  const resolvedStatusCounts =
+    Object.keys(analyticsStatusCounts).length > 0 ? analyticsStatusCounts : statusCounts
+
+  // Derived metrics
+  const totalHeadcount =
+    readNumberDeep(analyticsSummary, [
+      "headcount",
+      "employee_count",
+      "employees_total",
+      "total_headcount",
+    ]) ??
+    employeesTotal ??
+    employees.length
+
+  const activeCount =
+    readNumberDeep(analyticsSummary, ["active_headcount", "active_employees", "active_count"]) ??
+    resolvedStatusCounts["active"] ??
+    0
   const activePct = totalHeadcount > 0 ? Math.round((activeCount / totalHeadcount) * 100) : 0
 
   // Always derive from latest employees + departments so the chart cannot go stale
   // when one list request finishes before the other.
-  const resolvedDepartmentHeadcounts = React.useMemo(
-    () => buildDepartmentHeadcounts(departments, employees),
-    [departments, employees]
-  )
+  const resolvedDepartmentHeadcounts = React.useMemo(() => {
+    const analyticsRows = extractDepartmentHeadcountsFromAnalytics(analyticsSummary)
+    return analyticsRows.length > 0
+      ? analyticsRows
+      : buildDepartmentHeadcounts(departments, employees)
+  }, [analyticsSummary, departments, employees])
 
   const maxDeptCount = React.useMemo(() => {
     return Math.max(1, ...resolvedDepartmentHeadcounts.map(([, c]) => c), 0)
@@ -782,7 +984,11 @@ export default function HrAnalyticsDashboard({
     return counts
   }, [leaveRequests])
 
-  const pendingLeaves = leaveStatusCounts["pending"] || leaveStatusCounts["submitted"] || 0
+  const pendingLeaves =
+    readNumberDeep(analyticsSummary, ["pending_leave", "pending_leaves", "leave_pending"]) ??
+    leaveStatusCounts["pending"] ??
+    leaveStatusCounts["submitted"] ??
+    0
   const recentLeaves = React.useMemo(() => {
     return [...leaveRequests]
       .sort((a, b) => {
@@ -795,6 +1001,12 @@ export default function HrAnalyticsDashboard({
 
   // Attendance rate from summaries (defensive)
   const attendanceRate = React.useMemo(() => {
+    const analyticsValue = readNumberDeep(analyticsSummary, [
+      "attendance_rate",
+      "attendance_percentage",
+      "present_rate",
+    ])
+    if (analyticsValue !== null) return analyticsValue
     if (!attendanceSummaries.length) return null
     let present = 0
     let total = 0
@@ -814,7 +1026,7 @@ export default function HrAnalyticsDashboard({
     }
     if (total === 0) return null
     return Math.round((present / total) * 100)
-  }, [attendanceSummaries])
+  }, [analyticsSummary, attendanceSummaries])
 
   const recentEmployees = React.useMemo(() => {
     return [...employees]
@@ -828,6 +1040,12 @@ export default function HrAnalyticsDashboard({
 
   // Surface more: hires within the chosen date range (client-side on the loaded sample)
   const hiresInRange = React.useMemo(() => {
+    const analyticsValue = readNumberDeep(analyticsSummary, [
+      "new_hires",
+      "hires_in_range",
+      "recent_hires",
+    ])
+    if (analyticsValue !== null) return analyticsValue
     if (!fromDate || !toDate) return 0
     const from = new Date(fromDate)
     const to = new Date(toDate)
@@ -849,21 +1067,33 @@ export default function HrAnalyticsDashboard({
       if (d >= from && d <= to) c += 1
     }
     return c
-  }, [employees, fromDate, toDate])
+  }, [analyticsSummary, employees, fromDate, toDate])
 
   const pendingOnboarding = React.useMemo(() => {
+    const analyticsValue = readNumberDeep(analyticsSummary, [
+      "pending_onboarding",
+      "open_onboarding_requests",
+      "onboarding_pending",
+    ])
+    if (analyticsValue !== null) return analyticsValue
     return onboardingRequests.filter((r) => {
       const s = readString(r, ["status", "request_status"]).toLowerCase()
       return !s || s.includes("pend") || s.includes("progress") || s === "open" || s === "in_progress"
     }).length
-  }, [onboardingRequests])
+  }, [analyticsSummary, onboardingRequests])
 
   const pendingOffboarding = React.useMemo(() => {
+    const analyticsValue = readNumberDeep(analyticsSummary, [
+      "pending_offboarding",
+      "open_offboarding_requests",
+      "offboarding_pending",
+    ])
+    if (analyticsValue !== null) return analyticsValue
     return offboardingRequests.filter((r) => {
       const s = readString(r, ["status", "request_status"]).toLowerCase()
       return !s || s.includes("pend") || s.includes("progress") || s === "open" || s === "in_progress"
     }).length
-  }, [offboardingRequests])
+  }, [analyticsSummary, offboardingRequests])
 
   type MetricWithReady = Metric & { ready: boolean }
 
@@ -932,6 +1162,17 @@ export default function HrAnalyticsDashboard({
 
   const statusOrder = ["active", "onboarding", "suspended", "terminated", "exited"]
   const dashboardTitle = companyName?.trim() || "HRMS"
+  const latestAnalyticsRefresh =
+    analyticsFreshness
+      .map((row) =>
+        readStringDeep(row, [
+          "refreshed_at",
+          "updated_at",
+          "last_refreshed_at",
+          "lastUpdatedAt",
+        ]),
+      )
+      .find(Boolean) || ""
 
   return (
     <div className="w-full pb-6">
@@ -952,6 +1193,11 @@ export default function HrAnalyticsDashboard({
             <h1 className="mt-0.5 truncate text-base font-semibold tracking-tight text-white sm:text-lg">
               {dashboardTitle}
             </h1>
+            {latestAnalyticsRefresh ? (
+              <p className="mt-1 text-[11px] text-white/70">
+                Analytics snapshot refreshed {formatDateShort(latestAnalyticsRefresh)}
+              </p>
+            ) : null}
           </div>
           <div className="flex flex-wrap items-center gap-2 xl:justify-end">
             <div className="grid min-w-[240px] gap-2 sm:grid-cols-2">
@@ -1045,12 +1291,14 @@ export default function HrAnalyticsDashboard({
                   : "Latest activity"}
               </div>
             </div>
-            <Link
-              href="/dashboard/leave-management/requests"
-              className="text-[11px] font-medium text-primary hover:underline"
-            >
-              View all
-            </Link>
+            {canOpenLeaveRequests ? (
+              <Link
+                href="/dashboard/leave-management/requests"
+                className="text-[11px] font-medium text-primary hover:underline"
+              >
+                View all
+              </Link>
+            ) : null}
           </div>
 
           <div className="pt-3">
@@ -1071,12 +1319,17 @@ export default function HrAnalyticsDashboard({
                     {recentLeaves.map((lr, i) => {
                       const href = leaveDetailHref(lr)
                       const empNo = getLeaveEmployeeNo(lr)
+                      const canOpenLeaveLink = canOpenLeaveRequests && Boolean(href)
                       return (
                         <tr key={getLeaveId(lr) ?? i} className="transition hover:bg-muted/40">
                           <td className="px-2.5 py-1.5 font-medium">
-                            <Link href={href} className="hover:text-primary hover:underline">
-                              {getLeaveEmployeeName(lr)}
-                            </Link>
+                            {canOpenLeaveLink ? (
+                              <Link href={href} className="hover:text-primary hover:underline">
+                                {getLeaveEmployeeName(lr)}
+                              </Link>
+                            ) : (
+                              getLeaveEmployeeName(lr)
+                            )}
                             {empNo ? (
                               <div className="font-mono text-[10px] text-muted-foreground">{empNo}</div>
                             ) : null}
@@ -1113,17 +1366,19 @@ export default function HrAnalyticsDashboard({
           <div className="pt-3">
             {!workforceReady ? (
               <SectionSkeleton rows={3} />
-            ) : Object.keys(statusCounts).length === 0 ? (
+            ) : Object.keys(resolvedStatusCounts).length === 0 ? (
               <div className="py-5 text-center text-sm text-muted-foreground">
                 No employee records yet.
               </div>
             ) : (
               (() => {
                 const chartRows = statusOrder
-                  .filter((s) => statusCounts[s] != null)
-                  .concat(Object.keys(statusCounts).filter((s) => !statusOrder.includes(s)))
+                  .filter((s) => resolvedStatusCounts[s] != null)
+                  .concat(
+                    Object.keys(resolvedStatusCounts).filter((s) => !statusOrder.includes(s)),
+                  )
                   .map((status) => {
-                    const count = statusCounts[status] || 0
+                    const count = resolvedStatusCounts[status] || 0
                     const pct =
                       totalHeadcount > 0 ? Math.round((count / totalHeadcount) * 100) : 0
                     return {
@@ -1202,14 +1457,20 @@ export default function HrAnalyticsDashboard({
           <div className="flex items-center justify-between border-b border-border pb-2">
             <div>
               <div className="text-sm font-semibold text-foreground">Recent people</div>
-              <div className="text-[11px] text-muted-foreground">Newest records · click a row to open profile</div>
+              <div className="text-[11px] text-muted-foreground">
+                {canOpenEmployeeProfiles
+                  ? "Newest records · click a row to open profile"
+                  : "Newest employee records"}
+              </div>
             </div>
-            <Link
-              href="/dashboard/employees/all"
-              className="text-[11px] font-medium text-primary hover:underline"
-            >
-              View all
-            </Link>
+            {canOpenEmployeeDirectory ? (
+              <Link
+                href="/dashboard/employees/all"
+                className="text-[11px] font-medium text-primary hover:underline"
+              >
+                View all
+              </Link>
+            ) : null}
           </div>
           <div className="pt-3">
             {!workforceReady ? (
@@ -1230,22 +1491,23 @@ export default function HrAnalyticsDashboard({
                   <tbody className="divide-y divide-border text-foreground">
                     {recentEmployees.map((emp, idx) => {
                       const href = employeeProfileHref(emp)
+                      const canOpenEmployeeLink = canOpenEmployeeProfiles && Boolean(href)
                       return (
                         <tr
                           key={idx}
                           className={cn(
                             "transition",
-                            href ? "cursor-pointer hover:bg-muted/40" : null
+                            canOpenEmployeeLink ? "cursor-pointer hover:bg-muted/40" : null
                           )}
                           onClick={() => {
-                            if (href) router.push(href)
+                            if (canOpenEmployeeLink && href) router.push(href)
                           }}
                         >
                           <td className="px-2.5 py-2 font-mono text-xs text-muted-foreground">
                             {getEmployeeNo(emp)}
                           </td>
                           <td className="px-2.5 py-2 font-medium">
-                            {href ? (
+                            {canOpenEmployeeLink && href ? (
                               <Link
                                 href={href}
                                 className="hover:text-primary hover:underline"

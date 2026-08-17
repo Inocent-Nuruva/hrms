@@ -460,6 +460,7 @@ export function EmployeeAccessRemovalDialog({ open, target, onOpenChange, onComp
       await runStep(label, async () => {
         const payload: EmployeeStatusPayload = {
           employment_status: status,
+          effective_date: new Date().toISOString().slice(0, 10),
           notes:
             status === "terminated"
               ? "Terminated via unified removal dialog"
@@ -476,6 +477,7 @@ export function EmployeeAccessRemovalDialog({ open, target, onOpenChange, onComp
           if (status === "terminated") {
             await patchEmployeeStatus(token, target.employeeId, {
               employment_status: "exited",
+              effective_date: new Date().toISOString().slice(0, 10),
               exit_date: new Date().toISOString().slice(0, 10),
               exit_reason: "Removed via access cleanup",
               notes: "Exited via unified removal dialog",

@@ -78,6 +78,7 @@ import {
   isSelectableDefaultAvatar,
   listAllCurrentCompanyUsers,
   listDefaultAvatars,
+  listResourcePage,
   listRolePermissions,
   readDefaultAvatarId,
   listRoleUsers,
@@ -109,6 +110,7 @@ import {
   UserMinusIcon,
 } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { useDebouncedValue } from "@/hooks/use-debounced-value"
 
 interface DataTableProps {
   token: string
@@ -122,6 +124,10 @@ interface DataTableProps {
   usersTotal: number | null
   usersTotalPages: number | null
   onUsersQueryChange: (query: Partial<Required<UsersQueryParams>>) => void
+  catalogQuery?: { page: number; limit: number; search: string }
+  catalogTotal?: number | null
+  catalogTotalPages?: number | null
+  onCatalogQueryChange?: (query: Partial<{ page: number; limit: number; search: string }>) => void
   loading: boolean
   error: string | null
   onCreate: (resource: AdminResourceKey, payload: AdminRecord) => Promise<void>
@@ -766,7 +772,7 @@ type AccessControlTableRow = AdminRecord & {
   description: string
   type: string
   permissions_count?: number
-  /** Users assigned to this role (from API field or GET /roles/{id}/users). */
+  /** Users assigned to this role when the list payload includes a count. */
   users_count?: number
   __source: AdminRecord
 }
@@ -953,6 +959,10 @@ export function DataTable({
   usersTotal,
   usersTotalPages,
   onUsersQueryChange,
+  catalogQuery = { page: 1, limit: 20, search: "" },
+  catalogTotal = null,
+  catalogTotalPages = null,
+  onCatalogQueryChange,
   loading,
   error,
   onCreate,
@@ -999,6 +1009,9 @@ export function DataTable({
   const [editingRolePermissionNames, setEditingRolePermissionNames] = React.useState<string[]>([])
   const [, setInitialEditingRolePermissionNames] = React.useState<string[]>([])
   const [accessControlSearch, setAccessControlSearch] = React.useState("")
+  const [pickerPermissions, setPickerPermissions] = React.useState<AdminRecord[]>([])
+  const [pickerSearch, setPickerSearch] = React.useState("")
+  const debouncedPickerSearch = useDebouncedValue(pickerSearch, 400)
   const [detailSheetTab, setDetailSheetTab] = React.useState<DetailSheetTab>("general")
   const [memberCompanyUsers, setMemberCompanyUsers] = React.useState<AdminRecord[]>([])
   const [assignedMemberIds, setAssignedMemberIds] = React.useState<Set<string>>(() => new Set())
@@ -1022,8 +1035,6 @@ export function DataTable({
     displayName: string
   } | null>(null)
   const [peopleDialogOpen, setPeopleDialogOpen] = React.useState(false)
-  /** roleId → assigned user count for the roles table. */
-  const [roleUserCounts, setRoleUserCounts] = React.useState<Record<string, number>>({})
 
   const columns = React.useMemo(() => {
     const baseColumns = getVisibleColumns(rows)
@@ -1046,24 +1057,10 @@ export function DataTable({
       .filter((item): item is { id: string; label: string } => Boolean(item))
   }, [roles])
   const permissionOptions = React.useMemo(
-    () => toPermissionOptions(permissions),
-    [permissions]
+    () => toPermissionOptions(pickerPermissions.length > 0 ? pickerPermissions : permissions),
+    [permissions, pickerPermissions]
   )
-  const filteredAccessControlRows = React.useMemo(() => {
-    if (activeResource !== "roles" && activeResource !== "permissions") {
-      return rows
-    }
-    const query = accessControlSearch.trim().toLowerCase()
-    if (!query) {
-      return rows
-    }
-    const tokens = query.split(/\s+/).filter(Boolean)
-    return rows.filter((row) => {
-      const haystack = accessControlSearchHaystack(row)
-      // Every token must match (supports multi-word search like "company admin").
-      return tokens.every((token) => haystack.includes(token))
-    })
-  }, [accessControlSearch, activeResource, rows])
+  const filteredAccessControlRows = rows
 
   const accessControlTableRows = React.useMemo((): AccessControlTableRow[] => {
     if (activeResource !== "roles" && activeResource !== "permissions") {
@@ -1085,9 +1082,6 @@ export function DataTable({
         }
       }
       const embeddedUsers = readEmbeddedRoleUserCount(row)
-      const usersCount =
-        roleUserCounts[id] ??
-        (embeddedUsers !== null ? embeddedUsers : undefined)
       return {
         ...row,
         __id: id,
@@ -1097,7 +1091,7 @@ export function DataTable({
         description: readRecordString(row, ["description"]) || "—",
         type: isSystemGenerated(row) ? "System" : "Custom",
         permissions_count: rolePermissionNamesFromRecord(row).length,
-        users_count: usersCount ?? 0,
+        users_count: embeddedUsers ?? undefined,
         __source: row,
       }
     })
@@ -1108,44 +1102,7 @@ export function DataTable({
         numeric: true,
       })
     )
-  }, [activeResource, filteredAccessControlRows, roleUserCounts])
-
-  // Load assigned-user counts for each role (prefer API total; fall back to embedded fields).
-  React.useEffect(() => {
-    if (activeResource !== "roles" || !token || filteredAccessControlRows.length === 0) {
-      return
-    }
-
-    let cancelled = false
-
-    const loadCounts = async () => {
-      const next: Record<string, number> = {}
-      await Promise.all(
-        filteredAccessControlRows.map(async (row, index) => {
-          const id = String(getRowId(row, index + 1))
-          const embedded = readEmbeddedRoleUserCount(row)
-          if (embedded !== null) {
-            next[id] = embedded
-            return
-          }
-          try {
-            const result = await listRoleUsers(token, id, { page: 1, limit: 1 })
-            next[id] = result.total ?? result.rows.length
-          } catch {
-            next[id] = 0
-          }
-        })
-      )
-      if (!cancelled) {
-        setRoleUserCounts(next)
-      }
-    }
-
-    void loadCounts()
-    return () => {
-      cancelled = true
-    }
-  }, [activeResource, filteredAccessControlRows, token])
+  }, [activeResource, filteredAccessControlRows])
 
   const openAccessControlRow = React.useCallback(
     (row: AdminRecord) => {
@@ -1517,7 +1474,7 @@ export function DataTable({
         sortable: true,
         render: (row) => (
           <span className="text-sm tabular-nums text-slate-700 dark:text-slate-300">
-            {row.users_count ?? 0}
+            {row.users_count ?? "—"}
           </span>
         ),
       },
@@ -1653,8 +1610,27 @@ export function DataTable({
     activeResource === "roles" || activeResource === "permissions"
 
   React.useEffect(() => {
-    setAccessControlSearch("")
-  }, [activeResource])
+    setAccessControlSearch(catalogQuery.search)
+  }, [activeResource, catalogQuery.search])
+
+  const debouncedAccessControlSearch = useDebouncedValue(accessControlSearch, 400)
+  React.useEffect(() => {
+    if (activeResource !== "roles" && activeResource !== "permissions") {
+      return
+    }
+    if (!onCatalogQueryChange) {
+      return
+    }
+    if (debouncedAccessControlSearch === catalogQuery.search) {
+      return
+    }
+    onCatalogQueryChange({ search: debouncedAccessControlSearch, page: 1 })
+  }, [
+    activeResource,
+    catalogQuery.search,
+    debouncedAccessControlSearch,
+    onCatalogQueryChange,
+  ])
 
   const canManageAssignments =
     hasActorPermission(actorPermissions, "users:update") ||
@@ -1690,6 +1666,31 @@ export function DataTable({
     // Intentionally keyed on id/resource (not the whole editingEntity object) so that
     // in-place label updates don't reset the detail sheet's tab/search/picker state.
   }, [editingEntity?.id, editingEntity?.resource])
+
+  React.useEffect(() => {
+    if (!token || editingEntity?.resource !== "roles") {
+      return
+    }
+    let cancelled = false
+    void listResourcePage("permissions", token, {
+      page: 1,
+      limit: 50,
+      search: debouncedPickerSearch,
+    })
+      .then((result) => {
+        if (!cancelled) {
+          setPickerPermissions(result.rows)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setPickerPermissions([])
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [debouncedPickerSearch, editingEntity?.id, editingEntity?.resource, token])
 
   React.useEffect(() => {
     if (!editingEntity) return
@@ -1977,11 +1978,6 @@ export function DataTable({
             ? `Assigned ${selected.name} to this role.`
             : "Role assigned to user."
         )
-        const roleId = String(editingEntity.id)
-        setRoleUserCounts((prev) => ({
-          ...prev,
-          [roleId]: (prev[roleId] ?? 0) + 1,
-        }))
         // Reload from GET /api/roles/{roleId}/users so the list stays accurate.
         setMembersRefreshKey((key) => key + 1)
       }
@@ -2040,11 +2036,6 @@ export function DataTable({
         }
         await revokeUserFromRole(token, editingEntity.id, resolvedUserId)
         showSuccessAlert(`Removed ${personLabel} from this role.`)
-        const roleId = String(editingEntity.id)
-        setRoleUserCounts((prev) => ({
-          ...prev,
-          [roleId]: Math.max(0, (prev[roleId] ?? 1) - 1),
-        }))
         setMembersRefreshKey((key) => key + 1)
       }
       setRevokeConfirm(null)
@@ -2508,20 +2499,25 @@ export function DataTable({
                 </div>
               ) : (
                 <ResizableTable
+                  key={`access-control-${activeResource}`}
                   title={RESOURCE_LABELS[activeResource]}
                   data={accessControlTableRows}
                   columns={accessControlColumns}
-                  getRowId={(row) => row.__id}
+                  getRowId={(row, index) => row.__id || String(index + 1)}
                   onRowSelect={(_id, row) => {
                     if (row?.__source) {
                       openAccessControlRow(row.__source)
                     }
                   }}
                   loading={loading}
-                  itemsPerPage={20}
+                  itemsPerPage={catalogQuery.limit || 20}
+                  page={catalogQuery.page}
+                  totalPages={catalogTotalPages}
+                  totalItems={catalogTotal}
+                  onPageChange={(page) => onCatalogQueryChange?.({ page })}
                   showExport={false}
                   enableColumnVisibility
-                  enableAnimations
+                  enableAnimations={false}
                   storageKey={`access-control-${activeResource}`}
                   toolbarStart={
                     <div className="min-w-0 flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -3368,6 +3364,7 @@ export function DataTable({
                   <PermissionPicker
                     options={permissionOptions}
                     selectedNames={displayedRolePermissionNames}
+                    onQueryChange={setPickerSearch}
                     onChange={(next) => {
                       void handleRolePermissionsChange(next)
                     }}

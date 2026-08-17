@@ -1,7 +1,9 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
 import {
+  ArrowLeft,
   CheckCircle2,
   Loader2,
   Pencil,
@@ -404,6 +406,15 @@ export function DefaultAvatarsView() {
 
   return (
     <div className="grid gap-4">
+      <div>
+        <Link
+          href="/dashboard/settings"
+          className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ArrowLeft className="size-4" />
+          Back to Settings
+        </Link>
+      </div>
       <Card>
         <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-1">

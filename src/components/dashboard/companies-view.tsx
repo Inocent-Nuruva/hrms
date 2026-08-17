@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { CheckCircle2, Pencil, Plus, RefreshCw, ShieldAlert, Trash2 } from "lucide-react"
+import { CheckCircle2, KeyRound, Pencil, Plus, RefreshCw, ShieldAlert, Trash2 } from "lucide-react"
 
 import { SearchToggleField } from "@/components/common/search-toggle-field"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
@@ -9,6 +9,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { useDebouncedValue } from "@/hooks/use-debounced-value"
 import {
   activateCompany,
+  assignPermissionToCurrentCompanyUser,
+  assignRoleToCurrentCompanyUser,
   createCurrentCompanyUser,
   deleteCurrentCompanyUser,
   getCompanyById,
@@ -17,13 +19,20 @@ import {
   listCurrentCompanyUsers,
   listResource,
   listUsers,
+  revokePermissionFromCurrentCompanyUser,
+  revokeRoleFromCurrentCompanyUser,
   suspendCompany,
   updateCompanyById,
   type AdminRecord,
   type UsersQueryParams,
 } from "@/lib/admin-api"
+import { useRouter } from "next/navigation"
+
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
-import { canPerformPermission } from "@/lib/dashboard-permissions"
+import {
+  canAccessDashboardRoute,
+  canPerformPermission,
+} from "@/lib/dashboard-permissions"
 import { env } from "@/lib/env"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import {
@@ -122,6 +131,44 @@ function formatMetadata(value: unknown) {
   }
 }
 
+function summarizeOnboardingStatus(status: AdminRecord | null) {
+  if (!status) {
+    return "No onboarding status record returned."
+  }
+
+  const statusLabel = readString(status, [
+    "status",
+    "state",
+    "phase",
+    "current_status",
+    "currentStatus",
+  ])
+  const currentStep = readString(status, ["current_step", "currentStep", "step_name", "stepName"])
+  const completedSteps = readNumber(status, ["completed_steps", "completedSteps"])
+  const totalSteps = readNumber(status, ["total_steps", "totalSteps"])
+  const percentage = readNumber(status, [
+    "progress_percentage",
+    "progressPercent",
+    "completion_percentage",
+    "completionPercent",
+  ])
+
+  const summaryParts = [
+    statusLabel !== "-" ? statusLabel : "",
+    currentStep !== "-" ? `Current step: ${currentStep}` : "",
+    completedSteps !== null && totalSteps !== null
+      ? `${completedSteps}/${totalSteps} steps complete`
+      : "",
+    percentage !== null ? `${percentage}% complete` : "",
+  ].filter(Boolean)
+
+  if (summaryParts.length > 0) {
+    return summaryParts.join(" · ")
+  }
+
+  return "Status record loaded."
+}
+
 function companyName(row: AdminRecord) {
   return readString(row, ["company_name", "name", "display_name"])
 }
@@ -177,10 +224,77 @@ function toggleStringSelection(values: string[], nextValue: string) {
     : [...values, nextValue]
 }
 
+function nestedAdminRecord(row: AdminRecord, key: string) {
+  return typeof row[key] === "object" && row[key] !== null ? (row[key] as AdminRecord) : null
+}
+
+function collectAssignmentIds(row: AdminRecord, keys: string[]) {
+  const ids = new Set<string>()
+  const consume = (value: unknown) => {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      ids.add(String(value))
+      return
+    }
+    if (typeof value === "string" && value.trim()) {
+      const parsed = Number(value)
+      if (Number.isFinite(parsed)) {
+        ids.add(String(parsed))
+      }
+      return
+    }
+    if (Array.isArray(value)) {
+      value.forEach(consume)
+      return
+    }
+    if (typeof value !== "object" || value === null) {
+      return
+    }
+    const record = value as AdminRecord
+    for (const idKey of ["id", "role_id", "roleId", "permission_id", "permissionId"]) {
+      const next = readNumber(record, [idKey])
+      if (next !== null) {
+        ids.add(String(next))
+        return
+      }
+    }
+    for (const nestedKey of ["role", "permission", "roles", "permissions", "direct_permissions", "directPermissions"]) {
+      consume(record[nestedKey])
+    }
+  }
+
+  for (const key of keys) {
+    consume(row[key])
+  }
+
+  return Array.from(ids)
+}
+
+function memberRoleIds(row: AdminRecord) {
+  const user = nestedAdminRecord(row, "user")
+  const companyUser = nestedAdminRecord(row, "company_user")
+  return collectAssignmentIds(row, ["roles", "user_roles", "userRoles"]).concat(
+    user ? collectAssignmentIds(user, ["roles", "user_roles", "userRoles"]) : [],
+    companyUser ? collectAssignmentIds(companyUser, ["roles", "user_roles", "userRoles"]) : []
+  ).filter((value, index, values) => values.indexOf(value) === index)
+}
+
+function memberPermissionIds(row: AdminRecord) {
+  const user = nestedAdminRecord(row, "user")
+  const companyUser = nestedAdminRecord(row, "company_user")
+  return collectAssignmentIds(row, ["direct_permissions", "directPermissions", "permissions"]).concat(
+    user ? collectAssignmentIds(user, ["direct_permissions", "directPermissions", "permissions"]) : [],
+    companyUser ? collectAssignmentIds(companyUser, ["direct_permissions", "directPermissions", "permissions"]) : []
+  ).filter((value, index, values) => values.indexOf(value) === index)
+}
+
 export function CompaniesView() {
+  const router = useRouter()
   const actor = useDashboardActor()
   const actorPermissions = actor.permissionLabels
   const permissionsReady = actor.ready
+  const canAccessCompaniesRoute =
+    !permissionsReady ||
+    canAccessDashboardRoute("/dashboard/companies", actorPermissions, actor.accessMode)
   const [rows, setRows] = React.useState<AdminRecord[]>([])
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
@@ -200,11 +314,15 @@ export function CompaniesView() {
   const [members, setMembers] = React.useState<AdminRecord[]>([])
   const [allUsers, setAllUsers] = React.useState<AdminRecord[]>([])
   const [roles, setRoles] = React.useState<AdminRecord[]>([])
+  const [permissions, setPermissions] = React.useState<AdminRecord[]>([])
   const [memberForm, setMemberForm] = React.useState<CurrentCompanyUserForm>({
     userId: "",
     roleIds: [],
   })
   const [membersError, setMembersError] = React.useState<string | null>(null)
+  const [editingMember, setEditingMember] = React.useState<AdminRecord | null>(null)
+  const [editingMemberRoleIds, setEditingMemberRoleIds] = React.useState<string[]>([])
+  const [editingMemberPermissionIds, setEditingMemberPermissionIds] = React.useState<string[]>([])
 
   const canUpdateCompanies =
     permissionsReady && canPerformPermission(actorPermissions, "companies:update")
@@ -214,8 +332,35 @@ export function CompaniesView() {
       canPerformPermission(actorPermissions, "company_users:update") ||
       canPerformPermission(actorPermissions, "company_users:delete") ||
       canPerformPermission(actorPermissions, "users:update"))
+  const canManageCompanyUserPermissions =
+    permissionsReady &&
+    (canPerformPermission(actorPermissions, "company_users:update") ||
+      canPerformPermission(actorPermissions, "permissions:update") ||
+      canPerformPermission(actorPermissions, "users:update"))
+
+  React.useEffect(() => {
+    if (!permissionsReady) {
+      return
+    }
+    if (!canAccessCompaniesRoute) {
+      router.replace("/dashboard")
+    }
+  }, [canAccessCompaniesRoute, permissionsReady, router])
 
   const loadData = React.useCallback(async () => {
+    if (!permissionsReady) {
+      return
+    }
+    if (!canAccessCompaniesRoute) {
+      setRows([])
+      setMembers([])
+      setAllUsers([])
+      setRoles([])
+      setPermissions([])
+      setError(null)
+      return
+    }
+
     const token = readStoredToken()
     if (!token) {
       setError("Authentication required. Please log in again.")
@@ -227,7 +372,7 @@ export function CompaniesView() {
     setError(null)
     setMembersError(null)
     try {
-      const [companies, currentCompany, status, companyUsers, platformUsers, roleRows] =
+      const [companies, currentCompany, status, companyUsers, platformUsers, roleRows, permissionRows] =
         await Promise.all([
           listResource("companies", token),
           getMyCompany(token).catch(() => null),
@@ -239,6 +384,7 @@ export function CompaniesView() {
             cacheTtlMs: env.NEXT_PUBLIC_LIST_CACHE_TTL_SHORT_MS,
           }).then((result) => result.rows),
           listResource("roles", token),
+          listResource("permissions", token),
         ])
       setRows(companies)
       setMyCompany(currentCompany)
@@ -246,16 +392,18 @@ export function CompaniesView() {
       setMembers(companyUsers)
       setAllUsers(platformUsers)
       setRoles(roleRows)
+      setPermissions(permissionRows)
     } catch (errorObject) {
       setRows([])
       setMembers([])
       setAllUsers([])
       setRoles([])
+      setPermissions([])
       setError(errorObject instanceof Error ? errorObject.message : "Failed to load companies.")
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [canAccessCompaniesRoute, permissionsReady])
 
   React.useEffect(() => {
     void loadData()
@@ -288,6 +436,22 @@ export function CompaniesView() {
         return id !== null && !assignedCurrentCompanyUserIds.has(id)
       }),
     [allUsers, assignedCurrentCompanyUserIds]
+  )
+
+  const roleNameById = React.useCallback(
+    (id: string) => {
+      const match = roles.find((role) => String(readNumber(role, ["id"]) ?? "") === id)
+      return match ? readString(match, ["display_name", "name"]) : `Role #${id}`
+    },
+    [roles]
+  )
+
+  const permissionNameById = React.useCallback(
+    (id: string) => {
+      const match = permissions.find((permission) => String(readNumber(permission, ["id"]) ?? "") === id)
+      return match ? readString(match, ["display_name", "name"]) : `Permission #${id}`
+    },
+    [permissions]
   )
 
   const companyColumns: Column<AdminRecord>[] = [
@@ -397,14 +561,55 @@ export function CompaniesView() {
       render: (row) => readString(row, ["status", "membership_status"]),
     },
     {
+      key: "roles",
+      label: "Roles",
+      defaultWidth: 180,
+      render: (row) => {
+        const ids = memberRoleIds(row)
+        if (ids.length === 0) {
+          return "-"
+        }
+        return ids.slice(0, 3).map(roleNameById).join(", ")
+      },
+    },
+    {
+      key: "direct_permissions",
+      label: "Direct Permissions",
+      defaultWidth: 180,
+      render: (row) => {
+        const ids = memberPermissionIds(row)
+        if (ids.length === 0) {
+          return "-"
+        }
+        return ids.slice(0, 2).map(permissionNameById).join(", ")
+      },
+    },
+    {
       key: "actions",
       label: "Actions",
-      defaultWidth: 100,
+      defaultWidth: 150,
       sortable: false,
       render: (row) => {
         const userId = currentCompanyUserId(row)
         return (
           <div className="flex justify-end gap-1 pr-1" onClick={(event) => event.stopPropagation()}>
+            {canManageCompanyUserPermissions ? (
+              <button
+                type="button"
+                className="admin-table-icon-button"
+                disabled={userId === null}
+                onClick={() => {
+                  setEditingMember(row)
+                  setEditingMemberRoleIds(memberRoleIds(row))
+                  setEditingMemberPermissionIds(memberPermissionIds(row))
+                  setMembersError(null)
+                }}
+                aria-label="Manage member access"
+                title="Manage member access"
+              >
+                <KeyRound className="size-4" />
+              </button>
+            ) : null}
             {canManageCompanyUsers ? (
               <button
                 type="button"
@@ -529,6 +734,51 @@ export function CompaniesView() {
     }
   }
 
+  async function saveMemberAccess() {
+    const token = readStoredToken()
+    const userId = currentCompanyUserId(editingMember ?? {})
+    if (!token || userId === null || !editingMember) {
+      return
+    }
+
+    const previousRoleIds = new Set(memberRoleIds(editingMember))
+    const nextRoleIds = new Set(editingMemberRoleIds)
+    const addRoleIds = Array.from(nextRoleIds).filter((id) => !previousRoleIds.has(id))
+    const removeRoleIds = Array.from(previousRoleIds).filter((id) => !nextRoleIds.has(id))
+
+    const previousPermissionIds = new Set(memberPermissionIds(editingMember))
+    const nextPermissionIds = new Set(editingMemberPermissionIds)
+    const addPermissionIds = Array.from(nextPermissionIds).filter((id) => !previousPermissionIds.has(id))
+    const removePermissionIds = Array.from(previousPermissionIds).filter((id) => !nextPermissionIds.has(id))
+
+    setSaving(true)
+    setMembersError(null)
+    try {
+      for (const roleId of addRoleIds) {
+        await assignRoleToCurrentCompanyUser(token, userId, roleId)
+      }
+      for (const roleId of removeRoleIds) {
+        await revokeRoleFromCurrentCompanyUser(token, userId, roleId)
+      }
+      for (const permissionId of addPermissionIds) {
+        await assignPermissionToCurrentCompanyUser(token, userId, permissionId)
+      }
+      for (const permissionId of removePermissionIds) {
+        await revokePermissionFromCurrentCompanyUser(token, userId, permissionId)
+      }
+      setEditingMember(null)
+      await loadData()
+    } catch (errorObject) {
+      setMembersError(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to update current company user access."
+      )
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const onboardingCompleted = React.useMemo(() => {
     if (!onboardingStatus) {
       return false
@@ -540,6 +790,10 @@ export function CompaniesView() {
       onboardingStatus.isComplete
     return complete === true
   }, [onboardingStatus])
+
+  if (permissionsReady && !canAccessCompaniesRoute) {
+    return null
+  }
 
   return (
     <div className="space-y-4">
@@ -580,9 +834,7 @@ export function CompaniesView() {
                 {onboardingCompleted ? "Complete" : "In progress"}
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
-                {onboardingStatus
-                  ? formatMetadata(onboardingStatus).slice(0, 160) || "Status record loaded."
-                  : "No onboarding status record returned."}
+                {summarizeOnboardingStatus(onboardingStatus)}
               </p>
             </div>
           </div>
@@ -744,6 +996,99 @@ export function CompaniesView() {
                 onClick={() => void saveCompany()}
               >
                 {saving ? "Saving..." : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {editingMember ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+          <div className="w-full max-w-3xl rounded-lg border border-slate-200 bg-white p-4 shadow-lg">
+            <h3 className="text-lg font-semibold text-slate-900">
+              Manage Access: {currentCompanyUserLabel(editingMember)}
+            </h3>
+            <div className="mt-4 grid gap-4 lg:grid-cols-2">
+              <fieldset className="grid gap-1">
+                <legend className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Company Roles
+                </legend>
+                <div className="max-h-72 overflow-y-auto rounded-md border border-slate-300 bg-white p-2">
+                  <div className="grid gap-1">
+                    {roles.map((role) => {
+                      const id = readNumber(role, ["id"])
+                      if (id === null) return null
+                      const value = String(id)
+                      return (
+                        <label key={id} className="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-slate-50">
+                          <input
+                            type="checkbox"
+                            checked={editingMemberRoleIds.includes(value)}
+                            onChange={(event) =>
+                              setEditingMemberRoleIds((previous) =>
+                                event.target.checked
+                                  ? Array.from(new Set([...previous, value]))
+                                  : previous.filter((entry) => entry !== value)
+                              )
+                            }
+                          />
+                          <span>{readString(role, ["display_name", "name"])}</span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                </div>
+              </fieldset>
+
+              <fieldset className="grid gap-1">
+                <legend className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Direct Permissions
+                </legend>
+                <div className="max-h-72 overflow-y-auto rounded-md border border-slate-300 bg-white p-2">
+                  <div className="grid gap-1">
+                    {permissions.map((permission) => {
+                      const id = readNumber(permission, ["id"])
+                      if (id === null) return null
+                      const value = String(id)
+                      return (
+                        <label key={id} className="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-slate-50">
+                          <input
+                            type="checkbox"
+                            checked={editingMemberPermissionIds.includes(value)}
+                            onChange={(event) =>
+                              setEditingMemberPermissionIds((previous) =>
+                                event.target.checked
+                                  ? Array.from(new Set([...previous, value]))
+                                  : previous.filter((entry) => entry !== value)
+                              )
+                            }
+                          />
+                          <span>{readString(permission, ["display_name", "name"])}</span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                </div>
+              </fieldset>
+            </div>
+
+            {membersError ? <p className="mt-3 text-sm text-rose-600">{membersError}</p> : null}
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+                onClick={() => setEditingMember(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="rounded-md bg-primary px-3 py-2 text-sm font-medium !text-white transition hover:brightness-95 disabled:opacity-60"
+                disabled={saving}
+                onClick={() => void saveMemberAccess()}
+              >
+                {saving ? "Saving..." : "Save Access"}
               </button>
             </div>
           </div>

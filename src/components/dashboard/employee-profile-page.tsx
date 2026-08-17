@@ -32,24 +32,36 @@ import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 import { Textarea } from "@/components/ui/textarea"
 import {
   createEmployeeDocument,
+  createEmployeeMovement,
   createEmployeePosition,
   createEmployeeSectionItem,
+  cancelEmployeeMovement,
+  deleteEmployeePosition,
   deleteEmployeeDocument,
   deleteEmployeeSectionItem,
   EMPLOYEE_STATUS_VALUES,
+  fileToBase64UploadDto,
   getEmployeeById,
   isEmployeeStatusValue,
+  listBranches,
+  listCostCenters,
   listDepartmentPositions,
   listDepartments,
+  listEmployeeGrades,
+  listEmployeeMovementOperations,
+  listEmployeeMovements,
   listEmployeePositions,
   listEmployees,
   listPositions,
   patchEmployeeById,
+  patchEmployeeAssignment,
   patchEmployeePosition,
   patchEmployeeStatus,
   patchEmployeeSectionItem,
+  submitEmployeeMovement,
   updateUserById,
   type AdminRecord,
+  type EmployeeAssignmentPayload,
   type EmployeeStatusPayload,
   type EmployeeProfileSection,
 } from "@/lib/admin-api"
@@ -62,6 +74,7 @@ const EMPLOYEE_STATUS_REFRESH_EVENT = "hrms:employee-status-updated"
 
 type EmployeeStatusFormState = {
   employment_status: EmployeeStatusPayload["employment_status"]
+  effective_date: string
   exit_date: string
   exit_reason: string
   notes: string
@@ -80,6 +93,7 @@ function readEmployeeStatusForm(employee: AdminRecord): EmployeeStatusFormState 
 
   return {
     employment_status: status,
+    effective_date: new Date().toISOString().slice(0, 10),
     exit_date: status === "exited" ? exitDate : "",
     exit_reason: status === "exited" ? exitReason : "",
     notes,
@@ -89,6 +103,15 @@ function readEmployeeStatusForm(employee: AdminRecord): EmployeeStatusFormState 
 function validateStatusForm(form: EmployeeStatusFormState) {
   if (!isEmployeeStatusValue(form.employment_status)) {
     return "Please select a valid employment status."
+  }
+
+  const effectiveDate = form.effective_date.trim()
+  if (!effectiveDate) {
+    return "Effective date is required."
+  }
+  const effectiveParsed = new Date(effectiveDate)
+  if (Number.isNaN(effectiveParsed.getTime())) {
+    return "Effective date is invalid."
   }
 
   const notes = form.notes.trim()
@@ -235,6 +258,9 @@ function mergeEmployeeProfileRecord(record: AdminRecord | null) {
   if (!merged.bank_accounts && record.bankAccounts) {
     merged.bank_accounts = record.bankAccounts
   }
+  if (!merged.department_assignments && record.departmentAssignments) {
+    merged.department_assignments = record.departmentAssignments
+  }
   if (!merged.academic_qualifications && record.academicQualifications) {
     merged.academic_qualifications = record.academicQualifications
   }
@@ -243,6 +269,12 @@ function mergeEmployeeProfileRecord(record: AdminRecord | null) {
   }
   if (!merged.experience_details && record.experienceDetails) {
     merged.experience_details = record.experienceDetails
+  }
+  if (!merged.position_assignments && record.positionAssignments) {
+    merged.position_assignments = record.positionAssignments
+  }
+  if (!merged.employee_movements && record.employeeMovements) {
+    merged.employee_movements = record.employeeMovements
   }
 
   return merged
@@ -513,6 +545,30 @@ function relatedDepartmentNames(row: AdminRecord) {
   return names
 }
 
+function normalizeDepartmentScopedPositionOptions(rows: AdminRecord[], departmentId: number) {
+  return rows.map((row) => {
+    const nestedPosition =
+      asRecord(row.position) ??
+      asRecord(row.positionDetail) ??
+      asRecord(row.primary_position) ??
+      asRecord(row.primaryPosition)
+    const position = nestedPosition ? { ...row, ...nestedPosition } : row
+    const existingDepartmentIds = [
+      ...(Array.isArray(position.department_ids) ? position.department_ids : []),
+      ...(Array.isArray(position.departmentIds) ? position.departmentIds : []),
+    ]
+      .map((value) => readNumber(value))
+      .filter((value): value is number => value !== null)
+
+    const departmentIds = Array.from(new Set([...existingDepartmentIds, departmentId]))
+    return {
+      ...position,
+      department_ids: departmentIds,
+      departmentIds,
+    }
+  })
+}
+
 function recordOptionLabel(row: AdminRecord) {
   return readString(row, [
     "name",
@@ -525,6 +581,238 @@ function recordOptionLabel(row: AdminRecord) {
     "displayName",
     "code",
   ])
+}
+
+function emptyPositionAssignmentForm(): PositionAssignmentFormState {
+  return {
+    position_id: "",
+    assignment_type: "SECONDARY",
+    status: "ACTIVE",
+    is_primary: "false",
+    start_date: new Date().toISOString().slice(0, 10),
+    end_date: "",
+    notes: "",
+  }
+}
+
+function resolvePositionAssignmentPositionId(row: AdminRecord) {
+  return readRelatedId(
+    row,
+    ["position", "positionDetail", "primary_position", "primaryPosition"],
+    ["position_id", "positionId", "primary_position_id", "primaryPositionId"]
+  )
+}
+
+function positionAssignmentPreview(row: AdminRecord) {
+  const positionRecord =
+    asRecord(row.position) ??
+    asRecord(row.positionDetail) ??
+    asRecord(row.primary_position) ??
+    asRecord(row.primaryPosition)
+  const positionName = positionRecord ? recordOptionLabel(positionRecord) : "-"
+  const fallbackPosition = readString(row, ["position_name", "positionName", "title", "name"])
+  const assignmentType = readString(row, ["assignment_type", "assignmentType"])
+  const previewPosition = positionName !== "-" ? positionName : fallbackPosition
+  return [previewPosition, assignmentType].filter((value) => value !== "-").join(" • ") || "Position assignment"
+}
+
+function readPositionAssignmentForm(row: AdminRecord): PositionAssignmentFormState {
+  const positionId = resolvePositionAssignmentPositionId(row)
+  const assignmentType = readString(row, ["assignment_type", "assignmentType"])
+  const status = readString(row, ["status"])
+  const startDate = readString(row, ["start_date", "startDate", "effective_from", "effectiveFrom"])
+  const endDate = readString(row, ["end_date", "endDate", "effective_to", "effectiveTo"])
+  const notes = readString(row, ["notes"])
+  return {
+    position_id: positionId === null ? "" : String(positionId),
+    assignment_type: assignmentType === "-" ? "SECONDARY" : assignmentType.toUpperCase(),
+    status: status === "-" ? "ACTIVE" : status.toUpperCase(),
+    is_primary: isPrimaryEmployeePosition(row) ? "true" : "false",
+    start_date: startDate === "-" ? "" : startDate.slice(0, 10),
+    end_date: endDate === "-" ? "" : endDate.slice(0, 10),
+    notes: notes === "-" ? "" : notes,
+  }
+}
+
+function emptyDepartmentAssignmentForm(): DepartmentAssignmentFormState {
+  return {
+    department_id: "",
+    is_primary: "false",
+    effective_date: new Date().toISOString().slice(0, 10),
+    reason: "",
+  }
+}
+
+function resolveDepartmentAssignmentDepartmentId(row: AdminRecord) {
+  return readRelatedId(
+    row,
+    ["department", "departmentDetail", "primary_department", "primaryDepartment"],
+    ["department_id", "departmentId", "primary_department_id", "primaryDepartmentId"]
+  )
+}
+
+function isPrimaryDepartmentAssignment(row: AdminRecord) {
+  const primary = row.is_primary ?? row.isPrimary
+  if (primary === true || primary === 1 || primary === "1") return true
+  if (typeof primary === "string" && primary.trim().toLowerCase() === "true") return true
+  return false
+}
+
+function departmentAssignmentPreview(row: AdminRecord) {
+  const departmentRecord =
+    asRecord(row.department) ??
+    asRecord(row.departmentDetail) ??
+    asRecord(row.primary_department) ??
+    asRecord(row.primaryDepartment)
+  const departmentName = departmentRecord ? recordOptionLabel(departmentRecord) : "-"
+  const fallbackDepartment = readString(row, ["department_name", "departmentName", "name", "title"])
+  return departmentName !== "-" ? departmentName : fallbackDepartment !== "-" ? fallbackDepartment : "Department assignment"
+}
+
+function readDepartmentAssignmentForm(row: AdminRecord): DepartmentAssignmentFormState {
+  const departmentId = resolveDepartmentAssignmentDepartmentId(row)
+  return {
+    department_id: departmentId === null ? "" : String(departmentId),
+    is_primary: isPrimaryDepartmentAssignment(row) ? "true" : "false",
+    effective_date: new Date().toISOString().slice(0, 10),
+    reason: "",
+  }
+}
+
+type EmployeeMovementFormState = {
+  movement_type: string
+  title: string
+  reason: string
+  effective_date: string
+  new_branch_id: string
+  new_department_id: string
+  new_position_id: string
+  new_grade_id: string
+  new_cost_center_id: string
+  new_manager_employee_id: string
+  new_employment_type: string
+}
+
+const EMPLOYEE_MOVEMENT_TYPE_OPTIONS = [
+  "DEPARTMENT_TRANSFER",
+  "BRANCH_TRANSFER",
+  "POSITION_CHANGE",
+  "PROMOTION",
+  "DEMOTION",
+  "REPORTING_MANAGER_CHANGE",
+  "GRADE_CHANGE",
+  "COST_CENTER_CHANGE",
+  "EMPLOYMENT_TYPE_CHANGE",
+  "COMPOSITE",
+]
+
+const EMPLOYMENT_TYPE_OPTIONS = [
+  "full_time",
+  "part_time",
+  "contract",
+  "intern",
+  "consultant",
+  "temporary",
+]
+
+function emptyEmployeeMovementForm(): EmployeeMovementFormState {
+  return {
+    movement_type: "DEPARTMENT_TRANSFER",
+    title: "",
+    reason: "",
+    effective_date: new Date().toISOString().slice(0, 10),
+    new_branch_id: "",
+    new_department_id: "",
+    new_position_id: "",
+    new_grade_id: "",
+    new_cost_center_id: "",
+    new_manager_employee_id: "",
+    new_employment_type: "",
+  }
+}
+
+function resolveMovementEmployeeId(row: AdminRecord) {
+  return readRelatedId(row, ["employee"], ["employeeId", "employee_id"])
+}
+
+function movementBelongsToEmployee(row: AdminRecord, employeeId: number) {
+  return resolveMovementEmployeeId(row) === employeeId
+}
+
+function movementSupportsSubmit(status: string) {
+  return ["draft", "returned_for_correction"].includes(status.trim().toLowerCase())
+}
+
+function movementSupportsCancel(status: string) {
+  return ["draft", "submitted", "pending_approval", "returned_for_correction"].includes(
+    status.trim().toLowerCase()
+  )
+}
+
+function movementChangeValueSummary(value: unknown) {
+  if (value === null || value === undefined) {
+    return "-"
+  }
+  if (typeof value === "string") {
+    return value.trim() || "-"
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value)
+  }
+  if (Array.isArray(value)) {
+    return value.length === 0 ? "-" : `${value.length} item(s)`
+  }
+  const record = asRecord(value)
+  if (!record) {
+    return "-"
+  }
+  const summary = [
+    readString(record, ["name", "full_name", "fullName", "title", "code", "employee_no", "employeeNo"]),
+    readString(record, ["employment_type", "employmentType", "currency"]),
+    readString(record, ["base_salary", "baseSalary", "amount"]),
+  ]
+    .filter((entry, index, entries) => entry !== "-" && entries.indexOf(entry) === index)
+    .join(" • ")
+
+  if (summary) {
+    return summary
+  }
+
+  try {
+    return JSON.stringify(record)
+  } catch {
+    return "Available"
+  }
+}
+
+function buildEmployeeAssignmentPayload(
+  employee: AdminRecord,
+  departments: Array<{ department_id: number; is_primary?: boolean }>,
+  effectiveDate: string,
+  reason: string
+): EmployeeAssignmentPayload {
+  return {
+    effective_date: effectiveDate,
+    branch_id: readRelatedId(
+      employee,
+      ["primary_branch", "primaryBranch", "branch", "branchDetail"],
+      ["primary_branch_id", "primaryBranchId", "branch_id", "branchId"]
+    ),
+    departments,
+    primary_position_id: readRelatedId(
+      employee,
+      ["primary_position", "primaryPosition", "position", "positionDetail"],
+      ["primary_position_id", "primaryPositionId", "position_id", "positionId"]
+    ),
+    reports_to: readRelatedId(employee, ["manager", "managerDetail"], ["reports_to", "manager_id", "managerId"]),
+    grade_id: readRelatedId(employee, ["grade", "gradeDetail"], ["grade_id", "gradeId"]),
+    cost_center_id: readRelatedId(
+      employee,
+      ["cost_center", "costCenter", "cost_center_detail", "costCenterDetail"],
+      ["cost_center_id", "costCenterId"]
+    ),
+    reason,
+  }
 }
 
 function resolveCompanyUserId(employee: AdminRecord): number | null {
@@ -596,6 +884,8 @@ function routeKeyToSectionTitle(routeKey: string | null | undefined) {
       identifications: "Identifications",
       bank_accounts: "Bank Accounts",
       departments: "Departments",
+      positions: "Positions",
+      movements: "Movements",
       academic_qualifications: "Academic Qualifications",
       professional_qualifications: "Professional Qualifications",
       experience_details: "Experience Details",
@@ -605,6 +895,26 @@ function routeKeyToSectionTitle(routeKey: string | null | undefined) {
 }
 
 type SectionEntry = { key: string; label: string; value: string; kind: "text" | "boolean" }
+
+type PositionAssignmentFormState = {
+  position_id: string
+  assignment_type: string
+  status: string
+  is_primary: string
+  start_date: string
+  end_date: string
+  notes: string
+}
+
+const POSITION_ASSIGNMENT_TYPE_OPTIONS = ["PRIMARY", "ACTING", "TEMPORARY", "SECONDARY"]
+const POSITION_ASSIGNMENT_STATUS_OPTIONS = ["ACTIVE", "INACTIVE", "COMPLETED"]
+
+type DepartmentAssignmentFormState = {
+  department_id: string
+  is_primary: string
+  effective_date: string
+  reason: string
+}
 
 const EDUCATION_LEVEL_OPTIONS = [
   "Primary",
@@ -627,7 +937,14 @@ const DOCUMENT_TYPE_OPTIONS = [
   "cv",
   "offer_letter",
   "contract",
+  "id",
   "other",
+]
+
+const DOCUMENT_CLASSIFICATION_OPTIONS = [
+  "PRIVATE",
+  "CONFIDENTIAL",
+  "RESTRICTED",
 ]
 
 const RELATIONSHIP_OPTIONS = [
@@ -1056,6 +1373,23 @@ function renderEntryInput({
     )
   }
 
+  if (entry.key === "classification") {
+    return (
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+      >
+        <option value="">Select classification</option>
+        {DOCUMENT_CLASSIFICATION_OPTIONS.map((classification) => (
+          <option key={classification} value={classification}>
+            {classification}
+          </option>
+        ))}
+      </select>
+    )
+  }
+
   if (entry.key === "relationship") {
     return (
       <select
@@ -1207,7 +1541,8 @@ function sectionSchema(sectionTitle: string): SectionEntry[] {
     return [
       { key: "type", label: "Type", value: "other", kind: "text" },
       { key: "title", label: "Title", value: "", kind: "text" },
-      { key: "file_url", label: "Attachment", value: "", kind: "text" },
+      { key: "classification", label: "Classification", value: "PRIVATE", kind: "text" },
+      { key: "retention_until", label: "Retention Until", value: "", kind: "text" },
       { key: "notes", label: "Notes", value: "", kind: "text" },
     ]
   }
@@ -1276,6 +1611,8 @@ const PROFILE_SECTION_DEFS: Array<{
   { title: "Identifications", tabLabel: "IDs", keys: ["identifications", "identification_documents", "identificationDocuments"] },
   { title: "Bank Accounts", tabLabel: "Banks", keys: ["bank_accounts", "bankAccounts"] },
   { title: "Departments", tabLabel: "Depts", keys: ["departments", "department_assignments", "departmentAssignments"] },
+  { title: "Positions", tabLabel: "Positions", keys: ["position_assignments", "positionAssignments"] },
+  { title: "Movements", tabLabel: "Movements", keys: ["employee_movements", "employeeMovements"] },
   { title: "Academic Qualifications", tabLabel: "Academic", keys: ["academic_qualifications", "academicQualifications"] },
   { title: "Professional Qualifications", tabLabel: "Professional", keys: ["professional_qualifications", "professionalQualifications"] },
   { title: "Experience Details", tabLabel: "Experience", keys: ["experience_details", "experienceDetails"] },
@@ -1463,14 +1800,41 @@ function ProfileSectionsTabs({
       </div>
 
       {active ? (
-        <Section
-          key={active.routeKey}
-          title={active.title}
-          items={active.items}
-          employeeId={employeeId}
-          onMutated={onMutated}
-          requestedRouteKey={requestedRouteKey}
-        />
+        active.title === "Departments" ? (
+          <DepartmentAssignmentsSection
+            key={active.routeKey}
+            items={active.items}
+            employee={employee}
+            employeeId={employeeId}
+            onMutated={onMutated}
+            requestedRouteKey={requestedRouteKey}
+          />
+        ) : active.title === "Positions" ? (
+          <PositionAssignmentsSection
+            key={active.routeKey}
+            items={active.items}
+            employeeId={employeeId}
+            onMutated={onMutated}
+            requestedRouteKey={requestedRouteKey}
+          />
+        ) : active.title === "Movements" ? (
+          <EmployeeMovementsSection
+            key={active.routeKey}
+            items={active.items}
+            employeeId={employeeId}
+            onMutated={onMutated}
+            requestedRouteKey={requestedRouteKey}
+          />
+        ) : (
+          <Section
+            key={active.routeKey}
+            title={active.title}
+            items={active.items}
+            employeeId={employeeId}
+            onMutated={onMutated}
+            requestedRouteKey={requestedRouteKey}
+          />
+        )
       ) : null}
     </div>
   )
@@ -1495,6 +1859,7 @@ function Section({
   const [addingRecord, setAddingRecord] = React.useState(false)
   const [editForm, setEditForm] = React.useState<Record<string, string>>({})
   const [addForm, setAddForm] = React.useState<Record<string, string>>({})
+  const [documentUploadFile, setDocumentUploadFile] = React.useState<File | null>(null)
   const [mutationError, setMutationError] = React.useState<string | null>(null)
   const [submitting, setSubmitting] = React.useState(false)
   const token = readStoredToken()
@@ -1525,6 +1890,7 @@ function Section({
   React.useEffect(() => {
     if (!addingRecord) {
       setAddForm({})
+      setDocumentUploadFile(null)
       return
     }
     const initial = Object.fromEntries(templateEntries.map((entry) => [entry.key, entry.value]))
@@ -1597,6 +1963,24 @@ function Section({
                 <div className="mb-2 flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="break-words text-sm font-semibold text-foreground">{recordPreview(item)}</p>
+                    {isDocumentsSection ? (
+                      (() => {
+                        const documentUrl = readString(item, ["file_url"])
+                        if (documentUrl === "-") {
+                          return null
+                        }
+                        return (
+                          <a
+                            href={documentUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="mt-1 inline-flex text-xs font-medium text-primary hover:underline"
+                          >
+                            Open attachment
+                          </a>
+                        )
+                      })()
+                    ) : null}
                   </div>
                   <div className="flex items-center gap-1">
                     {supportsEdit ? (
@@ -1789,6 +2173,7 @@ function Section({
         onOpenChange={(open) => {
           if (!open) {
             setAddingRecord(false)
+            setMutationError(null)
           }
         }}
       >
@@ -1816,7 +2201,31 @@ function Section({
                 </label>
               ))
             )}
+            {isDocumentsSection ? (
+              <label className="grid min-w-0 gap-1 md:col-span-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Attachment
+                </span>
+                <input
+                  type="file"
+                  className="block w-full rounded-md border border-slate-300 px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-slate-900 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0] ?? null
+                    setDocumentUploadFile(file)
+                  }}
+                />
+                <p className="text-xs text-slate-500">
+                  {documentUploadFile
+                    ? `${documentUploadFile.name} · ${formatFileSize(documentUploadFile.size)}`
+                    : "Choose the document file to upload."}
+                </p>
+              </label>
+            ) : null}
           </div>
+          {isDocumentsSection && !documentUploadFile ? (
+            <p className="text-sm text-amber-700">Choose a file before adding this document.</p>
+          ) : null}
+          {mutationError ? <p className="text-sm text-rose-600">{mutationError}</p> : null}
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <button
@@ -1830,12 +2239,20 @@ function Section({
                 const payload: AdminRecord = {}
                 for (const entry of templateEntries) {
                   const raw = addForm[entry.key] ?? entry.value
+                  if (!raw.trim() && entry.kind !== "boolean") {
+                    continue
+                  }
                   payload[entry.key] = entry.kind === "boolean" ? raw === "true" : raw
                 }
                 setSubmitting(true)
                 setMutationError(null)
                 try {
                   if (isDocumentsSection) {
+                    if (!documentUploadFile) {
+                      setMutationError("Choose a file before adding this document.")
+                      return
+                    }
+                    payload.file = await fileToBase64UploadDto(documentUploadFile)
                     await createEmployeeDocument(token, employeeId, payload)
                   } else if (apiSection) {
                     await createEmployeeSectionItem(token, employeeId, apiSection, payload)
@@ -1844,6 +2261,7 @@ function Section({
                     return
                   }
                   setAddingRecord(false)
+                  setDocumentUploadFile(null)
                   await onMutated()
                 } catch (errorObject) {
                   setMutationError(errorObject instanceof Error ? errorObject.message : "Failed to add record.")
@@ -1854,6 +2272,1933 @@ function Section({
             >
               {submitting ? "Adding..." : "Add"}
             </button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+}
+
+function DepartmentAssignmentsSection({
+  items,
+  employee,
+  employeeId,
+  onMutated,
+  requestedRouteKey,
+}: {
+  items: AdminRecord[]
+  employee: AdminRecord
+  employeeId: number | null
+  onMutated: () => Promise<void>
+  requestedRouteKey?: string | null
+}) {
+  const sectionRef = React.useRef<HTMLDivElement | null>(null)
+  const token = readStoredToken()
+  const routeKey = sectionTitleToRouteKey("Departments")
+  const isHighlighted = requestedRouteKey === routeKey
+  const [departmentOptions, setDepartmentOptions] = React.useState<AdminRecord[]>([])
+  const [departmentsLoading, setDepartmentsLoading] = React.useState(false)
+  const [addingRecord, setAddingRecord] = React.useState(false)
+  const [editingRecord, setEditingRecord] = React.useState<AdminRecord | null>(null)
+  const [deletingRecord, setDeletingRecord] = React.useState<AdminRecord | null>(null)
+  const [form, setForm] = React.useState<DepartmentAssignmentFormState>(() =>
+    emptyDepartmentAssignmentForm()
+  )
+  const [mutationError, setMutationError] = React.useState<string | null>(null)
+  const [submitting, setSubmitting] = React.useState(false)
+
+  React.useEffect(() => {
+    if (!isHighlighted || !sectionRef.current) {
+      return
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      sectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
+      sectionRef.current?.focus({ preventScroll: true })
+    })
+
+    return () => window.cancelAnimationFrame(frameId)
+  }, [isHighlighted, items.length])
+
+  React.useEffect(() => {
+    if (!addingRecord && !editingRecord) {
+      setForm(emptyDepartmentAssignmentForm())
+      return
+    }
+    if (editingRecord) {
+      setForm(readDepartmentAssignmentForm(editingRecord))
+      return
+    }
+    setForm(emptyDepartmentAssignmentForm())
+  }, [addingRecord, editingRecord])
+
+  React.useEffect(() => {
+    if (!token || (!addingRecord && !editingRecord)) {
+      return
+    }
+
+    let cancelled = false
+    setDepartmentsLoading(true)
+
+    void listDepartments(token, {
+      page: 1,
+      limit: 200,
+      sortBy: "name",
+      sortOrder: "ASC",
+    })
+      .then((result) => {
+        if (!cancelled) {
+          setDepartmentOptions(result.rows)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setDepartmentOptions([])
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setDepartmentsLoading(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [addingRecord, editingRecord, token])
+
+  const closeDialogs = React.useCallback(() => {
+    setAddingRecord(false)
+    setEditingRecord(null)
+    setDeletingRecord(null)
+    setMutationError(null)
+    setSubmitting(false)
+  }, [])
+
+  const currentAssignments = React.useMemo(
+    () =>
+      items
+        .map((item) => {
+          const departmentId = resolveDepartmentAssignmentDepartmentId(item)
+          if (departmentId === null) {
+            return null
+          }
+          return {
+            id: readNumber(item.id),
+            department_id: departmentId,
+            is_primary: isPrimaryDepartmentAssignment(item),
+          }
+        })
+        .filter(
+          (
+            assignment
+          ): assignment is { id: number | null; department_id: number; is_primary: boolean } =>
+            assignment !== null
+        ),
+    [items]
+  )
+
+  const renderAssignmentField = (label: string, value: string) => {
+    if (!value || value === "-") {
+      return null
+    }
+    return (
+      <div className="min-w-0">
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          {label}
+        </p>
+        <p className="break-words text-foreground">{value}</p>
+      </div>
+    )
+  }
+
+  const submitMutation = React.useCallback(async () => {
+    if (!employeeId || !token) {
+      setMutationError("Authentication required. Please log in again.")
+      return
+    }
+
+    const departmentId = Number(form.department_id)
+    if (!Number.isFinite(departmentId) || departmentId <= 0) {
+      setMutationError("Select a department.")
+      return
+    }
+    if (!form.effective_date.trim()) {
+      setMutationError("Effective date is required.")
+      return
+    }
+
+    const editingAssignmentId = editingRecord ? readNumber(editingRecord.id) : null
+    const duplicate = currentAssignments.find(
+      (assignment) =>
+        assignment.department_id === departmentId &&
+        assignment.id !== editingAssignmentId
+    )
+    if (duplicate) {
+      setMutationError("This department is already assigned to the employee.")
+      return
+    }
+
+    let nextAssignments = currentAssignments
+      .filter((assignment) => assignment.id !== editingAssignmentId)
+      .map((assignment) => ({
+        department_id: assignment.department_id,
+        is_primary: assignment.is_primary,
+      }))
+
+    nextAssignments.push({
+      department_id: departmentId,
+      is_primary: form.is_primary === "true",
+    })
+
+    if (form.is_primary === "true") {
+      nextAssignments = nextAssignments.map((assignment) => ({
+        ...assignment,
+        is_primary: assignment.department_id === departmentId,
+      }))
+    } else if (!nextAssignments.some((assignment) => assignment.is_primary) && nextAssignments.length > 0) {
+      nextAssignments = nextAssignments.map((assignment, index) => ({
+        ...assignment,
+        is_primary: index === 0,
+      }))
+    }
+
+    setSubmitting(true)
+    setMutationError(null)
+    try {
+      await patchEmployeeAssignment(
+        token,
+        employeeId,
+        buildEmployeeAssignmentPayload(
+          employee,
+          nextAssignments,
+          form.effective_date,
+          form.reason
+        )
+      )
+      closeDialogs()
+      await onMutated()
+    } catch (errorObject) {
+      setMutationError(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to update department assignments."
+      )
+    } finally {
+      setSubmitting(false)
+    }
+  }, [
+    closeDialogs,
+    currentAssignments,
+    editingRecord,
+    employee,
+    employeeId,
+    form,
+    onMutated,
+    token,
+  ])
+
+  const deleteMutation = React.useCallback(async () => {
+    if (!deletingRecord || !employeeId || !token) {
+      return
+    }
+
+    const deletingAssignmentId = readNumber(deletingRecord.id)
+    if (deletingAssignmentId === null) {
+      setMutationError("Missing assignment id; cannot delete this department.")
+      return
+    }
+
+    let nextAssignments = currentAssignments
+      .filter((assignment) => assignment.id !== deletingAssignmentId)
+      .map((assignment) => ({
+        department_id: assignment.department_id,
+        is_primary: assignment.is_primary,
+      }))
+
+    if (!nextAssignments.some((assignment) => assignment.is_primary) && nextAssignments.length > 0) {
+      nextAssignments = nextAssignments.map((assignment, index) => ({
+        ...assignment,
+        is_primary: index === 0,
+      }))
+    }
+
+    setSubmitting(true)
+    setMutationError(null)
+    try {
+      await patchEmployeeAssignment(
+        token,
+        employeeId,
+        buildEmployeeAssignmentPayload(
+          employee,
+          nextAssignments,
+          new Date().toISOString().slice(0, 10),
+          ""
+        )
+      )
+      closeDialogs()
+      await onMutated()
+    } catch (errorObject) {
+      setMutationError(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to delete department assignment."
+      )
+    } finally {
+      setSubmitting(false)
+    }
+  }, [closeDialogs, currentAssignments, deletingRecord, employee, employeeId, onMutated, token])
+
+  return (
+    <>
+      <div
+        id={`employee-profile-section-${routeKey}`}
+        ref={sectionRef}
+        tabIndex={-1}
+        aria-label="Departments section"
+        className={cn(
+          "scroll-mt-24 rounded-xl px-3 py-3 outline-none transition-all duration-500 lg:px-4",
+          isHighlighted &&
+            "ring-2 ring-amber-400 ring-offset-2 ring-offset-background bg-amber-50/80 shadow-sm"
+        )}
+      >
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-base font-semibold">Departments</span>
+            <span
+              className={cn(
+                "inline-flex min-w-5 items-center justify-center rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums",
+                items.length === 0
+                  ? "bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300"
+                  : "bg-primary/10 text-primary"
+              )}
+            >
+              {items.length}
+            </span>
+            {items.length === 0 ? (
+              <span className="text-xs font-medium text-rose-700 dark:text-rose-300">
+                Not provided
+              </span>
+            ) : null}
+            {isHighlighted ? (
+              <span className="rounded-full bg-amber-200 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-900">
+                Needs attention
+              </span>
+            ) : null}
+          </div>
+          {employeeId ? (
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+              onClick={() => setAddingRecord(true)}
+            >
+              <PlusIcon className="size-3.5" /> Add
+            </button>
+          ) : null}
+        </div>
+
+        {items.length === 0 ? (
+          <p className="py-2 text-sm text-muted-foreground">No department assignments available.</p>
+        ) : (
+          <div className="space-y-3">
+            {items.map((item, index) => {
+              const departmentName = departmentAssignmentPreview(item)
+              const assignedAt = formatDateTime(item.created_at)
+              const branchName = readNestedString(item.department, ["branch_name", "branchName"])
+              return (
+                <div
+                  key={`departments-${index}`}
+                  className="border-b border-border pb-3 last:border-b-0 last:pb-0"
+                >
+                  <div className="mb-2 flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="break-words text-sm font-semibold text-foreground">
+                        {departmentName}
+                      </p>
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+                        {isPrimaryDepartmentAssignment(item) ? (
+                          <span className="rounded-full bg-primary/10 px-2 py-0.5 font-medium text-primary">
+                            Primary
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        aria-label={`Edit department assignment ${index + 1}`}
+                        className="p-1 text-muted-foreground hover:text-foreground"
+                        onClick={() => setEditingRecord(item)}
+                      >
+                        <PencilIcon className="size-4" />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Delete department assignment ${index + 1}`}
+                        className="p-1 text-muted-foreground hover:text-foreground"
+                        onClick={() => setDeletingRecord(item)}
+                      >
+                        <Trash2Icon className="size-4" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 gap-1 text-sm sm:grid-cols-2">
+                    {renderAssignmentField("Assigned At", assignedAt)}
+                    {renderAssignmentField("Branch", branchName)}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      <AlertDialog
+        open={addingRecord || Boolean(editingRecord)}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeDialogs()
+          }
+        }}
+      >
+        <AlertDialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {editingRecord ? "Edit Department Assignment" : "Add Department Assignment"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {editingRecord
+                ? "Update the selected employee department assignment."
+                : "Create a new department assignment for this employee."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="grid gap-1 sm:col-span-2">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Department
+              </span>
+              <select
+                value={form.department_id}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, department_id: event.target.value }))
+                }
+                className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                disabled={departmentsLoading}
+              >
+                <option value="">
+                  {departmentsLoading ? "Loading departments..." : "Select department"}
+                </option>
+                {departmentOptions.map((option) => {
+                  const optionId = readNumber(option.id)
+                  if (optionId === null) {
+                    return null
+                  }
+                  return (
+                    <option key={`department-option-${optionId}`} value={String(optionId)}>
+                      {recordOptionLabel(option)}
+                    </option>
+                  )
+                })}
+              </select>
+            </label>
+
+            <label className="grid gap-1">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Primary Assignment
+              </span>
+              <select
+                value={form.is_primary}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, is_primary: event.target.value }))
+                }
+                className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+              >
+                <option value="false">No</option>
+                <option value="true">Yes</option>
+              </select>
+            </label>
+
+            <label className="grid gap-1">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Effective Date
+              </span>
+              <DatePickerPresets
+                value={form.effective_date}
+                onChange={(value) =>
+                  setForm((current) => ({ ...current, effective_date: value }))
+                }
+              />
+            </label>
+
+            <label className="grid gap-1 sm:col-span-2">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Reason
+              </span>
+              <Textarea
+                value={form.reason}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, reason: event.target.value }))
+                }
+                className="min-h-24 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              />
+            </label>
+          </div>
+          {mutationError ? <p className="text-sm text-rose-600">{mutationError}</p> : null}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={submitting}>Cancel</AlertDialogCancel>
+            <button
+              type="button"
+              disabled={submitting}
+              className="rounded-md bg-primary px-3 py-2 text-sm font-medium !text-white disabled:opacity-50"
+              onClick={() => void submitMutation()}
+            >
+              {submitting ? "Saving..." : editingRecord ? "Save" : "Add"}
+            </button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={Boolean(deletingRecord)}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeDialogs()
+          }
+        }}
+      >
+        <AlertDialogContent className="max-w-xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Department Assignment</AlertDialogTitle>
+            <AlertDialogDescription>
+              Remove this employee department assignment and keep the remaining assignment history aligned.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {mutationError ? <p className="text-sm text-rose-600">{mutationError}</p> : null}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={submitting}>Cancel</AlertDialogCancel>
+            <button
+              type="button"
+              disabled={submitting}
+              className="rounded-md bg-rose-600 px-3 py-2 text-sm font-medium text-white hover:bg-rose-700 disabled:opacity-50"
+              onClick={() => void deleteMutation()}
+            >
+              {submitting ? "Deleting..." : "Delete"}
+            </button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+}
+
+function PositionAssignmentsSection({
+  items,
+  employeeId,
+  onMutated,
+  requestedRouteKey,
+}: {
+  items: AdminRecord[]
+  employeeId: number | null
+  onMutated: () => Promise<void>
+  requestedRouteKey?: string | null
+}) {
+  const sectionRef = React.useRef<HTMLDivElement | null>(null)
+  const token = readStoredToken()
+  const routeKey = sectionTitleToRouteKey("Positions")
+  const isHighlighted = requestedRouteKey === routeKey
+  const [positionOptions, setPositionOptions] = React.useState<AdminRecord[]>([])
+  const [positionsLoading, setPositionsLoading] = React.useState(false)
+  const [addingRecord, setAddingRecord] = React.useState(false)
+  const [editingRecord, setEditingRecord] = React.useState<AdminRecord | null>(null)
+  const [deletingRecord, setDeletingRecord] = React.useState<AdminRecord | null>(null)
+  const [form, setForm] = React.useState<PositionAssignmentFormState>(() => emptyPositionAssignmentForm())
+  const [mutationError, setMutationError] = React.useState<string | null>(null)
+  const [submitting, setSubmitting] = React.useState(false)
+
+  React.useEffect(() => {
+    if (!isHighlighted || !sectionRef.current) {
+      return
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      sectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
+      sectionRef.current?.focus({ preventScroll: true })
+    })
+
+    return () => window.cancelAnimationFrame(frameId)
+  }, [isHighlighted, items.length])
+
+  React.useEffect(() => {
+    if (!addingRecord && !editingRecord) {
+      setForm(emptyPositionAssignmentForm())
+      return
+    }
+    if (editingRecord) {
+      setForm(readPositionAssignmentForm(editingRecord))
+      return
+    }
+    setForm(emptyPositionAssignmentForm())
+  }, [addingRecord, editingRecord])
+
+  React.useEffect(() => {
+    if (!token || (!addingRecord && !editingRecord)) {
+      return
+    }
+
+    let cancelled = false
+    setPositionsLoading(true)
+
+    void listPositions(token, {
+      page: 1,
+      limit: 200,
+      sortBy: "name",
+      sortOrder: "ASC",
+    })
+      .then((result) => {
+        if (!cancelled) {
+          setPositionOptions(result.rows)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setPositionOptions([])
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setPositionsLoading(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [addingRecord, editingRecord, token])
+
+  const closeDialogs = React.useCallback(() => {
+    setAddingRecord(false)
+    setEditingRecord(null)
+    setDeletingRecord(null)
+    setMutationError(null)
+    setSubmitting(false)
+  }, [])
+
+  const submitMutation = React.useCallback(async () => {
+    if (!employeeId || !token) {
+      setMutationError("Authentication required. Please log in again.")
+      return
+    }
+
+    const positionId = Number(form.position_id)
+    if (!Number.isFinite(positionId) || positionId <= 0) {
+      setMutationError("Select a position.")
+      return
+    }
+    if (!form.start_date.trim()) {
+      setMutationError("Start date is required.")
+      return
+    }
+
+    const payload: AdminRecord = {
+      employee_id: employeeId,
+      position_id: positionId,
+      assignment_type: form.assignment_type,
+      status: form.status,
+      is_primary: form.is_primary === "true",
+      start_date: form.start_date,
+      end_date: form.end_date.trim() || null,
+      notes: form.notes.trim() || null,
+    }
+
+    setSubmitting(true)
+    setMutationError(null)
+    try {
+      if (editingRecord) {
+        const assignmentId = readNumber(editingRecord.id)
+        if (assignmentId === null) {
+          setMutationError("Missing assignment id; cannot update this position.")
+          return
+        }
+        await patchEmployeePosition(token, assignmentId, payload)
+      } else {
+        await createEmployeePosition(token, payload)
+      }
+      closeDialogs()
+      await onMutated()
+    } catch (errorObject) {
+      setMutationError(errorObject instanceof Error ? errorObject.message : "Failed to save position assignment.")
+    } finally {
+      setSubmitting(false)
+    }
+  }, [closeDialogs, editingRecord, employeeId, form, onMutated, token])
+
+  const deleteMutation = React.useCallback(async () => {
+    if (!deletingRecord || !token) {
+      return
+    }
+
+    const assignmentId = readNumber(deletingRecord.id)
+    if (assignmentId === null) {
+      setMutationError("Missing assignment id; cannot delete this position.")
+      return
+    }
+
+    setSubmitting(true)
+    setMutationError(null)
+    try {
+      await deleteEmployeePosition(token, assignmentId)
+      closeDialogs()
+      await onMutated()
+    } catch (errorObject) {
+      setMutationError(errorObject instanceof Error ? errorObject.message : "Failed to delete position assignment.")
+    } finally {
+      setSubmitting(false)
+    }
+  }, [closeDialogs, deletingRecord, onMutated, token])
+
+  const renderAssignmentField = (label: string, value: string, className?: string) => {
+    if (!value || value === "-") {
+      return null
+    }
+    return (
+      <div className="min-w-0">
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          {label}
+        </p>
+        <p className={cn("break-words text-foreground", className)}>{value}</p>
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <div
+        id={`employee-profile-section-${routeKey}`}
+        ref={sectionRef}
+        tabIndex={-1}
+        aria-label="Positions section"
+        className={cn(
+          "scroll-mt-24 rounded-xl px-3 py-3 outline-none transition-all duration-500 lg:px-4",
+          isHighlighted && "ring-2 ring-amber-400 ring-offset-2 ring-offset-background bg-amber-50/80 shadow-sm"
+        )}
+      >
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-base font-semibold">Positions</span>
+            <span
+              className={cn(
+                "inline-flex min-w-5 items-center justify-center rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums",
+                items.length === 0
+                  ? "bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300"
+                  : "bg-primary/10 text-primary"
+              )}
+            >
+              {items.length}
+            </span>
+            {items.length === 0 ? (
+              <span className="text-xs font-medium text-rose-700 dark:text-rose-300">Not provided</span>
+            ) : null}
+            {isHighlighted ? (
+              <span className="rounded-full bg-amber-200 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-900">
+                Needs attention
+              </span>
+            ) : null}
+          </div>
+          {employeeId ? (
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+              onClick={() => setAddingRecord(true)}
+            >
+              <PlusIcon className="size-3.5" /> Add
+            </button>
+          ) : null}
+        </div>
+
+        {items.length === 0 ? (
+          <p className="py-2 text-sm text-muted-foreground">No position assignments available.</p>
+        ) : (
+          <div className="space-y-3">
+            {items.map((item, index) => {
+              const status = readString(item, ["status"])
+              const assignmentType = readString(item, ["assignment_type", "assignmentType"])
+              const positionName = positionAssignmentPreview(item)
+              const departmentName = readNestedString(
+                item.department ?? item.departmentDetail ?? item.primary_department,
+                ["name", "department_name", "departmentName"]
+              )
+              const startDate = formatProfileDate(
+                readString(item, ["start_date", "startDate", "effective_from", "effectiveFrom"])
+              )
+              const endDate = formatProfileDate(
+                readString(item, ["end_date", "endDate", "effective_to", "effectiveTo"])
+              )
+              const notes = readString(item, ["notes"])
+
+              return (
+                <div key={`positions-${index}`} className="border-b border-border pb-3 last:border-b-0 last:pb-0">
+                  <div className="mb-2 flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="break-words text-sm font-semibold text-foreground">{positionName}</p>
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+                        {assignmentType !== "-" ? (
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                            {formatLabelValue(assignmentType)}
+                          </span>
+                        ) : null}
+                        {status !== "-" ? (
+                          <span className={cn("font-medium", statusTone(status))}>
+                            {formatLabelValue(status)}
+                          </span>
+                        ) : null}
+                        {isPrimaryEmployeePosition(item) ? (
+                          <span className="rounded-full bg-primary/10 px-2 py-0.5 font-medium text-primary">
+                            Primary
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        aria-label={`Edit position assignment ${index + 1}`}
+                        className="p-1 text-muted-foreground hover:text-foreground"
+                        onClick={() => setEditingRecord(item)}
+                      >
+                        <PencilIcon className="size-4" />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Delete position assignment ${index + 1}`}
+                        className="p-1 text-muted-foreground hover:text-foreground"
+                        onClick={() => setDeletingRecord(item)}
+                      >
+                        <Trash2Icon className="size-4" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 gap-1 text-sm sm:grid-cols-2">
+                    {renderAssignmentField("Department", departmentName)}
+                    {renderAssignmentField("Start Date", startDate)}
+                    {renderAssignmentField("End Date", endDate)}
+                    {renderAssignmentField("Notes", notes)}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      <AlertDialog
+        open={addingRecord || Boolean(editingRecord)}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeDialogs()
+          }
+        }}
+      >
+        <AlertDialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {editingRecord ? "Edit Position Assignment" : "Add Position Assignment"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {editingRecord
+                ? "Update the selected employee position assignment."
+                : "Create a new position assignment for this employee."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="grid gap-1 sm:col-span-2">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Position
+              </span>
+              <select
+                value={form.position_id}
+                onChange={(event) => setForm((current) => ({ ...current, position_id: event.target.value }))}
+                className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                disabled={positionsLoading}
+              >
+                <option value="">
+                  {positionsLoading ? "Loading positions..." : "Select position"}
+                </option>
+                {positionOptions.map((option) => {
+                  const optionId = readNumber(option.id)
+                  if (optionId === null) {
+                    return null
+                  }
+                  return (
+                    <option key={`position-option-${optionId}`} value={String(optionId)}>
+                      {recordOptionLabel(option)}
+                    </option>
+                  )
+                })}
+              </select>
+            </label>
+
+            <label className="grid gap-1">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Assignment Type
+              </span>
+              <select
+                value={form.assignment_type}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, assignment_type: event.target.value }))
+                }
+                className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+              >
+                {POSITION_ASSIGNMENT_TYPE_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {formatLabelValue(option)}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="grid gap-1">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Status
+              </span>
+              <select
+                value={form.status}
+                onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}
+                className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+              >
+                {POSITION_ASSIGNMENT_STATUS_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {formatLabelValue(option)}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="grid gap-1">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Start Date
+              </span>
+              <DatePickerPresets
+                value={form.start_date}
+                onChange={(value) => setForm((current) => ({ ...current, start_date: value }))}
+              />
+            </label>
+
+            <label className="grid gap-1">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                End Date
+              </span>
+              <DatePickerPresets
+                value={form.end_date}
+                onChange={(value) => setForm((current) => ({ ...current, end_date: value }))}
+              />
+            </label>
+
+            <label className="grid gap-1">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Primary Assignment
+              </span>
+              <select
+                value={form.is_primary}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, is_primary: event.target.value }))
+                }
+                className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+              >
+                <option value="false">No</option>
+                <option value="true">Yes</option>
+              </select>
+            </label>
+
+            <label className="grid gap-1 sm:col-span-2">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Notes
+              </span>
+              <Textarea
+                value={form.notes}
+                onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))}
+                className="min-h-24 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              />
+            </label>
+          </div>
+          {mutationError ? <p className="text-sm text-rose-600">{mutationError}</p> : null}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={submitting}>Cancel</AlertDialogCancel>
+            <button
+              type="button"
+              disabled={submitting}
+              className="rounded-md bg-primary px-3 py-2 text-sm font-medium !text-white disabled:opacity-50"
+              onClick={() => void submitMutation()}
+            >
+              {submitting ? "Saving..." : editingRecord ? "Save" : "Add"}
+            </button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={Boolean(deletingRecord)}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeDialogs()
+          }
+        }}
+      >
+        <AlertDialogContent className="max-w-xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Position Assignment</AlertDialogTitle>
+            <AlertDialogDescription>
+              Remove this employee position assignment. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {mutationError ? <p className="text-sm text-rose-600">{mutationError}</p> : null}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={submitting}>Cancel</AlertDialogCancel>
+            <button
+              type="button"
+              disabled={submitting}
+              className="rounded-md bg-rose-600 px-3 py-2 text-sm font-medium text-white hover:bg-rose-700 disabled:opacity-50"
+              onClick={() => void deleteMutation()}
+            >
+              {submitting ? "Deleting..." : "Delete"}
+            </button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+}
+
+function EmployeeMovementsSection({
+  items,
+  employeeId,
+  onMutated,
+  requestedRouteKey,
+}: {
+  items: AdminRecord[]
+  employeeId: number | null
+  onMutated: () => Promise<void>
+  requestedRouteKey?: string | null
+}) {
+  const sectionRef = React.useRef<HTMLDivElement | null>(null)
+  const token = readStoredToken()
+  const routeKey = sectionTitleToRouteKey("Movements")
+  const isHighlighted = requestedRouteKey === routeKey
+  const [branchOptions, setBranchOptions] = React.useState<AdminRecord[]>([])
+  const [departmentOptions, setDepartmentOptions] = React.useState<AdminRecord[]>([])
+  const [positionOptions, setPositionOptions] = React.useState<AdminRecord[]>([])
+  const [managerOptions, setManagerOptions] = React.useState<AdminRecord[]>([])
+  const [gradeOptions, setGradeOptions] = React.useState<AdminRecord[]>([])
+  const [costCenterOptions, setCostCenterOptions] = React.useState<AdminRecord[]>([])
+  const [optionsLoading, setOptionsLoading] = React.useState(false)
+  const [addingRecord, setAddingRecord] = React.useState(false)
+  const [viewingRecord, setViewingRecord] = React.useState<AdminRecord | null>(null)
+  const [movementOperations, setMovementOperations] = React.useState<AdminRecord[]>([])
+  const [operationsLoading, setOperationsLoading] = React.useState(false)
+  const [form, setForm] = React.useState<EmployeeMovementFormState>(() => emptyEmployeeMovementForm())
+  const [mutationError, setMutationError] = React.useState<string | null>(null)
+  const [detailError, setDetailError] = React.useState<string | null>(null)
+  const [submitting, setSubmitting] = React.useState(false)
+  const [actioningId, setActioningId] = React.useState<number | null>(null)
+
+  React.useEffect(() => {
+    if (!isHighlighted || !sectionRef.current) {
+      return
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      sectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
+      sectionRef.current?.focus({ preventScroll: true })
+    })
+
+    return () => window.cancelAnimationFrame(frameId)
+  }, [isHighlighted, items.length])
+
+  React.useEffect(() => {
+    if (!addingRecord) {
+      setForm(emptyEmployeeMovementForm())
+      setMutationError(null)
+      return
+    }
+
+    if (!token) {
+      return
+    }
+
+    let cancelled = false
+    setOptionsLoading(true)
+
+    void Promise.all([
+      listBranches(token, { page: 1, limit: 200 }),
+      listDepartments(token, { page: 1, limit: 200 }),
+      listPositions(token, { page: 1, limit: 200 }),
+      listEmployees(token, { page: 1, limit: 200, sortBy: "created_at", sortOrder: "DESC" }),
+      listEmployeeGrades(token),
+      listCostCenters(token),
+    ])
+      .then(([branches, departments, positions, managers, grades, costCenters]) => {
+        if (cancelled) {
+          return
+        }
+        setBranchOptions(branches.rows)
+        setDepartmentOptions(departments.rows)
+        setPositionOptions(positions.rows)
+        setManagerOptions(managers.rows)
+        setGradeOptions(grades)
+        setCostCenterOptions(costCenters)
+      })
+      .catch((errorObject) => {
+        if (!cancelled) {
+          setMutationError(errorObject instanceof Error ? errorObject.message : "Failed to load movement options.")
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setOptionsLoading(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [addingRecord, token])
+
+  React.useEffect(() => {
+    if (!viewingRecord || !token) {
+      setMovementOperations([])
+      setDetailError(null)
+      return
+    }
+
+    const movementId = readNumber(viewingRecord.id)
+    if (movementId === null) {
+      setMovementOperations([])
+      setDetailError("Missing movement id; unable to load operations.")
+      return
+    }
+
+    let cancelled = false
+    setOperationsLoading(true)
+    setDetailError(null)
+
+    void listEmployeeMovementOperations(token, movementId)
+      .then((rows) => {
+        if (!cancelled) {
+          setMovementOperations(rows)
+        }
+      })
+      .catch((errorObject) => {
+        if (!cancelled) {
+          setMovementOperations([])
+          setDetailError(errorObject instanceof Error ? errorObject.message : "Failed to load movement operations.")
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setOperationsLoading(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [token, viewingRecord])
+
+  const selectedDepartmentName = React.useMemo(() => {
+    const selected = departmentOptions.find((row) => String(readNumber(row.id) ?? "") === form.new_department_id)
+    const label = selected ? recordOptionLabel(selected) : ""
+    return label === "-" ? "" : label.trim().toLowerCase()
+  }, [departmentOptions, form.new_department_id])
+
+  const departmentPositionOptions = React.useMemo(
+    () =>
+      positionOptions.filter((row) =>
+        Boolean(form.new_department_id) && relatedDepartmentIds(row).has(Number(form.new_department_id))
+      ),
+    [form.new_department_id, positionOptions]
+  )
+
+  const filteredCostCenterOptions = React.useMemo(() => {
+    const selectedDepartmentId = form.new_department_id ? Number(form.new_department_id) : null
+    return costCenterOptions.filter((row) => {
+      const costCenterDepartmentId = readRelatedId(
+        row,
+        ["department", "departmentDetail", "primary_department", "primaryDepartment"],
+        ["department_id", "departmentId", "primary_department_id", "primaryDepartmentId"]
+      )
+      if (selectedDepartmentId === null) {
+        return true
+      }
+      return costCenterDepartmentId === null || costCenterDepartmentId === selectedDepartmentId
+    })
+  }, [costCenterOptions, form.new_department_id])
+
+  const filteredManagerOptions = React.useMemo(() => {
+    return managerOptions
+      .filter((row) => readNumber(row.id) !== employeeId)
+      .filter((row) => {
+        if (!form.new_department_id) {
+          return true
+        }
+        return (
+          relatedDepartmentIds(row).has(Number(form.new_department_id)) ||
+          (selectedDepartmentName !== "" && relatedDepartmentNames(row).has(selectedDepartmentName))
+        )
+      })
+  }, [employeeId, form.new_department_id, managerOptions, selectedDepartmentName])
+
+  const sortedItems = React.useMemo(
+    () =>
+      [...items].sort((first, second) => {
+        const firstCreatedAt = new Date(readString(first, ["createdAt", "created_at"])).getTime()
+        const secondCreatedAt = new Date(readString(second, ["createdAt", "created_at"])).getTime()
+        return (Number.isFinite(secondCreatedAt) ? secondCreatedAt : 0) - (Number.isFinite(firstCreatedAt) ? firstCreatedAt : 0)
+      }),
+    [items]
+  )
+
+  const showBranchField = form.movement_type === "BRANCH_TRANSFER" || form.movement_type === "COMPOSITE"
+  const showDepartmentField = form.movement_type === "DEPARTMENT_TRANSFER" || form.movement_type === "COMPOSITE"
+  const showPositionField = ["POSITION_CHANGE", "PROMOTION", "DEMOTION", "COMPOSITE"].includes(form.movement_type)
+  const showManagerField = form.movement_type === "REPORTING_MANAGER_CHANGE" || form.movement_type === "COMPOSITE"
+  const showGradeField = form.movement_type === "GRADE_CHANGE" || form.movement_type === "COMPOSITE"
+  const showCostCenterField = form.movement_type === "COST_CENTER_CHANGE" || form.movement_type === "COMPOSITE"
+  const showEmploymentTypeField =
+    form.movement_type === "EMPLOYMENT_TYPE_CHANGE" || form.movement_type === "COMPOSITE"
+
+  const closeAddDialog = React.useCallback(() => {
+    setAddingRecord(false)
+    setMutationError(null)
+    setSubmitting(false)
+  }, [])
+
+  const submitCreate = React.useCallback(async () => {
+    if (!token || employeeId === null) {
+      setMutationError("Authentication required. Please log in again.")
+      return
+    }
+
+    if (!form.title.trim()) {
+      setMutationError("Title is required.")
+      return
+    }
+    if (!form.reason.trim()) {
+      setMutationError("Reason is required.")
+      return
+    }
+    if (!form.effective_date.trim()) {
+      setMutationError("Effective date is required.")
+      return
+    }
+
+    const selectedTargets = [
+      form.new_branch_id,
+      form.new_department_id,
+      form.new_position_id,
+      form.new_grade_id,
+      form.new_cost_center_id,
+      form.new_manager_employee_id,
+      form.new_employment_type,
+    ].filter((value) => value.trim() !== "")
+
+    if (showBranchField && !form.new_branch_id) {
+      setMutationError("Choose the target branch for this movement.")
+      return
+    }
+    if (showDepartmentField && !form.new_department_id) {
+      setMutationError("Choose the target department for this movement.")
+      return
+    }
+    if (showPositionField && !form.new_position_id) {
+      setMutationError("Choose the target position for this movement.")
+      return
+    }
+    if (showManagerField && !form.new_manager_employee_id) {
+      setMutationError("Choose the target reporting manager for this movement.")
+      return
+    }
+    if (showGradeField && !form.new_grade_id) {
+      setMutationError("Choose the target grade for this movement.")
+      return
+    }
+    if (showCostCenterField && !form.new_cost_center_id) {
+      setMutationError("Choose the target cost center for this movement.")
+      return
+    }
+    if (showEmploymentTypeField && !form.new_employment_type) {
+      setMutationError("Choose the target employment type for this movement.")
+      return
+    }
+    if (form.movement_type === "COMPOSITE" && selectedTargets.length === 0) {
+      setMutationError("Choose at least one target change for a composite movement.")
+      return
+    }
+
+    const payload: AdminRecord = {
+      employee_id: employeeId,
+      movement_type: form.movement_type,
+      title: form.title.trim(),
+      reason: form.reason.trim(),
+      effective_date: form.effective_date,
+    }
+
+    if (form.new_branch_id) {
+      payload.new_branch_id = Number(form.new_branch_id)
+    }
+    if (form.new_department_id) {
+      payload.new_department_id = Number(form.new_department_id)
+    }
+    if (form.new_position_id) {
+      payload.new_position_id = Number(form.new_position_id)
+    }
+    if (form.new_grade_id) {
+      payload.new_grade_id = Number(form.new_grade_id)
+    }
+    if (form.new_cost_center_id) {
+      payload.new_cost_center_id = Number(form.new_cost_center_id)
+    }
+    if (form.new_manager_employee_id) {
+      payload.new_manager_employee_id = Number(form.new_manager_employee_id)
+    }
+    if (form.new_employment_type) {
+      payload.new_employment_type = form.new_employment_type
+    }
+
+    setSubmitting(true)
+    setMutationError(null)
+    try {
+      await createEmployeeMovement(token, payload)
+      closeAddDialog()
+      await onMutated()
+    } catch (errorObject) {
+      setMutationError(errorObject instanceof Error ? errorObject.message : "Failed to create movement.")
+    } finally {
+      setSubmitting(false)
+    }
+  }, [
+    closeAddDialog,
+    employeeId,
+    form,
+    onMutated,
+    showBranchField,
+    showCostCenterField,
+    showDepartmentField,
+    showEmploymentTypeField,
+    showGradeField,
+    showManagerField,
+    showPositionField,
+    token,
+  ])
+
+  const triggerMovementAction = React.useCallback(
+    async (movement: AdminRecord, action: "submit" | "cancel") => {
+      if (!token) {
+        setMutationError("Authentication required. Please log in again.")
+        return
+      }
+
+      const movementId = readNumber(movement.id)
+      if (movementId === null) {
+        setMutationError("Missing movement id; cannot continue.")
+        return
+      }
+
+      setActioningId(movementId)
+      setMutationError(null)
+      try {
+        if (action === "submit") {
+          await submitEmployeeMovement(token, movementId)
+        } else {
+          await cancelEmployeeMovement(token, movementId)
+        }
+        await onMutated()
+      } catch (errorObject) {
+        setMutationError(errorObject instanceof Error ? errorObject.message : `Failed to ${action} movement.`)
+      } finally {
+        setActioningId(null)
+      }
+    },
+    [onMutated, token]
+  )
+
+  const renderMovementField = (label: string, value: string, className?: string) => {
+    if (!value || value === "-") {
+      return null
+    }
+    return (
+      <div className="min-w-0">
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          {label}
+        </p>
+        <p className={cn("break-words text-foreground", className)}>{value}</p>
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <div
+        id={`employee-profile-section-${routeKey}`}
+        ref={sectionRef}
+        tabIndex={-1}
+        aria-label="Movements section"
+        className={cn(
+          "scroll-mt-24 rounded-xl px-3 py-3 outline-none transition-all duration-500 lg:px-4",
+          isHighlighted && "ring-2 ring-amber-400 ring-offset-2 ring-offset-background bg-amber-50/80 shadow-sm"
+        )}
+      >
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-base font-semibold">Movements</span>
+            <span
+              className={cn(
+                "inline-flex min-w-5 items-center justify-center rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums",
+                sortedItems.length === 0
+                  ? "bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300"
+                  : "bg-primary/10 text-primary"
+              )}
+            >
+              {sortedItems.length}
+            </span>
+            {sortedItems.length === 0 ? (
+              <span className="text-xs font-medium text-rose-700 dark:text-rose-300">Not provided</span>
+            ) : null}
+            {isHighlighted ? (
+              <span className="rounded-full bg-amber-200 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-900">
+                Needs attention
+              </span>
+            ) : null}
+          </div>
+          {employeeId !== null ? (
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+              onClick={() => setAddingRecord(true)}
+            >
+              <PlusIcon className="size-3.5" /> Add
+            </button>
+          ) : null}
+        </div>
+
+        {mutationError ? <p className="mb-2 text-sm text-rose-600">{mutationError}</p> : null}
+
+        {sortedItems.length === 0 ? (
+          <p className="py-2 text-sm text-muted-foreground">No employee movements available.</p>
+        ) : (
+          <div className="space-y-3">
+            {sortedItems.map((item, index) => {
+              const movementId = readNumber(item.id)
+              const movementNo = readString(item, ["movementNo", "movement_no"])
+              const movementType = readString(item, ["movementType", "movement_type"])
+              const status = readString(item, ["status"])
+              const effectiveDate = formatProfileDate(readString(item, ["effectiveDate", "effective_date"]))
+              const createdAt = formatDateTime(readString(item, ["createdAt", "created_at"]))
+              const applicationError = readString(item, ["applicationError", "application_error"])
+              const changes = asRecordArray(item.changes)
+
+              return (
+                <div key={`movements-${movementId ?? index}`} className="border-b border-border pb-3 last:border-b-0 last:pb-0">
+                  <div className="mb-2 flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="break-words text-sm font-semibold text-foreground">
+                        {readString(item, ["title"])}
+                      </p>
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+                        {movementNo !== "-" ? (
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                            {movementNo}
+                          </span>
+                        ) : null}
+                        {movementType !== "-" ? (
+                          <span className="rounded-full bg-primary/10 px-2 py-0.5 font-medium text-primary">
+                            {formatLabelValue(movementType)}
+                          </span>
+                        ) : null}
+                        {status !== "-" ? (
+                          <span className={cn("font-medium", statusTone(status))}>
+                            {formatLabelValue(status)}
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-end gap-1">
+                      <button
+                        type="button"
+                        aria-label={`View movement ${index + 1}`}
+                        className="p-1 text-muted-foreground hover:text-foreground"
+                        onClick={() => setViewingRecord(item)}
+                      >
+                        <EyeIcon className="size-4" />
+                      </button>
+                      {status !== "-" && movementSupportsSubmit(status) ? (
+                        <button
+                          type="button"
+                          disabled={actioningId === movementId}
+                          className="rounded-md border border-primary/30 px-2 py-1 text-xs font-medium text-primary hover:bg-primary/5 disabled:opacity-50"
+                          onClick={() => {
+                            void triggerMovementAction(item, "submit")
+                          }}
+                        >
+                          {actioningId === movementId ? "Submitting..." : "Submit"}
+                        </button>
+                      ) : null}
+                      {status !== "-" && movementSupportsCancel(status) ? (
+                        <button
+                          type="button"
+                          disabled={actioningId === movementId}
+                          className="rounded-md border border-rose-200 px-2 py-1 text-xs font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+                          onClick={() => {
+                            void triggerMovementAction(item, "cancel")
+                          }}
+                        >
+                          {actioningId === movementId ? "Working..." : "Cancel"}
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 gap-1 text-sm sm:grid-cols-2">
+                    {renderMovementField("Effective Date", effectiveDate)}
+                    {renderMovementField("Created", createdAt)}
+                    {renderMovementField("Reason", readString(item, ["reason"]))}
+                    {renderMovementField(
+                      "Application Error",
+                      applicationError,
+                      "text-rose-600 dark:text-rose-400"
+                    )}
+                  </div>
+                  {changes.length > 0 ? (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {changes.map((change, changeIndex) => (
+                        <span
+                          key={`movement-change-${movementId ?? index}-${changeIndex}`}
+                          className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                        >
+                          {formatLabelValue(readString(change, ["field"]))}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      <AlertDialog
+        open={addingRecord}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeAddDialog()
+          }
+        }}
+      >
+        <AlertDialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Add Employee Movement</AlertDialogTitle>
+            <AlertDialogDescription>
+              Create a movement draft for this employee, then submit it from the movements list.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="grid gap-1">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Movement Type
+              </span>
+              <select
+                value={form.movement_type}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    movement_type: event.target.value,
+                    new_branch_id: "",
+                    new_department_id: "",
+                    new_position_id: "",
+                    new_grade_id: "",
+                    new_cost_center_id: "",
+                    new_manager_employee_id: "",
+                    new_employment_type: "",
+                  }))
+                }
+                className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                disabled={optionsLoading}
+              >
+                {EMPLOYEE_MOVEMENT_TYPE_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {formatLabelValue(option)}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="grid gap-1">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Effective Date
+              </span>
+              <DatePickerPresets
+                value={form.effective_date}
+                onChange={(value) => setForm((current) => ({ ...current, effective_date: value }))}
+              />
+            </label>
+
+            <label className="grid gap-1 sm:col-span-2">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Title
+              </span>
+              <input
+                value={form.title}
+                onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
+                className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                placeholder="Movement title"
+              />
+            </label>
+
+            <label className="grid gap-1 sm:col-span-2">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Reason
+              </span>
+              <Textarea
+                value={form.reason}
+                onChange={(event) => setForm((current) => ({ ...current, reason: event.target.value }))}
+                className="min-h-24 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                placeholder="Why this movement is needed"
+              />
+            </label>
+
+            {showBranchField ? (
+              <label className="grid gap-1">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Target Branch
+                </span>
+                <select
+                  value={form.new_branch_id}
+                  onChange={(event) => setForm((current) => ({ ...current, new_branch_id: event.target.value }))}
+                  className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                  disabled={optionsLoading}
+                >
+                  <option value="">{optionsLoading ? "Loading branches..." : "Select branch"}</option>
+                  {branchOptions.map((option) => {
+                    const optionId = readNumber(option.id)
+                    if (optionId === null) {
+                      return null
+                    }
+                    return (
+                      <option key={`movement-branch-${optionId}`} value={String(optionId)}>
+                        {recordOptionLabel(option)}
+                      </option>
+                    )
+                  })}
+                </select>
+              </label>
+            ) : null}
+
+            {showDepartmentField ? (
+              <label className="grid gap-1">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Target Department
+                </span>
+                <select
+                  value={form.new_department_id}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      new_department_id: event.target.value,
+                      new_position_id: "",
+                      new_cost_center_id: "",
+                      new_manager_employee_id: "",
+                    }))
+                  }
+                  className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                  disabled={optionsLoading}
+                >
+                  <option value="">{optionsLoading ? "Loading departments..." : "Select department"}</option>
+                  {departmentOptions.map((option) => {
+                    const optionId = readNumber(option.id)
+                    if (optionId === null) {
+                      return null
+                    }
+                    return (
+                      <option key={`movement-department-${optionId}`} value={String(optionId)}>
+                        {recordOptionLabel(option)}
+                      </option>
+                    )
+                  })}
+                </select>
+              </label>
+            ) : null}
+
+            {showPositionField ? (
+              <label className="grid gap-1">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Target Position
+                </span>
+                <select
+                  value={form.new_position_id}
+                  onChange={(event) => setForm((current) => ({ ...current, new_position_id: event.target.value }))}
+                  className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                  disabled={optionsLoading}
+                >
+                  <option value="">
+                    {optionsLoading
+                      ? "Loading positions..."
+                      : form.new_department_id && departmentPositionOptions.length > 0
+                        ? "Select department position"
+                        : "Select position"}
+                  </option>
+                  {(form.new_department_id && departmentPositionOptions.length > 0
+                    ? departmentPositionOptions
+                    : positionOptions
+                  ).map((option) => {
+                    const optionId = readNumber(option.id)
+                    if (optionId === null) {
+                      return null
+                    }
+                    return (
+                      <option key={`movement-position-${optionId}`} value={String(optionId)}>
+                        {recordOptionLabel(option)}
+                      </option>
+                    )
+                  })}
+                </select>
+              </label>
+            ) : null}
+
+            {showManagerField ? (
+              <label className="grid gap-1">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Target Manager
+                </span>
+                <select
+                  value={form.new_manager_employee_id}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, new_manager_employee_id: event.target.value }))
+                  }
+                  className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                  disabled={optionsLoading}
+                >
+                  <option value="">
+                    {optionsLoading
+                      ? "Loading managers..."
+                      : form.new_department_id && filteredManagerOptions.length > 0
+                        ? "Select department manager"
+                        : "Select manager"}
+                  </option>
+                  {(form.new_department_id ? filteredManagerOptions : managerOptions).map((option) => {
+                    const optionId = readNumber(option.id)
+                    if (optionId === null) {
+                      return null
+                    }
+                    return (
+                      <option key={`movement-manager-${optionId}`} value={String(optionId)}>
+                        {employeeDisplayName(option)}
+                      </option>
+                    )
+                  })}
+                </select>
+              </label>
+            ) : null}
+
+            {showGradeField ? (
+              <label className="grid gap-1">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Target Grade
+                </span>
+                <select
+                  value={form.new_grade_id}
+                  onChange={(event) => setForm((current) => ({ ...current, new_grade_id: event.target.value }))}
+                  className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                  disabled={optionsLoading}
+                >
+                  <option value="">{optionsLoading ? "Loading grades..." : "Select grade"}</option>
+                  {gradeOptions.map((option) => {
+                    const optionId = readNumber(option.id)
+                    if (optionId === null) {
+                      return null
+                    }
+                    return (
+                      <option key={`movement-grade-${optionId}`} value={String(optionId)}>
+                        {recordOptionLabel(option)}
+                      </option>
+                    )
+                  })}
+                </select>
+              </label>
+            ) : null}
+
+            {showCostCenterField ? (
+              <label className="grid gap-1">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Target Cost Center
+                </span>
+                <select
+                  value={form.new_cost_center_id}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, new_cost_center_id: event.target.value }))
+                  }
+                  className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                  disabled={optionsLoading}
+                >
+                  <option value="">
+                    {optionsLoading
+                      ? "Loading cost centers..."
+                      : form.new_department_id && filteredCostCenterOptions.length > 0
+                        ? "Select department cost center"
+                        : "Select cost center"}
+                  </option>
+                  {(form.new_department_id ? filteredCostCenterOptions : costCenterOptions).map((option) => {
+                    const optionId = readNumber(option.id)
+                    if (optionId === null) {
+                      return null
+                    }
+                    return (
+                      <option key={`movement-cost-center-${optionId}`} value={String(optionId)}>
+                        {recordOptionLabel(option)}
+                      </option>
+                    )
+                  })}
+                </select>
+              </label>
+            ) : null}
+
+            {showEmploymentTypeField ? (
+              <label className="grid gap-1">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Target Employment Type
+                </span>
+                <select
+                  value={form.new_employment_type}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, new_employment_type: event.target.value }))
+                  }
+                  className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                >
+                  <option value="">Select employment type</option>
+                  {EMPLOYMENT_TYPE_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {formatLabelValue(option)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+          </div>
+          {mutationError ? <p className="text-sm text-rose-600">{mutationError}</p> : null}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={submitting}>Cancel</AlertDialogCancel>
+            <button
+              type="button"
+              disabled={submitting || optionsLoading}
+              className="rounded-md bg-primary px-3 py-2 text-sm font-medium !text-white disabled:opacity-50"
+              onClick={() => {
+                void submitCreate()
+              }}
+            >
+              {submitting ? "Adding..." : "Add Draft"}
+            </button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={Boolean(viewingRecord)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setViewingRecord(null)
+            setMovementOperations([])
+            setDetailError(null)
+          }
+        }}
+      >
+        <AlertDialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Movement Details</AlertDialogTitle>
+            <AlertDialogDescription>
+              Review movement changes, lifecycle status, and downstream operations.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {viewingRecord ? (
+            <div className="space-y-4">
+              <div className="grid gap-3 sm:grid-cols-2">
+                {renderMovementField("Movement No", readString(viewingRecord, ["movementNo", "movement_no"]))}
+                {renderMovementField("Type", formatLabelValue(readString(viewingRecord, ["movementType", "movement_type"])))}
+                {renderMovementField("Status", formatLabelValue(readString(viewingRecord, ["status"])), statusTone(readString(viewingRecord, ["status"])))}
+                {renderMovementField("Effective Date", formatProfileDate(readString(viewingRecord, ["effectiveDate", "effective_date"])))}
+                {renderMovementField("Created", formatDateTime(readString(viewingRecord, ["createdAt", "created_at"])))}
+                {renderMovementField("Updated", formatDateTime(readString(viewingRecord, ["updatedAt", "updated_at"])))}
+                {renderMovementField("Submitted", formatDateTime(readString(viewingRecord, ["submittedAt", "submitted_at"])))}
+                {renderMovementField("Approved", formatDateTime(readString(viewingRecord, ["approvedAt", "approved_at"])))}
+              </div>
+
+              <div className="grid gap-1">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Title
+                </p>
+                <p className="text-sm text-foreground">{readString(viewingRecord, ["title"])}</p>
+              </div>
+
+              <div className="grid gap-1">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Reason
+                </p>
+                <p className="text-sm text-foreground">{readString(viewingRecord, ["reason"])}</p>
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Changes
+                </p>
+                {asRecordArray(viewingRecord.changes).length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No change breakdown was returned for this movement.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {asRecordArray(viewingRecord.changes).map((change, index) => (
+                      <div key={`movement-detail-change-${index}`} className="rounded-lg border border-border p-3">
+                        <p className="text-sm font-semibold text-foreground">
+                          {formatLabelValue(readString(change, ["field"]))}
+                        </p>
+                        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                          {renderMovementField("From", movementChangeValueSummary(change.oldValue))}
+                          {renderMovementField("To", movementChangeValueSummary(change.newValue))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Operations
+                </p>
+                {operationsLoading ? (
+                  <p className="text-sm text-muted-foreground">Loading movement operations...</p>
+                ) : detailError ? (
+                  <p className="text-sm text-rose-600">{detailError}</p>
+                ) : movementOperations.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No downstream operations were returned.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {movementOperations.map((operation, index) => (
+                      <div key={`movement-operation-${readNumber(operation.id) ?? index}`} className="rounded-lg border border-border p-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-sm font-semibold text-foreground">
+                            {formatLabelValue(readString(operation, ["operationType", "operation_type"]))}
+                          </span>
+                          <span className={cn("text-xs font-medium", statusTone(readString(operation, ["status"])))}>{formatLabelValue(readString(operation, ["status"]))}</span>
+                        </div>
+                        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                          {renderMovementField("Resource Key", readString(operation, ["resourceKey", "resource_key"]))}
+                          {renderMovementField("Updated", formatDateTime(readString(operation, ["updatedAt", "updated_at"])))}
+                          {renderMovementField("Error", readString(operation, ["errorMessage", "error_message"]), "text-rose-600 dark:text-rose-400")}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : null}
+          <AlertDialogFooter>
+            <AlertDialogCancel>Close</AlertDialogCancel>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -1884,15 +4229,24 @@ export function EmployeeProfilePage({
   const [departmentId, setDepartmentId] = React.useState("")
   const [positionId, setPositionId] = React.useState("")
   const [managerId, setManagerId] = React.useState("")
+  const [gradeId, setGradeId] = React.useState("")
+  const [costCenterId, setCostCenterId] = React.useState("")
+  const [assignmentEffectiveDate, setAssignmentEffectiveDate] = React.useState(
+    () => new Date().toISOString().slice(0, 10)
+  )
+  const [assignmentReason, setAssignmentReason] = React.useState("")
   const [departmentOptions, setDepartmentOptions] = React.useState<AdminRecord[]>([])
   const [positionOptions, setPositionOptions] = React.useState<AdminRecord[]>([])
   const [managerOptions, setManagerOptions] = React.useState<AdminRecord[]>([])
+  const [gradeOptions, setGradeOptions] = React.useState<AdminRecord[]>([])
+  const [costCenterOptions, setCostCenterOptions] = React.useState<AdminRecord[]>([])
   const [organizationOptionsLoading, setOrganizationOptionsLoading] = React.useState(false)
   const [statusDialogOpen, setStatusDialogOpen] = React.useState(false)
   const [statusSubmitting, setStatusSubmitting] = React.useState(false)
   const [statusError, setStatusError] = React.useState<string | null>(null)
   const [statusForm, setStatusForm] = React.useState<EmployeeStatusFormState>({
     employment_status: "active",
+    effective_date: new Date().toISOString().slice(0, 10),
     exit_date: "",
     exit_reason: "",
     notes: "",
@@ -1923,6 +4277,20 @@ export function EmployeeProfilePage({
       ),
     [departmentId, positionOptions]
   )
+  const filteredCostCenterOptions = React.useMemo(() => {
+    const selectedDepartmentId = departmentId ? Number(departmentId) : null
+    return costCenterOptions.filter((row) => {
+      const costCenterDepartmentId = readRelatedId(
+        row,
+        ["department", "departmentDetail", "primary_department", "primaryDepartment"],
+        ["department_id", "departmentId", "primary_department_id", "primaryDepartmentId"]
+      )
+      if (selectedDepartmentId === null) {
+        return true
+      }
+      return costCenterDepartmentId === null || costCenterDepartmentId === selectedDepartmentId
+    })
+  }, [costCenterOptions, departmentId])
   const filteredManagerOptions = React.useMemo(
     () => {
       const eligible = managerOptions.filter((row) => readNumber(row.id) !== readNumber(employee?.id))
@@ -1936,6 +4304,32 @@ export function EmployeeProfilePage({
     },
     [departmentId, employee?.id, managerOptions, selectedDepartmentName]
   )
+
+  React.useEffect(() => {
+    if (!identityDialogOpen || !positionId) {
+      return
+    }
+
+    const hasSelectedPosition = departmentPositionOptions.some(
+      (row) => String(readNumber(row.id) ?? "") === positionId
+    )
+    if (!hasSelectedPosition) {
+      setPositionId("")
+    }
+  }, [departmentPositionOptions, identityDialogOpen, positionId])
+
+  React.useEffect(() => {
+    if (!identityDialogOpen || !managerId) {
+      return
+    }
+
+    const hasSelectedManager = filteredManagerOptions.some(
+      (row) => String(readNumber(row.id) ?? "") === managerId
+    )
+    if (!hasSelectedManager) {
+      setManagerId("")
+    }
+  }, [filteredManagerOptions, identityDialogOpen, managerId])
 
   const fetchEmployee = React.useCallback(async () => {
       const token = readStoredToken()
@@ -1969,8 +4363,29 @@ export function EmployeeProfilePage({
           if (employeeId === null) {
             setEmployee(mergeEmployeeProfileRecord(matched))
           } else {
-            const detailedEmployee = await getEmployeeById(employeeId, token).catch(() => null)
-            setEmployee(mergeEmployeeProfileRecord(detailedEmployee ?? matched))
+            const [detailedEmployee, assignmentResult, movementResult] = await Promise.all([
+              getEmployeeById(employeeId, token).catch(() => null),
+              listEmployeePositions(token, {
+                employee_id: employeeId,
+                page: 1,
+                limit: 100,
+              }).catch(() => null),
+              listEmployeeMovements(token).catch(() => null),
+            ])
+            const mergedEmployee = mergeEmployeeProfileRecord(detailedEmployee ?? matched)
+            const movementRows =
+              movementResult?.filter((row) => movementBelongsToEmployee(row, employeeId)) ??
+              firstRecordArray(mergedEmployee?.employee_movements, mergedEmployee?.employeeMovements)
+            setEmployee(
+              mergedEmployee
+                ? {
+                    ...mergedEmployee,
+                    position_assignments: assignmentResult?.rows ?? firstRecordArray(mergedEmployee.position_assignments),
+                    employee_movements: movementRows,
+                    employeeMovements: movementRows,
+                  }
+                : mergedEmployee
+            )
           }
         }
       } catch (errorObject) {
@@ -1985,39 +4400,32 @@ export function EmployeeProfilePage({
     if (!token) return
     setOrganizationOptionsLoading(true)
     try {
-      const [departments, positions, managers] = await Promise.all([
+      const selectedDepartmentNumber = Number(selectedDepartmentId)
+      const hasSelectedDepartment = Number.isFinite(selectedDepartmentNumber) && selectedDepartmentNumber > 0
+      const [departments, positions, managers, grades, costCenters] = await Promise.all([
         listDepartments(token, { page: 1, limit: 100 }),
-         selectedDepartmentId
-           ? listDepartmentPositions(token, selectedDepartmentId).then((rows) => ({
-              rows: rows.map((row) => {
-                const nestedPosition =
-                  asRecord(row.position) ??
-                  asRecord(row.positionDetail) ??
-                  asRecord(row.primary_position) ??
-                  asRecord(row.primaryPosition)
-                const position = nestedPosition ? { ...row, ...nestedPosition } : row
-                return {
-                  ...position,
-                  department_ids: Array.from(
-                    new Set([
-                      ...(Array.isArray(position.department_ids) ? position.department_ids : []),
-                      Number(selectedDepartmentId),
-                    ])
-                  ),
-                }
-              }),
-            }))
-          : listPositions(token, { page: 1, limit: 100 }),
-        listEmployees(token, {
-          page: 1,
-          limit: 100,
-          sortBy: "created_at",
-          sortOrder: "DESC",
-        }),
+        hasSelectedDepartment
+          ? listDepartmentPositions(token, selectedDepartmentId).then((rows) =>
+              normalizeDepartmentScopedPositionOptions(rows, selectedDepartmentNumber)
+            )
+          : Promise.resolve<AdminRecord[]>([]),
+        hasSelectedDepartment
+          ? listEmployees(token, {
+              page: 1,
+              limit: 100,
+              sortBy: "created_at",
+              sortOrder: "DESC",
+              department_id: selectedDepartmentNumber,
+            }).then((result) => result.rows)
+          : Promise.resolve<AdminRecord[]>([]),
+        listEmployeeGrades(token),
+        listCostCenters(token),
       ])
       setDepartmentOptions(departments.rows)
-      setPositionOptions(positions.rows)
-      setManagerOptions(managers.rows)
+      setPositionOptions(positions)
+      setManagerOptions(managers)
+      setGradeOptions(grades)
+      setCostCenterOptions(costCenters)
     } catch (errorObject) {
       setIdentityError(errorObject instanceof Error ? errorObject.message : "Failed to load organization options.")
     } finally {
@@ -2220,6 +4628,26 @@ export function EmployeeProfilePage({
                     ) ?? ""
                   )
                 )
+                setGradeId(
+                  String(
+                    readRelatedId(
+                      employee,
+                      ["grade", "gradeDetail"],
+                      ["grade_id", "gradeId"]
+                    ) ?? ""
+                  )
+                )
+                setCostCenterId(
+                  String(
+                    readRelatedId(
+                      employee,
+                      ["cost_center", "costCenter", "cost_center_detail", "costCenterDetail"],
+                      ["cost_center_id", "costCenterId"]
+                    ) ?? ""
+                  )
+                )
+                setAssignmentEffectiveDate(new Date().toISOString().slice(0, 10))
+                setAssignmentReason("")
                 setIdentityError(null)
                 setIdentityDialogOpen(true)
                 void loadOrganizationOptions(currentDepartmentId)
@@ -2356,6 +4784,13 @@ export function EmployeeProfilePage({
                 ))}
               </select>
             </label>
+            <label className="grid min-w-0 gap-1">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Effective Date</span>
+              <DatePickerPresets
+                value={statusForm.effective_date}
+                onChange={(value) => setStatusForm((prev) => ({ ...prev, effective_date: value }))}
+              />
+            </label>
             <label className={`grid min-w-0 gap-1 ${isExitedStatus ? "" : "opacity-60"}`}>
               <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Exit Date</span>
               {isExitedStatus ? (
@@ -2413,6 +4848,7 @@ export function EmployeeProfilePage({
 
                 const payload: EmployeeStatusPayload = {
                   employment_status: statusForm.employment_status,
+                  effective_date: statusForm.effective_date.trim(),
                   exit_date: isExitedStatus ? statusForm.exit_date.trim() || undefined : undefined,
                   exit_reason: isExitedStatus ? statusForm.exit_reason.trim() || undefined : undefined,
                   notes: statusForm.notes.trim() || undefined,
@@ -2558,6 +4994,45 @@ export function EmployeeProfilePage({
               </span>
             </label>
             <label className="grid gap-1">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Grade</span>
+              <select
+                value={gradeId}
+                disabled={organizationOptionsLoading}
+                onChange={(event) => setGradeId(event.target.value)}
+                className="h-9 min-w-0 rounded-md border border-slate-300 bg-background px-3 text-sm"
+              >
+                <option value="">No grade</option>
+                {gradeOptions.map((option) => {
+                  const id = readNumber(option.id)
+                  return id === null ? null : <option key={id} value={id}>{recordOptionLabel(option)}</option>
+                })}
+              </select>
+            </label>
+            <label className="grid gap-1">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Cost Center</span>
+              <select
+                value={costCenterId}
+                disabled={organizationOptionsLoading}
+                onChange={(event) => setCostCenterId(event.target.value)}
+                className="h-9 min-w-0 rounded-md border border-slate-300 bg-background px-3 text-sm"
+              >
+                <option value="">No cost center</option>
+                {filteredCostCenterOptions.map((option) => {
+                  const id = readNumber(option.id)
+                  return id === null ? null : <option key={id} value={id}>{recordOptionLabel(option)}</option>
+                })}
+              </select>
+            </label>
+            <label className="grid gap-1">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Assignment Effective Date
+              </span>
+              <DatePickerPresets
+                value={assignmentEffectiveDate}
+                onChange={setAssignmentEffectiveDate}
+              />
+            </label>
+            <label className="grid gap-1">
               <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                 New Password (Optional)
               </span>
@@ -2579,6 +5054,16 @@ export function EmployeeProfilePage({
                   {showProfilePassword ? <EyeOffIcon className="h-4 w-4" /> : <EyeIcon className="h-4 w-4" />}
                 </button>
               </div>
+            </label>
+            <label className="grid gap-1 sm:col-span-2">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Assignment Reason (Optional)
+              </span>
+              <Textarea
+                value={assignmentReason}
+                onChange={(event) => setAssignmentReason(event.target.value)}
+                className="min-h-20 rounded-md border border-slate-300 px-3 py-2 text-sm"
+              />
             </label>
           </div>
           {identityError ? <p className="text-sm text-rose-600">{identityError}</p> : null}
@@ -2638,6 +5123,10 @@ export function EmployeeProfilePage({
                   setIdentityError("Position is required.")
                   return
                 }
+                if (!assignmentEffectiveDate.trim()) {
+                  setIdentityError("Assignment effective date is required.")
+                  return
+                }
 
                 setIdentitySubmitting(true)
                 setIdentityError(null)
@@ -2654,61 +5143,27 @@ export function EmployeeProfilePage({
                   const employeePayload: AdminRecord = {
                     first_name: trimmedFirstName,
                     last_name: trimmedLastName,
-                    primary_department_id: Number(departmentId),
-                    primary_position_id: Number(positionId),
-                    position_id: Number(positionId),
-                    reports_to: managerId ? Number(managerId) : null,
+                  }
+                  await patchEmployeeById(employeeId, token, employeePayload)
+                  await patchEmployeeAssignment(token, employeeId, {
+                    effective_date: assignmentEffectiveDate.trim(),
+                    branch_id: readRelatedId(
+                      employee,
+                      ["primary_branch", "primaryBranch", "branch", "branchDetail"],
+                      ["primary_branch_id", "primaryBranchId", "branch_id", "branchId"]
+                    ),
                     departments: [
                       {
                         department_id: Number(departmentId),
                         is_primary: true,
                       },
                     ],
-                  }
-                  await patchEmployeeById(employeeId, token, employeePayload)
-
-                  const currentPositionId = readRelatedId(
-                    employee,
-                    ["primary_position", "primaryPosition", "position", "positionDetail"],
-                    ["primary_position_id", "primaryPositionId", "position_id", "positionId"]
-                  )
-                  const assignments = await listEmployeePositions(token, {
-                    employee_id: employeeId,
-                    page: 1,
-                    limit: 100,
+                    primary_position_id: Number(positionId),
+                    reports_to: managerId ? Number(managerId) : null,
+                    grade_id: gradeId ? Number(gradeId) : null,
+                    cost_center_id: costCenterId ? Number(costCenterId) : null,
+                    reason: assignmentReason.trim() || undefined,
                   })
-                  const primaryAssignment =
-                    assignments.rows.find(isPrimaryEmployeePosition) ??
-                    assignments.rows.find(
-                      (row) =>
-                        currentPositionId !== null &&
-                        readRelatedId(
-                          row,
-                          ["position", "positionDetail"],
-                          ["position_id", "positionId"]
-                        ) === currentPositionId
-                    ) ??
-                    assignments.rows.find((row) => {
-                      const status = readString(row, ["status"])
-                      return status === "-" || status.trim().toLowerCase() === "active"
-                    })
-                  const positionAssignmentPayload: AdminRecord = {
-                    employee_id: employeeId,
-                    department_id: Number(departmentId),
-                    position_id: Number(positionId),
-                    assignment_type: "primary",
-                    is_primary: true,
-                    status: "active",
-                  }
-                  const assignmentId = primaryAssignment ? readNumber(primaryAssignment.id) : null
-                  if (assignmentId !== null) {
-                    await patchEmployeePosition(token, assignmentId, positionAssignmentPayload)
-                  } else {
-                    await createEmployeePosition(token, {
-                      ...positionAssignmentPayload,
-                      effective_from: new Date().toISOString().slice(0, 10),
-                    })
-                  }
                   if (userId !== null) {
                     await updateUserById(userId, token, payload)
                   }

@@ -480,7 +480,7 @@ export function EmployeeInviteView() {
         ["department_id", "departmentId", "primary_department_id", "primaryDepartmentId", "department"]
       )
     }
-    const byDepartment = positions
+    const byDepartmentCandidates: Array<LookupOption | null> = positions
       .filter((record) => relatedDepartmentIds(record).has(departmentId))
       .map<LookupOption | null>((record) => {
         const id = getId(record)
@@ -492,7 +492,9 @@ export function EmployeeInviteView() {
           departmentId,
         } satisfies LookupOption
       })
-      .filter((option): option is LookupOption => option !== null)
+    const byDepartment = byDepartmentCandidates.filter(
+      (option): option is LookupOption => option !== null
+    )
     if (byDepartment.length > 0) return byDepartment
     return allPositionOptions.filter(
       (option) =>
@@ -510,7 +512,7 @@ export function EmployeeInviteView() {
 
   const employeeOptions = React.useMemo(() => {
     if (departmentId === null) return []
-    return employees
+    const candidates: Array<LookupOption | null> = employees
       .filter((record) => {
         if (!relatedDepartmentIds(record).has(departmentId)) {
           return false
@@ -537,7 +539,7 @@ export function EmployeeInviteView() {
           departmentId,
         } satisfies LookupOption
       })
-      .filter((option): option is LookupOption => option !== null)
+    return candidates.filter((option): option is LookupOption => option !== null)
   }, [branchId, departmentId, employees])
 
   const workflowOptions = React.useMemo(

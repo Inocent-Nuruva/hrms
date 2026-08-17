@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
 
 import {
   confirmEmployeeImport,
-  downloadEmployeeImportResult,
+  downloadEmployeeImportErrorsReport,
   downloadEmployeeImportTemplate,
   getEmployeeImportPreview,
   getEmployeeImportResult,
@@ -1349,9 +1349,9 @@ function buildOverviewIssueSummary(
       parts.push("You can still import ready rows if Skip bad rows is on");
     }
   } else if (options?.hasResultReport) {
-    parts.push("Download the Excel result report for per-row error details");
+    parts.push("Download the Excel row report for per-row error details");
   } else {
-    parts.push("Fetch the Excel result report for per-row error details");
+    parts.push("Fetch the Excel row report for per-row error details");
   }
 
   return {
@@ -1721,7 +1721,7 @@ function ResultReportPanel({
             </p>
             {!dense ? (
               <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
-                Excel result report
+                Excel row report
               </p>
             ) : null}
           </div>
@@ -1764,7 +1764,7 @@ function ResultReportPanel({
           ) : (
             <DownloadIcon className="size-3" />
           )}
-          Fetch report
+          Fetch workbook
         </Button>
       </div>
     );
@@ -1772,7 +1772,7 @@ function ResultReportPanel({
 
   return (
     <p className="text-[11px] leading-snug text-muted-foreground">
-      No result report for this import.
+      No row report for this import.
     </p>
   );
 }
@@ -2136,7 +2136,7 @@ export function EmployeeImportView() {
             setInspectedBatchId(normalizedBatchId);
             setMessage(
               successMessage ??
-                "Import finished. Download the Excel result report to review row-level details.",
+                "Import finished. Download the Excel row report to review row-level details.",
             );
           }
           return;
@@ -2253,7 +2253,7 @@ export function EmployeeImportView() {
       setLoadingResultReportBatchId(normalizedBatchId);
       setError(null);
       try {
-        const report = await downloadEmployeeImportResult(
+        const report = await downloadEmployeeImportErrorsReport(
           token,
           normalizedBatchId,
         );
@@ -2275,7 +2275,7 @@ export function EmployeeImportView() {
         setError(
           reportError instanceof Error
             ? reportError.message
-            : "Failed to download the import result report.",
+            : "Failed to download the import row report.",
         );
       } finally {
         setLoadingResultReportBatchId("");

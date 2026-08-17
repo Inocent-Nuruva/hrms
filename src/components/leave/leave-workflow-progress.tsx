@@ -11,8 +11,18 @@ import {
  DialogTitle,
 } from "@/components/animate-ui/components/base/dialog"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { getMyLeaveRequest, type AdminRecord } from "@/lib/admin-api"
+import {
+ addLeaveRequestDocument,
+ downloadLeaveRequestDocument,
+ downloadMyLeaveRequestPdf,
+ fileToBase64UploadDto,
+ getMyLeaveRequest,
+ patchLeaveRequestMedicalDetail,
+ resolveBackendMediaUrl,
+ type AdminRecord,
+} from "@/lib/admin-api"
 import { cn } from "@/lib/utils"
 
 export type LeaveApprovalNode = {
@@ -121,6 +131,35 @@ function formatDateTime(value: string) {
  hour: "numeric",
  minute: "2-digit",
  })
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+ const url = URL.createObjectURL(blob)
+ const link = document.createElement("a")
+ link.href = url
+ link.download = filename
+ document.body.appendChild(link)
+ link.click()
+ link.remove()
+ URL.revokeObjectURL(url)
+}
+
+function readDateInputValue(record: AdminRecord | null, key: string) {
+ const value = readString(record, [key])
+ if (!value) return ""
+ return value.replace("T", " ").split(" ")[0] ?? ""
+}
+
+function createEmptyMedicalForm() {
+ return {
+  sickness_nature: "",
+  doctor_name: "",
+  doctor_phone: "",
+  hospital_name: "",
+  treatment_start_date: "",
+  treatment_end_date: "",
+  attachment_url: "",
+ }
 }
 
 function statusTone(status: string): "good" | "bad" | "warn" | "neutral" {
@@ -1017,6 +1056,11 @@ export function LeaveWorkflowDialog({
  const [loading, setLoading] = React.useState(false)
  const [error, setError] = React.useState<string | null>(null)
  const [detail, setDetail] = React.useState<AdminRecord | null>(fallbackRow ?? null)
+ const [actionError, setActionError] = React.useState<string | null>(null)
+ const [actionMessage, setActionMessage] = React.useState<string | null>(null)
+ const [busyAction, setBusyAction] = React.useState<"pdf" | "medical" | "document" | "document-download" | null>(null)
+ const [medicalForm, setMedicalForm] = React.useState(createEmptyMedicalForm)
+ const [documentFile, setDocumentFile] = React.useState<File | null>(null)
 
  React.useEffect(() => {
  if (!open) {
@@ -1025,6 +1069,8 @@ export function LeaveWorkflowDialog({
 
  setDetail(fallbackRow ?? null)
  setError(null)
+ setActionError(null)
+ setActionMessage(null)
 
  if (!token || requestId === null) {
  return
@@ -1059,6 +1105,148 @@ export function LeaveWorkflowDialog({
  }
  }, [fallbackRow, open, requestId, token])
 
+ React.useEffect(() => {
+  const medical = asRecord(detail?.medical_detail)
+  setMedicalForm({
+   sickness_nature: readString(medical, ["sickness_nature"]),
+   doctor_name: readString(medical, ["doctor_name"]),
+   doctor_phone: readString(medical, ["doctor_phone"]),
+   hospital_name: readString(medical, ["hospital_name"]),
+   treatment_start_date: readDateInputValue(medical, "treatment_start_date"),
+   treatment_end_date: readDateInputValue(medical, "treatment_end_date"),
+   attachment_url: readString(medical, ["attachment_url"]),
+  })
+  setDocumentFile(null)
+ }, [detail])
+
+ const documents = React.useMemo(
+  () => asRecordList(detail?.documents),
+  [detail?.documents],
+ )
+
+ const refreshDetail = React.useCallback(async () => {
+  if (!token || requestId === null) {
+   return
+  }
+  const payload = await getMyLeaveRequest(token, requestId)
+  setDetail(mergeLeaveWorkflowRows(payload, fallbackRow ?? null))
+ }, [fallbackRow, requestId, token])
+
+ const handleDownloadPdf = React.useCallback(async () => {
+  if (!token || requestId === null) {
+   return
+  }
+  setBusyAction("pdf")
+  setActionError(null)
+  setActionMessage(null)
+  try {
+   const result = await downloadMyLeaveRequestPdf(token, requestId)
+   downloadBlob(result.blob, result.filename)
+   setActionMessage("Leave request PDF downloaded.")
+  } catch (errorObject) {
+   setActionError(
+    errorObject instanceof Error
+     ? errorObject.message
+     : "Failed to download leave request PDF."
+   )
+  } finally {
+   setBusyAction(null)
+  }
+ }, [requestId, token])
+
+ const handleSaveMedicalDetail = React.useCallback(async () => {
+  if (!token || requestId === null) {
+   return
+  }
+  setBusyAction("medical")
+  setActionError(null)
+  setActionMessage(null)
+  try {
+   await patchLeaveRequestMedicalDetail(token, requestId, {
+    sickness_nature: medicalForm.sickness_nature.trim() || undefined,
+    doctor_name: medicalForm.doctor_name.trim() || undefined,
+    doctor_phone: medicalForm.doctor_phone.trim() || undefined,
+    hospital_name: medicalForm.hospital_name.trim() || undefined,
+    treatment_start_date: medicalForm.treatment_start_date || undefined,
+    treatment_end_date: medicalForm.treatment_end_date || undefined,
+    attachment_url: medicalForm.attachment_url.trim() || undefined,
+   })
+   await refreshDetail()
+   setActionMessage("Medical detail saved.")
+  } catch (errorObject) {
+   setActionError(
+    errorObject instanceof Error
+     ? errorObject.message
+     : "Failed to save medical detail."
+   )
+  } finally {
+   setBusyAction(null)
+  }
+ }, [medicalForm, refreshDetail, requestId, token])
+
+ const handleUploadDocument = React.useCallback(async () => {
+  if (!token || requestId === null) {
+   return
+  }
+  if (!documentFile) {
+   setActionError("Choose a document to upload first.")
+   return
+  }
+  setBusyAction("document")
+  setActionError(null)
+  setActionMessage(null)
+  try {
+   const file = await fileToBase64UploadDto(documentFile)
+   await addLeaveRequestDocument(token, requestId, { file })
+   await refreshDetail()
+   setDocumentFile(null)
+   setActionMessage("Supporting document uploaded.")
+  } catch (errorObject) {
+   setActionError(
+    errorObject instanceof Error
+     ? errorObject.message
+     : "Failed to upload supporting document."
+   )
+  } finally {
+   setBusyAction(null)
+  }
+ }, [documentFile, refreshDetail, requestId, token])
+
+ const handleDownloadDocument = React.useCallback(async (documentRow: AdminRecord) => {
+  if (!token || requestId === null) {
+   return
+  }
+  const documentId = readNumber(documentRow, ["id"])
+  if (documentId === null) {
+   setActionError("This document is missing an id and cannot be downloaded.")
+   return
+  }
+  setBusyAction("document-download")
+  setActionError(null)
+  setActionMessage(null)
+  try {
+   const result = await downloadLeaveRequestDocument(token, requestId, documentId)
+   downloadBlob(result.blob, result.filename)
+   setActionMessage("Supporting document downloaded.")
+  } catch (errorObject) {
+   const rawUrl =
+    readString(documentRow, ["file_url"]) ||
+    resolveBackendMediaUrl(readString(documentRow, ["file_url"]))
+   if (rawUrl) {
+    window.open(resolveBackendMediaUrl(rawUrl) ?? rawUrl, "_blank", "noopener,noreferrer")
+    setActionMessage("Opened supporting document.")
+   } else {
+    setActionError(
+     errorObject instanceof Error
+      ? errorObject.message
+      : "Failed to download supporting document."
+    )
+   }
+  } finally {
+   setBusyAction(null)
+  }
+ }, [requestId, token])
+
  const requestLabel =
  readString(detail, ["leave_no", "request_no", "reference"]) ||
  (requestId !== null ? `Request #${requestId}` : "Leave request")
@@ -1068,11 +1256,14 @@ export function LeaveWorkflowDialog({
  "Leave"
  const status = readString(detail, ["status"]) || "pending"
 
+ const requestReason = readString(detail, ["reason"])
+ const medicalDetail = asRecord(detail?.medical_detail)
+
  return (
  <Dialog open={open} onOpenChange={onOpenChange}>
  <DialogPopup className="flex max-h-[min(92vh,820px)] w-[calc(100%-1rem)] max-w-none flex-col overflow-hidden p-3 sm:w-[min(32rem,calc(100%-2rem))] sm:max-w-none sm:p-4">
  <DialogHeader className="mb-0 shrink-0 space-y-0.5 border-b border-border pb-2 pr-10 text-left">
- <DialogTitle className="text-base">Approval network</DialogTitle>
+ <DialogTitle className="text-base">Leave request details</DialogTitle>
  <DialogDescription className="text-left text-sm">
  <span className="font-medium text-foreground">{requestLabel}</span>
  <span className="mx-1.5 text-muted-foreground">·</span>
@@ -1096,9 +1287,250 @@ export function LeaveWorkflowDialog({
  </div>
  ) : null}
 
+ {!loading && actionError ? (
+ <div className="mb-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-900 dark:text-rose-200">
+ {actionError}
+ </div>
+ ) : null}
+
+ {!loading && actionMessage ? (
+ <div className="mb-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-900 dark:text-emerald-200">
+ {actionMessage}
+ </div>
+ ) : null}
+
  {!loading ? (
+ <div className="w-full min-w-0 space-y-3">
+ <div className="grid grid-cols-2 gap-2 text-xs">
+ <div className="rounded-md border border-border/60 px-2.5 py-2">
+ <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Start</p>
+ <p className="font-medium text-foreground">{readString(detail, ["start_date"]) || "-"}</p>
+ </div>
+ <div className="rounded-md border border-border/60 px-2.5 py-2">
+ <p className="text-[10px] uppercase tracking-wide text-muted-foreground">End</p>
+ <p className="font-medium text-foreground">{readString(detail, ["end_date"]) || "-"}</p>
+ </div>
+ </div>
+
+ {requestReason ? (
+ <div className="rounded-lg border border-border/70 bg-background/60 px-3 py-2.5">
+ <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+ Reason
+ </p>
+ <p className="mt-1 text-sm text-foreground">{requestReason}</p>
+ </div>
+ ) : null}
+
+ <div className="flex flex-wrap gap-1.5">
+ <Button
+ type="button"
+ variant="outline"
+ size="sm"
+ disabled={busyAction !== null}
+ onClick={() => void handleDownloadPdf()}
+ >
+ {busyAction === "pdf" ? "Downloading…" : "PDF"}
+ </Button>
+ </div>
+
+ <div className="rounded-lg border border-border/70 bg-background/60 p-3">
+ <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+ <div>
+ <p className="text-sm font-medium text-foreground">Medical detail</p>
+ <p className="text-[11px] text-muted-foreground">
+ Keep treatment details and any supporting attachment URL in sync with this request.
+ </p>
+ </div>
+ <Button
+ type="button"
+ variant="outline"
+ size="sm"
+ disabled={busyAction !== null}
+ onClick={() => void handleSaveMedicalDetail()}
+ >
+ {busyAction === "medical" ? "Saving…" : "Save medical detail"}
+ </Button>
+ </div>
+ <div className="grid gap-3 sm:grid-cols-2">
+ <label className="grid gap-1">
+ <span className="text-xs font-medium text-muted-foreground">Sickness nature</span>
+ <Input
+ value={medicalForm.sickness_nature}
+ onChange={(event) =>
+ setMedicalForm((current) => ({
+ ...current,
+ sickness_nature: event.target.value,
+ }))
+ }
+ />
+ </label>
+ <label className="grid gap-1">
+ <span className="text-xs font-medium text-muted-foreground">Doctor name</span>
+ <Input
+ value={medicalForm.doctor_name}
+ onChange={(event) =>
+ setMedicalForm((current) => ({
+ ...current,
+ doctor_name: event.target.value,
+ }))
+ }
+ />
+ </label>
+ <label className="grid gap-1">
+ <span className="text-xs font-medium text-muted-foreground">Doctor phone</span>
+ <Input
+ value={medicalForm.doctor_phone}
+ onChange={(event) =>
+ setMedicalForm((current) => ({
+ ...current,
+ doctor_phone: event.target.value,
+ }))
+ }
+ />
+ </label>
+ <label className="grid gap-1">
+ <span className="text-xs font-medium text-muted-foreground">Hospital name</span>
+ <Input
+ value={medicalForm.hospital_name}
+ onChange={(event) =>
+ setMedicalForm((current) => ({
+ ...current,
+ hospital_name: event.target.value,
+ }))
+ }
+ />
+ </label>
+ <label className="grid gap-1">
+ <span className="text-xs font-medium text-muted-foreground">Treatment start</span>
+ <Input
+ type="date"
+ value={medicalForm.treatment_start_date}
+ onChange={(event) =>
+ setMedicalForm((current) => ({
+ ...current,
+ treatment_start_date: event.target.value,
+ }))
+ }
+ />
+ </label>
+ <label className="grid gap-1">
+ <span className="text-xs font-medium text-muted-foreground">Treatment end</span>
+ <Input
+ type="date"
+ value={medicalForm.treatment_end_date}
+ onChange={(event) =>
+ setMedicalForm((current) => ({
+ ...current,
+ treatment_end_date: event.target.value,
+ }))
+ }
+ />
+ </label>
+ <label className="grid gap-1 sm:col-span-2">
+ <span className="text-xs font-medium text-muted-foreground">Attachment URL</span>
+ <Input
+ value={medicalForm.attachment_url}
+ placeholder="https://..."
+ onChange={(event) =>
+ setMedicalForm((current) => ({
+ ...current,
+ attachment_url: event.target.value,
+ }))
+ }
+ />
+ </label>
+ </div>
+ {medicalDetail && !medicalForm.attachment_url ? (
+ <p className="mt-2 text-[11px] text-muted-foreground">
+ Existing medical detail saved on {formatDateTime(readString(medicalDetail, ["created_at"])) || "record"}.
+ </p>
+ ) : null}
+ </div>
+
+ <div className="rounded-lg border border-border/70 bg-background/60 p-3">
+ <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+ <div>
+ <p className="text-sm font-medium text-foreground">Supporting documents</p>
+ <p className="text-[11px] text-muted-foreground">
+ Upload a supporting file and download any document already attached to this request.
+ </p>
+ </div>
+ <Button
+ type="button"
+ variant="outline"
+ size="sm"
+ disabled={busyAction !== null || !documentFile}
+ onClick={() => void handleUploadDocument()}
+ >
+ {busyAction === "document" ? "Uploading…" : "Upload document"}
+ </Button>
+ </div>
+ <div className="rounded-md border border-dashed border-border/80 px-3 py-3">
+ <Input
+ type="file"
+ className="h-auto border-0 px-0 py-0 shadow-none focus-visible:ring-0"
+ onChange={(event) => {
+ const file = event.target.files?.[0] ?? null
+ setDocumentFile(file)
+ }}
+ />
+ <p className="mt-2 text-[11px] text-muted-foreground">
+ {documentFile ? `Ready to upload: ${documentFile.name}` : "Choose a document file to attach to this leave request."}
+ </p>
+ </div>
+ <div className="mt-3 space-y-2">
+ {documents.length === 0 ? (
+ <div className="rounded-md border border-border/60 px-3 py-2 text-xs text-muted-foreground">
+ No supporting documents attached yet.
+ </div>
+ ) : (
+ documents.map((documentRow, index) => {
+ const fileUrl = resolveBackendMediaUrl(readString(documentRow, ["file_url"]))
+ return (
+ <div
+ key={`leave-document-${readNumber(documentRow, ["id"]) ?? index}`}
+ className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/60 px-3 py-2"
+ >
+ <div className="min-w-0">
+ <p className="truncate text-xs font-medium text-foreground">
+ {readString(documentRow, ["file_name", "original_file_name"]) || "Supporting document"}
+ </p>
+ <p className="truncate text-[11px] text-muted-foreground">
+ {readString(documentRow, ["file_type", "mime_type"]) || "File"} · uploaded{" "}
+ {formatDateTime(readString(documentRow, ["uploaded_at", "created_at"])) || "-"}
+ </p>
+ </div>
+ <div className="flex flex-wrap gap-1.5">
+ <Button
+ type="button"
+ variant="outline"
+ size="sm"
+ disabled={busyAction !== null}
+ onClick={() => void handleDownloadDocument(documentRow)}
+ >
+ {busyAction === "document-download" ? "Downloading…" : "Download"}
+ </Button>
+ {fileUrl ? (
+ <Button
+ type="button"
+ variant="outline"
+ size="sm"
+ onClick={() => window.open(fileUrl, "_blank", "noopener,noreferrer")}
+ >
+ Open
+ </Button>
+ ) : null}
+ </div>
+ </div>
+ )
+ })
+ )}
+ </div>
+ </div>
+
  <div className="w-full min-w-0">
  <LeaveWorkflowProgress row={detail} />
+ </div>
  </div>
  ) : null}
  </div>

@@ -173,15 +173,32 @@ function formatUnknownValue(value: unknown): string {
           ? record.title.trim()
           : typeof record.label === "string" && record.label.trim()
             ? record.label.trim()
-            : null
+            : [record.first_name, record.middle_name, record.last_name]
+                .filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+                .join(" ")
+                .trim() ||
+              [record.firstName, record.middleName, record.lastName]
+                .filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+                .join(" ")
+                .trim() ||
+              (typeof record.employee_no === "string" && record.employee_no.trim()
+                ? record.employee_no.trim()
+                : typeof record.employeeNo === "string" && record.employeeNo.trim()
+                  ? record.employeeNo.trim()
+                  : typeof record.code === "string" && record.code.trim()
+                    ? record.code.trim()
+                    : null)
     if (label) {
       return label
     }
-    try {
-      return JSON.stringify(value)
-    } catch {
-      return "-"
-    }
+
+    const entries = Object.entries(record)
+      .filter(([, nested]) => nested !== null && nested !== undefined && nested !== "")
+      .slice(0, 4)
+      .map(([key, nested]) => `${humanizeFieldName(key)}: ${formatUnknownValue(nested)}`)
+      .filter((entry) => !entry.endsWith(": -"))
+
+    return entries.length > 0 ? entries.join(" • ") : "-"
   }
   return "-"
 }

@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { ArrowLeftIcon, PlusIcon, RefreshCwIcon, SearchIcon, Trash2Icon } from "lucide-react"
+import { ArrowLeftIcon, Loader2Icon, PlusIcon, RefreshCwIcon, SearchIcon, Trash2Icon } from "lucide-react"
 
 import {
   Dialog,
@@ -14,15 +14,19 @@ import {
 } from "@/components/animate-ui/components/base/dialog"
 import { TableScrollContainer } from "@/components/common/table-scroll-container"
 import {
+  assignAccessGroupDevices,
   assignAccessGroupDoors,
   assignAccessGroupEmployees,
   getAccessControlResourceById,
   listAttendanceDevices,
   listAccessControlResources,
+  listAccessGroupDevices,
   listEmployees,
+  removeAccessGroupDevice,
   listAccessGroupDoors,
   listAccessGroupEmployees,
   removeAccessGroupDoor,
+  syncAccessGroup,
   type AdminRecord,
 } from "@/lib/admin-api"
 import {
@@ -145,6 +149,7 @@ function resolveColumns(rows: AdminRecord[], preferred: string[]) {
 export function AccessGroupDetailView({ groupId }: { groupId: string }) {
   const [group, setGroup] = React.useState<AdminRecord | null>(null)
   const [assignedDoors, setAssignedDoors] = React.useState<AdminRecord[]>([])
+  const [assignedDevices, setAssignedDevices] = React.useState<AdminRecord[]>([])
   const [employees, setEmployees] = React.useState<AdminRecord[]>([])
   const [allEmployees, setAllEmployees] = React.useState<AdminRecord[]>([])
   const [availableDoors, setAvailableDoors] = React.useState<AdminRecord[]>([])
@@ -162,6 +167,14 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
   const [removeConfirmOpen, setRemoveConfirmOpen] = React.useState(false)
   const [removeError, setRemoveError] = React.useState<string | null>(null)
   const [doorPendingRemoval, setDoorPendingRemoval] = React.useState<AdminRecord | null>(null)
+  const [assignDeviceOpen, setAssignDeviceOpen] = React.useState(false)
+  const [selectedDeviceId, setSelectedDeviceId] = React.useState("")
+  const [assignDeviceError, setAssignDeviceError] = React.useState<string | null>(null)
+  const [assigningDevice, setAssigningDevice] = React.useState(false)
+  const [removeDeviceConfirmOpen, setRemoveDeviceConfirmOpen] = React.useState(false)
+  const [removeDeviceError, setRemoveDeviceError] = React.useState<string | null>(null)
+  const [devicePendingRemoval, setDevicePendingRemoval] = React.useState<AdminRecord | null>(null)
+  const [removingDeviceId, setRemovingDeviceId] = React.useState("")
   const [assignEmployeeOpen, setAssignEmployeeOpen] = React.useState(false)
   const [assignEmployeePickerOpen, setAssignEmployeePickerOpen] = React.useState(false)
   const [selectedEmployeeId, setSelectedEmployeeId] = React.useState("")
@@ -170,11 +183,14 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
   const [assigningEmployee, setAssigningEmployee] = React.useState(false)
   const [removalOpen, setRemovalOpen] = React.useState(false)
   const [removalTarget, setRemovalTarget] = React.useState<EmployeeAccessRemovalTarget | null>(null)
-  const [activeTab, setActiveTab] = React.useState<"details" | "doors" | "employees">("details")
+  const [activeTab, setActiveTab] = React.useState<"details" | "doors" | "devices" | "employees">("details")
   const [doorSearch, setDoorSearch] = React.useState("")
+  const [deviceSearch, setDeviceSearch] = React.useState("")
   const [employeeSearch, setEmployeeSearch] = React.useState("")
+  const [syncingGroup, setSyncingGroup] = React.useState(false)
 
   const doorSearchActive = doorSearch.trim().length > 0
+  const deviceSearchActive = deviceSearch.trim().length > 0
   const employeeSearchActive = employeeSearch.trim().length > 0
 
   const fetchGroupData = React.useCallback(async () => {
@@ -188,10 +204,11 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
     setLoading(true)
     setError(null)
     try {
-      const [groupRecord, groupDoorRows, employeeRows, deviceRows, allEmployeeRows, templateRows, allDoorRows] =
+      const [groupRecord, groupDoorRows, groupDeviceRows, employeeRows, deviceRows, allEmployeeRows, templateRows, allDoorRows] =
         await Promise.all([
           getAccessControlResourceById(token, "groups", groupId),
           listAccessGroupDoors(token, groupId),
+          listAccessGroupDevices(token, groupId),
           listAccessGroupEmployees(token, groupId),
           listAttendanceDevices(token, {
             page: 1,
@@ -221,6 +238,7 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
 
       setGroup(groupRecord)
       setAssignedDoors(groupDoorRows)
+      setAssignedDevices(groupDeviceRows)
       setEmployees(employeeRows)
       setDevices(deviceRows.rows)
       setAvailableDoors(allDoorRows.rows)
@@ -271,6 +289,53 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
       assignableDoors.find((door) => readNumberFromRecord(door, ["id", "door_id", "doorId"]) === doorId) ?? null
     )
   }, [assignableDoors, selectedDoorId])
+
+  const assignedDeviceIds = React.useMemo(
+    () =>
+      new Set(
+        assignedDevices
+          .map((device) => readNumberFromRecord(device, ["device_id", "deviceId", "id"]))
+          .filter((deviceId): deviceId is number => deviceId !== null)
+      ),
+    [assignedDevices]
+  )
+
+  const assignableDevices = React.useMemo(
+    () =>
+      devices.filter((device) => {
+        const deviceId = readNumberFromRecord(device, ["id", "device_id"])
+        return deviceId !== null && !assignedDeviceIds.has(deviceId)
+      }),
+    [assignedDeviceIds, devices]
+  )
+
+  const deviceDisplayRows = React.useMemo(
+    () =>
+      assignedDevices.map((device) => {
+        const deviceId = readNumberFromRecord(device, ["device_id", "deviceId", "id"])
+        const matchedDevice =
+          deviceId === null
+            ? null
+            : devices.find((entry) => readNumberFromRecord(entry, ["id", "device_id"]) === deviceId) ?? null
+
+        return {
+          ...device,
+          device_id: deviceId ?? device.device_id ?? device.deviceId,
+          device_name:
+            readStringFromRecord(device, ["device_name", "deviceName", "name"]) ??
+            readStringFromRecord(matchedDevice ?? {}, ["device_name", "deviceName", "name"]) ??
+            (deviceId !== null ? `Device ${deviceId}` : "-"),
+          device_code:
+            readStringFromRecord(device, ["device_code", "deviceCode"]) ??
+            readStringFromRecord(matchedDevice ?? {}, ["device_code", "deviceCode"]) ??
+            "-",
+          access_group_name:
+            readStringFromRecord(device, ["access_group_name", "accessGroupName", "group_name", "groupName"]) ??
+            groupName,
+        }
+      }),
+    [assignedDevices, devices, groupName]
+  )
 
   const doorDisplayRows = React.useMemo(
     () =>
@@ -493,6 +558,19 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
     [employeeDisplayRows]
   )
 
+  const deviceColumns = React.useMemo(
+    () =>
+      resolveColumns(deviceDisplayRows, [
+        "device_name",
+        "device_code",
+        "device_id",
+        "status",
+        "branch_name",
+        "created_at",
+      ]),
+    [deviceDisplayRows]
+  )
+
   const filteredDoorRows = React.useMemo(() => {
     const normalizedSearch = doorSearch.trim().toLowerCase()
     if (!normalizedSearch) {
@@ -510,6 +588,23 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
         .some((value) => value?.toLowerCase().includes(normalizedSearch))
     )
   }, [doorDisplayRows, doorSearch])
+
+  const filteredDeviceRows = React.useMemo(() => {
+    const normalizedSearch = deviceSearch.trim().toLowerCase()
+    if (!normalizedSearch) {
+      return deviceDisplayRows
+    }
+
+    return deviceDisplayRows.filter((device) =>
+      [
+        readStringFromRecord(device, ["device_name", "deviceName", "name"]),
+        readStringFromRecord(device, ["device_code", "deviceCode"]),
+        readStringFromRecord(device, ["status"]),
+      ]
+        .filter(Boolean)
+        .some((value) => value?.toLowerCase().includes(normalizedSearch))
+    )
+  }, [deviceDisplayRows, deviceSearch])
 
   const filteredEmployeeRows = React.useMemo(() => {
     const normalizedSearch = employeeSearch.trim().toLowerCase()
@@ -567,6 +662,33 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
     }
   }
 
+  const onAssignDevice = async () => {
+    const token = readStoredToken()
+    if (!token) {
+      setAssignDeviceError("Authentication required. Please log in again.")
+      return
+    }
+    if (!selectedDeviceId) {
+      setAssignDeviceError("Select a device to assign.")
+      return
+    }
+
+    setAssigningDevice(true)
+    setAssignDeviceError(null)
+    try {
+      await assignAccessGroupDevices(token, groupId, [selectedDeviceId])
+      setMessage("Device assigned successfully.")
+      setError(null)
+      setAssignDeviceOpen(false)
+      setSelectedDeviceId("")
+      await fetchGroupData()
+    } catch (errorObject) {
+      setAssignDeviceError(errorObject instanceof Error ? errorObject.message : "Failed to assign device.")
+    } finally {
+      setAssigningDevice(false)
+    }
+  }
+
   const requestRemoveDoor = (door: AdminRecord) => {
     setDoorPendingRemoval(door)
     setRemoveError(null)
@@ -604,6 +726,65 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
       setRemoveError(errorObject instanceof Error ? errorObject.message : "Failed to remove door.")
     } finally {
       setRemovingDoorId("")
+    }
+  }
+
+  const requestRemoveDevice = (device: AdminRecord) => {
+    setDevicePendingRemoval(device)
+    setRemoveDeviceError(null)
+    setRemoveDeviceConfirmOpen(true)
+  }
+
+  const onRemoveDevice = async () => {
+    const token = readStoredToken()
+    if (!token) {
+      setRemoveDeviceError("Authentication required. Please log in again.")
+      return
+    }
+
+    if (!devicePendingRemoval) {
+      setRemoveDeviceError("Select a device to remove.")
+      return
+    }
+
+    const deviceId = readNumberFromRecord(devicePendingRemoval, ["device_id", "deviceId", "id"])
+    if (deviceId === null) {
+      setRemoveDeviceError("This device does not have a valid id.")
+      return
+    }
+
+    setRemovingDeviceId(String(deviceId))
+    setRemoveDeviceError(null)
+    try {
+      await removeAccessGroupDevice(token, groupId, deviceId)
+      setMessage("Device removed from group.")
+      setError(null)
+      setRemoveDeviceConfirmOpen(false)
+      setDevicePendingRemoval(null)
+      await fetchGroupData()
+    } catch (errorObject) {
+      setRemoveDeviceError(errorObject instanceof Error ? errorObject.message : "Failed to remove device.")
+    } finally {
+      setRemovingDeviceId("")
+    }
+  }
+
+  const onSyncGroup = async () => {
+    const token = readStoredToken()
+    if (!token) {
+      setError("Authentication required. Please log in again.")
+      return
+    }
+
+    setSyncingGroup(true)
+    setError(null)
+    try {
+      await syncAccessGroup(token, groupId)
+      setMessage("Group sync started successfully.")
+    } catch (errorObject) {
+      setError(errorObject instanceof Error ? errorObject.message : "Failed to sync group.")
+    } finally {
+      setSyncingGroup(false)
     }
   }
 
@@ -684,7 +865,7 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
           <div>
             <div className="mb-2">
               <Link
-                href="/dashboard/attendance/groups"
+                href="/dashboard/access-control/groups"
                 className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800"
               >
                 <ArrowLeftIcon className="h-4 w-4" />
@@ -694,16 +875,27 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
             <h2 className="text-lg font-semibold text-slate-900">{groupName}</h2>
             <p className="text-sm text-slate-500">Group details, assigned doors, and assigned employees</p>
           </div>
-          <button
-            type="button"
-            onClick={() => void fetchGroupData()}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-slate-300 text-primary hover:bg-slate-50"
-            disabled={loading}
-            aria-label="Refresh"
-            title="Refresh"
-          >
-            <RefreshCwIcon className={`h-4 w-4 text-primary ${loading ? "animate-spin" : ""}`} />
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void onSyncGroup()}
+              className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              disabled={syncingGroup}
+            >
+              {syncingGroup ? <Loader2Icon className="h-4 w-4 animate-spin" /> : <RefreshCwIcon className="h-4 w-4" />}
+              {syncingGroup ? "Syncing..." : "Sync Group"}
+            </button>
+            <button
+              type="button"
+              onClick={() => void fetchGroupData()}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-slate-300 text-primary hover:bg-slate-50"
+              disabled={loading}
+              aria-label="Refresh"
+              title="Refresh"
+            >
+              <RefreshCwIcon className={`h-4 w-4 text-primary ${loading ? "animate-spin" : ""}`} />
+            </button>
+          </div>
         </div>
         {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
         {message ? <p className="mt-3 text-sm text-green-700">{message}</p> : null}
@@ -714,6 +906,7 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
           {[
             ["details", "Group Details"],
             ["doors", "Doors"],
+            ["devices", "Devices"],
             ["employees", "Employees"],
           ].map(([tabKey, label]) => (
             <button
@@ -724,7 +917,7 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
                   ? "bg-primary !text-white"
                   : "border border-slate-300 text-slate-700 hover:bg-slate-50"
               }`}
-              onClick={() => setActiveTab(tabKey as "details" | "doors" | "employees")}
+              onClick={() => setActiveTab(tabKey as "details" | "doors" | "devices" | "employees")}
             >
               {label}
             </button>
@@ -744,6 +937,7 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
                 readStringFromRecord(group ?? {}, ["device_name", "deviceName"]) ??
                   stringifyValue(group?.device_id ?? group?.deviceId),
               ],
+              ["Assigned Devices", String(assignedDevices.length)],
               ["Assigned Doors", String(assignedDoors.length)],
               ["Assigned Employees", String(employees.length)],
             ].map(([label, value]) => (
@@ -842,6 +1036,107 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
                               disabled={removingDoorId === String(rowId)}
                               aria-label="Remove door"
                               title="Remove door"
+                            >
+                              <Trash2Icon className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </TableScrollContainer>
+          </div>
+        ) : null}
+
+        {activeTab === "devices" ? (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="text-base font-semibold text-slate-900">Assigned Devices</h3>
+                <p className="text-sm text-slate-500">Devices currently linked to this access group.</p>
+              </div>
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm !text-white disabled:opacity-50"
+                onClick={() => setAssignDeviceOpen(true)}
+              >
+                <PlusIcon className="h-4 w-4" />
+                Assign Device
+              </button>
+            </div>
+
+            <div className="relative">
+              <SearchIcon
+                className={`pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 transition ${
+                  deviceSearchActive ? "animate-pulse text-slate-700" : ""
+                }`}
+              />
+              <input
+                className="w-full rounded-md border border-slate-300 py-2 pl-10 pr-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/20"
+                placeholder="Search devices by name, code, or status"
+                value={deviceSearch}
+                onChange={(event) => setDeviceSearch(event.target.value)}
+              />
+            </div>
+
+            <TableScrollContainer>
+              <table className="w-full min-w-[720px] text-sm">
+                <thead className="bg-slate-50/90">
+                  <tr>
+                    {deviceColumns.map((column) => (
+                      <th
+                        key={column}
+                        className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap"
+                      >
+                        {prettifyLabel(column)}
+                      </th>
+                    ))}
+                    <th className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="[&_tr:nth-child(odd)]:bg-slate-50/35 [&_tr]:border-t [&_tr]:border-slate-100 [&_tr:hover]:bg-slate-50/80">
+                  {!loading && filteredDeviceRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={Math.max(deviceColumns.length + 1, 1)} className="px-4 py-10 text-sm text-slate-500">
+                        {deviceSearch.trim()
+                          ? "No assigned devices matched your search."
+                          : "No devices assigned to this group yet."}
+                      </td>
+                    </tr>
+                  ) : null}
+                  {filteredDeviceRows.map((device, index) => {
+                    const rowId =
+                      readNumberFromRecord(device, ["device_id", "deviceId", "id"]) ?? `device-${index}`
+                    return (
+                      <tr
+                        key={String(rowId)}
+                        style={
+                          deviceSearchActive
+                            ? {
+                                animation: "search-result-reveal 280ms ease both",
+                                animationDelay: `${index * 45}ms`,
+                              }
+                            : undefined
+                        }
+                      >
+                        {deviceColumns.map((column) => (
+                          <td key={`${rowId}-${column}`} className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">
+                            {stringifyValue((device as Record<string, unknown>)[column])}
+                          </td>
+                        ))}
+                        <td className="px-4 py-4">
+                          <div className="flex justify-end">
+                            <button
+                              type="button"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-red-300 text-red-700 hover:bg-red-50 disabled:opacity-50"
+                              onClick={() => requestRemoveDevice(device)}
+                              disabled={removingDeviceId === String(rowId)}
+                              aria-label="Remove device"
+                              title="Remove device"
                             >
                               <Trash2Icon className="h-4 w-4" />
                             </button>
@@ -1130,6 +1425,136 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
                 String(readNumberFromRecord(doorPendingRemoval ?? {}, ["door_id", "doorId", "id"]) ?? "")
                 ? "Removing..."
                 : "Remove Door"}
+            </button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
+
+      <Dialog
+        open={assignDeviceOpen}
+        onOpenChange={(open) => {
+          setAssignDeviceOpen(open)
+          if (!open) {
+            setAssignDeviceError(null)
+            setSelectedDeviceId("")
+          }
+        }}
+      >
+        <DialogPopup className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Assign Device To Group</DialogTitle>
+            <DialogDescription>Select a device to link to this access group.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2">
+            {assignDeviceError ? <p className="text-sm text-red-600">{assignDeviceError}</p> : null}
+            <label className="grid gap-1">
+              <span className="text-xs font-medium uppercase text-slate-600">Device</span>
+              <select
+                className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+                value={selectedDeviceId}
+                onChange={(event) => setSelectedDeviceId(event.target.value)}
+              >
+                <option value="">Select device</option>
+                {assignableDevices.map((device, index) => {
+                  const deviceId = readNumberFromRecord(device, ["id", "device_id"])
+                  if (deviceId === null) return null
+                  const deviceName =
+                    readStringFromRecord(device, ["device_name", "deviceName", "name"]) ?? `Device ${deviceId}`
+                  const deviceCode = readStringFromRecord(device, ["device_code", "deviceCode"])
+                  return (
+                    <option key={`assign-device-${deviceId}-${index}`} value={String(deviceId)}>
+                      {deviceCode ? `${deviceName} (${deviceCode})` : deviceName}
+                    </option>
+                  )
+                })}
+              </select>
+            </label>
+            {assignableDevices.length === 0 ? (
+              <p className="text-sm text-slate-500">
+                No unassigned devices are currently available for this group.
+              </p>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <button
+              type="button"
+              className="rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+              onClick={() => {
+                setAssignDeviceOpen(false)
+                setAssignDeviceError(null)
+                setSelectedDeviceId("")
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="rounded-md bg-primary px-3 py-1.5 text-sm !text-white disabled:opacity-50"
+              onClick={() => void onAssignDevice()}
+              disabled={assigningDevice || !selectedDeviceId}
+            >
+              {assigningDevice ? "Assigning..." : "Assign Device"}
+            </button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
+
+      <Dialog
+        open={removeDeviceConfirmOpen}
+        onOpenChange={(open) => {
+          setRemoveDeviceConfirmOpen(open)
+          if (!open) {
+            setRemoveDeviceError(null)
+            setDevicePendingRemoval(null)
+          }
+        }}
+      >
+        <DialogPopup className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Remove Assigned Device</DialogTitle>
+            <DialogDescription>
+              Confirm that you want to remove this device from the access group.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2">
+            {removeDeviceError ? <p className="text-sm text-red-600">{removeDeviceError}</p> : null}
+            <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+              <p className="font-medium text-slate-900">
+                {readStringFromRecord(devicePendingRemoval ?? {}, ["device_name", "deviceName", "name"]) ??
+                  "Selected device"}
+              </p>
+              <p className="mt-1 text-slate-500">
+                Device Code: {readStringFromRecord(devicePendingRemoval ?? {}, ["device_code", "deviceCode"]) ?? "-"}
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <button
+              type="button"
+              className="rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+              onClick={() => {
+                setRemoveDeviceConfirmOpen(false)
+                setRemoveDeviceError(null)
+                setDevicePendingRemoval(null)
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="rounded-md bg-red-600 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+              onClick={() => void onRemoveDevice()}
+              disabled={
+                !devicePendingRemoval ||
+                removingDeviceId ===
+                  String(readNumberFromRecord(devicePendingRemoval ?? {}, ["device_id", "deviceId", "id"]) ?? "")
+              }
+            >
+              {removingDeviceId &&
+              removingDeviceId ===
+                String(readNumberFromRecord(devicePendingRemoval ?? {}, ["device_id", "deviceId", "id"]) ?? "")
+                ? "Removing..."
+                : "Remove Device"}
             </button>
           </DialogFooter>
         </DialogPopup>

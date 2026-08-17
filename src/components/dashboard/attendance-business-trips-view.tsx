@@ -28,10 +28,14 @@ import {
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import {
+  approveAttendanceBusinessTrip,
+  cancelAttendanceBusinessTrip,
   createAttendanceBusinessTrip,
   getAttendanceBusinessTrip,
   listAttendanceBusinessTrips,
   listEmployees,
+  rejectAttendanceBusinessTrip,
+  submitAttendanceBusinessTrip,
   updateAttendanceBusinessTrip,
   type AdminRecord,
 } from "@/lib/admin-api"
@@ -55,6 +59,8 @@ type TripFormState = {
   reason: string
   submit: boolean
 }
+
+type TripActionKind = "submit" | "approve" | "reject" | "cancel"
 
 const EMPTY_FORM: TripFormState = {
   employeeId: null,
@@ -381,6 +387,10 @@ export function AttendanceBusinessTripsView() {
   const [dialogOpen, setDialogOpen] = React.useState(false)
   const [editingTripId, setEditingTripId] = React.useState<string | null>(null)
   const [form, setForm] = React.useState<TripFormState>(EMPTY_FORM)
+  const [actionDialogOpen, setActionDialogOpen] = React.useState(false)
+  const [pendingAction, setPendingAction] = React.useState<TripActionKind | null>(null)
+  const [actionTrip, setActionTrip] = React.useState<AdminRecord | null>(null)
+  const [actionReason, setActionReason] = React.useState("")
 
   // HR/admin only — never show business trips on employee (user) side.
   React.useEffect(() => {
@@ -415,6 +425,7 @@ export function AttendanceBusinessTripsView() {
   const activeStatus = getStatusMeta(activeTrip?.status)
   const canEditActive =
     Boolean(activeTrip) && ["draft", "submitted"].includes(String(activeTrip?.status ?? "").toLowerCase())
+  const activeTripStatus = String(activeTrip?.status ?? "").toLowerCase()
 
   const selectedTripIdRef = React.useRef(selectedTripId)
 
@@ -632,6 +643,71 @@ export function AttendanceBusinessTripsView() {
       setSaving(false)
     }
   }
+
+  const openActionDialog = React.useCallback(
+    (trip: AdminRecord, action: TripActionKind) => {
+      setActionTrip(trip)
+      setPendingAction(action)
+      setActionReason(
+        action === "cancel"
+          ? "Cancelled by admin"
+          : action === "reject"
+            ? "Rejected by admin"
+            : ""
+      )
+      setActionDialogOpen(true)
+    },
+    []
+  )
+
+  const handleTripAction = React.useCallback(async () => {
+    const token = readStoredToken()
+    const tripId = getTripId(actionTrip)
+    if (!token || !tripId || !pendingAction) {
+      return
+    }
+
+    if ((pendingAction === "reject" || pendingAction === "cancel") && !actionReason.trim()) {
+      showErrorAlert(
+        pendingAction === "cancel"
+          ? "Enter a reason for cancellation."
+          : "Enter a reason for rejection."
+      )
+      return
+    }
+
+    setSaving(true)
+    try {
+      if (pendingAction === "submit") {
+        await submitAttendanceBusinessTrip(token, tripId)
+        showSuccessAlert("Business trip submitted.")
+      } else if (pendingAction === "approve") {
+        await approveAttendanceBusinessTrip(token, tripId, actionReason)
+        showSuccessAlert("Business trip approved.")
+      } else if (pendingAction === "reject") {
+        await rejectAttendanceBusinessTrip(token, tripId, actionReason)
+        showSuccessAlert("Business trip rejected.")
+      } else {
+        await cancelAttendanceBusinessTrip(token, tripId, actionReason)
+        showSuccessAlert("Business trip cancelled.")
+      }
+
+      setActionDialogOpen(false)
+      setPendingAction(null)
+      setActionTrip(null)
+      setActionReason("")
+      await loadTrips()
+    } catch (errorObject) {
+      const message =
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to update business trip status."
+      showErrorAlert(message)
+      setError(message)
+    } finally {
+      setSaving(false)
+    }
+  }, [actionReason, actionTrip, loadTrips, pendingAction])
 
   const columns = React.useMemo<Array<Column<AdminRecord>>>(
     () => [
@@ -927,8 +1003,8 @@ export function AttendanceBusinessTripsView() {
                   />
                 </div>
 
-                {canEditActive ? (
-                  <div className="mt-auto border-t border-slate-100 pt-2">
+                <div className="mt-auto space-y-1.5 border-t border-slate-100 pt-2">
+                  {canEditActive ? (
                     <Button
                       type="button"
                       variant="outline"
@@ -939,8 +1015,54 @@ export function AttendanceBusinessTripsView() {
                       <Pencil className="mr-1 size-3" />
                       Edit trip
                     </Button>
-                  </div>
-                ) : null}
+                  ) : null}
+
+                  {activeTripStatus === "draft" ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-7 w-full text-xs"
+                      onClick={() => openActionDialog(activeTrip, "submit")}
+                      disabled={saving}
+                    >
+                      Submit trip
+                    </Button>
+                  ) : null}
+
+                  {activeTripStatus === "submitted" ? (
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={() => openActionDialog(activeTrip, "approve")}
+                        disabled={saving}
+                      >
+                        Approve
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={() => openActionDialog(activeTrip, "reject")}
+                        disabled={saving}
+                      >
+                        Reject
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="col-span-2 h-7 text-xs"
+                        onClick={() => openActionDialog(activeTrip, "cancel")}
+                        disabled={saving}
+                      >
+                        Cancel trip
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
               </>
             ) : null}
           </div>
@@ -1058,6 +1180,71 @@ export function AttendanceBusinessTripsView() {
                 "Create & submit"
               ) : (
                 "Save draft"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
+
+      <Dialog open={actionDialogOpen} onOpenChange={setActionDialogOpen}>
+        <DialogPopup className="max-w-md" from="center">
+          <DialogHeader>
+            <DialogTitle className="text-base capitalize">
+              {pendingAction === "submit"
+                ? "Submit business trip"
+                : pendingAction === "approve"
+                  ? "Approve business trip"
+                  : pendingAction === "reject"
+                    ? "Reject business trip"
+                    : "Cancel business trip"}
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              {actionTrip ? getEmployeeLabel(actionTrip) : "Business trip"}
+            </DialogDescription>
+          </DialogHeader>
+
+          {pendingAction === "reject" || pendingAction === "cancel" || pendingAction === "approve" ? (
+            <div className="mt-3">
+              <Field label={pendingAction === "cancel" ? "Reason" : "Comments"}>
+                <Textarea
+                  value={actionReason}
+                  onChange={(event) => setActionReason(event.target.value)}
+                  className="min-h-20 text-xs"
+                  placeholder={
+                    pendingAction === "cancel"
+                      ? "Reason for cancellation"
+                      : pendingAction === "reject"
+                        ? "Reason for rejection"
+                        : "Optional approval note"
+                  }
+                  disabled={saving}
+                />
+              </Field>
+            </div>
+          ) : null}
+
+          <DialogFooter className="mt-4">
+            <DialogClose
+              render={
+                <Button type="button" variant="outline" size="sm" disabled={saving}>
+                  Close
+                </Button>
+              }
+            />
+            <Button type="button" size="sm" onClick={() => void handleTripAction()} disabled={saving}>
+              {saving ? (
+                <>
+                  <Loader2 className="mr-1 size-3.5 animate-spin" />
+                  Working…
+                </>
+              ) : pendingAction === "submit" ? (
+                "Submit"
+              ) : pendingAction === "approve" ? (
+                "Approve"
+              ) : pendingAction === "reject" ? (
+                "Reject"
+              ) : (
+                "Cancel trip"
               )}
             </Button>
           </DialogFooter>

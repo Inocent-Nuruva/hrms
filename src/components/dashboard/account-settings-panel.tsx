@@ -18,10 +18,19 @@ import {
   Trash2,
 } from "lucide-react"
 import { toast } from "sonner"
+import {
+  listMyNotificationPreferences,
+  setMyNotificationPreference,
+  type NotificationChannel,
+  type NotificationPreference,
+  type NotificationPreferenceType,
+} from "@/lib/admin-api"
 import { clearStoredSession, readStoredSessionTokens } from "@/lib/session-client"
 import { showSuccessAlert } from "@/lib/success-alert"
 import { authService } from "@/services/authService"
 import type { AuthSessionRecord, TwoFactorSetupResponse } from "@/types"
+import { useDashboardActor } from "@/hooks/use-dashboard-actor"
+import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
 import { AUTH_STORAGE_KEYS, ROUTES } from "@/utils/constants"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -29,6 +38,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
 
 interface AccountSettingsPanelProps {
   token: string
@@ -40,6 +50,67 @@ interface AccountSettingsPanelProps {
 }
 
 type SecurityTab = "reset-password" | "two-factor" | "devices" | "email"
+
+const NOTIFICATION_PREFERENCE_CHANNELS: NotificationChannel[] = [
+  "IN_APP",
+  "EMAIL",
+  "SMS",
+  "PUSH",
+]
+
+const NOTIFICATION_PREFERENCE_GROUPS: Array<{
+  title: string
+  types: NotificationPreferenceType[]
+}> = [
+  {
+    title: "General",
+    types: ["GENERAL", "AUTH_SECURITY", "ACCESS_CHANGE", "SYSTEM_ALERT"],
+  },
+  {
+    title: "Leave",
+    types: [
+      "LEAVE_SUBMITTED",
+      "LEAVE_APPROVAL_REQUIRED",
+      "LEAVE_APPROVED",
+      "LEAVE_REJECTED",
+      "LEAVE_RETURNED_FOR_CORRECTION",
+      "LEAVE_CANCELLED",
+    ],
+  },
+  {
+    title: "Onboarding",
+    types: [
+      "ONBOARDING_SUBMITTED",
+      "ONBOARDING_APPROVAL_REQUIRED",
+      "ONBOARDING_APPROVED",
+      "ONBOARDING_REJECTED",
+      "ONBOARDING_TASK_ASSIGNED",
+      "ONBOARDING_TASK_OVERDUE",
+      "ONBOARDING_APPROVAL_REMINDER",
+      "ONBOARDING_COMPLETED",
+    ],
+  },
+  {
+    title: "Offboarding",
+    types: [
+      "OFFBOARDING_SUBMITTED",
+      "OFFBOARDING_APPROVAL_REQUIRED",
+      "OFFBOARDING_APPROVED",
+      "OFFBOARDING_TASK_ASSIGNED",
+      "OFFBOARDING_TASK_OVERDUE",
+      "OFFBOARDING_APPROVAL_REMINDER",
+      "OFFBOARDING_CLEARANCE_REQUIRED",
+      "OFFBOARDING_CLEARANCE_OVERDUE",
+      "OFFBOARDING_ASSET_OVERDUE",
+      "OFFBOARDING_SETTLEMENT_OVERDUE",
+      "OFFBOARDING_COMPLETED",
+    ],
+  },
+  {
+    title: "Attendance",
+    types: ["ATTENDANCE_CORRECTION"],
+  },
+]
 
 function securityTabFromQuery(value: string | null): SecurityTab {
   const normalized = (value ?? "").trim().toLowerCase()
@@ -87,6 +158,47 @@ function formatSessionTimestamp(value?: string) {
   }).format(parsed)
 }
 
+function formatNotificationPreferenceLabel(value: string) {
+  return value
+    .replace(/[_-]+/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
+
+function buildNotificationPreferenceKey(
+  notificationType: NotificationPreferenceType,
+  channel: NotificationChannel
+) {
+  return `${notificationType}:${channel}`
+}
+
+function readNotificationPreferenceType(
+  preference: NotificationPreference | null | undefined
+): NotificationPreferenceType | null {
+  const value = preference?.notification_type ?? preference?.notificationType
+  return typeof value === "string" && value.trim()
+    ? (value.trim().toUpperCase() as NotificationPreferenceType)
+    : null
+}
+
+function readNotificationPreferenceChannel(
+  preference: NotificationPreference | null | undefined
+): NotificationChannel | null {
+  const value = preference?.channel
+  return typeof value === "string" && value.trim()
+    ? (value.trim().toUpperCase() as NotificationChannel)
+    : null
+}
+
+function readNotificationPreferenceEnabled(
+  preference: NotificationPreference | null | undefined
+) {
+  if (!preference) return false
+  if (typeof preference.is_enabled === "boolean") return preference.is_enabled
+  if (typeof preference.isEnabled === "boolean") return preference.isEnabled
+  return false
+}
+
 function resolveFreshAccessToken(fallbackToken: string) {
   if (typeof window === "undefined") {
     return fallbackToken.trim()
@@ -125,9 +237,11 @@ function AccountSettingsPanelContent({
   profilePictureHref,
 }: AccountSettingsPanelProps) {
   const router = useRouter()
+  const actor = useDashboardActor()
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const activeTab = securityTabFromQuery(searchParams?.get("tab") ?? null)
+  const [hasHydrated, setHasHydrated] = React.useState(false)
+  const [activeTab, setActiveTab] = React.useState<SecurityTab>("reset-password")
   const [currentPassword, setCurrentPassword] = React.useState("")
   const [newPassword, setNewPassword] = React.useState("")
 
@@ -146,6 +260,28 @@ function AccountSettingsPanelContent({
   const [sessionMessage, setSessionMessage] = React.useState<string | null>(null)
   const [sessionError, setSessionError] = React.useState<string | null>(null)
   const [logoutAllBusy, setLogoutAllBusy] = React.useState(false)
+  const [notificationPreferences, setNotificationPreferences] = React.useState<NotificationPreference[]>([])
+  const [notificationPreferencesLoading, setNotificationPreferencesLoading] = React.useState(false)
+  const [notificationPreferencesError, setNotificationPreferencesError] = React.useState<string | null>(null)
+  const [notificationPreferenceBusyKey, setNotificationPreferenceBusyKey] = React.useState<string | null>(null)
+  const canManageDefaultAvatars =
+    actor.ready &&
+    canAccessDashboardRoute(
+      "/dashboard/settings/default-avatars",
+      actor.permissionLabels,
+      actor.accessMode
+    )
+
+  React.useEffect(() => {
+    setHasHydrated(true)
+  }, [])
+
+  React.useEffect(() => {
+    if (!hasHydrated) {
+      return
+    }
+    setActiveTab(securityTabFromQuery(searchParams?.get("tab") ?? null))
+  }, [hasHydrated, searchParams])
 
   const handleTabChange = React.useCallback(
     (tab: SecurityTab) => {
@@ -224,6 +360,34 @@ function AccountSettingsPanelContent({
     }
   }, [activeTab, loadSessions])
 
+  const loadNotificationPreferences = React.useCallback(async () => {
+    const accessToken = resolveFreshAccessToken(token)
+    if (!accessToken) {
+      setNotificationPreferences([])
+      return
+    }
+
+    setNotificationPreferencesLoading(true)
+    setNotificationPreferencesError(null)
+    try {
+      const rows = await listMyNotificationPreferences(accessToken)
+      setNotificationPreferences(rows)
+    } catch (errorObject) {
+      setNotificationPreferences([])
+      setNotificationPreferencesError(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Could not load notification preferences."
+      )
+    } finally {
+      setNotificationPreferencesLoading(false)
+    }
+  }, [token])
+
+  React.useEffect(() => {
+    void loadNotificationPreferences()
+  }, [loadNotificationPreferences])
+
   const tabIndex =
     activeTab === "reset-password"
       ? 0
@@ -242,6 +406,16 @@ function AccountSettingsPanelContent({
       .join("") || "U"
 
   const qrImageSrc = resolveQrImageSrc(setupData?.qrCode)
+  const notificationPreferencesByKey = React.useMemo(() => {
+    const map = new Map<string, NotificationPreference>()
+    notificationPreferences.forEach((preference) => {
+      const notificationType = readNotificationPreferenceType(preference)
+      const channel = readNotificationPreferenceChannel(preference)
+      if (!notificationType || !channel) return
+      map.set(buildNotificationPreferenceKey(notificationType, channel), preference)
+    })
+    return map
+  }, [notificationPreferences])
 
   const handleChangePassword = async () => {
     const accessToken = resolveFreshAccessToken(token)
@@ -421,6 +595,63 @@ function AccountSettingsPanelContent({
     }
   }
 
+  const handleToggleNotificationPreference = async (
+    notificationType: NotificationPreferenceType,
+    channel: NotificationChannel,
+    nextEnabled: boolean
+  ) => {
+    const accessToken = resolveFreshAccessToken(token)
+    if (!accessToken) {
+      toast.error("Your session expired. Please sign in again.")
+      return
+    }
+
+    const key = buildNotificationPreferenceKey(notificationType, channel)
+    setNotificationPreferenceBusyKey(key)
+    setNotificationPreferencesError(null)
+    try {
+      const updated = await setMyNotificationPreference(accessToken, {
+        notification_type: notificationType,
+        channel,
+        is_enabled: nextEnabled,
+      })
+      const nextPreference =
+        updated ??
+        ({
+          notification_type: notificationType,
+          channel,
+          is_enabled: nextEnabled,
+        } satisfies NotificationPreference)
+
+      setNotificationPreferences((current) => {
+        const next = [...current]
+        const index = next.findIndex((preference) => {
+          return (
+            readNotificationPreferenceType(preference) === notificationType &&
+            readNotificationPreferenceChannel(preference) === channel
+          )
+        })
+        if (index >= 0) {
+          next[index] = nextPreference
+          return next
+        }
+        return [...next, nextPreference]
+      })
+      toast.success(
+        `${formatNotificationPreferenceLabel(notificationType)} ${formatNotificationPreferenceLabel(channel)} notifications ${nextEnabled ? "enabled" : "disabled"}.`
+      )
+    } catch (errorObject) {
+      const message =
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Could not update the notification preference."
+      setNotificationPreferencesError(message)
+      toast.error(message)
+    } finally {
+      setNotificationPreferenceBusyKey(null)
+    }
+  }
+
   return (
     <div className="grid gap-4 px-4 lg:px-6">
       {profilePictureHref ? (
@@ -451,23 +682,25 @@ function AccountSettingsPanelContent({
           </CardContent>
         </Card>
       ) : null}
-      <Card>
-        <CardHeader>
-          <CardTitle>Company default avatars</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm text-muted-foreground">
-            Manage the gallery of default profile avatars employees can choose from (by gender category).
-          </p>
-          <Link
-            href="/dashboard/settings/default-avatars"
-            className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground shadow-xs transition-colors hover:bg-accent hover:text-accent-foreground self-start sm:self-auto"
-          >
-            <ImageIcon className="size-4" />
-            Manage avatars
-          </Link>
-        </CardContent>
-      </Card>
+      {canManageDefaultAvatars ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Company default avatars</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-muted-foreground">
+              Manage the gallery of default profile avatars employees can choose from (by gender category).
+            </p>
+            <Link
+              href="/dashboard/settings/default-avatars"
+              className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground shadow-xs transition-colors hover:bg-accent hover:text-accent-foreground self-start sm:self-auto"
+            >
+              <ImageIcon className="size-4" />
+              Manage avatars
+            </Link>
+          </CardContent>
+        </Card>
+      ) : null}
       <Card>
         <CardHeader>
           <CardTitle>Security & Authentication</CardTitle>
@@ -797,7 +1030,7 @@ function AccountSettingsPanelContent({
                       <Loader2 className="size-4 animate-spin" />
                       Loading active sessions...
                     </div>
-                  ) : sessions.length === 0 ? (
+                  ) : sessionError ? null : sessions.length === 0 ? (
                     <div className="rounded-lg border border-dashed px-3 py-4 text-sm text-muted-foreground">
                       No active sessions were returned for this account.
                     </div>
@@ -921,6 +1154,124 @@ function AccountSettingsPanelContent({
               </div>
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="space-y-1">
+            <CardTitle>Notification Preferences</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Choose which channels should alert you for leave, onboarding, offboarding, attendance, and system events.
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Rows marked as default still follow the backend default until you change them here.
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void loadNotificationPreferences()}
+            disabled={notificationPreferencesLoading || !token}
+          >
+            {notificationPreferencesLoading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+            Refresh
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {notificationPreferencesError ? (
+            <div className="rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-xs text-rose-700 dark:text-rose-300">
+              {notificationPreferencesError}
+            </div>
+          ) : null}
+
+          {notificationPreferencesLoading ? (
+            <div className="flex items-center gap-2 rounded-lg border bg-muted/20 px-3 py-4 text-sm text-muted-foreground">
+              <Loader2 className="size-4 animate-spin" />
+              Loading notification preferences...
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {NOTIFICATION_PREFERENCE_GROUPS.map((group) => (
+                <div key={group.title} className="space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-sm font-semibold text-foreground">{group.title}</h3>
+                    <span className="text-[11px] text-muted-foreground">
+                      {group.types.length} type{group.types.length === 1 ? "" : "s"}
+                    </span>
+                  </div>
+                  <div className="overflow-x-auto rounded-lg border">
+                    <table className="min-w-full border-collapse text-sm">
+                      <thead className="bg-muted/30">
+                        <tr>
+                          <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            Notification
+                          </th>
+                          {NOTIFICATION_PREFERENCE_CHANNELS.map((channel) => (
+                            <th
+                              key={channel}
+                              className="px-3 py-2 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                            >
+                              {formatNotificationPreferenceLabel(channel)}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {group.types.map((notificationType) => (
+                          <tr key={notificationType} className="border-t">
+                            <td className="px-3 py-3 align-top">
+                              <div className="space-y-0.5">
+                                <p className="text-sm font-medium text-foreground">
+                                  {formatNotificationPreferenceLabel(notificationType)}
+                                </p>
+                                <p className="text-[11px] text-muted-foreground">
+                                  {notificationType}
+                                </p>
+                              </div>
+                            </td>
+                            {NOTIFICATION_PREFERENCE_CHANNELS.map((channel) => {
+                              const key = buildNotificationPreferenceKey(notificationType, channel)
+                              const preference = notificationPreferencesByKey.get(key) ?? null
+                              const busy = notificationPreferenceBusyKey === key
+                              const hasExplicitPreference = Boolean(preference)
+                              return (
+                                <td key={channel} className="px-3 py-3 text-center align-middle">
+                                  <div className="flex flex-col items-center gap-1">
+                                    <Switch
+                                      checked={readNotificationPreferenceEnabled(preference)}
+                                      disabled={busy || !token}
+                                      aria-label={`${formatNotificationPreferenceLabel(notificationType)} ${formatNotificationPreferenceLabel(channel)}`}
+                                      onCheckedChange={(checked) =>
+                                        void handleToggleNotificationPreference(
+                                          notificationType,
+                                          channel,
+                                          Boolean(checked)
+                                        )
+                                      }
+                                    />
+                                    <span className="text-[10px] text-muted-foreground">
+                                      {busy
+                                        ? "Saving..."
+                                        : hasExplicitPreference
+                                          ? readNotificationPreferenceEnabled(preference)
+                                            ? "On"
+                                            : "Off"
+                                          : "Default"}
+                                    </span>
+                                  </div>
+                                </td>
+                              )
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

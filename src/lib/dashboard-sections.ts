@@ -28,6 +28,7 @@ export const attendanceSectionTabGroups: DashboardSectionTabGroup[] = [
     items: [
       { title: "Daily Summaries", url: "/dashboard/attendance/daily-summaries" },
       { title: "Mobile Punch Review", url: "/dashboard/attendance/mobile-punches" },
+      { title: "Processing Exceptions", url: "/dashboard/attendance/processing-exceptions" },
       { title: "Recalculation Jobs", url: "/dashboard/attendance/recalculation-jobs" },
       { title: "Unmatched Logs", url: "/dashboard/attendance/unmatched-logs" },
       { title: "Device Sync Logs", url: "/dashboard/attendance/device-sync-logs" },
@@ -101,6 +102,75 @@ export const positionsSectionTabGroups: DashboardSectionTabGroup[] = [
   },
 ]
 
+export const performanceSectionTabGroups: DashboardSectionTabGroup[] = [
+  {
+    items: [
+      { title: "Overview", url: "/dashboard/performance/overview" },
+      { title: "Setup", url: "/dashboard/performance/setup" },
+      { title: "Plans", url: "/dashboard/performance/plans" },
+      { title: "Reviews", url: "/dashboard/performance/reviews" },
+      { title: "Improvement", url: "/dashboard/performance/improvement" },
+    ],
+  },
+]
+
+export const selfPerformanceSectionTabGroups: DashboardSectionTabGroup[] = [
+  {
+    items: [
+      { title: "Overview", url: "/dashboard/me/performance/overview" },
+      { title: "Assignments", url: "/dashboard/me/performance/assignments" },
+      { title: "Reviews", url: "/dashboard/me/performance/reviews" },
+      { title: "Achievements", url: "/dashboard/me/performance/achievements" },
+      { title: "Improvement", url: "/dashboard/me/performance/improvement" },
+      { title: "Team", url: "/dashboard/me/performance/team" },
+    ],
+  },
+]
+
+export const probationSectionTabGroups: DashboardSectionTabGroup[] = [
+  {
+    items: [
+      { title: "Overview", url: "/dashboard/probation/overview" },
+      { title: "Policies", url: "/dashboard/probation/policies" },
+      { title: "Cases", url: "/dashboard/probation/cases" },
+      { title: "Team", url: "/dashboard/probation/team" },
+    ],
+  },
+]
+
+export const fieldSectionTabGroups: DashboardSectionTabGroup[] = [
+  {
+    items: [
+      { title: "Overview", url: "/dashboard/field/overview" },
+      { title: "Visits", url: "/dashboard/field/visits" },
+      { title: "Map", url: "/dashboard/field/map" },
+      { title: "Parties", url: "/dashboard/field/parties" },
+      { title: "Setup", url: "/dashboard/field/setup" },
+    ],
+  },
+]
+
+export const selfFieldSectionTabGroups: DashboardSectionTabGroup[] = [
+  {
+    items: [
+      { title: "My visits", url: "/dashboard/me/field/visits" },
+      { title: "Plans", url: "/dashboard/me/field/plans" },
+      { title: "Follow-ups", url: "/dashboard/me/field/follow-ups" },
+    ],
+  },
+]
+
+export const financeSectionTabGroups: DashboardSectionTabGroup[] = [
+  {
+    items: [
+      { title: "Overview", url: "/dashboard/finance/overview" },
+      { title: "Products", url: "/dashboard/finance/products" },
+      { title: "Applications", url: "/dashboard/finance/applications" },
+      { title: "Accounts", url: "/dashboard/finance/accounts" },
+    ],
+  },
+]
+
 export const leaveManagementSectionTabGroups: DashboardSectionTabGroup[] = [
   {
     items: [
@@ -121,8 +191,13 @@ export const accessControlSectionTabGroups: DashboardSectionTabGroup[] = [
       { title: "Devices", url: "/dashboard/access-control/devices" },
       { title: "Doors", url: "/dashboard/access-control/doors" },
       { title: "Templates", url: "/dashboard/access-control/templates" },
+      { title: "Week Plans", url: "/dashboard/access-control/week-plans" },
       { title: "Organization", url: "/dashboard/access-control/organizations" },
       { title: "Groups", url: "/dashboard/access-control/groups" },
+      { title: "Credentials", url: "/dashboard/access-control/access-credentials" },
+      { title: "Audit Logs", url: "/dashboard/access-control/audit-logs" },
+      { title: "Command Logs", url: "/dashboard/access-control/device-command-logs" },
+      { title: "Sync Logs", url: "/dashboard/access-control/hikvision-sync-logs" },
       { title: "Roles", url: "/dashboard/roles" },
       { title: "Permissions", url: "/dashboard/permissions" },
     ],

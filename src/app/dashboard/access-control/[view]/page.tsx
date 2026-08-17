@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation"
 
+import { AccessControlActivityClient } from "@/components/dashboard/access-control-activity-client"
 import { AccessControlManagementClient } from "@/components/dashboard/access-control-management-client"
 import { AttendanceManagementClient } from "@/components/dashboard/attendance-management-client"
 
@@ -28,7 +29,15 @@ export default async function AccessControlViewPage({
     return <AttendanceManagementClient section="devices" />
   }
 
-  if (!["doors", "templates", "organizations", "groups"].includes(normalized)) {
+  if (
+    ["access-credentials", "audit-logs", "device-command-logs", "hikvision-sync-logs"].includes(
+      normalized
+    )
+  ) {
+    return <AccessControlActivityClient section={normalized} moduleTitle="Access Control" />
+  }
+
+  if (!["doors", "templates", "organizations", "groups", "week-plans"].includes(normalized)) {
     redirect("/dashboard/access-control")
   }
 

@@ -1,10 +1,11 @@
 import { redirect } from "next/navigation"
 import { AttendanceReportView } from "@/components/dashboard/attendance-report-view"
+import { NotificationsView } from "@/components/dashboard/notifications-view"
+import { PayrollOperationsView } from "@/components/dashboard/payroll-operations-view"
 import { ScheduledReportingView } from "@/components/dashboard/scheduled-reporting-view"
 import { RecruitmentView } from "@/components/dashboard/recruitment-view"
 import {
   EmployeePromotionView,
-  EmployeePayrollView,
 } from "@/components/dashboard/employee-self-service-view"
 
 const ALLOWED_VIEWS = new Set([
@@ -13,6 +14,7 @@ const ALLOWED_VIEWS = new Set([
   "payroll",
   "reports",
   "scheduled-reporting",
+  "notifications",
 ])
 
 interface OperationsViewPageProps {
@@ -37,8 +39,7 @@ export default async function OperationsViewPage({
   }
 
   if (normalized === "payroll") {
-    // My Payroll - bright background, under development with animated icons
-    return <EmployeePayrollView />
+    return <PayrollOperationsView />
   }
 
   if (normalized === "recruitment") {
@@ -51,6 +52,10 @@ export default async function OperationsViewPage({
 
   if (normalized === "scheduled-reporting") {
     return <ScheduledReportingView />
+  }
+
+  if (normalized === "notifications") {
+    return <NotificationsView />
   }
 
   return null

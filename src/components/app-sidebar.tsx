@@ -19,6 +19,9 @@ import { UsersRound } from "@/components/animate-ui/icons/users-round"
 import { Route } from "@/components/animate-ui/icons/route"
 import { CircleX } from "@/components/animate-ui/icons/circle-x"
 import { ChartColumn } from "@/components/animate-ui/icons/chart-column"
+import { ChartSpline } from "@/components/animate-ui/icons/chart-spline"
+import { BadgeCheck } from "@/components/animate-ui/icons/badge-check"
+import { MapPin } from "@/components/animate-ui/icons/map-pin"
 import { Settings } from "@/components/animate-ui/icons/settings"
 import { Search } from "@/components/animate-ui/icons/search"
 import { MessageCircleQuestion } from "@/components/animate-ui/icons/message-circle-question"
@@ -33,6 +36,9 @@ const IUsers = <UsersRound size={48} animation="path-loop" />
 const ILeave = <Route size={48} animation="path-loop" />
 const IOffboarding = <CircleX size={48} animation="path-loop" />
 const IAttendance = <ChartColumn size={48} animation="path-loop" />
+const IPerformance = <ChartSpline size={48} animation="default-loop" />
+const IProbation = <BadgeCheck size={48} animation="default" />
+const IField = <MapPin size={48} animation="default" />
 const IDepartments = <Kanban size={48} animation="default" />
 const ISettings = <Settings size={48} animation="path-loop" />
 const IHelp = <MessageCircleQuestion size={48} animation="path-loop" />
@@ -65,8 +71,13 @@ const adminData: SidebarData = {
         "/dashboard/access-control/devices",
         "/dashboard/access-control/doors",
         "/dashboard/access-control/templates",
+        "/dashboard/access-control/week-plans",
         "/dashboard/access-control/organizations",
         "/dashboard/access-control/groups",
+        "/dashboard/access-control/access-credentials",
+        "/dashboard/access-control/audit-logs",
+        "/dashboard/access-control/device-command-logs",
+        "/dashboard/access-control/hikvision-sync-logs",
         "/dashboard/roles",
         "/dashboard/permissions",
       ],
@@ -80,6 +91,11 @@ const adminData: SidebarData = {
     {
       title: "Branches",
       url: "/dashboard/branches",
+      icon: IUsers,
+    },
+    {
+      title: "Companies",
+      url: "/dashboard/companies",
       icon: IUsers,
     },
     {
@@ -116,6 +132,56 @@ const adminData: SidebarData = {
       icon: ILeave,
     },
     {
+      title: "Performance",
+      url: "/dashboard/performance",
+      matchUrls: [
+        "/dashboard/performance",
+        "/dashboard/performance/overview",
+        "/dashboard/performance/setup",
+        "/dashboard/performance/plans",
+        "/dashboard/performance/reviews",
+        "/dashboard/performance/improvement",
+      ],
+      icon: IPerformance,
+    },
+    {
+      title: "Probation",
+      url: "/dashboard/probation",
+      matchUrls: [
+        "/dashboard/probation",
+        "/dashboard/probation/overview",
+        "/dashboard/probation/policies",
+        "/dashboard/probation/cases",
+        "/dashboard/probation/team",
+      ],
+      icon: IProbation,
+    },
+    {
+      title: "Field",
+      url: "/dashboard/field",
+      matchUrls: [
+        "/dashboard/field",
+        "/dashboard/field/overview",
+        "/dashboard/field/visits",
+        "/dashboard/field/map",
+        "/dashboard/field/parties",
+        "/dashboard/field/setup",
+      ],
+      icon: IField,
+    },
+    {
+      title: "Finance",
+      url: "/dashboard/finance",
+      matchUrls: [
+        "/dashboard/finance",
+        "/dashboard/finance/overview",
+        "/dashboard/finance/products",
+        "/dashboard/finance/applications",
+        "/dashboard/finance/accounts",
+      ],
+      icon: IUsers,
+    },
+    {
       title: "Positions",
       url: "/dashboard/positions",
       icon: IUsers,
@@ -126,12 +192,22 @@ const adminData: SidebarData = {
       icon: IUsers,
     },
     {
+      title: "Payroll",
+      url: "/dashboard/operations/payroll",
+      icon: IUsers,
+    },
+    {
       title: "Reports",
       url: "/dashboard/operations/reports",
       matchUrls: [
         "/dashboard/operations/reports",
         "/dashboard/operations/scheduled-reporting",
       ],
+      icon: IUsers,
+    },
+    {
+      title: "Notifications",
+      url: "/dashboard/operations/notifications",
       icon: IUsers,
     },
   ],
@@ -185,8 +261,13 @@ const adminSearchIndex = [
   { title: "Attendance / Attendance Operations / Device Sync Logs", url: "/dashboard/attendance/device-sync-logs", section: "Attendance Operations", keywords: ["attendance", "sync logs"] },
   { title: "Access Control / Doors", url: "/dashboard/access-control/doors", section: "Access Control", keywords: ["attendance", "doors", "access"] },
   { title: "Access Control / Templates", url: "/dashboard/access-control/templates", section: "Access Control", keywords: ["attendance", "templates", "schedule"] },
+  { title: "Access Control / Week Plans", url: "/dashboard/access-control/week-plans", section: "Access Control", keywords: ["attendance", "week plan", "schedule"] },
   { title: "Access Control / Organization", url: "/dashboard/access-control/organizations", section: "Access Control", keywords: ["attendance", "organization", "access"] },
   { title: "Access Control / Groups", url: "/dashboard/access-control/groups", section: "Access Control", keywords: ["attendance", "groups", "access"] },
+  { title: "Access Control / Credentials", url: "/dashboard/access-control/access-credentials", section: "Access Control", keywords: ["credential", "card", "fingerprint", "pin"] },
+  { title: "Access Control / Audit Logs", url: "/dashboard/access-control/audit-logs", section: "Access Control", keywords: ["audit", "logs", "device access"] },
+  { title: "Access Control / Command Logs", url: "/dashboard/access-control/device-command-logs", section: "Access Control", keywords: ["command", "logs", "hikvision"] },
+  { title: "Access Control / Sync Logs", url: "/dashboard/access-control/hikvision-sync-logs", section: "Access Control", keywords: ["sync", "logs", "hikvision"] },
   { title: "Leave Management / Leave Types", url: "/dashboard/leave-management/types", section: "Leave", keywords: ["leave", "types", "vacation"] },
   { title: "Leave Management / Leave Requests", url: "/dashboard/leave-management/requests", section: "Leave", keywords: ["leave", "request", "approval"] },
   { title: "Leave Management / Leave Balances", url: "/dashboard/leave-management/balances", section: "Leave", keywords: ["leave", "balance", "quota"] },
@@ -194,12 +275,31 @@ const adminSearchIndex = [
   { title: "Leave Management / Holidays", url: "/dashboard/leave-management/holidays", section: "Leave", keywords: ["leave", "holiday", "calendar"] },
   { title: "Leave Management / Policies", url: "/dashboard/leave-management/policies", section: "Leave", keywords: ["leave", "policy", "quota"] },
   { title: "Leave Management / Workflows", url: "/dashboard/leave-management/workflows", section: "Leave", keywords: ["leave", "workflow", "approval"] },
+  { title: "Performance / Overview", url: "/dashboard/performance/overview", section: "Performance", keywords: ["performance", "kpi", "review", "score"] },
+  { title: "Performance / Setup", url: "/dashboard/performance/setup", section: "Performance", keywords: ["performance", "kpi", "year", "period", "template"] },
+  { title: "Performance / Plans", url: "/dashboard/performance/plans", section: "Performance", keywords: ["performance", "plan", "kpi"] },
+  { title: "Performance / Reviews", url: "/dashboard/performance/reviews", section: "Performance", keywords: ["performance", "review", "appeal", "moderation"] },
+  { title: "Performance / Improvement", url: "/dashboard/performance/improvement", section: "Performance", keywords: ["performance", "pip", "improvement"] },
+  { title: "Probation / Overview", url: "/dashboard/probation/overview", section: "Probation", keywords: ["probation", "confirmation"] },
+  { title: "Probation / Policies", url: "/dashboard/probation/policies", section: "Probation", keywords: ["probation", "policy"] },
+  { title: "Probation / Cases", url: "/dashboard/probation/cases", section: "Probation", keywords: ["probation", "case", "confirmation"] },
+  { title: "Probation / Team", url: "/dashboard/probation/team", section: "Probation", keywords: ["probation", "team", "manager"] },
+  { title: "Field / Overview", url: "/dashboard/field/overview", section: "Field", keywords: ["field", "visit", "map"] },
+  { title: "Field / Visits", url: "/dashboard/field/visits", section: "Field", keywords: ["field", "visit"] },
+  { title: "Field / Parties", url: "/dashboard/field/parties", section: "Field", keywords: ["field", "customer", "party"] },
+  { title: "Finance / Overview", url: "/dashboard/finance/overview", section: "Finance", keywords: ["finance", "loan", "advance"] },
+  { title: "Finance / Products", url: "/dashboard/finance/products", section: "Finance", keywords: ["loan", "advance", "product"] },
+  { title: "Finance / Applications", url: "/dashboard/finance/applications", section: "Finance", keywords: ["loan", "advance", "application"] },
+  { title: "Finance / Accounts", url: "/dashboard/finance/accounts", section: "Finance", keywords: ["loan", "repayment", "disbursement"] },
+  { title: "Companies", url: "/dashboard/companies", section: "Organization", keywords: ["company", "organization", "tenant"] },
   { title: "Departments", url: "/dashboard/departments", section: "Organization", keywords: ["department", "org"] },
   { title: "Branches", url: "/dashboard/branches", section: "Organization", keywords: ["branch", "location"] },
   { title: "Positions", url: "/dashboard/positions", section: "Organization", keywords: ["position", "job title"] },
   { title: "Recruitment", url: "/dashboard/operations/recruitment", section: "Operations", keywords: ["hiring", "talent"] },
+  { title: "Payroll", url: "/dashboard/operations/payroll", section: "Operations", keywords: ["payroll", "runs", "payslips", "salary", "banking"] },
   { title: "Reports", url: "/dashboard/operations/reports", section: "Operations", keywords: ["attendance", "download", "xlsx", "csv", "pdf", "scheduled", "smtp", "templates"] },
   { title: "Scheduled Reporting", url: "/dashboard/operations/scheduled-reporting", section: "Operations", keywords: ["scheduled reporting", "templates", "schedules", "executions", "smtp"] },
+  { title: "Notifications", url: "/dashboard/operations/notifications", section: "Operations", keywords: ["notifications", "inbox", "alerts", "read", "seen", "archive"] },
   { title: "Access Control / Roles", url: "/dashboard/access-control/roles", section: "Access Control", keywords: ["role", "access", "authorization"] },
   { title: "Access Control / Permissions", url: "/dashboard/access-control/permissions", section: "Access Control", keywords: ["permission", "policy", "authorization"] },
   { title: "Settings", url: "/dashboard/settings", section: "General", keywords: ["preferences", "account"] },
@@ -230,6 +330,71 @@ const employeeData: SidebarData = {
       icon: IUsers,
       url: "/dashboard/me/profile",
       matchUrls: ["/dashboard/me/profile", "/dashboard/me/organization", "/dashboard/me/promotion"],
+    },
+    {
+      title: "My Payroll",
+      icon: IUsers,
+      url: "/dashboard/me/payroll",
+    },
+    {
+      title: "My Performance",
+      icon: IPerformance,
+      url: "/dashboard/me/performance/overview",
+      matchUrls: [
+        "/dashboard/me/performance",
+        "/dashboard/me/performance/overview",
+        "/dashboard/me/performance/assignments",
+        "/dashboard/me/performance/reviews",
+        "/dashboard/me/performance/achievements",
+        "/dashboard/me/performance/improvement",
+        "/dashboard/me/performance/team",
+      ],
+    },
+    {
+      title: "My Probation",
+      icon: IProbation,
+      url: "/dashboard/me/probation",
+    },
+    {
+      title: "My Field",
+      icon: IField,
+      url: "/dashboard/me/field/visits",
+      matchUrls: [
+        "/dashboard/me/field",
+        "/dashboard/me/field/visits",
+        "/dashboard/me/field/plans",
+        "/dashboard/me/field/follow-ups",
+      ],
+    },
+    {
+      title: "My Finance",
+      icon: IUsers,
+      url: "/dashboard/me/finance",
+    },
+    {
+      title: "Field",
+      url: "/dashboard/field",
+      matchUrls: [
+        "/dashboard/field",
+        "/dashboard/field/overview",
+        "/dashboard/field/visits",
+        "/dashboard/field/map",
+        "/dashboard/field/parties",
+        "/dashboard/field/setup",
+      ],
+      icon: IField,
+    },
+    {
+      title: "Finance",
+      url: "/dashboard/finance",
+      matchUrls: [
+        "/dashboard/finance",
+        "/dashboard/finance/overview",
+        "/dashboard/finance/products",
+        "/dashboard/finance/applications",
+        "/dashboard/finance/accounts",
+      ],
+      icon: IUsers,
     },
     {
       title: "My Leave",
@@ -280,6 +445,14 @@ const employeeSearchIndex = [
   { title: "My Leave / Balances", url: "/dashboard/me/leave/balances", section: "Leave", keywords: ["leave", "balance", "quota"] },
   { title: "My Leave / Holidays", url: "/dashboard/me/leave/holidays", section: "Leave", keywords: ["leave", "holiday"] },
   { title: "My Leave / Policies", url: "/dashboard/me/leave/policies", section: "Leave", keywords: ["leave", "policy"] },
+  { title: "My Payroll", url: "/dashboard/me/payroll", section: "Payroll", keywords: ["payroll", "payslips", "salary", "earnings", "deductions"] },
+  { title: "My Performance", url: "/dashboard/me/performance/overview", section: "Performance", keywords: ["performance", "kpi", "review", "score", "self review"] },
+  { title: "My Performance / Team", url: "/dashboard/me/performance/team", section: "Performance", keywords: ["performance", "team", "manager", "review"] },
+  { title: "My Probation", url: "/dashboard/me/probation", section: "Probation", keywords: ["probation", "confirmation", "self assessment"] },
+  { title: "My Field", url: "/dashboard/me/field/visits", section: "Field", keywords: ["field", "visit", "check in", "plan"] },
+  { title: "My Finance", url: "/dashboard/me/finance", section: "Finance", keywords: ["loan", "advance", "application"] },
+  { title: "Field", url: "/dashboard/field/overview", section: "Field", keywords: ["field", "visit"] },
+  { title: "Finance", url: "/dashboard/finance/overview", section: "Finance", keywords: ["finance", "loan", "advance"] },
   { title: "Offboarding", url: "/dashboard/me/offboarding", section: "Employees", keywords: ["employee", "exit"] },
   { title: "Settings", url: "/dashboard/settings", section: "General", keywords: ["preferences", "account"] },
 ]

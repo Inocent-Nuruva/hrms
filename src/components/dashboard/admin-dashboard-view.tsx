@@ -44,14 +44,15 @@ const HrAnalyticsDashboard = dynamic(
 import {
   createResource,
   deleteResource,
-  assignRoleToUser,
+  assignRoleToCurrentCompanyUser,
   changeCurrentUserPassword,
   getCurrentAdmin,
   listEmployees,
-  listResource,
+  listResourcePage,
   listUsers,
+  type CatalogQueryParams,
   patchResource,
-  revokeRoleFromUser,
+  revokeRoleFromCurrentCompanyUser,
   updateUserById,
   type AdminRecord,
   type AdminResourceCollections,
@@ -79,6 +80,11 @@ const DEFAULT_USERS_QUERY: Required<UsersQueryParams> = {
   limit: 20,
   sortBy: "created_at",
   sortOrder: "DESC",
+  search: "",
+}
+const DEFAULT_CATALOG_QUERY: Required<CatalogQueryParams> = {
+  page: 1,
+  limit: 20,
   search: "",
 }
 const DEFAULT_EMPLOYEE_PREFETCH_QUERY = {
@@ -329,7 +335,7 @@ export default function AdminDashboardView({
   const currentPath = pathname ?? ""
   const inferredActiveResource = React.useMemo(() => {
     const match = currentPath.match(
-      /^\/dashboard\/(?:(?:access-control\/)?(roles|permissions)|(users|companies))(?:\/|$)/
+      /^\/dashboard\/(?:(?:access-control\/)?(roles|permissions)|users)(?:\/|$)/
     )
     return ((match?.[1] ?? match?.[2]) as AdminResourceKey | undefined) ?? undefined
   }, [currentPath])
@@ -361,6 +367,30 @@ export default function AdminDashboardView({
     React.useState<Required<UsersQueryParams>>(DEFAULT_USERS_QUERY)
   const [usersTotal, setUsersTotal] = React.useState<number | null>(null)
   const [usersTotalPages, setUsersTotalPages] = React.useState<number | null>(null)
+  const [catalogByResource, setCatalogByResource] = React.useState<
+    Record<"roles" | "permissions", Required<CatalogQueryParams>>
+  >({
+    roles: DEFAULT_CATALOG_QUERY,
+    permissions: DEFAULT_CATALOG_QUERY,
+  })
+  const [catalogMeta, setCatalogMeta] = React.useState<
+    Record<"roles" | "permissions", { total: number | null; totalPages: number | null }>
+  >({
+    roles: { total: null, totalPages: null },
+    permissions: { total: null, totalPages: null },
+  })
+  const catalogQuery =
+    resolvedActiveResource === "roles" || resolvedActiveResource === "permissions"
+      ? catalogByResource[resolvedActiveResource]
+      : DEFAULT_CATALOG_QUERY
+  const catalogTotal =
+    resolvedActiveResource === "roles" || resolvedActiveResource === "permissions"
+      ? catalogMeta[resolvedActiveResource].total
+      : null
+  const catalogTotalPages =
+    resolvedActiveResource === "roles" || resolvedActiveResource === "permissions"
+      ? catalogMeta[resolvedActiveResource].totalPages
+      : null
 
   const resolveStoredTokens = React.useCallback(() => {
     if (typeof window === "undefined") {
@@ -491,25 +521,11 @@ export default function AdminDashboardView({
       // still hit GET /api/permissions and GET /api/roles even when the layout
       // mounts AdminDashboardView without useApis/activeResource props.
       if (!resolvedUseApis) {
-        setCollections({ users: [], roles: [], permissions: [], companies: [] })
-        setRows([])
-        setCurrentAdmin(null)
-        setMyCompany(null)
-        setUsersTotal(null)
-        setUsersTotalPages(null)
-        setError(null)
         setLoading(false)
         return
       }
 
       if (!accessToken) {
-        setCollections({ users: [], roles: [], permissions: [], companies: [] })
-        setRows([])
-        setCurrentAdmin(null)
-        setMyCompany(null)
-        setUsersTotal(null)
-        setUsersTotalPages(null)
-        setError(null)
         return
       }
 
@@ -517,27 +533,52 @@ export default function AdminDashboardView({
       setError(null)
 
       try {
-        // Always load full collections once; switching roles ↔ permissions only
-        // swaps the visible rows (see effect below) — no full-page tab refresh.
-        const [usersResult, roles, permissions, admin] = await Promise.all([
-          listUsers(accessToken, usersQuery),
-          listResource("roles", accessToken).catch(() => []),
-          // Catalog from GET /api/permissions (all permissions visible to actor)
-          listResource("permissions", accessToken).catch(() => []),
+        // One backend page only. Roles/permissions lists are already paginated
+        // server-side — walking every page here trips the API throttle.
+        const needsUsers = resolvedActiveResource === "users"
+        const needsRoles = resolvedActiveResource === "roles"
+        const needsPermissions = resolvedActiveResource === "permissions"
+
+        const rolesQuery = catalogByResource.roles
+        const permissionsQuery = catalogByResource.permissions
+        const [usersResult, rolesResult, permissionsResult, admin] = await Promise.all([
+          needsUsers ? listUsers(accessToken, usersQuery) : Promise.resolve(null),
+          needsRoles
+            ? listResourcePage("roles", accessToken, rolesQuery)
+            : Promise.resolve(null),
+          needsPermissions
+            ? listResourcePage("permissions", accessToken, permissionsQuery)
+            : Promise.resolve(null),
           getCurrentAdmin(accessToken).catch(() => null),
         ])
 
-        const fetchedCollections: AdminResourceCollections = {
-          users: usersResult.rows,
-          roles,
-          permissions,
-          companies: [],
-        }
-        setCollections(fetchedCollections)
+        setCollections((previous) => ({
+          users: usersResult ? usersResult.rows : previous.users,
+          roles: rolesResult ? rolesResult.rows : previous.roles,
+          permissions: permissionsResult ? permissionsResult.rows : previous.permissions,
+          companies: previous.companies,
+        }))
         setCurrentAdmin(admin)
         setMyCompany(null)
-        setUsersTotal(usersResult.total)
-        setUsersTotalPages(usersResult.totalPages)
+        if (usersResult) {
+          setUsersTotal(usersResult.total)
+          setUsersTotalPages(usersResult.totalPages)
+        }
+        if (rolesResult) {
+          setCatalogMeta((previous) => ({
+            ...previous,
+            roles: { total: rolesResult.total, totalPages: rolesResult.totalPages },
+          }))
+        }
+        if (permissionsResult) {
+          setCatalogMeta((previous) => ({
+            ...previous,
+            permissions: {
+              total: permissionsResult.total,
+              totalPages: permissionsResult.totalPages,
+            },
+          }))
+        }
       } catch (errorObject) {
         if (retryOnUnauthorized && isUnauthorizedError(errorObject)) {
           const refreshedToken = await attemptRefreshToken()
@@ -559,10 +600,6 @@ export default function AdminDashboardView({
         const message =
           errorObject instanceof Error ? errorObject.message : "Failed to load dashboard data."
         setError(message)
-        setCollections({ users: [], roles: [], permissions: [], companies: [] })
-        setRows([])
-        setUsersTotal(null)
-        setUsersTotalPages(null)
       } finally {
         setLoading(false)
       }
@@ -570,10 +607,12 @@ export default function AdminDashboardView({
     [
       attemptRefreshToken,
       clearStoredSession,
+      resolvedActiveResource,
       resolvedUseApis,
       router,
       token,
       usersQuery,
+      catalogByResource,
     ]
   )
 
@@ -588,15 +627,14 @@ export default function AdminDashboardView({
   }, [hydrateTokenFromStorage])
 
   React.useEffect(() => {
-    if (!resolvedUseApis) {
-      return
-    }
-    void loadData(token)
-  }, [token, loadData, resolvedUseApis])
-
-  React.useEffect(() => {
     setRows(resolvedActiveResource ? collections[resolvedActiveResource] ?? [] : [])
   }, [resolvedActiveResource, collections])
+
+  React.useEffect(() => {
+    if (resolvedActiveResource === "roles" || resolvedActiveResource === "permissions") {
+      setLoading(true)
+    }
+  }, [resolvedActiveResource])
 
   const navigateToResource = React.useCallback(
     (resource: AdminResourceKey) => {
@@ -669,6 +707,20 @@ export default function AdminDashboardView({
     await loadData(accessToken)
   }
 
+  const handleCatalogQueryChange = (next: Partial<Required<CatalogQueryParams>>) => {
+    if (resolvedActiveResource !== "roles" && resolvedActiveResource !== "permissions") {
+      return
+    }
+    const resource = resolvedActiveResource
+    setCatalogByResource((previous) => {
+      const updated = { ...previous[resource], ...next }
+      if (next.search !== undefined && next.page === undefined) {
+        updated.page = 1
+      }
+      return { ...previous, [resource]: updated }
+    })
+  }
+
   const handleUsersQueryChange = (next: Partial<Required<UsersQueryParams>>) => {
     setUsersQuery((previous) => {
       const updated = { ...previous, ...next }
@@ -733,10 +785,10 @@ export default function AdminDashboardView({
     }
 
     for (const roleId of addRoleIds) {
-      await assignRoleToUser(accessToken, userId, roleId)
+      await assignRoleToCurrentCompanyUser(accessToken, userId, roleId)
     }
     for (const roleId of removeRoleIds) {
-      await revokeRoleFromUser(accessToken, userId, roleId)
+      await revokeRoleFromCurrentCompanyUser(accessToken, userId, roleId)
     }
     await loadData(accessToken)
   }
@@ -899,6 +951,21 @@ export default function AdminDashboardView({
     accessMode === "admin" && canViewCompanyDashboard(effectivePermissionLabels)
 
   React.useEffect(() => {
+    if (!resolvedUseApis || !identityReady || !token) {
+      return
+    }
+    void loadData(token)
+  }, [
+    accessMode,
+    currentPath,
+    effectivePermissionLabels,
+    identityReady,
+    token,
+    loadData,
+    resolvedUseApis,
+  ])
+
+  React.useEffect(() => {
     if (!identityReady) {
       return
     }
@@ -999,7 +1066,16 @@ export default function AdminDashboardView({
                   usersTotal={usersTotal}
                   usersTotalPages={usersTotalPages}
                   onUsersQueryChange={handleUsersQueryChange}
-                  loading={loading}
+                  catalogQuery={catalogQuery}
+                  catalogTotal={catalogTotal}
+                  catalogTotalPages={catalogTotalPages}
+                  onCatalogQueryChange={handleCatalogQueryChange}
+                  loading={
+                    loading ||
+                    ((resolvedActiveResource === "roles" ||
+                      resolvedActiveResource === "permissions") &&
+                      !token)
+                  }
                   error={error}
                   onCreate={handleCreate}
                   onPatch={handlePatch}

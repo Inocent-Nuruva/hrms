@@ -5,6 +5,7 @@ import * as React from "react"
 import {
   Dialog,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogPopup,
   DialogTitle,
@@ -215,6 +216,8 @@ export function RecordDetailsDialog({
   row,
   resolveLabel,
   resolveValue,
+  content,
+  footer,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -223,6 +226,8 @@ export function RecordDetailsDialog({
   row: AdminRecord | null
   resolveLabel?: (key: string) => string
   resolveValue?: (key: string, row: AdminRecord) => string
+  content?: React.ReactNode
+  footer?: React.ReactNode
 }) {
   const entries = React.useMemo(() => {
     if (!row) {
@@ -239,7 +244,9 @@ export function RecordDetailsDialog({
           <DialogTitle>{title}</DialogTitle>
           {description ? <DialogDescription>{description}</DialogDescription> : null}
         </DialogHeader>
-        {entries.length === 0 ? (
+        {content ? (
+          content
+        ) : entries.length === 0 ? (
           <p className="text-sm text-slate-500 dark:text-slate-400">No details available for this record.</p>
         ) : (
           <div className="max-h-[65vh] overflow-auto pr-1">
@@ -257,6 +264,7 @@ export function RecordDetailsDialog({
             </div>
           </div>
         )}
+        {footer ? <DialogFooter>{footer}</DialogFooter> : null}
       </DialogPopup>
     </Dialog>
   )

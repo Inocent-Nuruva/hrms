@@ -5,7 +5,7 @@ export type AdminResourceKey = "users" | "roles" | "permissions" | "companies";
 export type AdminRecord = Record<string, unknown>;
 export type SortOrder = "ASC" | "DESC";
 
-type HttpMethod = "GET" | "POST" | "PATCH" | "DELETE";
+type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 interface AdminRequestOptions {
   method?: HttpMethod;
@@ -151,6 +151,7 @@ export interface OffboardingWorkflowsQueryParams extends UsersQueryParams {
 export interface AttendanceQueryParams extends UsersQueryParams {
   employee_id?: number;
   employee_no?: string;
+  device_id?: number;
   from_date?: string;
   to_date?: string;
   organization_id?: number;
@@ -160,6 +161,7 @@ export interface AttendanceQueryParams extends UsersQueryParams {
   timetable_id?: number;
   status?: string;
   attendance_status?: string;
+  exception_type?: string;
   /** Filter attendance policies by active flag (GET /api/attendance/config/policies). */
   is_active?: boolean;
 }
@@ -208,6 +210,48 @@ export type NotificationStatus = "UNREAD" | "READ";
 export type NotificationCategory =
   "GENERAL" | "HR" | "AUTH" | "ACCESS_CONTROL" | "SYSTEM";
 export type NotificationPriority = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
+export type NotificationChannel = "IN_APP" | "EMAIL" | "SMS" | "PUSH";
+export type NotificationPreferenceType =
+  | "GENERAL"
+  | "AUTH_SECURITY"
+  | "ACCESS_CHANGE"
+  | "LEAVE_SUBMITTED"
+  | "LEAVE_APPROVAL_REQUIRED"
+  | "LEAVE_APPROVED"
+  | "LEAVE_REJECTED"
+  | "LEAVE_RETURNED_FOR_CORRECTION"
+  | "LEAVE_CANCELLED"
+  | "ONBOARDING_SUBMITTED"
+  | "ONBOARDING_APPROVAL_REQUIRED"
+  | "ONBOARDING_APPROVED"
+  | "ONBOARDING_REJECTED"
+  | "ONBOARDING_TASK_ASSIGNED"
+  | "ONBOARDING_TASK_OVERDUE"
+  | "ONBOARDING_APPROVAL_REMINDER"
+  | "ONBOARDING_COMPLETED"
+  | "OFFBOARDING_SUBMITTED"
+  | "OFFBOARDING_APPROVAL_REQUIRED"
+  | "OFFBOARDING_APPROVED"
+  | "OFFBOARDING_TASK_ASSIGNED"
+  | "OFFBOARDING_TASK_OVERDUE"
+  | "OFFBOARDING_APPROVAL_REMINDER"
+  | "OFFBOARDING_CLEARANCE_REQUIRED"
+  | "OFFBOARDING_CLEARANCE_OVERDUE"
+  | "OFFBOARDING_ASSET_OVERDUE"
+  | "OFFBOARDING_SETTLEMENT_OVERDUE"
+  | "OFFBOARDING_COMPLETED"
+  | "ATTENDANCE_CORRECTION"
+  | "SYSTEM_ALERT";
+export type NotificationDeliveryStatus =
+  | "PENDING"
+  | "DELIVERED"
+  | "FAILED"
+  | "SKIPPED";
+export type NotificationMailLogStatus =
+  | "PENDING"
+  | "SENT"
+  | "SKIPPED"
+  | "FAILED";
 
 export type NotificationItem = AdminRecord & {
   id?: number | string;
@@ -252,6 +296,83 @@ export interface NotificationQueryParams extends UsersQueryParams {
   include_archived?: boolean;
 }
 
+export interface NotificationDeliveryQueryParams extends UsersQueryParams {
+  channel?: NotificationChannel;
+  status?: NotificationDeliveryStatus;
+  notification_id?: number;
+  receiver_company_user_id?: number;
+  related_module?: string;
+  entity_type?: string;
+  entity_id?: string;
+}
+
+export interface NotificationMailLogQueryParams extends UsersQueryParams {
+  status?: NotificationMailLogStatus;
+  method?: string;
+  recipient_email?: string;
+  company_id?: number;
+  only_unscoped?: boolean;
+}
+
+export interface NotificationChannelRegistryQueryParams {
+  channel?: NotificationChannel;
+  module?: string;
+  search?: string;
+}
+
+export type NotificationChannelSetting = AdminRecord & {
+  id?: number | string;
+  channel?: NotificationChannel | string;
+  isEnabled?: boolean;
+  is_enabled?: boolean;
+  description?: string | null;
+  updatedByCompanyUserId?: number | string | null;
+  updated_by_company_user_id?: number | string | null;
+  createdAt?: string;
+  created_at?: string;
+  updatedAt?: string;
+  updated_at?: string;
+};
+
+export type NotificationChannelRegistryItem = AdminRecord & {
+  id?: number | string;
+  channel?: NotificationChannel | string;
+  code?: string;
+  name?: string;
+  module?: string;
+  description?: string | null;
+  isEnabled?: boolean;
+  is_enabled?: boolean;
+  updatedByCompanyUserId?: number | string | null;
+  updated_by_company_user_id?: number | string | null;
+  createdAt?: string;
+  created_at?: string;
+  updatedAt?: string;
+  updated_at?: string;
+};
+
+export type NotificationPreference = AdminRecord & {
+  id?: number | string;
+  notification_type?: NotificationPreferenceType | string;
+  notificationType?: NotificationPreferenceType | string;
+  channel?: NotificationChannel | string;
+  is_enabled?: boolean;
+  isEnabled?: boolean;
+  created_at?: string;
+  createdAt?: string;
+  updated_at?: string;
+  updatedAt?: string;
+};
+
+export interface SetMyNotificationPreferenceInput {
+  notification_type: NotificationPreferenceType;
+  channel: NotificationChannel;
+  is_enabled: boolean;
+}
+
+export type NotificationDeliveryLog = AdminRecord;
+export type NotificationMailLog = AdminRecord;
+
 export type CreateTestNotificationInput = {
   receiver_company_user_id: number;
   title: string;
@@ -277,6 +398,12 @@ export interface EmployeePositionsQueryParams extends UsersQueryParams {
   position_id?: number;
   status?: string;
   assignment_type?: string;
+}
+
+export interface EmployeeMovementsQueryParams extends UsersQueryParams {
+  employee_id?: number;
+  status?: string;
+  movement_type?: string;
 }
 
 export type AttendanceResourceKey =
@@ -337,9 +464,21 @@ export interface EmployeeStatusPayload {
     | "terminated"
     | "retired"
     | "exited";
+  effective_date: string;
   exit_date?: string;
   exit_reason?: string;
   notes?: string;
+}
+
+export interface EmployeeAssignmentPayload {
+  effective_date: string;
+  branch_id?: number | null;
+  departments?: Array<{ department_id: number; is_primary?: boolean }>;
+  primary_position_id?: number | null;
+  reports_to?: number | null;
+  grade_id?: number | null;
+  cost_center_id?: number | null;
+  reason?: string;
 }
 
 export const EMPLOYEE_STATUS_VALUES = [
@@ -596,11 +735,18 @@ function asArray(value: unknown): AdminRecord[] | null {
     (entry) =>
       typeof entry === "object" && entry !== null && !Array.isArray(entry),
   ) as AdminRecord[];
-  // Non-empty arrays of primitives (permission strings, ids, etc.) are not record lists.
-  if (records.length === 0) {
-    return null;
+  if (records.length > 0) {
+    return records;
   }
-  return records;
+  // Permission catalogs sometimes return ["roles:read", "users:update", ...].
+  if (value.every((entry) => typeof entry === "string" && entry.trim())) {
+    return (value as string[]).map((name) => ({
+      id: name,
+      name,
+      display_name: name,
+    }));
+  }
+  return null;
 }
 
 const PREFERRED_LIST_KEYS = [
@@ -1245,6 +1391,109 @@ function buildNotificationsQuery(params: NotificationQueryParams) {
   return query ? `?${query}` : "";
 }
 
+function buildNotificationDeliveriesQuery(
+  params: NotificationDeliveryQueryParams,
+) {
+  const searchParams = new URLSearchParams();
+  if (typeof params.page === "number" && params.page > 0) {
+    searchParams.set("page", String(params.page));
+  }
+  if (typeof params.limit === "number" && params.limit > 0) {
+    searchParams.set("limit", String(params.limit));
+  }
+  if (params.sortBy && params.sortBy.trim()) {
+    searchParams.set("sortBy", params.sortBy.trim());
+  }
+  if (params.sortOrder === "ASC" || params.sortOrder === "DESC") {
+    searchParams.set("sortOrder", params.sortOrder);
+  }
+  if (params.search && params.search.trim()) {
+    searchParams.set("search", params.search.trim());
+  }
+  if (params.channel) {
+    searchParams.set("channel", params.channel);
+  }
+  if (params.status) {
+    searchParams.set("status", params.status);
+  }
+  if (typeof params.notification_id === "number" && params.notification_id > 0) {
+    searchParams.set("notification_id", String(params.notification_id));
+  }
+  if (
+    typeof params.receiver_company_user_id === "number" &&
+    params.receiver_company_user_id > 0
+  ) {
+    searchParams.set(
+      "receiver_company_user_id",
+      String(params.receiver_company_user_id),
+    );
+  }
+  if (params.related_module && params.related_module.trim()) {
+    searchParams.set("related_module", params.related_module.trim());
+  }
+  if (params.entity_type && params.entity_type.trim()) {
+    searchParams.set("entity_type", params.entity_type.trim());
+  }
+  if (params.entity_id && params.entity_id.trim()) {
+    searchParams.set("entity_id", params.entity_id.trim());
+  }
+  const query = searchParams.toString();
+  return query ? `?${query}` : "";
+}
+
+function buildNotificationMailLogsQuery(params: NotificationMailLogQueryParams) {
+  const searchParams = new URLSearchParams();
+  if (typeof params.page === "number" && params.page > 0) {
+    searchParams.set("page", String(params.page));
+  }
+  if (typeof params.limit === "number" && params.limit > 0) {
+    searchParams.set("limit", String(params.limit));
+  }
+  if (params.sortBy && params.sortBy.trim()) {
+    searchParams.set("sortBy", params.sortBy.trim());
+  }
+  if (params.sortOrder === "ASC" || params.sortOrder === "DESC") {
+    searchParams.set("sortOrder", params.sortOrder);
+  }
+  if (params.search && params.search.trim()) {
+    searchParams.set("search", params.search.trim());
+  }
+  if (params.status) {
+    searchParams.set("status", params.status);
+  }
+  if (params.method && params.method.trim()) {
+    searchParams.set("method", params.method.trim());
+  }
+  if (params.recipient_email && params.recipient_email.trim()) {
+    searchParams.set("recipient_email", params.recipient_email.trim());
+  }
+  if (typeof params.company_id === "number" && params.company_id > 0) {
+    searchParams.set("company_id", String(params.company_id));
+  }
+  if (typeof params.only_unscoped === "boolean") {
+    searchParams.set("only_unscoped", String(params.only_unscoped));
+  }
+  const query = searchParams.toString();
+  return query ? `?${query}` : "";
+}
+
+function buildNotificationChannelRegistryQuery(
+  params: NotificationChannelRegistryQueryParams,
+) {
+  const searchParams = new URLSearchParams();
+  if (params.channel) {
+    searchParams.set("channel", params.channel);
+  }
+  if (params.module && params.module.trim()) {
+    searchParams.set("module", params.module.trim());
+  }
+  if (params.search && params.search.trim()) {
+    searchParams.set("search", params.search.trim());
+  }
+  const query = searchParams.toString();
+  return query ? `?${query}` : "";
+}
+
 function buildAttendanceReportQuery(params: AttendanceReportDownloadParams) {
   const searchParams = new URLSearchParams();
   if (typeof params.page === "number" && params.page > 0) {
@@ -1264,6 +1513,9 @@ function buildAttendanceReportQuery(params: AttendanceReportDownloadParams) {
   }
   if (typeof params.employee_id === "number" && params.employee_id > 0) {
     searchParams.set("employee_id", String(params.employee_id));
+  }
+  if (typeof params.device_id === "number" && params.device_id > 0) {
+    searchParams.set("device_id", String(params.device_id));
   }
   if (params.employee_no && params.employee_no.trim()) {
     searchParams.set("employee_no", params.employee_no.trim());
@@ -1294,6 +1546,9 @@ function buildAttendanceReportQuery(params: AttendanceReportDownloadParams) {
   }
   if (params.status && params.status.trim()) {
     searchParams.set("status", params.status.trim());
+  }
+  if (params.exception_type && params.exception_type.trim()) {
+    searchParams.set("exception_type", params.exception_type.trim());
   }
   if (params.attendance_status && params.attendance_status.trim()) {
     searchParams.set("attendance_status", params.attendance_status.trim());
@@ -2248,7 +2503,52 @@ function parseResponseBodyText(
   }
 }
 
+const GET_THROTTLE_MAX_RETRIES = 3;
+const GET_THROTTLE_RETRY_CAP_MS = 10_000;
+
+function parseRetryAfterMs(header: string | null): number | null {
+  if (!header) {
+    return null;
+  }
+  const trimmed = header.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const asSeconds = Number(trimmed);
+  if (Number.isFinite(asSeconds) && asSeconds >= 0) {
+    return Math.min(Math.round(asSeconds * 1000), GET_THROTTLE_RETRY_CAP_MS);
+  }
+  const asDate = Date.parse(trimmed);
+  if (Number.isFinite(asDate)) {
+    return Math.min(Math.max(asDate - Date.now(), 0), GET_THROTTLE_RETRY_CAP_MS);
+  }
+  return null;
+}
+
+async function waitForRetry(ms: number, signal?: AbortSignal) {
+  if (signal?.aborted) {
+    throw createAbortError();
+  }
+  if (ms <= 0) {
+    return;
+  }
+  await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(createAbortError());
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
 function extractMessage(payload: unknown, status: number) {
+  if (status === 429) {
+    return "Too many requests. Please wait a moment and try again.";
+  }
   const record = asRecord(payload);
   if (!record) {
     return `Request failed with status ${status}`;
@@ -2333,41 +2633,58 @@ async function adminRequest<T>(
   }
 
   const requestPromise = (async () => {
-    const response = await fetch(buildUrl(path), {
-      method,
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-      cache: "no-store",
-      signal,
-    });
-
-    const contentType = response.headers.get("content-type");
-    const text = await response.text();
-    const payload = parseResponseBodyText(text, contentType);
-
-    if (!response.ok) {
-      const error = new Error(
-        extractMessage(payload, response.status),
-      ) as Error & {
-        status?: number;
-        payload?: unknown;
-      };
-      error.status = response.status;
-      error.payload = payload;
-      throw error;
-    }
-
-    if (canReuseGetRequest && cacheTtlMs > 0) {
-      adminResponseCache.set(requestKey, {
-        expiresAt: Date.now() + cacheTtlMs,
-        value: payload,
+    let attempt = 0;
+    while (true) {
+      const response = await fetch(buildUrl(path), {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+        cache: "no-store",
+        signal,
       });
-    }
 
-    return payload as T;
+      if (
+        response.status === 429 &&
+        method === "GET" &&
+        attempt < GET_THROTTLE_MAX_RETRIES
+      ) {
+        attempt += 1;
+        await response.text().catch(() => "");
+        const waitMs =
+          parseRetryAfterMs(response.headers.get("retry-after")) ??
+          Math.min(400 * 2 ** (attempt - 1), 4_000);
+        await waitForRetry(waitMs, signal);
+        continue;
+      }
+
+      const contentType = response.headers.get("content-type");
+      const text = await response.text();
+      const payload = parseResponseBodyText(text, contentType);
+
+      if (!response.ok) {
+        const error = new Error(
+          extractMessage(payload, response.status),
+        ) as Error & {
+          status?: number;
+          payload?: unknown;
+        };
+        error.status = response.status;
+        error.payload = payload;
+        throw error;
+      }
+
+      if (canReuseGetRequest && cacheTtlMs > 0) {
+        adminResponseCache.set(requestKey, {
+          expiresAt: Date.now() + cacheTtlMs,
+          value: payload,
+        });
+      }
+
+      return payload as T;
+    }
   })();
 
   if (canReuseGetRequest && dedupe && !signal) {
@@ -2411,15 +2728,63 @@ function dedupeAdminRecordsById(rows: AdminRecord[]): AdminRecord[] {
   return out;
 }
 
+export interface CatalogQueryParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+}
+
+/**
+ * One backend page of roles or permissions. Do not loop this from the UI —
+ * GET /api/roles and GET /api/permissions are already paginated and throttled.
+ */
+export async function listResourcePage(
+  resource: AdminResourceKey,
+  token: string,
+  params: CatalogQueryParams = {},
+  options: ListRequestOptions = {},
+): Promise<PaginatedUsersResult> {
+  const page = params.page && params.page > 0 ? params.page : 1;
+  const limit =
+    params.limit && params.limit > 0
+      ? Math.min(params.limit, env.NEXT_PUBLIC_MAX_PAGE_SIZE || 100)
+      : 20;
+  const query = buildUsersQuery({
+    page,
+    limit,
+    search: params.search,
+  });
+  const payload = await adminRequest<unknown>(
+    `${RESOURCE_PATHS[resource]}${query}`,
+    {
+      token,
+      signal: options.signal,
+      cacheTtlMs:
+        options.cacheTtlMs === undefined
+          ? env.NEXT_PUBLIC_LIST_CACHE_TTL_SHORT_MS
+          : options.cacheTtlMs,
+      dedupe: options.dedupe,
+    },
+  );
+  const rows = dedupeAdminRecordsById(normalizeList(payload));
+  const pagination = extractUsersPagination(payload, page, limit);
+  return { rows, ...pagination };
+}
+
 /**
  * Fetch every page of a catalog resource (roles/permissions/…).
- * A single GET often only returns the first page (default limit 10–20), which
- * hides system roles such as "company user" that sit later in the list.
+ * Prefer `listResourcePage` for the Roles/Permissions tabs so the backend
+ * throttle is not hit by client-side page walking.
  */
 export async function listResource(
   resource: AdminResourceKey,
   token: string,
-  options: { pageAll?: boolean; pageSize?: number; maxPages?: number } = {},
+  options: {
+    pageAll?: boolean;
+    pageSize?: number;
+    maxPages?: number;
+    cacheTtlMs?: number;
+  } = {},
 ) {
   const pageAll = options.pageAll !== false;
   const pageSize =
@@ -2428,10 +2793,15 @@ export async function listResource(
       : Math.min(100, env.NEXT_PUBLIC_MAX_PAGE_SIZE || 100);
   const maxPages =
     options.maxPages && options.maxPages > 0 ? options.maxPages : 50;
+  const cacheTtlMs =
+    options.cacheTtlMs === undefined
+      ? env.NEXT_PUBLIC_LIST_CACHE_TTL_LONG_MS
+      : options.cacheTtlMs;
 
   if (!pageAll) {
     const payload = await adminRequest<unknown>(RESOURCE_PATHS[resource], {
       token,
+      cacheTtlMs,
     });
     return dedupeAdminRecordsById(normalizeList(payload));
   }
@@ -2442,21 +2812,32 @@ export async function listResource(
   while (page <= maxPages) {
     // Only page/limit — avoid sortBy so backends that don't index roles by created_at still work.
     const query = buildUsersQuery({ page, limit: pageSize });
-    const payload = await adminRequest<unknown>(
-      `${RESOURCE_PATHS[resource]}${query}`,
-      {
-        token,
-      },
-    );
+    let payload: unknown;
+    try {
+      payload = await adminRequest<unknown>(
+        `${RESOURCE_PATHS[resource]}${query}`,
+        {
+          token,
+          cacheTtlMs,
+        },
+      );
+    } catch (errorObject) {
+      if (collected.length > 0) {
+        break;
+      }
+      throw errorObject;
+    }
     const rows = normalizeList(payload);
     const pagination = extractUsersPagination(payload, page, pageSize);
     collected.push(...rows);
 
     const reachedEnd =
       rows.length === 0 ||
-      rows.length < pageSize ||
-      (pagination.totalPages !== null && page >= pagination.totalPages) ||
-      (pagination.total !== null && collected.length >= pagination.total);
+      (pagination.totalPages !== null
+        ? page >= pagination.totalPages
+        : pagination.total !== null
+          ? collected.length >= pagination.total
+          : rows.length < pageSize);
 
     if (reachedEnd) {
       break;
@@ -2594,6 +2975,305 @@ export async function createTestNotification(
     body: data,
   });
   return (normalizeSingle(payload) as NotificationItem | null) ?? null;
+}
+
+export async function listNotificationChannelSettings(token: string) {
+  const payload = await adminRequest<unknown>(
+    "/api/notifications/channel-settings",
+    { token },
+  );
+  return normalizeList(payload) as NotificationChannelSetting[];
+}
+
+export async function getNotificationChannelSetting(
+  token: string,
+  channel: string,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/notifications/channel-settings/${encodeURIComponent(channel)}`,
+    { token },
+  );
+  return (
+    (normalizeSingle(payload) as NotificationChannelSetting | null) ??
+    (asRecord(payload) as NotificationChannelSetting | null)
+  );
+}
+
+export async function updateNotificationChannelSetting(
+  token: string,
+  channel: string,
+  data: AdminRecord,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/notifications/channel-settings/${encodeURIComponent(channel)}`,
+    {
+      method: "PATCH",
+      token,
+      body: data,
+    },
+  );
+  return (
+    (normalizeSingle(payload) as NotificationChannelSetting | null) ??
+    (asRecord(payload) as NotificationChannelSetting | null)
+  );
+}
+
+export async function listNotificationChannelRegistry(
+  token: string,
+  params: NotificationChannelRegistryQueryParams = {},
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/notifications/channel-registry${buildNotificationChannelRegistryQuery(params)}`,
+    { token },
+  );
+  return normalizeList(payload) as NotificationChannelRegistryItem[];
+}
+
+export async function listPlatformNotificationChannelRegistry(
+  token: string,
+  params: NotificationChannelRegistryQueryParams = {},
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/notifications/platform/channel-registry${buildNotificationChannelRegistryQuery(params)}`,
+    { token },
+  );
+  return normalizeList(payload) as NotificationChannelRegistryItem[];
+}
+
+export async function getNotificationChannelRegistryItem(
+  token: string,
+  channel: string,
+  code: string,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/notifications/channel-registry/${encodeURIComponent(channel)}/${encodeURIComponent(code)}`,
+    { token },
+  );
+  return (
+    (normalizeSingle(payload) as NotificationChannelRegistryItem | null) ??
+    (asRecord(payload) as NotificationChannelRegistryItem | null)
+  );
+}
+
+export async function updateNotificationChannelRegistryItem(
+  token: string,
+  channel: string,
+  code: string,
+  data: AdminRecord,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/notifications/channel-registry/${encodeURIComponent(channel)}/${encodeURIComponent(code)}`,
+    {
+      method: "PATCH",
+      token,
+      body: data,
+    },
+  );
+  return (
+    (normalizeSingle(payload) as NotificationChannelRegistryItem | null) ??
+    (asRecord(payload) as NotificationChannelRegistryItem | null)
+  );
+}
+
+export async function updatePlatformNotificationChannelRegistryItem(
+  token: string,
+  channel: string,
+  code: string,
+  data: AdminRecord,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/notifications/platform/channel-registry/${encodeURIComponent(channel)}/${encodeURIComponent(code)}`,
+    {
+      method: "PATCH",
+      token,
+      body: data,
+    },
+  );
+  return (
+    (normalizeSingle(payload) as NotificationChannelRegistryItem | null) ??
+    (asRecord(payload) as NotificationChannelRegistryItem | null)
+  );
+}
+
+export async function listNotificationDeliveries(
+  token: string,
+  params: NotificationDeliveryQueryParams = {},
+  options: ListRequestOptions = {},
+): Promise<PaginatedUsersResult> {
+  const fallbackPage = params.page && params.page > 0 ? params.page : 1;
+  const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20;
+  const query = buildNotificationDeliveriesQuery(params);
+  const payload = await adminRequest<unknown>(
+    `/api/notifications/deliveries${query}`,
+    {
+      token,
+      signal: options.signal,
+      cacheTtlMs: options.cacheTtlMs,
+      dedupe: options.dedupe,
+    },
+  );
+  const rows = normalizeList(payload);
+  const pagination = extractUsersPagination(
+    payload,
+    fallbackPage,
+    fallbackLimit,
+  );
+  return { rows, ...pagination };
+}
+
+export async function getNotificationDelivery(
+  token: string,
+  id: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/notifications/deliveries/${id}`,
+    { token },
+  );
+  return (
+    (normalizeSingle(payload) as NotificationDeliveryLog | null) ??
+    (asRecord(payload) as NotificationDeliveryLog | null)
+  );
+}
+
+export async function listNotificationMailLogs(
+  token: string,
+  params: NotificationMailLogQueryParams = {},
+  options: ListRequestOptions = {},
+): Promise<PaginatedUsersResult> {
+  const fallbackPage = params.page && params.page > 0 ? params.page : 1;
+  const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20;
+  const query = buildNotificationMailLogsQuery(params);
+  const payload = await adminRequest<unknown>(
+    `/api/notifications/mail-logs${query}`,
+    {
+      token,
+      signal: options.signal,
+      cacheTtlMs: options.cacheTtlMs,
+      dedupe: options.dedupe,
+    },
+  );
+  const rows = normalizeList(payload);
+  const pagination = extractUsersPagination(
+    payload,
+    fallbackPage,
+    fallbackLimit,
+  );
+  return { rows, ...pagination };
+}
+
+export async function getNotificationMailLog(
+  token: string,
+  id: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/notifications/mail-logs/${id}`,
+    { token },
+  );
+  return (
+    (normalizeSingle(payload) as NotificationMailLog | null) ??
+    (asRecord(payload) as NotificationMailLog | null)
+  );
+}
+
+export async function retryNotificationMailLog(
+  token: string,
+  id: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/notifications/mail-logs/${id}/retry`,
+    {
+      method: "POST",
+      token,
+    },
+  );
+  return (
+    (normalizeSingle(payload) as NotificationMailLog | null) ??
+    (asRecord(payload) as NotificationMailLog | null)
+  );
+}
+
+export async function listPlatformNotificationChannelSettings(token: string) {
+  const payload = await adminRequest<unknown>(
+    "/api/notifications/platform/channel-settings",
+    { token },
+  );
+  return normalizeList(payload) as NotificationChannelSetting[];
+}
+
+export async function updatePlatformNotificationChannelSetting(
+  token: string,
+  channel: string,
+  data: AdminRecord,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/notifications/platform/channel-settings/${encodeURIComponent(channel)}`,
+    {
+      method: "PATCH",
+      token,
+      body: data,
+    },
+  );
+  return (
+    (normalizeSingle(payload) as NotificationChannelSetting | null) ??
+    (asRecord(payload) as NotificationChannelSetting | null)
+  );
+}
+
+export async function listPlatformNotificationMailLogs(
+  token: string,
+  params: NotificationMailLogQueryParams = {},
+  options: ListRequestOptions = {},
+): Promise<PaginatedUsersResult> {
+  const fallbackPage = params.page && params.page > 0 ? params.page : 1;
+  const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20;
+  const query = buildNotificationMailLogsQuery(params);
+  const payload = await adminRequest<unknown>(
+    `/api/notifications/platform/mail-logs${query}`,
+    {
+      token,
+      signal: options.signal,
+      cacheTtlMs: options.cacheTtlMs,
+      dedupe: options.dedupe,
+    },
+  );
+  const rows = normalizeList(payload);
+  const pagination = extractUsersPagination(
+    payload,
+    fallbackPage,
+    fallbackLimit,
+  );
+  return { rows, ...pagination };
+}
+
+export async function getPlatformNotificationMailLog(
+  token: string,
+  id: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/notifications/platform/mail-logs/${id}`,
+    { token },
+  );
+  return (
+    (normalizeSingle(payload) as NotificationMailLog | null) ??
+    (asRecord(payload) as NotificationMailLog | null)
+  );
+}
+
+export async function retryPlatformNotificationMailLog(
+  token: string,
+  id: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/notifications/platform/mail-logs/${id}/retry`,
+    {
+      method: "POST",
+      token,
+    },
+  );
+  return (
+    (normalizeSingle(payload) as NotificationMailLog | null) ??
+    (asRecord(payload) as NotificationMailLog | null)
+  );
 }
 
 export async function listEmployees(
@@ -2924,7 +3604,7 @@ export async function getEmployeeImportResult(
 }
 
 /** Download the import error/result report workbook for a batch. */
-export async function downloadEmployeeImportResult(
+export async function downloadEmployeeImportErrorsReport(
   token: string,
   batchId: string,
 ): Promise<{ blob: Blob; filename: string; contentType: string | null }> {
@@ -2986,6 +3666,14 @@ export async function downloadEmployeeImportResult(
     ),
     contentType,
   };
+}
+
+/** Backward-compatible alias; this endpoint downloads the error workbook route. */
+export async function downloadEmployeeImportResult(
+  token: string,
+  batchId: string,
+) {
+  return downloadEmployeeImportErrorsReport(token, batchId);
 }
 
 export async function listEmployeeImportHistory(
@@ -3126,6 +3814,70 @@ export async function listPositions(
     fallbackLimit,
   );
   return { rows, ...pagination };
+}
+
+export async function listEmployeeGrades(token: string) {
+  const payload = await adminRequest<unknown>("/api/employee-grades", {
+    token,
+  });
+  return normalizeList(payload);
+}
+
+export async function getEmployeeGrade(token: string, id: string | number) {
+  const payload = await adminRequest<unknown>(`/api/employee-grades/${id}`, {
+    token,
+  });
+  return normalizeSingle(payload);
+}
+
+export async function createEmployeeGrade(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/employee-grades", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function patchEmployeeGrade(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/employee-grades/${id}`, {
+    method: "PATCH",
+    token,
+    body: data,
+  });
+}
+
+export async function deleteEmployeeGrade(token: string, id: string | number) {
+  return adminRequest<unknown>(`/api/employee-grades/${id}`, {
+    method: "DELETE",
+    token,
+  });
+}
+
+export async function getEmployeeNumbering(token: string) {
+  const payload = await adminRequest<unknown>("/api/employee-numbering", {
+    token,
+  });
+  return normalizeSingle(payload);
+}
+
+export async function updateEmployeeNumbering(token: string, data: AdminRecord) {
+  const payload = await adminRequest<unknown>("/api/employee-numbering", {
+    method: "PUT",
+    token,
+    body: data,
+  });
+  return normalizeSingle(payload);
+}
+
+export async function listCostCenters(token: string) {
+  const payload = await adminRequest<unknown>("/api/cost-centers", {
+    token,
+  });
+  return normalizeList(payload);
 }
 
 export async function listLeaveTypes(
@@ -3343,6 +4095,9 @@ function buildAttendanceQuery(params: AttendanceQueryParams) {
   if (typeof params.employee_id === "number" && params.employee_id > 0) {
     searchParams.set("employee_id", String(params.employee_id));
   }
+  if (typeof params.device_id === "number" && params.device_id > 0) {
+    searchParams.set("device_id", String(params.device_id));
+  }
   if (params.employee_no && params.employee_no.trim()) {
     searchParams.set("employee_no", params.employee_no.trim());
   }
@@ -3372,6 +4127,9 @@ function buildAttendanceQuery(params: AttendanceQueryParams) {
   }
   if (params.status && params.status.trim()) {
     searchParams.set("status", params.status.trim());
+  }
+  if (params.exception_type && params.exception_type.trim()) {
+    searchParams.set("exception_type", params.exception_type.trim());
   }
   if (params.attendance_status && params.attendance_status.trim()) {
     searchParams.set("attendance_status", params.attendance_status.trim());
@@ -3755,6 +4513,36 @@ export async function getAttendanceDailySummary(
   return normalizeSingle(payload);
 }
 
+export async function upsertAttendanceDailySummaryAdjustment(
+  token: string,
+  employeeId: string | number,
+  date: string,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    `/api/attendance/daily-summaries/${employeeId}/${encodeURIComponent(date)}/adjustment`,
+    {
+      method: "PUT",
+      token,
+      body: data,
+    },
+  );
+}
+
+export async function clearAttendanceDailySummaryAdjustment(
+  token: string,
+  employeeId: string | number,
+  date: string,
+) {
+  return adminRequest<unknown>(
+    `/api/attendance/daily-summaries/${employeeId}/${encodeURIComponent(date)}/adjustment`,
+    {
+      method: "DELETE",
+      token,
+    },
+  );
+}
+
 export async function listAttendanceProcessingJobs(
   token: string,
   params: AttendanceQueryParams = {},
@@ -3890,6 +4678,29 @@ export async function listAttendanceUnmatchedLogs(
   );
 }
 
+export async function listAttendanceProcessingExceptions(
+  token: string,
+  params: AttendanceQueryParams = {},
+) {
+  return listAllAttendanceCollection(
+    "/api/attendance/processing/exceptions",
+    token,
+    params,
+  );
+}
+
+export async function updateAttendanceProcessingException(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/attendance/processing/exceptions/${id}`, {
+    method: "PATCH",
+    token,
+    body: data,
+  });
+}
+
 function buildAttendanceBusinessTripsQuery(params: AttendanceQueryParams) {
   const searchParams = new URLSearchParams();
   if (typeof params.page === "number" && params.page > 0) {
@@ -3978,6 +4789,52 @@ export async function updateAttendanceBusinessTrip(
     method: "PATCH",
     token,
     body: data,
+  });
+}
+
+export async function submitAttendanceBusinessTrip(
+  token: string,
+  id: string | number,
+) {
+  return adminRequest<unknown>(`/api/attendance/business-trips/${id}/submit`, {
+    method: "POST",
+    token,
+  });
+}
+
+export async function approveAttendanceBusinessTrip(
+  token: string,
+  id: string | number,
+  comments?: string,
+) {
+  return adminRequest<unknown>(`/api/attendance/business-trips/${id}/approve`, {
+    method: "POST",
+    token,
+    body: comments?.trim() ? { comments: comments.trim() } : {},
+  });
+}
+
+export async function rejectAttendanceBusinessTrip(
+  token: string,
+  id: string | number,
+  comments?: string,
+) {
+  return adminRequest<unknown>(`/api/attendance/business-trips/${id}/reject`, {
+    method: "POST",
+    token,
+    body: comments?.trim() ? { comments: comments.trim() } : {},
+  });
+}
+
+export async function cancelAttendanceBusinessTrip(
+  token: string,
+  id: string | number,
+  reason?: string,
+) {
+  return adminRequest<unknown>(`/api/attendance/business-trips/${id}/cancel`, {
+    method: "POST",
+    token,
+    body: reason?.trim() ? { reason: reason.trim() } : {},
   });
 }
 
@@ -4233,6 +5090,81 @@ export async function syncAccessControlDeviceTemplates(
 
 export type AccessScheduleType = "DOOR" | "ATTENDANCE" | "MIXED";
 export type AccessScheduleTemplateStatus = "ACTIVE" | "INACTIVE";
+export type AccessCredentialType =
+  | "CARD"
+  | "FINGERPRINT"
+  | "FACE"
+  | "PASSWORD"
+  | "QR"
+  | "PIN";
+export type AccessCredentialStatus =
+  | "ACTIVE"
+  | "INACTIVE"
+  | "LOST"
+  | "BLOCKED"
+  | "DELETED";
+export type AccessAuditLogStatus = "PENDING" | "SUCCESS" | "FAILED";
+export type HikvisionSyncLogStatus = "SUCCESS" | "FAILED" | "PARTIAL";
+export type HikvisionSyncDirection = "PULL" | "PUSH";
+export type HikvisionSyncType =
+  | "ATTENDANCE"
+  | "USERS"
+  | "CARDS"
+  | "FINGERPRINTS"
+  | "DOORS"
+  | "WEEK_PLANS"
+  | "TEMPLATES"
+  | "ORGANIZATIONS"
+  | "ACCESS_GROUPS"
+  | "FULL";
+
+export interface AccessCredentialQueryParams extends UsersQueryParams {
+  employee_id?: number;
+  device_id?: number;
+  credential_type?: AccessCredentialType | string;
+  credential_status?: AccessCredentialStatus | string;
+  employee_no?: string;
+  card_no?: string;
+  fingerprint_id?: string;
+  sort_order?: SortOrder;
+}
+
+export interface AccessAuditLogQueryParams {
+  companyId?: number;
+  branchId?: number;
+  deviceId?: number;
+  employeeId?: number;
+  employeeNo?: string;
+  action?: string;
+  status?: AccessAuditLogStatus | string;
+  dateFrom?: string;
+  dateTo?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface AccessDeviceCommandLogQueryParams {
+  companyId?: number;
+  branchId?: number;
+  deviceId?: number;
+  commandType?: string;
+  status?: AccessAuditLogStatus | string;
+  dateFrom?: string;
+  dateTo?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface HikvisionSyncLogQueryParams {
+  deviceId?: number;
+  syncType?: HikvisionSyncType | string;
+  direction?: HikvisionSyncDirection | string;
+  status?: HikvisionSyncLogStatus | string;
+  dateFrom?: string;
+  dateTo?: string;
+  page?: number;
+  limit?: number;
+}
 
 export interface AccessScheduleTemplatesQueryParams extends UsersQueryParams {
   status?: AccessScheduleTemplateStatus | string;
@@ -4263,6 +5195,150 @@ function buildAccessScheduleTemplatesQuery(
   }
   if (params.schedule_type && params.schedule_type.trim()) {
     searchParams.set("schedule_type", params.schedule_type.trim());
+  }
+  const query = searchParams.toString();
+  return query ? `?${query}` : "";
+}
+
+function buildAccessCredentialQuery(params: AccessCredentialQueryParams = {}) {
+  const searchParams = new URLSearchParams();
+  if (typeof params.page === "number" && params.page > 0) {
+    searchParams.set("page", String(params.page));
+  }
+  if (typeof params.limit === "number" && params.limit > 0) {
+    searchParams.set("limit", String(params.limit));
+  }
+  if (typeof params.employee_id === "number" && params.employee_id > 0) {
+    searchParams.set("employee_id", String(params.employee_id));
+  }
+  if (typeof params.device_id === "number" && params.device_id > 0) {
+    searchParams.set("device_id", String(params.device_id));
+  }
+  if (params.credential_type?.trim()) {
+    searchParams.set("credential_type", params.credential_type.trim());
+  }
+  if (params.credential_status?.trim()) {
+    searchParams.set("credential_status", params.credential_status.trim());
+  }
+  if (params.employee_no?.trim()) {
+    searchParams.set("employee_no", params.employee_no.trim());
+  }
+  if (params.card_no?.trim()) {
+    searchParams.set("card_no", params.card_no.trim());
+  }
+  if (params.fingerprint_id?.trim()) {
+    searchParams.set("fingerprint_id", params.fingerprint_id.trim());
+  }
+  if (params.search?.trim()) {
+    searchParams.set("search", params.search.trim());
+  }
+  const sortOrder = params.sort_order ?? params.sortOrder;
+  if (sortOrder === "ASC" || sortOrder === "DESC") {
+    searchParams.set("sort_order", sortOrder);
+  }
+  const query = searchParams.toString();
+  return query ? `?${query}` : "";
+}
+
+function buildAccessAuditLogQuery(params: AccessAuditLogQueryParams = {}) {
+  const searchParams = new URLSearchParams();
+  if (typeof params.companyId === "number" && params.companyId > 0) {
+    searchParams.set("companyId", String(params.companyId));
+  }
+  if (typeof params.branchId === "number" && params.branchId > 0) {
+    searchParams.set("branchId", String(params.branchId));
+  }
+  if (typeof params.deviceId === "number" && params.deviceId > 0) {
+    searchParams.set("deviceId", String(params.deviceId));
+  }
+  if (typeof params.employeeId === "number" && params.employeeId > 0) {
+    searchParams.set("employeeId", String(params.employeeId));
+  }
+  if (params.employeeNo?.trim()) {
+    searchParams.set("employeeNo", params.employeeNo.trim());
+  }
+  if (params.action?.trim()) {
+    searchParams.set("action", params.action.trim());
+  }
+  if (params.status?.trim()) {
+    searchParams.set("status", params.status.trim());
+  }
+  if (params.dateFrom?.trim()) {
+    searchParams.set("dateFrom", params.dateFrom.trim());
+  }
+  if (params.dateTo?.trim()) {
+    searchParams.set("dateTo", params.dateTo.trim());
+  }
+  if (typeof params.page === "number" && params.page > 0) {
+    searchParams.set("page", String(params.page));
+  }
+  if (typeof params.limit === "number" && params.limit > 0) {
+    searchParams.set("limit", String(params.limit));
+  }
+  const query = searchParams.toString();
+  return query ? `?${query}` : "";
+}
+
+function buildAccessDeviceCommandLogQuery(
+  params: AccessDeviceCommandLogQueryParams = {},
+) {
+  const searchParams = new URLSearchParams();
+  if (typeof params.companyId === "number" && params.companyId > 0) {
+    searchParams.set("companyId", String(params.companyId));
+  }
+  if (typeof params.branchId === "number" && params.branchId > 0) {
+    searchParams.set("branchId", String(params.branchId));
+  }
+  if (typeof params.deviceId === "number" && params.deviceId > 0) {
+    searchParams.set("deviceId", String(params.deviceId));
+  }
+  if (params.commandType?.trim()) {
+    searchParams.set("commandType", params.commandType.trim());
+  }
+  if (params.status?.trim()) {
+    searchParams.set("status", params.status.trim());
+  }
+  if (params.dateFrom?.trim()) {
+    searchParams.set("dateFrom", params.dateFrom.trim());
+  }
+  if (params.dateTo?.trim()) {
+    searchParams.set("dateTo", params.dateTo.trim());
+  }
+  if (typeof params.page === "number" && params.page > 0) {
+    searchParams.set("page", String(params.page));
+  }
+  if (typeof params.limit === "number" && params.limit > 0) {
+    searchParams.set("limit", String(params.limit));
+  }
+  const query = searchParams.toString();
+  return query ? `?${query}` : "";
+}
+
+function buildHikvisionSyncLogQuery(params: HikvisionSyncLogQueryParams = {}) {
+  const searchParams = new URLSearchParams();
+  if (typeof params.deviceId === "number" && params.deviceId > 0) {
+    searchParams.set("deviceId", String(params.deviceId));
+  }
+  if (params.syncType?.trim()) {
+    searchParams.set("syncType", params.syncType.trim());
+  }
+  if (params.direction?.trim()) {
+    searchParams.set("direction", params.direction.trim());
+  }
+  if (params.status?.trim()) {
+    searchParams.set("status", params.status.trim());
+  }
+  if (params.dateFrom?.trim()) {
+    searchParams.set("dateFrom", params.dateFrom.trim());
+  }
+  if (params.dateTo?.trim()) {
+    searchParams.set("dateTo", params.dateTo.trim());
+  }
+  if (typeof params.page === "number" && params.page > 0) {
+    searchParams.set("page", String(params.page));
+  }
+  if (typeof params.limit === "number" && params.limit > 0) {
+    searchParams.set("limit", String(params.limit));
   }
   const query = searchParams.toString();
   return query ? `?${query}` : "";
@@ -4369,6 +5445,21 @@ export async function syncAccessScheduleTemplatesFromDevice(
   return syncAccessControlDeviceTemplates(token, deviceId);
 }
 
+export async function syncAccessWeekPlanToDevice(
+  token: string,
+  id: string | number,
+  data: { device_id: number },
+) {
+  return adminRequest<unknown>(
+    `/api/access-control/week-plans/${id}/sync-to-device`,
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
+  );
+}
+
 export async function syncHikvisionDeviceFingerprints(
   token: string,
   deviceId: string | number,
@@ -4408,6 +5499,158 @@ export async function syncAccessControlDeviceWeekPlans(
   );
 }
 
+export async function listAccessCredentials(
+  token: string,
+  params: AccessCredentialQueryParams = {},
+): Promise<PaginatedUsersResult> {
+  const fallbackPage = params.page && params.page > 0 ? params.page : 1;
+  const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20;
+  const query = buildAccessCredentialQuery(params);
+  const payload = await adminRequest<unknown>(
+    `/api/access-control/access-credentials${query}`,
+    { token },
+  );
+  const rows = normalizeList(payload);
+  const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit);
+  return { rows, ...pagination };
+}
+
+export async function getAccessCredentialById(
+  token: string,
+  id: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/access-control/access-credentials/${id}`,
+    { token },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function getAccessCredentialDeviceActionRoutes(
+  token: string,
+  id: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/access-control/access-credentials/${id}/device-action-routes`,
+    { token },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function updateAccessCredentialStatus(
+  token: string,
+  id: string | number,
+  action: "block" | "disable" | "enable" | "lost" | "revoke",
+  data: AdminRecord = {},
+) {
+  return adminRequest<unknown>(
+    `/api/access-control/access-credentials/${id}/${action}`,
+    {
+      method: "PATCH",
+      token,
+      body: data,
+    },
+  );
+}
+
+export async function listEmployeeAccessCredentials(
+  token: string,
+  employeeId: string | number,
+  params: AccessCredentialQueryParams = {},
+): Promise<PaginatedUsersResult> {
+  const fallbackPage = params.page && params.page > 0 ? params.page : 1;
+  const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20;
+  const query = buildAccessCredentialQuery(params);
+  const payload = await adminRequest<unknown>(
+    `/api/access-control/employees/${employeeId}/access-credentials${query}`,
+    { token },
+  );
+  const rows = normalizeList(payload);
+  const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit);
+  return { rows, ...pagination };
+}
+
+export async function listAccessAuditLogs(
+  token: string,
+  params: AccessAuditLogQueryParams = {},
+): Promise<PaginatedUsersResult> {
+  const fallbackPage = params.page && params.page > 0 ? params.page : 1;
+  const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20;
+  const query = buildAccessAuditLogQuery(params);
+  const payload = await adminRequest<unknown>(
+    `/api/access-control/audit-logs${query}`,
+    { token },
+  );
+  const rows = normalizeList(payload);
+  const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit);
+  return { rows, ...pagination };
+}
+
+export async function getAccessAuditLogById(
+  token: string,
+  id: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/access-control/audit-logs/${id}`,
+    { token },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function listAccessDeviceCommandLogs(
+  token: string,
+  params: AccessDeviceCommandLogQueryParams = {},
+): Promise<PaginatedUsersResult> {
+  const fallbackPage = params.page && params.page > 0 ? params.page : 1;
+  const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20;
+  const query = buildAccessDeviceCommandLogQuery(params);
+  const payload = await adminRequest<unknown>(
+    `/api/access-control/device-command-logs${query}`,
+    { token },
+  );
+  const rows = normalizeList(payload);
+  const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit);
+  return { rows, ...pagination };
+}
+
+export async function getAccessDeviceCommandLogById(
+  token: string,
+  id: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/access-control/device-command-logs/${id}`,
+    { token },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function listHikvisionSyncLogs(
+  token: string,
+  params: HikvisionSyncLogQueryParams = {},
+): Promise<PaginatedUsersResult> {
+  const fallbackPage = params.page && params.page > 0 ? params.page : 1;
+  const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20;
+  const query = buildHikvisionSyncLogQuery(params);
+  const payload = await adminRequest<unknown>(
+    `/api/access-control/hikvision-sync-logs${query}`,
+    { token },
+  );
+  const rows = normalizeList(payload);
+  const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit);
+  return { rows, ...pagination };
+}
+
+export async function getHikvisionSyncLogById(
+  token: string,
+  id: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/access-control/hikvision-sync-logs/${id}`,
+    { token },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
 export async function activateAttendancePolicy(
   token: string,
   id: string | number,
@@ -4439,6 +5682,86 @@ export async function listEmployeePositions(
     fallbackLimit,
   );
   return { rows, ...pagination };
+}
+
+function buildEmployeeMovementsQuery(params: EmployeeMovementsQueryParams = {}) {
+  const searchParams = new URLSearchParams();
+
+  if (typeof params.page === "number" && params.page > 0) {
+    searchParams.set("page", String(params.page));
+  }
+  if (typeof params.limit === "number" && params.limit > 0) {
+    searchParams.set("limit", String(params.limit));
+  }
+  if (typeof params.employee_id === "number" && params.employee_id > 0) {
+    searchParams.set("employee_id", String(params.employee_id));
+  }
+  if (params.status?.trim()) {
+    searchParams.set("status", params.status.trim());
+  }
+  if (params.movement_type?.trim()) {
+    searchParams.set("movement_type", params.movement_type.trim());
+  }
+
+  const query = searchParams.toString();
+  return query ? `?${query}` : "";
+}
+
+export async function listEmployeeMovements(
+  token: string,
+  params: EmployeeMovementsQueryParams = {},
+) {
+  const query = buildEmployeeMovementsQuery(params);
+  const payload = await adminRequest<unknown>(`/api/employee-movements${query}`, {
+    token,
+  });
+  return normalizeList(payload);
+}
+
+export async function getEmployeeMovement(token: string, id: string | number) {
+  const payload = await adminRequest<unknown>(`/api/employee-movements/${id}`, {
+    token,
+  });
+  return normalizeSingle(payload);
+}
+
+export async function listEmployeeMovementOperations(
+  token: string,
+  id: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/employee-movements/${id}/operations`,
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function createEmployeeMovement(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/employee-movements", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function submitEmployeeMovement(
+  token: string,
+  id: string | number,
+) {
+  return adminRequest<unknown>(`/api/employee-movements/${id}/submit`, {
+    method: "POST",
+    token,
+  });
+}
+
+export async function cancelEmployeeMovement(
+  token: string,
+  id: string | number,
+) {
+  return adminRequest<unknown>(`/api/employee-movements/${id}/cancel`, {
+    method: "POST",
+    token,
+  });
 }
 
 export async function getEmployeePosition(token: string, id: string | number) {
@@ -4665,6 +5988,65 @@ export async function listAccessGroupDoors(
   return normalizeList(payload);
 }
 
+export async function listAccessGroupDevices(
+  token: string,
+  groupId: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/access-control/groups/${groupId}/devices`,
+    {
+      token,
+    },
+  );
+  return normalizeList(payload);
+}
+
+export async function assignAccessGroupDevices(
+  token: string,
+  groupId: string | number,
+  deviceIds: Array<string | number>,
+) {
+  return adminRequest<unknown>(
+    `/api/access-control/groups/${groupId}/devices`,
+    {
+      method: "POST",
+      token,
+      body: {
+        device_ids: deviceIds
+          .map((deviceId) => Number(deviceId))
+          .filter((deviceId) => Number.isFinite(deviceId)),
+      },
+    },
+  );
+}
+
+export async function removeAccessGroupDevice(
+  token: string,
+  groupId: string | number,
+  deviceId: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/access-control/groups/${groupId}/devices/${deviceId}`,
+    {
+      method: "DELETE",
+      token,
+    },
+  );
+}
+
+export async function syncAccessGroup(
+  token: string,
+  groupId: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/access-control/groups/${groupId}/sync`,
+    {
+      method: "POST",
+      token,
+    },
+  );
+}
+
 export async function assignAccessGroupDoors(
   token: string,
   groupId: string | number,
@@ -4746,6 +6128,80 @@ export async function assignAccessGroupEmployees(
           .map((employeeId) => Number(employeeId))
           .filter((employeeId) => Number.isFinite(employeeId)),
       },
+    },
+  );
+}
+
+export async function listAccessOrganizationEmployees(
+  token: string,
+  organizationId: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/access-control/organizations/${organizationId}/employees`,
+    {
+      token,
+    },
+  );
+  return normalizeList(payload);
+}
+
+export async function assignAccessOrganizationEmployees(
+  token: string,
+  organizationId: string | number,
+  employeeIds: Array<string | number>,
+) {
+  return adminRequest<unknown>(
+    `/api/access-control/organizations/${organizationId}/employees`,
+    {
+      method: "POST",
+      token,
+      body: {
+        employee_ids: employeeIds
+          .map((employeeId) => Number(employeeId))
+          .filter((employeeId) => Number.isFinite(employeeId)),
+      },
+    },
+  );
+}
+
+export async function removeAccessOrganizationEmployee(
+  token: string,
+  organizationId: string | number,
+  employeeId: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/access-control/organizations/${organizationId}/employees/${employeeId}`,
+    {
+      method: "DELETE",
+      token,
+    },
+  );
+}
+
+export async function syncAccessOrganizationToDevice(
+  token: string,
+  organizationId: string | number,
+  data: { device_id?: number; device_ids?: number[] },
+) {
+  return adminRequest<unknown>(
+    `/api/access-control/organizations/${organizationId}/sync-to-device`,
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
+  );
+}
+
+export async function syncAccessOrganizationsFromDevice(
+  token: string,
+  deviceId: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/access-control/organizations/sync-from-device/${deviceId}`,
+    {
+      method: "POST",
+      token,
     },
   );
 }
@@ -4843,14 +6299,11 @@ export async function listEmployeeDevices(
 }
 
 export async function getEmployeeAccessCredentials(
-  _token: string,
-  _employeeId: string | number,
+  token: string,
+  employeeId: string | number,
 ) {
-  void _token;
-  void _employeeId;
-  unsupportedAdminEndpoint(
-    "Employee access credential management is not available in the current backend API.",
-  );
+  const result = await listEmployeeAccessCredentials(token, employeeId);
+  return result.rows;
 }
 
 export async function createEmployeeAccessCredentials(
@@ -5302,6 +6755,107 @@ export async function createMyLeaveRequest(token: string, data: AdminRecord) {
   });
 }
 
+export async function listMyNotificationPreferences(token: string) {
+  const payload = await adminRequest<unknown>("/api/me/notifications/preferences", {
+    token,
+  });
+  return normalizeList(payload) as NotificationPreference[];
+}
+
+export async function setMyNotificationPreference(
+  token: string,
+  data: SetMyNotificationPreferenceInput,
+) {
+  const payload = await adminRequest<unknown>("/api/me/notifications/preferences", {
+    method: "POST",
+    token,
+    body: data,
+  });
+  return (normalizeSingle(payload) as NotificationPreference | null) ?? null;
+}
+
+export async function listMyMovements(token: string) {
+  const payload = await adminRequest<unknown>("/api/me/movements", { token });
+  return normalizeList(payload);
+}
+
+export async function getMyMovement(token: string, id: string | number) {
+  const payload = await adminRequest<unknown>(`/api/me/movements/${id}`, {
+    token,
+  });
+  return normalizeSingle(payload);
+}
+
+export async function acknowledgeMyMovement(
+  token: string,
+  id: string | number,
+) {
+  return adminRequest<unknown>(`/api/me/movements/${id}/acknowledge`, {
+    method: "POST",
+    token,
+  });
+}
+
+export async function listMyPayslips(token: string) {
+  const payload = await adminRequest<unknown>("/api/me/payslips", { token });
+  return normalizeList(payload);
+}
+
+export async function getMyPayslip(token: string, id: string | number) {
+  const payload = await adminRequest<unknown>(`/api/me/payslips/${id}`, {
+    token,
+  });
+  return normalizeSingle(payload);
+}
+
+export async function downloadMyPayslip(
+  token: string,
+  id: string | number,
+): Promise<{ blob: Blob; filename: string; contentType: string | null }> {
+  const response = await fetch(buildUrl(`/api/me/payslips/${id}/download`), {
+    method: "GET",
+    headers: {
+      accept: "*/*",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    let payload: unknown = null;
+    if (text) {
+      try {
+        payload = JSON.parse(text) as unknown;
+      } catch {
+        payload = { message: text };
+      }
+    }
+    const error = new Error(extractMessage(payload, response.status)) as Error & {
+      status?: number;
+      payload?: unknown;
+    };
+    error.status = response.status;
+    error.payload = payload;
+    throw error;
+  }
+
+  const blob = await response.blob();
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const filenameMatch = disposition.match(
+    /filename\*=UTF-8''([^;]+)|filename=\"?([^\";]+)\"?/i,
+  );
+  const rawFilename =
+    filenameMatch?.[1] ?? filenameMatch?.[2] ?? `my-payslip-${id}`;
+  const filename = decodeURIComponent(rawFilename);
+
+  return {
+    blob,
+    filename,
+    contentType: response.headers.get("content-type"),
+  };
+}
+
 export async function listMyLeaveRequests(
   token: string,
   params: LeaveRequestsQueryParams = {},
@@ -5350,6 +6904,56 @@ export async function cancelMyLeaveRequest(
 
 export async function getMyLeaveRequestPdf(token: string, id: string | number) {
   return adminRequest<unknown>(`/api/me/leave/requests/${id}/pdf`, { token });
+}
+
+export async function downloadMyLeaveRequestPdf(
+  token: string,
+  id: string | number,
+): Promise<{ blob: Blob; filename: string; contentType: string | null }> {
+  const response = await fetch(buildUrl(`/api/me/leave/requests/${id}/pdf`), {
+    method: "GET",
+    headers: {
+      accept: "*/*",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    let payload: unknown = null;
+    if (text) {
+      try {
+        payload = JSON.parse(text) as unknown;
+      } catch {
+        payload = { message: text };
+      }
+    }
+    const error = new Error(
+      extractMessage(payload, response.status),
+    ) as Error & {
+      status?: number;
+      payload?: unknown;
+    };
+    error.status = response.status;
+    error.payload = payload;
+    throw error;
+  }
+
+  const blob = await response.blob();
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const filenameMatch = disposition.match(
+    /filename\*=UTF-8''([^;]+)|filename=\"?([^\";]+)\"?/i,
+  );
+  const rawFilename =
+    filenameMatch?.[1] ?? filenameMatch?.[2] ?? `leave-request-${id}.pdf`;
+  const filename = decodeURIComponent(rawFilename);
+
+  return {
+    blob,
+    filename,
+    contentType: response.headers.get("content-type"),
+  };
 }
 
 export async function getLeaveRequest(token: string, id: string | number) {
@@ -5566,6 +7170,114 @@ export function getLeaveRequestPdfUrl(id: string | number) {
   return buildUrl(`/api/leave/requests/${id}/pdf`);
 }
 
+export async function downloadLeaveRequestPdf(
+  token: string,
+  id: string | number,
+): Promise<{ blob: Blob; filename: string; contentType: string | null }> {
+  const response = await fetch(buildUrl(`/api/leave/requests/${id}/pdf`), {
+    method: "GET",
+    headers: {
+      accept: "*/*",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    let payload: unknown = null;
+    if (text) {
+      try {
+        payload = JSON.parse(text) as unknown;
+      } catch {
+        payload = { message: text };
+      }
+    }
+    const error = new Error(
+      extractMessage(payload, response.status),
+    ) as Error & {
+      status?: number;
+      payload?: unknown;
+    };
+    error.status = response.status;
+    error.payload = payload;
+    throw error;
+  }
+
+  const blob = await response.blob();
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const filenameMatch = disposition.match(
+    /filename\*=UTF-8''([^;]+)|filename=\"?([^\";]+)\"?/i,
+  );
+  const rawFilename =
+    filenameMatch?.[1] ?? filenameMatch?.[2] ?? `leave-request-${id}.pdf`;
+  const filename = decodeURIComponent(rawFilename);
+
+  return {
+    blob,
+    filename,
+    contentType: response.headers.get("content-type"),
+  };
+}
+
+export async function downloadLeaveRequestDocument(
+  token: string,
+  leaveRequestId: string | number,
+  documentId: string | number,
+): Promise<{ blob: Blob; filename: string; contentType: string | null }> {
+  const response = await fetch(
+    buildUrl(
+      `/api/leave/requests/${leaveRequestId}/documents/${documentId}/download`,
+    ),
+    {
+      method: "GET",
+      headers: {
+        accept: "*/*",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      cache: "no-store",
+    },
+  );
+
+  if (!response.ok) {
+    const text = await response.text();
+    let payload: unknown = null;
+    if (text) {
+      try {
+        payload = JSON.parse(text) as unknown;
+      } catch {
+        payload = { message: text };
+      }
+    }
+    const error = new Error(
+      extractMessage(payload, response.status),
+    ) as Error & {
+      status?: number;
+      payload?: unknown;
+    };
+    error.status = response.status;
+    error.payload = payload;
+    throw error;
+  }
+
+  const blob = await response.blob();
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const filenameMatch = disposition.match(
+    /filename\*=UTF-8''([^;]+)|filename=\"?([^\";]+)\"?/i,
+  );
+  const rawFilename =
+    filenameMatch?.[1] ??
+    filenameMatch?.[2] ??
+    `leave-document-${documentId}`;
+  const filename = decodeURIComponent(rawFilename);
+
+  return {
+    blob,
+    filename,
+    contentType: response.headers.get("content-type"),
+  };
+}
+
 export type OnboardingWorkflowStepPayload = {
   is_required: boolean;
   name: string;
@@ -5590,6 +7302,18 @@ export async function createOnboardingWorkflow(
   data: CreateOnboardingWorkflowPayload | AdminRecord,
 ) {
   return adminRequest<unknown>("/api/onboarding/workflows", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function cloneOnboardingWorkflow(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/onboarding/workflows/${id}/clone`, {
     method: "POST",
     token,
     body: data,
@@ -5836,6 +7560,105 @@ export async function uploadOnboardingDocument(
   );
 }
 
+export async function listOnboardingDocuments(
+  token: string,
+  requestId: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/onboarding/requests/${requestId}/documents`,
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function updateOnboardingDocument(
+  token: string,
+  requestId: string | number,
+  documentId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    `/api/onboarding/requests/${requestId}/documents/${documentId}`,
+    {
+      method: "PATCH",
+      token,
+      body: data,
+    },
+  );
+}
+
+export async function deleteOnboardingDocument(
+  token: string,
+  requestId: string | number,
+  documentId: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/onboarding/requests/${requestId}/documents/${documentId}`,
+    {
+      method: "DELETE",
+      token,
+    },
+  );
+}
+
+export async function downloadOnboardingDocument(
+  token: string,
+  requestId: string | number,
+  documentId: string | number,
+): Promise<{ blob: Blob; filename: string; contentType: string | null }> {
+  const response = await fetch(
+    buildUrl(
+      `/api/onboarding/requests/${requestId}/documents/${documentId}/download`,
+    ),
+    {
+      method: "GET",
+      headers: {
+        accept: "*/*",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      cache: "no-store",
+    },
+  );
+
+  if (!response.ok) {
+    const text = await response.text();
+    let payload: unknown = null;
+    if (text) {
+      try {
+        payload = JSON.parse(text) as unknown;
+      } catch {
+        payload = { message: text };
+      }
+    }
+    const error = new Error(
+      extractMessage(payload, response.status),
+    ) as Error & {
+      status?: number;
+      payload?: unknown;
+    };
+    error.status = response.status;
+    error.payload = payload;
+    throw error;
+  }
+
+  const blob = await response.blob();
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const filenameMatch = disposition.match(
+    /filename\*=UTF-8''([^;]+)|filename=\"?([^\";]+)\"?/i,
+  );
+  const rawFilename =
+    filenameMatch?.[1] ??
+    filenameMatch?.[2] ??
+    `onboarding-document-${documentId}`;
+  const filename = decodeURIComponent(rawFilename);
+
+  return {
+    blob,
+    filename,
+    contentType: response.headers.get("content-type"),
+  };
+}
+
 export async function verifyOnboardingDocument(
   token: string,
   requestId: string | number,
@@ -5862,6 +7685,45 @@ export async function createOnboardingTask(
     token,
     body: data,
   });
+}
+
+export async function listOnboardingTasks(
+  token: string,
+  requestId: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/onboarding/requests/${requestId}/tasks`,
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function getOnboardingTask(
+  token: string,
+  requestId: string | number,
+  taskId: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/onboarding/requests/${requestId}/tasks/${taskId}`,
+    { token },
+  );
+  return normalizeSingle(payload);
+}
+
+export async function reassignOnboardingTask(
+  token: string,
+  requestId: string | number,
+  taskId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    `/api/onboarding/requests/${requestId}/tasks/${taskId}/assign`,
+    {
+      method: "PATCH",
+      token,
+      body: data,
+    },
+  );
 }
 
 export async function completeOnboardingTask(
@@ -6083,6 +7945,16 @@ export async function completeOffboardingRequest(
   });
 }
 
+export async function finalizeOffboardingRequest(
+  token: string,
+  id: string | number,
+) {
+  return adminRequest<unknown>(`/api/offboarding/requests/${id}/finalize`, {
+    method: "POST",
+    token,
+  });
+}
+
 export async function addOffboardingDocument(
   token: string,
   requestId: string | number,
@@ -6107,6 +7979,64 @@ export async function listOffboardingDocuments(
     { token },
   );
   return normalizeList(payload);
+}
+
+export async function downloadOffboardingDocument(
+  token: string,
+  requestId: string | number,
+  documentId: string | number,
+): Promise<{ blob: Blob; filename: string; contentType: string | null }> {
+  const response = await fetch(
+    buildUrl(
+      `/api/offboarding/requests/${requestId}/documents/${documentId}/download`,
+    ),
+    {
+      method: "GET",
+      headers: {
+        accept: "*/*",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      cache: "no-store",
+    },
+  );
+
+  if (!response.ok) {
+    const text = await response.text();
+    let payload: unknown = null;
+    if (text) {
+      try {
+        payload = JSON.parse(text) as unknown;
+      } catch {
+        payload = { message: text };
+      }
+    }
+    const error = new Error(
+      extractMessage(payload, response.status),
+    ) as Error & {
+      status?: number;
+      payload?: unknown;
+    };
+    error.status = response.status;
+    error.payload = payload;
+    throw error;
+  }
+
+  const blob = await response.blob();
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const filenameMatch = disposition.match(
+    /filename\*=UTF-8''([^;]+)|filename=\"?([^\";]+)\"?/i,
+  );
+  const rawFilename =
+    filenameMatch?.[1] ??
+    filenameMatch?.[2] ??
+    `offboarding-document-${documentId}`;
+  const filename = decodeURIComponent(rawFilename);
+
+  return {
+    blob,
+    filename,
+    contentType: response.headers.get("content-type"),
+  };
 }
 
 export async function createOffboardingTask(
@@ -6424,6 +8354,21 @@ export async function listOffboardingActions(
   return normalizeList(payload);
 }
 
+export async function createOffboardingAction(
+  token: string,
+  requestId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    `/api/offboarding/requests/${requestId}/actions`,
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
+  );
+}
+
 export async function listOffboardingAssets(
   token: string,
   requestId: string | number,
@@ -6433,6 +8378,21 @@ export async function listOffboardingAssets(
     { token },
   );
   return normalizeList(payload);
+}
+
+export async function createOffboardingAsset(
+  token: string,
+  requestId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    `/api/offboarding/requests/${requestId}/assets`,
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
+  );
 }
 
 export async function listOffboardingSettlements(
@@ -6448,6 +8408,47 @@ export async function listOffboardingSettlements(
   return normalizeList(payload);
 }
 
+export async function listOffboardingLetters(
+  token: string,
+  requestId: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/offboarding/requests/${requestId}/letters`,
+    {
+      token,
+    },
+  );
+  return normalizeList(payload);
+}
+
+export async function listOffboardingAccessOperations(
+  token: string,
+  requestId: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/offboarding/requests/${requestId}/access-operations`,
+    {
+      token,
+    },
+  );
+  return normalizeList(payload);
+}
+
+export async function createOffboardingSettlement(
+  token: string,
+  requestId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    `/api/offboarding/requests/${requestId}/settlements`,
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
+  );
+}
+
 export async function getOffboardingExitInterview(
   token: string,
   requestId: string | number,
@@ -6459,6 +8460,21 @@ export async function getOffboardingExitInterview(
     },
   );
   return asRecord(payload) ?? normalizeSingle(payload);
+}
+
+export async function updateOffboardingExitInterview(
+  token: string,
+  requestId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    `/api/offboarding/requests/${requestId}/exit-interview`,
+    {
+      method: "PATCH",
+      token,
+      body: data,
+    },
+  );
 }
 
 export async function reopenOffboardingTask(
@@ -6478,7 +8494,10 @@ export async function reopenOffboardingTask(
 }
 
 export async function getCurrentAdmin(token: string) {
-  const payload = await adminRequest<unknown>("/api/users/me", { token });
+  const payload = await adminRequest<unknown>("/api/users/me", {
+    token,
+    cacheTtlMs: env.NEXT_PUBLIC_LIST_CACHE_TTL_SHORT_MS,
+  });
   return normalizeSingle(payload);
 }
 
@@ -7776,7 +9795,11 @@ export async function listAllCurrentCompanyUsers(
     const result = await listCurrentCompanyUsers(
       token,
       { page, limit: 100, sortBy: "created_at", sortOrder: "ASC" },
-      { signal: options.signal, dedupe: false },
+      {
+        signal: options.signal,
+        dedupe: false,
+        cacheTtlMs: env.NEXT_PUBLIC_LIST_CACHE_TTL_SHORT_MS,
+      },
     );
     collected.push(...result.rows);
     const reachedEnd =
@@ -8284,7 +10307,10 @@ export async function deleteResource(
 }
 
 export async function getRoleById(id: string | number, token: string) {
-  const payload = await adminRequest<unknown>(`/api/roles/${id}`, { token });
+  const payload = await adminRequest<unknown>(`/api/roles/${id}`, {
+    token,
+    cacheTtlMs: env.NEXT_PUBLIC_LIST_CACHE_TTL_SHORT_MS,
+  });
   return normalizeSingle(payload);
 }
 
@@ -8310,14 +10336,25 @@ export async function deleteRoleById(id: string | number, token: string) {
 export async function listRolePermissions(
   token: string,
   roleId: string | number,
+  options: { cacheTtlMs?: number; pageSize?: number } = {},
 ): Promise<AdminRecord[]> {
+  const pageSize =
+    options.pageSize && options.pageSize > 0
+      ? Math.min(options.pageSize, env.NEXT_PUBLIC_MAX_PAGE_SIZE || 100)
+      : Math.min(100, env.NEXT_PUBLIC_MAX_PAGE_SIZE || 100);
+  const cacheTtlMs =
+    options.cacheTtlMs === undefined
+      ? env.NEXT_PUBLIC_LIST_CACHE_TTL_SHORT_MS
+      : options.cacheTtlMs;
+  const query = buildUsersQuery({ page: 1, limit: pageSize });
   const payload = await adminRequest<unknown>(
-    `/api/roles/${roleId}/permissions`,
+    `/api/roles/${roleId}/permissions${query}`,
     {
       token,
+      cacheTtlMs,
     },
   );
-  return normalizeList(payload);
+  return dedupeAdminRecordsById(normalizeList(payload));
 }
 
 export async function assignPermissionToRole(
@@ -8478,13 +10515,19 @@ export async function patchEmployeeStatus(
   const normalizedStatus = String(data.employment_status ?? "")
     .trim()
     .toLowerCase();
+  const effectiveDate =
+    typeof data.effective_date === "string" ? data.effective_date.trim() : "";
   if (!isEmployeeStatusValue(normalizedStatus)) {
     throw new Error("Invalid employee status.");
+  }
+  if (!effectiveDate) {
+    throw new Error("Effective date is required.");
   }
 
   const trimmedNotes = typeof data.notes === "string" ? data.notes.trim() : "";
   const normalizedPayload: EmployeeStatusPayload = {
     employment_status: normalizedStatus,
+    effective_date: effectiveDate,
     notes: trimmedNotes || undefined,
   };
 
@@ -8498,6 +10541,53 @@ export async function patchEmployeeStatus(
   }
 
   return adminRequest<unknown>(`/api/employees/${employeeId}/status`, {
+    method: "PATCH",
+    token,
+    body: normalizedPayload,
+  });
+}
+
+export async function patchEmployeeAssignment(
+  token: string,
+  employeeId: string | number,
+  data: EmployeeAssignmentPayload,
+) {
+  const effectiveDate =
+    typeof data.effective_date === "string" ? data.effective_date.trim() : "";
+  if (!effectiveDate) {
+    throw new Error("Effective date is required.");
+  }
+
+  const normalizedPayload: EmployeeAssignmentPayload = {
+    effective_date: effectiveDate,
+  };
+
+  if ("branch_id" in data) {
+    normalizedPayload.branch_id = data.branch_id ?? null;
+  }
+  if ("departments" in data) {
+    normalizedPayload.departments = Array.isArray(data.departments)
+      ? data.departments
+      : [];
+  }
+  if ("primary_position_id" in data) {
+    normalizedPayload.primary_position_id = data.primary_position_id ?? null;
+  }
+  if ("reports_to" in data) {
+    normalizedPayload.reports_to = data.reports_to ?? null;
+  }
+  if ("grade_id" in data) {
+    normalizedPayload.grade_id = data.grade_id ?? null;
+  }
+  if ("cost_center_id" in data) {
+    normalizedPayload.cost_center_id = data.cost_center_id ?? null;
+  }
+  if (typeof data.reason === "string") {
+    const trimmedReason = data.reason.trim();
+    normalizedPayload.reason = trimmedReason || undefined;
+  }
+
+  return adminRequest<unknown>(`/api/employees/${employeeId}/assignment`, {
     method: "PATCH",
     token,
     body: normalizedPayload,
@@ -8777,6 +10867,91 @@ export async function getScheduledReportExecution(
   return normalizeSingle(payload);
 }
 
+export async function retryScheduledReportExecution(
+  token: string,
+  id: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/scheduled-reporting/executions/${id}/retry`,
+    {
+      method: "POST",
+      token,
+    },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function downloadScheduledReportExecution(
+  token: string,
+  id: string | number,
+): Promise<{ blob: Blob; filename: string; contentType: string | null }> {
+  const response = await fetch(
+    buildUrl(`/api/scheduled-reporting/executions/${id}/download`),
+    {
+      method: "GET",
+      headers: {
+        accept: "*/*",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      cache: "no-store",
+    },
+  );
+
+  if (!response.ok) {
+    const text = await response.text();
+    let payload: unknown = null;
+    if (text) {
+      try {
+        payload = JSON.parse(text) as unknown;
+      } catch {
+        payload = { message: text };
+      }
+    }
+    const error = new Error(
+      extractMessage(payload, response.status),
+    ) as Error & {
+      status?: number;
+      payload?: unknown;
+    };
+    error.status = response.status;
+    error.payload = payload;
+    throw error;
+  }
+
+  const blob = await response.blob();
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const filenameMatch = disposition.match(
+    /filename\*=UTF-8''([^;]+)|filename=\"?([^\";]+)\"?/i,
+  );
+  const rawFilename =
+    filenameMatch?.[1] ??
+    filenameMatch?.[2] ??
+    `scheduled-report-execution-${id}`;
+  const filename = decodeURIComponent(rawFilename);
+
+  return {
+    blob,
+    filename,
+    contentType: response.headers.get("content-type"),
+  };
+}
+
+export async function runScheduledReportTemplate(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/scheduled-reporting/templates/${id}/run`,
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
 export async function listScheduledReportSmtpConfigurations(
   token: string,
   params: ScheduledReportingListParams = {},
@@ -8859,13 +11034,1654 @@ export async function testScheduledReportSmtpConfigurationDraft(
   data: AdminRecord & { toEmail?: string; sendTestEmail?: boolean },
 ) {
   return adminRequest<unknown>(
-    "/api/scheduled-reporting/smtp-configurations/test",
+    "/api/scheduled-reporting/smtp-configurations/test-draft",
     {
       method: "POST",
       token,
       body: data,
     },
   );
+}
+
+export interface PayrollListParams {
+  page?: number;
+  limit?: number;
+  sortBy?: string;
+  sortOrder?: "ASC" | "DESC";
+  search?: string;
+  employee_id?: number;
+  payroll_period_id?: number;
+  status?: string;
+}
+
+function buildPayrollQuery(params: PayrollListParams = {}) {
+  const searchParams = new URLSearchParams();
+  if (typeof params.page === "number" && params.page > 0) {
+    searchParams.set("page", String(params.page));
+  }
+  if (typeof params.limit === "number" && params.limit > 0) {
+    searchParams.set("limit", String(params.limit));
+  }
+  if (params.sortBy?.trim()) {
+    searchParams.set("sortBy", params.sortBy.trim());
+  }
+  if (params.sortOrder?.trim()) {
+    searchParams.set("sortOrder", params.sortOrder.trim());
+  }
+  if (params.search?.trim()) {
+    searchParams.set("search", params.search.trim());
+  }
+  if (typeof params.employee_id === "number" && Number.isFinite(params.employee_id)) {
+    searchParams.set("employee_id", String(params.employee_id));
+  }
+  if (
+    typeof params.payroll_period_id === "number" &&
+    Number.isFinite(params.payroll_period_id)
+  ) {
+    searchParams.set("payroll_period_id", String(params.payroll_period_id));
+  }
+  if (params.status?.trim()) {
+    searchParams.set("status", params.status.trim());
+  }
+  const query = searchParams.toString();
+  return query ? `?${query}` : "";
+}
+
+async function listPayrollCollection(
+  path: string,
+  token: string,
+  params: PayrollListParams = {},
+): Promise<PaginatedUsersResult> {
+  const fallbackPage = params.page && params.page > 0 ? params.page : 1;
+  const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20;
+  const payload = await adminRequest<unknown>(`${path}${buildPayrollQuery(params)}`, {
+    token,
+  });
+  const rows = normalizeList(payload);
+  const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit);
+  return { rows, ...pagination };
+}
+
+export async function getPayrollDashboard(token: string) {
+  const payload = await adminRequest<unknown>("/api/payroll/reports/dashboard", {
+    token,
+  });
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function listPayrollRuns(
+  token: string,
+  params: PayrollListParams = {},
+) {
+  return listPayrollCollection("/api/payroll/runs", token, params);
+}
+
+export async function getPayrollRun(
+  token: string,
+  id: string | number,
+) {
+  const payload = await adminRequest<unknown>(`/api/payroll/runs/${id}`, {
+    token,
+  });
+  return normalizeSingle(payload);
+}
+
+export async function createPayrollRun(
+  token: string,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>("/api/payroll/runs", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function processPayrollRun(
+  token: string,
+  id: string | number,
+) {
+  const payload = await adminRequest<unknown>(`/api/payroll/runs/${id}/process`, {
+    method: "POST",
+    token,
+  });
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function approvePayrollRun(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  const payload = await adminRequest<unknown>(`/api/payroll/runs/${id}/approve`, {
+    method: "POST",
+    token,
+    body: data,
+  });
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function lockPayrollRun(
+  token: string,
+  id: string | number,
+) {
+  const payload = await adminRequest<unknown>(`/api/payroll/runs/${id}/lock`, {
+    method: "POST",
+    token,
+  });
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function listPayrollInputs(
+  token: string,
+  params: PayrollListParams = {},
+) {
+  return listPayrollCollection("/api/payroll/inputs", token, params);
+}
+
+export async function createPayrollInput(
+  token: string,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>("/api/payroll/inputs", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function approvePayrollInput(
+  token: string,
+  id: string | number,
+) {
+  const payload = await adminRequest<unknown>(`/api/payroll/inputs/${id}/approve`, {
+    method: "POST",
+    token,
+  });
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function listEmployeePayrollProfiles(
+  token: string,
+  params: PayrollListParams = {},
+) {
+  return listPayrollCollection("/api/payroll/employees/profiles", token, params);
+}
+
+export async function upsertEmployeePayrollProfile(
+  token: string,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>("/api/payroll/employees/profiles", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function listPayrollPeriods(token: string) {
+  const payload = await adminRequest<unknown>("/api/payroll/configuration/periods", {
+    token,
+  });
+  return normalizeList(payload);
+}
+
+export async function generatePayrollPeriod(
+  token: string,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>("/api/payroll/configuration/periods/generate", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function listPayrollComponents(token: string) {
+  const payload = await adminRequest<unknown>("/api/payroll/configuration/components", {
+    token,
+  });
+  return normalizeList(payload);
+}
+
+export async function createPayrollComponent(
+  token: string,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>("/api/payroll/configuration/components", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function listPayrollCalendars(token: string) {
+  const payload = await adminRequest<unknown>("/api/payroll/configuration/calendars", {
+    token,
+  });
+  return normalizeList(payload);
+}
+
+export async function createPayrollCalendar(
+  token: string,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>("/api/payroll/configuration/calendars", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function listPayrollSalaryStructures(token: string) {
+  const payload = await adminRequest<unknown>(
+    "/api/payroll/configuration/salary-structures",
+    {
+      token,
+    },
+  );
+  return normalizeList(payload);
+}
+
+export async function getPayrollSalaryStructure(
+  token: string,
+  id: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/payroll/configuration/salary-structures/${id}`,
+    {
+      token,
+    },
+  );
+  return normalizeSingle(payload);
+}
+
+export async function createPayrollSalaryStructure(
+  token: string,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>("/api/payroll/configuration/salary-structures", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function listPayrollStatutorySchemes(token: string) {
+  const payload = await adminRequest<unknown>(
+    "/api/payroll/configuration/statutory-schemes",
+    {
+      token,
+    },
+  );
+  return normalizeList(payload);
+}
+
+export async function createPayrollStatutoryScheme(
+  token: string,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>("/api/payroll/configuration/statutory-schemes", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function createPayrollStatutoryRule(
+  token: string,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>("/api/payroll/configuration/statutory-rules", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function listPayrollAccountingMappings(token: string) {
+  const payload = await adminRequest<unknown>(
+    "/api/payroll/configuration/accounting-mappings",
+    {
+      token,
+    },
+  );
+  return normalizeList(payload);
+}
+
+export async function createPayrollAccountingMapping(
+  token: string,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>("/api/payroll/configuration/accounting-mappings", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function listPayrollPayslipsForRun(
+  token: string,
+  runId: string | number,
+) {
+  const payload = await adminRequest<unknown>(`/api/payroll/payslips/runs/${runId}`, {
+    token,
+  });
+  return normalizeList(payload);
+}
+
+export async function generatePayrollPayslipsForRun(
+  token: string,
+  runId: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/payroll/payslips/runs/${runId}/generate`,
+    {
+      method: "POST",
+      token,
+    },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function generatePayrollBankingBatch(
+  token: string,
+  runId: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/payroll/banking/runs/${runId}/batches`,
+    {
+      method: "POST",
+      token,
+    },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function downloadPayrollBankingBatch(
+  token: string,
+  batchId: string | number,
+): Promise<{ blob: Blob; filename: string; contentType: string | null }> {
+  const response = await fetch(
+    buildUrl(`/api/payroll/banking/batches/${batchId}/download`),
+    {
+      method: "GET",
+      headers: {
+        accept: "*/*",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      cache: "no-store",
+    },
+  );
+
+  if (!response.ok) {
+    const text = await response.text();
+    let payload: unknown = null;
+    if (text) {
+      try {
+        payload = JSON.parse(text) as unknown;
+      } catch {
+        payload = { message: text };
+      }
+    }
+    const error = new Error(extractMessage(payload, response.status)) as Error & {
+      status?: number;
+      payload?: unknown;
+    };
+    error.status = response.status;
+    error.payload = payload;
+    throw error;
+  }
+
+  const blob = await response.blob();
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const filenameMatch = disposition.match(
+    /filename\*=UTF-8''([^;]+)|filename=\"?([^\";]+)\"?/i,
+  );
+  const rawFilename =
+    filenameMatch?.[1] ??
+    filenameMatch?.[2] ??
+    `payroll-banking-batch-${batchId}`;
+
+  return {
+    blob,
+    filename: decodeURIComponent(rawFilename),
+    contentType: response.headers.get("content-type"),
+  };
+}
+
+export async function generatePayrollAccountingJournals(
+  token: string,
+  runId: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/payroll/accounting/runs/${runId}/journals`,
+    {
+      method: "POST",
+      token,
+    },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+function buildStatusQuery(status?: string) {
+  const value = status?.trim();
+  return value ? `?status=${encodeURIComponent(value)}` : "";
+}
+
+export async function getPerformanceDashboard(token: string) {
+  const payload = await adminRequest<unknown>("/api/performance/dashboard/summary", {
+    token,
+  });
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function listPerformanceFinancialYears(token: string) {
+  const payload = await adminRequest<unknown>("/api/performance/financial-years", {
+    token,
+  });
+  return normalizeList(payload);
+}
+
+export async function createPerformanceFinancialYear(
+  token: string,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>("/api/performance/financial-years", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function generatePerformancePeriods(
+  token: string,
+  yearId: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/performance/financial-years/${yearId}/generate-periods`,
+    { method: "POST", token },
+  );
+}
+
+export async function calculatePerformanceAggregates(
+  token: string,
+  yearId: string | number,
+  periodType: string,
+) {
+  return adminRequest<unknown>(
+    `/api/performance/financial-years/${yearId}/aggregates`,
+    {
+      method: "POST",
+      token,
+      body: { period_type: periodType },
+    },
+  );
+}
+
+export async function listPerformancePeriods(token: string) {
+  const payload = await adminRequest<unknown>("/api/performance/periods", {
+    token,
+  });
+  return normalizeList(payload);
+}
+
+export async function createPerformancePeriodAssignments(
+  token: string,
+  periodId: string | number,
+) {
+  return adminRequest<unknown>(`/api/performance/periods/${periodId}/assignments`, {
+    method: "POST",
+    token,
+  });
+}
+
+export async function syncPerformanceSystemKpis(
+  token: string,
+  periodId: string | number,
+  providerKey?: string,
+) {
+  return adminRequest<unknown>(
+    `/api/performance/periods/${periodId}/sync-system-kpis`,
+    {
+      method: "POST",
+      token,
+      body: providerKey ? { provider_key: providerKey } : {},
+    },
+  );
+}
+
+export async function listPerformanceKpis(token: string) {
+  const payload = await adminRequest<unknown>("/api/performance/kpis", { token });
+  return normalizeList(payload);
+}
+
+export async function createPerformanceKpi(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/performance/kpis", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function createPerformanceKpiVersion(
+  token: string,
+  kpiId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/performance/kpis/${kpiId}/versions`, {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function listPerformanceKpiTemplates(token: string) {
+  const payload = await adminRequest<unknown>("/api/performance/kpi-templates", {
+    token,
+  });
+  return normalizeList(payload);
+}
+
+export async function createPerformanceKpiTemplate(
+  token: string,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>("/api/performance/kpi-templates", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function listPerformanceKpiRules(token: string) {
+  const payload = await adminRequest<unknown>("/api/performance/kpi-rules", {
+    token,
+  });
+  return normalizeList(payload);
+}
+
+export async function createPerformanceKpiRule(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/performance/kpi-rules", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function listPerformanceCompetencyTemplates(token: string) {
+  const payload = await adminRequest<unknown>(
+    "/api/performance/competency-templates",
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function createPerformanceCompetencyTemplate(
+  token: string,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>("/api/performance/competency-templates", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function listPerformanceRatingScales(token: string) {
+  const payload = await adminRequest<unknown>("/api/performance/rating-scales", {
+    token,
+  });
+  return normalizeList(payload);
+}
+
+export async function createPerformanceRatingScale(
+  token: string,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>("/api/performance/rating-scales", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function listPerformancePlans(token: string) {
+  const payload = await adminRequest<unknown>("/api/performance/plans", {
+    token,
+  });
+  return normalizeList(payload);
+}
+
+export async function createPerformancePlan(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/performance/plans", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function generatePerformancePlanFromRules(
+  token: string,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>("/api/performance/plans/generate-from-rules", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function listPerformanceImprovementPlans(token: string) {
+  const payload = await adminRequest<unknown>(
+    "/api/performance/improvement-plans",
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function createPerformanceImprovementPlan(
+  token: string,
+  reviewId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    `/api/performance/reviews/${reviewId}/improvement-plan`,
+    { method: "POST", token, body: data },
+  );
+}
+
+export async function closePerformanceImprovementPlan(
+  token: string,
+  planId: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/performance/improvement-plans/${planId}/close`,
+    { method: "POST", token },
+  );
+}
+
+export async function reviewPerformanceImprovementMilestone(
+  token: string,
+  milestoneId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    `/api/performance/improvement-milestones/${milestoneId}/review`,
+    { method: "POST", token, body: data },
+  );
+}
+
+export async function moderatePerformanceReview(
+  token: string,
+  reviewId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/performance/reviews/${reviewId}/moderate`, {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function reopenPerformanceReview(
+  token: string,
+  reviewId: string | number,
+  reason: string,
+) {
+  return adminRequest<unknown>(`/api/performance/reviews/${reviewId}/reopen`, {
+    method: "POST",
+    token,
+    body: { reason },
+  });
+}
+
+export async function approvePerformanceReview(
+  token: string,
+  periodAssignmentId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    `/api/performance/reviews/${periodAssignmentId}/approve`,
+    { method: "POST", token, body: data },
+  );
+}
+
+export async function listPerformanceAppeals(token: string) {
+  const payload = await adminRequest<unknown>("/api/performance/appeals", {
+    token,
+  });
+  return normalizeList(payload);
+}
+
+export async function getMyPerformanceSummary(token: string) {
+  const payload = await adminRequest<unknown>("/api/performance/me/summary", {
+    token,
+  });
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function listMyPerformanceAssignments(token: string) {
+  const payload = await adminRequest<unknown>("/api/performance/me/assignments", {
+    token,
+  });
+  return normalizeList(payload);
+}
+
+export async function listMyPerformanceAchievements(token: string) {
+  const payload = await adminRequest<unknown>(
+    "/api/performance/me/achievements",
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function updateMyPerformanceAchievement(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/performance/me/achievements/${id}`, {
+    method: "PATCH",
+    token,
+    body: data,
+  });
+}
+
+export async function listMyPerformanceReviews(token: string) {
+  const payload = await adminRequest<unknown>("/api/performance/me/reviews", {
+    token,
+  });
+  return normalizeList(payload);
+}
+
+export async function submitMyPerformanceSelfReview(
+  token: string,
+  periodAssignmentId: string | number,
+  review: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    `/api/performance/me/reviews/${periodAssignmentId}/self-review`,
+    { method: "POST", token, body: { review } },
+  );
+}
+
+export async function submitMyPerformanceAppeal(
+  token: string,
+  reviewId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/performance/me/reviews/${reviewId}/appeal`, {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function listMyPerformanceImprovementPlans(token: string) {
+  const payload = await adminRequest<unknown>(
+    "/api/performance/me/improvement-plans",
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function acknowledgeMyPerformanceImprovementPlan(
+  token: string,
+  planId: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/performance/me/improvement-plans/${planId}/acknowledge`,
+    { method: "POST", token },
+  );
+}
+
+export async function getManagerPerformanceSummary(token: string) {
+  const payload = await adminRequest<unknown>(
+    "/api/performance/manager/summary",
+    { token },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function listManagerTeamAchievements(token: string) {
+  const payload = await adminRequest<unknown>(
+    "/api/performance/manager/team-achievements",
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function validateManagerAchievement(
+  token: string,
+  achievementId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    `/api/performance/manager/achievements/${achievementId}/validate`,
+    { method: "POST", token, body: data },
+  );
+}
+
+export async function submitManagerPerformanceReview(
+  token: string,
+  periodAssignmentId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    `/api/performance/manager/reviews/${periodAssignmentId}/submit`,
+    { method: "POST", token, body: data },
+  );
+}
+
+export async function getProbationDashboard(token: string) {
+  const payload = await adminRequest<unknown>("/api/probation/dashboard/summary", {
+    token,
+  });
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function listProbationPolicies(token: string, status?: string) {
+  const payload = await adminRequest<unknown>(
+    `/api/probation/policies${buildStatusQuery(status)}`,
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function createProbationPolicy(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/probation/policies", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function updateProbationPolicy(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/probation/policies/${id}`, {
+    method: "PATCH",
+    token,
+    body: data,
+  });
+}
+
+export async function listProbationCases(token: string, status?: string) {
+  const payload = await adminRequest<unknown>(
+    `/api/probation/cases${buildStatusQuery(status)}`,
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function listMyTeamProbationCases(token: string, status?: string) {
+  const payload = await adminRequest<unknown>(
+    `/api/probation/cases/my-team${buildStatusQuery(status)}`,
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function getProbationCase(token: string, id: string | number) {
+  const payload = await adminRequest<unknown>(`/api/probation/cases/${id}`, {
+    token,
+  });
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function submitProbationManagerReview(
+  token: string,
+  caseId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/probation/cases/${caseId}/manager-review`, {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function submitProbationHrDecision(
+  token: string,
+  caseId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/probation/cases/${caseId}/hr-decision`, {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function generateProbationLetter(
+  token: string,
+  caseId: string | number,
+) {
+  return adminRequest<unknown>(`/api/probation/cases/${caseId}/generate-letter`, {
+    method: "POST",
+    token,
+  });
+}
+
+export async function getMyProbation(token: string, signal?: AbortSignal) {
+  const payload = await adminRequest<unknown>("/api/me/probation", { token, signal });
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function submitMyProbationSelfAssessment(
+  token: string,
+  caseId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/me/probation/${caseId}/self-assessment`, {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+function buildRecordQuery(params: Record<string, string | number | boolean | undefined>) {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === "") continue;
+    search.set(key, String(value));
+  }
+  const query = search.toString();
+  return query ? `?${query}` : "";
+}
+
+export async function listFieldParties(token: string) {
+  const payload = await adminRequest<unknown>("/api/field-parties", { token });
+  return normalizeList(payload);
+}
+
+export async function createFieldParty(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/field-parties", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function updateFieldParty(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/field-parties/${id}`, {
+    method: "PATCH",
+    token,
+    body: data,
+  });
+}
+
+export async function listHrFieldVisits(
+  token: string,
+  params: Record<string, string | number | undefined> = {},
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/hr/field-visits${buildRecordQuery(params)}`,
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function getHrFieldVisitsMap(token: string) {
+  const payload = await adminRequest<unknown>("/api/hr/field-visits/map", { token });
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function listHrFieldLocationAccessLogs(token: string) {
+  const payload = await adminRequest<unknown>("/api/hr/field-locations/access-logs", {
+    token,
+  });
+  return normalizeList(payload);
+}
+
+export async function listHrActivities(token: string) {
+  const payload = await adminRequest<unknown>("/api/hr/activities", { token });
+  return normalizeList(payload);
+}
+
+export async function listHrActivityExceptions(token: string) {
+  const payload = await adminRequest<unknown>("/api/hr/activity-exceptions", { token });
+  return normalizeList(payload);
+}
+
+export async function listActivityCategories(token: string) {
+  const payload = await adminRequest<unknown>("/api/activity-categories", { token });
+  return normalizeList(payload);
+}
+
+export async function createActivityCategory(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/activity-categories", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function listActivityPolicies(token: string) {
+  const payload = await adminRequest<unknown>("/api/activity-policies", { token });
+  return normalizeList(payload);
+}
+
+export async function createActivityPolicy(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/activity-policies", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function getManagerFieldVisitDashboard(token: string) {
+  const payload = await adminRequest<unknown>("/api/manager/field-visits/dashboard", {
+    token,
+  });
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function listManagerFieldVisits(token: string) {
+  const payload = await adminRequest<unknown>("/api/manager/field-visits", { token });
+  return normalizeList(payload);
+}
+
+export async function getManagerFieldVisit(token: string, id: string | number) {
+  const payload = await adminRequest<unknown>(`/api/manager/field-visits/${id}`, {
+    token,
+  });
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function reviewManagerFieldVisit(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/manager/field-visits/${id}/review`, {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function listManagerFieldVisitPlans(token: string) {
+  const payload = await adminRequest<unknown>("/api/manager/field-visits/plans", {
+    token,
+  });
+  return normalizeList(payload);
+}
+
+export async function reviewManagerFieldVisitPlan(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/manager/field-visits/plans/${id}/review`, {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function getManagerFieldVisitMap(token: string) {
+  const payload = await adminRequest<unknown>("/api/manager/field-visits/map/view", {
+    token,
+  });
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function getManagerFieldVisitExceptions(token: string) {
+  const payload = await adminRequest<unknown>(
+    "/api/manager/field-visits/exceptions/summary",
+    { token },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function listManagerFieldFollowUps(token: string) {
+  const payload = await adminRequest<unknown>("/api/manager/field-visits/follow-ups", {
+    token,
+  });
+  return normalizeList(payload);
+}
+
+export async function listMyFieldVisits(
+  token: string,
+  params: Record<string, string | number | undefined> = {},
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/me/field-visits${buildRecordQuery(params)}`,
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function getMyFieldVisit(token: string, id: string | number) {
+  const payload = await adminRequest<unknown>(`/api/me/field-visits/${id}`, { token });
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function listMyFieldVisitPlans(token: string) {
+  const payload = await adminRequest<unknown>("/api/me/field-visits/plans", { token });
+  return normalizeList(payload);
+}
+
+export async function createMyFieldVisitPlan(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/me/field-visits/plans", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function submitMyFieldVisitPlan(
+  token: string,
+  id: string | number,
+  data: AdminRecord = {},
+) {
+  return adminRequest<unknown>(`/api/me/field-visits/plans/${id}/submit`, {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function createMyUnplannedFieldVisit(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/me/field-visits/unplanned", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function checkInMyFieldVisit(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/me/field-visits/${id}/check-in`, {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function checkOutMyFieldVisit(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/me/field-visits/${id}/check-out`, {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function addMyFieldVisitExpense(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/me/field-visits/${id}/expenses`, {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function addMyFieldVisitOpportunity(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/me/field-visits/${id}/opportunities`, {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function listMyFieldFollowUps(token: string) {
+  const payload = await adminRequest<unknown>("/api/me/field-follow-ups", { token });
+  return normalizeList(payload);
+}
+
+export async function completeMyFieldFollowUp(
+  token: string,
+  id: string | number,
+  data: AdminRecord = {},
+) {
+  return adminRequest<unknown>(`/api/me/field-follow-ups/${id}/complete`, {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function getEmployeeFinanceDashboard(token: string) {
+  const payload = await adminRequest<unknown>(
+    "/api/employee-finance/reports/dashboard",
+    { token },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function listEmployeeFinanceProducts(token: string) {
+  const payload = await adminRequest<unknown>("/api/employee-finance/products", {
+    token,
+  });
+  return normalizeList(payload);
+}
+
+export async function createEmployeeFinanceProduct(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/employee-finance/products", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function evaluateEmployeeFinanceEligibility(
+  token: string,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>("/api/employee-finance/products/eligibility", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function listEmployeeFinanceApplications(
+  token: string,
+  params: Record<string, string | number | undefined> = {},
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/employee-finance/applications${buildRecordQuery(params)}`,
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function getEmployeeFinanceApplication(
+  token: string,
+  id: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/employee-finance/applications/${id}`,
+    { token },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function approveEmployeeFinanceApplication(
+  token: string,
+  id: string | number,
+  data: AdminRecord = {},
+) {
+  return adminRequest<unknown>(
+    `/api/finance/employee-finance/applications/${id}/approve`,
+    { method: "POST", token, body: data },
+  );
+}
+
+export async function approveHrEmployeeFinanceApplication(
+  token: string,
+  id: string | number,
+  data: AdminRecord = {},
+) {
+  return adminRequest<unknown>(`/api/hr/finance/applications/${id}/approve`, {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function recommendEmployeeFinanceApplication(
+  token: string,
+  id: string | number,
+  data: AdminRecord = {},
+) {
+  return adminRequest<unknown>(`/api/manager/finance/applications/${id}/recommend`, {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function listEmployeeFinanceAccounts(
+  token: string,
+  params: Record<string, string | number | undefined> = {},
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/finance/employee-finance/accounts${buildRecordQuery(params)}`,
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function createEmployeeFinanceDisbursement(
+  token: string,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>("/api/finance/employee-finance/disbursements", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function approveEmployeeFinanceDisbursement(
+  token: string,
+  id: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/finance/employee-finance/disbursements/${id}/approve`,
+    { method: "POST", token },
+  );
+}
+
+export async function confirmEmployeeFinanceDisbursement(
+  token: string,
+  id: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/finance/employee-finance/disbursements/${id}/confirm`,
+    { method: "POST", token },
+  );
+}
+
+export async function createEmployeeFinanceRepayment(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/finance/employee-finance/repayments", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function approveEmployeeFinanceRepayment(
+  token: string,
+  id: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/finance/employee-finance/repayments/${id}/approve`,
+    { method: "POST", token },
+  );
+}
+
+export async function requestEmployeeFinanceDeferment(
+  token: string,
+  accountId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    `/api/finance/employee-finance/accounts/${accountId}/deferments`,
+    { method: "POST", token, body: data },
+  );
+}
+
+export async function requestEmployeeFinanceReschedule(
+  token: string,
+  accountId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    `/api/finance/employee-finance/accounts/${accountId}/reschedules`,
+    { method: "POST", token, body: data },
+  );
+}
+
+export async function createEmployeeFinanceSettlementQuote(
+  token: string,
+  accountId: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/finance/employee-finance/accounts/${accountId}/settlement-quotes`,
+    { method: "POST", token },
+  );
+}
+
+export async function runEmployeeFinanceReconciliation(token: string) {
+  return adminRequest<unknown>("/api/employee-finance/reconciliation/run", {
+    method: "POST",
+    token,
+  });
+}
+
+export async function listMyFinanceApplications(token: string) {
+  const payload = await adminRequest<unknown>("/api/me/finance/applications", {
+    token,
+  });
+  return normalizeList(payload);
+}
+
+export async function createMyFinanceApplication(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/me/finance/applications", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function submitMyFinanceApplication(token: string, id: string | number) {
+  return adminRequest<unknown>(`/api/me/finance/applications/${id}/submit`, {
+    method: "POST",
+    token,
+  });
+}
+
+export async function acceptMyFinanceApplication(token: string, id: string | number) {
+  return adminRequest<unknown>(`/api/me/finance/applications/${id}/accept`, {
+    method: "POST",
+    token,
+  });
+}
+
+export async function withdrawMyFinanceApplication(
+  token: string,
+  id: string | number,
+) {
+  return adminRequest<unknown>(`/api/me/finance/applications/${id}/withdraw`, {
+    method: "POST",
+    token,
+  });
+}
+
+export async function getMyFinanceAccountStatement(
+  token: string,
+  accountId: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/me/finance/accounts/${accountId}/statement`,
+    { token },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export interface AnalyticsQueryParams {
+  date_from?: string;
+  date_to?: string;
+  branch_id?: number;
+  department_id?: number;
+  employee_id?: number;
+  purpose?: string;
+}
+
+export interface AnalyticsDashboardKindMap {
+  hr: "hr";
+  management: "management";
+  manager: "manager";
+  "sales-field": "sales-field";
+}
+
+export type AnalyticsDashboardKind = keyof AnalyticsDashboardKindMap;
+
+export interface AnalyticsCustomReportPayload extends AnalyticsQueryParams {
+  dataset_code: string;
+  dimensions: string[];
+  measures: string[];
+  filters?: Record<string, unknown>;
+  limit?: number;
+}
+
+export interface AnalyticsExportPayload extends AnalyticsCustomReportPayload {
+  output_format?: "CSV" | "JSON";
+  idempotency_key?: string;
+}
+
+export interface AnalyticsRefreshPayload extends AnalyticsQueryParams {
+  dataset_code?: string;
+  refresh_mode?: "INCREMENTAL" | "FULL_REFRESH" | "PERIOD_CLOSE" | "MANUAL";
+}
+
+export interface StatutoryReportRunPayload extends AnalyticsQueryParams {
+  report_code: string;
+}
+
+function buildAnalyticsQuery(params: AnalyticsQueryParams = {}) {
+  const searchParams = new URLSearchParams();
+  if (params.date_from?.trim()) {
+    searchParams.set("date_from", params.date_from.trim());
+  }
+  if (params.date_to?.trim()) {
+    searchParams.set("date_to", params.date_to.trim());
+  }
+  if (typeof params.branch_id === "number" && Number.isFinite(params.branch_id)) {
+    searchParams.set("branch_id", String(params.branch_id));
+  }
+  if (
+    typeof params.department_id === "number" &&
+    Number.isFinite(params.department_id)
+  ) {
+    searchParams.set("department_id", String(params.department_id));
+  }
+  if (typeof params.employee_id === "number" && Number.isFinite(params.employee_id)) {
+    searchParams.set("employee_id", String(params.employee_id));
+  }
+  if (params.purpose?.trim()) {
+    searchParams.set("purpose", params.purpose.trim());
+  }
+  const query = searchParams.toString();
+  return query ? `?${query}` : "";
+}
+
+export async function getAnalyticsDashboard(
+  token: string,
+  kind: AnalyticsDashboardKind,
+  params: AnalyticsQueryParams = {},
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/analytics/dashboards/${kind}${buildAnalyticsQuery(params)}`,
+    {
+      token,
+    },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function listAnalyticsDatasets(token: string) {
+  const payload = await adminRequest<unknown>("/api/analytics/datasets", {
+    token,
+  });
+  return normalizeList(payload);
+}
+
+export async function listAnalyticsMetrics(token: string) {
+  const payload = await adminRequest<unknown>("/api/analytics/metrics", {
+    token,
+  });
+  return normalizeList(payload);
+}
+
+export async function listAnalyticsSources(token: string) {
+  const payload = await adminRequest<unknown>("/api/analytics/sources", {
+    token,
+  });
+  return normalizeList(payload);
+}
+
+export async function getAnalyticsFreshness(
+  token: string,
+  dataset_code?: string,
+) {
+  const query =
+    dataset_code && dataset_code.trim()
+      ? `?dataset_code=${encodeURIComponent(dataset_code.trim())}`
+      : "";
+  const payload = await adminRequest<unknown>(`/api/analytics/freshness${query}`, {
+    token,
+  });
+  const list = normalizeList(payload);
+  if (list.length > 0) {
+    return list;
+  }
+  const single = normalizeSingle(payload);
+  return single ? [single] : [];
+}
+
+export async function refreshAnalyticsDataset(
+  token: string,
+  data: AnalyticsRefreshPayload,
+) {
+  const payload = await adminRequest<unknown>("/api/analytics/refresh", {
+    method: "POST",
+    token,
+    body: data,
+  });
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function runAnalyticsCustomReport(
+  token: string,
+  data: AnalyticsCustomReportPayload,
+) {
+  const payload = await adminRequest<unknown>("/api/analytics/reports/custom", {
+    method: "POST",
+    token,
+    body: data,
+  });
+  const list = normalizeList(payload);
+  if (list.length > 0) {
+    return list;
+  }
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function exportAnalyticsReport(
+  token: string,
+  data: AnalyticsExportPayload,
+) {
+  const payload = await adminRequest<unknown>("/api/analytics/exports", {
+    method: "POST",
+    token,
+    body: data,
+  });
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function runAnalyticsReconciliation(token: string) {
+  const payload = await adminRequest<unknown>("/api/analytics/reconciliation/run", {
+    method: "POST",
+    token,
+  });
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function runStatutoryReport(
+  token: string,
+  data: StatutoryReportRunPayload,
+) {
+  const payload = await adminRequest<unknown>("/api/analytics/statutory-reports/run", {
+    method: "POST",
+    token,
+    body: data,
+  });
+  return normalizeSingle(payload) ?? asRecord(payload);
 }
 
 // ── Default Avatars ──────────────────────────────────────────────────────────
@@ -9224,6 +13040,57 @@ function estimateBase64ByteLength(base64: string): number {
   const compact = base64.replace(/\s+/g, "");
   const padding = compact.endsWith("==") ? 2 : compact.endsWith("=") ? 1 : 0;
   return Math.max(1, Math.floor((compact.length * 3) / 4) - padding);
+}
+
+function sanitizeUploadFileName(name: string, fallback = "upload"): string {
+  const normalized = (name || fallback)
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 120);
+  return normalized || fallback;
+}
+
+export async function fileToBase64UploadDto(
+  file: File,
+): Promise<Base64FileDto> {
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") resolve(reader.result);
+      else reject(new Error("Could not read file."));
+    };
+    reader.onerror = () => reject(new Error("Could not read file."));
+    reader.readAsDataURL(file);
+  });
+  const comma = dataUrl.indexOf(",");
+  const header = comma >= 0 ? dataUrl.slice(0, comma) : "";
+  const fileString = (comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl).replace(
+    /\s+/g,
+    "",
+  );
+  if (!fileString) {
+    throw new Error("File encoding produced an empty upload.");
+  }
+  const mimeFromHeader =
+    header
+      .match(/^data:([^;]+);/i)?.[1]
+      ?.trim()
+      .toLowerCase() || "";
+  const mimeType = (
+    file.type ||
+    mimeFromHeader ||
+    "application/octet-stream"
+  )
+    .trim()
+    .toLowerCase();
+
+  return {
+    fileName: sanitizeUploadFileName(file.name || "upload"),
+    fileSize: estimateBase64ByteLength(fileString),
+    mimeType,
+    fileString,
+  };
 }
 
 /**

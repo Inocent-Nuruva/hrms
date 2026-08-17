@@ -15,6 +15,8 @@ import {
   User,
   CreditCard,
   Landmark,
+  Target,
+  BadgeCheck,
   Building2,
   GraduationCap,
   Briefcase,
@@ -52,11 +54,13 @@ import {
 import {
   getMyDashboard,
   getMyAttendanceToday,
+  listMyPayslips,
   listMyAttendancePunches,
   listMyLeaveBalances,
   listLeaveTypes,
   createEmployeeSectionItem,
   createEmployeeDocument,
+  fileToBase64UploadDto,
   patchEmployeeStatus,
   type AdminRecord,
   type EmployeeProfileSection,
@@ -235,6 +239,7 @@ type EmployeeDashboardViewProps = {
   attendancePunchesToday?: AdminRecord[]
   leaveBalances?: AdminRecord[]
   leaveTypes?: AdminRecord[]
+  payslips?: AdminRecord[]
 }
 
 type LeaveBalanceSummary = {
@@ -414,7 +419,7 @@ interface OnboardingFormField {
   name: string
   label: string
   placeholder?: string
-  type?: "text" | "email" | "tel" | "date" | "select"
+  type?: "text" | "email" | "tel" | "date" | "select" | "file"
   required?: boolean
   options?: string[]
   defaultValue?: string
@@ -508,6 +513,8 @@ const ONBOARDING_FORM_SCHEMAS: Record<string, OnboardingFormField[]> = {
   documents: [
     { name: "title", label: "Document Title", placeholder: "Passport Copy", required: true },
     { name: "type", label: "Type", type: "select", options: ["certificate", "cv", "offer_letter", "contract", "id", "other"], defaultValue: "other" },
+    { name: "classification", label: "Classification", type: "select", options: ["PRIVATE", "CONFIDENTIAL", "RESTRICTED"], defaultValue: "PRIVATE" },
+    { name: "file", label: "Attachment", type: "file", required: true },
     { name: "notes", label: "Notes (optional)", placeholder: "Scanned copy" },
   ],
   departments: [], // special cased - not user editable via section
@@ -534,6 +541,9 @@ function buildPayload(key: string, values: Record<string, string>): AdminRecord 
   const schema = getFormSchema(key)
   const payload: AdminRecord = {}
   schema.forEach((f) => {
+    if (f.type === "file") {
+      return
+    }
     const v = (values[f.name] ?? "").trim()
     if (f.type === "select" && (f.options?.includes("true") || f.options?.includes("false"))) {
       payload[f.name] = v === "true"
@@ -718,6 +728,55 @@ function formatBalanceNumber(value: unknown): string {
     return value.trim()
   }
   return "—"
+}
+
+function readMoneyAmount(record: AdminRecord | null | undefined, keys: string[]) {
+  if (!record) return null
+  for (const key of keys) {
+    const value = record[key]
+    if (typeof value === "number" && Number.isFinite(value)) return value
+    if (typeof value === "string" && value.trim()) {
+      const parsed = Number(value)
+      if (Number.isFinite(parsed)) return parsed
+    }
+  }
+  return null
+}
+
+function formatMoneyAmount(amount: number | null, currency?: string | null) {
+  if (amount === null) return "—"
+  const prefix = currency?.trim() ? `${currency.trim()} ` : ""
+  return `${prefix}${amount.toLocaleString()}`
+}
+
+function readPayslipPeriodLabel(record: AdminRecord | null | undefined) {
+  if (!record) return "Latest payslip"
+  const direct =
+    readString(record ?? null, ["period_label", "periodLabel", "label", "name"]) ||
+    readString(asRecord(record.period), ["label", "name", "title"]) ||
+    ""
+  if (direct) return direct
+
+  const year = readString(record ?? null, ["year"]) || readString(asRecord(record.period), ["year"])
+  const month =
+    readString(record ?? null, ["month_name", "monthName", "month"]) ||
+    readString(asRecord(record.period), ["month_name", "monthName", "month"])
+  if (month || year) {
+    return [month, year].filter(Boolean).join(" ")
+  }
+  return "Latest payslip"
+}
+
+function readPayslipStatusLabel(record: AdminRecord | null | undefined) {
+  const raw =
+    readString(record ?? null, ["status", "payslip_status", "payslipStatus"]) ||
+    readString(asRecord(record?.period), ["status"]) ||
+    "Available"
+  return raw
+    .split(/[_\s-]+/)
+    .filter(Boolean)
+    .map((part) => part[0]?.toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ")
 }
 
 function readNumericish(record: AdminRecord | null | undefined, keys: string[]): number | null {
@@ -1634,6 +1693,7 @@ export function EmployeeDashboardView({
   attendancePunchesToday,
   leaveBalances,
   leaveTypes,
+  payslips,
 }: EmployeeDashboardViewProps) {
   const { url: myProfilePhotoUrl } = useMyProfilePhoto()
 
@@ -1657,6 +1717,7 @@ export function EmployeeDashboardView({
   const leaveRequestHref = "/dashboard/me/leave/requests"
   const attendanceHref = "/dashboard/attendance/today"
   const holidaysHref = "/dashboard/me/leave/holidays"
+  const payrollHref = "/dashboard/me/payroll"
 
   const employeeProfilePhotoUrl =
     myProfilePhotoUrl || resolveDashboardProfilePhotoUrl(dashboardData) || undefined
@@ -1778,6 +1839,21 @@ export function EmployeeDashboardView({
     const n = Number(String(item.available).replace(/[^\d.-]/g, ""))
     return sum + (Number.isFinite(n) ? n : 0)
   }, 0)
+  const latestPayslip = Array.isArray(payslips) && payslips.length > 0 ? payslips[0] : null
+  const latestPayslipCurrency =
+    readString(latestPayslip, ["currency", "pay_currency", "payCurrency"]) ||
+    readString(asRecord(latestPayslip?.period), ["currency"]) ||
+    ""
+  const latestPayslipNet = formatMoneyAmount(
+    readMoneyAmount(latestPayslip, ["net_pay", "netPay", "net_salary", "netSalary"]),
+    latestPayslipCurrency
+  )
+  const latestPayslipGross = formatMoneyAmount(
+    readMoneyAmount(latestPayslip, ["gross_pay", "grossPay", "gross_salary", "grossSalary"]),
+    latestPayslipCurrency
+  )
+  const latestPayslipPeriod = readPayslipPeriodLabel(latestPayslip)
+  const latestPayslipStatus = readPayslipStatusLabel(latestPayslip)
 
   const todayLabel = new Date().toLocaleDateString(undefined, {
     weekday: "short",
@@ -1971,6 +2047,11 @@ export function EmployeeDashboardView({
               { href: attendanceHref, title: "Attendance", icon: <ClockIcon /> },
               { href: leaveRequestHref, title: "Request leave", icon: <CalendarClockIcon /> },
               { href: leaveBalancesHref, title: "Leave balances", icon: <CalendarIcon /> },
+              { href: payrollHref, title: "My payroll", icon: <Landmark /> },
+              { href: "/dashboard/me/performance/overview", title: "My performance", icon: <Target /> },
+              { href: "/dashboard/me/probation", title: "My probation", icon: <BadgeCheck /> },
+              { href: "/dashboard/me/field/visits", title: "My field", icon: <MapPin /> },
+              { href: "/dashboard/me/finance", title: "My finance", icon: <Landmark /> },
               { href: holidaysHref, title: "Holidays", icon: <CalendarIcon /> },
             ].map((action, index) => (
               <motion.div
@@ -2035,6 +2116,56 @@ export function EmployeeDashboardView({
           ) : (
             <div className="px-3 py-4 text-sm text-muted-foreground">
               No leave balance information available yet.
+            </div>
+          )}
+        </DashboardSection>
+      </motion.div>
+
+      <motion.div variants={dashboardItem}>
+        <DashboardSection
+          title="Payroll"
+          subtitle="Latest payslip snapshot"
+          action={
+            <Link
+              href={payrollHref}
+              className="shrink-0 text-xs font-medium text-primary no-underline hover:underline"
+            >
+              Open payroll
+            </Link>
+          }
+          barClassName="bg-emerald-500"
+        >
+          {latestPayslip ? (
+            <div className="grid gap-3 px-3 py-3 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-xl bg-muted/40 px-3 py-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                  Period
+                </p>
+                <p className="mt-1 text-sm font-semibold text-foreground">{latestPayslipPeriod}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{latestPayslipStatus}</p>
+              </div>
+              <div className="rounded-xl bg-muted/40 px-3 py-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                  Net pay
+                </p>
+                <p className="mt-1 text-sm font-semibold text-foreground">{latestPayslipNet}</p>
+              </div>
+              <div className="rounded-xl bg-muted/40 px-3 py-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                  Gross pay
+                </p>
+                <p className="mt-1 text-sm font-semibold text-foreground">{latestPayslipGross}</p>
+              </div>
+              <div className="rounded-xl bg-muted/40 px-3 py-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                  Available payslips
+                </p>
+                <p className="mt-1 text-sm font-semibold text-foreground">{payslips?.length ?? 0}</p>
+              </div>
+            </div>
+          ) : (
+            <div className="px-3 py-4 text-sm text-muted-foreground">
+              No payslips have been published to your account yet.
             </div>
           )}
         </DashboardSection>
@@ -2244,6 +2375,7 @@ export function EmployeeHomeDashboard() {
   const [attendancePunchesToday, setAttendancePunchesToday] = React.useState<AdminRecord[]>([])
   const [leaveBalances, setLeaveBalances] = React.useState<AdminRecord[]>([])
   const [leaveTypes, setLeaveTypes] = React.useState<AdminRecord[]>([])
+  const [payslips, setPayslips] = React.useState<AdminRecord[]>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [isAdmin, setIsAdmin] = React.useState(true)
@@ -2252,6 +2384,7 @@ export function EmployeeHomeDashboard() {
   const [accessToken, setAccessToken] = React.useState<string>("")
   const [fillingItemKey, setFillingItemKey] = React.useState<string | null>(null)
   const [formValues, setFormValues] = React.useState<Record<string, string>>({})
+  const [documentUploadFile, setDocumentUploadFile] = React.useState<File | null>(null)
   const [formError, setFormError] = React.useState<string | null>(null)
   const [isSaving, setIsSaving] = React.useState(false)
   const [publicCountryStates, setPublicCountryStates] = React.useState<PublicCountryStateRecord[]>([])
@@ -2302,7 +2435,7 @@ export function EmployeeHomeDashboard() {
     const load = async () => {
       try {
         const todayIso = localDateIso()
-        const [dash, attToday, punchesResult, leaves, types] = await Promise.all([
+        const [dash, attToday, punchesResult, leaves, types, payrollRows] = await Promise.all([
           getMyDashboard(accessToken),
           getMyAttendanceToday(accessToken).catch(() => null),
           // Match Android: load recent punches, then filter to today client-side.
@@ -2331,6 +2464,7 @@ export function EmployeeHomeDashboard() {
           listLeaveTypes(accessToken, { page: 1, limit: 100 })
             .then((r) => r.rows || [])
             .catch(() => []),
+          listMyPayslips(accessToken).catch(() => []),
         ])
 
         if (cancelled) return
@@ -2347,6 +2481,7 @@ export function EmployeeHomeDashboard() {
         setAttendancePunchesToday(punchesToday)
         setLeaveBalances(leaves as AdminRecord[])
         setLeaveTypes(types as AdminRecord[])
+        setPayslips(payrollRows as AdminRecord[])
 
         if (!validDash) {
           setError("Your dashboard payload is incomplete right now. Please refresh and try again.")
@@ -2550,6 +2685,7 @@ export function EmployeeHomeDashboard() {
     // reset any in-progress form state
     setFillingItemKey(null)
     setFormValues({})
+    setDocumentUploadFile(null)
     setFormError(null)
   }
 
@@ -2573,12 +2709,14 @@ export function EmployeeHomeDashboard() {
 
     setFillingItemKey(key)
     setFormValues(init)
+    setDocumentUploadFile(null)
     setFormError(null)
   }
 
   const cancelFilling = () => {
     setFillingItemKey(null)
     setFormValues({})
+    setDocumentUploadFile(null)
     setFormError(null)
   }
 
@@ -2621,6 +2759,11 @@ export function EmployeeHomeDashboard() {
     try {
       if (!isNoApi) {
         if (apiSection === "documents") {
+          if (!documentUploadFile) {
+            setFormError("Choose a file before saving this document.")
+            return
+          }
+          payload.file = await fileToBase64UploadDto(documentUploadFile)
           await createEmployeeDocument(accessToken, empId, payload)
         } else {
           await createEmployeeSectionItem(accessToken, empId, apiSection as EmployeeProfileSection, payload)
@@ -2642,7 +2785,17 @@ export function EmployeeHomeDashboard() {
             [fillingItemKey]:
               Array.isArray(existingSectionItems) && existingSectionItems.length > 0
                 ? existingSectionItems
-                : [{ ...payload, _onboard: true }],
+                : [{
+                    ...payload,
+                    ...(fillingItemKey === "documents" && documentUploadFile
+                      ? {
+                          original_file_name: documentUploadFile.name,
+                          mime_type: documentUploadFile.type || "application/octet-stream",
+                          file_size: String(documentUploadFile.size),
+                        }
+                      : {}),
+                    _onboard: true,
+                  }],
           } as DashboardEmployee,
         }
       })
@@ -2652,6 +2805,7 @@ export function EmployeeHomeDashboard() {
       // Clear form UI
       setFillingItemKey(null)
       setFormValues({})
+      setDocumentUploadFile(null)
       setFormError(null)
 
       // Background refresh to pull authoritative arrays from server (non-blocking)
@@ -2666,7 +2820,10 @@ export function EmployeeHomeDashboard() {
       // If this was the last pending, optionally activate + close
       if (remainingAfter <= 0) {
         try {
-          await patchEmployeeStatus(accessToken, empId, { employment_status: "active" })
+          await patchEmployeeStatus(accessToken, empId, {
+            employment_status: "active",
+            effective_date: new Date().toISOString().slice(0, 10),
+          })
         } catch {
           // non-fatal; backend may auto-handle or admin may do later
         }
@@ -2709,6 +2866,7 @@ export function EmployeeHomeDashboard() {
         attendancePunchesToday={attendancePunchesToday}
         leaveBalances={leaveBalances}
         leaveTypes={leaveTypes}
+        payslips={payslips}
       />
 
       <Dialog open={showOnboardingDialog} onOpenChange={(open) => { if (!open) handleCloseOnboardingDialog() }}>
@@ -2877,6 +3035,22 @@ export function EmployeeHomeDashboard() {
                                   <option key={opt} value={opt}>{opt === "true" ? "Yes" : opt === "false" ? "No" : opt}</option>
                                 ))}
                               </select>
+                            ) : field.type === "file" ? (
+                              <div className="mt-1 rounded-xl border border-dashed border-slate-300 bg-white px-3 py-3 dark:border-slate-700 dark:bg-slate-950">
+                                <Input
+                                  type="file"
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0] ?? null
+                                    setDocumentUploadFile(file)
+                                    updateFormValue(field.name, file?.name ?? "")
+                                  }}
+                                  className="h-auto border-0 px-0 py-0 shadow-none focus-visible:ring-0"
+                                  required={!!field.required}
+                                />
+                                <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                                  {documentUploadFile ? `Selected: ${documentUploadFile.name}` : "Choose the attachment to upload with this document."}
+                                </p>
+                              </div>
                             ) : (
                               <Input
                                 type={field.type === "date" ? "date" : field.type || "text"}

@@ -897,6 +897,148 @@ function resolveScheduleCellValue(
   return stringifyValue(raw)
 }
 
+function ScheduleDetailField({
+  label,
+  value,
+}: {
+  label: string
+  value: string
+}) {
+  return (
+    <div className="rounded-xl border border-border/60 bg-background px-3 py-2">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+        {label}
+      </p>
+      <p className="mt-1 text-sm text-foreground">{value}</p>
+    </div>
+  )
+}
+
+function buildScheduleDetailTitle(section: ScheduleSectionKey, row: AdminRecord, lookupMaps: Record<string, Map<string, string>>) {
+  const config = SECTION_CONFIG[section]
+  const direct =
+    readStringFromRecord(row, ["name", "title", "code"]) ||
+    (row.employee_id !== undefined ? String(resolveScheduleCellValue("employee_id", row, lookupMaps)) : null) ||
+    (row.shift_id !== undefined ? String(resolveScheduleCellValue("shift_id", row, lookupMaps)) : null) ||
+    (row.timetable_id !== undefined ? String(resolveScheduleCellValue("timetable_id", row, lookupMaps)) : null)
+
+  if (direct) return direct
+
+  const id = resolveRowId(row, 0)
+  return `${config.title.slice(0, -1) || config.title} ${id ? `#${String(id)}` : ""}`.trim()
+}
+
+function buildScheduleDetailEntries(
+  section: ScheduleSectionKey,
+  row: AdminRecord,
+  lookupMaps: Record<string, Map<string, string>>
+) {
+  const config = SECTION_CONFIG[section]
+  const seen = new Set<string>()
+  const entries: Array<{ label: string; value: string }> = []
+
+  for (const field of config.fields) {
+    seen.add(field.key)
+    const raw = row[field.key]
+    if (raw === undefined || raw === null || field.hidden) {
+      continue
+    }
+    const value = String(resolveScheduleCellValue(field.key, row, lookupMaps))
+    if (!value || value === "-") {
+      continue
+    }
+    entries.push({ label: field.label, value })
+  }
+
+  for (const key of ["status", "created_at", "updated_at", "remarks", "description"]) {
+    if (seen.has(key)) continue
+    const raw = row[key]
+    if (raw === undefined || raw === null) continue
+    const value = String(resolveScheduleCellValue(key, row, lookupMaps))
+    if (!value || value === "-") continue
+    entries.push({ label: prettifyLabel(key), value })
+  }
+
+  return entries
+}
+
+function ScheduleDetailsContent({
+  section,
+  row,
+  lookupMaps,
+}: {
+  section: ScheduleSectionKey
+  row: AdminRecord | null
+  lookupMaps: Record<string, Map<string, string>>
+}) {
+  if (!row) {
+    return <p className="text-sm text-muted-foreground">No details are available for this schedule record.</p>
+  }
+
+  const config = SECTION_CONFIG[section]
+  const title = buildScheduleDetailTitle(section, row, lookupMaps)
+  const entries = buildScheduleDetailEntries(section, row, lookupMaps)
+  const statusValue =
+    row.status !== undefined ? String(resolveScheduleCellValue("status", row, lookupMaps)) : ""
+
+  const summaryFields = [
+    row.employee_id !== undefined
+      ? { label: "Employee", value: String(resolveScheduleCellValue("employee_id", row, lookupMaps)) }
+      : null,
+    row.shift_id !== undefined
+      ? { label: "Shift", value: String(resolveScheduleCellValue("shift_id", row, lookupMaps)) }
+      : null,
+    row.timetable_id !== undefined
+      ? { label: "Timetable", value: String(resolveScheduleCellValue("timetable_id", row, lookupMaps)) }
+      : null,
+    row.schedule_date !== undefined
+      ? { label: "Schedule Date", value: String(resolveScheduleCellValue("schedule_date", row, lookupMaps)) }
+      : null,
+    row.effective_from !== undefined
+      ? { label: "Effective From", value: String(resolveScheduleCellValue("effective_from", row, lookupMaps)) }
+      : null,
+  ].filter((entry): entry is { label: string; value: string } => Boolean(entry && entry.value && entry.value !== "-"))
+
+  return (
+    <div className="max-h-[65vh] space-y-4 overflow-auto pr-1">
+      <div className="rounded-2xl border border-border bg-card p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              {config.moduleTitle}
+            </p>
+            <p className="mt-1 text-xl font-semibold text-foreground">{title}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{config.description}</p>
+          </div>
+          {statusValue && statusValue !== "-" ? (
+            <div className="rounded-full border border-border bg-muted/40 px-3 py-1 text-sm font-medium text-foreground">
+              {statusValue}
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      {summaryFields.length > 0 ? (
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {summaryFields.map((field) => (
+            <ScheduleDetailField key={field.label} label={field.label} value={field.value} />
+          ))}
+        </div>
+      ) : null}
+
+      {entries.length > 0 ? (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {entries.map((entry) => (
+            <ScheduleDetailField key={`${entry.label}-${entry.value}`} label={entry.label} value={entry.value} />
+          ))}
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">No readable details are available for this record.</p>
+      )}
+    </div>
+  )
+}
+
 function resolveRowId(row: AdminRecord, fallbackIndex: number) {
   const candidates = [
     row.id,
@@ -2189,8 +2331,9 @@ export function ScheduleManagementView({ section }: { section: string }) {
         open={detailsOpen}
         onOpenChange={setDetailsOpen}
         title={`${config.title} details`}
-        description="Selected row details"
+        description="Review the selected schedule record in a readable operational summary."
         row={selectedRow}
+        content={<ScheduleDetailsContent section={activeSection} row={selectedRow} lookupMaps={lookupMaps} />}
         resolveLabel={(key) => prettifyLabel(key)}
         resolveValue={(key, row) => resolveScheduleCellValue(key, row, lookupMaps)}
       />

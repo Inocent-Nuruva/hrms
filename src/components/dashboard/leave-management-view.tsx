@@ -18,6 +18,7 @@ import {
 import { SearchToggleField } from "@/components/common/search-toggle-field"
 
 import {
+  addLeaveRequestDocument,
   adjustLeaveBalance,
   cancelLeaveRequest,
   createLeaveHoliday,
@@ -31,6 +32,9 @@ import {
   deleteLeaveType,
   deleteLeaveWorkflow,
   deleteLeaveWorkflowStep,
+  downloadLeaveRequestDocument,
+  downloadLeaveRequestPdf,
+  fileToBase64UploadDto,
   getCurrentAdmin,
   getLeaveRequest,
   getLeaveWorkflow,
@@ -49,6 +53,7 @@ import {
   listResource,
   patchLeaveHoliday,
   patchLeavePolicy,
+  patchLeaveRequestMedicalDetail,
   patchLeaveType,
   patchLeaveWorkflow,
   patchLeaveWorkflowStep,
@@ -125,6 +130,18 @@ function createEmptyLeaveTypeForm() {
     max_carry_forward_days: "0",
     max_days_per_year: "0",
     gender_restriction: "any",
+  }
+}
+
+function createEmptyLeaveMedicalForm() {
+  return {
+    sickness_nature: "",
+    doctor_name: "",
+    doctor_phone: "",
+    hospital_name: "",
+    treatment_start_date: "",
+    treatment_end_date: "",
+    attachment_url: "",
   }
 }
 
@@ -327,6 +344,17 @@ function readBoolean(row: AdminRecord, keys: string[]) {
     }
   }
   return false
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement("a")
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
 }
 
 function readDisplayValue(row: AdminRecord, keys: string[]) {
@@ -991,6 +1019,8 @@ export function LeaveManagementView({
   const [leaveRequestDetailsOpen, setLeaveRequestDetailsOpen] = React.useState(false)
   const [currentActor, setCurrentActor] = React.useState<LeaveActor | null>(null)
   const [cancelReason, setCancelReason] = React.useState("Cancelled by admin")
+  const [leaveMedicalForm, setLeaveMedicalForm] = React.useState(createEmptyLeaveMedicalForm)
+  const [leaveDocumentFile, setLeaveDocumentFile] = React.useState<File | null>(null)
   const [selectedWorkflowId, setSelectedWorkflowId] = React.useState("")
   const [holidayImportCountry, setHolidayImportCountry] = React.useState<HolidayImportCountryCode>("TZ")
   const [holidayImportYear, setHolidayImportYear] = React.useState(String(new Date().getFullYear()))
@@ -1084,6 +1114,40 @@ export function LeaveManagementView({
     assigned_department_id: "",
     is_required: "true",
   })
+
+  const hydrateLeaveMedicalForm = React.useCallback((row: AdminRecord | null) => {
+    const medical = row ? asRecord(row.medical_detail) : null
+    const readMedicalValue = (key: string) => {
+      if (!medical) {
+        return ""
+      }
+      const value = readString(medical, [key])
+      return value === "-" ? "" : value
+    }
+    setLeaveMedicalForm({
+      sickness_nature: readMedicalValue("sickness_nature"),
+      doctor_name: readMedicalValue("doctor_name"),
+      doctor_phone: readMedicalValue("doctor_phone"),
+      hospital_name: readMedicalValue("hospital_name"),
+      treatment_start_date: readMedicalValue("treatment_start_date").replace("T", " ").split(" ")[0] ?? "",
+      treatment_end_date: readMedicalValue("treatment_end_date").replace("T", " ").split(" ")[0] ?? "",
+      attachment_url: readMedicalValue("attachment_url"),
+    })
+  }, [])
+
+  const leaveRequestDocuments = React.useMemo(() => {
+    if (!selectedLeaveRequestRow || !Array.isArray(selectedLeaveRequestRow.documents)) {
+      return [] as AdminRecord[]
+    }
+    return selectedLeaveRequestRow.documents
+      .map((value) => asRecord(value))
+      .filter((value): value is AdminRecord => Boolean(value))
+  }, [selectedLeaveRequestRow])
+
+  React.useEffect(() => {
+    hydrateLeaveMedicalForm(selectedLeaveRequestRow)
+    setLeaveDocumentFile(null)
+  }, [hydrateLeaveMedicalForm, selectedLeaveRequestRow])
 
   const loadLookups = React.useCallback(async (token: string, lookupKeys: LeaveLookupKey[], force = false) => {
     const missingKeys = force ? lookupKeys : lookupKeys.filter((key) => !loadedLookups[key])
@@ -1334,6 +1398,35 @@ export function LeaveManagementView({
     } catch (errorObject) {
       console.warn("[leave] Failed to load highlighted leave request detail.", errorObject)
     }
+  }, [])
+
+  const refreshLeaveRequestDetail = React.useCallback(async (row: AdminRecord | null) => {
+    const token = readStoredToken()
+    const requestId = row ? readNumber(row, ["id", "leave_request_id", "leaveRequestId"]) : null
+    if (!token || requestId === null) {
+      return null
+    }
+
+    const detail = await getLeaveRequest(token, requestId)
+    if (!detail) {
+      return null
+    }
+
+    setSelectedLeaveRequestRow((current) => ({
+      ...(current ?? row ?? {}),
+      ...(row ?? {}),
+      ...detail,
+    }))
+
+    setRequests((current) =>
+      current.map((entry) =>
+        readNumber(entry, ["id", "leave_request_id", "leaveRequestId"]) === requestId
+          ? { ...entry, ...detail }
+          : entry
+      )
+    )
+
+    return detail
   }, [])
 
   const openedHighlightedRequestRef = React.useRef("")
@@ -2654,6 +2747,105 @@ export function LeaveManagementView({
     }
   }
 
+  async function downloadRequestPdf(row: AdminRecord) {
+    const token = readStoredToken()
+    const id = readNumber(row, ["id"])
+    if (!token || id === null) {
+      showErrorAlert("Authentication required. Please log in again.")
+      return
+    }
+
+    setSaving(true)
+    try {
+      const result = await downloadLeaveRequestPdf(token, id)
+      downloadBlob(result.blob, result.filename)
+      showSuccessAlert("Leave request PDF downloaded.")
+    } catch (errorObject) {
+      const message = errorObject instanceof Error ? errorObject.message : "Failed to download leave request PDF."
+      showErrorAlert(message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function saveLeaveMedicalDetail(row: AdminRecord) {
+    const token = readStoredToken()
+    const id = readNumber(row, ["id"])
+    if (!token || id === null) {
+      showErrorAlert("Authentication required. Please log in again.")
+      return
+    }
+
+    setSaving(true)
+    try {
+      await patchLeaveRequestMedicalDetail(token, id, {
+        sickness_nature: leaveMedicalForm.sickness_nature.trim() || undefined,
+        doctor_name: leaveMedicalForm.doctor_name.trim() || undefined,
+        doctor_phone: leaveMedicalForm.doctor_phone.trim() || undefined,
+        hospital_name: leaveMedicalForm.hospital_name.trim() || undefined,
+        treatment_start_date: leaveMedicalForm.treatment_start_date || undefined,
+        treatment_end_date: leaveMedicalForm.treatment_end_date || undefined,
+        attachment_url: leaveMedicalForm.attachment_url.trim() || undefined,
+      })
+      await refreshLeaveRequestDetail(row)
+      showSuccessAlert("Medical detail saved.")
+    } catch (errorObject) {
+      const message = errorObject instanceof Error ? errorObject.message : "Failed to save medical detail."
+      showErrorAlert(message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function uploadLeaveDocument(row: AdminRecord) {
+    const token = readStoredToken()
+    const id = readNumber(row, ["id"])
+    if (!token || id === null) {
+      showErrorAlert("Authentication required. Please log in again.")
+      return
+    }
+    if (!leaveDocumentFile) {
+      showErrorAlert("Choose a document to upload first.")
+      return
+    }
+
+    setSaving(true)
+    try {
+      const file = await fileToBase64UploadDto(leaveDocumentFile)
+      await addLeaveRequestDocument(token, id, { file })
+      setLeaveDocumentFile(null)
+      await refreshLeaveRequestDetail(row)
+      showSuccessAlert("Leave document uploaded.")
+    } catch (errorObject) {
+      const message = errorObject instanceof Error ? errorObject.message : "Failed to upload leave document."
+      showErrorAlert(message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function downloadRequestDocument(row: AdminRecord, documentRow: AdminRecord) {
+    const token = readStoredToken()
+    const requestId = readNumber(row, ["id"])
+    const documentId = readNumber(documentRow, ["id"])
+    if (!token || requestId === null || documentId === null) {
+      showErrorAlert("Authentication required. Please log in again.")
+      return
+    }
+
+    setSaving(true)
+    try {
+      const result = await downloadLeaveRequestDocument(token, requestId, documentId)
+      downloadBlob(result.blob, result.filename)
+      showSuccessAlert("Leave document downloaded.")
+    } catch (errorObject) {
+      const message = errorObject instanceof Error ? errorObject.message : "Failed to download leave document."
+      showErrorAlert(message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
   async function toggleHolidayRecurring(row: AdminRecord) {
     const token = readStoredToken()
     const id = readNumber(row, ["id"])
@@ -3230,7 +3422,11 @@ export function LeaveManagementView({
             open={leaveRequestDetailsOpen}
             onOpenChange={(open) => {
               setLeaveRequestDetailsOpen(open)
-              if (!open) setSelectedLeaveRequestRow(null)
+              if (!open) {
+                setSelectedLeaveRequestRow(null)
+                setLeaveDocumentFile(null)
+                setLeaveMedicalForm(createEmptyLeaveMedicalForm())
+              }
             }}
           >
             <DialogPopup
@@ -3272,6 +3468,193 @@ export function LeaveManagementView({
                     </div>
                   </div>
 
+                  <div className="grid gap-3 rounded-lg border border-border/70 bg-background/60 p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-medium text-foreground">Medical detail</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          Save treatment details and any medical attachment URL returned by your document store.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        className="inline-flex h-8 items-center justify-center rounded-md border border-slate-300 px-3 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+                        disabled={saving}
+                        onClick={() => void saveLeaveMedicalDetail(selectedLeaveRequestRow)}
+                      >
+                        Save medical detail
+                      </button>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-1">
+                        <p className="text-xs font-medium text-slate-600">Sickness nature</p>
+                        <input
+                          className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                          value={leaveMedicalForm.sickness_nature}
+                          onChange={(event) =>
+                            setLeaveMedicalForm((current) => ({
+                              ...current,
+                              sickness_nature: event.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-xs font-medium text-slate-600">Doctor name</p>
+                        <input
+                          className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                          value={leaveMedicalForm.doctor_name}
+                          onChange={(event) =>
+                            setLeaveMedicalForm((current) => ({
+                              ...current,
+                              doctor_name: event.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-xs font-medium text-slate-600">Doctor phone</p>
+                        <input
+                          className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                          value={leaveMedicalForm.doctor_phone}
+                          onChange={(event) =>
+                            setLeaveMedicalForm((current) => ({
+                              ...current,
+                              doctor_phone: event.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-xs font-medium text-slate-600">Hospital name</p>
+                        <input
+                          className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                          value={leaveMedicalForm.hospital_name}
+                          onChange={(event) =>
+                            setLeaveMedicalForm((current) => ({
+                              ...current,
+                              hospital_name: event.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-xs font-medium text-slate-600">Treatment start</p>
+                        <input
+                          type="date"
+                          className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                          value={leaveMedicalForm.treatment_start_date}
+                          onChange={(event) =>
+                            setLeaveMedicalForm((current) => ({
+                              ...current,
+                              treatment_start_date: event.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-xs font-medium text-slate-600">Treatment end</p>
+                        <input
+                          type="date"
+                          className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                          value={leaveMedicalForm.treatment_end_date}
+                          onChange={(event) =>
+                            setLeaveMedicalForm((current) => ({
+                              ...current,
+                              treatment_end_date: event.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                      <div className="space-y-1 sm:col-span-2">
+                        <p className="text-xs font-medium text-slate-600">Attachment URL</p>
+                        <input
+                          className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                          placeholder="https://..."
+                          value={leaveMedicalForm.attachment_url}
+                          onChange={(event) =>
+                            setLeaveMedicalForm((current) => ({
+                              ...current,
+                              attachment_url: event.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 rounded-lg border border-border/70 bg-background/60 p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-medium text-foreground">Supporting documents</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          Upload a file to the request and download previously attached documents.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        className="inline-flex h-8 items-center justify-center rounded-md border border-slate-300 px-3 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+                        disabled={saving || !leaveDocumentFile}
+                        onClick={() => void uploadLeaveDocument(selectedLeaveRequestRow)}
+                      >
+                        Upload document
+                      </button>
+                    </div>
+                    <div className="rounded-md border border-dashed border-slate-300 bg-slate-50/60 px-3 py-3">
+                      <input
+                        type="file"
+                        className="block w-full text-xs text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-900 file:px-3 file:py-2 file:text-xs file:font-medium file:text-white"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0] ?? null
+                          setLeaveDocumentFile(file)
+                        }}
+                      />
+                      <p className="mt-2 text-[11px] text-muted-foreground">
+                        {leaveDocumentFile
+                          ? `Ready to upload: ${leaveDocumentFile.name}`
+                          : "Choose a PDF, image, or other supporting document."}
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      {leaveRequestDocuments.length === 0 ? (
+                        <div className="rounded-md border border-border/60 px-3 py-2 text-xs text-muted-foreground">
+                          No supporting documents attached yet.
+                        </div>
+                      ) : (
+                        leaveRequestDocuments.map((documentRow, index) => (
+                          <div
+                            key={`leave-document-${readNumber(documentRow, ["id"]) ?? index}`}
+                            className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/60 px-3 py-2"
+                          >
+                            <div className="min-w-0">
+                              <p className="truncate text-xs font-medium text-foreground">
+                                {readString(documentRow, ["file_name"])}
+                              </p>
+                              <p className="truncate text-[11px] text-muted-foreground">
+                                {readString(documentRow, ["file_type"])} · uploaded{" "}
+                                {formatLeaveDateTime(readString(documentRow, ["uploaded_at"]))}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              className="inline-flex h-8 items-center justify-center gap-1 rounded-md border border-slate-300 px-3 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+                              disabled={saving}
+                              onClick={() =>
+                                void downloadRequestDocument(
+                                  selectedLeaveRequestRow,
+                                  documentRow
+                                )
+                              }
+                            >
+                              <Download className="size-3.5" />
+                              Download
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
                   <ApprovalChain row={selectedLeaveRequestRow} actor={currentActor} />
 
                   {(() => {
@@ -3281,6 +3664,15 @@ export function LeaveManagementView({
                     )
                     return (
                       <div className="flex flex-wrap gap-1.5 border-t border-border pt-3">
+                        <button
+                          type="button"
+                          className="inline-flex h-9 flex-1 items-center justify-center gap-1 rounded-md border border-slate-300 px-3 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40 sm:flex-none"
+                          disabled={saving}
+                          onClick={() => void downloadRequestPdf(selectedLeaveRequestRow)}
+                        >
+                          <Download className="size-3.5" />
+                          PDF
+                        </button>
                         <button
                           type="button"
                           className="inline-flex h-9 flex-1 items-center justify-center gap-1 rounded-md border border-emerald-300 px-3 text-xs font-medium text-emerald-700 disabled:cursor-not-allowed disabled:opacity-40 sm:flex-none"

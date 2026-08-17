@@ -68,6 +68,8 @@ import {
   EmployeeAccessRemovalDialog,
   type EmployeeAccessRemovalTarget,
 } from "@/components/dashboard/employee-access-removal-dialog"
+import { useDashboardActor } from "@/hooks/use-dashboard-actor"
+import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
 import { cn } from "@/lib/utils"
 import { showErrorAlert } from "@/lib/error-alert"
 import { showSuccessAlert } from "@/lib/success-alert"
@@ -209,6 +211,10 @@ const CREDENTIAL_TYPE_CHOICES: CredentialTypeChoice[] = [
     enabled: false,
   },
 ]
+
+const SUPPORTED_CREDENTIAL_TYPES = new Set<CredentialTypeValue>(
+  CREDENTIAL_TYPE_CHOICES.filter((choice) => choice.enabled).map((choice) => choice.value)
+)
 
 function buildInitialDeviceSyncStatus(): DeviceSyncStatus {
   return {
@@ -513,7 +519,9 @@ function buildInitialCredentialForm(userVerifyMode = "") {
 
 function getAllowedCredentialTypes(userVerifyMode: string) {
   const supportedTypes = USER_VERIFY_MODE_CREDENTIAL_MAP[userVerifyMode] ?? []
-  return new Set<CredentialTypeValue>(supportedTypes)
+  return new Set<CredentialTypeValue>(
+    supportedTypes.filter((type): type is CredentialTypeValue => SUPPORTED_CREDENTIAL_TYPES.has(type))
+  )
 }
 
 function findFingerprintOptionById(id: string) {
@@ -693,19 +701,29 @@ function CredentialTypePicker({
   allowedTypes?: Set<CredentialTypeValue>
   requireVerifyMode?: boolean
 }) {
+  const visibleChoices = React.useMemo(
+    () => CREDENTIAL_TYPE_CHOICES.filter((choice) => choice.enabled),
+    []
+  )
+
+  if (requireVerifyMode && allowedTypes && allowedTypes.size === 0) {
+    return (
+      <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-900">
+        The selected verify mode does not expose any credential types this screen can manage yet.
+        Use a verify mode that allows fingerprint, password, or PIN.
+      </div>
+    )
+  }
+
   return (
     <div className="grid gap-2 sm:grid-cols-2">
-      {CREDENTIAL_TYPE_CHOICES.map((choice) => {
+      {visibleChoices.map((choice) => {
         const Icon = choice.icon
         const isSelected = value === choice.value
-        const supportedInUi = choice.enabled
         const enabledByVerifyMode = allowedTypes ? allowedTypes.has(choice.value) : !requireVerifyMode
-        const isEnabled = supportedInUi && enabledByVerifyMode
-        const disabledLabel = !supportedInUi
-          ? "Coming soon"
-          : requireVerifyMode && !allowedTypes
-            ? "Set verify mode first"
-            : "Not in this mode"
+        const isEnabled = enabledByVerifyMode
+        const disabledLabel =
+          requireVerifyMode && !allowedTypes ? "Set verify mode first" : "Not in this mode"
 
         return (
           <button
@@ -759,6 +777,7 @@ function CredentialTypePicker({
 }
 
 export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
+  const actor = useDashboardActor()
   const [activeTab, setActiveTab] = React.useState<DeviceTabKey>("details")
   const [device, setDevice] = React.useState<AdminRecord | null>(null)
   const [assignedEmployees, setAssignedEmployees] = React.useState<AdminRecord[]>([])
@@ -809,6 +828,13 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
   const [deviceSyncStatus, setDeviceSyncStatus] = React.useState<DeviceSyncStatus>(
     buildInitialDeviceSyncStatus()
   )
+  const canOpenAccessControlDevices =
+    actor.ready &&
+    canAccessDashboardRoute(
+      "/dashboard/access-control/devices",
+      actor.permissionLabels,
+      actor.accessMode
+    )
   const [testingConnection, setTestingConnection] = React.useState(false)
   const [attendanceSyncSnapshot, setAttendanceSyncSnapshot] = React.useState<AdminRecord | null>(null)
   const [accessSyncSnapshot, setAccessSyncSnapshot] = React.useState<AdminRecord | null>(null)
@@ -1034,8 +1060,8 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
     [credentialForm.user_verify_mode]
   )
   const assignCredentialModeReady =
-    !!assignAllowedCredentialTypes?.size &&
-    assignAllowedCredentialTypes.has(credentialForm.credential_type)
+    (assignAllowedCredentialTypes?.has(credentialForm.credential_type) ?? false) &&
+    Boolean(assignAllowedCredentialTypes?.size)
   const assignedSummaryAccessGroupLabel = React.useMemo(
     () =>
       accessGroupOptions.find(
@@ -1404,6 +1430,19 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
       options?: { fingerprintSlots?: FingerprintSlotSummary[] }
     ) => {
       const userVerifyMode = credentialForm.user_verify_mode.trim()
+      if (!userVerifyMode) {
+        throw new Error("Select or confirm the verify mode before saving credentials.")
+      }
+
+      const allowedCredentialTypes = getAllowedCredentialTypes(userVerifyMode)
+      if (!allowedCredentialTypes.size) {
+        throw new Error(
+          "The selected verify mode does not support a credential flow in this screen yet. Use a mode that allows fingerprint, password, or PIN."
+        )
+      }
+      if (!allowedCredentialTypes.has(credentialForm.credential_type)) {
+        throw new Error("Select a credential type allowed by the saved verify mode.")
+      }
 
       if (isPasswordCredential) {
         const pinPassword = credentialForm.pin_password.trim()
@@ -1700,8 +1739,8 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
     [credentialForm.user_verify_mode]
   )
   const manageCredentialModeReady =
-    !manageAllowedCredentialTypes?.size ||
-    manageAllowedCredentialTypes.has(credentialForm.credential_type)
+    (manageAllowedCredentialTypes?.has(credentialForm.credential_type) ?? false) &&
+    Boolean(manageAllowedCredentialTypes?.size)
 
   React.useEffect(() => {
     if (!manageCredentialsOpen || !credentialEmployee) {
@@ -2108,13 +2147,15 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
     <div className="space-y-5">
       {/* Page header */}
       <div className="space-y-3">
-        <Link
-          href="/dashboard/access-control/devices"
-          className="inline-flex items-center gap-1 text-sm text-slate-500 transition hover:text-primary"
-        >
-          <ArrowLeftIcon className="h-4 w-4" />
-          Devices
-        </Link>
+        {canOpenAccessControlDevices ? (
+          <Link
+            href="/dashboard/access-control/devices"
+            className="inline-flex items-center gap-1 text-sm text-slate-500 transition hover:text-primary"
+          >
+            <ArrowLeftIcon className="h-4 w-4" />
+            Devices
+          </Link>
+        ) : null}
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">

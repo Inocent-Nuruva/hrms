@@ -1,8 +1,10 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
 import {
   DownloadIcon,
+  EyeIcon,
   Loader2Icon,
   PencilIcon,
   PlusIcon,
@@ -34,6 +36,8 @@ import {
   listDepartments,
   syncAccessScheduleTemplateToDevice,
   syncAccessScheduleTemplatesFromDevice,
+  syncAccessControlDeviceWeekPlans,
+  syncAccessWeekPlanToDevice,
   type AccessControlResourceKey,
   type AdminRecord,
   updateAccessControlResourceById,
@@ -45,7 +49,7 @@ import { useDebouncedValue } from "@/hooks/use-debounced-value"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import { readStoredCompanyName } from "@/components/dashboard/admin-view-shared"
 
-type AccessControlSectionKey = "doors" | "templates" | "organizations" | "groups"
+type AccessControlSectionKey = "doors" | "templates" | "organizations" | "groups" | "week-plans"
 type FieldType = "text" | "number" | "boolean" | "select" | "json"
 
 type FieldConfig = {
@@ -64,6 +68,7 @@ const ROUTE_TO_RESOURCE: Record<AccessControlSectionKey, AccessControlResourceKe
   templates: "schedule-templates",
   organizations: "organizations",
   groups: "groups",
+  "week-plans": "week-plans",
 }
 
 const SECTION_PERMISSION_PREFIX: Record<AccessControlSectionKey, string> = {
@@ -71,6 +76,7 @@ const SECTION_PERMISSION_PREFIX: Record<AccessControlSectionKey, string> = {
   templates: "access_schedule_templates",
   organizations: "access_organizations",
   groups: "access_groups",
+  "week-plans": "access_schedule_templates",
 }
 
 const SECTION_TITLES: Record<AccessControlSectionKey, string> = {
@@ -78,6 +84,7 @@ const SECTION_TITLES: Record<AccessControlSectionKey, string> = {
   templates: "Templates",
   organizations: "Organization",
   groups: "Groups",
+  "week-plans": "Week Plans",
 }
 
 const SECTION_FIELDS: Record<AccessControlSectionKey, FieldConfig[]> = {
@@ -139,6 +146,22 @@ const SECTION_FIELDS: Record<AccessControlSectionKey, FieldConfig[]> = {
     { key: "status", label: "Status", type: "select", options: ["ACTIVE", "INACTIVE"] },
     { key: "metadata", label: "Metadata", type: "json", placeholder: "{\"members\":10}" },
   ],
+  "week-plans": [
+    { key: "device_id", label: "Device", type: "number", required: true },
+    { key: "hikvision_plan_no", label: "Hikvision Plan No", type: "text", required: true },
+    { key: "name", label: "Plan Name", type: "text" },
+    { key: "branch_id", label: "Branch", type: "number" },
+    { key: "enable", label: "Enabled", type: "boolean" },
+    { key: "description", label: "Description", type: "text" },
+    {
+      key: "segments",
+      label: "Segments",
+      type: "json",
+      placeholder:
+        '[{"week":"Monday","segment_no":1,"TimeSegment":{"beginTime":"08:00:00","endTime":"17:00:00"}}]',
+    },
+    { key: "metadata", label: "Metadata", type: "json", placeholder: "{\"source\":\"HQ\"}" },
+  ],
 }
 
 const FIELD_VALUE_ALIASES: Record<AccessControlSectionKey, Record<string, string[]>> = {
@@ -185,6 +208,12 @@ const FIELD_VALUE_ALIASES: Record<AccessControlSectionKey, Record<string, string
     group_name: ["groupName"],
     group_code: ["groupCode"],
     device_id: ["deviceId"],
+    branch_id: ["branchId"],
+    metadata: ["metadataExtras"],
+  },
+  "week-plans": {
+    device_id: ["deviceId"],
+    hikvision_plan_no: ["hikvisionPlanNo", "hikvision_week_plan_no"],
     branch_id: ["branchId"],
     metadata: ["metadataExtras"],
   },
@@ -805,7 +834,7 @@ export function AccessControlManagementView({
   const [templateTypeFilter, setTemplateTypeFilter] = React.useState("")
   const [syncFromDeviceId, setSyncFromDeviceId] = React.useState("")
   const [syncToOpen, setSyncToOpen] = React.useState(false)
-  const [syncToTemplateId, setSyncToTemplateId] = React.useState("")
+  const [syncToRecordId, setSyncToRecordId] = React.useState("")
   const [syncToDeviceId, setSyncToDeviceId] = React.useState("")
   const [syncing, setSyncing] = React.useState(false)
 
@@ -822,7 +851,7 @@ export function AccessControlManagementView({
     setTemplateTypeFilter("")
     setSyncFromDeviceId("")
     setSyncToOpen(false)
-    setSyncToTemplateId("")
+    setSyncToRecordId("")
     setSyncToDeviceId("")
   }, [activeSection, fields])
 
@@ -942,6 +971,15 @@ export function AccessControlManagementView({
           search: debouncedTemplateSearch.trim() || undefined,
           status: templateStatusFilter || undefined,
           schedule_type: templateTypeFilter || undefined,
+        })
+        setRows(result.rows)
+      } else if (activeSection === "week-plans") {
+        const result = await listAccessControlResources(token, resource, {
+          page: 1,
+          limit: 100,
+          sortBy: "created_at",
+          sortOrder: "DESC",
+          search: debouncedTemplateSearch.trim() || undefined,
         })
         setRows(result.rows)
       } else {
@@ -1184,20 +1222,20 @@ export function AccessControlManagementView({
   const openSyncToDevice = (row: AdminRecord, fallbackIndex: number) => {
     const rowId = String(resolveRowId(row, fallbackIndex))
     const deviceId = readNumberFromRecord(row, ["device_id", "deviceId"])
-    setSyncToTemplateId(rowId)
+    setSyncToRecordId(rowId)
     setSyncToDeviceId(deviceId !== null ? String(deviceId) : "")
     setFormError(null)
     setSyncToOpen(true)
   }
 
-  const onSyncTemplateToDevice = async () => {
+  const onSyncResourceToDevice = async () => {
     const token = readStoredToken()
     if (!token) {
       setFormError("Authentication required. Please log in again.")
       return
     }
-    if (!syncToTemplateId.trim()) {
-      setFormError("Template id is missing.")
+    if (!syncToRecordId.trim()) {
+      setFormError(activeSection === "week-plans" ? "Week plan id is missing." : "Template id is missing.")
       return
     }
     const deviceId = Number(syncToDeviceId)
@@ -1208,10 +1246,14 @@ export function AccessControlManagementView({
     setSyncing(true)
     setFormError(null)
     try {
-      await syncAccessScheduleTemplateToDevice(token, syncToTemplateId.trim(), { device_id: deviceId })
-      setMessage("Template synced to device.")
+      if (activeSection === "week-plans") {
+        await syncAccessWeekPlanToDevice(token, syncToRecordId.trim(), { device_id: deviceId })
+      } else {
+        await syncAccessScheduleTemplateToDevice(token, syncToRecordId.trim(), { device_id: deviceId })
+      }
+      setMessage(activeSection === "week-plans" ? "Week plan synced to device." : "Template synced to device.")
       setSyncToOpen(false)
-      setSyncToTemplateId("")
+      setSyncToRecordId("")
       setSyncToDeviceId("")
       await fetchRows()
     } catch (errorObject) {
@@ -1221,7 +1263,7 @@ export function AccessControlManagementView({
     }
   }
 
-  const onSyncTemplatesFromDevice = async () => {
+  const onSyncResourcesFromDevice = async () => {
     const token = readStoredToken()
     if (!token) {
       setError("Authentication required. Please log in again.")
@@ -1229,14 +1271,18 @@ export function AccessControlManagementView({
     }
     const deviceId = Number(syncFromDeviceId)
     if (!Number.isFinite(deviceId) || deviceId < 1) {
-      setError("Select a device to pull templates from.")
+      setError(activeSection === "week-plans" ? "Select a device to pull week plans from." : "Select a device to pull templates from.")
       return
     }
     setSyncing(true)
     setError(null)
     try {
-      await syncAccessScheduleTemplatesFromDevice(token, deviceId)
-      setMessage("Templates synced from device.")
+      if (activeSection === "week-plans") {
+        await syncAccessControlDeviceWeekPlans(token, deviceId)
+      } else {
+        await syncAccessScheduleTemplatesFromDevice(token, deviceId)
+      }
+      setMessage(activeSection === "week-plans" ? "Week plans synced from device." : "Templates synced from device.")
       await fetchRows()
     } catch (errorObject) {
       setError(errorObject instanceof Error ? errorObject.message : "Sync from device failed.")
@@ -1303,20 +1349,45 @@ export function AccessControlManagementView({
             sortable: true,
             render: (row: AdminRecord) => resolveDisplayValue(row, c),
           })),
-          ...(canUpdate || canDelete || activeSection === "templates"
+          ...(canUpdate ||
+          canDelete ||
+          activeSection === "templates" ||
+          activeSection === "week-plans" ||
+          activeSection === "groups" ||
+          activeSection === "organizations"
             ? [
                 {
                   key: "actions",
                   label: "Actions",
-                  defaultWidth: activeSection === "templates" ? 90 : 55,
+                  defaultWidth:
+                    activeSection === "templates" ||
+                    activeSection === "week-plans" ||
+                    activeSection === "groups" ||
+                    activeSection === "organizations"
+                      ? 100
+                      : 55,
                   sortable: false,
                   render: (row: AdminRecord) => (
                     <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-                      {activeSection === "templates" && canUpdate ? (
+                      {activeSection === "groups" || activeSection === "organizations" ? (
+                        <Link
+                          href={`/dashboard/access-control/${activeSection}/${resolveRowId(row, rows.indexOf(row))}`}
+                          className="admin-table-icon-button"
+                          aria-label="View details"
+                          title="View details"
+                        >
+                          <EyeIcon className="h-3.5 w-3.5" />
+                        </Link>
+                      ) : null}
+                      {(activeSection === "templates" || activeSection === "week-plans") && canUpdate ? (
                         <button
                           type="button"
                           className="admin-table-icon-button"
-                          aria-label="Sync template to device"
+                          aria-label={
+                            activeSection === "week-plans"
+                              ? "Sync week plan to device"
+                              : "Sync template to device"
+                          }
                           title="Sync to device"
                           onClick={() => openSyncToDevice(row, rows.indexOf(row))}
                           disabled={syncing}
@@ -1369,35 +1440,39 @@ export function AccessControlManagementView({
         }
         toolbarActions={
           <>
-            {activeSection === "templates" ? (
+            {activeSection === "templates" || activeSection === "week-plans" ? (
               <>
                 <input
                   className="h-8 w-32 rounded-lg border border-border bg-background px-2 text-xs sm:w-40"
-                  placeholder="Search templates…"
+                  placeholder={activeSection === "week-plans" ? "Search week plans…" : "Search templates…"}
                   value={templateSearch}
                   onChange={(event) => setTemplateSearch(event.target.value)}
                 />
-                <select
-                  className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
-                  value={templateStatusFilter}
-                  onChange={(event) => setTemplateStatusFilter(event.target.value)}
-                  aria-label="Filter by status"
-                >
-                  <option value="">All statuses</option>
-                  <option value="ACTIVE">Active</option>
-                  <option value="INACTIVE">Inactive</option>
-                </select>
-                <select
-                  className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
-                  value={templateTypeFilter}
-                  onChange={(event) => setTemplateTypeFilter(event.target.value)}
-                  aria-label="Filter by schedule type"
-                >
-                  <option value="">All types</option>
-                  <option value="DOOR">Door</option>
-                  <option value="ATTENDANCE">Attendance</option>
-                  <option value="MIXED">Mixed</option>
-                </select>
+                {activeSection === "templates" ? (
+                  <>
+                    <select
+                      className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
+                      value={templateStatusFilter}
+                      onChange={(event) => setTemplateStatusFilter(event.target.value)}
+                      aria-label="Filter by status"
+                    >
+                      <option value="">All statuses</option>
+                      <option value="ACTIVE">Active</option>
+                      <option value="INACTIVE">Inactive</option>
+                    </select>
+                    <select
+                      className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
+                      value={templateTypeFilter}
+                      onChange={(event) => setTemplateTypeFilter(event.target.value)}
+                      aria-label="Filter by schedule type"
+                    >
+                      <option value="">All types</option>
+                      <option value="DOOR">Door</option>
+                      <option value="ATTENDANCE">Attendance</option>
+                      <option value="MIXED">Mixed</option>
+                    </select>
+                  </>
+                ) : null}
                 <select
                   className="h-8 max-w-[10rem] rounded-lg border border-border bg-background px-2 text-xs"
                   value={syncFromDeviceId}
@@ -1421,9 +1496,9 @@ export function AccessControlManagementView({
                 <button
                   type="button"
                   className="inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-border px-2.5 text-xs font-medium transition hover:bg-muted disabled:opacity-60"
-                  onClick={() => void onSyncTemplatesFromDevice()}
+                  onClick={() => void onSyncResourcesFromDevice()}
                   disabled={syncing || !syncFromDeviceId}
-                  title="Pull templates from device"
+                  title={activeSection === "week-plans" ? "Pull week plans from device" : "Pull templates from device"}
                 >
                   {syncing ? (
                     <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
@@ -1611,9 +1686,13 @@ export function AccessControlManagementView({
       <Dialog open={syncToOpen} onOpenChange={setSyncToOpen}>
         <DialogPopup className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Sync template to device</DialogTitle>
+            <DialogTitle>
+              {activeSection === "week-plans" ? "Sync week plan to device" : "Sync template to device"}
+            </DialogTitle>
             <DialogDescription>
-              Push schedule template #{syncToTemplateId || "—"} to a Hikvision device.
+              {activeSection === "week-plans"
+                ? `Push week plan #${syncToRecordId || "—"} to a Hikvision device.`
+                : `Push schedule template #${syncToRecordId || "—"} to a Hikvision device.`}
             </DialogDescription>
           </DialogHeader>
           {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
@@ -1654,7 +1733,7 @@ export function AccessControlManagementView({
             </button>
             <button
               type="button"
-              onClick={() => void onSyncTemplateToDevice()}
+              onClick={() => void onSyncResourceToDevice()}
               disabled={syncing || !syncToDeviceId}
               className="inline-flex items-center gap-1.5 rounded-md bg-[var(--primary)] px-3 py-1.5 text-sm !text-white transition hover:brightness-95 disabled:opacity-60"
             >

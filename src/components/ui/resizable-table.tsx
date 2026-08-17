@@ -765,21 +765,37 @@ export function ResizableTable<T = Record<string, unknown>>({
     });
   }, [tableData, sortField, sortOrder, tableColumns]);
 
+  const clientPageCount =
+    itemsPerPage > 0 ? Math.max(1, Math.ceil(sortedData.length / itemsPerPage)) : 1;
+
+  React.useEffect(() => {
+    if (isServerPagination) {
+      return
+    }
+    setCurrentPage((page) => {
+      const next = Math.min(Math.max(1, page), clientPageCount)
+      return next === page ? page : next
+    })
+  }, [clientPageCount, isServerPagination, storageKey, title])
+
   const activePage = isServerPagination
     ? Math.max(1, controlledPage ?? 1)
-    : currentPage;
+    : Math.min(Math.max(1, currentPage), clientPageCount);
 
   const paginatedData = useMemo(() => {
     // Server already returned one page of rows — do not re-slice client-side.
     if (isServerPagination) {
       return sortedData;
     }
-    const startIdx = (currentPage - 1) * itemsPerPage;
+    if (sortedData.length === 0 || itemsPerPage <= 0) {
+      return [];
+    }
+    const startIdx = (activePage - 1) * itemsPerPage;
     return sortedData.slice(startIdx, startIdx + itemsPerPage);
     // itemsPerPage / isServerPagination intentionally omitted: including them
     // breaks the React Compiler's preserve-manual-memoization check.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sortedData, currentPage, isServerPagination]);
+  }, [sortedData, activePage, isServerPagination]);
 
   const totalPages = isServerPagination
     ? Math.max(
@@ -1347,7 +1363,7 @@ export function ResizableTable<T = Record<string, unknown>>({
                       </div>
                     ))}
                   </div>
-                ) : paginatedData.length === 0 ? (
+                ) : sortedData.length === 0 ? (
                   <div className="py-4 text-center text-xs text-muted-foreground border-b border-border">
                     No records found.
                   </div>

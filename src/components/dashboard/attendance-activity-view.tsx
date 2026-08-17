@@ -27,13 +27,17 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
+import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared"
 import {
   cancelMyAttendanceCorrectionRequest,
+  clearAttendanceDailySummaryAdjustment,
   createMyAttendanceCorrectionRequest,
   downloadAttendanceReport,
+  getAttendanceDailySummary,
   getMyAttendanceCorrectionRequest,
   getMyAttendanceSchedule,
   getMyAttendanceToday,
+  listAttendanceProcessingExceptions,
   listMyAttendanceCorrectionRequests,
   refreshAttendanceDailySummaries,
   listAttendanceDailySummariesPage,
@@ -44,6 +48,8 @@ import {
   listMyAttendanceHistory,
   runPendingAttendanceProcessingJobs,
   submitMyAttendanceCorrectionRequest,
+  updateAttendanceProcessingException,
+  upsertAttendanceDailySummaryAdjustment,
   type AdminRecord,
   type RefreshAttendanceDailySummariesInput,
 } from "@/lib/admin-api"
@@ -61,6 +67,7 @@ import {
 
 type AttendanceActivitySectionKey =
   | "daily-summaries"
+  | "processing-exceptions"
   | "recalculation-jobs"
   | "unmatched-logs"
   | "today"
@@ -91,6 +98,11 @@ const SECTION_CONFIG: Record<AttendanceActivitySectionKey, SectionConfig> = {
     title: "Daily Summaries",
     groupTitle: "Attendance Operations",
     description: "Review processed daily attendance summaries returned by the attendance engine.",
+  },
+  "processing-exceptions": {
+    title: "Processing Exceptions",
+    groupTitle: "Attendance Operations",
+    description: "Review unresolved attendance processing exceptions and resolve or ignore them.",
   },
   "recalculation-jobs": {
     title: "Recalculation Jobs",
@@ -1358,6 +1370,15 @@ function resolveVisibleColumns(rows: AdminRecord[], section: AttendanceActivityS
           "check_in_time",
           "check_out_time",
         ]
+      : section === "processing-exceptions"
+      ? [
+          "exception_type",
+          "status",
+          "employee_name",
+          "attendance_date",
+          "device_id",
+          "created_at",
+        ]
       : section === "attendance-history"
       ? [
           "attendanceDate",
@@ -1398,6 +1419,9 @@ function resolveVisibleColumns(rows: AdminRecord[], section: AttendanceActivityS
   const keySet = new Set<string>()
   rows.forEach((row) => Object.keys(row).forEach((key) => keySet.add(key)))
   if (section === "daily-summaries") {
+    return preferred
+  }
+  if (section === "processing-exceptions") {
     return preferred
   }
   if (section === "attendance-history") {
@@ -1524,9 +1548,358 @@ function resolveDailySummaryCellValue(column: string, row: AdminRecord): React.R
   return stringifyValue(row[column])
 }
 
+function formatBooleanSummaryValue(value: unknown) {
+  if (value === null || value === undefined || value === "") {
+    return null
+  }
+  if (typeof value === "boolean") {
+    return value ? "Yes" : "No"
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase()
+    if (!normalized) {
+      return null
+    }
+    if (normalized === "true") {
+      return "Yes"
+    }
+    if (normalized === "false") {
+      return "No"
+    }
+    return prettifyLabel(value)
+  }
+  return stringifyValue(value)
+}
+
+function nullIfDash(value: string) {
+  return value === "—" || value === "-" ? null : value
+}
+
+function buildDailySummaryDetailsRecord(row: AdminRecord | null): AdminRecord | null {
+  if (!row) {
+    return null
+  }
+
+  const nestedEmployee = readNestedRecord(row, ["employee"])
+  const nestedTimetable = readNestedRecord(row, ["timetable", "schedule", "shift"])
+  const adjustment = readNestedRecord(row, ["adjustment", "manual_adjustment", "manualAdjustment"])
+
+  const employeeName =
+    typeof resolveDailySummaryCellValue("employee_name", row) === "string"
+      ? String(resolveDailySummaryCellValue("employee_name", row)).trim()
+      : readStringFromRow(row, ["employee_name", "employeeName", "full_name", "fullName"])
+  const employeeNo = readStringFromRow(row, [
+    "employee_no",
+    "employeeNo",
+    "employee_number",
+    "employeeNumber",
+    "employee_code",
+    "employeeCode",
+  ]) ?? readStringFromRow(nestedEmployee ?? {}, ["employee_no", "employeeNo", "employee_number"])
+
+  const branchName =
+    typeof resolveDailySummaryCellValue("branch_name", row) === "string"
+      ? String(resolveDailySummaryCellValue("branch_name", row)).trim()
+      : null
+  const attendanceDate =
+    typeof resolveDailySummaryCellValue("attendance_date", row) === "string"
+      ? String(resolveDailySummaryCellValue("attendance_date", row)).trim()
+      : null
+
+  const rawStatus = readFirstValue(row, [
+    "attendance_status",
+    "attendanceStatus",
+    "status",
+    "summary_status",
+    "summaryStatus",
+    "state",
+  ])
+  const timetableName =
+    typeof resolveDailySummaryCellValue("timetable_used", row) === "string"
+      ? String(resolveDailySummaryCellValue("timetable_used", row)).trim()
+      : null
+  const checkInTime =
+    typeof resolveDailySummaryCellValue("check_in_time", row) === "string"
+      ? String(resolveDailySummaryCellValue("check_in_time", row)).trim()
+      : null
+  const checkOutTime =
+    typeof resolveDailySummaryCellValue("check_out_time", row) === "string"
+      ? String(resolveDailySummaryCellValue("check_out_time", row)).trim()
+      : null
+
+  const expectedStart = formatClockValue(
+    readFirstValue(nestedTimetable, ["start_time", "startTime", "expected_check_in_time", "expectedCheckInTime"])
+  )
+  const expectedEnd = formatClockValue(
+    readFirstValue(nestedTimetable, ["end_time", "endTime", "expected_check_out_time", "expectedCheckOutTime"])
+  )
+  const scheduleWindow =
+    expectedStart !== "—" || expectedEnd !== "—"
+      ? [expectedStart !== "—" ? expectedStart : null, expectedEnd !== "—" ? expectedEnd : null]
+          .filter(Boolean)
+          .join(" - ")
+      : null
+
+  const adjustmentNotes = readFirstValue(adjustment, [
+    "notes",
+    "adjustment_notes",
+    "adjustmentNotes",
+  ]) ?? readFirstValue(row, ["notes", "adjustment_notes", "adjustmentNotes"])
+
+  const remarksValue = row.remarks ?? row.remarksList
+  const remarks =
+    Array.isArray(remarksValue)
+      ? remarksValue
+          .filter((entry) => typeof entry === "string" && entry.trim())
+          .map((entry) => entry.trim())
+          .join(", ")
+      : typeof remarksValue === "string" && remarksValue.trim()
+        ? remarksValue.trim()
+        : null
+  const workedTime = nullIfDash(
+    formatMinutesLabel(readFirstValue(row, ["worked_minutes", "workedMinutes", "work_minutes", "workMinutes"]))
+  )
+  const expectedWorkTime = nullIfDash(
+    formatMinutesLabel(readFirstValue(nestedTimetable ?? row, ["expected_work_minutes", "expectedWorkMinutes"]))
+  )
+  const breakTime = nullIfDash(
+    formatMinutesLabel(readFirstValue(row, ["break_minutes", "breakMinutes"]))
+  )
+  const lateTime = nullIfDash(
+    formatMinutesLabel(readFirstValue(row, ["late_minutes", "lateMinutes"]))
+  )
+  const earlyDepartureTime = nullIfDash(
+    formatMinutesLabel(readFirstValue(row, ["early_departure_minutes", "earlyDepartureMinutes"]))
+  )
+  const overtimeTime = nullIfDash(
+    formatMinutesLabel(readFirstValue(row, ["overtime_minutes", "overtimeMinutes"]))
+  )
+
+  return {
+    employee: employeeName
+      ? employeeNo
+        ? `${employeeName} (${employeeNo})`
+        : employeeName
+      : employeeNo,
+    branch: branchName || null,
+    attendance_date: attendanceDate || null,
+    attendance_status: rawStatus ? prettifyLabel(rawStatus) : null,
+    timetable_used: timetableName && timetableName !== "—" ? timetableName : null,
+    scheduled_hours: scheduleWindow || null,
+    check_in_time: checkInTime && checkInTime !== "—" ? checkInTime : null,
+    check_out_time: checkOutTime && checkOutTime !== "—" ? checkOutTime : null,
+    worked_time: workedTime,
+    expected_work_time: expectedWorkTime,
+    break_time: breakTime,
+    late_time: lateTime,
+    early_departure_time: earlyDepartureTime,
+    overtime_time: overtimeTime,
+    holiday: formatBooleanSummaryValue(readFirstValue(row, ["is_holiday", "isHoliday"])),
+    approved_leave: formatBooleanSummaryValue(
+      readFirstValue(row, ["has_approved_leave", "hasApprovedLeave"])
+    ),
+    approved_business_trip: formatBooleanSummaryValue(
+      readFirstValue(row, ["has_approved_business_trip", "hasApprovedBusinessTrip"])
+    ),
+    adjustment_notes: adjustmentNotes || null,
+    remarks: remarks || null,
+    created_at: readFirstValue(row, ["created_at", "createdAt"]),
+    updated_at: readFirstValue(row, ["updated_at", "updatedAt"]),
+  }
+}
+
+function DailySummaryDetailField({
+  label,
+  value,
+  emphasized = false,
+}: {
+  label: string
+  value: string
+  emphasized?: boolean
+}) {
+  return (
+    <div className="rounded-xl border border-border/70 bg-background/70 px-3 py-2">
+      <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+        {label}
+      </div>
+      <div className={cn("mt-1 text-sm text-foreground", emphasized ? "font-semibold" : "font-medium")}>
+        {value}
+      </div>
+    </div>
+  )
+}
+
+function DailySummaryDetailsContent({
+  row,
+  detailsError,
+}: {
+  row: AdminRecord | null
+  detailsError: string | null
+}) {
+  const details = React.useMemo(() => buildDailySummaryDetailsRecord(row), [row])
+
+  if (!details) {
+    return <p className="text-sm text-muted-foreground">No daily summary details are available for this record.</p>
+  }
+
+  const nestedEmployee = row ? readNestedRecord(row, ["employee"]) : null
+  const nestedDepartment = row ? readNestedRecord(row, ["department"]) : null
+  const nestedPosition = row ? readNestedRecord(row, ["position"]) : null
+  const statusValue = readFirstValue(details, ["attendance_status"]) ?? "Unknown"
+  const statusUi = statusTone(statusValue)
+  const employeeValue =
+    readFirstValue(details, ["employee"]) ||
+    readStringFromRow(nestedEmployee ?? {}, ["full_name", "fullName", "name"]) ||
+    "Employee not identified"
+  const branchValue = readFirstValue(details, ["branch"]) ?? "—"
+  const departmentValue =
+    readStringFromRow(nestedDepartment ?? {}, ["name", "department_name", "departmentName"]) ?? "—"
+  const positionValue =
+    readStringFromRow(nestedPosition ?? {}, ["name", "position_name", "positionName", "title"]) ?? "—"
+  const scheduleValue = readFirstValue(details, ["scheduled_hours"]) ?? "—"
+  const timetableValue = readFirstValue(details, ["timetable_used"]) ?? "—"
+  const checkInValue = readFirstValue(details, ["check_in_time"]) ?? "—"
+  const checkOutValue = readFirstValue(details, ["check_out_time"]) ?? "—"
+  const workedValue = readFirstValue(details, ["worked_time"]) ?? "—"
+  const expectedWorkValue = readFirstValue(details, ["expected_work_time"]) ?? "—"
+  const breakValue = readFirstValue(details, ["break_time"]) ?? "—"
+  const lateValue = readFirstValue(details, ["late_time"]) ?? "—"
+  const earlyDepartureValue = readFirstValue(details, ["early_departure_time"]) ?? "—"
+  const overtimeValue = readFirstValue(details, ["overtime_time"]) ?? "—"
+  const approvedLeaveValue = readFirstValue(details, ["approved_leave"]) ?? "No"
+  const approvedBusinessTripValue = readFirstValue(details, ["approved_business_trip"]) ?? "No"
+  const holidayValue = readFirstValue(details, ["holiday"]) ?? "No"
+  const remarksValue = readFirstValue(details, ["remarks"])
+  const adjustmentNotesValue = readFirstValue(details, ["adjustment_notes"])
+  const createdAtValue = readFirstValue(details, ["created_at"]) ?? "—"
+  const updatedAtValue = readFirstValue(details, ["updated_at"]) ?? "—"
+
+  return (
+    <div className="max-h-[65vh] space-y-4 overflow-auto pr-1">
+      {detailsError ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+          Showing the latest available details. {detailsError}
+        </div>
+      ) : null}
+
+      <div className={cn("rounded-2xl border px-4 py-4", statusUi.panel)}>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="space-y-1">
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+              Employee
+            </div>
+            <div className="text-xl font-semibold text-foreground">{employeeValue}</div>
+            <div className="text-sm text-muted-foreground">
+              {readFirstValue(details, ["attendance_date"]) ?? "Attendance date not provided"}
+            </div>
+          </div>
+          <div className={cn("inline-flex rounded-full border px-3 py-1 text-sm font-semibold", statusUi.badge)}>
+            {statusValue}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <DailySummaryDetailField label="Branch" value={branchValue} />
+        <DailySummaryDetailField label="Department" value={departmentValue} />
+        <DailySummaryDetailField label="Position" value={positionValue} />
+        <DailySummaryDetailField label="Timetable" value={timetableValue} />
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="rounded-2xl border border-border bg-card">
+          <div className="border-b border-border px-4 py-3">
+            <h3 className="text-sm font-semibold text-foreground">Schedule and punches</h3>
+            <p className="text-xs text-muted-foreground">Compare the planned window with the actual attendance marks.</p>
+          </div>
+          <div className="grid gap-3 p-4 sm:grid-cols-2">
+            <DailySummaryDetailField label="Scheduled window" value={scheduleValue} emphasized />
+            <DailySummaryDetailField label="Expected work time" value={expectedWorkValue} emphasized />
+            <DailySummaryDetailField label="Check in" value={checkInValue} emphasized />
+            <DailySummaryDetailField label="Check out" value={checkOutValue} emphasized />
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-border bg-card">
+          <div className="border-b border-border px-4 py-3">
+            <h3 className="text-sm font-semibold text-foreground">Time totals</h3>
+            <p className="text-xs text-muted-foreground">Attendance engine totals after processing the day.</p>
+          </div>
+          <div className="grid gap-3 p-4 sm:grid-cols-2">
+            <DailySummaryDetailField label="Worked time" value={workedValue} emphasized />
+            <DailySummaryDetailField label="Break time" value={breakValue} />
+            <DailySummaryDetailField label="Late time" value={lateValue} />
+            <DailySummaryDetailField label="Early departure" value={earlyDepartureValue} />
+            <DailySummaryDetailField label="Overtime" value={overtimeValue} />
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-3">
+        <DailySummaryDetailField label="Approved leave" value={approvedLeaveValue} />
+        <DailySummaryDetailField label="Business trip" value={approvedBusinessTripValue} />
+        <DailySummaryDetailField label="Holiday" value={holidayValue} />
+      </div>
+
+      {remarksValue || adjustmentNotesValue ? (
+        <div className="grid gap-4 lg:grid-cols-2">
+          {remarksValue ? (
+            <div className="rounded-2xl border border-border bg-card px-4 py-4">
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                Remarks
+              </div>
+              <p className="mt-2 text-sm leading-6 text-foreground">{remarksValue}</p>
+            </div>
+          ) : null}
+          {adjustmentNotesValue ? (
+            <div className="rounded-2xl border border-border bg-card px-4 py-4">
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                Adjustment notes
+              </div>
+              <p className="mt-2 text-sm leading-6 text-foreground">{adjustmentNotesValue}</p>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div className="grid gap-3 md:grid-cols-2">
+        <DailySummaryDetailField label="Created" value={createdAtValue} />
+        <DailySummaryDetailField label="Last updated" value={updatedAtValue} />
+      </div>
+    </div>
+  )
+}
+
 function resolveTableCellValue(section: AttendanceActivitySectionKey, column: string, row: AdminRecord): React.ReactNode {
   if (section === "daily-summaries") {
     return resolveDailySummaryCellValue(column, row)
+  }
+  if (section === "processing-exceptions") {
+    if (column === "exception_type") {
+      return prettifyLabel(
+        readFirstValue(row, ["exception_type", "exceptionType", "type"]) ?? "-"
+      )
+    }
+    if (column === "status") {
+      const status = readFirstValue(row, ["status"]) ?? "-"
+      const tone = statusTone(String(status))
+      const textClass = tone.badge.split(" ").find((entry) => entry.startsWith("text-")) || "text-foreground"
+      return <span className={`text-xs font-medium ${textClass}`}>{String(status)}</span>
+    }
+    if (column === "employee_name") {
+      return (
+        readFirstValue(row, ["employee_name", "employeeName", "full_name", "fullName"]) ??
+        readFirstValue(readNestedRecord(row, ["employee"]), ["full_name", "fullName", "name"]) ??
+        "—"
+      )
+    }
+    if (column === "attendance_date") {
+      return readFirstValue(row, ["attendance_date", "attendanceDate", "date"]) ?? "—"
+    }
+    if (column === "device_id") {
+      return readFirstValue(row, ["device_name", "deviceName", "device_id", "deviceId"]) ?? "—"
+    }
+    return stringifyValue(row[column]) || "—"
   }
   if (section === "attendance-history") {
     if (column === "attendanceDate" || column === "attendance_date") {
@@ -1672,6 +2045,10 @@ function buildRefreshSummariesPayload(values: Record<string, string>): RefreshAt
   return payload
 }
 
+function getProcessingExceptionId(row: AdminRecord | null) {
+  return readNumberFromRow(row ?? {}, ["id", "exception_id", "exceptionId"])
+}
+
 function AttendanceViewLoader({ label = "Loading attendance data…" }: { label?: string }) {
   return (
     <div className="flex min-h-[220px] flex-col items-center justify-center gap-3 rounded-xl border border-border/70 bg-card px-4 py-10 shadow-sm">
@@ -1692,6 +2069,7 @@ function TableBlock({
   totalPages,
   totalItems,
   onPageChange,
+  onRowSelect,
 }: {
   rows: AdminRecord[]
   section: AttendanceActivitySectionKey
@@ -1703,6 +2081,7 @@ function TableBlock({
   totalPages?: number | null
   totalItems?: number | null
   onPageChange?: (page: number) => void
+  onRowSelect?: (rowId: string, row?: AdminRecord) => void
 }) {
   const columns = React.useMemo(() => resolveVisibleColumns(rows, section), [rows, section])
 
@@ -1727,6 +2106,7 @@ function TableBlock({
         totalPages={totalPages}
         totalItems={totalItems}
         onPageChange={onPageChange}
+        onRowSelect={onRowSelect}
       />
     </div>
   )
@@ -1734,6 +2114,148 @@ function TableBlock({
 
 const DAILY_SUMMARY_PAGE_SIZE_OPTIONS = [20, 50, 100, 200] as const
 const DEFAULT_DAILY_SUMMARY_PAGE_SIZE = 50
+
+type DailySummaryAdjustmentFormState = {
+  check_in_at: string
+  check_out_at: string
+  attendance_status: string
+  break_minutes: string
+  worked_minutes: string
+  late_minutes: string
+  early_departure_minutes: string
+  overtime_minutes: string
+  notes: string
+}
+
+const EMPTY_DAILY_SUMMARY_ADJUSTMENT_FORM: DailySummaryAdjustmentFormState = {
+  check_in_at: "",
+  check_out_at: "",
+  attendance_status: "",
+  break_minutes: "",
+  worked_minutes: "",
+  late_minutes: "",
+  early_departure_minutes: "",
+  overtime_minutes: "",
+  notes: "",
+}
+
+function toDateTimeLocalInputValue(value: unknown) {
+  if (typeof value !== "string" || !value.trim()) {
+    return ""
+  }
+
+  const parsed = new Date(value)
+  if (!Number.isNaN(parsed.getTime())) {
+    const offset = parsed.getTimezoneOffset() * 60_000
+    return new Date(parsed.getTime() - offset).toISOString().slice(0, 16)
+  }
+
+  return value.trim().replace(" ", "T").slice(0, 16)
+}
+
+function toIsoDateTimeOrUndefined(value: string) {
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return undefined
+  }
+  const parsed = new Date(trimmed)
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error("Please enter a valid date and time.")
+  }
+  return parsed.toISOString()
+}
+
+function readDailySummaryIdentity(row: AdminRecord | null) {
+  if (!row) {
+    return { employeeId: null, attendanceDate: "" }
+  }
+
+  const employeeId = readNumberFromRow(row, ["employee_id", "employeeId"])
+  const attendanceDateValue = readFirstValue(row, [
+    "attendance_date",
+    "attendanceDate",
+    "date",
+    "summary_date",
+    "summaryDate",
+    "work_date",
+    "workDate",
+  ])
+  const attendanceDate =
+    typeof attendanceDateValue === "string" && attendanceDateValue.trim()
+      ? attendanceDateValue.trim().slice(0, 10)
+      : ""
+
+  return { employeeId, attendanceDate }
+}
+
+function readDailySummaryAdjustmentForm(row: AdminRecord | null): DailySummaryAdjustmentFormState {
+  if (!row) {
+    return EMPTY_DAILY_SUMMARY_ADJUSTMENT_FORM
+  }
+
+  const adjustment = readNestedRecord(row, ["adjustment", "manual_adjustment", "manualAdjustment"])
+
+  const readValue = (keys: string[]) =>
+    readFirstValue(adjustment, keys) ?? readFirstValue(row, keys)
+
+  return {
+    check_in_at: toDateTimeLocalInputValue(readValue(["check_in_at", "checkInAt", "first_check_in_at", "firstCheckInAt"])),
+    check_out_at: toDateTimeLocalInputValue(readValue(["check_out_at", "checkOutAt", "last_check_out_at", "lastCheckOutAt"])),
+    attendance_status: String(
+      readValue(["attendance_status", "attendanceStatus", "status", "summary_status", "summaryStatus"]) ?? ""
+    ),
+    break_minutes: String(readValue(["break_minutes", "breakMinutes"]) ?? ""),
+    worked_minutes: String(readValue(["worked_minutes", "workedMinutes", "work_minutes", "workMinutes"]) ?? ""),
+    late_minutes: String(readValue(["late_minutes", "lateMinutes"]) ?? ""),
+    early_departure_minutes: String(readValue(["early_departure_minutes", "earlyDepartureMinutes"]) ?? ""),
+    overtime_minutes: String(readValue(["overtime_minutes", "overtimeMinutes"]) ?? ""),
+    notes: String(readValue(["notes", "adjustment_notes", "adjustmentNotes"]) ?? ""),
+  }
+}
+
+function buildDailySummaryAdjustmentPayload(form: DailySummaryAdjustmentFormState) {
+  const payload: AdminRecord = {}
+
+  const checkInAt = toIsoDateTimeOrUndefined(form.check_in_at)
+  if (checkInAt) {
+    payload.check_in_at = checkInAt
+  }
+
+  const checkOutAt = toIsoDateTimeOrUndefined(form.check_out_at)
+  if (checkOutAt) {
+    payload.check_out_at = checkOutAt
+  }
+
+  const attendanceStatus = form.attendance_status.trim()
+  if (attendanceStatus) {
+    payload.attendance_status = attendanceStatus
+  }
+
+  for (const [key, value] of Object.entries({
+    break_minutes: form.break_minutes,
+    worked_minutes: form.worked_minutes,
+    late_minutes: form.late_minutes,
+    early_departure_minutes: form.early_departure_minutes,
+    overtime_minutes: form.overtime_minutes,
+  })) {
+    const trimmed = value.trim()
+    if (!trimmed) {
+      continue
+    }
+    const parsed = Number(trimmed)
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      throw new Error("Adjustment minute values must be numbers greater than or equal to 0.")
+    }
+    payload[key] = parsed
+  }
+
+  const notes = form.notes.trim()
+  if (notes) {
+    payload.notes = notes
+  }
+
+  return payload
+}
 
 export function AttendanceActivityView({ section }: { section: string }) {
   const activeSection = React.useMemo(() => resolveSection(section), [section])
@@ -1748,6 +2270,18 @@ export function AttendanceActivityView({ section }: { section: string }) {
   const [dailySummaryTotal, setDailySummaryTotal] = React.useState<number | null>(null)
   const [dailySummaryTotalPages, setDailySummaryTotalPages] = React.useState<number | null>(null)
   const [singleRecord, setSingleRecord] = React.useState<AdminRecord | null>(null)
+  const [detailsOpen, setDetailsOpen] = React.useState(false)
+  const [detailsLoading, setDetailsLoading] = React.useState(false)
+  const [detailsError, setDetailsError] = React.useState<string | null>(null)
+  const [detailsRow, setDetailsRow] = React.useState<AdminRecord | null>(null)
+  const [detailsActionBusy, setDetailsActionBusy] = React.useState<"" | "clear-adjustment" | "save-exception">("")
+  const [adjustmentDialogOpen, setAdjustmentDialogOpen] = React.useState(false)
+  const [adjustmentBusy, setAdjustmentBusy] = React.useState(false)
+  const [adjustmentForm, setAdjustmentForm] = React.useState<DailySummaryAdjustmentFormState>(
+    EMPTY_DAILY_SUMMARY_ADJUSTMENT_FORM
+  )
+  const [exceptionStatus, setExceptionStatus] = React.useState("RESOLVED")
+  const [exceptionResolutionNote, setExceptionResolutionNote] = React.useState("")
   const [loading, setLoading] = React.useState(true)
   const [message, setMessage] = React.useState<string | null>(null)
   const [error, setError] = React.useState<string | null>(null)
@@ -1894,7 +2428,26 @@ export function AttendanceActivityView({ section }: { section: string }) {
   }, [employees])
 
   React.useEffect(() => {
-    if (activeSection !== "daily-summaries") {
+    if (activeSection === "daily-summaries") {
+      setAdjustmentForm(readDailySummaryAdjustmentForm(detailsRow))
+      return
+    }
+    if (activeSection === "processing-exceptions") {
+      const currentStatus = String(readFirstValue(detailsRow, ["status"]) ?? "OPEN").trim().toUpperCase()
+      setExceptionStatus(
+        currentStatus === "RESOLVED" || currentStatus === "IGNORED" || currentStatus === "OPEN"
+          ? currentStatus
+          : "RESOLVED"
+      )
+      setExceptionResolutionNote(
+        String(readFirstValue(detailsRow, ["resolution_note", "resolutionNote", "notes"]) ?? "")
+      )
+      return
+    }
+  }, [activeSection, detailsRow])
+
+  React.useEffect(() => {
+    if (activeSection !== "daily-summaries" && activeSection !== "processing-exceptions") {
       return
     }
 
@@ -1934,14 +2487,24 @@ export function AttendanceActivityView({ section }: { section: string }) {
 
   // Re-attach employee/branch names when support lists arrive, without re-fetching summaries.
   React.useEffect(() => {
-    if (activeSection !== "daily-summaries") {
+    if (activeSection !== "daily-summaries" && activeSection !== "processing-exceptions") {
       return
     }
     if (!branches.length && !employees.length) {
       return
     }
 
-    setDailySummaryRows((current) => {
+    if (activeSection === "daily-summaries") {
+      setDailySummaryRows((current) => {
+        if (!current.length) {
+          return current
+        }
+        return enrichRowsWithReadableNames(current, branches, employees)
+      })
+      return
+    }
+
+    setRows((current) => {
       if (!current.length) {
         return current
       }
@@ -2083,6 +2646,27 @@ export function AttendanceActivityView({ section }: { section: string }) {
         return
       }
 
+      if (activeSection === "processing-exceptions") {
+        const result = await listAttendanceProcessingExceptions(token, {
+          page: 1,
+          limit: 100,
+          sortBy: "created_at",
+          sortOrder: "DESC",
+        })
+        const enrichedRows = enrichRowsWithReadableNames(
+          result.rows,
+          branchesRef.current,
+          employeesRef.current
+        )
+        setDailySummaryRows([])
+        setDailySummaryTotal(null)
+        setDailySummaryTotalPages(null)
+        setRows(enrichedRows)
+        setSingleRecord(null)
+        setCorrectionRequests([])
+        return
+      }
+
       if (activeSection === "unmatched-logs") {
         const result = await listAttendanceUnmatchedLogs(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" })
         setDailySummaryRows([])
@@ -2120,6 +2704,104 @@ export function AttendanceActivityView({ section }: { section: string }) {
     hasAppliedDailySummaryFilters,
     historyFilters,
   ])
+
+  const openRecordDetails = React.useCallback(
+    async (row?: AdminRecord) => {
+      if (!row) {
+        return
+      }
+
+      setDetailsOpen(true)
+      setDetailsError(null)
+      setDetailsRow(row)
+
+      if (activeSection !== "daily-summaries") {
+        setDetailsLoading(false)
+        return
+      }
+
+      const token = readStoredToken()
+      const employeeId = readNumberFromRow(row, ["employee_id", "employeeId"])
+      const attendanceDateRaw = readFirstValue(row, [
+        "attendance_date",
+        "attendanceDate",
+        "date",
+        "summary_date",
+        "summaryDate",
+        "work_date",
+        "workDate",
+      ])
+      const attendanceDate =
+        typeof attendanceDateRaw === "string" && attendanceDateRaw.trim()
+          ? attendanceDateRaw.trim().slice(0, 10)
+          : ""
+
+      if (!token || employeeId === null || !attendanceDate) {
+        return
+      }
+
+      setDetailsLoading(true)
+      try {
+        const detail = await getAttendanceDailySummary(token, employeeId, attendanceDate)
+        if (detail) {
+          setDetailsRow({ ...row, ...detail })
+        }
+      } catch (errorObject) {
+        setDetailsError(
+          formatLoadError(errorObject, "Could not load the latest attendance summary details.")
+        )
+      } finally {
+        setDetailsLoading(false)
+      }
+    },
+    [activeSection]
+  )
+
+  const detailsTitle = React.useMemo(() => {
+    if (activeSection === "daily-summaries") return "Daily summary details"
+    if (activeSection === "processing-exceptions") return "Processing exception details"
+    if (activeSection === "recalculation-jobs") return "Recalculation job details"
+    if (activeSection === "unmatched-logs") return "Unmatched log details"
+    return "Attendance record details"
+  }, [activeSection])
+
+  const detailsDescription = React.useMemo(() => {
+      if (activeSection === "daily-summaries") {
+        if (detailsLoading) {
+          return "Loading the latest processed attendance summary details."
+        }
+        if (detailsError) {
+          return `Review the processed attendance summary returned by the attendance engine. ${detailsError}`
+      }
+      return "Review the processed attendance summary returned by the attendance engine."
+    }
+    if (activeSection === "processing-exceptions") {
+      if (detailsError) {
+        return `Review the selected attendance processing exception. ${detailsError}`
+      }
+      return "Review the selected attendance processing exception and update its status."
+    }
+    if (activeSection === "recalculation-jobs") {
+      if (detailsError) {
+        return `Review the selected attendance processing job. ${detailsError}`
+      }
+      return "Review the selected attendance processing job."
+    }
+    if (activeSection === "unmatched-logs") {
+      if (detailsError) {
+        return `Review the selected unmatched attendance log. ${detailsError}`
+      }
+      return "Review the selected unmatched attendance log."
+    }
+    return "Selected attendance record details."
+  }, [activeSection, detailsError, detailsLoading])
+
+  const detailsDisplayRow = React.useMemo(() => {
+    if (activeSection === "daily-summaries") {
+      return buildDailySummaryDetailsRecord(detailsRow)
+    }
+    return detailsRow
+  }, [activeSection, detailsRow])
 
   const fetchSectionData = React.useCallback(async (force = false) => {
     const requestKey = JSON.stringify({
@@ -2220,6 +2902,104 @@ export function AttendanceActivityView({ section }: { section: string }) {
       setRecalcActionBusy(false)
     }
   }
+
+  const saveDailySummaryAdjustment = React.useCallback(async () => {
+    const token = readStoredToken()
+    if (!token) {
+      setError("Authentication required. Please log in again.")
+      return
+    }
+
+    const { employeeId, attendanceDate } = readDailySummaryIdentity(detailsRow)
+    if (employeeId === null || !attendanceDate) {
+      setError("The selected summary is missing its employee or date.")
+      return
+    }
+
+    setAdjustmentBusy(true)
+    setError(null)
+    setMessage(null)
+    try {
+      const payload = buildDailySummaryAdjustmentPayload(adjustmentForm)
+      const updated = await upsertAttendanceDailySummaryAdjustment(token, employeeId, attendanceDate, payload)
+      setAdjustmentDialogOpen(false)
+      setDetailsRow((current) =>
+        current ? { ...current, ...(asRecordValue(updated) ?? {}) } : current
+      )
+      setMessage("Attendance daily summary adjustment saved.")
+      await fetchSectionData(true)
+    } catch (errorObject) {
+      setError(formatLoadError(errorObject, "Could not save the attendance summary adjustment."))
+    } finally {
+      setAdjustmentBusy(false)
+    }
+  }, [adjustmentForm, detailsRow, fetchSectionData])
+
+  const clearDailySummaryAdjustment = React.useCallback(async () => {
+    const token = readStoredToken()
+    if (!token) {
+      setError("Authentication required. Please log in again.")
+      return
+    }
+
+    const { employeeId, attendanceDate } = readDailySummaryIdentity(detailsRow)
+    if (employeeId === null || !attendanceDate) {
+      setError("The selected summary is missing its employee or date.")
+      return
+    }
+
+    setDetailsActionBusy("clear-adjustment")
+    setError(null)
+    setMessage(null)
+    try {
+      await clearAttendanceDailySummaryAdjustment(token, employeeId, attendanceDate)
+      setMessage("Attendance daily summary adjustment cleared.")
+      await fetchSectionData(true)
+      const fresh = await getAttendanceDailySummary(token, employeeId, attendanceDate).catch(() => null)
+      setDetailsRow((current) =>
+        fresh ? { ...(current ?? {}), ...fresh } : current
+      )
+      setAdjustmentForm(readDailySummaryAdjustmentForm(fresh))
+    } catch (errorObject) {
+      setError(formatLoadError(errorObject, "Could not clear the attendance summary adjustment."))
+    } finally {
+      setDetailsActionBusy("")
+    }
+  }, [detailsRow, fetchSectionData])
+
+  const saveProcessingException = React.useCallback(async () => {
+    const token = readStoredToken()
+    if (!token) {
+      setError("Authentication required. Please log in again.")
+      return
+    }
+
+    const exceptionId = getProcessingExceptionId(detailsRow)
+    if (exceptionId === null) {
+      setError("The selected processing exception is missing its id.")
+      return
+    }
+
+    setDetailsActionBusy("save-exception")
+    setError(null)
+    setMessage(null)
+    try {
+      const updated = await updateAttendanceProcessingException(token, exceptionId, {
+        status: exceptionStatus,
+        resolution_note: exceptionResolutionNote.trim() || undefined,
+      })
+      const updatedRecord = asRecordValue(updated)
+      if (updatedRecord) {
+        setDetailsRow((current) => ({ ...(current ?? {}), ...updatedRecord }))
+      }
+      setMessage(`Processing exception marked as ${exceptionStatus.toLowerCase()}.`)
+      await fetchSectionData(true)
+    } catch (errorObject) {
+      setError(formatLoadError(errorObject, "Could not update the processing exception."))
+    } finally {
+      setDetailsActionBusy("")
+    }
+  }, [detailsRow, exceptionResolutionNote, exceptionStatus, fetchSectionData])
 
   const submitCorrectionRequest = async () => {
     const token = readStoredToken()
@@ -3744,6 +4524,9 @@ export function AttendanceActivityView({ section }: { section: string }) {
               }
               // While free-text searching, page over the filtered subset only (no server page jumps).
               onPageChange={recordSearch.trim() ? undefined : setDailySummaryPage}
+              onRowSelect={(_, row) => {
+                void openRecordDetails(row)
+              }}
               toolbarStart={sectionTitleBlock}
               toolbarActions={
                 <>
@@ -3788,6 +4571,9 @@ export function AttendanceActivityView({ section }: { section: string }) {
             rows={rows}
             section={activeSection}
             loading={loading}
+            onRowSelect={(_, row) => {
+              void openRecordDetails(row)
+            }}
             toolbarStart={sectionTitleBlock}
             toolbarActions={
               <>
@@ -3940,7 +4726,18 @@ export function AttendanceActivityView({ section }: { section: string }) {
         activeSection !== "recalculation-jobs" &&
         activeSection !== "corrections" ? (
           <div className="mt-6">
-            <TableBlock rows={rows} section={activeSection} loading={loading} />
+            <TableBlock
+              rows={rows}
+              section={activeSection}
+              loading={loading}
+              onRowSelect={
+                activeSection === "unmatched-logs"
+                  ? (_, row) => {
+                      void openRecordDetails(row)
+                    }
+                  : undefined
+              }
+            />
           </div>
         ) : null}
 
@@ -4033,6 +4830,226 @@ export function AttendanceActivityView({ section }: { section: string }) {
               onClick={() => void submitCorrectionRequest()}
             >
               Create request
+            </button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
+
+      <RecordDetailsDialog
+        open={detailsOpen}
+        onOpenChange={(open) => {
+          setDetailsOpen(open)
+          if (!open) {
+            setDetailsError(null)
+            setDetailsLoading(false)
+            setDetailsActionBusy("")
+            setAdjustmentDialogOpen(false)
+          }
+        }}
+        title={detailsTitle}
+        description={detailsDescription}
+        row={detailsDisplayRow}
+        content={
+          activeSection === "daily-summaries" ? (
+            <DailySummaryDetailsContent row={detailsRow} detailsError={detailsError} />
+          ) : undefined
+        }
+        resolveLabel={(key) => prettifyLabel(key)}
+        resolveValue={(key, row) => stringifyValue(row[key])}
+        footer={
+          activeSection === "daily-summaries" && detailsRow ? (
+            <div className="flex w-full flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                className="inline-flex h-9 items-center justify-center rounded-lg border border-border px-3 text-sm font-medium text-foreground transition hover:bg-muted"
+                onClick={() => setAdjustmentDialogOpen(true)}
+              >
+                Adjust summary
+              </button>
+              <button
+                type="button"
+                className="inline-flex h-9 items-center justify-center rounded-lg border border-rose-300 px-3 text-sm font-medium text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60 dark:text-rose-300 dark:hover:bg-rose-950/40"
+                onClick={() => void clearDailySummaryAdjustment()}
+                disabled={detailsActionBusy === "clear-adjustment"}
+              >
+                {detailsActionBusy === "clear-adjustment" ? "Clearing..." : "Clear adjustment"}
+              </button>
+            </div>
+          ) : activeSection === "processing-exceptions" && detailsRow ? (
+            <div className="flex w-full flex-col gap-3">
+              <div className="grid gap-3 md:grid-cols-[minmax(0,180px)_1fr]">
+                <label className="grid gap-1 text-sm">
+                  <span className="font-medium text-slate-700">Status</span>
+                  <select
+                    className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
+                    value={exceptionStatus}
+                    onChange={(event) => setExceptionStatus(event.target.value)}
+                  >
+                    <option value="OPEN">Open</option>
+                    <option value="RESOLVED">Resolved</option>
+                    <option value="IGNORED">Ignored</option>
+                  </select>
+                </label>
+                <label className="grid gap-1 text-sm">
+                  <span className="font-medium text-slate-700">Resolution note</span>
+                  <Textarea
+                    className="min-h-24 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+                    value={exceptionResolutionNote}
+                    onChange={(event) => setExceptionResolutionNote(event.target.value)}
+                    placeholder="Explain how this exception was resolved or why it is being ignored."
+                  />
+                </label>
+              </div>
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  className="inline-flex h-9 items-center justify-center rounded-lg bg-primary px-3 text-sm font-medium !text-white transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={() => void saveProcessingException()}
+                  disabled={detailsActionBusy === "save-exception"}
+                >
+                  {detailsActionBusy === "save-exception" ? "Saving..." : "Save exception status"}
+                </button>
+              </div>
+            </div>
+          ) : null
+        }
+      />
+
+      <Dialog open={adjustmentDialogOpen} onOpenChange={setAdjustmentDialogOpen}>
+        <DialogPopup className="sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Adjust daily summary</DialogTitle>
+            <DialogDescription>
+              Apply a manual attendance adjustment while keeping the raw punches unchanged.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className="grid gap-1.5 text-sm">
+                <span className="font-medium text-slate-700">Check-in at</span>
+                <input
+                  className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
+                  type="datetime-local"
+                  value={adjustmentForm.check_in_at}
+                  onChange={(event) =>
+                    setAdjustmentForm((current) => ({ ...current, check_in_at: event.target.value }))
+                  }
+                />
+              </label>
+              <label className="grid gap-1.5 text-sm">
+                <span className="font-medium text-slate-700">Check-out at</span>
+                <input
+                  className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
+                  type="datetime-local"
+                  value={adjustmentForm.check_out_at}
+                  onChange={(event) =>
+                    setAdjustmentForm((current) => ({ ...current, check_out_at: event.target.value }))
+                  }
+                />
+              </label>
+              <label className="grid gap-1.5 text-sm">
+                <span className="font-medium text-slate-700">Attendance status</span>
+                <select
+                  className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
+                  value={adjustmentForm.attendance_status}
+                  onChange={(event) =>
+                    setAdjustmentForm((current) => ({ ...current, attendance_status: event.target.value }))
+                  }
+                >
+                  <option value="">Keep current</option>
+                  {DAILY_SUMMARY_STATUS_OPTIONS.map((status) => (
+                    <option key={status} value={status}>
+                      {prettifyLabel(status)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="grid gap-1.5 text-sm">
+                <span className="font-medium text-slate-700">Break minutes</span>
+                <input
+                  className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
+                  inputMode="numeric"
+                  value={adjustmentForm.break_minutes}
+                  onChange={(event) =>
+                    setAdjustmentForm((current) => ({ ...current, break_minutes: event.target.value }))
+                  }
+                />
+              </label>
+              <label className="grid gap-1.5 text-sm">
+                <span className="font-medium text-slate-700">Worked minutes</span>
+                <input
+                  className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
+                  inputMode="numeric"
+                  value={adjustmentForm.worked_minutes}
+                  onChange={(event) =>
+                    setAdjustmentForm((current) => ({ ...current, worked_minutes: event.target.value }))
+                  }
+                />
+              </label>
+              <label className="grid gap-1.5 text-sm">
+                <span className="font-medium text-slate-700">Late minutes</span>
+                <input
+                  className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
+                  inputMode="numeric"
+                  value={adjustmentForm.late_minutes}
+                  onChange={(event) =>
+                    setAdjustmentForm((current) => ({ ...current, late_minutes: event.target.value }))
+                  }
+                />
+              </label>
+              <label className="grid gap-1.5 text-sm">
+                <span className="font-medium text-slate-700">Early departure minutes</span>
+                <input
+                  className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
+                  inputMode="numeric"
+                  value={adjustmentForm.early_departure_minutes}
+                  onChange={(event) =>
+                    setAdjustmentForm((current) => ({
+                      ...current,
+                      early_departure_minutes: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <label className="grid gap-1.5 text-sm">
+                <span className="font-medium text-slate-700">Overtime minutes</span>
+                <input
+                  className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
+                  inputMode="numeric"
+                  value={adjustmentForm.overtime_minutes}
+                  onChange={(event) =>
+                    setAdjustmentForm((current) => ({ ...current, overtime_minutes: event.target.value }))
+                  }
+                />
+              </label>
+            </div>
+            <label className="grid gap-1.5 text-sm">
+              <span className="font-medium text-slate-700">Notes</span>
+              <Textarea
+                className="min-h-28 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+                value={adjustmentForm.notes}
+                onChange={(event) =>
+                  setAdjustmentForm((current) => ({ ...current, notes: event.target.value }))
+                }
+                placeholder="Document why this manual adjustment was approved."
+              />
+            </label>
+          </div>
+          <DialogFooter>
+            <button
+              className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-300 px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              type="button"
+              onClick={() => setAdjustmentDialogOpen(false)}
+            >
+              Close
+            </button>
+            <button
+              className="inline-flex h-10 items-center justify-center rounded-lg bg-primary px-4 text-sm font-medium !text-white transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
+              type="button"
+              disabled={adjustmentBusy}
+              onClick={() => void saveDailySummaryAdjustment()}
+            >
+              {adjustmentBusy ? "Saving..." : "Save adjustment"}
             </button>
           </DialogFooter>
         </DialogPopup>

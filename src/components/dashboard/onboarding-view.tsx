@@ -17,12 +17,18 @@ import {
   approveOnboardingRequest,
   cancelOnboardingRequest,
   completeOnboardingRequest,
+  completeOnboardingTask,
+  cloneOnboardingWorkflow,
   createOnboardingRequest,
+  createOnboardingTask,
   createOnboardingWorkflow,
   createOnboardingWorkflowStep,
+  deleteOnboardingDocument,
   deleteOnboardingRequest,
   deleteOnboardingWorkflow,
   deleteOnboardingWorkflowStep,
+  downloadOnboardingDocument,
+  fileToBase64UploadDto,
   getOnboardingAuditLogs,
   getOnboardingProgress,
   getOnboardingRequest,
@@ -30,8 +36,11 @@ import {
   listAccessControlResources,
   listAttendanceDevices,
   listBranches,
+  listDepartments,
   listEmployees,
+  listOnboardingDocuments,
   listOnboardingRequests,
+  listOnboardingTasks,
   listOnboardingWorkflowSteps,
   listOnboardingWorkflows,
   listResource,
@@ -41,6 +50,8 @@ import {
   patchOnboardingWorkflow,
   patchOnboardingWorkflowStep,
   rejectOnboardingRequest,
+  uploadOnboardingDocument,
+  verifyOnboardingDocument,
   type AdminRecord,
   type OnboardingProvisioning,
 } from "@/lib/admin-api"
@@ -99,6 +110,7 @@ type OnboardingLookupKey =
   | "users"
   | "roles"
   | "branches"
+  | "departments"
   | "shifts"
   | "rotationGroups"
   | "timetables"
@@ -563,6 +575,19 @@ const USER_VERIFY_MODE_OPTIONS = [
   { value: "cardOrFpOrPw", label: "Card, fingerprint or password" },
 ] as const
 
+const ONBOARDING_TASK_TYPE_OPTIONS = [
+  "general",
+  "hr",
+  "it",
+  "department",
+  "manager",
+  "document",
+  "asset",
+  "induction",
+  "acknowledgement",
+  "system",
+] as const
+
 const selectPopupClassName = "z-[400]"
 
 const EMPTY_ONBOARDING_SHIFT_ASSIGNMENT: OnboardingShiftAssignmentDraft = {
@@ -870,6 +895,7 @@ export function OnboardingView() {
   const [users, setUsers] = React.useState<AdminRecord[]>([])
   const [roles, setRoles] = React.useState<AdminRecord[]>([])
   const [branches, setBranches] = React.useState<AdminRecord[]>([])
+  const [departments, setDepartments] = React.useState<AdminRecord[]>([])
   const [shiftRecords, setShiftRecords] = React.useState<AdminRecord[]>([])
   const [rotationGroupRecords, setRotationGroupRecords] = React.useState<AdminRecord[]>([])
   const [timetableRecords, setTimetableRecords] = React.useState<AdminRecord[]>([])
@@ -897,6 +923,7 @@ export function OnboardingView() {
     users: false,
     roles: false,
     branches: false,
+    departments: false,
     shifts: false,
     rotationGroups: false,
     timetables: false,
@@ -910,7 +937,26 @@ export function OnboardingView() {
   const [selectedRequestDetails, setSelectedRequestDetails] = React.useState<AdminRecord | null>(null)
   const [selectedRequestProgress, setSelectedRequestProgress] = React.useState<AdminRecord | null>(null)
   const [selectedRequestAuditLogs, setSelectedRequestAuditLogs] = React.useState<AdminRecord[]>([])
+  const [selectedRequestDocuments, setSelectedRequestDocuments] = React.useState<AdminRecord[]>([])
+  const [selectedRequestTasks, setSelectedRequestTasks] = React.useState<AdminRecord[]>([])
   const [selectedWorkflowSteps, setSelectedWorkflowSteps] = React.useState<AdminRecord[]>([])
+  const [showDocumentComposer, setShowDocumentComposer] = React.useState(false)
+  const [documentUploadFile, setDocumentUploadFile] = React.useState<File | null>(null)
+  const [documentForm, setDocumentForm] = React.useState({
+    title: "",
+    description: "",
+    document_type_code: "",
+    expiry_date: "",
+  })
+  const [showTaskComposer, setShowTaskComposer] = React.useState(false)
+  const [taskForm, setTaskForm] = React.useState({
+    title: "",
+    description: "",
+    task_type: "general",
+    assigned_company_user_id: "",
+    assigned_department_id: "",
+    due_date: "",
+  })
 
   const [requestForm, setRequestForm] = React.useState({
     employee_id: "",
@@ -1123,6 +1169,8 @@ export function OnboardingView() {
             return { key, result: await listResource("roles", token) }
           case "branches":
             return { key, result: await listBranches(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }) }
+          case "departments":
+            return { key, result: await listDepartments(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }) }
           case "shifts":
             return { key, result: await listShiftResources(token, "shifts", { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }) }
           case "rotationGroups":
@@ -1164,6 +1212,9 @@ export function OnboardingView() {
           break
         case "branches":
           setBranches(entry.result.rows)
+          break
+        case "departments":
+          setDepartments(entry.result.rows)
           break
         case "shifts":
           setShiftRecords(entry.result.rows)
@@ -1625,6 +1676,27 @@ export function OnboardingView() {
     })
   }
 
+  function resetDocumentForm() {
+    setDocumentForm({
+      title: "",
+      description: "",
+      document_type_code: "",
+      expiry_date: "",
+    })
+    setDocumentUploadFile(null)
+  }
+
+  function resetTaskForm() {
+    setTaskForm({
+      title: "",
+      description: "",
+      task_type: "general",
+      assigned_company_user_id: "",
+      assigned_department_id: "",
+      due_date: "",
+    })
+  }
+
   async function openRequestSheet() {
     const loaded = await ensureLookups(["employees", "workflows"])
     if (!loaded) {
@@ -1920,6 +1992,42 @@ export function OnboardingView() {
       await reloadAll(activeTab, true)
     } catch (errorObject) {
       const message = errorObject instanceof Error ? errorObject.message : "Failed to delete workflow."
+      setError(message)
+      showErrorAlert(message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function cloneWorkflow(workflowId: number | null, row: AdminRecord) {
+    if (!canCreateOnboardingWorkflows) {
+      showErrorAlert("You do not have permission to clone onboarding workflows.")
+      return
+    }
+    if (workflowId === null) {
+      return
+    }
+    const token = readStoredToken()
+    if (!token) {
+      showErrorAlert("Authentication required. Please log in again.")
+      return
+    }
+
+    const sourceName = readString(row, ["name", "title"])
+    const cloneName =
+      sourceName !== "-" ? `${sourceName} Copy` : `Workflow ${workflowId} Copy`
+
+    setSaving(true)
+    setError(null)
+    try {
+      await cloneOnboardingWorkflow(token, workflowId, {
+        name: cloneName,
+        is_default: false,
+      })
+      showSuccessAlert("Onboarding workflow cloned.")
+      await reloadAll("workflows", true)
+    } catch (errorObject) {
+      const message = errorObject instanceof Error ? errorObject.message : "Failed to clone workflow."
       setError(message)
       showErrorAlert(message)
     } finally {
@@ -2381,6 +2489,272 @@ export function OnboardingView() {
     timetableRecords,
   ])
 
+  const resolveRequestTaskOwner = React.useCallback((task: AdminRecord) => {
+    const nestedUser =
+      toRecord(task.assigned_company_user) ??
+      toRecord(task.assignee) ??
+      toRecord(task.user) ??
+      null
+    if (nestedUser) {
+      const nestedLabel = readString(nestedUser, ["full_name", "name", "email"])
+      if (nestedLabel !== "-") {
+        return nestedLabel
+      }
+    }
+
+    const assignedUserId = readNumber(task, ["assigned_company_user_id", "assigned_user_id", "user_id"])
+    if (assignedUserId !== null) {
+      const userLabel = resolveOptionLabel(
+        users,
+        assignedUserId,
+        ["id", "company_user_id", "user_id"],
+        ["full_name", "name", "email"]
+      )
+      if (userLabel !== "-") {
+        return userLabel
+      }
+    }
+
+    const nestedDepartment = toRecord(task.assigned_department) ?? toRecord(task.department) ?? null
+    if (nestedDepartment) {
+      const nestedLabel = readString(nestedDepartment, ["name", "title"])
+      if (nestedLabel !== "-") {
+        return `Department: ${nestedLabel}`
+      }
+    }
+
+    const assignedDepartmentId = readNumber(task, ["assigned_department_id", "department_id"])
+    if (assignedDepartmentId !== null) {
+      const departmentLabel = resolveOptionLabel(
+        departments,
+        assignedDepartmentId,
+        ["id", "department_id"],
+        ["name", "title"]
+      )
+      if (departmentLabel !== "-") {
+        return `Department: ${departmentLabel}`
+      }
+    }
+
+    return "-"
+  }, [departments, users])
+
+  function readCurrentRequestId() {
+    return readNumber(selectedRequestDetails ?? selectedRequestRow ?? {}, ["id", "request_id"])
+  }
+
+  async function reloadCurrentRequestActivity(requestId?: number | null) {
+    const id = requestId ?? readCurrentRequestId()
+    if (id === null) {
+      return
+    }
+    await reloadAll("requests", true)
+    await openRequestDetails({
+      ...(selectedRequestRow ?? {}),
+      id,
+      request_id: id,
+    })
+  }
+
+  async function submitRequestDocument() {
+    if (!canUpdateOnboardingRequests) {
+      showErrorAlert("You do not have permission to manage onboarding documents.")
+      return
+    }
+
+    const token = readStoredToken()
+    const requestId = readCurrentRequestId()
+    if (!token || requestId === null) {
+      showErrorAlert("Missing request context.")
+      return
+    }
+    if (!documentForm.title.trim()) {
+      showErrorAlert("Document title is required.")
+      return
+    }
+    if (!documentUploadFile) {
+      showErrorAlert("Choose a document file before uploading.")
+      return
+    }
+
+    setSaving(true)
+    try {
+      const file = await fileToBase64UploadDto(documentUploadFile)
+      await uploadOnboardingDocument(token, requestId, {
+        title: documentForm.title.trim(),
+        description: documentForm.description.trim() || undefined,
+        document_type_code: documentForm.document_type_code.trim() || undefined,
+        expiry_date: documentForm.expiry_date || undefined,
+        file,
+      })
+      showSuccessAlert("Onboarding document uploaded.")
+      resetDocumentForm()
+      setShowDocumentComposer(false)
+      await reloadCurrentRequestActivity(requestId)
+    } catch (errorObject) {
+      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to upload document.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function downloadRequestDocument(documentRow: AdminRecord) {
+    const token = readStoredToken()
+    const requestId = readCurrentRequestId()
+    const documentId = readNumber(documentRow, ["id", "document_id"])
+    if (!token || requestId === null || documentId === null) {
+      showErrorAlert("Missing document identifiers.")
+      return
+    }
+
+    setSaving(true)
+    try {
+      const result = await downloadOnboardingDocument(token, requestId, documentId)
+      const url = window.URL.createObjectURL(result.blob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = result.filename
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+      showSuccessAlert("Document download started.")
+    } catch (errorObject) {
+      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to download document.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function setRequestDocumentVerified(documentRow: AdminRecord, isVerified: boolean) {
+    if (!canUpdateOnboardingRequests) {
+      showErrorAlert("You do not have permission to verify onboarding documents.")
+      return
+    }
+
+    const token = readStoredToken()
+    const requestId = readCurrentRequestId()
+    const documentId = readNumber(documentRow, ["id", "document_id"])
+    if (!token || requestId === null || documentId === null) {
+      showErrorAlert("Missing document identifiers.")
+      return
+    }
+
+    setSaving(true)
+    try {
+      await verifyOnboardingDocument(token, requestId, documentId, {
+        is_verified: isVerified,
+      })
+      showSuccessAlert(isVerified ? "Document verified." : "Document marked unverified.")
+      await reloadCurrentRequestActivity(requestId)
+    } catch (errorObject) {
+      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to update document verification.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function removeRequestDocument(documentRow: AdminRecord) {
+    if (!canUpdateOnboardingRequests) {
+      showErrorAlert("You do not have permission to delete onboarding documents.")
+      return
+    }
+
+    const token = readStoredToken()
+    const requestId = readCurrentRequestId()
+    const documentId = readNumber(documentRow, ["id", "document_id"])
+    if (!token || requestId === null || documentId === null) {
+      showErrorAlert("Missing document identifiers.")
+      return
+    }
+    if (typeof window !== "undefined" && !window.confirm("Delete this onboarding document?")) {
+      return
+    }
+
+    setSaving(true)
+    try {
+      await deleteOnboardingDocument(token, requestId, documentId)
+      showSuccessAlert("Onboarding document deleted.")
+      await reloadCurrentRequestActivity(requestId)
+    } catch (errorObject) {
+      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to delete document.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function submitRequestTask() {
+    if (!canUpdateOnboardingRequests) {
+      showErrorAlert("You do not have permission to manage onboarding tasks.")
+      return
+    }
+
+    const token = readStoredToken()
+    const requestId = readCurrentRequestId()
+    if (!token || requestId === null) {
+      showErrorAlert("Missing request context.")
+      return
+    }
+    if (!taskForm.title.trim()) {
+      showErrorAlert("Task title is required.")
+      return
+    }
+
+    setSaving(true)
+    try {
+      await createOnboardingTask(token, requestId, {
+        title: taskForm.title.trim(),
+        description: taskForm.description.trim() || undefined,
+        task_type: taskForm.task_type || "general",
+        assigned_company_user_id:
+          taskForm.assigned_company_user_id && Number(taskForm.assigned_company_user_id) > 0
+            ? Number(taskForm.assigned_company_user_id)
+            : undefined,
+        assigned_department_id:
+          taskForm.assigned_department_id && Number(taskForm.assigned_department_id) > 0
+            ? Number(taskForm.assigned_department_id)
+            : undefined,
+        due_date: taskForm.due_date || undefined,
+      })
+      showSuccessAlert("Onboarding task created.")
+      resetTaskForm()
+      setShowTaskComposer(false)
+      await reloadCurrentRequestActivity(requestId)
+    } catch (errorObject) {
+      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to create task.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function completeRequestTask(taskRow: AdminRecord) {
+    if (!canUpdateOnboardingRequests && !canCompleteOnboardingRequests) {
+      showErrorAlert("You do not have permission to complete onboarding tasks.")
+      return
+    }
+
+    const token = readStoredToken()
+    const requestId = readCurrentRequestId()
+    const taskId = readNumber(taskRow, ["id", "task_id"])
+    if (!token || requestId === null || taskId === null) {
+      showErrorAlert("Missing task identifiers.")
+      return
+    }
+
+    setSaving(true)
+    try {
+      await completeOnboardingTask(token, requestId, taskId, {
+        completion_notes: "Completed by admin",
+      })
+      showSuccessAlert("Onboarding task completed.")
+      await reloadCurrentRequestActivity(requestId)
+    } catch (errorObject) {
+      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to complete task.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
   async function openRequestDetails(row: AdminRecord) {
     const requestId = readNumber(row, ["id", "request_id"])
     if (requestId === null) {
@@ -2400,17 +2774,27 @@ export function OnboardingView() {
     setSelectedRequestDetails(null)
     setSelectedRequestProgress(null)
     setSelectedRequestAuditLogs([])
+    setSelectedRequestDocuments([])
+    setSelectedRequestTasks([])
     setSelectedWorkflowSteps([])
+    setShowDocumentComposer(false)
+    setShowTaskComposer(false)
+    resetDocumentForm()
+    resetTaskForm()
 
     try {
-      const [detail, progress, auditLogs] = await Promise.all([
+      const [detail, progress, auditLogs, documents, tasks] = await Promise.all([
         getOnboardingRequest(token, requestId),
         getOnboardingProgress(token, requestId),
         getOnboardingAuditLogs(token, requestId),
+        listOnboardingDocuments(token, requestId),
+        listOnboardingTasks(token, requestId),
       ])
       setSelectedRequestDetails(detail)
       setSelectedRequestProgress(progress)
       setSelectedRequestAuditLogs(auditLogs)
+      setSelectedRequestDocuments(documents)
+      setSelectedRequestTasks(tasks)
 
       const assignedWorkflow = detail
         ? toRecord(detail.workflow ?? detail.assigned_workflow)
@@ -3644,23 +4028,374 @@ export function OnboardingView() {
                             {selectedRequestProvisioningSummary.continueOnError}
                           </p>
                         </div>
-                        <div className="md:col-span-2 xl:col-span-3">
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Provisioning Payload</p>
-                          <pre className="mt-1 overflow-x-auto rounded-md bg-slate-50 p-3 text-xs text-slate-700">
-                            {JSON.stringify(selectedRequestProvisioningSummary.rawProvisioning, null, 2)}
-                          </pre>
-                        </div>
-                        {selectedRequestProvisioningSummary.metadata ? (
-                          <div className="md:col-span-2 xl:col-span-3">
-                            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Metadata</p>
-                            <pre className="mt-1 overflow-x-auto rounded-md bg-slate-50 p-3 text-xs text-slate-700">
-                              {JSON.stringify(selectedRequestProvisioningSummary.metadata, null, 2)}
-                            </pre>
-                          </div>
-                        ) : null}
                       </div>
                     </div>
                   ) : null}
+
+                  <div className="space-y-3 rounded-lg border border-border p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-semibold text-slate-900">Documents</p>
+                      {canUpdateOnboardingRequests ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-8 px-3 text-xs"
+                          onClick={() => {
+                            resetDocumentForm()
+                            setShowDocumentComposer((current) => !current)
+                          }}
+                          disabled={saving}
+                        >
+                          {showDocumentComposer ? "Hide upload" : "Upload document"}
+                        </Button>
+                      ) : null}
+                    </div>
+
+                    {showDocumentComposer ? (
+                      <div className="grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 md:grid-cols-2">
+                        <label className="grid gap-1 text-xs font-medium text-slate-700">
+                          Title
+                          <Input
+                            className="h-9 bg-white text-slate-900"
+                            value={documentForm.title}
+                            onChange={(event) => setDocumentForm((prev) => ({ ...prev, title: event.target.value }))}
+                            placeholder="Document title"
+                          />
+                        </label>
+                        <label className="grid gap-1 text-xs font-medium text-slate-700">
+                          Document type code
+                          <Input
+                            className="h-9 bg-white text-slate-900"
+                            value={documentForm.document_type_code}
+                            onChange={(event) =>
+                              setDocumentForm((prev) => ({ ...prev, document_type_code: event.target.value }))
+                            }
+                            placeholder="Optional code"
+                          />
+                        </label>
+                        <label className="grid gap-1 text-xs font-medium text-slate-700">
+                          Expiry date
+                          <Input
+                            className="h-9 bg-white text-slate-900"
+                            type="date"
+                            value={documentForm.expiry_date}
+                            onChange={(event) => setDocumentForm((prev) => ({ ...prev, expiry_date: event.target.value }))}
+                          />
+                        </label>
+                        <label className="grid gap-1 text-xs font-medium text-slate-700">
+                          File
+                          <Input
+                            className="h-9 bg-white text-slate-900 file:mr-3 file:border-0 file:bg-transparent file:text-xs file:font-medium"
+                            type="file"
+                            onChange={(event) => setDocumentUploadFile(event.target.files?.[0] ?? null)}
+                          />
+                        </label>
+                        <label className="grid gap-1 text-xs font-medium text-slate-700 md:col-span-2">
+                          Description
+                          <textarea
+                            className="min-h-24 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+                            value={documentForm.description}
+                            onChange={(event) => setDocumentForm((prev) => ({ ...prev, description: event.target.value }))}
+                            placeholder="Optional document notes"
+                          />
+                        </label>
+                        <div className="flex justify-end gap-2 md:col-span-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-8 px-3 text-xs"
+                            onClick={() => {
+                              resetDocumentForm()
+                              setShowDocumentComposer(false)
+                            }}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            type="button"
+                            className="h-8 px-3 text-xs"
+                            onClick={() => void submitRequestDocument()}
+                            disabled={saving}
+                          >
+                            {saving ? "Uploading..." : "Upload"}
+                          </Button>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {selectedRequestDocuments.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No onboarding documents attached yet.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {selectedRequestDocuments.map((documentRow, index) => {
+                          const documentId = readNumber(documentRow, ["id", "document_id"])
+                          const title = readString(documentRow, ["title", "name", "file_name"])
+                          const typeCode = readString(documentRow, ["document_type_code", "type_code", "type"])
+                          const isVerified = asTruthyBoolean(
+                            documentRow.is_verified ?? documentRow.verified ?? documentRow.isVerified
+                          )
+                          return (
+                            <div
+                              key={`onboarding-document-${documentId ?? index}`}
+                              className="rounded-md border border-slate-200 bg-white p-3"
+                            >
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div>
+                                  <p className="text-sm font-medium text-slate-900">{title !== "-" ? title : `Document #${documentId ?? index + 1}`}</p>
+                                  <p className="text-xs text-slate-500">
+                                    {typeCode !== "-" ? typeCode : "No type"} •{" "}
+                                    {isVerified ? "Verified" : "Pending verification"}
+                                  </p>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="h-7 px-2 text-[11px]"
+                                    onClick={() => void downloadRequestDocument(documentRow)}
+                                    disabled={saving}
+                                  >
+                                    Download
+                                  </Button>
+                                  {canUpdateOnboardingRequests ? (
+                                    <>
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        className="h-7 px-2 text-[11px]"
+                                        onClick={() => void setRequestDocumentVerified(documentRow, !isVerified)}
+                                        disabled={saving}
+                                      >
+                                        {isVerified ? "Mark unverified" : "Verify"}
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        className="h-7 px-2 text-[11px] text-rose-600"
+                                        onClick={() => void removeRequestDocument(documentRow)}
+                                        disabled={saving}
+                                      >
+                                        Delete
+                                      </Button>
+                                    </>
+                                  ) : null}
+                                </div>
+                              </div>
+                              <div className="mt-2 grid gap-2 md:grid-cols-3">
+                                <div>
+                                  <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Expiry</p>
+                                  <p className="text-sm text-slate-900">{toTimestamp(documentRow.expiry_date)}</p>
+                                </div>
+                                <div>
+                                  <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Uploaded</p>
+                                  <p className="text-sm text-slate-900">
+                                    {toTimestamp(documentRow.created_at ?? documentRow.uploaded_at)}
+                                  </p>
+                                </div>
+                                <div>
+                                  <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Description</p>
+                                  <p className="text-sm text-slate-900">
+                                    {readString(documentRow, ["description", "notes", "remarks"])}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-3 rounded-lg border border-border p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-semibold text-slate-900">Tasks</p>
+                      {canUpdateOnboardingRequests ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-8 px-3 text-xs"
+                          onClick={() => {
+                            void ensureLookups(["users", "departments"])
+                            resetTaskForm()
+                            setShowTaskComposer((current) => !current)
+                          }}
+                          disabled={saving}
+                        >
+                          {showTaskComposer ? "Hide task form" : "Create task"}
+                        </Button>
+                      ) : null}
+                    </div>
+
+                    {showTaskComposer ? (
+                      <div className="grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 md:grid-cols-2">
+                        <label className="grid gap-1 text-xs font-medium text-slate-700">
+                          Title
+                          <Input
+                            className="h-9 bg-white text-slate-900"
+                            value={taskForm.title}
+                            onChange={(event) => setTaskForm((prev) => ({ ...prev, title: event.target.value }))}
+                            placeholder="Task title"
+                          />
+                        </label>
+                        <label className="grid gap-1 text-xs font-medium text-slate-700">
+                          Task type
+                          <select
+                            className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
+                            value={taskForm.task_type}
+                            onChange={(event) => setTaskForm((prev) => ({ ...prev, task_type: event.target.value }))}
+                          >
+                            {ONBOARDING_TASK_TYPE_OPTIONS.map((type) => (
+                              <option key={type} value={type}>
+                                {toTitleCaseWords(type)}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="grid gap-1 text-xs font-medium text-slate-700">
+                          Assigned user
+                          <select
+                            className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
+                            value={taskForm.assigned_company_user_id}
+                            onChange={(event) =>
+                              setTaskForm((prev) => ({ ...prev, assigned_company_user_id: event.target.value }))
+                            }
+                          >
+                            <option value="">Optional user</option>
+                            {users.map((row, index) => {
+                              const userId = readNumber(row, ["id", "company_user_id", "user_id"])
+                              if (userId === null) return null
+                              return (
+                                <option key={`onboarding-task-user-${userId}-${index}`} value={String(userId)}>
+                                  {resolveOptionLabel(users, userId, ["id", "company_user_id", "user_id"], ["full_name", "name", "email"])}
+                                </option>
+                              )
+                            })}
+                          </select>
+                        </label>
+                        <label className="grid gap-1 text-xs font-medium text-slate-700">
+                          Assigned department
+                          <select
+                            className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
+                            value={taskForm.assigned_department_id}
+                            onChange={(event) =>
+                              setTaskForm((prev) => ({ ...prev, assigned_department_id: event.target.value }))
+                            }
+                          >
+                            <option value="">Optional department</option>
+                            {departments.map((row, index) => {
+                              const departmentId = readNumber(row, ["id", "department_id"])
+                              if (departmentId === null) return null
+                              return (
+                                <option key={`onboarding-task-dept-${departmentId}-${index}`} value={String(departmentId)}>
+                                  {resolveOptionLabel(departments, departmentId, ["id", "department_id"], ["name", "title"])}
+                                </option>
+                              )
+                            })}
+                          </select>
+                        </label>
+                        <label className="grid gap-1 text-xs font-medium text-slate-700">
+                          Due date
+                          <Input
+                            className="h-9 bg-white text-slate-900"
+                            type="datetime-local"
+                            value={taskForm.due_date}
+                            onChange={(event) => setTaskForm((prev) => ({ ...prev, due_date: event.target.value }))}
+                          />
+                        </label>
+                        <label className="grid gap-1 text-xs font-medium text-slate-700 md:col-span-2">
+                          Description
+                          <textarea
+                            className="min-h-24 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+                            value={taskForm.description}
+                            onChange={(event) => setTaskForm((prev) => ({ ...prev, description: event.target.value }))}
+                            placeholder="Optional task instructions"
+                          />
+                        </label>
+                        <div className="flex justify-end gap-2 md:col-span-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-8 px-3 text-xs"
+                            onClick={() => {
+                              resetTaskForm()
+                              setShowTaskComposer(false)
+                            }}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            type="button"
+                            className="h-8 px-3 text-xs"
+                            onClick={() => void submitRequestTask()}
+                            disabled={saving}
+                          >
+                            {saving ? "Creating..." : "Create task"}
+                          </Button>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {selectedRequestTasks.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No onboarding tasks have been created for this request.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {selectedRequestTasks.map((taskRow, index) => {
+                          const taskId = readNumber(taskRow, ["id", "task_id"])
+                          const taskStatus = readString(taskRow, ["status", "task_status"])
+                          const isTaskClosed = ["completed", "cancelled"].includes(taskStatus.trim().toLowerCase())
+                          return (
+                            <div
+                              key={`onboarding-task-${taskId ?? index}`}
+                              className="rounded-md border border-slate-200 bg-white p-3"
+                            >
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div>
+                                  <p className="text-sm font-medium text-slate-900">
+                                    {readString(taskRow, ["title", "name", "task_title"])}
+                                  </p>
+                                  <p className="text-xs text-slate-500">
+                                    {toTitleCaseWords(readString(taskRow, ["task_type", "type"]))} •{" "}
+                                    {taskStatus !== "-" ? toTitleCaseWords(taskStatus) : "Pending"}
+                                  </p>
+                                </div>
+                                {!isTaskClosed && (canUpdateOnboardingRequests || canCompleteOnboardingRequests) ? (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="h-7 px-2 text-[11px]"
+                                    onClick={() => void completeRequestTask(taskRow)}
+                                    disabled={saving}
+                                  >
+                                    Complete task
+                                  </Button>
+                                ) : null}
+                              </div>
+                              <div className="mt-2 grid gap-2 md:grid-cols-3">
+                                <div>
+                                  <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Owner</p>
+                                  <p className="text-sm text-slate-900">{resolveRequestTaskOwner(taskRow)}</p>
+                                </div>
+                                <div>
+                                  <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Due</p>
+                                  <p className="text-sm text-slate-900">{toTimestamp(taskRow.due_date)}</p>
+                                </div>
+                                <div>
+                                  <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Completed</p>
+                                  <p className="text-sm text-slate-900">{toTimestamp(taskRow.completed_at)}</p>
+                                </div>
+                                <div className="md:col-span-3">
+                                  <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Description</p>
+                                  <p className="text-sm text-slate-900">
+                                    {readString(taskRow, ["description", "completion_notes", "notes"])}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
 
                   <div className="space-y-3 rounded-lg border border-border p-4">
                     <p className="text-sm font-semibold text-slate-900">Workflow Map</p>
@@ -3868,6 +4603,20 @@ export function OnboardingView() {
                             disabled={saving}
                           >
                             <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                        ) : null}
+                        {canCreateOnboardingWorkflows ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-7 px-2 text-[11px]"
+                            onClick={() => void cloneWorkflow(workflowId, row)}
+                            aria-label={`Clone workflow ${workflowId ?? index + 1}`}
+                            title="Clone workflow"
+                            disabled={saving}
+                          >
+                            Copy
                           </Button>
                         ) : null}
                         {canDeleteOnboardingWorkflows ? (

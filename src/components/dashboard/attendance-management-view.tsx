@@ -37,6 +37,8 @@ import { ResizableTable } from "@/components/ui/resizable-table"
 import { Textarea } from "@/components/ui/textarea"
 
 import {
+  approveAttendanceMobilePunchOverride,
+  rejectAttendanceMobilePunchOverride,
   createAttendanceResource,
   deleteAttendanceResourceById,
   activateAttendancePolicy,
@@ -57,6 +59,8 @@ import {
   type AdminRecord,
   type AttendanceResourceKey,
 } from "@/lib/admin-api"
+import { useDashboardActor } from "@/hooks/use-dashboard-actor"
+import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
@@ -696,6 +700,16 @@ function readStringFromRecord(row: AdminRecord, keys: string[]) {
   return null
 }
 
+function prettifyLabel(value: string): string {
+  return value
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replaceAll("_", " ")
+    .replaceAll("-", " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase())
+}
+
 function buildAttendanceDeviceIdentity(row: AdminRecord, resolveBranchName?: (branchId: number | null) => string) {
   const branchId = readNumberFromRecord(row, ["branch_id", "branchId"])
   const branchName = resolveBranchName ? resolveBranchName(branchId) : null
@@ -1305,6 +1319,169 @@ function resolveAttendanceCellValue(
   return formatAdminValue(raw)
 }
 
+function AttendanceDetailField({
+  label,
+  value,
+}: {
+  label: string
+  value: string
+}) {
+  return (
+    <div className="rounded-xl border border-border/60 bg-background px-3 py-2">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+        {label}
+      </p>
+      <p className="mt-1 text-sm text-foreground">{value}</p>
+    </div>
+  )
+}
+
+function buildAttendanceDetailTitle(
+  section: AttendanceSectionKey,
+  row: AdminRecord,
+  lookupMaps: Record<string, Map<string, string>>
+) {
+  const direct =
+    readStringFromRecord(row, [
+      "name",
+      "title",
+      "device_name",
+      "deviceName",
+      "employee_name",
+      "employeeName",
+      "ssid",
+    ]) ||
+    (row.employeeId !== undefined ? String(resolveAttendanceCellValue("employee_name", row, lookupMaps)) : null) ||
+    (row.device_id !== undefined ? String(resolveAttendanceCellValue("device_id", row, lookupMaps)) : null) ||
+    null
+
+  if (direct) {
+    return direct
+  }
+
+  const id = readNumberFromRecord(row, ["id", "device_id", "attendance_device_id"])
+  return `${section.replaceAll("-", " ")}${id !== null ? ` #${id}` : ""}`
+}
+
+function buildAttendanceDetailEntries(
+  section: AttendanceSectionKey,
+  row: AdminRecord,
+  lookupMaps: Record<string, Map<string, string>>
+) {
+  const fields = SECTION_FIELDS[section]
+  const seen = new Set<string>()
+  const entries: Array<{ label: string; value: string }> = []
+
+  for (const field of fields) {
+    seen.add(field.key)
+    if (field.type === "password") {
+      continue
+    }
+    const raw = row[field.key]
+    if (raw === undefined || raw === null) {
+      continue
+    }
+    const value = String(resolveAttendanceCellValue(field.key, row, lookupMaps))
+    if (!value || value === "-") {
+      continue
+    }
+    entries.push({ label: field.label, value })
+  }
+
+  for (const key of ["status", "created_at", "updated_at", "description", "error_message", "remarks"]) {
+    if (seen.has(key)) continue
+    const raw = row[key]
+    if (raw === undefined || raw === null) continue
+    const value = String(resolveAttendanceCellValue(key, row, lookupMaps))
+    if (!value || value === "-") continue
+    entries.push({ label: prettifyLabel(key), value })
+  }
+
+  return entries
+}
+
+function AttendanceDetailsContent({
+  section,
+  row,
+  lookupMaps,
+}: {
+  section: AttendanceSectionKey
+  row: AdminRecord | null
+  lookupMaps: Record<string, Map<string, string>>
+}) {
+  if (!row) {
+    return <p className="text-sm text-muted-foreground">No details are available for this attendance record.</p>
+  }
+
+  const entries = buildAttendanceDetailEntries(section, row, lookupMaps)
+  const title = buildAttendanceDetailTitle(section, row, lookupMaps)
+  const summaryCandidates = [
+    row.status !== undefined ? { label: "Status", value: String(resolveAttendanceCellValue("status", row, lookupMaps)) } : null,
+    row.employee_name !== undefined || row.employeeId !== undefined || row.employee_id !== undefined
+      ? { label: "Employee", value: String(resolveAttendanceCellValue("employee_name", row, lookupMaps)) }
+      : null,
+    row.branch_id !== undefined || row.branchId !== undefined
+      ? {
+          label: "Branch",
+          value:
+            row.branch_id !== undefined
+              ? String(resolveAttendanceCellValue("branch_id", row, lookupMaps))
+              : String(resolveAttendanceCellValue("branchId", row, lookupMaps)),
+        }
+      : null,
+    row.date !== undefined
+      ? { label: "Date", value: String(resolveAttendanceCellValue("date", row, lookupMaps)) }
+      : row.attendanceDate !== undefined
+        ? { label: "Attendance Date", value: String(resolveAttendanceCellValue("attendanceDate", row, lookupMaps)) }
+        : null,
+    row.device_id !== undefined
+      ? { label: "Device", value: String(resolveAttendanceCellValue("device_id", row, lookupMaps)) }
+      : null,
+    row.type !== undefined ? { label: "Type", value: String(resolveAttendanceCellValue("type", row, lookupMaps)) } : null,
+  ].filter((entry): entry is { label: string; value: string } => Boolean(entry && entry.value && entry.value !== "-"))
+
+  return (
+    <div className="max-h-[65vh] space-y-4 overflow-auto pr-1">
+      <div className="rounded-2xl border border-border bg-card p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              Attendance details
+            </p>
+            <p className="mt-1 text-xl font-semibold text-foreground">{title}</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Review the selected {section.replaceAll("-", " ")} record in a readable summary.
+            </p>
+          </div>
+          {summaryCandidates.find((entry) => entry.label === "Status") ? (
+            <div className="rounded-full border border-border bg-muted/40 px-3 py-1 text-sm font-medium text-foreground">
+              {summaryCandidates.find((entry) => entry.label === "Status")?.value}
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      {summaryCandidates.length > 0 ? (
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {summaryCandidates.map((entry) => (
+            <AttendanceDetailField key={entry.label} label={entry.label} value={entry.value} />
+          ))}
+        </div>
+      ) : null}
+
+      {entries.length > 0 ? (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {entries.map((entry) => (
+            <AttendanceDetailField key={`${entry.label}-${entry.value}`} label={entry.label} value={entry.value} />
+          ))}
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">No readable details are available for this record.</p>
+      )}
+    </div>
+  )
+}
+
 function isAttendanceDateLikeColumn(column: string) {
   const normalized = column.trim().toLowerCase()
   return (
@@ -1778,9 +1955,17 @@ function shouldShowField(
 }
 
 export function AttendanceManagementView({ section }: { section: string }) {
+  const actor = useDashboardActor()
   const router = useRouter()
   const activeSection = ROUTE_TO_SECTION[section] ?? "settings"
   const isDeviceSyncLogsSection = activeSection === "device-sync-logs"
+  const canOpenAccessControlDevices =
+    actor.ready &&
+    canAccessDashboardRoute(
+      "/dashboard/access-control/devices",
+      actor.permissionLabels,
+      actor.accessMode
+    )
   const isReadOnlySection = READ_ONLY_SECTIONS.has(activeSection)
   const [rows, setRows] = React.useState<AdminRecord[]>([])
   const [branches, setBranches] = React.useState<AdminRecord[]>([])
@@ -1824,6 +2009,8 @@ export function AttendanceManagementView({ section }: { section: string }) {
   const [deleteOpen, setDeleteOpen] = React.useState(false)
   const [detailsOpen, setDetailsOpen] = React.useState(false)
   const [selectedRow, setSelectedRow] = React.useState<AdminRecord | null>(null)
+  const [mobilePunchReviewNote, setMobilePunchReviewNote] = React.useState("")
+  const [mobilePunchActionBusy, setMobilePunchActionBusy] = React.useState<"" | "approve" | "reject">("")
   const [guidanceDismissed, setGuidanceDismissed] = React.useState(false)
   const [currentCompanyName, setCurrentCompanyName] = React.useState<string | null>(() =>
     readStoredCompanyName()
@@ -1851,6 +2038,8 @@ export function AttendanceManagementView({ section }: { section: string }) {
     setActivatingId("")
     setSelectedRow(null)
     setDetailsOpen(false)
+    setMobilePunchReviewNote("")
+    setMobilePunchActionBusy("")
     setError(null)
     setFormError(null)
     setMessage(null)
@@ -2440,7 +2629,70 @@ export function AttendanceManagementView({ section }: { section: string }) {
 
   const openDetailsDialog = (row: AdminRecord) => {
     setSelectedRow(row)
+    setMobilePunchReviewNote("")
+    setMobilePunchActionBusy("")
+    setFormError(null)
     setDetailsOpen(true)
+  }
+
+  const selectedMobilePunchStatus =
+    selectedRow && activeSection === "mobile-punches"
+      ? (
+          readStringFromRecord(selectedRow, [
+            "validationStatus",
+            "validation_status",
+            "status",
+          ]) ?? ""
+        ).toUpperCase()
+      : ""
+
+  const canReviewMobilePunchOverride =
+    activeSection === "mobile-punches" && selectedMobilePunchStatus === "PENDING_OVERRIDE"
+
+  const handleMobilePunchOverrideAction = async (action: "approve" | "reject") => {
+    if (!selectedRow || activeSection !== "mobile-punches") {
+      return
+    }
+
+    const token = readStoredToken()
+    if (!token) {
+      setFormError("Authentication required. Please log in again.")
+      return
+    }
+
+    const rowId = readNumberFromRecord(selectedRow, ["id", "mobile_punch_id", "mobilePunchId"])
+    if (rowId === null) {
+      setFormError("This mobile punch record does not have an id.")
+      return
+    }
+
+    setMobilePunchActionBusy(action)
+    setFormError(null)
+    try {
+      const payload = mobilePunchReviewNote.trim()
+        ? { reviewNote: mobilePunchReviewNote.trim() }
+        : {}
+      if (action === "approve") {
+        await approveAttendanceMobilePunchOverride(token, rowId, payload)
+        setMessage("Mobile punch override approved.")
+      } else {
+        await rejectAttendanceMobilePunchOverride(token, rowId, payload)
+        setMessage("Mobile punch override rejected.")
+      }
+      setError(null)
+      setDetailsOpen(false)
+      setSelectedRow(null)
+      setMobilePunchReviewNote("")
+      await fetchRows()
+    } catch (errorObject) {
+      setFormError(
+        errorObject instanceof Error
+          ? errorObject.message
+          : `Failed to ${action} mobile punch override.`
+      )
+    } finally {
+      setMobilePunchActionBusy("")
+    }
   }
 
   const handleRowClick = (row: AdminRecord) => {
@@ -2810,12 +3062,58 @@ export function AttendanceManagementView({ section }: { section: string }) {
           </Dialog>
           <RecordDetailsDialog
             open={detailsOpen}
-            onOpenChange={setDetailsOpen}
+            onOpenChange={(open) => {
+              setDetailsOpen(open)
+              if (!open) {
+                setMobilePunchReviewNote("")
+                setMobilePunchActionBusy("")
+              }
+            }}
             title={`${activeSection.replaceAll("-", " ")} details`}
-            description="Selected row details"
+            description={
+              canReviewMobilePunchOverride
+                ? "Review the selected mobile punch override request and approve or reject it."
+                : "Review the selected attendance record in a readable operational summary."
+            }
             row={selectedRow}
+            content={<AttendanceDetailsContent section={activeSection} row={selectedRow} lookupMaps={lookupMaps} />}
             resolveLabel={(key) => key.replaceAll("_", " ")}
             resolveValue={(key, row) => resolveAttendanceCellValue(key, row, lookupMaps)}
+            footer={
+              canReviewMobilePunchOverride ? (
+                <div className="flex w-full flex-col gap-3">
+                  <label className="grid gap-1">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Review note
+                    </span>
+                    <Textarea
+                      className="min-h-24"
+                      placeholder="Optional note for the override review"
+                      value={mobilePunchReviewNote}
+                      onChange={(event) => setMobilePunchReviewNote(event.target.value)}
+                    />
+                  </label>
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <button
+                      type="button"
+                      className="rounded-md border border-rose-300 px-3 py-1.5 text-sm font-medium text-rose-700 disabled:opacity-50"
+                      disabled={Boolean(mobilePunchActionBusy)}
+                      onClick={() => void handleMobilePunchOverrideAction("reject")}
+                    >
+                      {mobilePunchActionBusy === "reject" ? "Rejecting..." : "Reject override"}
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-md bg-[var(--primary)] px-3 py-1.5 text-sm font-medium !text-white transition hover:brightness-95 disabled:opacity-50"
+                      disabled={Boolean(mobilePunchActionBusy)}
+                      onClick={() => void handleMobilePunchOverrideAction("approve")}
+                    >
+                      {mobilePunchActionBusy === "approve" ? "Approving..." : "Approve override"}
+                    </button>
+                  </div>
+                </div>
+              ) : null
+            }
           />
 
       {sectionGuidance.length && !guidanceDismissed ? (
@@ -2857,12 +3155,14 @@ export function AttendanceManagementView({ section }: { section: string }) {
             device to retry sync, confirm connectivity and credentials, or inspect the employees
             assigned to that terminal.
           </p>
-          <Link
-            href="/dashboard/access-control/devices"
-            className="mt-2 inline-flex text-sm font-medium text-sky-800 underline underline-offset-4 hover:text-sky-950"
-          >
-            Go to devices
-          </Link>
+          {canOpenAccessControlDevices ? (
+            <Link
+              href="/dashboard/access-control/devices"
+              className="mt-2 inline-flex text-sm font-medium text-sky-800 underline underline-offset-4 hover:text-sky-950"
+            >
+              Go to devices
+            </Link>
+          ) : null}
         </div>
       ) : null}
 

@@ -74,11 +74,13 @@ export function PermissionPicker({
   options,
   selectedNames,
   onChange,
+  onQueryChange,
   className,
 }: {
   options: PermissionOption[]
   selectedNames: string[]
   onChange: (next: string[]) => void
+  onQueryChange?: (query: string) => void
   className?: string
 }) {
   const [query, setQuery] = React.useState("")
@@ -186,7 +188,11 @@ export function PermissionPicker({
           <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => {
+              const next = event.target.value
+              setQuery(next)
+              onQueryChange?.(next)
+            }}
             placeholder="Search by name, key, or module…"
             className="h-9 border-border/80 bg-background pl-8 text-sm"
           />

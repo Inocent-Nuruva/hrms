@@ -21,6 +21,7 @@ const ALLOWED_VIEWS = new Set([
   "holidays",
   "device-sync-logs",
   "daily-summaries",
+  "processing-exceptions",
   "recalculation-jobs",
   "unmatched-logs",
   "today",
@@ -67,6 +68,7 @@ const SCHEDULE_ATTENDANCE_VIEWS = new Set([
 
 const ACTIVITY_ATTENDANCE_VIEWS = new Set([
   "daily-summaries",
+  "processing-exceptions",
   "recalculation-jobs",
   "unmatched-logs",
   "today",

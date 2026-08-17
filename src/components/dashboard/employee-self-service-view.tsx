@@ -3,12 +3,17 @@
 import * as React from "react"
 import { motion } from "framer-motion"
 import {
+  ArrowLeft,
+  CheckCircle2,
   BriefcaseIcon,
   Building2Icon,
   CalendarIcon,
   ClockIcon,
+  DownloadIcon,
+  FileTextIcon,
   Loader2,
   PencilIcon,
+  RefreshCwIcon,
   UserIcon,
   UsersIcon,
 } from "lucide-react"
@@ -22,11 +27,13 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Textarea } from "@/components/ui/textarea"
 
 import {
+  acknowledgeMyMovement,
   cancelMyProfileUpdateRequest,
   getMyAttendanceAssignments,
   getMyAttendanceOverview,
   getMyAttendanceToday,
   getMyDashboard,
+  getMyMovement,
   getMyStatus,
   createMyLeaveRequest,
   getCurrentEmployee,
@@ -39,6 +46,7 @@ import {
   listMyAttendanceCorrectionRequests,
   listMyAttendancePunches,
   listMyLeaveBalances,
+  listMyMovements,
   listLeavePolicies,
   listMyLeaveRequests,
   listLeaveTypes,
@@ -48,14 +56,18 @@ import {
   listMyTeamAttendance,
   submitMyProfileUpdateRequest,
   cancelMyLeaveRequest,
+  downloadMyLeaveRequestPdf,
   getMyLeaveRequest,
+  getMyPayslip,
   submitMyLeaveRequest,
   uploadMyProfilePhoto,
   selectMyProfileAvatar,
   listDefaultAvatars,
+  listMyPayslips,
   extractDefaultAvatarImageUrl,
   fetchImageUrlAsAvatarFile,
   isSelectableDefaultAvatar,
+  downloadMyPayslip,
   readDefaultAvatarId,
   resolveBackendMediaUrl,
   type AdminRecord,
@@ -88,6 +100,18 @@ import { LeaveWorkflowDialog } from "@/components/leave/leave-workflow-progress"
 import { notifySubmittedRequestApprovers } from "@/lib/request-notifications"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
+
+function BackToSettingsLink() {
+  return (
+    <Link
+      href="/dashboard/settings"
+      className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+    >
+      <ArrowLeft className="size-4" />
+      Back to Settings
+    </Link>
+  )
+}
 
 type SelfLeaveTab = "requests" | "balances" | "holidays" | "policies"
 type SelfProfileTab = "summary" | "assignments" | "personal" | "records" | "updates"
@@ -743,6 +767,214 @@ function resolveLeaveStatusMeta(value: unknown) {
     barClassName: "bg-primary",
     chipClassName: "bg-primary/10 text-primary",
   }
+}
+
+function resolveMovementStatusMeta(value: unknown) {
+  const raw = typeof value === "string" ? value.trim() : ""
+  const normalized = raw.toLowerCase().replace(/[\s-]+/g, "_")
+
+  if (normalized === "draft") {
+    return {
+      label: "Draft",
+      badgeTone: "muted" as const,
+      helperText: "Saved but not submitted.",
+    }
+  }
+
+  if (["submitted", "pending_approval", "returned_for_correction", "scheduled", "applying"].includes(normalized)) {
+    return {
+      label: raw.replace(/_/g, " ") || "Pending approval",
+      badgeTone: "amber" as const,
+      helperText: "Still moving through the workflow.",
+    }
+  }
+
+  if (["approved", "applied"].includes(normalized)) {
+    return {
+      label: normalized === "applied" ? "Applied" : "Approved",
+      badgeTone: "success" as const,
+      helperText: normalized === "applied" ? "Already applied to your profile." : "Approved and waiting for acknowledgement or application.",
+    }
+  }
+
+  if (normalized === "application_failed" || normalized === "rejected") {
+    return {
+      label: normalized === "application_failed" ? "Application failed" : "Rejected",
+      badgeTone: "primary" as const,
+      helperText: normalized === "application_failed" ? "HR needs to retry or correct this movement." : "This request was rejected.",
+    }
+  }
+
+  if (normalized === "cancelled") {
+    return {
+      label: "Cancelled",
+      badgeTone: "muted" as const,
+      helperText: "This movement was cancelled.",
+    }
+  }
+
+  return {
+    label: raw.replace(/_/g, " ") || "In progress",
+    badgeTone: "primary" as const,
+    helperText: "",
+  }
+}
+
+function readMovementId(row: AdminRecord | null | undefined) {
+  if (!row) return null
+  return readNumber(row, ["id", "movementId", "movement_id"])
+}
+
+function readMovementType(row: AdminRecord | null | undefined) {
+  return readString(row ?? null, ["movementType", "movement_type"], "Movement")
+}
+
+function readMovementAcknowledgedAt(row: AdminRecord | null | undefined) {
+  return readString(row ?? null, ["employeeAcknowledgedAt", "employee_acknowledged_at"], "")
+}
+
+function needsMovementAcknowledgement(row: AdminRecord | null | undefined) {
+  if (!row) return false
+  const requiresAcknowledgement = Boolean(
+    row.employeeAcknowledgementRequired ?? row.employee_acknowledgement_required
+  )
+  if (!requiresAcknowledgement) return false
+  return !readMovementAcknowledgedAt(row)
+}
+
+function stringifyMovementValue(value: unknown): string {
+  if (value === null || value === undefined) return "—"
+  if (typeof value === "string") return value.trim() || "—"
+  if (typeof value === "number") return Number.isFinite(value) ? String(value) : "—"
+  if (typeof value === "boolean") return value ? "Yes" : "No"
+  if (Array.isArray(value)) return value.length ? value.map((entry) => stringifyMovementValue(entry)).join(", ") : "—"
+
+  const record = asRecord(value)
+  if (record) {
+    const preferred =
+      readString(record, ["name", "title", "label", "code", "full_name", "display_name", "displayName"], "") ||
+      readString(record, ["employee_no", "employeeNo", "movementNo"], "")
+    if (preferred && preferred !== "-") {
+      return preferred
+    }
+
+    const amount = readString(record, ["amount", "salary", "base_salary", "baseSalary"], "")
+    if (amount && amount !== "-") {
+      return amount
+    }
+
+    const entries = Object.entries(record)
+      .filter(([, entry]) => entry !== null && entry !== undefined && entry !== "")
+      .slice(0, 3)
+      .map(([key, entry]) => `${key}: ${stringifyMovementValue(entry)}`)
+    return entries.length ? entries.join(" | ") : "—"
+  }
+
+  return String(value)
+}
+
+function formatMovementLabel(value: string) {
+  return value
+    .replace(/[_-]+/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
+
+function readPayslipId(row: AdminRecord | null | undefined) {
+  if (!row) return null
+  return readNumber(row, ["id", "payslip_id", "payslipId"])
+}
+
+function readPayslipCurrency(row: AdminRecord | null | undefined) {
+  return readString(row ?? null, ["currency", "currency_code", "currencyCode"], "")
+}
+
+function formatPayslipMoney(value: unknown, currency = "") {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return `${currency ? `${currency} ` : ""}${value.toLocaleString()}`
+  }
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) {
+      return `${currency ? `${currency} ` : ""}${parsed.toLocaleString()}`
+    }
+    return value.trim()
+  }
+  return "—"
+}
+
+function readPayslipPeriodLabel(row: AdminRecord | null | undefined) {
+  if (!row) return "Payslip"
+
+  const periodRecord =
+    asRecord(row.payroll_period) ??
+    asRecord(row.payrollPeriod) ??
+    asRecord(row.period)
+
+  const namedPeriod =
+    readString(periodRecord, ["name", "title", "code"], "") ||
+    readString(row, ["period_name", "periodName", "month_name", "monthName"], "")
+  if (namedPeriod && namedPeriod !== "-") return namedPeriod
+
+  const month = readString(periodRecord, ["month_name", "monthName", "month"], "") || readString(row, ["month_name", "monthName", "month"], "")
+  const year = readString(periodRecord, ["year"], "") || readString(row, ["year"], "")
+  if (month && year) return `${month} ${year}`
+  if (month) return month
+  if (year) return year
+
+  const startDate = readString(periodRecord, ["start_date", "startDate"], "") || readString(row, ["start_date", "startDate"], "")
+  const endDate = readString(periodRecord, ["end_date", "endDate"], "") || readString(row, ["end_date", "endDate"], "")
+  if (startDate !== "-" || endDate !== "-") {
+    return `${formatDate(startDate)} - ${formatDate(endDate)}`
+  }
+
+  return "Payslip"
+}
+
+function readPayslipStatus(row: AdminRecord | null | undefined) {
+  return readString(row ?? null, ["status"], "")
+}
+
+function resolvePayslipStatusTone(value: string) {
+  const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, "_")
+  if (["generated", "sent", "paid", "published", "available"].includes(normalized)) {
+    return "success" as const
+  }
+  if (["pending", "queued", "processing", "draft"].includes(normalized)) {
+    return "amber" as const
+  }
+  if (["failed", "cancelled", "rejected"].includes(normalized)) {
+    return "primary" as const
+  }
+  return "muted" as const
+}
+
+function readPayslipLineItems(
+  row: AdminRecord | null | undefined,
+  keys: string[]
+) {
+  if (!row) return []
+  for (const key of keys) {
+    const value = row[key]
+    if (Array.isArray(value)) {
+      return value.filter(
+        (entry): entry is AdminRecord =>
+          typeof entry === "object" && entry !== null && !Array.isArray(entry)
+      )
+    }
+  }
+  return []
+}
+
+function downloadLocalBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement("a")
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
 }
 
 function readLeaveTotalsValue(totals: Record<string, number> | undefined, keys: string[]) {
@@ -4206,8 +4438,15 @@ export function EmployeeSelfServiceProfileView() {
     ]
   }, [attendanceAssignments])
 
+  const openedFromSettings = editTarget === "profile-photo"
+
   return (
     <div className="grid gap-4">
+      {openedFromSettings ? (
+        <div>
+          <BackToSettingsLink />
+        </div>
+      ) : null}
       <DoodleSprites />
       <div className="tab-rail-scroll">
         <div className="inline-flex min-w-full items-center gap-4 border-b border-border/80">
@@ -4297,6 +4536,7 @@ export function EmployeeSelfServiceProfileView() {
           <Dialog open={Boolean(sectionEditor)} onOpenChange={(open) => (!open ? setSectionEditor(null) : undefined)}>
             <DialogPopup from="bottom" className="sm:max-w-xl">
               <DialogHeader>
+                {openedFromSettings ? <BackToSettingsLink /> : null}
                 <DialogTitle>{sectionEditor ? `Edit ${sectionEditor.title}` : "Edit Section"}</DialogTitle>
               </DialogHeader>
               <div className="grid gap-3">
@@ -4490,7 +4730,131 @@ export function EmployeeOrganizationView() {
 }
 
 export function EmployeePromotionView() {
-  const { loading, error } = useSelfEmployeeData()
+  const { loading, error, token, employee } = useSelfEmployeeData()
+  const [movementsLoading, setMovementsLoading] = React.useState(false)
+  const [movementsError, setMovementsError] = React.useState<string | null>(null)
+  const [movements, setMovements] = React.useState<AdminRecord[]>([])
+  const [detailOpen, setDetailOpen] = React.useState(false)
+  const [detailLoading, setDetailLoading] = React.useState(false)
+  const [selectedMovement, setSelectedMovement] = React.useState<AdminRecord | null>(null)
+  const [acknowledgingId, setAcknowledgingId] = React.useState<number | null>(null)
+  const [message, setMessage] = React.useState<string | null>(null)
+
+  const loadMovements = React.useCallback(async () => {
+    if (!token) {
+      setMovements([])
+      return
+    }
+
+    setMovementsLoading(true)
+    setMovementsError(null)
+    try {
+      const rows = await listMyMovements(token)
+      setMovements(rows)
+    } catch (errorObject) {
+      setMovements([])
+      setMovementsError(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Could not load your movement history."
+      )
+    } finally {
+      setMovementsLoading(false)
+    }
+  }, [token])
+
+  React.useEffect(() => {
+    if (!loading && token) {
+      void loadMovements()
+    }
+  }, [loadMovements, loading, token])
+
+  const openMovementDetail = React.useCallback(async (row: AdminRecord) => {
+    const id = readMovementId(row)
+    if (!token || id === null) {
+      setSelectedMovement(row)
+      setDetailOpen(true)
+      return
+    }
+
+    setSelectedMovement(row)
+    setDetailOpen(true)
+    setDetailLoading(true)
+    try {
+      const detail = await getMyMovement(token, id)
+      if (detail) {
+        setSelectedMovement(detail)
+      }
+    } catch (errorObject) {
+      setMovementsError(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Could not load movement details."
+      )
+    } finally {
+      setDetailLoading(false)
+    }
+  }, [token])
+
+  const handleAcknowledgeMovement = React.useCallback(async (row: AdminRecord) => {
+    const id = readMovementId(row)
+    if (!token || id === null || !needsMovementAcknowledgement(row)) {
+      return
+    }
+
+    setAcknowledgingId(id)
+    setMessage(null)
+    try {
+      await acknowledgeMyMovement(token, id)
+      const acknowledgedAt = new Date().toISOString()
+      setMovements((current) =>
+        current.map((entry) =>
+          readMovementId(entry) === id
+            ? { ...entry, employeeAcknowledgedAt: acknowledgedAt }
+            : entry
+        )
+      )
+      setSelectedMovement((current) =>
+        current && readMovementId(current) === id
+          ? { ...current, employeeAcknowledgedAt: acknowledgedAt }
+          : current
+      )
+      setMessage("Movement acknowledged. HR can now see you have reviewed it.")
+    } catch (errorObject) {
+      setMovementsError(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Could not acknowledge this movement."
+      )
+    } finally {
+      setAcknowledgingId(null)
+    }
+  }, [token])
+
+  const movementSummary = React.useMemo(() => {
+    let awaitingAcknowledgement = 0
+    let approvedOrApplied = 0
+    for (const movement of movements) {
+      if (needsMovementAcknowledgement(movement)) {
+        awaitingAcknowledgement += 1
+      }
+      const status = readString(movement, ["status"], "").toLowerCase()
+      if (status === "approved" || status === "applied") {
+        approvedOrApplied += 1
+      }
+    }
+
+    return {
+      total: movements.length,
+      awaitingAcknowledgement,
+      approvedOrApplied,
+    }
+  }, [movements])
+
+  const employeeName = readString(employee, ["full_name", "name", "first_name"], "You")
+  const detailChanges = Array.isArray(selectedMovement?.changes)
+    ? selectedMovement?.changes.filter((entry): entry is AdminRecord => Boolean(asRecord(entry)))
+    : []
 
   return (
     <section className="space-y-4 px-4 py-2 lg:px-6">
@@ -4503,41 +4867,635 @@ export function EmployeePromotionView() {
       ) : error ? (
         <p className="text-sm text-red-600">{error}</p>
       ) : (
-        <div className="max-w-sm mx-auto">
-          <div className="relative overflow-hidden rounded-2xl p-6 text-white flex flex-col items-center justify-center min-h-[180px]" style={{ backgroundColor: 'var(--primary)' }}>
-            <Doodle name="doodle-circles" />
-            <div className="relative z-10 flex flex-col items-center">
-              <h3 className="text-xl font-semibold tracking-tight text-center">
-                No promotion currently assigned to you
-              </h3>
-              <p className="mt-2 text-sm text-white/70 text-center">
-                When HR processes or approves a promotion for you, the details will show up here.
-              </p>
-            </div>
+        <>
+          <div className="grid gap-4 md:grid-cols-3">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription>Total movements</CardDescription>
+                <CardTitle>{movementSummary.total}</CardTitle>
+              </CardHeader>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription>Awaiting your acknowledgement</CardDescription>
+                <CardTitle>{movementSummary.awaitingAcknowledgement}</CardTitle>
+              </CardHeader>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription>Approved or applied</CardDescription>
+                <CardTitle>{movementSummary.approvedOrApplied}</CardTitle>
+              </CardHeader>
+            </Card>
           </div>
-        </div>
+
+          <Card>
+            <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="space-y-1">
+                <CardTitle>My Promotions & Movements</CardTitle>
+                <CardDescription>
+                  Review department transfers, promotions, reporting-line changes, and other HR movements assigned to {employeeName}.
+                </CardDescription>
+              </div>
+              <Button type="button" variant="outline" onClick={() => void loadMovements()} disabled={movementsLoading || !token}>
+                {movementsLoading ? <Loader2 className="size-4 animate-spin" /> : <ClockIcon className="size-4" />}
+                Refresh
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {message ? (
+                <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300">
+                  {message}
+                </div>
+              ) : null}
+
+              {movementsError ? (
+                <div className="rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-xs text-rose-700 dark:text-rose-300">
+                  {movementsError}
+                </div>
+              ) : null}
+
+              {movementsLoading ? (
+                <div className="flex items-center gap-2 rounded-lg border bg-muted/20 px-3 py-4 text-sm text-muted-foreground">
+                  <Loader2 className="size-4 animate-spin" />
+                  Loading your movement history...
+                </div>
+              ) : movements.length === 0 ? (
+                <div className="mx-auto max-w-xl">
+                  <div className="relative overflow-hidden rounded-2xl p-6 text-white flex flex-col items-center justify-center min-h-[180px]" style={{ backgroundColor: "var(--primary)" }}>
+                    <Doodle name="doodle-circles" />
+                    <div className="relative z-10 flex flex-col items-center">
+                      <h3 className="text-xl font-semibold tracking-tight text-center">
+                        No HR movements yet
+                      </h3>
+                      <p className="mt-2 text-sm text-white/70 text-center">
+                        When HR records a promotion, transfer, reporting manager change, or salary revision for you, it will appear here.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid gap-3">
+                  {movements.map((movement) => {
+                    const id = readMovementId(movement) ?? 0
+                    const statusMeta = resolveMovementStatusMeta(readString(movement, ["status"], ""))
+                    const movementType = readMovementType(movement)
+                    const requiresAcknowledgement = needsMovementAcknowledgement(movement)
+                    const isAcknowledging = acknowledgingId === id
+
+                    return (
+                      <div key={id} className="rounded-xl border bg-background p-4 shadow-sm">
+                        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                          <div className="space-y-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="text-sm font-semibold text-foreground">
+                                {readString(movement, ["title"], formatMovementLabel(movementType))}
+                              </p>
+                              <AssignmentBadge tone={statusMeta.badgeTone}>{statusMeta.label}</AssignmentBadge>
+                              {requiresAcknowledgement ? (
+                                <AssignmentBadge tone="amber">Needs acknowledgement</AssignmentBadge>
+                              ) : null}
+                            </div>
+                            <p className="text-sm text-muted-foreground">
+                              {readString(movement, ["reason"], "No reason provided by HR.")}
+                            </p>
+                            <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
+                              <div className="flex items-center gap-1.5">
+                                <BriefcaseIcon className="size-3.5" />
+                                <span>{formatMovementLabel(movementType)}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <CalendarIcon className="size-3.5" />
+                                <span>Effective {formatDate(movement.effectiveDate ?? movement.effective_date)}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <ClockIcon className="size-3.5" />
+                                <span>Updated {formatDate(movement.updatedAt ?? movement.updated_at)}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <UserIcon className="size-3.5" />
+                                <span>{Array.isArray(movement.changes) ? movement.changes.length : 0} change(s)</span>
+                              </div>
+                            </div>
+                            {statusMeta.helperText ? (
+                              <p className="text-xs text-muted-foreground">{statusMeta.helperText}</p>
+                            ) : null}
+                          </div>
+
+                          <div className="flex flex-wrap gap-2">
+                            <Button type="button" variant="outline" onClick={() => void openMovementDetail(movement)}>
+                              Details
+                            </Button>
+                            {requiresAcknowledgement ? (
+                              <Button
+                                type="button"
+                                onClick={() => void handleAcknowledgeMovement(movement)}
+                                disabled={isAcknowledging}
+                              >
+                                {isAcknowledging ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
+                                Acknowledge
+                              </Button>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Dialog
+            open={detailOpen}
+            onOpenChange={(open) => {
+              setDetailOpen(open)
+              if (!open) {
+                setDetailLoading(false)
+              }
+            }}
+          >
+            <DialogPopup className="max-w-3xl">
+              <DialogHeader>
+                <DialogTitle>
+                  {readString(selectedMovement, ["title"], "Movement details")}
+                </DialogTitle>
+                <DialogDescription>
+                  Review the movement HR recorded for your profile, the proposed change set, and whether your acknowledgement is still needed.
+                </DialogDescription>
+              </DialogHeader>
+
+              {detailLoading ? (
+                <div className="flex items-center gap-2 rounded-lg border bg-muted/20 px-3 py-4 text-sm text-muted-foreground">
+                  <Loader2 className="size-4 animate-spin" />
+                  Loading movement details...
+                </div>
+              ) : selectedMovement ? (
+                <div className="space-y-4">
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <Card>
+                      <CardContent className="grid gap-3 p-4">
+                        <AssignmentField label="Movement No" value={readString(selectedMovement, ["movementNo", "movement_no"])} />
+                        <AssignmentField label="Type" value={formatMovementLabel(readMovementType(selectedMovement))} />
+                        <AssignmentField label="Status" value={<AssignmentBadge tone={resolveMovementStatusMeta(readString(selectedMovement, ["status"], "")).badgeTone}>{resolveMovementStatusMeta(readString(selectedMovement, ["status"], "")).label}</AssignmentBadge>} />
+                        <AssignmentField label="Effective Date" value={formatDate(selectedMovement.effectiveDate ?? selectedMovement.effective_date)} />
+                        <AssignmentField label="Submitted" value={formatDate(selectedMovement.submittedAt ?? selectedMovement.submitted_at)} />
+                        <AssignmentField label="Approved" value={formatDate(selectedMovement.approvedAt ?? selectedMovement.approved_at)} />
+                        <AssignmentField label="Applied" value={formatDate(selectedMovement.appliedAt ?? selectedMovement.applied_at)} />
+                        <AssignmentField label="Acknowledged" value={formatDate(selectedMovement.employeeAcknowledgedAt ?? selectedMovement.employee_acknowledged_at)} />
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardContent className="grid gap-3 p-4">
+                        <AssignmentField label="Employee" value={readString(asRecord(selectedMovement.employee), ["full_name", "name"], employeeName)} />
+                        <AssignmentField label="Requested By" value={readString(asRecord(selectedMovement.requestedBy), ["full_name", "name", "email"], "HR")} />
+                        <AssignmentField label="Changes" value={String(detailChanges.length)} />
+                        <AssignmentField label="Version" value={readString(selectedMovement, ["version"], "—")} />
+                        <AssignmentField label="Created" value={formatDate(selectedMovement.createdAt ?? selectedMovement.created_at)} />
+                        <AssignmentField label="Last Updated" value={formatDate(selectedMovement.updatedAt ?? selectedMovement.updated_at)} />
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base">Reason</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-sm text-muted-foreground">
+                        {readString(selectedMovement, ["reason"], "No reason was provided by HR.")}
+                      </p>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base">Changes</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {detailChanges.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">
+                          No field-level change rows were returned for this movement.
+                        </p>
+                      ) : (
+                        <div className="space-y-3">
+                          {detailChanges.map((change, index) => (
+                            <div key={`${readMovementId(selectedMovement)}-change-${index}`} className="rounded-lg border bg-muted/10 p-3">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <AssignmentBadge tone="primary">
+                                  {formatMovementLabel(readString(change, ["field"], "Change"))}
+                                </AssignmentBadge>
+                              </div>
+                              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                                <div className="rounded-md border border-dashed p-3">
+                                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                    Previous
+                                  </p>
+                                  <p className="mt-1 text-sm text-foreground">
+                                    {stringifyMovementValue(change.oldValue ?? change.old_value)}
+                                  </p>
+                                </div>
+                                <div className="rounded-md border border-dashed p-3">
+                                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                    New
+                                  </p>
+                                  <p className="mt-1 text-sm text-foreground">
+                                    {stringifyMovementValue(change.newValue ?? change.new_value)}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+              ) : null}
+
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setDetailOpen(false)}>
+                  Close
+                </Button>
+                {selectedMovement && needsMovementAcknowledgement(selectedMovement) ? (
+                  <Button
+                    type="button"
+                    onClick={() => void handleAcknowledgeMovement(selectedMovement)}
+                    disabled={acknowledgingId === readMovementId(selectedMovement)}
+                  >
+                    {acknowledgingId === readMovementId(selectedMovement) ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <CheckCircle2 className="size-4" />
+                    )}
+                    Acknowledge movement
+                  </Button>
+                ) : null}
+              </DialogFooter>
+            </DialogPopup>
+          </Dialog>
+        </>
       )}
     </section>
   )
 }
 
 export function EmployeePayrollView() {
+  const { loading, error, token, employee } = useSelfEmployeeData()
+  const [payslipsLoading, setPayslipsLoading] = React.useState(false)
+  const [payslipsError, setPayslipsError] = React.useState<string | null>(null)
+  const [payslips, setPayslips] = React.useState<AdminRecord[]>([])
+  const [detailOpen, setDetailOpen] = React.useState(false)
+  const [detailLoading, setDetailLoading] = React.useState(false)
+  const [selectedPayslip, setSelectedPayslip] = React.useState<AdminRecord | null>(null)
+  const [downloadingId, setDownloadingId] = React.useState<number | null>(null)
+
+  const loadPayslips = React.useCallback(async () => {
+    if (!token) {
+      setPayslips([])
+      return
+    }
+
+    setPayslipsLoading(true)
+    setPayslipsError(null)
+    try {
+      const rows = await listMyPayslips(token)
+      setPayslips(rows)
+    } catch (errorObject) {
+      setPayslips([])
+      setPayslipsError(
+        errorObject instanceof Error ? errorObject.message : "Could not load your payslips."
+      )
+    } finally {
+      setPayslipsLoading(false)
+    }
+  }, [token])
+
+  React.useEffect(() => {
+    if (!loading && token) {
+      void loadPayslips()
+    }
+  }, [loadPayslips, loading, token])
+
+  const openPayslipDetail = React.useCallback(async (row: AdminRecord) => {
+    const id = readPayslipId(row)
+    if (!token || id === null) {
+      setSelectedPayslip(row)
+      setDetailOpen(true)
+      return
+    }
+
+    setSelectedPayslip(row)
+    setDetailOpen(true)
+    setDetailLoading(true)
+    try {
+      const detail = await getMyPayslip(token, id)
+      if (detail) {
+        setSelectedPayslip(detail)
+      }
+    } catch (errorObject) {
+      setPayslipsError(
+        errorObject instanceof Error ? errorObject.message : "Could not load payslip details."
+      )
+    } finally {
+      setDetailLoading(false)
+    }
+  }, [token])
+
+  const handleDownloadPayslip = React.useCallback(async (row: AdminRecord) => {
+    const id = readPayslipId(row)
+    if (!token || id === null) return
+
+    setDownloadingId(id)
+    try {
+      const result = await downloadMyPayslip(token, id)
+      downloadLocalBlob(result.blob, result.filename)
+    } catch (errorObject) {
+      setPayslipsError(
+        errorObject instanceof Error ? errorObject.message : "Could not download the selected payslip."
+      )
+    } finally {
+      setDownloadingId(null)
+    }
+  }, [token])
+
+  const payslipSummary = React.useMemo(() => {
+    const latest = payslips[0] ?? null
+    const currency = readPayslipCurrency(latest)
+    return {
+      total: payslips.length,
+      latestNet: latest ? formatPayslipMoney(latest.net_pay ?? latest.netPay, currency) : "—",
+      latestGross: latest ? formatPayslipMoney(latest.gross_pay ?? latest.grossPay, currency) : "—",
+    }
+  }, [payslips])
+
+  const employeeName = readString(employee, ["full_name", "name", "first_name"], "You")
+  const selectedCurrency = readPayslipCurrency(selectedPayslip)
+  const earningsRows = readPayslipLineItems(selectedPayslip, ["earnings", "earning_lines", "earningLines"])
+  const deductionRows = readPayslipLineItems(selectedPayslip, ["deductions", "deduction_lines", "deductionLines"])
+
   return (
     <section className="space-y-4 px-4 py-2 lg:px-6">
       <DoodleSprites />
-      <div className="max-w-sm mx-auto">
-        <div className="relative overflow-hidden rounded-2xl p-6 text-white flex flex-col items-center justify-center min-h-[180px]" style={{ backgroundColor: 'var(--primary)' }}>
-          <Doodle name="doodle-circles" />
-          <div className="relative z-10 flex flex-col items-center">
-            <div className="flex items-center justify-center gap-4">
-              <ChartBar size={36} className="text-white/90" />
-              <Settings size={36} className="text-white/90" />
-              <Sparkles size={36} className="text-white/90" />
-            </div>
-            <h3 className="text-2xl font-semibold tracking-tight text-center mt-4">Coming Soon</h3>
-          </div>
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-10">
+          <LumaSpin />
+          <p className="text-sm text-muted-foreground">Loading payroll history...</p>
         </div>
-      </div>
+      ) : error ? (
+        <p className="text-sm text-red-600">{error}</p>
+      ) : (
+        <>
+          <div className="grid gap-4 md:grid-cols-3">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription>Total payslips</CardDescription>
+                <CardTitle>{payslipSummary.total}</CardTitle>
+              </CardHeader>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription>Latest gross pay</CardDescription>
+                <CardTitle>{payslipSummary.latestGross}</CardTitle>
+              </CardHeader>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription>Latest net pay</CardDescription>
+                <CardTitle>{payslipSummary.latestNet}</CardTitle>
+              </CardHeader>
+            </Card>
+          </div>
+
+          <Card>
+            <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="space-y-1">
+                <CardTitle>My Payslips</CardTitle>
+                <CardDescription>
+                  Review issued payroll slips for {employeeName}, open the detailed breakdown, and download copies when available.
+                </CardDescription>
+              </div>
+              <Button type="button" variant="outline" onClick={() => void loadPayslips()} disabled={payslipsLoading || !token}>
+                {payslipsLoading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+                Refresh
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {payslipsError ? (
+                <div className="rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-xs text-rose-700 dark:text-rose-300">
+                  {payslipsError}
+                </div>
+              ) : null}
+
+              {payslipsLoading ? (
+                <div className="flex items-center gap-2 rounded-lg border bg-muted/20 px-3 py-4 text-sm text-muted-foreground">
+                  <Loader2 className="size-4 animate-spin" />
+                  Loading your payslips...
+                </div>
+              ) : payslips.length === 0 ? (
+                <div className="mx-auto max-w-xl">
+                  <div className="relative overflow-hidden rounded-2xl p-6 text-white flex flex-col items-center justify-center min-h-[180px]" style={{ backgroundColor: "var(--primary)" }}>
+                    <Doodle name="doodle-circles" />
+                    <div className="relative z-10 flex flex-col items-center">
+                      <h3 className="text-xl font-semibold tracking-tight text-center">
+                        No payslips available yet
+                      </h3>
+                      <p className="mt-2 text-sm text-white/70 text-center">
+                        Once payroll is generated and published for you, each payslip will show up here with a detail view and download action.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid gap-3">
+                  {payslips.map((payslip) => {
+                    const id = readPayslipId(payslip) ?? 0
+                    const currency = readPayslipCurrency(payslip)
+                    const status = readPayslipStatus(payslip)
+                    const statusTone = resolvePayslipStatusTone(status)
+                    const isDownloading = downloadingId === id
+
+                    return (
+                      <div key={id} className="rounded-xl border bg-background p-4 shadow-sm">
+                        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                          <div className="space-y-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="text-sm font-semibold text-foreground">
+                                {readString(payslip, ["payslip_number", "payslipNo", "payslip_no"], `Payslip #${id}`)}
+                              </p>
+                              <AssignmentBadge tone={statusTone}>
+                                {status && status !== "-" ? formatMovementLabel(status) : "Available"}
+                              </AssignmentBadge>
+                            </div>
+                            <p className="text-sm text-muted-foreground">
+                              {readPayslipPeriodLabel(payslip)}
+                            </p>
+                            <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
+                              <div className="flex items-center gap-1.5">
+                                <CalendarIcon className="size-3.5" />
+                                <span>Issued {formatDate(payslip.issued_at ?? payslip.issuedAt ?? payslip.created_at ?? payslip.createdAt)}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <BriefcaseIcon className="size-3.5" />
+                                <span>Gross {formatPayslipMoney(payslip.gross_pay ?? payslip.grossPay, currency)}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <UsersIcon className="size-3.5" />
+                                <span>Net {formatPayslipMoney(payslip.net_pay ?? payslip.netPay, currency)}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <FileTextIcon className="size-3.5" />
+                                <span>{currency || "Currency pending"}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-wrap gap-2">
+                            <Button type="button" variant="outline" onClick={() => void openPayslipDetail(payslip)}>
+                              Details
+                            </Button>
+                            <Button type="button" onClick={() => void handleDownloadPayslip(payslip)} disabled={isDownloading}>
+                              {isDownloading ? <Loader2 className="size-4 animate-spin" /> : <DownloadIcon className="size-4" />}
+                              Download
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Dialog
+            open={detailOpen}
+            onOpenChange={(open) => {
+              setDetailOpen(open)
+              if (!open) {
+                setDetailLoading(false)
+              }
+            }}
+          >
+            <DialogPopup className="max-w-3xl">
+              <DialogHeader>
+                <DialogTitle>
+                  {selectedPayslip
+                    ? readString(selectedPayslip, ["payslip_number", "payslipNo", "payslip_no"], "Payslip details")
+                    : "Payslip details"}
+                </DialogTitle>
+                <DialogDescription>
+                  Review payroll totals, issue dates, and any earnings or deduction rows returned by the backend.
+                </DialogDescription>
+              </DialogHeader>
+
+              {detailLoading ? (
+                <div className="flex items-center gap-2 rounded-lg border bg-muted/20 px-3 py-4 text-sm text-muted-foreground">
+                  <Loader2 className="size-4 animate-spin" />
+                  Loading payslip details...
+                </div>
+              ) : selectedPayslip ? (
+                <div className="space-y-4">
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <Card>
+                      <CardContent className="grid gap-3 p-4">
+                        <AssignmentField label="Period" value={readPayslipPeriodLabel(selectedPayslip)} />
+                        <AssignmentField label="Status" value={<AssignmentBadge tone={resolvePayslipStatusTone(readPayslipStatus(selectedPayslip))}>{readPayslipStatus(selectedPayslip) ? formatMovementLabel(readPayslipStatus(selectedPayslip)) : "Available"}</AssignmentBadge>} />
+                        <AssignmentField label="Gross Pay" value={formatPayslipMoney(selectedPayslip.gross_pay ?? selectedPayslip.grossPay, selectedCurrency)} />
+                        <AssignmentField label="Net Pay" value={formatPayslipMoney(selectedPayslip.net_pay ?? selectedPayslip.netPay, selectedCurrency)} />
+                        <AssignmentField label="Tax" value={formatPayslipMoney(selectedPayslip.tax_amount ?? selectedPayslip.taxAmount, selectedCurrency)} />
+                        <AssignmentField label="Deductions" value={formatPayslipMoney(selectedPayslip.total_deductions ?? selectedPayslip.totalDeductions, selectedCurrency)} />
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardContent className="grid gap-3 p-4">
+                        <AssignmentField label="Employee" value={readString(asRecord(selectedPayslip.employee), ["full_name", "name"], employeeName)} />
+                        <AssignmentField label="Payroll No" value={readString(selectedPayslip, ["payroll_number", "payrollNumber"], "—")} />
+                        <AssignmentField label="Currency" value={selectedCurrency || "—"} />
+                        <AssignmentField label="Issued At" value={formatDate(selectedPayslip.issued_at ?? selectedPayslip.issuedAt)} />
+                        <AssignmentField label="Created At" value={formatDate(selectedPayslip.created_at ?? selectedPayslip.createdAt)} />
+                        <AssignmentField label="Updated At" value={formatDate(selectedPayslip.updated_at ?? selectedPayslip.updatedAt)} />
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {earningsRows.length > 0 ? (
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-base">Earnings</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-2">
+                        {earningsRows.map((line, index) => (
+                          <div key={`earning-${index}`} className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
+                            <div>
+                              <p className="text-sm font-medium text-foreground">
+                                {readString(line, ["name", "component_name", "componentName", "code"], "Earning")}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {readString(line, ["description"], "Payroll earning line")}
+                              </p>
+                            </div>
+                            <span className="text-sm font-semibold text-foreground">
+                              {formatPayslipMoney(line.amount ?? line.value, selectedCurrency)}
+                            </span>
+                          </div>
+                        ))}
+                      </CardContent>
+                    </Card>
+                  ) : null}
+
+                  {deductionRows.length > 0 ? (
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-base">Deductions</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-2">
+                        {deductionRows.map((line, index) => (
+                          <div key={`deduction-${index}`} className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
+                            <div>
+                              <p className="text-sm font-medium text-foreground">
+                                {readString(line, ["name", "component_name", "componentName", "code"], "Deduction")}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {readString(line, ["description"], "Payroll deduction line")}
+                              </p>
+                            </div>
+                            <span className="text-sm font-semibold text-foreground">
+                              {formatPayslipMoney(line.amount ?? line.value, selectedCurrency)}
+                            </span>
+                          </div>
+                        ))}
+                      </CardContent>
+                    </Card>
+                  ) : null}
+                </div>
+              ) : null}
+
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setDetailOpen(false)}>
+                  Close
+                </Button>
+                {selectedPayslip ? (
+                  <Button
+                    type="button"
+                    onClick={() => void handleDownloadPayslip(selectedPayslip)}
+                    disabled={downloadingId === readPayslipId(selectedPayslip)}
+                  >
+                    {downloadingId === readPayslipId(selectedPayslip) ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <DownloadIcon className="size-4" />
+                    )}
+                    Download payslip
+                  </Button>
+                ) : null}
+              </DialogFooter>
+            </DialogPopup>
+          </Dialog>
+        </>
+      )}
     </section>
   )
 }
@@ -5029,17 +5987,11 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
   const onDownloadPdf = async (id: number | string) => {
     if (!token) return
     try {
-      const baseUrl = resolveApiBaseUrl()
-      const res = await fetch(`${baseUrl}/api/me/leave/requests/${id}/pdf`, {
-
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (!res.ok) throw new Error("Failed to generate PDF")
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
+      const result = await downloadMyLeaveRequestPdf(token, id)
+      const url = URL.createObjectURL(result.blob)
       const a = document.createElement("a")
       a.href = url
-      a.download = `leave_request_${id}.pdf`
+      a.download = result.filename
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)

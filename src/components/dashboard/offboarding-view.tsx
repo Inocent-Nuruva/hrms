@@ -9,31 +9,50 @@ import { Plus, RefreshCw } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 import {
+  addOffboardingDocument,
   approveOffboardingRequest,
   cancelOffboardingRequest,
   completeOffboardingRequest,
+  completeOffboardingClearance,
   completeOffboardingTask,
+  createOffboardingAction,
+  createOffboardingAsset,
+  createOffboardingClearance,
   createOffboardingRequest,
+  createOffboardingSettlement,
+  createOffboardingTask,
   createOffboardingWorkflow,
   createOffboardingWorkflowStep,
+  downloadOffboardingDocument,
+  extractOffboardingItemsFromRecord,
+  finalizeOffboardingRequest,
+  fileToBase64UploadDto,
   getCurrentEmployee,
   getOffboardingRequest,
   getOffboardingApprovals,
   getOffboardingAuditLogs,
   getOffboardingDashboard,
+  getOffboardingExitInterview,
   getOffboardingProgress,
   listBranches,
   listDepartments,
   listEmployees,
+  listOffboardingActions,
+  listOffboardingAssets,
+  listOffboardingAccessOperations,
   listMyOffboardingApprovals,
   listMyOffboardingClearances,
   listMyOffboardingTasks,
   listOffboardingDocuments,
   listOffboardingItemsFromOwnRequests,
+  listOffboardingLetters,
   listOffboardingRequests,
+  listOffboardingSettlements,
   listOffboardingWorkflows,
+  reopenOffboardingTask,
   rejectOffboardingRequest,
   submitOffboardingRequest,
+  updateOffboardingExitInterview,
   type AdminRecord,
 } from "@/lib/admin-api"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
@@ -174,6 +193,85 @@ function EmptyState({
 type Tab = "requests" | "workflows" | "my-tasks" | "my-approvals" | "my-clearances"
 type OffboardingLookupKey = "employees" | "branches" | "departments" | "workflows"
 
+const OFFBOARDING_TASK_TYPE_OPTIONS = [
+  "hr",
+  "it",
+  "finance",
+  "manager",
+  "security",
+  "admin",
+  "general",
+] as const
+
+const OFFBOARDING_PRIORITY_OPTIONS = ["low", "medium", "high", "urgent"] as const
+const OFFBOARDING_CLEARANCE_TYPE_OPTIONS = [
+  "laptop",
+  "id_card",
+  "email",
+  "system_access",
+  "vehicle",
+  "documents",
+  "finance",
+  "other",
+] as const
+const OFFBOARDING_ACTION_TYPE_OPTIONS = [
+  "email_disable",
+  "sso_revoke",
+  "vpn_revoke",
+  "hrms_lock",
+  "device_recovery",
+  "badge_deactivation",
+  "payroll_stop",
+  "other",
+] as const
+const OFFBOARDING_ACTION_STATUS_OPTIONS = [
+  "pending",
+  "in_progress",
+  "completed",
+  "failed",
+  "cancelled",
+] as const
+const OFFBOARDING_ASSET_TYPE_OPTIONS = [
+  "laptop",
+  "id_card",
+  "sim_card",
+  "keys",
+  "vehicle",
+  "access_card",
+  "phone",
+  "other",
+] as const
+const OFFBOARDING_ASSET_STATUS_OPTIONS = [
+  "pending",
+  "returned",
+  "missing",
+  "waived",
+] as const
+const OFFBOARDING_SETTLEMENT_ITEM_TYPE_OPTIONS = [
+  "final_salary",
+  "leave_encashment",
+  "loan_recovery",
+  "salary_advance_recovery",
+  "gratuity",
+  "severance",
+  "tax_clearance",
+  "other",
+] as const
+const OFFBOARDING_SETTLEMENT_STATUS_OPTIONS = [
+  "pending",
+  "in_progress",
+  "completed",
+  "blocked",
+  "waived",
+] as const
+const OFFBOARDING_EXIT_INTERVIEW_STATUS_OPTIONS = ["draft", "completed"] as const
+const OFFBOARDING_KNOWLEDGE_TRANSFER_OPTIONS = [
+  "not_started",
+  "in_progress",
+  "completed",
+  "not_required",
+] as const
+
 function statusIsDraft(status: string) {
   const s = status.trim().toLowerCase()
   return s === "draft" || s === "pending_submit" || s === "new" || s === ""
@@ -182,6 +280,72 @@ function statusIsDraft(status: string) {
 function statusIsCancellable(status: string) {
   const s = status.trim().toLowerCase()
   return ["draft", "pending", "submitted", "in_review", "in_progress", "pending_approval"].includes(s)
+}
+
+function toTitleCaseWords(value: string) {
+  const normalized = value.trim().replace(/[_-]+/g, " ")
+  if (!normalized) return "—"
+  return normalized.replace(/\b\w/g, (character) => character.toUpperCase())
+}
+
+function formatDateTimeValue(value: unknown) {
+  if (typeof value !== "string" || !value.trim()) {
+    return "—"
+  }
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) {
+    return value
+  }
+  return parsed.toLocaleString()
+}
+
+function readCompanyUserId(row: AdminRecord) {
+  const direct = readNumber(row, ["company_user_id", "companyUserId", "assigned_to_company_user_id", "owner_company_user_id"])
+  if (direct !== null) {
+    return direct
+  }
+  const nestedCompanyUser = asRecord(row.company_user) ?? asRecord(row.companyUser)
+  const nestedUser = asRecord(row.user)
+  return (
+    readNumber(nestedCompanyUser ?? {}, ["id", "company_user_id", "companyUserId"]) ??
+    readNumber(nestedUser ?? {}, ["company_user_id", "companyUserId", "id"]) ??
+    null
+  )
+}
+
+function readBooleanLike(row: AdminRecord, keys: string[]) {
+  for (const key of keys) {
+    const value = row[key]
+    if (typeof value === "boolean") {
+      return value
+    }
+    if (value === 1 || value === "1") {
+      return true
+    }
+    if (value === 0 || value === "0") {
+      return false
+    }
+    if (typeof value === "string") {
+      const normalized = value.trim().toLowerCase()
+      if (normalized === "true" || normalized === "yes") {
+        return true
+      }
+      if (normalized === "false" || normalized === "no") {
+        return false
+      }
+    }
+  }
+  return null
+}
+
+function isRequestFinalized(row: AdminRecord | null) {
+  if (!row) {
+    return false
+  }
+  if (readBooleanLike(row, ["is_finalized", "isFinalized"]) === true) {
+    return true
+  }
+  return readString(row, ["finalized_at", "finalizedAt"]) !== "-"
 }
 
 export function OffboardingView() {
@@ -241,6 +405,12 @@ export function OffboardingView() {
   const [selectedRequest, setSelectedRequest] = React.useState<AdminRecord | null>(null)
   const [requestApprovals, setRequestApprovals] = React.useState<AdminRecord[]>([])
   const [requestAuditLogs, setRequestAuditLogs] = React.useState<AdminRecord[]>([])
+  const [showDocumentComposer, setShowDocumentComposer] = React.useState(false)
+  const [showTaskComposer, setShowTaskComposer] = React.useState(false)
+  const [showClearanceComposer, setShowClearanceComposer] = React.useState(false)
+  const [showActionComposer, setShowActionComposer] = React.useState(false)
+  const [showAssetComposer, setShowAssetComposer] = React.useState(false)
+  const [showSettlementComposer, setShowSettlementComposer] = React.useState(false)
 
   function autoResizeTextarea(event: React.FormEvent<HTMLTextAreaElement>) {
     const element = event.currentTarget
@@ -249,6 +419,71 @@ export function OffboardingView() {
   }
   const [requestDocuments, setRequestDocuments] = React.useState<AdminRecord[]>([])
   const [requestProgress, setRequestProgress] = React.useState<AdminRecord | null>(null)
+  const [requestActions, setRequestActions] = React.useState<AdminRecord[]>([])
+  const [requestAssets, setRequestAssets] = React.useState<AdminRecord[]>([])
+  const [requestLetters, setRequestLetters] = React.useState<AdminRecord[]>([])
+  const [requestAccessOperations, setRequestAccessOperations] = React.useState<AdminRecord[]>([])
+  const [requestSettlements, setRequestSettlements] = React.useState<AdminRecord[]>([])
+  const [requestExitInterview, setRequestExitInterview] = React.useState<AdminRecord | null>(null)
+  const [documentUploadFile, setDocumentUploadFile] = React.useState<File | null>(null)
+  const [documentForm, setDocumentForm] = React.useState({
+    title: "",
+    description: "",
+    document_type: "",
+    expiry_date: "",
+  })
+  const [taskForm, setTaskForm] = React.useState({
+    title: "",
+    description: "",
+    task_type: "general",
+    priority: "medium",
+    assigned_to_company_user_id: "",
+    due_date: "",
+  })
+  const [clearanceForm, setClearanceForm] = React.useState({
+    clearance_type: "documents",
+    status: "pending",
+    remarks: "",
+    owner_company_user_id: "",
+    due_date: "",
+  })
+  const [actionForm, setActionForm] = React.useState({
+    action_type: "email_disable",
+    system_name: "",
+    owner_company_user_id: "",
+    status: "pending",
+    due_date: "",
+    notes: "",
+  })
+  const [assetForm, setAssetForm] = React.useState({
+    asset_type: "laptop",
+    asset_label: "",
+    asset_identifier: "",
+    owner_company_user_id: "",
+    status: "pending",
+    due_date: "",
+    remarks: "",
+  })
+  const [settlementForm, setSettlementForm] = React.useState({
+    item_type: "final_salary",
+    title: "",
+    owner_company_user_id: "",
+    status: "pending",
+    amount: "",
+    currency: "TZS",
+    due_date: "",
+    remarks: "",
+  })
+  const [exitInterviewForm, setExitInterviewForm] = React.useState({
+    status: "draft",
+    exit_reason_category: "",
+    employee_feedback: "",
+    manager_feedback: "",
+    rehire_eligible: "unknown",
+    knowledge_transfer_status: "not_started",
+    handover_notes: "",
+    final_notes: "",
+  })
 
   const [requestForm, setRequestForm] = React.useState({
     employee_id: "",
@@ -287,6 +522,58 @@ export function OffboardingView() {
     is_required: "true",
     expected_duration_days: "1",
   })
+
+  const employeeCompanyUserOptions = React.useMemo(
+    () =>
+      employees
+        .map((row) => {
+          const companyUserId = readCompanyUserId(row)
+          if (companyUserId === null) {
+            return null
+          }
+          return {
+            companyUserId,
+            label: employeeLabel(row),
+          }
+        })
+        .filter(
+          (
+            option
+          ): option is {
+            companyUserId: number
+            label: string
+          } => option !== null
+        ),
+    [employees]
+  )
+
+  const selectedRequestTasks = React.useMemo(() => {
+    const detailTasks = extractOffboardingItemsFromRecord(selectedRequest, ["tasks"]).tasks
+    const progressTasks = extractOffboardingItemsFromRecord(requestProgress, ["tasks"]).tasks
+    const seen = new Set<string>()
+    return [...detailTasks, ...progressTasks].filter((row, index) => {
+      const key = String(readNumber(row, ["id", "task_id"]) ?? `task-${index}`)
+      if (seen.has(key)) {
+        return false
+      }
+      seen.add(key)
+      return true
+    })
+  }, [requestProgress, selectedRequest])
+
+  const selectedRequestClearances = React.useMemo(() => {
+    const detailClearances = extractOffboardingItemsFromRecord(selectedRequest, ["clearances"]).clearances
+    const progressClearances = extractOffboardingItemsFromRecord(requestProgress, ["clearances"]).clearances
+    const seen = new Set<string>()
+    return [...detailClearances, ...progressClearances].filter((row, index) => {
+      const key = String(readNumber(row, ["id", "clearance_id"]) ?? `clearance-${index}`)
+      if (seen.has(key)) {
+        return false
+      }
+      seen.add(key)
+      return true
+    })
+  }, [requestProgress, selectedRequest])
 
   const employeeLabel = (employee: AdminRecord) => {
     const fullName = readString(employee, ["full_name", "name"])
@@ -536,6 +823,138 @@ export function OffboardingView() {
     return name === "-" ? `Workflow #${workflowId}` : name
   }
 
+  function resetDocumentForm() {
+    setDocumentForm({
+      title: "",
+      description: "",
+      document_type: "",
+      expiry_date: "",
+    })
+    setDocumentUploadFile(null)
+  }
+
+  function resetTaskForm() {
+    setTaskForm({
+      title: "",
+      description: "",
+      task_type: "general",
+      priority: "medium",
+      assigned_to_company_user_id: "",
+      due_date: "",
+    })
+  }
+
+  function resetClearanceForm() {
+    setClearanceForm({
+      clearance_type: "documents",
+      status: "pending",
+      remarks: "",
+      owner_company_user_id: "",
+      due_date: "",
+    })
+  }
+
+  function resetActionForm() {
+    setActionForm({
+      action_type: "email_disable",
+      system_name: "",
+      owner_company_user_id: "",
+      status: "pending",
+      due_date: "",
+      notes: "",
+    })
+  }
+
+  function resetAssetForm() {
+    setAssetForm({
+      asset_type: "laptop",
+      asset_label: "",
+      asset_identifier: "",
+      owner_company_user_id: "",
+      status: "pending",
+      due_date: "",
+      remarks: "",
+    })
+  }
+
+  function resetSettlementForm() {
+    setSettlementForm({
+      item_type: "final_salary",
+      title: "",
+      owner_company_user_id: "",
+      status: "pending",
+      amount: "",
+      currency: "TZS",
+      due_date: "",
+      remarks: "",
+    })
+  }
+
+  function syncExitInterviewForm(record: AdminRecord | null) {
+    setExitInterviewForm({
+      status: readString(record ?? {}, ["status"]) === "-" ? "draft" : readString(record ?? {}, ["status"]),
+      exit_reason_category:
+        readString(record ?? {}, ["exit_reason_category", "exitReasonCategory"]) === "-"
+          ? ""
+          : readString(record ?? {}, ["exit_reason_category", "exitReasonCategory"]),
+      employee_feedback:
+        readString(record ?? {}, ["employee_feedback", "employeeFeedback"]) === "-"
+          ? ""
+          : readString(record ?? {}, ["employee_feedback", "employeeFeedback"]),
+      manager_feedback:
+        readString(record ?? {}, ["manager_feedback", "managerFeedback"]) === "-"
+          ? ""
+          : readString(record ?? {}, ["manager_feedback", "managerFeedback"]),
+      rehire_eligible: (() => {
+        const value = readBooleanLike(record ?? {}, ["rehire_eligible", "rehireEligible"])
+        if (value === null) {
+          return "unknown"
+        }
+        return value ? "true" : "false"
+      })(),
+      knowledge_transfer_status:
+        readString(record ?? {}, ["knowledge_transfer_status", "knowledgeTransferStatus"]) === "-"
+          ? "not_started"
+          : readString(record ?? {}, ["knowledge_transfer_status", "knowledgeTransferStatus"]),
+      handover_notes:
+        readString(record ?? {}, ["handover_notes", "handoverNotes"]) === "-"
+          ? ""
+          : readString(record ?? {}, ["handover_notes", "handoverNotes"]),
+      final_notes:
+        readString(record ?? {}, ["final_notes", "finalNotes"]) === "-"
+          ? ""
+          : readString(record ?? {}, ["final_notes", "finalNotes"]),
+    })
+  }
+
+  function readCurrentRequestId() {
+    return readNumber(selectedRequest ?? {}, ["id", "request_id"])
+  }
+
+  function resolveEmployeeOptionLabel(companyUserId: number | null) {
+    if (companyUserId === null) {
+      return "Unassigned"
+    }
+    const match = employeeCompanyUserOptions.find((option) => option.companyUserId === companyUserId)
+    if (match) {
+      return match.label
+    }
+    return `Company user #${companyUserId}`
+  }
+
+  async function reloadCurrentRequestActivity(requestId?: number | null) {
+    const id = requestId ?? readCurrentRequestId()
+    if (id === null) {
+      return
+    }
+    await reloadAll("requests", true)
+    await openRequestDetails({
+      ...(selectedRequest ?? {}),
+      id,
+      request_id: id,
+    })
+  }
+
   async function openRequestSheet() {
     if (!canCreateRequest) return
     const token = readStoredToken()
@@ -658,13 +1077,31 @@ export function OffboardingView() {
     if (!token || id === null) return
     setSelectedRequest(row)
     setRequestDetailsOpen(true)
+    setShowDocumentComposer(false)
+    setShowTaskComposer(false)
+    setShowClearanceComposer(false)
+    setShowActionComposer(false)
+    setShowAssetComposer(false)
+    setShowSettlementComposer(false)
+    resetDocumentForm()
+    resetTaskForm()
+    resetClearanceForm()
+    resetActionForm()
+    resetAssetForm()
+    resetSettlementForm()
     try {
-      const [detail, approvals, audit, docs, progress] = await Promise.all([
+      const [detail, approvals, audit, docs, progress, actions, assets, letters, accessOperations, settlements, exitInterview] = await Promise.all([
         getOffboardingRequest(token, id),
         getOffboardingApprovals(token, id),
         getOffboardingAuditLogs(token, id),
         listOffboardingDocuments(token, id),
         getOffboardingProgress(token, id),
+        listOffboardingActions(token, id).catch(() => []),
+        listOffboardingAssets(token, id).catch(() => []),
+        listOffboardingLetters(token, id).catch(() => []),
+        listOffboardingAccessOperations(token, id).catch(() => []),
+        listOffboardingSettlements(token, id).catch(() => []),
+        getOffboardingExitInterview(token, id).catch(() => null),
       ])
       if (detail) {
         setSelectedRequest({ ...row, ...detail })
@@ -673,11 +1110,25 @@ export function OffboardingView() {
       setRequestAuditLogs(audit)
       setRequestDocuments(docs)
       setRequestProgress(progress)
+      setRequestActions(actions)
+      setRequestAssets(assets)
+      setRequestLetters(letters)
+      setRequestAccessOperations(accessOperations)
+      setRequestSettlements(settlements)
+      setRequestExitInterview(exitInterview)
+      syncExitInterviewForm(exitInterview)
     } catch {
       setRequestApprovals([])
       setRequestAuditLogs([])
       setRequestDocuments([])
       setRequestProgress(null)
+      setRequestActions([])
+      setRequestAssets([])
+      setRequestLetters([])
+      setRequestAccessOperations([])
+      setRequestSettlements([])
+      setRequestExitInterview(null)
+      syncExitInterviewForm(null)
     }
   }
 
@@ -701,7 +1152,7 @@ export function OffboardingView() {
 
   async function runRequestAction(
     row: AdminRecord,
-    action: "submit" | "approve" | "reject" | "cancel" | "complete"
+    action: "submit" | "approve" | "reject" | "cancel" | "complete" | "finalize"
   ) {
     const token = readStoredToken()
     const id = readNumber(row, ["id"])
@@ -731,6 +1182,7 @@ export function OffboardingView() {
         })
       }
       if (action === "complete") await completeOffboardingRequest(token, id)
+      if (action === "finalize") await finalizeOffboardingRequest(token, id)
       const pastTense =
         action === "submit"
           ? "submitted"
@@ -740,7 +1192,9 @@ export function OffboardingView() {
               ? "rejected"
               : action === "cancel"
                 ? "cancelled"
-                : "completed"
+                : action === "complete"
+                  ? "completed"
+                  : "finalized"
       showSuccessAlert(`Request ${pastTense} successfully.`)
       await reloadAll("requests", true)
       if (requestDetailsOpen) {
@@ -748,6 +1202,349 @@ export function OffboardingView() {
       }
     } catch (errorObject) {
       showErrorAlert(errorObject instanceof Error ? errorObject.message : "Action failed.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function submitRequestDocument() {
+    const token = readStoredToken()
+    const requestId = readCurrentRequestId()
+    if (!token || requestId === null) {
+      showErrorAlert("Missing request context.")
+      return
+    }
+    if (!documentForm.title.trim()) {
+      showErrorAlert("Document title is required.")
+      return
+    }
+    if (!documentUploadFile) {
+      showErrorAlert("Choose a document file before uploading.")
+      return
+    }
+
+    setSaving(true)
+    try {
+      const file = await fileToBase64UploadDto(documentUploadFile)
+      await addOffboardingDocument(token, requestId, {
+        title: documentForm.title.trim(),
+        description: documentForm.description.trim() || undefined,
+        document_type: documentForm.document_type.trim() || undefined,
+        expiry_date: documentForm.expiry_date || undefined,
+        file,
+      })
+      showSuccessAlert("Offboarding document uploaded.")
+      resetDocumentForm()
+      setShowDocumentComposer(false)
+      await reloadCurrentRequestActivity(requestId)
+    } catch (errorObject) {
+      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to upload document.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function downloadRequestDocument(documentRow: AdminRecord) {
+    const token = readStoredToken()
+    const requestId = readCurrentRequestId()
+    const documentId = readNumber(documentRow, ["id", "document_id"])
+    if (!token || requestId === null || documentId === null) {
+      showErrorAlert("Missing document identifiers.")
+      return
+    }
+
+    setSaving(true)
+    try {
+      const result = await downloadOffboardingDocument(token, requestId, documentId)
+      const url = window.URL.createObjectURL(result.blob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = result.filename
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+      showSuccessAlert("Document download started.")
+    } catch (errorObject) {
+      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to download document.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function submitRequestTask() {
+    const token = readStoredToken()
+    const requestId = readCurrentRequestId()
+    if (!token || requestId === null) {
+      showErrorAlert("Missing request context.")
+      return
+    }
+    if (!taskForm.title.trim()) {
+      showErrorAlert("Task title is required.")
+      return
+    }
+
+    setSaving(true)
+    try {
+      await createOffboardingTask(token, requestId, {
+        title: taskForm.title.trim(),
+        description: taskForm.description.trim() || undefined,
+        task_type: taskForm.task_type,
+        priority: taskForm.priority,
+        assigned_to_company_user_id:
+          taskForm.assigned_to_company_user_id && Number(taskForm.assigned_to_company_user_id) > 0
+            ? Number(taskForm.assigned_to_company_user_id)
+            : undefined,
+        due_date: taskForm.due_date || undefined,
+      })
+      showSuccessAlert("Offboarding task created.")
+      resetTaskForm()
+      setShowTaskComposer(false)
+      await reloadCurrentRequestActivity(requestId)
+    } catch (errorObject) {
+      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to create task.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function completeRequestTask(taskRow: AdminRecord) {
+    const token = readStoredToken()
+    const requestId = readCurrentRequestId()
+    const taskId = readNumber(taskRow, ["id", "task_id"])
+    if (!token || requestId === null || taskId === null) {
+      showErrorAlert("Missing task identifiers.")
+      return
+    }
+
+    setSaving(true)
+    try {
+      await completeOffboardingTask(token, requestId, taskId, { remarks: "Completed" })
+      showSuccessAlert("Task marked complete.")
+      await reloadCurrentRequestActivity(requestId)
+      await reloadAll("my-tasks", true)
+    } catch (errorObject) {
+      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to complete task.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function reopenRequestTask(taskRow: AdminRecord) {
+    const token = readStoredToken()
+    const requestId = readCurrentRequestId()
+    const taskId = readNumber(taskRow, ["id", "task_id"])
+    if (!token || requestId === null || taskId === null) {
+      showErrorAlert("Missing task identifiers.")
+      return
+    }
+
+    setSaving(true)
+    try {
+      await reopenOffboardingTask(token, requestId, taskId, { remarks: "Reopened from request detail." })
+      showSuccessAlert("Task reopened.")
+      await reloadCurrentRequestActivity(requestId)
+      await reloadAll("my-tasks", true)
+    } catch (errorObject) {
+      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to reopen task.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function submitRequestClearance() {
+    const token = readStoredToken()
+    const requestId = readCurrentRequestId()
+    if (!token || requestId === null) {
+      showErrorAlert("Missing request context.")
+      return
+    }
+
+    setSaving(true)
+    try {
+      await createOffboardingClearance(token, requestId, {
+        clearance_type: clearanceForm.clearance_type,
+        status: clearanceForm.status,
+        remarks: clearanceForm.remarks.trim() || undefined,
+        owner_company_user_id:
+          clearanceForm.owner_company_user_id && Number(clearanceForm.owner_company_user_id) > 0
+            ? Number(clearanceForm.owner_company_user_id)
+            : undefined,
+        due_date: clearanceForm.due_date || undefined,
+      })
+      showSuccessAlert("Clearance item created.")
+      resetClearanceForm()
+      setShowClearanceComposer(false)
+      await reloadCurrentRequestActivity(requestId)
+    } catch (errorObject) {
+      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to create clearance.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function completeRequestClearance(clearanceRow: AdminRecord) {
+    const token = readStoredToken()
+    const requestId = readCurrentRequestId()
+    const clearanceId = readNumber(clearanceRow, ["id", "clearance_id"])
+    if (!token || requestId === null || clearanceId === null) {
+      showErrorAlert("Missing clearance identifiers.")
+      return
+    }
+
+    setSaving(true)
+    try {
+      await completeOffboardingClearance(token, requestId, clearanceId, {
+        status: "cleared",
+        remarks: "Cleared",
+      })
+      showSuccessAlert("Clearance marked cleared.")
+      await reloadCurrentRequestActivity(requestId)
+      await reloadAll("my-clearances", true)
+    } catch (errorObject) {
+      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to complete clearance.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function submitRequestActionItem() {
+    const token = readStoredToken()
+    const requestId = readCurrentRequestId()
+    if (!token || requestId === null) {
+      showErrorAlert("Missing request context.")
+      return
+    }
+
+    setSaving(true)
+    try {
+      await createOffboardingAction(token, requestId, {
+        action_type: actionForm.action_type,
+        system_name: actionForm.system_name.trim() || undefined,
+        owner_company_user_id:
+          actionForm.owner_company_user_id && Number(actionForm.owner_company_user_id) > 0
+            ? Number(actionForm.owner_company_user_id)
+            : undefined,
+        status: actionForm.status,
+        due_date: actionForm.due_date || undefined,
+        notes: actionForm.notes.trim() || undefined,
+      })
+      showSuccessAlert("Offboarding action created.")
+      resetActionForm()
+      setShowActionComposer(false)
+      await reloadCurrentRequestActivity(requestId)
+    } catch (errorObject) {
+      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to create action.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function submitRequestAsset() {
+    const token = readStoredToken()
+    const requestId = readCurrentRequestId()
+    if (!token || requestId === null) {
+      showErrorAlert("Missing request context.")
+      return
+    }
+    if (!assetForm.asset_label.trim()) {
+      showErrorAlert("Asset label is required.")
+      return
+    }
+
+    setSaving(true)
+    try {
+      await createOffboardingAsset(token, requestId, {
+        asset_type: assetForm.asset_type,
+        asset_label: assetForm.asset_label.trim(),
+        asset_identifier: assetForm.asset_identifier.trim() || undefined,
+        owner_company_user_id:
+          assetForm.owner_company_user_id && Number(assetForm.owner_company_user_id) > 0
+            ? Number(assetForm.owner_company_user_id)
+            : undefined,
+        status: assetForm.status,
+        due_date: assetForm.due_date || undefined,
+        remarks: assetForm.remarks.trim() || undefined,
+      })
+      showSuccessAlert("Asset return item created.")
+      resetAssetForm()
+      setShowAssetComposer(false)
+      await reloadCurrentRequestActivity(requestId)
+    } catch (errorObject) {
+      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to create asset return item.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function submitRequestSettlement() {
+    const token = readStoredToken()
+    const requestId = readCurrentRequestId()
+    if (!token || requestId === null) {
+      showErrorAlert("Missing request context.")
+      return
+    }
+    if (!settlementForm.title.trim()) {
+      showErrorAlert("Settlement title is required.")
+      return
+    }
+
+    setSaving(true)
+    try {
+      await createOffboardingSettlement(token, requestId, {
+        item_type: settlementForm.item_type,
+        title: settlementForm.title.trim(),
+        owner_company_user_id:
+          settlementForm.owner_company_user_id && Number(settlementForm.owner_company_user_id) > 0
+            ? Number(settlementForm.owner_company_user_id)
+            : undefined,
+        status: settlementForm.status,
+        amount: settlementForm.amount.trim() || undefined,
+        currency: settlementForm.currency.trim() || undefined,
+        due_date: settlementForm.due_date || undefined,
+        remarks: settlementForm.remarks.trim() || undefined,
+      })
+      showSuccessAlert("Settlement item created.")
+      resetSettlementForm()
+      setShowSettlementComposer(false)
+      await reloadCurrentRequestActivity(requestId)
+    } catch (errorObject) {
+      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to create settlement item.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function saveExitInterview() {
+    const token = readStoredToken()
+    const requestId = readCurrentRequestId()
+    if (!token || requestId === null) {
+      showErrorAlert("Missing request context.")
+      return
+    }
+
+    setSaving(true)
+    try {
+      const updated = await updateOffboardingExitInterview(token, requestId, {
+        status: exitInterviewForm.status,
+        exit_reason_category: exitInterviewForm.exit_reason_category.trim() || undefined,
+        employee_feedback: exitInterviewForm.employee_feedback.trim() || undefined,
+        manager_feedback: exitInterviewForm.manager_feedback.trim() || undefined,
+        rehire_eligible:
+          exitInterviewForm.rehire_eligible === "unknown"
+            ? undefined
+            : exitInterviewForm.rehire_eligible === "true",
+        knowledge_transfer_status: exitInterviewForm.knowledge_transfer_status,
+        handover_notes: exitInterviewForm.handover_notes.trim() || undefined,
+        final_notes: exitInterviewForm.final_notes.trim() || undefined,
+      })
+      const nextRecord = asRecord(updated) ?? requestExitInterview ?? {}
+      setRequestExitInterview(nextRecord)
+      syncExitInterviewForm(nextRecord)
+      showSuccessAlert("Exit interview saved.")
+      await reloadCurrentRequestActivity(requestId)
+    } catch (errorObject) {
+      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to save exit interview.")
     } finally {
       setSaving(false)
     }
@@ -765,7 +1562,7 @@ export function OffboardingView() {
     }
     setSaving(true)
     try {
-      await completeOffboardingTask(token, requestId, taskId, { notes: "Completed" })
+      await completeOffboardingTask(token, requestId, taskId, { remarks: "Completed" })
       showSuccessAlert("Task marked complete.")
       await reloadAll("my-tasks", true)
     } catch (errorObject) {
@@ -2004,7 +2801,7 @@ export function OffboardingView() {
       ) : null}
 
       <Dialog open={requestDetailsOpen} onOpenChange={setRequestDetailsOpen}>
-        <DialogPopup from="bottom" className="sm:max-w-lg">
+        <DialogPopup from="bottom" className="sm:max-w-4xl">
           <DialogHeader>
             <DialogTitle>
               {selectedRequest ? requestLabel(selectedRequest) : "Request details"}
@@ -2014,8 +2811,8 @@ export function OffboardingView() {
             </DialogDescription>
           </DialogHeader>
           {selectedRequest ? (
-            <div className="grid gap-3 py-2">
-              <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="max-h-[72vh] space-y-4 overflow-y-auto py-2 pr-1">
+              <div className="grid gap-2 text-xs md:grid-cols-4">
                 <div className="rounded-md border border-border/70 px-3 py-2">
                   <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Status</p>
                   <div className="mt-1">
@@ -2025,50 +2822,1459 @@ export function OffboardingView() {
                 <div className="rounded-md border border-border/70 px-3 py-2">
                   <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Type</p>
                   <p className="mt-1 font-medium text-foreground">
-                    {readString(selectedRequest, ["offboarding_type", "type"])}
+                    {toTitleCaseWords(readString(selectedRequest, ["offboarding_type", "type"]))}
                   </p>
                 </div>
                 <div className="rounded-md border border-border/70 px-3 py-2">
-                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                    Last working day
-                  </p>
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Last working day</p>
                   <p className="mt-1 font-medium text-foreground">
-                    {readString(selectedRequest, ["last_working_date", "lastWorkingDate"])}
+                    {formatDateTimeValue(
+                      readString(selectedRequest, ["last_working_date", "lastWorkingDate"])
+                    )}
                   </p>
                 </div>
                 <div className="rounded-md border border-border/70 px-3 py-2">
-                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                    Approvals
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Progress</p>
+                  <p className="mt-1 font-medium text-foreground">
+                    {requestProgress
+                      ? String(requestProgress.progress_percentage ?? requestProgress.progress ?? "—")
+                      : "—"}
                   </p>
-                  <p className="mt-1 font-medium text-foreground">{requestApprovals.length}</p>
                 </div>
               </div>
+
               <div className="rounded-md border border-border/70 px-3 py-2 text-xs">
                 <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Reason</p>
                 <p className="mt-1 text-foreground">
                   {readString(selectedRequest, ["reason", "description"])}
                 </p>
               </div>
-              <div className="grid grid-cols-3 gap-2 text-xs">
-                <div className="rounded-md border border-border/70 px-3 py-2 text-center">
-                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Docs</p>
-                  <p className="mt-1 text-sm font-semibold">{requestDocuments.length}</p>
-                </div>
-                <div className="rounded-md border border-border/70 px-3 py-2 text-center">
-                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Audit</p>
-                  <p className="mt-1 text-sm font-semibold">{requestAuditLogs.length}</p>
-                </div>
-                <div className="rounded-md border border-border/70 px-3 py-2 text-center">
-                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Progress</p>
-                  <p className="mt-1 text-sm font-semibold">
-                    {requestProgress
-                      ? String(
-                          requestProgress.progress_percentage ??
-                            requestProgress.progress ??
-                            "—"
+
+              <div className="grid gap-3 lg:grid-cols-3">
+                <div className="space-y-3 rounded-lg border border-border p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">Documents</p>
+                      <p className="text-xs text-muted-foreground">
+                        Exit letters, handover files, and supporting documents.
+                      </p>
+                    </div>
+                    {canManage || canActOnSelected ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-8 px-3 text-xs"
+                        onClick={() => {
+                          resetDocumentForm()
+                          setShowDocumentComposer((current) => !current)
+                        }}
+                        disabled={saving}
+                      >
+                        {showDocumentComposer ? "Hide upload" : "Upload"}
+                      </Button>
+                    ) : null}
+                  </div>
+
+                  {showDocumentComposer ? (
+                    <div className="grid gap-2 rounded-md border border-border/70 bg-muted/20 p-3">
+                      <label className="grid gap-1 text-xs">
+                        <span className="font-medium text-muted-foreground">Title</span>
+                        <input
+                          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                          value={documentForm.title}
+                          onChange={(event) =>
+                            setDocumentForm((prev) => ({ ...prev, title: event.target.value }))
+                          }
+                          placeholder="Document title"
+                        />
+                      </label>
+                      <label className="grid gap-1 text-xs">
+                        <span className="font-medium text-muted-foreground">Document type</span>
+                        <input
+                          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                          value={documentForm.document_type}
+                          onChange={(event) =>
+                            setDocumentForm((prev) => ({ ...prev, document_type: event.target.value }))
+                          }
+                          placeholder="e.g. clearance_form"
+                        />
+                      </label>
+                      <label className="grid gap-1 text-xs">
+                        <span className="font-medium text-muted-foreground">Expiry date</span>
+                        <DatePickerPresets
+                          value={documentForm.expiry_date}
+                          onChange={(value) =>
+                            setDocumentForm((prev) => ({ ...prev, expiry_date: value }))
+                          }
+                          placeholder="Expiry date"
+                          className="h-8 text-xs"
+                        />
+                      </label>
+                      <label className="grid gap-1 text-xs">
+                        <span className="font-medium text-muted-foreground">File</span>
+                        <input
+                          type="file"
+                          className="block h-8 rounded-md border border-input bg-background px-2 py-1 text-xs file:mr-2 file:border-0 file:bg-transparent file:text-xs"
+                          onChange={(event) => setDocumentUploadFile(event.target.files?.[0] ?? null)}
+                        />
+                      </label>
+                      <label className="grid gap-1 text-xs">
+                        <span className="font-medium text-muted-foreground">Description</span>
+                        <Textarea
+                          className="min-h-20 rounded-md border border-input px-2 py-1.5 text-xs"
+                          value={documentForm.description}
+                          onChange={(event) =>
+                            setDocumentForm((prev) => ({ ...prev, description: event.target.value }))
+                          }
+                          placeholder="Optional document notes"
+                        />
+                      </label>
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-8 px-3 text-xs"
+                          onClick={() => {
+                            resetDocumentForm()
+                            setShowDocumentComposer(false)
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          type="button"
+                          className="h-8 px-3 text-xs"
+                          disabled={saving}
+                          onClick={() => void submitRequestDocument()}
+                        >
+                          {saving ? "Uploading..." : "Upload"}
+                        </Button>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {requestDocuments.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No offboarding documents attached yet.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {requestDocuments.map((documentRow, index) => {
+                        const documentId = readNumber(documentRow, ["id", "document_id"])
+                        return (
+                          <div
+                            key={`offboarding-document-${documentId ?? index}`}
+                            className="rounded-md border border-border/70 bg-background p-3"
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div>
+                                <p className="text-sm font-medium text-foreground">
+                                  {readString(documentRow, ["title", "name", "file_name"])}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {toTitleCaseWords(readString(documentRow, ["document_type", "type"]))}
+                                </p>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="h-7 px-2 text-[11px]"
+                                onClick={() => void downloadRequestDocument(documentRow)}
+                                disabled={saving}
+                              >
+                                Download
+                              </Button>
+                            </div>
+                            <div className="mt-2 grid gap-2 text-xs">
+                              <div>
+                                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Uploaded</p>
+                                <p className="mt-0.5 text-foreground">
+                                  {formatDateTimeValue(documentRow.created_at ?? documentRow.uploaded_at)}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Description</p>
+                                <p className="mt-0.5 text-foreground">
+                                  {readString(documentRow, ["description", "notes", "remarks"])}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
                         )
-                      : "—"}
-                  </p>
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-3 rounded-lg border border-border p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">Tasks</p>
+                      <p className="text-xs text-muted-foreground">
+                        Work items assigned during the exit process.
+                      </p>
+                    </div>
+                    {canManage ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-8 px-3 text-xs"
+                        onClick={() => {
+                          void ensureLookups(["employees"])
+                          resetTaskForm()
+                          setShowTaskComposer((current) => !current)
+                        }}
+                        disabled={saving}
+                      >
+                        {showTaskComposer ? "Hide form" : "Create task"}
+                      </Button>
+                    ) : null}
+                  </div>
+
+                  {showTaskComposer ? (
+                    <div className="grid gap-2 rounded-md border border-border/70 bg-muted/20 p-3">
+                      <label className="grid gap-1 text-xs">
+                        <span className="font-medium text-muted-foreground">Title</span>
+                        <input
+                          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                          value={taskForm.title}
+                          onChange={(event) =>
+                            setTaskForm((prev) => ({ ...prev, title: event.target.value }))
+                          }
+                          placeholder="Task title"
+                        />
+                      </label>
+                      <div className="grid gap-2 md:grid-cols-2">
+                        <label className="grid gap-1 text-xs">
+                          <span className="font-medium text-muted-foreground">Task type</span>
+                          <select
+                            className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                            value={taskForm.task_type}
+                            onChange={(event) =>
+                              setTaskForm((prev) => ({ ...prev, task_type: event.target.value }))
+                            }
+                          >
+                            {OFFBOARDING_TASK_TYPE_OPTIONS.map((type) => (
+                              <option key={type} value={type}>
+                                {toTitleCaseWords(type)}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="grid gap-1 text-xs">
+                          <span className="font-medium text-muted-foreground">Priority</span>
+                          <select
+                            className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                            value={taskForm.priority}
+                            onChange={(event) =>
+                              setTaskForm((prev) => ({ ...prev, priority: event.target.value }))
+                            }
+                          >
+                            {OFFBOARDING_PRIORITY_OPTIONS.map((priority) => (
+                              <option key={priority} value={priority}>
+                                {toTitleCaseWords(priority)}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+                      <label className="grid gap-1 text-xs">
+                        <span className="font-medium text-muted-foreground">Assigned user</span>
+                        <select
+                          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                          value={taskForm.assigned_to_company_user_id}
+                          onChange={(event) =>
+                            setTaskForm((prev) => ({
+                              ...prev,
+                              assigned_to_company_user_id: event.target.value,
+                            }))
+                          }
+                        >
+                          <option value="">Optional assignee</option>
+                          {employeeCompanyUserOptions.map((option) => (
+                            <option key={`offboarding-task-owner-${option.companyUserId}`} value={String(option.companyUserId)}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="grid gap-1 text-xs">
+                        <span className="font-medium text-muted-foreground">Due date</span>
+                        <input
+                          type="datetime-local"
+                          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                          value={taskForm.due_date}
+                          onChange={(event) =>
+                            setTaskForm((prev) => ({ ...prev, due_date: event.target.value }))
+                          }
+                        />
+                      </label>
+                      <label className="grid gap-1 text-xs">
+                        <span className="font-medium text-muted-foreground">Description</span>
+                        <Textarea
+                          className="min-h-20 rounded-md border border-input px-2 py-1.5 text-xs"
+                          value={taskForm.description}
+                          onChange={(event) =>
+                            setTaskForm((prev) => ({ ...prev, description: event.target.value }))
+                          }
+                          placeholder="Optional instructions"
+                        />
+                      </label>
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-8 px-3 text-xs"
+                          onClick={() => {
+                            resetTaskForm()
+                            setShowTaskComposer(false)
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          type="button"
+                          className="h-8 px-3 text-xs"
+                          disabled={saving}
+                          onClick={() => void submitRequestTask()}
+                        >
+                          {saving ? "Creating..." : "Create task"}
+                        </Button>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {selectedRequestTasks.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No offboarding tasks have been created for this request.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {selectedRequestTasks.map((taskRow, index) => {
+                        const taskId = readNumber(taskRow, ["id", "task_id"])
+                        const taskStatus = readString(taskRow, ["status", "task_status"])
+                        const normalizedStatus = taskStatus.trim().toLowerCase()
+                        const assignedCompanyUserId = readCompanyUserId(taskRow)
+                        return (
+                          <div
+                            key={`offboarding-task-${taskId ?? index}`}
+                            className="rounded-md border border-border/70 bg-background p-3"
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div>
+                                <p className="text-sm font-medium text-foreground">
+                                  {readString(taskRow, ["title", "task_title", "name", "step_name"])}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {toTitleCaseWords(readString(taskRow, ["task_type", "type"]))} •{" "}
+                                  {toTitleCaseWords(taskStatus)}
+                                </p>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                {normalizedStatus !== "completed" && normalizedStatus !== "done" ? (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="h-7 px-2 text-[11px]"
+                                    disabled={saving}
+                                    onClick={() => void completeRequestTask(taskRow)}
+                                  >
+                                    Complete
+                                  </Button>
+                                ) : canManage ? (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="h-7 px-2 text-[11px]"
+                                    disabled={saving}
+                                    onClick={() => void reopenRequestTask(taskRow)}
+                                  >
+                                    Reopen
+                                  </Button>
+                                ) : null}
+                              </div>
+                            </div>
+                            <div className="mt-2 grid gap-2 text-xs">
+                              <div>
+                                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Owner</p>
+                                <p className="mt-0.5 text-foreground">
+                                  {resolveEmployeeOptionLabel(assignedCompanyUserId)}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Due</p>
+                                <p className="mt-0.5 text-foreground">{formatDateTimeValue(taskRow.due_date)}</p>
+                              </div>
+                              <div>
+                                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Description</p>
+                                <p className="mt-0.5 text-foreground">
+                                  {readString(taskRow, ["description", "task_description", "remarks"])}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-3 rounded-lg border border-border p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">Clearances</p>
+                      <p className="text-xs text-muted-foreground">
+                        Department sign-off items required before exit closes.
+                      </p>
+                    </div>
+                    {canManage ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-8 px-3 text-xs"
+                        onClick={() => {
+                          void ensureLookups(["employees"])
+                          resetClearanceForm()
+                          setShowClearanceComposer((current) => !current)
+                        }}
+                        disabled={saving}
+                      >
+                        {showClearanceComposer ? "Hide form" : "Create clearance"}
+                      </Button>
+                    ) : null}
+                  </div>
+
+                  {showClearanceComposer ? (
+                    <div className="grid gap-2 rounded-md border border-border/70 bg-muted/20 p-3">
+                      <label className="grid gap-1 text-xs">
+                        <span className="font-medium text-muted-foreground">Clearance type</span>
+                        <select
+                          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                          value={clearanceForm.clearance_type}
+                          onChange={(event) =>
+                            setClearanceForm((prev) => ({
+                              ...prev,
+                              clearance_type: event.target.value,
+                            }))
+                          }
+                        >
+                          {OFFBOARDING_CLEARANCE_TYPE_OPTIONS.map((type) => (
+                            <option key={type} value={type}>
+                              {toTitleCaseWords(type)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <div className="grid gap-2 md:grid-cols-2">
+                        <label className="grid gap-1 text-xs">
+                          <span className="font-medium text-muted-foreground">Initial status</span>
+                          <select
+                            className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                            value={clearanceForm.status}
+                            onChange={(event) =>
+                              setClearanceForm((prev) => ({ ...prev, status: event.target.value }))
+                            }
+                          >
+                            <option value="pending">Pending</option>
+                            <option value="cleared">Cleared</option>
+                            <option value="not_cleared">Not cleared</option>
+                          </select>
+                        </label>
+                        <label className="grid gap-1 text-xs">
+                          <span className="font-medium text-muted-foreground">Owner</span>
+                          <select
+                            className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                            value={clearanceForm.owner_company_user_id}
+                            onChange={(event) =>
+                              setClearanceForm((prev) => ({
+                                ...prev,
+                                owner_company_user_id: event.target.value,
+                              }))
+                            }
+                          >
+                            <option value="">Optional owner</option>
+                            {employeeCompanyUserOptions.map((option) => (
+                              <option key={`offboarding-clearance-owner-${option.companyUserId}`} value={String(option.companyUserId)}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+                      <label className="grid gap-1 text-xs">
+                        <span className="font-medium text-muted-foreground">Due date</span>
+                        <input
+                          type="datetime-local"
+                          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                          value={clearanceForm.due_date}
+                          onChange={(event) =>
+                            setClearanceForm((prev) => ({ ...prev, due_date: event.target.value }))
+                          }
+                        />
+                      </label>
+                      <label className="grid gap-1 text-xs">
+                        <span className="font-medium text-muted-foreground">Remarks</span>
+                        <Textarea
+                          className="min-h-20 rounded-md border border-input px-2 py-1.5 text-xs"
+                          value={clearanceForm.remarks}
+                          onChange={(event) =>
+                            setClearanceForm((prev) => ({ ...prev, remarks: event.target.value }))
+                          }
+                          placeholder="Optional instructions"
+                        />
+                      </label>
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-8 px-3 text-xs"
+                          onClick={() => {
+                            resetClearanceForm()
+                            setShowClearanceComposer(false)
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          type="button"
+                          className="h-8 px-3 text-xs"
+                          disabled={saving}
+                          onClick={() => void submitRequestClearance()}
+                        >
+                          {saving ? "Creating..." : "Create clearance"}
+                        </Button>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {selectedRequestClearances.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No clearances have been added for this request yet.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {selectedRequestClearances.map((clearanceRow, index) => {
+                        const clearanceId = readNumber(clearanceRow, ["id", "clearance_id"])
+                        const clearanceStatus = readString(clearanceRow, ["status"])
+                        const normalizedStatus = clearanceStatus.trim().toLowerCase()
+                        const ownerCompanyUserId =
+                          readNumber(clearanceRow, ["owner_company_user_id"]) ??
+                          readCompanyUserId(clearanceRow)
+                        return (
+                          <div
+                            key={`offboarding-clearance-${clearanceId ?? index}`}
+                            className="rounded-md border border-border/70 bg-background p-3"
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div>
+                                <p className="text-sm font-medium text-foreground">
+                                  {toTitleCaseWords(
+                                    readString(clearanceRow, [
+                                      "clearance_type",
+                                      "title",
+                                      "name",
+                                      "department_name",
+                                    ])
+                                  )}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {toTitleCaseWords(clearanceStatus)}
+                                </p>
+                              </div>
+                              {normalizedStatus !== "cleared" && canManage ? (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="h-7 px-2 text-[11px]"
+                                  disabled={saving}
+                                  onClick={() => void completeRequestClearance(clearanceRow)}
+                                >
+                                  Mark cleared
+                                </Button>
+                              ) : null}
+                            </div>
+                            <div className="mt-2 grid gap-2 text-xs">
+                              <div>
+                                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Owner</p>
+                                <p className="mt-0.5 text-foreground">
+                                  {resolveEmployeeOptionLabel(ownerCompanyUserId)}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Due</p>
+                                <p className="mt-0.5 text-foreground">{formatDateTimeValue(clearanceRow.due_date)}</p>
+                              </div>
+                              <div>
+                                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Remarks</p>
+                                <p className="mt-0.5 text-foreground">
+                                  {readString(clearanceRow, ["remarks", "notes", "description"])}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid gap-2 text-xs md:grid-cols-2">
+                <div className="rounded-md border border-border/70 px-3 py-2">
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Approvals</p>
+                  <p className="mt-1 text-sm font-semibold text-foreground">{requestApprovals.length}</p>
+                </div>
+                <div className="rounded-md border border-border/70 px-3 py-2">
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Audit log entries</p>
+                  <p className="mt-1 text-sm font-semibold text-foreground">{requestAuditLogs.length}</p>
+                </div>
+              </div>
+
+              <div className="grid gap-3 lg:grid-cols-2">
+                <div className="space-y-3 rounded-lg border border-border p-4">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">Approvals</p>
+                    <p className="text-xs text-muted-foreground">
+                      Current approval trail for this offboarding request.
+                    </p>
+                  </div>
+                  {requestApprovals.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No approval records returned for this request.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {requestApprovals.map((approvalRow, index) => (
+                        <div
+                          key={`offboarding-approval-${readNumber(approvalRow, ["id", "approval_id"]) ?? index}`}
+                          className="rounded-md border border-border/70 bg-background p-3"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-sm font-medium text-foreground">
+                              {readString(approvalRow, ["title", "step_name", "approval_name", "name"])}
+                            </p>
+                            <StatusDot status={readString(approvalRow, ["status", "approval_status"])} />
+                          </div>
+                          <div className="mt-2 grid gap-2 text-xs">
+                            <div>
+                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Approver</p>
+                              <p className="mt-0.5 text-foreground">
+                                {readString(approvalRow, ["approver_name", "company_user_name", "assigned_to_name", "name"])}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Comments</p>
+                              <p className="mt-0.5 text-foreground">
+                                {readString(approvalRow, ["comments", "remark", "remarks", "notes"])}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-3 rounded-lg border border-border p-4">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">Audit log</p>
+                    <p className="text-xs text-muted-foreground">
+                      Timeline of request activity returned by the backend.
+                    </p>
+                  </div>
+                  {requestAuditLogs.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No audit log records returned for this request.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {requestAuditLogs.map((auditRow, index) => (
+                        <div
+                          key={`offboarding-audit-${readNumber(auditRow, ["id", "audit_log_id"]) ?? index}`}
+                          className="rounded-md border border-border/70 bg-background p-3"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-sm font-medium text-foreground">
+                              {toTitleCaseWords(
+                                readString(auditRow, ["action", "event", "event_name", "title"])
+                              )}
+                            </p>
+                            <span className="text-[11px] text-muted-foreground">
+                              {formatDateTimeValue(
+                                auditRow.created_at ?? auditRow.createdAt ?? auditRow.timestamp
+                              )}
+                            </span>
+                          </div>
+                          <div className="mt-2 grid gap-2 text-xs">
+                            <div>
+                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Actor</p>
+                              <p className="mt-0.5 text-foreground">
+                                {readString(auditRow, ["actor_name", "performed_by_name", "user_name", "company_user_name"])}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Notes</p>
+                              <p className="mt-0.5 text-foreground">
+                                {readString(auditRow, ["description", "notes", "remark", "remarks"])}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid gap-3 lg:grid-cols-2">
+                <div className="space-y-3 rounded-lg border border-border p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">Exit interview</p>
+                      <p className="text-xs text-muted-foreground">
+                        Capture employee feedback, handover notes, and rehire recommendation.
+                      </p>
+                    </div>
+                    {(canManage || canActOnSelected) && requestDetailsOpen ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-8 px-3 text-xs"
+                        disabled={saving}
+                        onClick={() => void saveExitInterview()}
+                      >
+                        {saving ? "Saving..." : "Save interview"}
+                      </Button>
+                    ) : null}
+                  </div>
+
+                  <div className="grid gap-2 text-xs">
+                    <div className="grid gap-2 md:grid-cols-2">
+                      <label className="grid gap-1">
+                        <span className="font-medium text-muted-foreground">Status</span>
+                        <select
+                          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                          value={exitInterviewForm.status}
+                          disabled={!canManage && !canActOnSelected}
+                          onChange={(event) =>
+                            setExitInterviewForm((prev) => ({ ...prev, status: event.target.value }))
+                          }
+                        >
+                          {OFFBOARDING_EXIT_INTERVIEW_STATUS_OPTIONS.map((status) => (
+                            <option key={status} value={status}>
+                              {toTitleCaseWords(status)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="grid gap-1">
+                        <span className="font-medium text-muted-foreground">Knowledge transfer</span>
+                        <select
+                          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                          value={exitInterviewForm.knowledge_transfer_status}
+                          disabled={!canManage && !canActOnSelected}
+                          onChange={(event) =>
+                            setExitInterviewForm((prev) => ({
+                              ...prev,
+                              knowledge_transfer_status: event.target.value,
+                            }))
+                          }
+                        >
+                          {OFFBOARDING_KNOWLEDGE_TRANSFER_OPTIONS.map((status) => (
+                            <option key={status} value={status}>
+                              {toTitleCaseWords(status)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                    <label className="grid gap-1">
+                      <span className="font-medium text-muted-foreground">Exit reason category</span>
+                      <input
+                        className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                        value={exitInterviewForm.exit_reason_category}
+                        disabled={!canManage && !canActOnSelected}
+                        onChange={(event) =>
+                          setExitInterviewForm((prev) => ({
+                            ...prev,
+                            exit_reason_category: event.target.value,
+                          }))
+                        }
+                        placeholder="Optional category"
+                      />
+                    </label>
+                    <label className="grid gap-1">
+                      <span className="font-medium text-muted-foreground">Rehire eligible</span>
+                      <select
+                        className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                        value={exitInterviewForm.rehire_eligible}
+                        disabled={!canManage && !canActOnSelected}
+                        onChange={(event) =>
+                          setExitInterviewForm((prev) => ({
+                            ...prev,
+                            rehire_eligible: event.target.value,
+                          }))
+                        }
+                      >
+                        <option value="unknown">Not set</option>
+                        <option value="true">Yes</option>
+                        <option value="false">No</option>
+                      </select>
+                    </label>
+                    <label className="grid gap-1">
+                      <span className="font-medium text-muted-foreground">Employee feedback</span>
+                      <Textarea
+                        className="min-h-20 rounded-md border border-input px-2 py-1.5 text-xs"
+                        value={exitInterviewForm.employee_feedback}
+                        disabled={!canManage && !canActOnSelected}
+                        onChange={(event) =>
+                          setExitInterviewForm((prev) => ({
+                            ...prev,
+                            employee_feedback: event.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                    <label className="grid gap-1">
+                      <span className="font-medium text-muted-foreground">Manager feedback</span>
+                      <Textarea
+                        className="min-h-20 rounded-md border border-input px-2 py-1.5 text-xs"
+                        value={exitInterviewForm.manager_feedback}
+                        disabled={!canManage && !canActOnSelected}
+                        onChange={(event) =>
+                          setExitInterviewForm((prev) => ({
+                            ...prev,
+                            manager_feedback: event.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                    <label className="grid gap-1">
+                      <span className="font-medium text-muted-foreground">Handover notes</span>
+                      <Textarea
+                        className="min-h-20 rounded-md border border-input px-2 py-1.5 text-xs"
+                        value={exitInterviewForm.handover_notes}
+                        disabled={!canManage && !canActOnSelected}
+                        onChange={(event) =>
+                          setExitInterviewForm((prev) => ({
+                            ...prev,
+                            handover_notes: event.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                    <label className="grid gap-1">
+                      <span className="font-medium text-muted-foreground">Final notes</span>
+                      <Textarea
+                        className="min-h-20 rounded-md border border-input px-2 py-1.5 text-xs"
+                        value={exitInterviewForm.final_notes}
+                        disabled={!canManage && !canActOnSelected}
+                        onChange={(event) =>
+                          setExitInterviewForm((prev) => ({
+                            ...prev,
+                            final_notes: event.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                <div className="space-y-3 rounded-lg border border-border p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">Access actions</p>
+                      <p className="text-xs text-muted-foreground">
+                        Track system disablement and access revocation steps.
+                      </p>
+                    </div>
+                    {canManage ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-8 px-3 text-xs"
+                        onClick={() => {
+                          resetActionForm()
+                          setShowActionComposer((current) => !current)
+                        }}
+                        disabled={saving}
+                      >
+                        {showActionComposer ? "Hide form" : "Create action"}
+                      </Button>
+                    ) : null}
+                  </div>
+
+                  {showActionComposer ? (
+                    <div className="grid gap-2 rounded-md border border-border/70 bg-muted/20 p-3 text-xs">
+                      <div className="grid gap-2 md:grid-cols-2">
+                        <label className="grid gap-1">
+                          <span className="font-medium text-muted-foreground">Action type</span>
+                          <select
+                            className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                            value={actionForm.action_type}
+                            onChange={(event) =>
+                              setActionForm((prev) => ({ ...prev, action_type: event.target.value }))
+                            }
+                          >
+                            {OFFBOARDING_ACTION_TYPE_OPTIONS.map((type) => (
+                              <option key={type} value={type}>
+                                {toTitleCaseWords(type)}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="grid gap-1">
+                          <span className="font-medium text-muted-foreground">Status</span>
+                          <select
+                            className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                            value={actionForm.status}
+                            onChange={(event) =>
+                              setActionForm((prev) => ({ ...prev, status: event.target.value }))
+                            }
+                          >
+                            {OFFBOARDING_ACTION_STATUS_OPTIONS.map((status) => (
+                              <option key={status} value={status}>
+                                {toTitleCaseWords(status)}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+                      <label className="grid gap-1">
+                        <span className="font-medium text-muted-foreground">System name</span>
+                        <input
+                          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                          value={actionForm.system_name}
+                          onChange={(event) =>
+                            setActionForm((prev) => ({ ...prev, system_name: event.target.value }))
+                          }
+                          placeholder="e.g. Microsoft 365"
+                        />
+                      </label>
+                      <label className="grid gap-1">
+                        <span className="font-medium text-muted-foreground">Owner</span>
+                        <select
+                          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                          value={actionForm.owner_company_user_id}
+                          onChange={(event) =>
+                            setActionForm((prev) => ({
+                              ...prev,
+                              owner_company_user_id: event.target.value,
+                            }))
+                          }
+                        >
+                          <option value="">Optional owner</option>
+                          {employeeCompanyUserOptions.map((option) => (
+                            <option key={`offboarding-action-owner-${option.companyUserId}`} value={String(option.companyUserId)}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="grid gap-1">
+                        <span className="font-medium text-muted-foreground">Due date</span>
+                        <input
+                          type="datetime-local"
+                          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                          value={actionForm.due_date}
+                          onChange={(event) =>
+                            setActionForm((prev) => ({ ...prev, due_date: event.target.value }))
+                          }
+                        />
+                      </label>
+                      <label className="grid gap-1">
+                        <span className="font-medium text-muted-foreground">Notes</span>
+                        <Textarea
+                          className="min-h-16 rounded-md border border-input px-2 py-1.5 text-xs"
+                          value={actionForm.notes}
+                          onChange={(event) =>
+                            setActionForm((prev) => ({ ...prev, notes: event.target.value }))
+                          }
+                        />
+                      </label>
+                      <div className="flex justify-end gap-2">
+                        <Button type="button" variant="outline" className="h-8 px-3 text-xs" onClick={() => {
+                          resetActionForm()
+                          setShowActionComposer(false)
+                        }}>
+                          Cancel
+                        </Button>
+                        <Button type="button" className="h-8 px-3 text-xs" disabled={saving} onClick={() => void submitRequestActionItem()}>
+                          {saving ? "Creating..." : "Create action"}
+                        </Button>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {requestActions.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No access actions have been added yet.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {requestActions.map((actionRow, index) => (
+                        <div
+                          key={`offboarding-action-${readNumber(actionRow, ["id", "action_id"]) ?? index}`}
+                          className="rounded-md border border-border/70 bg-background p-3"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-sm font-medium text-foreground">
+                              {toTitleCaseWords(readString(actionRow, ["action_type", "title", "name"]))}
+                            </p>
+                            <StatusDot status={readString(actionRow, ["status"])} />
+                          </div>
+                          <div className="mt-2 grid gap-2 text-xs">
+                            <div>
+                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">System</p>
+                              <p className="mt-0.5 text-foreground">{readString(actionRow, ["system_name", "systemName"])}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Owner</p>
+                              <p className="mt-0.5 text-foreground">
+                                {resolveEmployeeOptionLabel(readNumber(actionRow, ["owner_company_user_id"]))}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid gap-3 lg:grid-cols-2">
+                <div className="space-y-3 rounded-lg border border-border p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">Asset returns</p>
+                      <p className="text-xs text-muted-foreground">
+                        Track laptops, cards, phones, keys, and other company property.
+                      </p>
+                    </div>
+                    {canManage ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-8 px-3 text-xs"
+                        onClick={() => {
+                          resetAssetForm()
+                          setShowAssetComposer((current) => !current)
+                        }}
+                        disabled={saving}
+                      >
+                        {showAssetComposer ? "Hide form" : "Add asset"}
+                      </Button>
+                    ) : null}
+                  </div>
+
+                  {showAssetComposer ? (
+                    <div className="grid gap-2 rounded-md border border-border/70 bg-muted/20 p-3 text-xs">
+                      <div className="grid gap-2 md:grid-cols-2">
+                        <label className="grid gap-1">
+                          <span className="font-medium text-muted-foreground">Asset type</span>
+                          <select
+                            className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                            value={assetForm.asset_type}
+                            onChange={(event) =>
+                              setAssetForm((prev) => ({ ...prev, asset_type: event.target.value }))
+                            }
+                          >
+                            {OFFBOARDING_ASSET_TYPE_OPTIONS.map((type) => (
+                              <option key={type} value={type}>
+                                {toTitleCaseWords(type)}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="grid gap-1">
+                          <span className="font-medium text-muted-foreground">Status</span>
+                          <select
+                            className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                            value={assetForm.status}
+                            onChange={(event) =>
+                              setAssetForm((prev) => ({ ...prev, status: event.target.value }))
+                            }
+                          >
+                            {OFFBOARDING_ASSET_STATUS_OPTIONS.map((status) => (
+                              <option key={status} value={status}>
+                                {toTitleCaseWords(status)}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+                      <label className="grid gap-1">
+                        <span className="font-medium text-muted-foreground">Asset label</span>
+                        <input
+                          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                          value={assetForm.asset_label}
+                          onChange={(event) =>
+                            setAssetForm((prev) => ({ ...prev, asset_label: event.target.value }))
+                          }
+                          placeholder="e.g. Dell Latitude 5440"
+                        />
+                      </label>
+                      <label className="grid gap-1">
+                        <span className="font-medium text-muted-foreground">Asset identifier</span>
+                        <input
+                          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                          value={assetForm.asset_identifier}
+                          onChange={(event) =>
+                            setAssetForm((prev) => ({ ...prev, asset_identifier: event.target.value }))
+                          }
+                          placeholder="Serial / tag"
+                        />
+                      </label>
+                      <label className="grid gap-1">
+                        <span className="font-medium text-muted-foreground">Owner</span>
+                        <select
+                          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                          value={assetForm.owner_company_user_id}
+                          onChange={(event) =>
+                            setAssetForm((prev) => ({
+                              ...prev,
+                              owner_company_user_id: event.target.value,
+                            }))
+                          }
+                        >
+                          <option value="">Optional owner</option>
+                          {employeeCompanyUserOptions.map((option) => (
+                            <option key={`offboarding-asset-owner-${option.companyUserId}`} value={String(option.companyUserId)}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="grid gap-1">
+                        <span className="font-medium text-muted-foreground">Due date</span>
+                        <input
+                          type="datetime-local"
+                          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                          value={assetForm.due_date}
+                          onChange={(event) =>
+                            setAssetForm((prev) => ({ ...prev, due_date: event.target.value }))
+                          }
+                        />
+                      </label>
+                      <label className="grid gap-1">
+                        <span className="font-medium text-muted-foreground">Remarks</span>
+                        <Textarea
+                          className="min-h-16 rounded-md border border-input px-2 py-1.5 text-xs"
+                          value={assetForm.remarks}
+                          onChange={(event) =>
+                            setAssetForm((prev) => ({ ...prev, remarks: event.target.value }))
+                          }
+                        />
+                      </label>
+                      <div className="flex justify-end gap-2">
+                        <Button type="button" variant="outline" className="h-8 px-3 text-xs" onClick={() => {
+                          resetAssetForm()
+                          setShowAssetComposer(false)
+                        }}>
+                          Cancel
+                        </Button>
+                        <Button type="button" className="h-8 px-3 text-xs" disabled={saving} onClick={() => void submitRequestAsset()}>
+                          {saving ? "Creating..." : "Add asset"}
+                        </Button>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {requestAssets.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No asset return items have been added yet.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {requestAssets.map((assetRow, index) => (
+                        <div
+                          key={`offboarding-asset-${readNumber(assetRow, ["id", "asset_return_id"]) ?? index}`}
+                          className="rounded-md border border-border/70 bg-background p-3"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-sm font-medium text-foreground">
+                              {readString(assetRow, ["asset_label", "title", "name"])}
+                            </p>
+                            <StatusDot status={readString(assetRow, ["status"])} />
+                          </div>
+                          <div className="mt-2 grid gap-2 text-xs">
+                            <div>
+                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Type</p>
+                              <p className="mt-0.5 text-foreground">
+                                {toTitleCaseWords(readString(assetRow, ["asset_type", "type"]))}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Identifier</p>
+                              <p className="mt-0.5 text-foreground">{readString(assetRow, ["asset_identifier", "identifier"])}</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-3 rounded-lg border border-border p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">Settlements</p>
+                      <p className="text-xs text-muted-foreground">
+                        Final salary, recoveries, gratuity, and other financial closeout items.
+                      </p>
+                    </div>
+                    {canManage ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-8 px-3 text-xs"
+                        onClick={() => {
+                          resetSettlementForm()
+                          setShowSettlementComposer((current) => !current)
+                        }}
+                        disabled={saving}
+                      >
+                        {showSettlementComposer ? "Hide form" : "Add settlement"}
+                      </Button>
+                    ) : null}
+                  </div>
+
+                  {showSettlementComposer ? (
+                    <div className="grid gap-2 rounded-md border border-border/70 bg-muted/20 p-3 text-xs">
+                      <div className="grid gap-2 md:grid-cols-2">
+                        <label className="grid gap-1">
+                          <span className="font-medium text-muted-foreground">Item type</span>
+                          <select
+                            className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                            value={settlementForm.item_type}
+                            onChange={(event) =>
+                              setSettlementForm((prev) => ({ ...prev, item_type: event.target.value }))
+                            }
+                          >
+                            {OFFBOARDING_SETTLEMENT_ITEM_TYPE_OPTIONS.map((type) => (
+                              <option key={type} value={type}>
+                                {toTitleCaseWords(type)}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="grid gap-1">
+                          <span className="font-medium text-muted-foreground">Status</span>
+                          <select
+                            className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                            value={settlementForm.status}
+                            onChange={(event) =>
+                              setSettlementForm((prev) => ({ ...prev, status: event.target.value }))
+                            }
+                          >
+                            {OFFBOARDING_SETTLEMENT_STATUS_OPTIONS.map((status) => (
+                              <option key={status} value={status}>
+                                {toTitleCaseWords(status)}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+                      <label className="grid gap-1">
+                        <span className="font-medium text-muted-foreground">Title</span>
+                        <input
+                          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                          value={settlementForm.title}
+                          onChange={(event) =>
+                            setSettlementForm((prev) => ({ ...prev, title: event.target.value }))
+                          }
+                          placeholder="e.g. Leave encashment"
+                        />
+                      </label>
+                      <div className="grid gap-2 md:grid-cols-2">
+                        <label className="grid gap-1">
+                          <span className="font-medium text-muted-foreground">Amount</span>
+                          <input
+                            className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                            value={settlementForm.amount}
+                            onChange={(event) =>
+                              setSettlementForm((prev) => ({ ...prev, amount: event.target.value }))
+                            }
+                            placeholder="Optional"
+                          />
+                        </label>
+                        <label className="grid gap-1">
+                          <span className="font-medium text-muted-foreground">Currency</span>
+                          <input
+                            className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                            value={settlementForm.currency}
+                            onChange={(event) =>
+                              setSettlementForm((prev) => ({ ...prev, currency: event.target.value }))
+                            }
+                          />
+                        </label>
+                      </div>
+                      <label className="grid gap-1">
+                        <span className="font-medium text-muted-foreground">Owner</span>
+                        <select
+                          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                          value={settlementForm.owner_company_user_id}
+                          onChange={(event) =>
+                            setSettlementForm((prev) => ({
+                              ...prev,
+                              owner_company_user_id: event.target.value,
+                            }))
+                          }
+                        >
+                          <option value="">Optional owner</option>
+                          {employeeCompanyUserOptions.map((option) => (
+                            <option key={`offboarding-settlement-owner-${option.companyUserId}`} value={String(option.companyUserId)}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="grid gap-1">
+                        <span className="font-medium text-muted-foreground">Due date</span>
+                        <input
+                          type="datetime-local"
+                          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                          value={settlementForm.due_date}
+                          onChange={(event) =>
+                            setSettlementForm((prev) => ({ ...prev, due_date: event.target.value }))
+                          }
+                        />
+                      </label>
+                      <label className="grid gap-1">
+                        <span className="font-medium text-muted-foreground">Remarks</span>
+                        <Textarea
+                          className="min-h-16 rounded-md border border-input px-2 py-1.5 text-xs"
+                          value={settlementForm.remarks}
+                          onChange={(event) =>
+                            setSettlementForm((prev) => ({ ...prev, remarks: event.target.value }))
+                          }
+                        />
+                      </label>
+                      <div className="flex justify-end gap-2">
+                        <Button type="button" variant="outline" className="h-8 px-3 text-xs" onClick={() => {
+                          resetSettlementForm()
+                          setShowSettlementComposer(false)
+                        }}>
+                          Cancel
+                        </Button>
+                        <Button type="button" className="h-8 px-3 text-xs" disabled={saving} onClick={() => void submitRequestSettlement()}>
+                          {saving ? "Creating..." : "Add settlement"}
+                        </Button>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {requestSettlements.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No settlement items have been added yet.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {requestSettlements.map((settlementRow, index) => (
+                        <div
+                          key={`offboarding-settlement-${readNumber(settlementRow, ["id", "item_id"]) ?? index}`}
+                          className="rounded-md border border-border/70 bg-background p-3"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-sm font-medium text-foreground">
+                              {readString(settlementRow, ["title", "name"])}
+                            </p>
+                            <StatusDot status={readString(settlementRow, ["status"])} />
+                          </div>
+                          <div className="mt-2 grid gap-2 text-xs">
+                            <div>
+                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Type</p>
+                              <p className="mt-0.5 text-foreground">
+                                {toTitleCaseWords(readString(settlementRow, ["item_type", "type"]))}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Amount</p>
+                              <p className="mt-0.5 text-foreground">
+                                {readString(settlementRow, ["amount"])} {readString(settlementRow, ["currency"])}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid gap-3 lg:grid-cols-2">
+                <div className="space-y-3 rounded-lg border border-border p-4">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">Generated letters</p>
+                    <p className="text-xs text-muted-foreground">
+                      Relieving and service letter records returned by the backend.
+                    </p>
+                  </div>
+                  {requestLetters.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No generated letters were returned for this request.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {requestLetters.map((letterRow, index) => (
+                        <div
+                          key={`offboarding-letter-${readNumber(letterRow, ["id", "letter_id", "document_id"]) ?? index}`}
+                          className="rounded-md border border-border/70 bg-background p-3"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-sm font-medium text-foreground">
+                              {readString(letterRow, ["title", "name", "document_name", "file_name"])}
+                            </p>
+                            <StatusDot status={readString(letterRow, ["status", "document_status"])} />
+                          </div>
+                          <div className="mt-2 grid gap-2 text-xs">
+                            <div>
+                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Type</p>
+                              <p className="mt-0.5 text-foreground">
+                                {toTitleCaseWords(readString(letterRow, ["type", "document_type", "category"]))}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Created</p>
+                              <p className="mt-0.5 text-foreground">
+                                {formatDateTimeValue(letterRow.created_at ?? letterRow.createdAt ?? letterRow.generated_at)}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-3 rounded-lg border border-border p-4">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">Access operations</p>
+                    <p className="text-xs text-muted-foreground">
+                      Technical access-termination operations tracked for this exit.
+                    </p>
+                  </div>
+                  {requestAccessOperations.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No access operations were returned for this request.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {requestAccessOperations.map((operationRow, index) => (
+                        <div
+                          key={`offboarding-access-op-${readNumber(operationRow, ["id", "operation_id"]) ?? index}`}
+                          className="rounded-md border border-border/70 bg-background p-3"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-sm font-medium text-foreground">
+                              {toTitleCaseWords(readString(operationRow, ["operation_type", "action_type", "name", "title"]))}
+                            </p>
+                            <StatusDot status={readString(operationRow, ["status"])} />
+                          </div>
+                          <div className="mt-2 grid gap-2 text-xs">
+                            <div>
+                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">System</p>
+                              <p className="mt-0.5 text-foreground">
+                                {readString(operationRow, ["system_name", "systemName", "provider"])}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Updated</p>
+                              <p className="mt-0.5 text-foreground">
+                                {formatDateTimeValue(operationRow.updated_at ?? operationRow.updatedAt ?? operationRow.created_at)}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Notes</p>
+                              <p className="mt-0.5 text-foreground">
+                                {readString(operationRow, ["notes", "remark", "remarks", "error_message"])}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -2121,6 +4327,18 @@ export function OffboardingView() {
                     onClick={() => void runRequestAction(selectedRequest, "complete")}
                   >
                     Complete
+                  </Button>
+                ) : null}
+                {canManage &&
+                !isRequestFinalized(selectedRequest) &&
+                ["completed"].includes(readString(selectedRequest, ["status"]).toLowerCase()) ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={saving}
+                    onClick={() => void runRequestAction(selectedRequest, "finalize")}
+                  >
+                    Finalize
                   </Button>
                 ) : null}
                 {(canManage || canActOnSelected) &&

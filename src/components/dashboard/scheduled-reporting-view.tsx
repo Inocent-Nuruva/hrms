@@ -2,15 +2,19 @@
 
 import * as React from "react"
 import {
+  DownloadIcon,
   Loader2Icon,
   PencilIcon,
+  PlayIcon,
   PlusIcon,
   RefreshCwIcon,
+  RotateCcwIcon,
   SendIcon,
   Trash2Icon,
 } from "lucide-react"
 import { toast } from "sonner"
 
+import { formatAdminValue } from "@/components/dashboard/admin-view-shared"
 import {
   createScheduledReportSchedule,
   createScheduledReportSmtpConfiguration,
@@ -18,13 +22,20 @@ import {
   deleteScheduledReportSchedule,
   deleteScheduledReportSmtpConfiguration,
   deleteScheduledReportTemplate,
+  downloadScheduledReportExecution,
   getScheduledReportExecution,
+  getScheduledReportSchedule,
+  getScheduledReportSmtpConfiguration,
+  getScheduledReportTemplate,
   listScheduledReportDefinitions,
   listScheduledReportExecutions,
   listScheduledReportSchedules,
   listScheduledReportSmtpConfigurations,
   listScheduledReportTemplates,
+  retryScheduledReportExecution,
+  runScheduledReportTemplate,
   testScheduledReportSmtpConfiguration,
+  testScheduledReportSmtpConfigurationDraft,
   updateScheduledReportSchedule,
   updateScheduledReportSmtpConfiguration,
   updateScheduledReportTemplate,
@@ -53,9 +64,10 @@ import {
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 
-type ReportingTab = "templates" | "schedules" | "executions" | "smtp"
+type ReportingTab = "definitions" | "templates" | "schedules" | "executions" | "smtp"
 
 const TABS: Array<{ id: ReportingTab; label: string }> = [
+  { id: "definitions", label: "Definitions" },
   { id: "templates", label: "Templates" },
   { id: "schedules", label: "Schedules" },
   { id: "executions", label: "Executions" },
@@ -77,6 +89,16 @@ const DATE_RANGE_STRATEGIES = [
 const SECURITY_TYPES = ["NONE", "STARTTLS", "SSL_TLS", "AUTO"] as const
 const MISFIRE_HANDLING = ["SKIP", "RUN_IMMEDIATELY", "DEFER_TO_NEXT_WINDOW"] as const
 const WEEKDAYS = ["SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"] as const
+const RECIPIENT_CHANNELS = ["TO", "CC", "BCC"] as const
+const RECIPIENT_TYPES = [
+  "EMAIL",
+  "COMPANY_USER",
+  "EMPLOYEE",
+  "ROLE",
+  "DEPARTMENT",
+  "DEPARTMENT_MANAGER",
+  "DYNAMIC_GROUP",
+] as const
 const EXECUTION_STATUSES = [
   "PENDING",
   "QUEUED",
@@ -89,6 +111,22 @@ const EXECUTION_STATUSES = [
   "CANCELLED",
   "SKIPPED",
 ] as const
+const EXECUTION_EMAIL_DELIVERY_STATUSES = [
+  "PENDING",
+  "SENT",
+  "PARTIALLY_SENT",
+  "FAILED",
+  "SKIPPED",
+] as const
+const EXECUTION_SOURCES = [
+  "SCHEDULER",
+  "MANUAL",
+  "API",
+  "RETRY",
+  "SYSTEM",
+] as const
+const RETRYABLE_EXECUTION_STATUSES = new Set(["FAILED", "CANCELLED", "SKIPPED"])
+const DOWNLOADABLE_EXECUTION_STATUSES = new Set(["GENERATED", "SENT", "PARTIALLY_SENT"])
 
 function readStoredToken(): string {
   if (typeof window === "undefined") return ""
@@ -136,6 +174,19 @@ function readBool(row: AdminRecord | null | undefined, keys: string[]): boolean 
     if (value === 0 || value === "0" || value === "false") return false
   }
   return false
+}
+
+function readStringArray(row: AdminRecord | null | undefined, keys: string[]): string[] {
+  if (!row) return []
+  for (const key of keys) {
+    const value = row[key]
+    if (Array.isArray(value)) {
+      return value
+        .map((entry) => (typeof entry === "string" ? entry.trim() : String(entry ?? "").trim()))
+        .filter(Boolean)
+    }
+  }
+  return []
 }
 
 function enumValue<T extends readonly string[]>(
@@ -196,6 +247,17 @@ function formatDateTime(value: unknown): string {
   }).format(date)
 }
 
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement("a")
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
 function statusTone(status: string): string {
   const s = status.toUpperCase()
   if (["SENT", "GENERATED", "ACTIVE", "TRUE"].includes(s)) {
@@ -217,6 +279,170 @@ function optionLabel(row: AdminRecord): string {
   )
 }
 
+function executionStatus(row: AdminRecord | null | undefined): string {
+  return readString(row, ["status"], "").toUpperCase()
+}
+
+function canRetryExecution(row: AdminRecord | null | undefined): boolean {
+  return RETRYABLE_EXECUTION_STATUSES.has(executionStatus(row))
+}
+
+function canDownloadExecution(row: AdminRecord | null | undefined): boolean {
+  if (DOWNLOADABLE_EXECUTION_STATUSES.has(executionStatus(row))) {
+    return true
+  }
+  return Boolean(
+    readString(row, [
+      "filename",
+      "file_name",
+      "generatedFilename",
+      "generated_filename",
+      "downloadUrl",
+      "download_url",
+    ])
+  )
+}
+
+function definitionFormatsLabel(row: AdminRecord | null | undefined): string {
+  const formats = readStringArray(row, ["supportedFormats", "supported_formats"])
+  return formats.length ? formats.join(", ") : "—"
+}
+
+function definitionFilterKeysLabel(row: AdminRecord | null | undefined): string {
+  if (!row) return "—"
+  const rawValue = row.supportedFilters ?? row.supported_filters
+  if (!rawValue || typeof rawValue !== "object" || Array.isArray(rawValue)) return "—"
+  const keys = Object.keys(rawValue as Record<string, unknown>)
+  return keys.length ? keys.map(prettify).join(", ") : "—"
+}
+
+function relatedCount(row: AdminRecord | null | undefined, key: string): string {
+  if (!row) return "0"
+  const value = row[key]
+  return Array.isArray(value) ? String(value.length) : "0"
+}
+
+type TemplateRecipientForm = {
+  channel: (typeof RECIPIENT_CHANNELS)[number]
+  recipientType: (typeof RECIPIENT_TYPES)[number]
+  emailAddress: string
+  companyUserId: string
+  employeeId: string
+  roleId: string
+  departmentId: string
+  dynamicGroupCode: string
+  displayName: string
+}
+
+function emptyTemplateRecipientForm(): TemplateRecipientForm {
+  return {
+    channel: "TO",
+    recipientType: "EMAIL",
+    emailAddress: "",
+    companyUserId: "",
+    employeeId: "",
+    roleId: "",
+    departmentId: "",
+    dynamicGroupCode: "",
+    displayName: "",
+  }
+}
+
+function asRecordArray(value: unknown): AdminRecord[] {
+  if (!Array.isArray(value)) return []
+  return value.filter(
+    (entry): entry is AdminRecord =>
+      typeof entry === "object" && entry !== null && !Array.isArray(entry),
+  )
+}
+
+function readTemplateRecipients(row: AdminRecord | null | undefined): TemplateRecipientForm[] {
+  return asRecordArray(row?.recipients).map((recipient) => ({
+    channel: enumValue(
+      readString(recipient, ["channel"], "TO"),
+      RECIPIENT_CHANNELS,
+      "TO",
+    ),
+    recipientType: enumValue(
+      readString(recipient, ["recipientType", "recipient_type"], "EMAIL"),
+      RECIPIENT_TYPES,
+      "EMAIL",
+    ),
+    emailAddress: readString(recipient, ["emailAddress", "email_address"]),
+    companyUserId: readString(recipient, ["companyUserId", "company_user_id"]),
+    employeeId: readString(recipient, ["employeeId", "employee_id"]),
+    roleId: readString(recipient, ["roleId", "role_id"]),
+    departmentId: readString(recipient, ["departmentId", "department_id"]),
+    dynamicGroupCode: readString(recipient, ["dynamicGroupCode", "dynamic_group_code"]),
+    displayName: readString(recipient, ["displayName", "display_name"]),
+  }))
+}
+
+function recipientTargetLabel(recipient: AdminRecord | TemplateRecipientForm): string {
+  const formRecipient = recipient as Partial<TemplateRecipientForm>
+  const adminRecipient = recipient as AdminRecord
+  const recipientType =
+    typeof formRecipient.recipientType === "string"
+      ? formRecipient.recipientType
+      : readString(adminRecipient, ["recipientType", "recipient_type"], "EMAIL")
+  if (recipientType === "EMAIL") {
+    return typeof formRecipient.emailAddress === "string" && formRecipient.emailAddress.trim()
+      ? formRecipient.emailAddress.trim()
+      : readString(adminRecipient, ["emailAddress", "email_address"], "—")
+  }
+  if (recipientType === "COMPANY_USER") {
+    const value =
+      typeof formRecipient.companyUserId === "string"
+        ? formRecipient.companyUserId
+        : readString(adminRecipient, ["companyUserId", "company_user_id"])
+    return value ? `Company user #${value}` : "—"
+  }
+  if (recipientType === "EMPLOYEE") {
+    const value =
+      typeof formRecipient.employeeId === "string"
+        ? formRecipient.employeeId
+        : readString(adminRecipient, ["employeeId", "employee_id"])
+    return value ? `Employee #${value}` : "—"
+  }
+  if (recipientType === "ROLE") {
+    const value =
+      typeof formRecipient.roleId === "string"
+        ? formRecipient.roleId
+        : readString(adminRecipient, ["roleId", "role_id"])
+    return value ? `Role #${value}` : "—"
+  }
+  if (recipientType === "DYNAMIC_GROUP") {
+    return typeof formRecipient.dynamicGroupCode === "string" &&
+      formRecipient.dynamicGroupCode.trim()
+      ? formRecipient.dynamicGroupCode.trim()
+      : readString(adminRecipient, ["dynamicGroupCode", "dynamic_group_code"], "—")
+  }
+  const value =
+    typeof formRecipient.departmentId === "string"
+      ? formRecipient.departmentId
+      : readString(adminRecipient, ["departmentId", "department_id"])
+  return value ? `Department #${value}` : "—"
+}
+
+function recipientRowHasValue(recipient: TemplateRecipientForm): boolean {
+  return Boolean(
+    recipient.emailAddress.trim() ||
+      recipient.companyUserId.trim() ||
+      recipient.employeeId.trim() ||
+      recipient.roleId.trim() ||
+      recipient.departmentId.trim() ||
+      recipient.dynamicGroupCode.trim() ||
+      recipient.displayName.trim(),
+  )
+}
+
+function objectEntries(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return []
+  return Object.entries(value as Record<string, unknown>).filter(
+    ([, entry]) => entry !== null && entry !== undefined && formatAdminValue(entry) !== "-",
+  )
+}
+
 const emptyTemplateForm = () => ({
   reportDefinitionId: "",
   smtpConfigurationId: "",
@@ -229,7 +455,13 @@ const emptyTemplateForm = () => ({
   dateRangeStrategy: "CURRENT_DAY",
   attachReport: "true",
   isActive: "true",
-  recipientEmail: "",
+  recipients: [] as TemplateRecipientForm[],
+})
+
+const emptyTemplateRunForm = () => ({
+  dateFrom: "",
+  dateTo: "",
+  outputFormat: "PDF",
 })
 
 const emptyScheduleForm = () => ({
@@ -292,11 +524,22 @@ export function ScheduledReportingView() {
   const [rows, setRows] = React.useState<AdminRecord[]>([])
   const [definitions, setDefinitions] = React.useState<AdminRecord[]>([])
   const [templates, setTemplates] = React.useState<AdminRecord[]>([])
+  const [schedules, setSchedules] = React.useState<AdminRecord[]>([])
   const [smtpConfigs, setSmtpConfigs] = React.useState<AdminRecord[]>([])
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [search, setSearch] = React.useState("")
   const [statusFilter, setStatusFilter] = React.useState("")
+  const [templateDefinitionFilter, setTemplateDefinitionFilter] = React.useState("")
+  const [templateSmtpFilter, setTemplateSmtpFilter] = React.useState("")
+  const [isActiveFilter, setIsActiveFilter] = React.useState("")
+  const [scheduleTemplateFilter, setScheduleTemplateFilter] = React.useState("")
+  const [scheduleTypeFilter, setScheduleTypeFilter] = React.useState("")
+  const [smtpDefaultFilter, setSmtpDefaultFilter] = React.useState("")
+  const [executionTemplateFilter, setExecutionTemplateFilter] = React.useState("")
+  const [executionScheduleFilter, setExecutionScheduleFilter] = React.useState("")
+  const [executionEmailFilter, setExecutionEmailFilter] = React.useState("")
+  const [executionSourceFilter, setExecutionSourceFilter] = React.useState("")
 
   const [createOpen, setCreateOpen] = React.useState(false)
   const [editOpen, setEditOpen] = React.useState(false)
@@ -307,33 +550,58 @@ export function ScheduledReportingView() {
   const [saving, setSaving] = React.useState(false)
 
   const [templateForm, setTemplateForm] = React.useState(emptyTemplateForm)
+  const [runTemplateForm, setRunTemplateForm] = React.useState(emptyTemplateRunForm)
   const [scheduleForm, setScheduleForm] = React.useState(emptyScheduleForm)
   const [smtpForm, setSmtpForm] = React.useState(emptySmtpForm)
 
+  const [runTemplateOpen, setRunTemplateOpen] = React.useState(false)
+  const [runTemplateId, setRunTemplateId] = React.useState("")
+  const [definitionSheetOpen, setDefinitionSheetOpen] = React.useState(false)
+  const [definitionDetail, setDefinitionDetail] = React.useState<AdminRecord | null>(null)
+  const [detailSheetOpen, setDetailSheetOpen] = React.useState(false)
+  const [detailLoading, setDetailLoading] = React.useState(false)
+  const [detailRecord, setDetailRecord] = React.useState<AdminRecord | null>(null)
   const [executionSheetOpen, setExecutionSheetOpen] = React.useState(false)
   const [executionDetail, setExecutionDetail] = React.useState<AdminRecord | null>(null)
   const [executionLoading, setExecutionLoading] = React.useState(false)
+  const [runningTemplateId, setRunningTemplateId] = React.useState("")
+  const [retryingExecutionId, setRetryingExecutionId] = React.useState("")
+  const [downloadingExecutionId, setDownloadingExecutionId] = React.useState("")
   const [smtpTestOpen, setSmtpTestOpen] = React.useState(false)
   const [smtpTestId, setSmtpTestId] = React.useState("")
   const [smtpTestRecipient, setSmtpTestRecipient] = React.useState("")
   const [testingSmtpId, setTestingSmtpId] = React.useState("")
+  const [smtpDraftTestRecipient, setSmtpDraftTestRecipient] = React.useState("")
+  const [testingDraftSmtp, setTestingDraftSmtp] = React.useState(false)
   const loadRequestIdRef = React.useRef(0)
 
   const loadLookups = React.useCallback(async (token: string) => {
-    const [defsResult, tmplResult, smtpResult] = await Promise.allSettled([
+    const [defsResult, tmplResult, scheduleResult, smtpResult] = await Promise.allSettled([
       listScheduledReportDefinitions(token),
       listScheduledReportTemplates(token, { page: 1, limit: 100 }),
+      listScheduledReportSchedules(token, { page: 1, limit: 100 }),
       listScheduledReportSmtpConfigurations(token, { page: 1, limit: 100 }),
     ])
-    setDefinitions(
+    const nextDefinitions =
       defsResult.status === "fulfilled"
         ? Array.isArray(defsResult.value)
           ? defsResult.value
           : []
         : []
-    )
-    setTemplates(tmplResult.status === "fulfilled" ? (tmplResult.value.rows ?? []) : [])
-    setSmtpConfigs(smtpResult.status === "fulfilled" ? (smtpResult.value.rows ?? []) : [])
+    const nextTemplates = tmplResult.status === "fulfilled" ? (tmplResult.value.rows ?? []) : []
+    const nextSchedules =
+      scheduleResult.status === "fulfilled" ? (scheduleResult.value.rows ?? []) : []
+    const nextSmtpConfigs = smtpResult.status === "fulfilled" ? (smtpResult.value.rows ?? []) : []
+    setDefinitions(nextDefinitions)
+    setTemplates(nextTemplates)
+    setSchedules(nextSchedules)
+    setSmtpConfigs(nextSmtpConfigs)
+    return {
+      definitions: nextDefinitions,
+      templates: nextTemplates,
+      schedules: nextSchedules,
+      smtpConfigs: nextSmtpConfigs,
+    }
   }, [])
 
   const loadRows = React.useCallback(async () => {
@@ -350,7 +618,7 @@ export function ScheduledReportingView() {
     setError(null)
     setRows([])
     try {
-      await loadLookups(token)
+      const lookups = await loadLookups(token)
       const params = {
         page: 1,
         limit: 100,
@@ -358,9 +626,56 @@ export function ScheduledReportingView() {
         sortOrder: "DESC" as const,
         search: search.trim() || undefined,
         status: tab === "executions" && statusFilter ? statusFilter : undefined,
+        reportDefinitionId:
+          tab === "templates" && templateDefinitionFilter
+            ? Number(templateDefinitionFilter)
+            : undefined,
+        smtpConfigurationId:
+          tab === "templates" && templateSmtpFilter ? Number(templateSmtpFilter) : undefined,
+        templateId:
+          tab === "schedules" && scheduleTemplateFilter
+            ? Number(scheduleTemplateFilter)
+            : tab === "executions" && executionTemplateFilter
+              ? Number(executionTemplateFilter)
+              : undefined,
+        scheduleId:
+          tab === "executions" && executionScheduleFilter
+            ? Number(executionScheduleFilter)
+            : undefined,
+        scheduleType: tab === "schedules" && scheduleTypeFilter ? scheduleTypeFilter : undefined,
+        isActive:
+          (tab === "templates" || tab === "schedules" || tab === "smtp") && isActiveFilter
+            ? isActiveFilter === "true"
+            : undefined,
+        isDefault:
+          tab === "smtp" && smtpDefaultFilter ? smtpDefaultFilter === "true" : undefined,
+        emailDeliveryStatus:
+          tab === "executions" && executionEmailFilter ? executionEmailFilter : undefined,
+        source:
+          tab === "executions" && executionSourceFilter ? executionSourceFilter : undefined,
       }
 
-      if (tab === "templates") {
+      if (tab === "definitions") {
+        const query = search.trim().toLowerCase()
+        const filtered = !query
+          ? lookups.definitions
+          : lookups.definitions.filter((row) => {
+              const haystack = [
+                readString(row, ["name"]),
+                readString(row, ["reportCode", "report_code"]),
+                readString(row, ["description"]),
+                readString(row, ["generatorService", "generator_service"]),
+                definitionFormatsLabel(row),
+                definitionFilterKeysLabel(row),
+              ]
+                .join(" ")
+                .toLowerCase()
+              return haystack.includes(query)
+            })
+        if (loadRequestIdRef.current === requestId) {
+          setRows(filtered)
+        }
+      } else if (tab === "templates") {
         const result = await listScheduledReportTemplates(token, params)
         if (loadRequestIdRef.current === requestId) {
           setRows(result.rows)
@@ -391,7 +706,22 @@ export function ScheduledReportingView() {
         setLoading(false)
       }
     }
-  }, [loadLookups, search, statusFilter, tab])
+  }, [
+    executionEmailFilter,
+    executionScheduleFilter,
+    executionSourceFilter,
+    executionTemplateFilter,
+    isActiveFilter,
+    loadLookups,
+    scheduleTemplateFilter,
+    scheduleTypeFilter,
+    search,
+    smtpDefaultFilter,
+    statusFilter,
+    tab,
+    templateDefinitionFilter,
+    templateSmtpFilter,
+  ])
 
   React.useEffect(() => {
     void loadRows()
@@ -406,13 +736,34 @@ export function ScheduledReportingView() {
     setFormError(null)
     setSearch("")
     setStatusFilter("")
+    setTemplateDefinitionFilter("")
+    setTemplateSmtpFilter("")
+    setIsActiveFilter("")
+    setScheduleTemplateFilter("")
+    setScheduleTypeFilter("")
+    setSmtpDefaultFilter("")
+    setExecutionTemplateFilter("")
+    setExecutionScheduleFilter("")
+    setExecutionEmailFilter("")
+    setExecutionSourceFilter("")
     setTemplateForm(emptyTemplateForm())
+    setRunTemplateForm(emptyTemplateRunForm())
     setScheduleForm(emptyScheduleForm())
     setSmtpForm(emptySmtpForm())
+    setSmtpDraftTestRecipient("")
+    setTestingDraftSmtp(false)
+    setRunTemplateOpen(false)
+    setRunTemplateId("")
+    setDefinitionSheetOpen(false)
+    setDefinitionDetail(null)
+    setDetailSheetOpen(false)
+    setDetailLoading(false)
+    setDetailRecord(null)
   }, [tab])
 
   const openCreate = () => {
     setFormError(null)
+    setSmtpDraftTestRecipient("")
     const nextTemplate = emptyTemplateForm()
     // Prefill SMTP when only one config exists or a default is marked.
     nextTemplate.smtpConfigurationId = pickDefaultSmtpId(smtpConfigs)
@@ -457,6 +808,8 @@ export function ScheduledReportingView() {
   const fillEditFromRow = React.useCallback((row: AdminRecord) => {
     setEditingId(getRowId(row))
     setFormError(null)
+    setSmtpDraftTestRecipient("")
+    setTestingDraftSmtp(false)
     if (tab === "templates") {
       setTemplateForm({
         reportDefinitionId: String(readNumber(row, ["reportDefinitionId", "report_definition_id"]) ?? ""),
@@ -470,7 +823,7 @@ export function ScheduledReportingView() {
         dateRangeStrategy: enumValue(readString(row, ["dateRangeStrategy", "date_range_strategy"], "CURRENT_DAY"), DATE_RANGE_STRATEGIES, "CURRENT_DAY"),
         attachReport: readBool(row, ["attachReport", "attach_report"]) ? "true" : "false",
         isActive: readBool(row, ["isActive", "is_active"]) ? "true" : "false",
-        recipientEmail: "",
+        recipients: readTemplateRecipients(row),
       })
     } else if (tab === "schedules") {
       const weekdays = row.weekdays
@@ -513,6 +866,35 @@ export function ScheduledReportingView() {
   }, [tab])
 
   const buildTemplatePayload = (form: ReturnType<typeof emptyTemplateForm>) => {
+    const recipients = form.recipients
+      .filter((recipient) => recipientRowHasValue(recipient))
+      .map((recipient) => {
+        const payload: AdminRecord = {
+          channel: recipient.channel,
+          recipientType: recipient.recipientType,
+          displayName: recipient.displayName.trim() || undefined,
+        }
+
+        if (recipient.recipientType === "EMAIL") {
+          payload.emailAddress = recipient.emailAddress.trim()
+          if (!payload.displayName && payload.emailAddress) {
+            payload.displayName = payload.emailAddress
+          }
+        } else if (recipient.recipientType === "COMPANY_USER") {
+          payload.companyUserId = Number(recipient.companyUserId)
+        } else if (recipient.recipientType === "EMPLOYEE") {
+          payload.employeeId = Number(recipient.employeeId)
+        } else if (recipient.recipientType === "ROLE") {
+          payload.roleId = Number(recipient.roleId)
+        } else if (recipient.recipientType === "DYNAMIC_GROUP") {
+          payload.dynamicGroupCode = recipient.dynamicGroupCode.trim()
+        } else {
+          payload.departmentId = Number(recipient.departmentId)
+        }
+
+        return payload
+      })
+
     const payload: AdminRecord = {
       reportDefinitionId: Number(form.reportDefinitionId),
       smtpConfigurationId: Number(form.smtpConfigurationId),
@@ -525,19 +907,48 @@ export function ScheduledReportingView() {
       dateRangeStrategy: enumValue(form.dateRangeStrategy, DATE_RANGE_STRATEGIES, "CURRENT_DAY"),
       attachReport: form.attachReport === "true",
       isActive: form.isActive === "true",
-    }
-    if (form.recipientEmail.trim()) {
-      payload.recipients = [
-        {
-          channel: "TO",
-          recipientType: "EMAIL",
-          emailAddress: form.recipientEmail.trim(),
-          displayName: form.recipientEmail.trim(),
-        },
-      ]
+      recipients,
     }
     return payload
   }
+
+  const validateTemplateRecipients = React.useCallback(
+    (form: ReturnType<typeof emptyTemplateForm>) => {
+      const activeRecipients = form.recipients.filter((recipient) =>
+        recipientRowHasValue(recipient),
+      )
+
+      for (const recipient of activeRecipients) {
+        if (recipient.recipientType === "EMAIL" && !recipient.emailAddress.trim()) {
+          return "Each email recipient needs an email address."
+        }
+        if (recipient.recipientType === "COMPANY_USER" && !recipient.companyUserId.trim()) {
+          return "Each company-user recipient needs a company user ID."
+        }
+        if (recipient.recipientType === "EMPLOYEE" && !recipient.employeeId.trim()) {
+          return "Each employee recipient needs an employee ID."
+        }
+        if (recipient.recipientType === "ROLE" && !recipient.roleId.trim()) {
+          return "Each role recipient needs a role ID."
+        }
+        if (
+          ["DEPARTMENT", "DEPARTMENT_MANAGER"].includes(recipient.recipientType) &&
+          !recipient.departmentId.trim()
+        ) {
+          return "Each department recipient needs a department ID."
+        }
+        if (
+          recipient.recipientType === "DYNAMIC_GROUP" &&
+          !recipient.dynamicGroupCode.trim()
+        ) {
+          return "Each dynamic-group recipient needs a group code."
+        }
+      }
+
+      return null
+    },
+    [],
+  )
 
   const buildSchedulePayload = (form: ReturnType<typeof emptyScheduleForm>) => {
     const weekdays = form.weekdays
@@ -605,6 +1016,8 @@ export function ScheduledReportingView() {
         if (missing.length) {
           throw new Error(`${missing.join(", ")} ${missing.length === 1 ? "is" : "are"} required.`)
         }
+        const recipientError = validateTemplateRecipients(templateForm)
+        if (recipientError) throw new Error(recipientError)
         await createScheduledReportTemplate(token, buildTemplatePayload(templateForm))
       } else if (tab === "schedules") {
         if (!scheduleForm.name.trim() || !scheduleForm.templateId) {
@@ -637,6 +1050,8 @@ export function ScheduledReportingView() {
     setFormError(null)
     try {
       if (tab === "templates") {
+        const recipientError = validateTemplateRecipients(templateForm)
+        if (recipientError) throw new Error(recipientError)
         await updateScheduledReportTemplate(token, editingId, buildTemplatePayload(templateForm))
       } else if (tab === "schedules") {
         await updateScheduledReportSchedule(token, editingId, buildSchedulePayload(scheduleForm))
@@ -694,6 +1109,168 @@ export function ScheduledReportingView() {
     }
   }, [])
 
+  const openDefinition = React.useCallback((row: AdminRecord) => {
+    setDefinitionDetail(row)
+    setDefinitionSheetOpen(true)
+  }, [])
+
+  const openEditRecord = React.useCallback(
+    async (row: AdminRecord) => {
+      const token = readStoredToken()
+      const id = getRowId(row)
+      if (!token || !id) {
+        fillEditFromRow(row)
+        return
+      }
+
+      try {
+        if (tab === "templates") {
+          const detail = await getScheduledReportTemplate(token, id)
+          fillEditFromRow((detail as AdminRecord | null) ?? row)
+          return
+        }
+        if (tab === "schedules") {
+          const detail = await getScheduledReportSchedule(token, id)
+          fillEditFromRow((detail as AdminRecord | null) ?? row)
+          return
+        }
+        if (tab === "smtp") {
+          const detail = await getScheduledReportSmtpConfiguration(token, id)
+          fillEditFromRow((detail as AdminRecord | null) ?? row)
+          return
+        }
+      } catch (errorObject) {
+        toast.error(errorObject instanceof Error ? errorObject.message : "Failed to load edit details.")
+      }
+
+      fillEditFromRow(row)
+    },
+    [fillEditFromRow, tab],
+  )
+
+  const openConfigDetail = React.useCallback(
+    async (row: AdminRecord) => {
+      const token = readStoredToken()
+      const id = getRowId(row)
+      if (!id) return
+
+      setDetailSheetOpen(true)
+      setDetailRecord(row)
+      if (!token) return
+
+      setDetailLoading(true)
+      try {
+        if (tab === "templates") {
+          const detail = await getScheduledReportTemplate(token, id)
+          setDetailRecord(detail ?? row)
+        } else if (tab === "schedules") {
+          const detail = await getScheduledReportSchedule(token, id)
+          setDetailRecord(detail ?? row)
+        } else if (tab === "smtp") {
+          const detail = await getScheduledReportSmtpConfiguration(token, id)
+          setDetailRecord(detail ?? row)
+        }
+      } catch (errorObject) {
+        toast.error(errorObject instanceof Error ? errorObject.message : "Failed to load details.")
+      } finally {
+        setDetailLoading(false)
+      }
+    },
+    [tab],
+  )
+
+  const openRunTemplate = React.useCallback((row: AdminRecord) => {
+    const id = getRowId(row)
+    if (!id) return
+    setRunTemplateId(id)
+    setRunTemplateForm({
+      dateFrom: "",
+      dateTo: "",
+      outputFormat: enumValue(
+        readString(row, ["outputFormat", "output_format"], "PDF"),
+        OUTPUT_FORMATS,
+        "PDF"
+      ),
+    })
+    setRunTemplateOpen(true)
+  }, [])
+
+  const onRunTemplate = React.useCallback(async () => {
+    const token = readStoredToken()
+    if (!token || !runTemplateId) {
+      setFormError("Authentication required.")
+      return
+    }
+    if (runTemplateForm.dateFrom && runTemplateForm.dateTo && runTemplateForm.dateFrom > runTemplateForm.dateTo) {
+      setFormError("End date cannot be earlier than the start date.")
+      return
+    }
+
+    setFormError(null)
+    setRunningTemplateId(runTemplateId)
+    try {
+      const execution = await runScheduledReportTemplate(token, runTemplateId, {
+        date_from: runTemplateForm.dateFrom || undefined,
+        date_to: runTemplateForm.dateTo || undefined,
+        output_format: enumValue(runTemplateForm.outputFormat, OUTPUT_FORMATS, "PDF"),
+      })
+      toast.success("Template run started. Check the execution history for progress.")
+      setRunTemplateOpen(false)
+      setTab("executions")
+      if (execution) {
+        setExecutionDetail(execution)
+        setExecutionSheetOpen(true)
+      }
+    } catch (errorObject) {
+      setFormError(errorObject instanceof Error ? errorObject.message : "Could not run template.")
+    } finally {
+      setRunningTemplateId("")
+    }
+  }, [runTemplateForm, runTemplateId])
+
+  const onRetryExecution = React.useCallback(async (row: AdminRecord) => {
+    const token = readStoredToken()
+    const id = getRowId(row)
+    if (!token || !id) return
+
+    setRetryingExecutionId(id)
+    try {
+      const execution = await retryScheduledReportExecution(token, id)
+      toast.success("Execution retry queued.")
+      await loadRows()
+      if (executionDetail && getRowId(executionDetail) === id) {
+        setExecutionLoading(true)
+        try {
+          const detail = await getScheduledReportExecution(token, id)
+          setExecutionDetail(detail ?? execution ?? row)
+        } finally {
+          setExecutionLoading(false)
+        }
+      }
+    } catch (errorObject) {
+      toast.error(errorObject instanceof Error ? errorObject.message : "Could not retry execution.")
+    } finally {
+      setRetryingExecutionId("")
+    }
+  }, [executionDetail, loadRows])
+
+  const onDownloadExecution = React.useCallback(async (row: AdminRecord) => {
+    const token = readStoredToken()
+    const id = getRowId(row)
+    if (!token || !id) return
+
+    setDownloadingExecutionId(id)
+    try {
+      const result = await downloadScheduledReportExecution(token, id)
+      downloadBlob(result.blob, result.filename)
+      toast.success("Report download started.")
+    } catch (errorObject) {
+      toast.error(errorObject instanceof Error ? errorObject.message : "Could not download the report.")
+    } finally {
+      setDownloadingExecutionId("")
+    }
+  }, [])
+
   const openSmtpTest = React.useCallback((row: AdminRecord) => {
     const id = getRowId(row)
     if (!id) return
@@ -725,6 +1302,39 @@ export function ScheduledReportingView() {
     }
   }, [smtpTestId, smtpTestRecipient])
 
+  const onTestDraftSmtp = React.useCallback(async () => {
+    const token = readStoredToken()
+    if (!token) {
+      setFormError("Authentication required.")
+      return
+    }
+    if (!smtpDraftTestRecipient.trim()) {
+      setFormError("Enter a draft test recipient email address.")
+      return
+    }
+    if (!smtpForm.name.trim() || !smtpForm.host.trim() || !smtpForm.senderEmail.trim()) {
+      setFormError("Name, host, and sender email are required before a draft SMTP test.")
+      return
+    }
+
+    setFormError(null)
+    setTestingDraftSmtp(true)
+    try {
+      await testScheduledReportSmtpConfigurationDraft(token, {
+        ...buildSmtpPayload(smtpForm, editOpen),
+        testRecipientEmail: smtpDraftTestRecipient.trim(),
+        sendTestEmail: true,
+      })
+      toast.success("Draft SMTP test sent.")
+    } catch (errorObject) {
+      setFormError(
+        errorObject instanceof Error ? errorObject.message : "Draft SMTP test failed.",
+      )
+    } finally {
+      setTestingDraftSmtp(false)
+    }
+  }, [editOpen, smtpDraftTestRecipient, smtpForm])
+
   const templateNameById = React.useMemo(() => {
     const map = new Map<number, string>()
     templates.forEach((row) => {
@@ -733,6 +1343,15 @@ export function ScheduledReportingView() {
     })
     return map
   }, [templates])
+
+  const scheduleNameById = React.useMemo(() => {
+    const map = new Map<number, string>()
+    schedules.forEach((row) => {
+      const id = readNumber(row, ["id"])
+      if (id !== null) map.set(id, optionLabel(row))
+    })
+    return map
+  }, [schedules])
 
   const definitionNameById = React.useMemo(() => {
     const map = new Map<number, string>()
@@ -743,7 +1362,86 @@ export function ScheduledReportingView() {
     return map
   }, [definitions])
 
+  const smtpNameById = React.useMemo(() => {
+    const map = new Map<number, string>()
+    smtpConfigs.forEach((row) => {
+      const id = smtpConfigId(row)
+      if (id !== null) map.set(id, optionLabel(row))
+    })
+    return map
+  }, [smtpConfigs])
+
   const columns = React.useMemo<Array<Column<AdminRecord>>>(() => {
+    if (tab === "definitions") {
+      return [
+        {
+          key: "name",
+          label: "Definition",
+          defaultWidth: 220,
+          render: (row) => (
+            <div className="min-w-0">
+              <p className="truncate text-xs font-medium text-foreground">
+                {readString(row, ["name"], "—")}
+              </p>
+              <p className="truncate text-[11px] text-muted-foreground">
+                {readString(row, ["reportCode", "report_code"], "—")}
+              </p>
+            </div>
+          ),
+        },
+        {
+          key: "supportedFormats",
+          label: "Formats",
+          defaultWidth: 120,
+          render: (row) => (
+            <span className="text-xs text-muted-foreground">
+              {definitionFormatsLabel(row)}
+            </span>
+          ),
+        },
+        {
+          key: "generatorService",
+          label: "Generator",
+          defaultWidth: 140,
+          render: (row) => (
+            <span className="text-xs text-muted-foreground">
+              {readString(row, ["generatorService", "generator_service"], "—")}
+            </span>
+          ),
+        },
+        {
+          key: "isActive",
+          label: "Status",
+          defaultWidth: 80,
+          render: (row) => {
+            const active = readBool(row, ["isActive", "is_active"])
+            return (
+              <Badge variant="outline" className={cn("text-[10px]", statusTone(active ? "ACTIVE" : "INACTIVE"))}>
+                {active ? "Active" : "Inactive"}
+              </Badge>
+            )
+          },
+        },
+        {
+          key: "actions",
+          label: "Actions",
+          defaultWidth: 72,
+          sortable: false,
+          render: (row) => (
+            <div className="flex justify-end" onClick={(event) => event.stopPropagation()}>
+              <button
+                type="button"
+                className="rounded-md px-2 py-1 text-[11px] font-medium text-primary hover:bg-primary/10"
+                onClick={() => openDefinition(row)}
+              >
+                View
+              </button>
+            </div>
+          ),
+        },
+      ]
+    }
+
     if (tab === "templates") {
       return [
         {
@@ -789,11 +1487,32 @@ export function ScheduledReportingView() {
         {
           key: "actions",
           label: "Actions",
-          defaultWidth: 70,
+          defaultWidth: 146,
           sortable: false,
           render: (row) => (
             <div className="flex justify-end gap-1" onClick={(event) => event.stopPropagation()}>
-              <button className="admin-table-icon-button" type="button" aria-label="Edit" onClick={() => fillEditFromRow(row)}>
+              <button
+                type="button"
+                className="rounded-md px-2 py-1 text-[11px] font-medium text-primary hover:bg-primary/10"
+                onClick={() => void openConfigDetail(row)}
+              >
+                View
+              </button>
+              <button
+                className="admin-table-icon-button"
+                type="button"
+                aria-label="Run now"
+                title="Run now"
+                onClick={() => openRunTemplate(row)}
+                disabled={runningTemplateId === getRowId(row)}
+              >
+                {runningTemplateId === getRowId(row) ? (
+                  <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <PlayIcon className="h-3.5 w-3.5" />
+                )}
+              </button>
+              <button className="admin-table-icon-button" type="button" aria-label="Edit" onClick={() => void openEditRecord(row)}>
                 <PencilIcon className="h-3.5 w-3.5" />
               </button>
               <button
@@ -869,11 +1588,18 @@ export function ScheduledReportingView() {
         {
           key: "actions",
           label: "Actions",
-          defaultWidth: 70,
+          defaultWidth: 108,
           sortable: false,
           render: (row) => (
             <div className="flex justify-end gap-1" onClick={(event) => event.stopPropagation()}>
-              <button className="admin-table-icon-button" type="button" aria-label="Edit" onClick={() => fillEditFromRow(row)}>
+              <button
+                type="button"
+                className="rounded-md px-2 py-1 text-[11px] font-medium text-primary hover:bg-primary/10"
+                onClick={() => void openConfigDetail(row)}
+              >
+                View
+              </button>
+              <button className="admin-table-icon-button" type="button" aria-label="Edit" onClick={() => void openEditRecord(row)}>
                 <PencilIcon className="h-3.5 w-3.5" />
               </button>
               <button
@@ -947,10 +1673,14 @@ export function ScheduledReportingView() {
         {
           key: "actions",
           label: "",
-          defaultWidth: 70,
+          defaultWidth: 142,
           sortable: false,
-          render: (row) => (
-            <div className="flex justify-end" onClick={(event) => event.stopPropagation()}>
+          render: (row) => {
+            const rowId = getRowId(row)
+            const downloading = downloadingExecutionId === rowId
+            const retrying = retryingExecutionId === rowId
+            return (
+            <div className="flex justify-end gap-1" onClick={(event) => event.stopPropagation()}>
               <button
                 type="button"
                 className="rounded-md px-2 py-1 text-[11px] font-medium text-primary hover:bg-primary/10"
@@ -958,8 +1688,37 @@ export function ScheduledReportingView() {
               >
                 View
               </button>
+              <button
+                type="button"
+                className="admin-table-icon-button"
+                aria-label="Download"
+                title="Download"
+                disabled={!canDownloadExecution(row) || downloading}
+                onClick={() => void onDownloadExecution(row)}
+              >
+                {downloading ? (
+                  <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <DownloadIcon className="h-3.5 w-3.5" />
+                )}
+              </button>
+              <button
+                type="button"
+                className="admin-table-icon-button"
+                aria-label="Retry"
+                title="Retry"
+                disabled={!canRetryExecution(row) || retrying}
+                onClick={() => void onRetryExecution(row)}
+              >
+                {retrying ? (
+                  <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RotateCcwIcon className="h-3.5 w-3.5" />
+                )}
+              </button>
             </div>
-          ),
+            )
+          },
         },
       ]
     }
@@ -1007,10 +1766,17 @@ export function ScheduledReportingView() {
       {
         key: "actions",
         label: "Actions",
-        defaultWidth: 95,
+        defaultWidth: 132,
         sortable: false,
         render: (row) => (
           <div className="flex justify-end gap-1" onClick={(event) => event.stopPropagation()}>
+            <button
+              type="button"
+              className="rounded-md px-2 py-1 text-[11px] font-medium text-primary hover:bg-primary/10"
+              onClick={() => void openConfigDetail(row)}
+            >
+              View
+            </button>
             <button
               className="admin-table-icon-button"
               type="button"
@@ -1025,7 +1791,7 @@ export function ScheduledReportingView() {
                 <SendIcon className="h-3.5 w-3.5" />
               )}
             </button>
-            <button className="admin-table-icon-button" type="button" aria-label="Edit" onClick={() => fillEditFromRow(row)}>
+            <button className="admin-table-icon-button" type="button" aria-label="Edit" onClick={() => void openEditRecord(row)}>
               <PencilIcon className="h-3.5 w-3.5" />
             </button>
             <button
@@ -1046,24 +1812,34 @@ export function ScheduledReportingView() {
     ]
   }, [
     definitionNameById,
-    fillEditFromRow,
-    openSmtpTest,
+    downloadingExecutionId,
+    openConfigDetail,
+    openDefinition,
+    openEditRecord,
     openExecution,
+    openRunTemplate,
+    openSmtpTest,
+    onDownloadExecution,
+    onRetryExecution,
+    retryingExecutionId,
+    runningTemplateId,
     tab,
     templateNameById,
     testingSmtpId,
   ])
 
   const sectionTitle =
-    tab === "templates"
-      ? "Templates"
-      : tab === "schedules"
-        ? "Schedules"
-        : tab === "executions"
-          ? "Executions"
-          : "SMTP configurations"
+    tab === "definitions"
+      ? "Report Definitions"
+      : tab === "templates"
+        ? "Templates"
+        : tab === "schedules"
+          ? "Schedules"
+          : tab === "executions"
+            ? "Executions"
+            : "SMTP configurations"
 
-  const canCreate = tab !== "executions"
+  const canCreate = tab !== "definitions" && tab !== "executions"
 
   const renderTemplateFields = (form: ReturnType<typeof emptyTemplateForm>, setForm: typeof setTemplateForm) => (
     <div className="grid gap-3 md:grid-cols-2">
@@ -1170,15 +1946,6 @@ export function ScheduledReportingView() {
           onChange={(e) => setForm((c) => ({ ...c, emailSubjectTemplate: e.target.value }))}
         />
       </Field>
-      <Field label="Recipient email (optional)">
-        <input
-          className={inputClass}
-          type="email"
-          value={form.recipientEmail}
-          onChange={(e) => setForm((c) => ({ ...c, recipientEmail: e.target.value }))}
-          placeholder="hr@company.com"
-        />
-      </Field>
       <Field label="Description" className="md:col-span-2">
         <textarea
           className={textareaClass}
@@ -1205,6 +1972,249 @@ export function ScheduledReportingView() {
           <option value="false">Inactive</option>
         </select>
       </Field>
+      <div className="grid gap-3 md:col-span-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-xs font-medium text-muted-foreground">Recipients</p>
+            <p className="text-[11px] text-muted-foreground">
+              Add one or more recipients using the backend-supported delivery targets.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="inline-flex h-8 items-center gap-1 rounded-lg border border-border px-2.5 text-xs font-medium"
+            onClick={() =>
+              setForm((current) => ({
+                ...current,
+                recipients: [...current.recipients, emptyTemplateRecipientForm()],
+              }))
+            }
+          >
+            <PlusIcon className="size-3.5" />
+            Add recipient
+          </button>
+        </div>
+        {form.recipients.length === 0 ? (
+          <div className="rounded-md border border-dashed border-border px-3 py-3 text-xs text-muted-foreground">
+            No explicit recipients yet. Add one if this template should deliver to email, employee, role, department, or group targets.
+          </div>
+        ) : null}
+        {form.recipients.map((recipient, index) => (
+          <div key={`recipient-${index}`} className="grid gap-3 rounded-md border border-border bg-muted/10 p-3 md:grid-cols-2">
+            <Field label="Channel">
+              <select
+                className={selectClass}
+                value={recipient.channel}
+                onChange={(e) =>
+                  setForm((current) => ({
+                    ...current,
+                    recipients: current.recipients.map((entry, entryIndex) =>
+                      entryIndex === index
+                        ? {
+                            ...entry,
+                            channel: enumValue(
+                              e.target.value,
+                              RECIPIENT_CHANNELS,
+                              "TO",
+                            ),
+                          }
+                        : entry,
+                    ),
+                  }))
+                }
+              >
+                {RECIPIENT_CHANNELS.map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Recipient type">
+              <select
+                className={selectClass}
+                value={recipient.recipientType}
+                onChange={(e) =>
+                  setForm((current) => ({
+                    ...current,
+                    recipients: current.recipients.map((entry, entryIndex) =>
+                      entryIndex === index
+                        ? {
+                            ...emptyTemplateRecipientForm(),
+                            channel: entry.channel,
+                            recipientType: enumValue(
+                              e.target.value,
+                              RECIPIENT_TYPES,
+                              "EMAIL",
+                            ),
+                          }
+                        : entry,
+                    ),
+                  }))
+                }
+              >
+                {RECIPIENT_TYPES.map((value) => (
+                  <option key={value} value={value}>
+                    {prettify(value)}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            {recipient.recipientType === "EMAIL" ? (
+              <Field label="Email address">
+                <input
+                  className={inputClass}
+                  type="email"
+                  value={recipient.emailAddress}
+                  onChange={(e) =>
+                    setForm((current) => ({
+                      ...current,
+                      recipients: current.recipients.map((entry, entryIndex) =>
+                        entryIndex === index
+                          ? { ...entry, emailAddress: e.target.value }
+                          : entry,
+                      ),
+                    }))
+                  }
+                  placeholder="hr@company.com"
+                />
+              </Field>
+            ) : null}
+            {recipient.recipientType === "COMPANY_USER" ? (
+              <Field label="Company user ID">
+                <input
+                  className={inputClass}
+                  type="number"
+                  min={1}
+                  value={recipient.companyUserId}
+                  onChange={(e) =>
+                    setForm((current) => ({
+                      ...current,
+                      recipients: current.recipients.map((entry, entryIndex) =>
+                        entryIndex === index
+                          ? { ...entry, companyUserId: e.target.value }
+                          : entry,
+                      ),
+                    }))
+                  }
+                />
+              </Field>
+            ) : null}
+            {recipient.recipientType === "EMPLOYEE" ? (
+              <Field label="Employee ID">
+                <input
+                  className={inputClass}
+                  type="number"
+                  min={1}
+                  value={recipient.employeeId}
+                  onChange={(e) =>
+                    setForm((current) => ({
+                      ...current,
+                      recipients: current.recipients.map((entry, entryIndex) =>
+                        entryIndex === index
+                          ? { ...entry, employeeId: e.target.value }
+                          : entry,
+                      ),
+                    }))
+                  }
+                />
+              </Field>
+            ) : null}
+            {recipient.recipientType === "ROLE" ? (
+              <Field label="Role ID">
+                <input
+                  className={inputClass}
+                  type="number"
+                  min={1}
+                  value={recipient.roleId}
+                  onChange={(e) =>
+                    setForm((current) => ({
+                      ...current,
+                      recipients: current.recipients.map((entry, entryIndex) =>
+                        entryIndex === index
+                          ? { ...entry, roleId: e.target.value }
+                          : entry,
+                      ),
+                    }))
+                  }
+                />
+              </Field>
+            ) : null}
+            {recipient.recipientType === "DEPARTMENT" ||
+            recipient.recipientType === "DEPARTMENT_MANAGER" ? (
+              <Field label="Department ID">
+                <input
+                  className={inputClass}
+                  type="number"
+                  min={1}
+                  value={recipient.departmentId}
+                  onChange={(e) =>
+                    setForm((current) => ({
+                      ...current,
+                      recipients: current.recipients.map((entry, entryIndex) =>
+                        entryIndex === index
+                          ? { ...entry, departmentId: e.target.value }
+                          : entry,
+                      ),
+                    }))
+                  }
+                />
+              </Field>
+            ) : null}
+            {recipient.recipientType === "DYNAMIC_GROUP" ? (
+              <Field label="Dynamic group code">
+                <input
+                  className={inputClass}
+                  value={recipient.dynamicGroupCode}
+                  onChange={(e) =>
+                    setForm((current) => ({
+                      ...current,
+                      recipients: current.recipients.map((entry, entryIndex) =>
+                        entryIndex === index
+                          ? { ...entry, dynamicGroupCode: e.target.value }
+                          : entry,
+                      ),
+                    }))
+                  }
+                  placeholder="TEAM_LEADS"
+                />
+              </Field>
+            ) : null}
+            <Field label="Display name (optional)">
+              <input
+                className={inputClass}
+                value={recipient.displayName}
+                onChange={(e) =>
+                  setForm((current) => ({
+                    ...current,
+                    recipients: current.recipients.map((entry, entryIndex) =>
+                      entryIndex === index
+                        ? { ...entry, displayName: e.target.value }
+                        : entry,
+                    ),
+                  }))
+                }
+                placeholder="HR Team"
+              />
+            </Field>
+            <div className="flex items-end justify-end md:col-span-2">
+              <button
+                type="button"
+                className="inline-flex h-8 items-center gap-1 rounded-lg border border-rose-200 px-2.5 text-xs font-medium text-rose-700 dark:border-rose-900/50 dark:text-rose-300"
+                onClick={() =>
+                  setForm((current) => ({
+                    ...current,
+                    recipients: current.recipients.filter((_, entryIndex) => entryIndex !== index),
+                  }))
+                }
+              >
+                <Trash2Icon className="size-3.5" />
+                Remove recipient
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   )
 
@@ -1371,6 +2381,38 @@ export function ScheduledReportingView() {
           <option value="true">Yes</option>
         </select>
       </Field>
+      <div className="grid gap-3 rounded-md border border-border bg-muted/10 p-3 md:col-span-2">
+        <div>
+          <p className="text-xs font-medium text-muted-foreground">Draft SMTP test</p>
+          <p className="text-[11px] text-muted-foreground">
+            Test the form values before saving. If you are editing an authenticated SMTP server, include the password if the connection needs it.
+          </p>
+        </div>
+        <Field label="Test recipient email">
+          <input
+            className={inputClass}
+            type="email"
+            value={smtpDraftTestRecipient}
+            onChange={(e) => setSmtpDraftTestRecipient(e.target.value)}
+            placeholder="name@example.com"
+          />
+        </Field>
+        <div className="flex justify-end">
+          <button
+            type="button"
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-medium disabled:opacity-60"
+            disabled={testingDraftSmtp || !smtpDraftTestRecipient.trim()}
+            onClick={() => void onTestDraftSmtp()}
+          >
+            {testingDraftSmtp ? (
+              <Loader2Icon className="size-3.5 animate-spin" />
+            ) : (
+              <SendIcon className="size-3.5" />
+            )}
+            {testingDraftSmtp ? "Testing…" : "Send draft test"}
+          </button>
+        </div>
+      </div>
     </div>
   )
 
@@ -1383,7 +2425,7 @@ export function ScheduledReportingView() {
           </p>
           <h1 className="text-xl font-semibold tracking-tight text-foreground">Scheduled Reporting</h1>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            Configure templates, schedules, SMTP delivery, and review execution history.
+            Review available report definitions, then configure templates, schedules, SMTP delivery, and execution history.
           </p>
         </div>
       </div>
@@ -1441,19 +2483,185 @@ export function ScheduledReportingView() {
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
+            {tab === "templates" ? (
+              <>
+                <select
+                  className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
+                  value={templateDefinitionFilter}
+                  onChange={(event) => setTemplateDefinitionFilter(event.target.value)}
+                >
+                  <option value="">All definitions</option>
+                  {definitions.map((row, index) => {
+                    const id = definitionId(row)
+                    if (id === null) return null
+                    return (
+                      <option key={`template-definition-filter-${id}-${index}`} value={String(id)}>
+                        {optionLabel(row)}
+                      </option>
+                    )
+                  })}
+                </select>
+                <select
+                  className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
+                  value={templateSmtpFilter}
+                  onChange={(event) => setTemplateSmtpFilter(event.target.value)}
+                >
+                  <option value="">All SMTP</option>
+                  {smtpConfigs.map((row, index) => {
+                    const id = smtpConfigId(row)
+                    if (id === null) return null
+                    return (
+                      <option key={`template-smtp-filter-${id}-${index}`} value={String(id)}>
+                        {optionLabel(row)}
+                      </option>
+                    )
+                  })}
+                </select>
+                <select
+                  className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
+                  value={isActiveFilter}
+                  onChange={(event) => setIsActiveFilter(event.target.value)}
+                >
+                  <option value="">All status</option>
+                  <option value="true">Active</option>
+                  <option value="false">Inactive</option>
+                </select>
+              </>
+            ) : null}
+            {tab === "schedules" ? (
+              <>
+                <select
+                  className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
+                  value={scheduleTemplateFilter}
+                  onChange={(event) => setScheduleTemplateFilter(event.target.value)}
+                >
+                  <option value="">All templates</option>
+                  {templates.map((row, index) => {
+                    const id = readNumber(row, ["id"])
+                    if (id === null) return null
+                    return (
+                      <option key={`schedule-template-filter-${id}-${index}`} value={String(id)}>
+                        {optionLabel(row)}
+                      </option>
+                    )
+                  })}
+                </select>
+                <select
+                  className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
+                  value={scheduleTypeFilter}
+                  onChange={(event) => setScheduleTypeFilter(event.target.value)}
+                >
+                  <option value="">All types</option>
+                  {SCHEDULE_TYPES.map((value) => (
+                    <option key={value} value={value}>
+                      {prettify(value)}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
+                  value={isActiveFilter}
+                  onChange={(event) => setIsActiveFilter(event.target.value)}
+                >
+                  <option value="">All status</option>
+                  <option value="true">Active</option>
+                  <option value="false">Inactive</option>
+                </select>
+              </>
+            ) : null}
             {tab === "executions" ? (
-              <select
-                className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
-                value={statusFilter}
-                onChange={(event) => setStatusFilter(event.target.value)}
-              >
-                <option value="">All statuses</option>
-                {EXECUTION_STATUSES.map((status) => (
-                  <option key={status} value={status}>
-                    {prettify(status)}
-                  </option>
-                ))}
-              </select>
+              <>
+                <select
+                  className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
+                  value={statusFilter}
+                  onChange={(event) => setStatusFilter(event.target.value)}
+                >
+                  <option value="">All statuses</option>
+                  {EXECUTION_STATUSES.map((status) => (
+                    <option key={status} value={status}>
+                      {prettify(status)}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
+                  value={executionTemplateFilter}
+                  onChange={(event) => setExecutionTemplateFilter(event.target.value)}
+                >
+                  <option value="">All templates</option>
+                  {templates.map((row, index) => {
+                    const id = readNumber(row, ["id"])
+                    if (id === null) return null
+                    return (
+                      <option key={`execution-template-filter-${id}-${index}`} value={String(id)}>
+                        {optionLabel(row)}
+                      </option>
+                    )
+                  })}
+                </select>
+                <select
+                  className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
+                  value={executionScheduleFilter}
+                  onChange={(event) => setExecutionScheduleFilter(event.target.value)}
+                >
+                  <option value="">All schedules</option>
+                  {schedules.map((row, index) => {
+                    const id = readNumber(row, ["id"])
+                    if (id === null) return null
+                    return (
+                      <option key={`execution-schedule-filter-${id}-${index}`} value={String(id)}>
+                        {optionLabel(row)}
+                      </option>
+                    )
+                  })}
+                </select>
+                <select
+                  className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
+                  value={executionEmailFilter}
+                  onChange={(event) => setExecutionEmailFilter(event.target.value)}
+                >
+                  <option value="">All email delivery</option>
+                  {EXECUTION_EMAIL_DELIVERY_STATUSES.map((status) => (
+                    <option key={status} value={status}>
+                      {prettify(status)}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
+                  value={executionSourceFilter}
+                  onChange={(event) => setExecutionSourceFilter(event.target.value)}
+                >
+                  <option value="">All sources</option>
+                  {EXECUTION_SOURCES.map((source) => (
+                    <option key={source} value={source}>
+                      {prettify(source)}
+                    </option>
+                  ))}
+                </select>
+              </>
+            ) : null}
+            {tab === "smtp" ? (
+              <>
+                <select
+                  className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
+                  value={isActiveFilter}
+                  onChange={(event) => setIsActiveFilter(event.target.value)}
+                >
+                  <option value="">All status</option>
+                  <option value="true">Active</option>
+                  <option value="false">Inactive</option>
+                </select>
+                <select
+                  className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
+                  value={smtpDefaultFilter}
+                  onChange={(event) => setSmtpDefaultFilter(event.target.value)}
+                >
+                  <option value="">All default states</option>
+                  <option value="true">Default only</option>
+                  <option value="false">Non-default</option>
+                </select>
+              </>
             ) : null}
             {canCreate ? (
               <button
@@ -1479,11 +2687,15 @@ export function ScheduledReportingView() {
         }
         onRowSelect={(_, row) => {
           if (!row) return
+          if (tab === "definitions") {
+            openDefinition(row)
+            return
+          }
           if (tab === "executions") {
             void openExecution(row)
             return
           }
-          fillEditFromRow(row)
+          void openConfigDetail(row)
         }}
       />
 
@@ -1569,6 +2781,84 @@ export function ScheduledReportingView() {
       </Dialog>
 
       <Dialog
+        open={runTemplateOpen}
+        onOpenChange={(open) => {
+          setRunTemplateOpen(open)
+          if (!open) {
+            setRunTemplateId("")
+            setRunTemplateForm(emptyTemplateRunForm())
+            setFormError(null)
+          }
+        }}
+      >
+        <DialogPopup className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Run template now</DialogTitle>
+            <DialogDescription>
+              Start a one-off execution for template #{runTemplateId || "—"}. Dates are optional and only needed when you want a custom range.
+            </DialogDescription>
+          </DialogHeader>
+          {formError ? <p className="text-sm text-rose-600">{formError}</p> : null}
+          <div className="grid gap-3 md:grid-cols-2">
+            <Field label="Start date">
+              <DatePickerPresets
+                value={runTemplateForm.dateFrom}
+                onChange={(value) => setRunTemplateForm((current) => ({ ...current, dateFrom: value }))}
+                placeholder="Start date"
+                className="h-9"
+              />
+            </Field>
+            <Field label="End date">
+              <DatePickerPresets
+                value={runTemplateForm.dateTo}
+                onChange={(value) => setRunTemplateForm((current) => ({ ...current, dateTo: value }))}
+                placeholder="End date"
+                className="h-9"
+              />
+            </Field>
+            <Field label="Output format" className="md:col-span-2">
+              <select
+                className={selectClass}
+                value={runTemplateForm.outputFormat}
+                onChange={(event) =>
+                  setRunTemplateForm((current) => ({ ...current, outputFormat: event.target.value }))
+                }
+              >
+                {OUTPUT_FORMATS.map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+          <DialogFooter>
+            <button
+              type="button"
+              className="inline-flex h-9 items-center rounded-lg border border-border px-3 text-sm font-medium"
+              disabled={runningTemplateId === runTemplateId}
+              onClick={() => setRunTemplateOpen(false)}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-semibold !text-white disabled:opacity-60"
+              disabled={runningTemplateId === runTemplateId}
+              onClick={() => void onRunTemplate()}
+            >
+              {runningTemplateId === runTemplateId ? (
+                <Loader2Icon className="size-3.5 animate-spin" />
+              ) : (
+                <PlayIcon className="size-3.5" />
+              )}
+              {runningTemplateId === runTemplateId ? "Starting…" : "Run template"}
+            </button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
+
+      <Dialog
         open={smtpTestOpen}
         onOpenChange={(open) => {
           setSmtpTestOpen(open)
@@ -1644,6 +2934,263 @@ export function ScheduledReportingView() {
         </DialogPopup>
       </Dialog>
 
+      <Sheet
+        open={detailSheetOpen}
+        onOpenChange={(open) => {
+          setDetailSheetOpen(open)
+          if (!open) {
+            setDetailLoading(false)
+            setDetailRecord(null)
+          }
+        }}
+      >
+        <SheetContent side="right" className="w-full gap-0 p-0 sm:max-w-md">
+          <SheetHeader className="border-b border-border bg-muted/20 px-4 py-3 pr-12">
+            <SheetDescription className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              {tab === "templates"
+                ? "Template detail"
+                : tab === "schedules"
+                  ? "Schedule detail"
+                  : "SMTP configuration detail"}
+            </SheetDescription>
+            <SheetTitle className="text-base font-semibold">
+              {detailRecord
+                ? readString(detailRecord, ["name"], tab === "smtp" ? "SMTP configuration" : "Scheduled reporting record")
+                : tab === "templates"
+                  ? "Template"
+                  : tab === "schedules"
+                    ? "Schedule"
+                    : "SMTP configuration"}
+            </SheetTitle>
+          </SheetHeader>
+          <div className="space-y-3 overflow-y-auto p-4">
+            {detailLoading ? (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2Icon className="size-4 animate-spin text-primary" />
+                Loading…
+              </div>
+            ) : null}
+            {detailRecord ? (
+              <>
+                <div className="flex flex-wrap gap-2">
+                  {tab === "smtp" ? (
+                    <button
+                      type="button"
+                      className="inline-flex h-8 items-center gap-1 rounded-lg border border-border px-2.5 text-xs font-medium"
+                      onClick={() => openSmtpTest(detailRecord)}
+                    >
+                      <SendIcon className="size-3.5" />
+                      Test SMTP
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="inline-flex h-8 items-center gap-1 rounded-lg border border-border px-2.5 text-xs font-medium"
+                    onClick={() => {
+                      setDetailSheetOpen(false)
+                      void openEditRecord(detailRecord)
+                    }}
+                  >
+                    <PencilIcon className="size-3.5" />
+                    Edit
+                  </button>
+                </div>
+
+                {tab === "templates" ? (
+                  <>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        [
+                          "Report",
+                          (() => {
+                            const id = readNumber(detailRecord, ["reportDefinitionId", "report_definition_id"])
+                            return id !== null ? definitionNameById.get(id) ?? `#${id}` : "—"
+                          })(),
+                        ],
+                        [
+                          "SMTP",
+                          (() => {
+                            const id = readNumber(detailRecord, ["smtpConfigurationId", "smtp_configuration_id"])
+                            return id !== null ? smtpNameById.get(id) ?? `#${id}` : "—"
+                          })(),
+                        ],
+                        ["Format", readString(detailRecord, ["outputFormat", "output_format"], "—")],
+                        ["Date range", prettify(readString(detailRecord, ["dateRangeStrategy", "date_range_strategy"], "—"))],
+                        ["Attach report", readBool(detailRecord, ["attachReport", "attach_report"]) ? "Yes" : "No"],
+                        ["Status", readBool(detailRecord, ["isActive", "is_active"]) ? "Active" : "Inactive"],
+                        ["Created", formatDateTime(detailRecord.createdAt ?? detailRecord.created_at)],
+                        ["Updated", formatDateTime(detailRecord.updatedAt ?? detailRecord.updated_at)],
+                      ].map(([label, value]) => (
+                        <div key={label} className="rounded-md border border-border bg-muted/20 px-2.5 py-1.5">
+                          <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                            {label}
+                          </p>
+                          <p className="text-xs font-medium text-foreground">{value}</p>
+                        </div>
+                      ))}
+                    </div>
+                    {readString(detailRecord, ["description"]) ? (
+                      <div className="rounded-md border border-border bg-background px-3 py-3">
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                          Description
+                        </p>
+                        <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">
+                          {readString(detailRecord, ["description"])}
+                        </p>
+                      </div>
+                    ) : null}
+                    {readString(detailRecord, ["filenamePattern", "filename_pattern"]) ? (
+                      <div className="rounded-md border border-border bg-background px-3 py-3">
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                          Filename pattern
+                        </p>
+                        <p className="mt-1 text-sm text-foreground">
+                          {readString(detailRecord, ["filenamePattern", "filename_pattern"])}
+                        </p>
+                      </div>
+                    ) : null}
+                    {readString(detailRecord, ["emailSubjectTemplate", "email_subject_template"]) ? (
+                      <div className="rounded-md border border-border bg-background px-3 py-3">
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                          Email subject
+                        </p>
+                        <p className="mt-1 text-sm text-foreground">
+                          {readString(detailRecord, ["emailSubjectTemplate", "email_subject_template"])}
+                        </p>
+                      </div>
+                    ) : null}
+                    {readString(detailRecord, ["emailBodyTemplate", "email_body_template"]) ? (
+                      <div className="rounded-md border border-border bg-background px-3 py-3">
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                          Email body
+                        </p>
+                        <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">
+                          {readString(detailRecord, ["emailBodyTemplate", "email_body_template"])}
+                        </p>
+                      </div>
+                    ) : null}
+                    {asRecordArray(detailRecord.recipients).length > 0 ? (
+                      <div className="rounded-md border border-border bg-background px-3 py-3">
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                          Recipients
+                        </p>
+                        <div className="mt-2 grid gap-2">
+                          {asRecordArray(detailRecord.recipients).map((recipient, index) => (
+                            <div key={`detail-template-recipient-${index}`} className="rounded-md border border-border/70 bg-muted/20 px-2.5 py-2">
+                              <p className="text-xs font-medium text-foreground">
+                                {prettify(readString(recipient, ["channel"], "TO"))} · {prettify(readString(recipient, ["recipientType", "recipient_type"], "EMAIL"))}
+                              </p>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                {recipientTargetLabel(recipient)}
+                              </p>
+                              {readString(recipient, ["displayName", "display_name"]) ? (
+                                <p className="mt-1 text-[11px] text-muted-foreground">
+                                  {readString(recipient, ["displayName", "display_name"])}
+                                </p>
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                  </>
+                ) : null}
+
+                {tab === "schedules" ? (
+                  <>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        [
+                          "Template",
+                          (() => {
+                            const id = readNumber(detailRecord, ["templateId", "template_id"])
+                            return id !== null ? templateNameById.get(id) ?? `#${id}` : "—"
+                          })(),
+                        ],
+                        ["Type", prettify(readString(detailRecord, ["scheduleType", "schedule_type"], "—"))],
+                        ["Execution time", readString(detailRecord, ["executionTime", "execution_time"], "—")],
+                        ["Timezone", readString(detailRecord, ["timezone"], "—")],
+                        ["Misfire", prettify(readString(detailRecord, ["misfireHandling", "misfire_handling"], "—"))],
+                        [
+                          "Max retries",
+                          String(readNumber(detailRecord, ["maxRetryAttempts", "max_retry_attempts"]) ?? "—"),
+                        ],
+                        ["Status", readBool(detailRecord, ["isActive", "is_active"]) ? "Active" : "Inactive"],
+                        ["Created", formatDateTime(detailRecord.createdAt ?? detailRecord.created_at)],
+                      ].map(([label, value]) => (
+                        <div key={label} className="rounded-md border border-border bg-muted/20 px-2.5 py-1.5">
+                          <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                            {label}
+                          </p>
+                          <p className="text-xs font-medium text-foreground">{value}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="grid gap-2">
+                      {[
+                        ["Start date", formatDateTime(detailRecord.startDate ?? detailRecord.start_date)],
+                        ["End date", formatDateTime(detailRecord.endDate ?? detailRecord.end_date)],
+                        ["One-time run", formatDateTime(detailRecord.oneTimeRunAt ?? detailRecord.one_time_run_at)],
+                        ["Day of month", readString(detailRecord, ["dayOfMonth", "day_of_month"], "—")],
+                        ["Weekdays", Array.isArray(detailRecord.weekdays) ? detailRecord.weekdays.join(", ") : readString(detailRecord, ["weekdays"], "—")],
+                        ["Cron expression", readString(detailRecord, ["cronExpression", "cron_expression"], "—")],
+                      ]
+                        .filter(([, value]) => value && value !== "—")
+                        .map(([label, value]) => (
+                          <div key={label} className="rounded-md border border-border bg-background px-3 py-2">
+                            <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                              {label}
+                            </p>
+                            <p className="text-xs text-foreground">{value}</p>
+                          </div>
+                        ))}
+                    </div>
+                  </>
+                ) : null}
+
+                {tab === "smtp" ? (
+                  <>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        ["Host", `${readString(detailRecord, ["host"], "—")}:${readString(detailRecord, ["port"], "—")}`],
+                        ["Security", readString(detailRecord, ["securityType", "security_type"], "—")],
+                        ["Sender", readString(detailRecord, ["senderEmail", "sender_email"], "—")],
+                        ["Reply-to", readString(detailRecord, ["replyToEmail", "reply_to_email"], "—")],
+                        ["Username", readString(detailRecord, ["username"], "—")],
+                        ["Timeout", `${readString(detailRecord, ["connectionTimeoutMs", "connection_timeout_ms"], "—")} ms`],
+                        ["Default", readBool(detailRecord, ["isDefault", "is_default"]) ? "Yes" : "No"],
+                        ["Status", readBool(detailRecord, ["isActive", "is_active"]) ? "Active" : "Inactive"],
+                      ].map(([label, value]) => (
+                        <div key={label} className="rounded-md border border-border bg-muted/20 px-2.5 py-1.5">
+                          <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                            {label}
+                          </p>
+                          <p className="text-xs font-medium text-foreground">{value}</p>
+                        </div>
+                      ))}
+                    </div>
+                    {readString(detailRecord, ["senderName", "sender_name"]) ? (
+                      <div className="rounded-md border border-border bg-background px-3 py-3">
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                          Sender name
+                        </p>
+                        <p className="mt-1 text-sm text-foreground">
+                          {readString(detailRecord, ["senderName", "sender_name"])}
+                        </p>
+                      </div>
+                    ) : null}
+                  </>
+                ) : null}
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Select a record to review its details.
+              </p>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
+
       <Sheet open={executionSheetOpen} onOpenChange={setExecutionSheetOpen}>
         <SheetContent side="right" className="w-full gap-0 p-0 sm:max-w-md">
           <SheetHeader className="border-b border-border bg-muted/20 px-4 py-3 pr-12">
@@ -1665,6 +3212,34 @@ export function ScheduledReportingView() {
             ) : null}
             {executionDetail ? (
               <>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className="inline-flex h-8 items-center gap-1 rounded-lg border border-border px-2.5 text-xs font-medium disabled:opacity-60"
+                    disabled={!canDownloadExecution(executionDetail) || downloadingExecutionId === getRowId(executionDetail)}
+                    onClick={() => void onDownloadExecution(executionDetail)}
+                  >
+                    {downloadingExecutionId === getRowId(executionDetail) ? (
+                      <Loader2Icon className="size-3.5 animate-spin" />
+                    ) : (
+                      <DownloadIcon className="size-3.5" />
+                    )}
+                    Download
+                  </button>
+                  <button
+                    type="button"
+                    className="inline-flex h-8 items-center gap-1 rounded-lg border border-border px-2.5 text-xs font-medium disabled:opacity-60"
+                    disabled={!canRetryExecution(executionDetail) || retryingExecutionId === getRowId(executionDetail)}
+                    onClick={() => void onRetryExecution(executionDetail)}
+                  >
+                    {retryingExecutionId === getRowId(executionDetail) ? (
+                      <Loader2Icon className="size-3.5 animate-spin" />
+                    ) : (
+                      <RotateCcwIcon className="size-3.5" />
+                    )}
+                    Retry
+                  </button>
+                </div>
                 <div className="grid grid-cols-2 gap-2">
                   {[
                     ["Status", prettify(readString(executionDetail, ["status"], "—"))],
@@ -1682,6 +3257,21 @@ export function ScheduledReportingView() {
                         return id !== null ? templateNameById.get(id) ?? `#${id}` : "—"
                       })(),
                     ],
+                    [
+                      "Schedule",
+                      (() => {
+                        const id = readNumber(executionDetail, ["scheduleId", "schedule_id"])
+                        return id !== null ? scheduleNameById.get(id) ?? `#${id}` : "—"
+                      })(),
+                    ],
+                    [
+                      "Retry count",
+                      String(readNumber(executionDetail, ["retryCount", "retry_count"]) ?? "—"),
+                    ],
+                    [
+                      "Max retries",
+                      String(readNumber(executionDetail, ["maxRetryAttempts", "max_retry_attempts"]) ?? "—"),
+                    ],
                     ["Created", formatDateTime(executionDetail.created_at ?? executionDetail.createdAt)],
                     ["Updated", formatDateTime(executionDetail.updated_at ?? executionDetail.updatedAt)],
                   ].map(([label, value]) => (
@@ -1693,13 +3283,184 @@ export function ScheduledReportingView() {
                     </div>
                   ))}
                 </div>
+                <div className="grid gap-2">
+                  {[
+                    ["Report file", readString(executionDetail, ["generatedFilename", "generated_filename", "filename", "file_name"], "—")],
+                    ["Started", formatDateTime(executionDetail.started_at ?? executionDetail.startedAt)],
+                    ["Completed", formatDateTime(executionDetail.completed_at ?? executionDetail.completedAt)],
+                    ["Report date from", formatDateTime(executionDetail.reportDateFrom ?? executionDetail.report_date_from)],
+                    ["Report date to", formatDateTime(executionDetail.reportDateTo ?? executionDetail.report_date_to)],
+                    ["Queue job", readString(executionDetail, ["queueJobId", "queue_job_id"], "—")],
+                    ["Idempotency key", readString(executionDetail, ["idempotencyKey", "idempotency_key"], "—")],
+                    ["File type", readString(executionDetail, ["generatedFileMimeType", "generated_file_mime_type"], "—")],
+                    ["File size", readString(executionDetail, ["generatedFileSize", "generated_file_size"], "—")],
+                    [
+                      "Records processed",
+                      (() => {
+                        const count = readNumber(executionDetail, ["recordCount", "record_count", "rowsProcessed", "rows_processed"])
+                        return count !== null ? String(count) : "—"
+                      })(),
+                    ],
+                  ]
+                    .filter(([, value]) => value && value !== "—")
+                    .map(([label, value]) => (
+                      <div key={label} className="rounded-md border border-border bg-background px-3 py-2">
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                          {label}
+                        </p>
+                        <p className="text-xs text-foreground">{value}</p>
+                      </div>
+                    ))}
+                </div>
+                {asRecordArray(executionDetail.resolvedRecipients).length > 0 ? (
+                  <div className="rounded-md border border-border bg-background px-3 py-3">
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                      Resolved recipients
+                    </p>
+                    <div className="mt-2 grid gap-2">
+                      {asRecordArray(executionDetail.resolvedRecipients).map((recipient, index) => (
+                        <div key={`resolved-recipient-${index}`} className="rounded-md border border-border/70 bg-muted/20 px-2.5 py-2">
+                          <p className="text-xs font-medium text-foreground">
+                            {prettify(readString(recipient, ["channel"], "TO"))} · {prettify(readString(recipient, ["recipientType", "recipient_type"], "EMAIL"))}
+                          </p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {recipientTargetLabel(recipient)}
+                          </p>
+                          {readString(recipient, ["displayName", "display_name"]) ? (
+                            <p className="mt-1 text-[11px] text-muted-foreground">
+                              {readString(recipient, ["displayName", "display_name"])}
+                            </p>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+                {objectEntries(executionDetail.appliedFilters).length > 0 ? (
+                  <div className="rounded-md border border-border bg-background">
+                    <div className="border-b border-border px-3 py-2">
+                      <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                        Applied filters
+                      </p>
+                    </div>
+                    <div className="grid gap-x-4 gap-y-2 px-3 py-3 md:grid-cols-2">
+                      {objectEntries(executionDetail.appliedFilters).map(([key, value]) => (
+                        <div key={key} className="rounded-md border border-border/70 bg-muted/20 px-2.5 py-2">
+                          <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                            {prettify(key)}
+                          </p>
+                          <p className="mt-1 text-xs text-foreground">
+                            {formatAdminValue(value)}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+                {objectEntries(executionDetail.executionMetadata).length > 0 ? (
+                  <div className="rounded-md border border-border bg-background">
+                    <div className="border-b border-border px-3 py-2">
+                      <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                        Execution metadata
+                      </p>
+                    </div>
+                    <div className="grid gap-x-4 gap-y-2 px-3 py-3 md:grid-cols-2">
+                      {objectEntries(executionDetail.executionMetadata).map(([key, value]) => (
+                        <div key={key} className="rounded-md border border-border/70 bg-muted/20 px-2.5 py-2">
+                          <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                            {prettify(key)}
+                          </p>
+                          <p className="mt-1 text-xs text-foreground">
+                            {formatAdminValue(value)}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
                 {readString(executionDetail, ["error_message", "errorMessage", "message"]) ? (
                   <div className="rounded-md border border-rose-200 bg-rose-50 px-2.5 py-2 text-xs text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300">
                     {readString(executionDetail, ["error_message", "errorMessage", "message"])}
                   </div>
                 ) : null}
+                {readString(executionDetail, ["technicalDetails", "technical_details"]) ? (
+                  <div className="rounded-md border border-border bg-background px-3 py-3">
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                      Technical details
+                    </p>
+                    <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">
+                      {readString(executionDetail, ["technicalDetails", "technical_details"])}
+                    </p>
+                  </div>
+                ) : null}
               </>
             ) : null}
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      <Sheet
+        open={definitionSheetOpen}
+        onOpenChange={(open) => {
+          setDefinitionSheetOpen(open)
+          if (!open) setDefinitionDetail(null)
+        }}
+      >
+        <SheetContent side="right" className="w-full gap-0 p-0 sm:max-w-md">
+          <SheetHeader className="border-b border-border bg-muted/20 px-4 py-3 pr-12">
+            <SheetDescription className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              Report definition detail
+            </SheetDescription>
+            <SheetTitle className="text-base font-semibold">
+              {definitionDetail
+                ? readString(definitionDetail, ["name"], "Report definition")
+                : "Report definition"}
+            </SheetTitle>
+          </SheetHeader>
+          <div className="space-y-3 overflow-y-auto p-4">
+            {definitionDetail ? (
+              <>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    ["Code", readString(definitionDetail, ["reportCode", "report_code"], "—")],
+                    ["Status", readBool(definitionDetail, ["isActive", "is_active"]) ? "Active" : "Inactive"],
+                    ["Formats", definitionFormatsLabel(definitionDetail)],
+                    ["Generator", readString(definitionDetail, ["generatorService", "generator_service"], "—")],
+                    ["Templates", relatedCount(definitionDetail, "templates")],
+                    ["Executions", relatedCount(definitionDetail, "executions")],
+                    ["Created", formatDateTime(definitionDetail.createdAt ?? definitionDetail.created_at)],
+                    ["Updated", formatDateTime(definitionDetail.updatedAt ?? definitionDetail.updated_at)],
+                  ].map(([label, value]) => (
+                    <div key={label} className="rounded-md border border-border bg-muted/20 px-2.5 py-1.5">
+                      <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                        {label}
+                      </p>
+                      <p className="text-xs font-medium text-foreground">{value}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="rounded-md border border-border bg-background px-3 py-3">
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Description
+                  </p>
+                  <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">
+                    {readString(definitionDetail, ["description"], "No description provided.")}
+                  </p>
+                </div>
+                <div className="rounded-md border border-border bg-background px-3 py-3">
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Supported filters
+                  </p>
+                  <p className="mt-1 text-sm text-foreground">
+                    {definitionFilterKeysLabel(definitionDetail)}
+                  </p>
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Select a definition to review its details.
+              </p>
+            )}
           </div>
         </SheetContent>
       </Sheet>
