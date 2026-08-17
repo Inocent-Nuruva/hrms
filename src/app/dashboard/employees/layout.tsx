@@ -25,6 +25,10 @@ export default function EmployeesLayout({
       router.replace("/dashboard/me/offboarding")
       return
     }
+    if (pathname?.startsWith("/dashboard/employees/onboarding")) {
+      router.replace("/dashboard/me/onboarding")
+      return
+    }
     // Any other employees/* route is admin/HR only for the employee shell.
     if (pathname?.startsWith("/dashboard/employees")) {
       router.replace("/dashboard")

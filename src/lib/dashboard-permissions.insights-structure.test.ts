@@ -77,5 +77,6 @@ describe("structure and insights route access", () => {
 
   it("leaves personal insights available without operations permissions", () => {
     expect(canAccessDashboardRoute("/dashboard/me/insights", [], "employee")).toBe(true)
+    expect(canAccessDashboardRoute("/dashboard/me/onboarding", [], "employee")).toBe(true)
   })
 })

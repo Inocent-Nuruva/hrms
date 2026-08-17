@@ -8373,6 +8373,73 @@ export async function getOnboardingAuditLogs(
   return normalizeList(payload);
 }
 
+/** GET /api/me/onboarding — current employee's onboarding requests. */
+export async function listMyOnboardingRequests(
+  token: string,
+): Promise<AdminRecord[]> {
+  try {
+    const payload = await adminRequest<unknown>("/api/me/onboarding", { token });
+    return normalizeList(payload);
+  } catch (error) {
+    if (isForbiddenOrMissingError(error)) return [];
+    throw error;
+  }
+}
+
+/**
+ * POST /api/onboarding/requests/{id}/acknowledge
+ * Body: { accepted, acknowledgement_version }
+ */
+export async function acknowledgeOnboardingRequest(
+  token: string,
+  id: string | number,
+  data: { accepted: boolean; acknowledgement_version: string },
+) {
+  const version = data.acknowledgement_version.trim();
+  if (!version) {
+    throw new Error("Acknowledgement version is required.");
+  }
+  return adminRequest<unknown>(`/api/onboarding/requests/${id}/acknowledge`, {
+    method: "POST",
+    token,
+    body: {
+      accepted: data.accepted === true,
+      acknowledgement_version: version.slice(0, 50),
+    },
+  });
+}
+
+/**
+ * POST /api/onboarding/requests/{id}/approvals/{approvalId}/delegate
+ * Body: { delegate_company_user_id, reason }
+ */
+export async function delegateOnboardingApproval(
+  token: string,
+  requestId: string | number,
+  approvalId: string | number,
+  data: { delegate_company_user_id: number; reason: string },
+) {
+  const delegateId = Number(data.delegate_company_user_id);
+  const reason = data.reason.trim();
+  if (!Number.isFinite(delegateId) || delegateId < 1) {
+    throw new Error("A valid company user is required to delegate.");
+  }
+  if (!reason) {
+    throw new Error("A delegation reason is required.");
+  }
+  return adminRequest<unknown>(
+    `/api/onboarding/requests/${requestId}/approvals/${approvalId}/delegate`,
+    {
+      method: "POST",
+      token,
+      body: {
+        delegate_company_user_id: Math.trunc(delegateId),
+        reason: reason.slice(0, 1000),
+      },
+    },
+  );
+}
+
 export async function createOffboardingWorkflow(
   token: string,
   data: AdminRecord,
@@ -8590,6 +8657,41 @@ export async function listOffboardingDocuments(
   return normalizeList(payload);
 }
 
+/**
+ * PATCH /api/offboarding/requests/{id}/documents/{documentId}
+ * Body: { title?, description?, expiry_date? }
+ */
+export async function updateOffboardingDocument(
+  token: string,
+  requestId: string | number,
+  documentId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    `/api/offboarding/requests/${requestId}/documents/${documentId}`,
+    {
+      method: "PATCH",
+      token,
+      body: data,
+    },
+  );
+}
+
+/** DELETE /api/offboarding/requests/{id}/documents/{documentId} */
+export async function deleteOffboardingDocument(
+  token: string,
+  requestId: string | number,
+  documentId: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/offboarding/requests/${requestId}/documents/${documentId}`,
+    {
+      method: "DELETE",
+      token,
+    },
+  );
+}
+
 export async function downloadOffboardingDocument(
   token: string,
   requestId: string | number,
@@ -8723,6 +8825,38 @@ export async function completeOffboardingClearance(
   );
 }
 
+/**
+ * PATCH /api/offboarding/requests/{id}/clearances/{clearanceId}/assign
+ * Body: { owner_company_user_id, due_date?, remarks? }
+ */
+export async function assignOffboardingClearance(
+  token: string,
+  requestId: string | number,
+  clearanceId: string | number,
+  data: {
+    owner_company_user_id: number;
+    due_date?: string;
+    remarks?: string;
+  },
+) {
+  const ownerId = Number(data.owner_company_user_id);
+  if (!Number.isFinite(ownerId) || ownerId < 1) {
+    throw new Error("A clearance owner is required.");
+  }
+  return adminRequest<unknown>(
+    `/api/offboarding/requests/${requestId}/clearances/${clearanceId}/assign`,
+    {
+      method: "PATCH",
+      token,
+      body: {
+        owner_company_user_id: Math.trunc(ownerId),
+        due_date: data.due_date?.trim() || undefined,
+        remarks: data.remarks?.trim() || undefined,
+      },
+    },
+  );
+}
+
 export async function getOffboardingProgress(
   token: string,
   requestId: string | number,
@@ -8784,6 +8918,19 @@ function isForbiddenOrMissingError(error: unknown): boolean {
  * Many employee roles are not granted these endpoints (403 Forbidden resource).
  * Callers should treat an empty array as "none" and optionally fall back.
  */
+/** GET /api/me/offboarding — current employee's offboarding requests. */
+export async function listMyOffboardingRequests(
+  token: string,
+): Promise<AdminRecord[]> {
+  try {
+    const payload = await adminRequest<unknown>("/api/me/offboarding", { token });
+    return normalizeList(payload);
+  } catch (error) {
+    if (isForbiddenOrMissingError(error)) return [];
+    throw error;
+  }
+}
+
 export async function listMyOffboardingApprovals(
   token: string,
 ): Promise<AdminRecord[]> {
@@ -8978,6 +9125,23 @@ export async function createOffboardingAction(
   );
 }
 
+/** PATCH /api/offboarding/requests/{id}/actions/{actionId} */
+export async function updateOffboardingAction(
+  token: string,
+  requestId: string | number,
+  actionId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    `/api/offboarding/requests/${requestId}/actions/${actionId}`,
+    {
+      method: "PATCH",
+      token,
+      body: data,
+    },
+  );
+}
+
 export async function listOffboardingAssets(
   token: string,
   requestId: string | number,
@@ -8998,6 +9162,23 @@ export async function createOffboardingAsset(
     `/api/offboarding/requests/${requestId}/assets`,
     {
       method: "POST",
+      token,
+      body: data,
+    },
+  );
+}
+
+/** PATCH /api/offboarding/requests/{id}/assets/{assetReturnId} */
+export async function updateOffboardingAssetReturn(
+  token: string,
+  requestId: string | number,
+  assetReturnId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    `/api/offboarding/requests/${requestId}/assets/${assetReturnId}`,
+    {
+      method: "PATCH",
       token,
       body: data,
     },

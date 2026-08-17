@@ -14,6 +14,7 @@ import { LumaSpin } from "@/components/ui/luma-spin"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
 import {
+  acknowledgeOnboardingRequest,
   approveOnboardingRequest,
   cancelOnboardingRequest,
   completeOnboardingRequest,
@@ -23,6 +24,7 @@ import {
   createOnboardingTask,
   createOnboardingWorkflow,
   createOnboardingWorkflowStep,
+  delegateOnboardingApproval,
   deleteOnboardingDocument,
   deleteOnboardingRequest,
   deleteOnboardingWorkflow,
@@ -38,6 +40,7 @@ import {
   listBranches,
   listDepartments,
   listEmployees,
+  listMyOnboardingRequests,
   listOnboardingDocuments,
   listOnboardingRequests,
   listOnboardingTasks,
@@ -854,6 +857,7 @@ export function OnboardingView() {
   )
   const actor = useDashboardActor()
   const actorPermissions = actor.permissionLabels
+  const isEmployeeMode = actor.ready ? actor.accessMode === "employee" || !actor.isAdmin : false
   const canCreateOnboardingRequests = React.useMemo(
     () => canPerformPermission(actorPermissions, "onboarding_requests:create"),
     [actorPermissions]
@@ -1316,12 +1320,18 @@ export function OnboardingView() {
     setError(null)
     try {
       if (targetTab === "requests") {
-        const [requestsResult] = await Promise.all([
-          listOnboardingRequests(token, requestQuery),
-          loadLookups(token, ["employees", "workflows"], force),
-        ])
-        setRequests(requestsResult.rows)
-        requestsFetchKeyRef.current = fetchKey
+        if (isEmployeeMode) {
+          const mine = await listMyOnboardingRequests(token)
+          setRequests(mine)
+          requestsFetchKeyRef.current = fetchKey
+        } else {
+          const [requestsResult] = await Promise.all([
+            listOnboardingRequests(token, requestQuery),
+            loadLookups(token, ["employees", "workflows"], force),
+          ])
+          setRequests(requestsResult.rows)
+          requestsFetchKeyRef.current = fetchKey
+        }
       } else {
         const workflowsResult = await listOnboardingWorkflows(token, workflowQuery)
         setWorkflows(workflowsResult.rows)
@@ -1341,10 +1351,17 @@ export function OnboardingView() {
     debouncedRequestSearch,
     debouncedWorkflowSearch,
     loadLookups,
+    isEmployeeMode,
     requestEmployeeFilter,
     requestStatusFilter,
     workflowStatusFilter,
   ])
+
+  React.useEffect(() => {
+    if (isEmployeeMode && activeTab === "workflows") {
+      setActiveTab("requests")
+    }
+  }, [activeTab, isEmployeeMode])
 
   React.useEffect(() => {
     void reloadAll(activeTab)
@@ -2358,6 +2375,31 @@ export function OnboardingView() {
     selectedWorkflowSteps,
   ])
 
+  const selectedRequestApprovals = React.useMemo(() => {
+    const sources = [selectedRequestDetails, selectedRequestProgress, selectedRequestRow]
+    const rows: AdminRecord[] = []
+    const seen = new Set<string>()
+    for (const source of sources) {
+      if (!source) continue
+      const lists = [
+        source.approvals,
+        source.approval_records,
+        source.pending_approvals,
+        toRecord(source.progress)?.approvals,
+      ]
+      for (const list of lists) {
+        for (const row of toRecordList(list)) {
+          const id = readNumber(row, ["id", "approval_id"])
+          const key = id == null ? JSON.stringify(row).slice(0, 40) : String(id)
+          if (seen.has(key)) continue
+          seen.add(key)
+          rows.push(row)
+        }
+      }
+    }
+    return rows
+  }, [selectedRequestDetails, selectedRequestProgress, selectedRequestRow])
+
   const selectedRequestProvisioningSummary = React.useMemo(() => {
     const detailProvisioning = extractProvisioning(selectedRequestDetails)
     const rowProvisioning = extractProvisioning(selectedRequestRow)
@@ -2755,6 +2797,63 @@ export function OnboardingView() {
     }
   }
 
+  async function acknowledgeSelectedRequest() {
+    const token = readStoredToken()
+    const requestId = readCurrentRequestId()
+    if (!token || requestId === null) {
+      showErrorAlert("Missing request context.")
+      return
+    }
+    const version =
+      readString(selectedRequestDetails ?? selectedRequestRow ?? {}, [
+        "employee_acknowledgement_version",
+        "acknowledgement_version",
+      ])
+    const acknowledgementVersion = version && version !== "-" ? version : "v1"
+    setSaving(true)
+    try {
+      await acknowledgeOnboardingRequest(token, requestId, {
+        accepted: true,
+        acknowledgement_version: acknowledgementVersion,
+      })
+      showSuccessAlert("Onboarding acknowledgement recorded.")
+      await reloadCurrentRequestActivity(requestId)
+      await reloadAll("requests", true)
+    } catch (errorObject) {
+      showErrorAlert(
+        errorObject instanceof Error ? errorObject.message : "Failed to acknowledge onboarding."
+      )
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function delegateSelectedApproval(approvalRow: AdminRecord) {
+    const token = readStoredToken()
+    const requestId = readCurrentRequestId()
+    const approvalId = readNumber(approvalRow, ["id", "approval_id"])
+    if (!token || requestId === null || approvalId === null) {
+      showErrorAlert("Missing approval identifiers.")
+      return
+    }
+    const target = window.prompt("Delegate to company user id")
+    const reason = window.prompt("Reason")
+    if (!target || !reason) return
+    setSaving(true)
+    try {
+      await delegateOnboardingApproval(token, requestId, approvalId, {
+        delegate_company_user_id: Number(target),
+        reason,
+      })
+      showSuccessAlert("Onboarding approval delegated.")
+      await reloadCurrentRequestActivity(requestId)
+    } catch (errorObject) {
+      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Delegate failed.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
   async function openRequestDetails(row: AdminRecord) {
     const requestId = readNumber(row, ["id", "request_id"])
     if (requestId === null) {
@@ -2855,6 +2954,7 @@ export function OnboardingView() {
           >
             Requests
           </button>
+          {isEmployeeMode ? null : (
           <button
             type="button"
             onClick={() => setActiveTab("workflows")}
@@ -2867,6 +2967,7 @@ export function OnboardingView() {
           >
             Workflows
           </button>
+          )}
         </div>
       </div>
 
@@ -2893,6 +2994,7 @@ export function OnboardingView() {
                 </option>
               ))}
             </select>
+            {isEmployeeMode ? null : (
             <select
               className="h-8 min-w-[9rem] max-w-[12rem] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
               value={requestEmployeeFilter}
@@ -2910,8 +3012,9 @@ export function OnboardingView() {
                 )
               })}
             </select>
+            )}
             <div className="ml-auto flex flex-wrap items-center gap-1.5">
-              {canCreateOnboardingRequests ? (
+              {canCreateOnboardingRequests && !isEmployeeMode ? (
                 <Button
                   type="button"
                   className="h-8 px-2.5 text-xs"
@@ -3867,6 +3970,68 @@ export function OnboardingView() {
                       </div>
                     </div>
                   </div>
+
+                  {(() => {
+                    const acknowledgedAt = readString(
+                      selectedRequestDetails ?? selectedRequestRow ?? {},
+                      ["employee_acknowledged_at", "employeeAcknowledgedAt"]
+                    )
+                    const needsAcknowledgement = !acknowledgedAt || acknowledgedAt === "-"
+                    return (
+                      <div className="space-y-3 rounded-lg border border-border p-4">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-900">Employee acknowledgement</p>
+                            <p className="text-xs text-muted-foreground">
+                              {needsAcknowledgement
+                                ? "Record that the employee has reviewed this onboarding request."
+                                : `Acknowledged ${toTimestamp(acknowledgedAt)}.`}
+                            </p>
+                          </div>
+                          {needsAcknowledgement ? (
+                            <Button
+                              type="button"
+                              className="h-8 px-3 text-xs"
+                              disabled={saving}
+                              onClick={() => void acknowledgeSelectedRequest()}
+                            >
+                              Acknowledge
+                            </Button>
+                          ) : null}
+                        </div>
+                        {selectedRequestApprovals.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">No pending approval records on this request.</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {selectedRequestApprovals.map((approvalRow, index) => (
+                              <div
+                                key={`onboarding-approval-${readNumber(approvalRow, ["id", "approval_id"]) ?? index}`}
+                                className="rounded-md border border-slate-200 bg-white p-3"
+                              >
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <p className="text-sm font-medium text-slate-900">
+                                    {readString(approvalRow, ["title", "step_name", "approval_name", "name"])}
+                                  </p>
+                                  <span className="text-xs text-slate-500">
+                                    {toTitleCaseWords(readString(approvalRow, ["status", "approval_status"]))}
+                                  </span>
+                                </div>
+                                {canApproveOnboardingRequests ? (
+                                  <button
+                                    type="button"
+                                    className="mt-2 text-xs font-medium text-primary"
+                                    onClick={() => void delegateSelectedApproval(approvalRow)}
+                                  >
+                                    Delegate
+                                  </button>
+                                ) : null}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
 
                   {selectedRequestProvisioningSummary ? (
                     <div className="space-y-3 rounded-lg border border-border p-4">

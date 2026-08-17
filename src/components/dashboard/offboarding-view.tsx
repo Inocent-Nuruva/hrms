@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils"
 import {
   addOffboardingDocument,
   approveOffboardingRequest,
+  assignOffboardingClearance,
   cancelOffboardingRequest,
   completeOffboardingRequest,
   completeOffboardingClearance,
@@ -24,6 +25,7 @@ import {
   createEmployeeFinanceOffboardingRecoveries,
   createOffboardingWorkflow,
   createOffboardingWorkflowStep,
+  deleteOffboardingDocument,
   delegateOffboardingApproval,
   emergencyOffboardingAccessTermination,
   downloadOffboardingDocument,
@@ -45,6 +47,7 @@ import {
   listOffboardingAccessOperations,
   listMyOffboardingApprovals,
   listMyOffboardingClearances,
+  listMyOffboardingRequests,
   listMyOffboardingTasks,
   listOffboardingDocuments,
   listOffboardingItemsFromOwnRequests,
@@ -57,6 +60,9 @@ import {
   rejectOffboardingRequest,
   retryOffboardingAccessTermination,
   submitOffboardingRequest,
+  updateOffboardingAction,
+  updateOffboardingAssetReturn,
+  updateOffboardingDocument,
   updateOffboardingExitInterview,
   updateOffboardingSettlement,
   type AdminRecord,
@@ -697,20 +703,40 @@ export function OffboardingView() {
     try {
       if (targetTab === "requests") {
         let employeeFilter = selfEmployeeId ?? undefined
-        if (isEmployeeMode && employeeFilter == null) {
-          const me = await loadSelfEmployee(token)
-          employeeFilter = me
-            ? readNumber(me, ["id", "employee_id", "employeeId"]) ?? undefined
-            : undefined
+        if (isEmployeeMode) {
+          let mine: AdminRecord[] = []
+          try {
+            mine = await listMyOffboardingRequests(token)
+          } catch {
+            mine = []
+          }
+          if (mine.length > 0) {
+            setRequests(mine)
+          } else {
+            if (employeeFilter == null) {
+              const me = await loadSelfEmployee(token)
+              employeeFilter = me
+                ? readNumber(me, ["id", "employee_id", "employeeId"]) ?? undefined
+                : undefined
+            }
+            const requestsResult = await listOffboardingRequests(token, {
+              page: 1,
+              limit: 100,
+              sortBy: "created_at",
+              sortOrder: "DESC",
+              employee_id: employeeFilter,
+            })
+            setRequests(requestsResult.rows)
+          }
+        } else {
+          const requestsResult = await listOffboardingRequests(token, {
+            page: 1,
+            limit: 100,
+            sortBy: "created_at",
+            sortOrder: "DESC",
+          })
+          setRequests(requestsResult.rows)
         }
-        const requestsResult = await listOffboardingRequests(token, {
-          page: 1,
-          limit: 100,
-          sortBy: "created_at",
-          sortOrder: "DESC",
-          employee_id: isEmployeeMode && employeeFilter ? employeeFilter : undefined,
-        })
-        setRequests(requestsResult.rows)
         if (canManage) {
           try {
             await getOffboardingDashboard(token)
@@ -1095,6 +1121,7 @@ export function OffboardingView() {
     resetActionForm()
     resetAssetForm()
     resetSettlementForm()
+    void ensureLookups(["employees"])
     try {
       const [detail, approvals, audit, docs, progress, actions, assets, letters, accessOperations, settlements, exitInterview] = await Promise.all([
         getOffboardingRequest(token, id),
@@ -1278,6 +1305,63 @@ export function OffboardingView() {
     }
   }
 
+  async function saveRequestDocument(documentRow: AdminRecord) {
+    const token = readStoredToken()
+    const requestId = readCurrentRequestId()
+    const documentId = readNumber(documentRow, ["id", "document_id"])
+    if (!token || requestId === null || documentId === null) {
+      showErrorAlert("Missing document identifiers.")
+      return
+    }
+    const currentTitle = readString(documentRow, ["title", "name", "file_name"])
+    const nextTitle = window.prompt("Document title", currentTitle === "-" ? "" : currentTitle)
+    if (nextTitle == null) return
+    const currentDescription = readString(documentRow, ["description", "notes", "remarks"])
+    const nextDescription = window.prompt(
+      "Description",
+      currentDescription === "-" ? "" : currentDescription
+    )
+    if (nextDescription == null) return
+
+    setSaving(true)
+    try {
+      await updateOffboardingDocument(token, requestId, documentId, {
+        title: nextTitle.trim() || currentTitle,
+        description: nextDescription.trim() || undefined,
+      })
+      showSuccessAlert("Document updated.")
+      await reloadCurrentRequestActivity(requestId)
+    } catch (errorObject) {
+      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to update document.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function removeRequestDocument(documentRow: AdminRecord) {
+    const token = readStoredToken()
+    const requestId = readCurrentRequestId()
+    const documentId = readNumber(documentRow, ["id", "document_id"])
+    if (!token || requestId === null || documentId === null) {
+      showErrorAlert("Missing document identifiers.")
+      return
+    }
+    if (typeof window !== "undefined" && !window.confirm("Delete this offboarding document?")) {
+      return
+    }
+
+    setSaving(true)
+    try {
+      await deleteOffboardingDocument(token, requestId, documentId)
+      showSuccessAlert("Document deleted.")
+      await reloadCurrentRequestActivity(requestId)
+    } catch (errorObject) {
+      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to delete document.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
   async function submitRequestTask() {
     const token = readStoredToken()
     const requestId = readCurrentRequestId()
@@ -1414,6 +1498,31 @@ export function OffboardingView() {
     }
   }
 
+  async function assignRequestClearance(clearanceRow: AdminRecord, ownerCompanyUserId: string) {
+    const token = readStoredToken()
+    const requestId = readCurrentRequestId()
+    const clearanceId = readNumber(clearanceRow, ["id", "clearance_id"])
+    const ownerId = Number(ownerCompanyUserId)
+    if (!token || requestId === null || clearanceId === null || !Number.isFinite(ownerId) || ownerId < 1) {
+      showErrorAlert("Choose a clearance owner.")
+      return
+    }
+
+    setSaving(true)
+    try {
+      await assignOffboardingClearance(token, requestId, clearanceId, {
+        owner_company_user_id: ownerId,
+      })
+      showSuccessAlert("Clearance owner assigned.")
+      await reloadCurrentRequestActivity(requestId)
+      await reloadAll("my-clearances", true)
+    } catch (errorObject) {
+      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to assign clearance.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
   async function submitRequestActionItem() {
     const token = readStoredToken()
     const requestId = readCurrentRequestId()
@@ -1441,6 +1550,27 @@ export function OffboardingView() {
       await reloadCurrentRequestActivity(requestId)
     } catch (errorObject) {
       showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to create action.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function saveRequestActionStatus(actionRow: AdminRecord, status: string) {
+    const token = readStoredToken()
+    const requestId = readCurrentRequestId()
+    const actionId = readNumber(actionRow, ["id", "action_id"])
+    if (!token || requestId === null || actionId === null || !status.trim()) {
+      showErrorAlert("Missing action identifiers.")
+      return
+    }
+
+    setSaving(true)
+    try {
+      await updateOffboardingAction(token, requestId, actionId, { status })
+      showSuccessAlert("Access action updated.")
+      await reloadCurrentRequestActivity(requestId)
+    } catch (errorObject) {
+      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to update action.")
     } finally {
       setSaving(false)
     }
@@ -1478,6 +1608,27 @@ export function OffboardingView() {
       await reloadCurrentRequestActivity(requestId)
     } catch (errorObject) {
       showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to create asset return item.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function saveRequestAssetStatus(assetRow: AdminRecord, status: string) {
+    const token = readStoredToken()
+    const requestId = readCurrentRequestId()
+    const assetReturnId = readNumber(assetRow, ["id", "asset_return_id"])
+    if (!token || requestId === null || assetReturnId === null || !status.trim()) {
+      showErrorAlert("Missing asset identifiers.")
+      return
+    }
+
+    setSaving(true)
+    try {
+      await updateOffboardingAssetReturn(token, requestId, assetReturnId, { status })
+      showSuccessAlert("Asset return updated.")
+      await reloadCurrentRequestActivity(requestId)
+    } catch (errorObject) {
+      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to update asset return.")
     } finally {
       setSaving(false)
     }
@@ -2979,15 +3130,39 @@ export function OffboardingView() {
                                   {toTitleCaseWords(readString(documentRow, ["document_type", "type"]))}
                                 </p>
                               </div>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className="h-7 px-2 text-[11px]"
-                                onClick={() => void downloadRequestDocument(documentRow)}
-                                disabled={saving}
-                              >
-                                Download
-                              </Button>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="h-7 px-2 text-[11px]"
+                                  onClick={() => void downloadRequestDocument(documentRow)}
+                                  disabled={saving}
+                                >
+                                  Download
+                                </Button>
+                                {canManage ? (
+                                  <>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      className="h-7 px-2 text-[11px]"
+                                      onClick={() => void saveRequestDocument(documentRow)}
+                                      disabled={saving}
+                                    >
+                                      Edit
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      className="h-7 px-2 text-[11px] text-rose-600"
+                                      onClick={() => void removeRequestDocument(documentRow)}
+                                      disabled={saving}
+                                    >
+                                      Delete
+                                    </Button>
+                                  </>
+                                ) : null}
+                              </div>
                             </div>
                             <div className="mt-2 grid gap-2 text-xs">
                               <div>
@@ -3403,15 +3578,38 @@ export function OffboardingView() {
                                 </p>
                               </div>
                               {normalizedStatus !== "cleared" && canManage ? (
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  className="h-7 px-2 text-[11px]"
-                                  disabled={saving}
-                                  onClick={() => void completeRequestClearance(clearanceRow)}
-                                >
-                                  Mark cleared
-                                </Button>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <select
+                                    className="h-7 max-w-[10rem] rounded-md border border-input bg-background px-2 text-[11px]"
+                                    defaultValue={ownerCompanyUserId == null ? "" : String(ownerCompanyUserId)}
+                                    disabled={saving}
+                                    onChange={(event) => {
+                                      if (event.target.value) {
+                                        void assignRequestClearance(clearanceRow, event.target.value)
+                                      }
+                                    }}
+                                    aria-label="Assign clearance owner"
+                                  >
+                                    <option value="">Assign owner</option>
+                                    {employeeCompanyUserOptions.map((option) => (
+                                      <option
+                                        key={`assign-clearance-${clearanceId}-${option.companyUserId}`}
+                                        value={String(option.companyUserId)}
+                                      >
+                                        {option.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="h-7 px-2 text-[11px]"
+                                    disabled={saving}
+                                    onClick={() => void completeRequestClearance(clearanceRow)}
+                                  >
+                                    Mark cleared
+                                  </Button>
+                                </div>
                               ) : null}
                             </div>
                             <div className="mt-2 grid gap-2 text-xs">
@@ -3856,7 +4054,23 @@ export function OffboardingView() {
                             <p className="text-sm font-medium text-foreground">
                               {toTitleCaseWords(readString(actionRow, ["action_type", "title", "name"]))}
                             </p>
-                            <StatusDot status={readString(actionRow, ["status"])} />
+                            {canManage ? (
+                              <select
+                                className="h-7 rounded-md border border-input bg-background px-2 text-[11px]"
+                                value={readString(actionRow, ["status"])}
+                                disabled={saving}
+                                onChange={(event) => void saveRequestActionStatus(actionRow, event.target.value)}
+                                aria-label="Update access action status"
+                              >
+                                {OFFBOARDING_ACTION_STATUS_OPTIONS.map((status) => (
+                                  <option key={status} value={status}>
+                                    {toTitleCaseWords(status)}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <StatusDot status={readString(actionRow, ["status"])} />
+                            )}
                           </div>
                           <div className="mt-2 grid gap-2 text-xs">
                             <div>
@@ -4028,7 +4242,23 @@ export function OffboardingView() {
                             <p className="text-sm font-medium text-foreground">
                               {readString(assetRow, ["asset_label", "title", "name"])}
                             </p>
-                            <StatusDot status={readString(assetRow, ["status"])} />
+                            {canManage ? (
+                              <select
+                                className="h-7 rounded-md border border-input bg-background px-2 text-[11px]"
+                                value={readString(assetRow, ["status"])}
+                                disabled={saving}
+                                onChange={(event) => void saveRequestAssetStatus(assetRow, event.target.value)}
+                                aria-label="Update asset return status"
+                              >
+                                {OFFBOARDING_ASSET_STATUS_OPTIONS.map((status) => (
+                                  <option key={status} value={status}>
+                                    {toTitleCaseWords(status)}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <StatusDot status={readString(assetRow, ["status"])} />
+                            )}
                           </div>
                           <div className="mt-2 grid gap-2 text-xs">
                             <div>

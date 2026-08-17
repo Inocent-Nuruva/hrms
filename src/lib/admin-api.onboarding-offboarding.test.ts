@@ -1,0 +1,146 @@
+import { afterEach, describe, expect, it, vi } from "vitest"
+
+import {
+  acknowledgeOnboardingRequest,
+  assignOffboardingClearance,
+  delegateOnboardingApproval,
+  deleteOffboardingDocument,
+  listMyOffboardingRequests,
+  listMyOnboardingRequests,
+  updateOffboardingAction,
+  updateOffboardingAssetReturn,
+  updateOffboardingDocument,
+} from "./admin-api"
+
+function jsonResponse(payload: unknown, init?: ResponseInit) {
+  return new Response(JSON.stringify(payload), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+    ...init,
+  })
+}
+
+describe("documented onboarding and offboarding leftovers", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  it("lists my onboarding and offboarding requests", async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (String(url).includes("/api/me/onboarding")) {
+        return jsonResponse({ data: [{ id: 11, status: "in_progress" }] })
+      }
+      return jsonResponse({ data: [{ id: 22, status: "submitted" }] })
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    const onboarding = await listMyOnboardingRequests("token")
+    const offboarding = await listMyOffboardingRequests("token")
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "http://localhost:8888/api/me/onboarding",
+      expect.objectContaining({ method: "GET" }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "http://localhost:8888/api/me/offboarding",
+      expect.objectContaining({ method: "GET" }),
+    )
+    expect(onboarding).toEqual([expect.objectContaining({ id: 11 })])
+    expect(offboarding).toEqual([expect.objectContaining({ id: 22 })])
+  })
+
+  it("acknowledges onboarding and delegates a pending approval", async () => {
+    const fetchMock = vi.fn().mockImplementation(() => jsonResponse({ data: { ok: true } }))
+    vi.stubGlobal("fetch", fetchMock)
+
+    await acknowledgeOnboardingRequest("token", 8, {
+      accepted: true,
+      acknowledgement_version: "v1",
+    })
+    await delegateOnboardingApproval("token", 8, 3, {
+      delegate_company_user_id: 44,
+      reason: "On leave",
+    })
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "http://localhost:8888/api/onboarding/requests/8/acknowledge",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          accepted: true,
+          acknowledgement_version: "v1",
+        }),
+      }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "http://localhost:8888/api/onboarding/requests/8/approvals/3/delegate",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          delegate_company_user_id: 44,
+          reason: "On leave",
+        }),
+      }),
+    )
+  })
+
+  it("updates nested offboarding actions, assets, clearances, and documents", async () => {
+    const fetchMock = vi.fn().mockImplementation(() => jsonResponse({ data: { ok: true } }))
+    vi.stubGlobal("fetch", fetchMock)
+
+    await updateOffboardingAction("token", 9, 4, { status: "completed" })
+    await updateOffboardingAssetReturn("token", 9, 6, { status: "returned" })
+    await assignOffboardingClearance("token", 9, 2, {
+      owner_company_user_id: 15,
+      remarks: "IT owner",
+    })
+    await updateOffboardingDocument("token", 9, 7, { title: "Exit checklist" })
+    await deleteOffboardingDocument("token", 9, 7)
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "http://localhost:8888/api/offboarding/requests/9/actions/4",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ status: "completed" }),
+      }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "http://localhost:8888/api/offboarding/requests/9/assets/6",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ status: "returned" }),
+      }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "http://localhost:8888/api/offboarding/requests/9/clearances/2/assign",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({
+          owner_company_user_id: 15,
+          remarks: "IT owner",
+        }),
+      }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
+      "http://localhost:8888/api/offboarding/requests/9/documents/7",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ title: "Exit checklist" }),
+      }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      5,
+      "http://localhost:8888/api/offboarding/requests/9/documents/7",
+      expect.objectContaining({ method: "DELETE" }),
+    )
+  })
+})

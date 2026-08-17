@@ -476,6 +476,7 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/me/requests/documents": null,
   "/dashboard/me/requests/profile-changes": null,
   "/dashboard/me/requests/resignation": null,
+  "/dashboard/me/onboarding": null,
   "/dashboard/me/offboarding": {
     permissions: [
       "offboarding_requests:read",

@@ -595,6 +595,11 @@ const employeeData: SidebarData = {
       ],
     },
     {
+      title: "Onboarding",
+      icon: IUsers,
+      url: "/dashboard/me/onboarding",
+    },
+    {
       title: "Offboarding",
       icon: IOffboarding,
       // Self-service path — does not mount the HR Employees section tabs.
@@ -650,6 +655,7 @@ const employeeSearchIndex = [
   { title: "Finance", url: "/dashboard/finance/overview", section: "Finance", keywords: ["finance", "loan", "advance"] },
   { title: "Activities", url: "/dashboard/activities/overview", section: "Activities", keywords: ["activity", "report"] },
   { title: "Movements", url: "/dashboard/movements/overview", section: "Movements", keywords: ["movement", "transfer"] },
+  { title: "Onboarding", url: "/dashboard/me/onboarding", section: "Employees", keywords: ["employee", "onboarding", "acknowledge"] },
   { title: "Offboarding", url: "/dashboard/me/offboarding", section: "Employees", keywords: ["employee", "exit"] },
   { title: "Settings", url: "/dashboard/settings", section: "General", keywords: ["preferences", "account"] },
 ]
