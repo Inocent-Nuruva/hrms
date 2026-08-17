@@ -73,6 +73,29 @@ describe("authService foundation helpers", () => {
     ])
   })
 
+  it("regenerates 2FA backup codes with the current token", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        backup_codes: ["ABC1-DEF2-GHI3", "JKL4-MNO5-PQR6"],
+      })
+    )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const codes = await authService.regenerateBackupCodes("access-token", "123456")
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8888/api/users/2fa/backup-codes/regenerate",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          Authorization: "Bearer access-token",
+        }),
+        body: JSON.stringify({ token: "123456" }),
+      })
+    )
+    expect(codes).toEqual(["ABC1-DEF2-GHI3", "JKL4-MNO5-PQR6"])
+  })
+
   it("posts logout-all with the current bearer token", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response("", { status: 200 }))
     vi.stubGlobal("fetch", fetchMock)

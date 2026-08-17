@@ -15,6 +15,7 @@ import type {
   AuthUser,
   AuthTokens,
 } from "@/types";
+import { extractBackupCodes } from "@/lib/admin-api";
 import { apiRequest, ApiError } from "@/services/api";
 import { isLikelyRefreshToken } from "@/utils/token-utils";
 
@@ -552,6 +553,18 @@ export const authService = {
       token,
       body: { token: code },
     });
+  },
+
+  async regenerateBackupCodes(token: string, code: string): Promise<string[]> {
+    const response = await apiRequest<unknown>(
+      "/api/users/2fa/backup-codes/regenerate",
+      {
+        method: "POST",
+        token,
+        body: { token: code.trim() },
+      },
+    );
+    return extractBackupCodes(response);
   },
 
   async getSecurityFlags(token: string): Promise<UserSecurityFlags> {

@@ -19,6 +19,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import {
+  extractBackupCodes,
   listMyNotificationPreferences,
   setMyNotificationPreference,
   type NotificationChannel,
@@ -252,6 +253,9 @@ function AccountSettingsPanelContent({
   const [setupData, setSetupData] = React.useState<TwoFactorSetupResponse | null>(null)
   const [verifyCode, setVerifyCode] = React.useState("")
   const [disableCode, setDisableCode] = React.useState("")
+  const [backupCodes, setBackupCodes] = React.useState<string[]>([])
+  const [regenerateCode, setRegenerateCode] = React.useState("")
+  const [regenerateBusy, setRegenerateBusy] = React.useState(false)
   const [accountEmail, setAccountEmail] = React.useState("")
   const [emailBusy, setEmailBusy] = React.useState(false)
   const [sessions, setSessions] = React.useState<AuthSessionRecord[]>([])
@@ -472,11 +476,17 @@ function AccountSettingsPanelContent({
     }
     setTwoFactorBusy(true)
     try {
-      await authService.verifyTwoFactor(accessToken, code)
+      const verifyResult = await authService.verifyTwoFactor(accessToken, code)
+      const nextBackupCodes = extractBackupCodes(verifyResult)
       setSetupData(null)
       setVerifyCode("")
       setTwoFactorEnabled(true)
-      showSuccessAlert("Two-factor authentication is now enabled.")
+      if (nextBackupCodes.length > 0) {
+        setBackupCodes(nextBackupCodes)
+        showSuccessAlert("Two-factor authentication is now enabled. Save your backup codes.")
+      } else {
+        showSuccessAlert("Two-factor authentication is now enabled.")
+      }
       void refreshSecurityFlags()
     } catch (errorObject) {
       const message = errorObject instanceof Error ? errorObject.message : "Invalid 2FA code."
@@ -502,6 +512,8 @@ function AccountSettingsPanelContent({
       await authService.disableTwoFactor(accessToken, code)
       setDisableCode("")
       setSetupData(null)
+      setBackupCodes([])
+      setRegenerateCode("")
       setTwoFactorEnabled(false)
       showSuccessAlert("Two-factor authentication has been disabled.")
       void refreshSecurityFlags()
@@ -510,6 +522,45 @@ function AccountSettingsPanelContent({
       toast.error(message)
     } finally {
       setTwoFactorBusy(false)
+    }
+  }
+
+  const handleRegenerateBackupCodes = async () => {
+    const accessToken = resolveFreshAccessToken(token)
+    if (!accessToken) {
+      toast.error("Your session expired. Please sign in again.")
+      return
+    }
+    const code = regenerateCode.trim()
+    if (!code) {
+      toast.error("Enter an authenticator code or unused backup code.")
+      return
+    }
+    setRegenerateBusy(true)
+    try {
+      const nextCodes = await authService.regenerateBackupCodes(accessToken, code)
+      if (nextCodes.length === 0) {
+        throw new Error("The server did not return new backup codes.")
+      }
+      setBackupCodes(nextCodes)
+      setRegenerateCode("")
+      showSuccessAlert("New backup codes generated. Store them in a safe place.")
+    } catch (errorObject) {
+      const message =
+        errorObject instanceof Error ? errorObject.message : "Could not regenerate backup codes."
+      toast.error(message)
+    } finally {
+      setRegenerateBusy(false)
+    }
+  }
+
+  const handleCopyBackupCodes = async () => {
+    if (backupCodes.length === 0) return
+    try {
+      await navigator.clipboard.writeText(backupCodes.join("\n"))
+      toast.success("Backup codes copied.")
+    } catch {
+      toast.error("Could not copy backup codes.")
     }
   }
 
@@ -946,6 +997,69 @@ function AccountSettingsPanelContent({
 
                   {twoFactorEnabled ? (
                     <div className="space-y-3 border-t pt-3">
+                      {backupCodes.length > 0 ? (
+                        <div className="space-y-2 rounded-lg border bg-muted/30 p-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="space-y-1">
+                              <p className="text-sm font-medium text-foreground">Backup codes</p>
+                              <p className="text-xs text-muted-foreground">
+                                Store these somewhere safe. Each code can be used once if you lose your authenticator.
+                              </p>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => void handleCopyBackupCodes()}
+                            >
+                              <Copy className="size-3.5" />
+                              Copy
+                            </Button>
+                          </div>
+                          <ul className="grid gap-1 font-mono text-xs sm:grid-cols-2">
+                            {backupCodes.map((code) => (
+                              <li key={code} className="rounded-md border bg-background px-2 py-1">
+                                {code}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium text-foreground">Regenerate backup codes</p>
+                        <p className="text-xs text-muted-foreground">
+                          This replaces any unused backup codes. Enter a current authenticator code or an unused backup code.
+                        </p>
+                        <Label htmlFor="regenerate-2fa-code">Authenticator or backup code</Label>
+                        <Input
+                          id="regenerate-2fa-code"
+                          autoComplete="one-time-code"
+                          placeholder="123456"
+                          value={regenerateCode}
+                          onChange={(event) => setRegenerateCode(event.target.value)}
+                          className="max-w-[14rem] font-mono"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => void handleRegenerateBackupCodes()}
+                          disabled={regenerateBusy || twoFactorBusy || !regenerateCode.trim()}
+                        >
+                          {regenerateBusy ? (
+                            <>
+                              <Loader2 className="size-4 animate-spin" />
+                              Regenerating…
+                            </>
+                          ) : (
+                            <>
+                              <KeyRound className="size-4" />
+                              Generate new backup codes
+                            </>
+                          )}
+                        </Button>
+                      </div>
+
                       <p className="text-sm text-muted-foreground">
                         To disable 2FA, enter a current code from your authenticator app.
                       </p>

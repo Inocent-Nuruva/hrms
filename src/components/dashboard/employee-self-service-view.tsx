@@ -62,7 +62,9 @@ import {
   submitMyLeaveRequest,
   uploadMyProfilePhoto,
   selectMyProfileAvatar,
+  selectMyUserAvatar,
   listDefaultAvatars,
+  listSelectableAvatarsForMe,
   listMyPayslips,
   extractDefaultAvatarImageUrl,
   fetchImageUrlAsAvatarFile,
@@ -3903,12 +3905,19 @@ export function EmployeeSelfServiceProfileView() {
           ? "male"
           : undefined
 
-    void listDefaultAvatars(token, {
-      status: "active",
-      // Prefer matching gender when known; still load neutrals by omitting filter if needed.
-      gender_category: genderCategory,
-    })
-      .then(async (matched) => {
+    void listSelectableAvatarsForMe(token)
+      .then(async (selfServiceRows) => {
+        if (cancelled) return
+        if (selfServiceRows.length > 0) {
+          setDefaultAvatars(selfServiceRows)
+          return
+        }
+
+        const matched = await listDefaultAvatars(token, {
+          status: "active",
+          // Prefer matching gender when known; still load neutrals by omitting filter if needed.
+          gender_category: genderCategory,
+        })
         if (cancelled) return
         // Also pull neutrals so users always have options.
         let neutrals: AdminRecord[] = []
@@ -4078,26 +4087,35 @@ export function EmployeeSelfServiceProfileView() {
           try {
             result = await selectMyProfileAvatar(token, avatarId)
           } catch (selectError) {
-            // Some gallery rows 500 on the backend (missing storage file / bad media).
-            // Fall back to uploading the preview image as a normal profile photo.
-            const status =
-              typeof selectError === "object" &&
-              selectError !== null &&
-              "status" in selectError
-                ? Number((selectError as { status?: number }).status)
-                : null
-            if (status !== 500 && status !== 502 && status !== 503) {
-              throw selectError
+            try {
+              const userAvatar = await selectMyUserAvatar(token, avatarId)
+              result = (userAvatar as AdminRecord | null) ?? null
+            } catch {
+              // Documented /api/users/me/avatar path also failed.
             }
-            if (!profilePhotoPreviewUrl) {
-              throw selectError
+
+            if (!result) {
+              // Some gallery rows 500 on the backend (missing storage file / bad media).
+              // Fall back to uploading the preview image as a normal profile photo.
+              const status =
+                typeof selectError === "object" &&
+                selectError !== null &&
+                "status" in selectError
+                  ? Number((selectError as { status?: number }).status)
+                  : null
+              if (status !== 500 && status !== 502 && status !== 503) {
+                throw selectError
+              }
+              if (!profilePhotoPreviewUrl) {
+                throw selectError
+              }
+              const fallbackFile = await fetchImageUrlAsAvatarFile(
+                profilePhotoPreviewUrl,
+                profilePhotoFileName || "avatar.png"
+              )
+              result = await uploadMyProfilePhoto(token, fallbackFile)
+              usedUploadFallback = true
             }
-            const fallbackFile = await fetchImageUrlAsAvatarFile(
-              profilePhotoPreviewUrl,
-              profilePhotoFileName || "avatar.png"
-            )
-            result = await uploadMyProfilePhoto(token, fallbackFile)
-            usedUploadFallback = true
           }
         } else if (selectedProfilePhotoFile) {
           result = await uploadMyProfilePhoto(token, selectedProfilePhotoFile)

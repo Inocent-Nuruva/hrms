@@ -9658,6 +9658,129 @@ export async function selectMyProfileAvatar(
   return normalizeSingle(payload) ?? asRecord(payload);
 }
 
+/** Pull backup codes from 2FA setup / regenerate payloads. */
+export function extractBackupCodes(payload: unknown): string[] {
+  const root = asRecord(payload);
+  const data = asRecord(root?.data) ?? root;
+  const candidates = [
+    data?.backup_codes,
+    data?.backupCodes,
+    data?.recovery_codes,
+    data?.recoveryCodes,
+    data?.codes,
+    root?.backup_codes,
+    root?.backupCodes,
+    root?.recovery_codes,
+    root?.recoveryCodes,
+  ];
+
+  for (const value of candidates) {
+    if (Array.isArray(value)) {
+      return value
+        .map((entry) => String(entry ?? "").trim())
+        .filter(Boolean);
+    }
+    if (typeof value === "string" && value.trim()) {
+      return value
+        .split(/[\n,]+/)
+        .map((entry) => entry.trim())
+        .filter(Boolean);
+    }
+  }
+
+  return [];
+}
+
+/**
+ * GET /api/me/profile/avatar-options
+ * Default avatars available to the signed-in employee.
+ */
+export async function listMyProfileAvatarOptions(
+  token: string,
+): Promise<AdminRecord[]> {
+  const payload = await adminRequest<unknown>("/api/me/profile/avatar-options", {
+    token,
+    cacheTtlMs: 0,
+    dedupe: false,
+  });
+  return normalizeList(payload);
+}
+
+/**
+ * GET /api/users/me/available-avatars
+ * Default avatars available to the current user (company + gender rules).
+ */
+export async function listMyAvailableAvatars(
+  token: string,
+): Promise<AdminRecord[]> {
+  const payload = await adminRequest<unknown>("/api/users/me/available-avatars", {
+    token,
+    cacheTtlMs: 0,
+    dedupe: false,
+  });
+  return normalizeList(payload);
+}
+
+/**
+ * GET /api/users/me/avatars
+ * Backward-compatible alias for listMyAvailableAvatars.
+ */
+export async function listMyAvailableAvatarsLegacy(
+  token: string,
+): Promise<AdminRecord[]> {
+  const payload = await adminRequest<unknown>("/api/users/me/avatars", {
+    token,
+    cacheTtlMs: 0,
+    dedupe: false,
+  });
+  return normalizeList(payload);
+}
+
+/**
+ * PATCH /api/users/me/avatar — assign an active default avatar to the current user.
+ * Body: { avatar_id: number }
+ */
+export async function selectMyUserAvatar(token: string, avatarId: number) {
+  const id = Number(avatarId);
+  if (!Number.isFinite(id)) {
+    throw new Error("Invalid default avatar id.");
+  }
+  return adminRequest<unknown>("/api/users/me/avatar", {
+    method: "PATCH",
+    token,
+    body: { avatar_id: Math.trunc(id) },
+  });
+}
+
+/**
+ * Employee/self-service avatar gallery. Tries the documented self-service
+ * endpoints first so users without default-avatar admin grants still get options.
+ */
+export async function listSelectableAvatarsForMe(
+  token: string,
+): Promise<AdminRecord[]> {
+  const loaders = [
+    listMyProfileAvatarOptions,
+    listMyAvailableAvatars,
+    listMyAvailableAvatarsLegacy,
+  ];
+
+  for (const load of loaders) {
+    try {
+      const rows = (await load(token)).filter((row) =>
+        isSelectableDefaultAvatar(row),
+      );
+      if (rows.length > 0) {
+        return rows;
+      }
+    } catch {
+      // Try the next documented source.
+    }
+  }
+
+  return [];
+}
+
 export async function getMyStatus(token: string) {
   const payload = await adminRequest<unknown>("/api/me/status", { token });
   return normalizeSingle(payload);
@@ -10802,16 +10925,65 @@ export function readTwoFactorEnabled(
   return readTwoFactorFlagFromRecord(record, 0) ?? false;
 }
 
+const FORCE_TWO_FACTOR_KEYS = [
+  "force_two_factor",
+  "forceTwoFactor",
+  "two_factor_forced",
+  "twoFactorForced",
+  "two_factor_required",
+  "twoFactorRequired",
+] as const;
+
+/** Resolve whether 2FA is mandatory for a user, independent of current setup. */
+export function readForceTwoFactor(
+  record: AdminRecord | null | undefined,
+): boolean {
+  if (!record) {
+    return false;
+  }
+
+  for (const key of FORCE_TWO_FACTOR_KEYS) {
+    if (!(key in record)) {
+      continue;
+    }
+    const coerced = coerceTwoFactorFlag(record[key]);
+    if (coerced !== null) {
+      return coerced;
+    }
+  }
+
+  for (const nestKey of TWO_FACTOR_NEST_KEYS) {
+    const nested = asRecord(record[nestKey]);
+    if (!nested) {
+      continue;
+    }
+    for (const key of FORCE_TWO_FACTOR_KEYS) {
+      if (!(key in nested)) {
+        continue;
+      }
+      const coerced = coerceTwoFactorFlag(nested[key]);
+      if (coerced !== null) {
+        return coerced;
+      }
+    }
+  }
+
+  return false;
+}
+
 /** Attach consistent top-level 2FA fields for tables and toggles. */
 export function withNormalizedTwoFactorFields(
   record: AdminRecord,
 ): AdminRecord {
   const enabled = readTwoFactorEnabled(record);
+  const forced = readForceTwoFactor(record);
   return {
     ...record,
     two_factor_enabled: enabled,
     is_two_factor_enabled: enabled,
     twoFactorEnabled: enabled,
+    force_two_factor: forced,
+    forceTwoFactor: forced,
   };
 }
 
@@ -10901,6 +11073,45 @@ export async function disableUserTwoFactor(
     token,
     body: reason?.trim() ? { reason: reason.trim() } : {},
   });
+}
+
+/**
+ * PATCH /api/users/{userId}/two-factor/force
+ * Mark 2FA as mandatory (or optional) for a specific user.
+ */
+export async function setUserForceTwoFactor(
+  token: string,
+  userId: string | number,
+  force: boolean,
+) {
+  return adminRequest<unknown>(`/api/users/${userId}/two-factor/force`, {
+    method: "PATCH",
+    token,
+    body: { force },
+  });
+}
+
+/**
+ * POST /api/users/2fa/backup-codes/regenerate
+ * Requires the current TOTP token or an unused backup code.
+ */
+export async function regenerateMyTwoFactorBackupCodes(
+  token: string,
+  totpOrBackupCode: string,
+) {
+  const code = totpOrBackupCode.trim();
+  if (!code) {
+    throw new Error("Enter an authenticator code or backup code.");
+  }
+  const payload = await adminRequest<unknown>(
+    "/api/users/2fa/backup-codes/regenerate",
+    {
+      method: "POST",
+      token,
+      body: { token: code },
+    },
+  );
+  return extractBackupCodes(payload);
 }
 
 export async function deleteUserById(id: string | number, token: string) {

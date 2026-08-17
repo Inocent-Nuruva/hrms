@@ -72,6 +72,8 @@ import {
   assignUserAvatar,
   disableUserTwoFactor,
   enableUserTwoFactor,
+  readForceTwoFactor,
+  setUserForceTwoFactor,
   extractDefaultAvatarImageUrl,
   getPermissionById,
   getRoleById,
@@ -102,6 +104,7 @@ import {
   Loader2Icon,
   PencilIcon,
   PlusIcon,
+  ShieldAlertIcon,
   ShieldCheckIcon,
   ShieldOffIcon,
   Trash2Icon,
@@ -327,18 +330,26 @@ function getVisibleColumns(rows: AdminRecord[]) {
 
 function formatTwoFactorCell(row: AdminRecord): React.ReactNode {
   const enabled = readTwoFactorEnabled(row)
+  const forced = readForceTwoFactor(row)
   return (
-    <Badge
-      variant={enabled ? "default" : "secondary"}
-      className={cn(
-        "text-[10px] font-semibold",
-        enabled
-          ? "bg-emerald-600/90 text-white hover:bg-emerald-600/90"
-          : "bg-muted text-muted-foreground"
-      )}
-    >
-      {enabled ? "On" : "Off"}
-    </Badge>
+    <div className="flex flex-wrap items-center gap-1">
+      <Badge
+        variant={enabled ? "default" : "secondary"}
+        className={cn(
+          "text-[10px] font-semibold",
+          enabled
+            ? "bg-emerald-600/90 text-white hover:bg-emerald-600/90"
+            : "bg-muted text-muted-foreground"
+        )}
+      >
+        {enabled ? "On" : "Off"}
+      </Badge>
+      {forced ? (
+        <Badge variant="outline" className="text-[10px] font-semibold">
+          Required
+        </Badge>
+      ) : null}
+    </div>
   )
 }
 
@@ -984,7 +995,7 @@ export function DataTable({
   const [twoFactorUser, setTwoFactorUser] = React.useState<{
     id: string | number
     label: string
-    mode: "enable" | "disable"
+    mode: "enable" | "disable" | "force" | "unforce"
   } | null>(null)
   const [twoFactorReason, setTwoFactorReason] = React.useState("")
   const [twoFactorBusy, setTwoFactorBusy] = React.useState(false)
@@ -1566,6 +1577,14 @@ export function DataTable({
         showSuccessAlert(
           "2FA required for this user. They complete setup during their next login."
         )
+      } else if (twoFactorUser.mode === "force") {
+        await setUserForceTwoFactor(token, twoFactorUser.id, true)
+        showSuccessAlert(
+          "Two-factor is now mandatory for this user until they complete setup."
+        )
+      } else if (twoFactorUser.mode === "unforce") {
+        await setUserForceTwoFactor(token, twoFactorUser.id, false)
+        showSuccessAlert("Two-factor is no longer mandatory for this user.")
       } else {
         await disableUserTwoFactor(token, twoFactorUser.id, twoFactorReason)
         showSuccessAlert("2FA has been disabled for this user.")
@@ -2621,6 +2640,8 @@ export function DataTable({
                         const rowId = getRowId(row, index + 1)
                         const rowLabel = stringifyValue(row.name ?? row.email ?? rowId)
                         const twoFactorOn = activeResource === "users" ? readTwoFactorEnabled(row) : false
+                        const twoFactorForced =
+                          activeResource === "users" ? readForceTwoFactor(row) : false
 
                         return (
                           <motion.tr
@@ -2737,6 +2758,38 @@ export function DataTable({
                                     >
                                       <ShieldOffIcon />
                                       Disable 2FA
+                                    </DropdownMenuItem>
+                                  ) : null}
+
+                                  {activeResource === "users" && !twoFactorForced ? (
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        setTwoFactorUser({
+                                          id: rowId,
+                                          label: rowLabel,
+                                          mode: "force",
+                                        })
+                                        setTwoFactorReason("")
+                                      }}
+                                    >
+                                      <ShieldAlertIcon />
+                                      Require 2FA
+                                    </DropdownMenuItem>
+                                  ) : null}
+
+                                  {activeResource === "users" && twoFactorForced ? (
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        setTwoFactorUser({
+                                          id: rowId,
+                                          label: rowLabel,
+                                          mode: "unforce",
+                                        })
+                                        setTwoFactorReason("")
+                                      }}
+                                    >
+                                      <ShieldCheckIcon />
+                                      Make 2FA optional
                                     </DropdownMenuItem>
                                   ) : null}
 
@@ -2949,13 +3002,23 @@ export function DataTable({
         <DialogPopup className="max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {twoFactorUser?.mode === "disable" ? "Disable 2FA" : "Enable 2FA"} for{" "}
-              {twoFactorUser?.label ?? "user"}
+              {twoFactorUser?.mode === "disable"
+                ? "Disable 2FA"
+                : twoFactorUser?.mode === "force"
+                  ? "Require 2FA"
+                  : twoFactorUser?.mode === "unforce"
+                    ? "Make 2FA optional"
+                    : "Enable 2FA"}{" "}
+              for {twoFactorUser?.label ?? "user"}
             </DialogTitle>
             <DialogDescription>
               {twoFactorUser?.mode === "disable"
                 ? "This disables two-factor authentication, revokes recovery data, and may invalidate active sessions."
-                : "The user must complete 2FA setup during their next login. No secret is shown here."}
+                : twoFactorUser?.mode === "force"
+                  ? "Two-factor becomes mandatory for this user. If they have not set it up yet, they are blocked until setup is complete."
+                  : twoFactorUser?.mode === "unforce"
+                    ? "Two-factor will no longer be mandatory. Existing 2FA setup is left unchanged."
+                    : "The user must complete 2FA setup during their next login. No secret is shown here."}
             </DialogDescription>
           </DialogHeader>
           {twoFactorUser?.mode === "disable" ? (
@@ -2991,7 +3054,11 @@ export function DataTable({
                 ? "Working…"
                 : twoFactorUser?.mode === "disable"
                   ? "Disable 2FA"
-                  : "Enable 2FA"}
+                  : twoFactorUser?.mode === "force"
+                    ? "Require 2FA"
+                    : twoFactorUser?.mode === "unforce"
+                      ? "Make optional"
+                      : "Enable 2FA"}
             </Button>
           </DialogFooter>
         </DialogPopup>
