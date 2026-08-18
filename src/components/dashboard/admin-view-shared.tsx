@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/animate-ui/components/base/dialog"
 import type { AdminRecord } from "@/lib/admin-api"
+import { cn } from "@/lib/utils"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 
 const FORM_DRAFT_PREFIX = "hrms.form-draft"
@@ -218,6 +219,7 @@ export function RecordDetailsDialog({
   resolveValue,
   content,
   footer,
+  popupClassName,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -228,6 +230,7 @@ export function RecordDetailsDialog({
   resolveValue?: (key: string, row: AdminRecord) => string
   content?: React.ReactNode
   footer?: React.ReactNode
+  popupClassName?: string
 }) {
   const entries = React.useMemo(() => {
     if (!row) {
@@ -239,7 +242,7 @@ export function RecordDetailsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogPopup className="sm:max-w-2xl">
+      <DialogPopup className={cn("sm:max-w-2xl", popupClassName)}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           {description ? <DialogDescription>{description}</DialogDescription> : null}

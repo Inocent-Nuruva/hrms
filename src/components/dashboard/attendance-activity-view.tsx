@@ -8,6 +8,8 @@ import {
 } from "framer-motion"
 import {
   AlarmClockCheckIcon,
+  AlertTriangle,
+  CalendarDays,
   Filter,
   PlusIcon,
   RefreshCwIcon,
@@ -54,6 +56,7 @@ import {
   type RefreshAttendanceDailySummariesInput,
 } from "@/lib/admin-api"
 import { cn } from "@/lib/utils"
+import { useDashboardMotion } from "@/lib/dashboard-motion"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import { notifySubmittedRequestApprovers } from "@/lib/request-notifications"
 import {
@@ -1575,6 +1578,79 @@ function nullIfDash(value: string) {
   return value === "—" || value === "-" ? null : value
 }
 
+function composeEmployeeIdentity(name: string | null, employeeNo: string | null) {
+  const rawName = name?.trim() || ""
+  const rawNumber = employeeNo?.trim() || ""
+  const wrapped = rawName.match(/^(.*?)(?:\s+\(([^)]+)\))+$/)
+  const cleanName = (wrapped?.[1] || rawName).trim()
+  const wrappedNumber = wrapped?.[2]?.trim() || ""
+  const number = rawNumber || wrappedNumber
+  if (cleanName && number && cleanName.includes(number) && !wrapped) {
+    return { name: cleanName, number }
+  }
+  return {
+    name: cleanName || number || null,
+    number: number || null,
+  }
+}
+
+function parseClockMinutes(value: string | null | undefined) {
+  if (!value || value === "—" || value === "-") return null
+  const match = value.trim().match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
+  if (!match) return null
+  let hours = Number(match[1])
+  const minutes = Number(match[2])
+  const meridian = match[3]?.toUpperCase()
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null
+  if (meridian === "PM" && hours < 12) hours += 12
+  if (meridian === "AM" && hours === 12) hours = 0
+  return hours * 60 + minutes
+}
+
+function formatPrettyDate(value: string | null | undefined) {
+  if (!value || value === "—") return "Date not provided"
+  const parsed = new Date(value.length <= 10 ? `${value}T00:00:00` : value)
+  if (Number.isNaN(parsed.getTime())) return value
+  return parsed.toLocaleDateString(undefined, {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  })
+}
+
+function formatPrettyDateTime(value: string | null | undefined) {
+  if (!value || value === "—") return "—"
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return value
+  return parsed.toLocaleString(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  })
+}
+
+function splitRemarkChips(value: string | null | undefined) {
+  if (!value) return []
+  return value
+    .split(/[,|]/)
+    .map((entry) => prettifyLabel(entry.trim()))
+    .filter(Boolean)
+}
+
+function readMinutesNumber(row: AdminRecord | null, keys: string[]) {
+  if (!row) return null
+  const value = readFirstValue(row, keys)
+  const minutes = Number(value)
+  return Number.isFinite(minutes) ? minutes : null
+}
+
+function clockPercent(minutes: number, rangeStart: number, span: number) {
+  return Math.min(100, Math.max(0, ((minutes - rangeStart) / span) * 100))
+}
+
 function buildDailySummaryDetailsRecord(row: AdminRecord | null): AdminRecord | null {
   if (!row) {
     return null
@@ -1596,6 +1672,7 @@ function buildDailySummaryDetailsRecord(row: AdminRecord | null): AdminRecord | 
     "employee_code",
     "employeeCode",
   ]) ?? readStringFromRow(nestedEmployee ?? {}, ["employee_no", "employeeNo", "employee_number"])
+  const employeeLabel = composeEmployeeIdentity(employeeName, employeeNo)
 
   const branchName =
     typeof resolveDailySummaryCellValue("branch_name", row) === "string"
@@ -1676,11 +1753,8 @@ function buildDailySummaryDetailsRecord(row: AdminRecord | null): AdminRecord | 
   )
 
   return {
-    employee: employeeName
-      ? employeeNo
-        ? `${employeeName} (${employeeNo})`
-        : employeeName
-      : employeeNo,
+    employee: employeeLabel.name,
+    employee_no: employeeLabel.number,
     branch: branchName || null,
     attendance_date: attendanceDate || null,
     attendance_status: rawStatus ? prettifyLabel(rawStatus) : null,
@@ -1708,27 +1782,6 @@ function buildDailySummaryDetailsRecord(row: AdminRecord | null): AdminRecord | 
   }
 }
 
-function DailySummaryDetailField({
-  label,
-  value,
-  emphasized = false,
-}: {
-  label: string
-  value: string
-  emphasized?: boolean
-}) {
-  return (
-    <div className="rounded-xl border border-border/70 bg-background/70 px-3 py-2">
-      <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-        {label}
-      </div>
-      <div className={cn("mt-1 text-sm text-foreground", emphasized ? "font-semibold" : "font-medium")}>
-        {value}
-      </div>
-    </div>
-  )
-}
-
 function DailySummaryDetailsContent({
   row,
   detailsError,
@@ -1736,28 +1789,33 @@ function DailySummaryDetailsContent({
   row: AdminRecord | null
   detailsError: string | null
 }) {
+  const motionPreset = useDashboardMotion()
   const details = React.useMemo(() => buildDailySummaryDetailsRecord(row), [row])
 
   if (!details) {
     return <p className="text-sm text-muted-foreground">No daily summary details are available for this record.</p>
   }
 
-  const nestedEmployee = row ? readNestedRecord(row, ["employee"]) : null
   const nestedDepartment = row ? readNestedRecord(row, ["department"]) : null
   const nestedPosition = row ? readNestedRecord(row, ["position"]) : null
   const statusValue = readFirstValue(details, ["attendance_status"]) ?? "Unknown"
   const statusUi = statusTone(statusValue)
-  const employeeValue =
-    readFirstValue(details, ["employee"]) ||
-    readStringFromRow(nestedEmployee ?? {}, ["full_name", "fullName", "name"]) ||
-    "Employee not identified"
-  const branchValue = readFirstValue(details, ["branch"]) ?? "—"
-  const departmentValue =
-    readStringFromRow(nestedDepartment ?? {}, ["name", "department_name", "departmentName"]) ?? "—"
-  const positionValue =
-    readStringFromRow(nestedPosition ?? {}, ["name", "position_name", "positionName", "title"]) ?? "—"
+  const employeeValue = readFirstValue(details, ["employee"]) || "Employee not identified"
+  const employeeNo = readFirstValue(details, ["employee_no"])
+  const branchValue = readFirstValue(details, ["branch"])
+  const departmentValue = readStringFromRow(nestedDepartment ?? {}, [
+    "name",
+    "department_name",
+    "departmentName",
+  ])
+  const positionValue = readStringFromRow(nestedPosition ?? {}, [
+    "name",
+    "position_name",
+    "positionName",
+    "title",
+  ])
   const scheduleValue = readFirstValue(details, ["scheduled_hours"]) ?? "—"
-  const timetableValue = readFirstValue(details, ["timetable_used"]) ?? "—"
+  const timetableValue = readFirstValue(details, ["timetable_used"])
   const checkInValue = readFirstValue(details, ["check_in_time"]) ?? "—"
   const checkOutValue = readFirstValue(details, ["check_out_time"]) ?? "—"
   const workedValue = readFirstValue(details, ["worked_time"]) ?? "—"
@@ -1766,107 +1824,298 @@ function DailySummaryDetailsContent({
   const lateValue = readFirstValue(details, ["late_time"]) ?? "—"
   const earlyDepartureValue = readFirstValue(details, ["early_departure_time"]) ?? "—"
   const overtimeValue = readFirstValue(details, ["overtime_time"]) ?? "—"
-  const approvedLeaveValue = readFirstValue(details, ["approved_leave"]) ?? "No"
-  const approvedBusinessTripValue = readFirstValue(details, ["approved_business_trip"]) ?? "No"
-  const holidayValue = readFirstValue(details, ["holiday"]) ?? "No"
-  const remarksValue = readFirstValue(details, ["remarks"])
+  const remarksChips = splitRemarkChips(readFirstValue(details, ["remarks"]))
   const adjustmentNotesValue = readFirstValue(details, ["adjustment_notes"])
-  const createdAtValue = readFirstValue(details, ["created_at"]) ?? "—"
-  const updatedAtValue = readFirstValue(details, ["updated_at"]) ?? "—"
+  const missingCheckout = checkOutValue === "—"
+  const needsReview = remarksChips.some((entry) => /missing|review|manual/i.test(entry))
+
+  const scheduledStart = parseClockMinutes(scheduleValue.split(" - ")[0] ?? null)
+  const scheduledEnd = parseClockMinutes(scheduleValue.split(" - ")[1] ?? null)
+  const checkInMinutes = parseClockMinutes(checkInValue)
+  const checkOutMinutes = parseClockMinutes(checkOutValue)
+  const timelinePoints = [scheduledStart, scheduledEnd, checkInMinutes, checkOutMinutes].filter(
+    (value): value is number => value !== null,
+  )
+  const rangeStart = timelinePoints.length > 0 ? Math.max(0, Math.min(...timelinePoints) - 45) : 8 * 60
+  const rangeEnd = timelinePoints.length > 0 ? Math.min(24 * 60, Math.max(...timelinePoints) + 45) : 18 * 60
+  const span = Math.max(rangeEnd - rangeStart, 60)
+  const scheduledLeft =
+    scheduledStart !== null ? clockPercent(scheduledStart, rangeStart, span) : 8
+  const scheduledRight =
+    scheduledEnd !== null ? clockPercent(scheduledEnd, rangeStart, span) : 92
+  const actualStart = checkInMinutes ?? scheduledStart
+  const actualEnd = checkOutMinutes ?? scheduledEnd ?? rangeEnd
+  const actualLeft = actualStart !== null ? clockPercent(actualStart, rangeStart, span) : null
+  const actualRight = actualEnd !== null ? clockPercent(actualEnd, rangeStart, span) : null
+  const checkInLeft = checkInMinutes !== null ? clockPercent(checkInMinutes, rangeStart, span) : null
+  const checkOutLeft = checkOutMinutes !== null ? clockPercent(checkOutMinutes, rangeStart, span) : null
+
+  const workedMinutes = readMinutesNumber(row, ["worked_minutes", "workedMinutes", "work_minutes", "workMinutes"])
+  const expectedMinutes = readMinutesNumber(
+    row ? readNestedRecord(row, ["timetable", "schedule", "shift"]) ?? row : null,
+    ["expected_work_minutes", "expectedWorkMinutes"],
+  )
+  const workedRatio =
+    workedMinutes !== null && expectedMinutes && expectedMinutes > 0
+      ? Math.min(100, Math.round((workedMinutes / expectedMinutes) * 100))
+      : null
+
+  const contextItems = [
+    branchValue,
+    departmentValue,
+    positionValue,
+    timetableValue ? prettifyLabel(timetableValue) : null,
+  ].filter((item): item is string => Boolean(item))
+
+  const flags = [
+    { label: "Leave", on: readFirstValue(details, ["approved_leave"]) === "Yes" },
+    { label: "Business trip", on: readFirstValue(details, ["approved_business_trip"]) === "Yes" },
+    { label: "Holiday", on: readFirstValue(details, ["holiday"]) === "Yes" },
+  ]
+
+  const metrics = [
+    { label: "Worked", value: workedValue, warn: workedValue === "0h 00m" || workedValue === "—" },
+    { label: "Expected", value: expectedWorkValue, warn: false },
+    { label: "Break", value: breakValue, warn: false },
+    { label: "Late", value: lateValue, warn: lateValue !== "0h 00m" && lateValue !== "—" },
+    { label: "Left early", value: earlyDepartureValue, warn: earlyDepartureValue !== "0h 00m" && earlyDepartureValue !== "—" },
+    { label: "Overtime", value: overtimeValue, warn: overtimeValue !== "0h 00m" && overtimeValue !== "—" },
+  ]
 
   return (
-    <div className="max-h-[65vh] space-y-4 overflow-auto pr-1">
+    <motion.div
+      className="max-h-[68vh] space-y-5 overflow-auto pr-1"
+      variants={motionPreset.container}
+      initial="hidden"
+      animate="show"
+    >
       {detailsError ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+        <motion.div
+          variants={motionPreset.item}
+          className="rounded-xl border border-amber-200/80 bg-amber-50/80 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200"
+        >
           Showing the latest available details. {detailsError}
-        </div>
+        </motion.div>
       ) : null}
 
-      <div className={cn("rounded-2xl border px-4 py-4", statusUi.panel)}>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="space-y-1">
-            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-              Employee
-            </div>
-            <div className="text-xl font-semibold text-foreground">{employeeValue}</div>
-            <div className="text-sm text-muted-foreground">
-              {readFirstValue(details, ["attendance_date"]) ?? "Attendance date not provided"}
-            </div>
+      <motion.div variants={motionPreset.rise} className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-xl font-semibold tracking-tight text-foreground">{employeeValue}</h3>
+            {employeeNo ? (
+              <span className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
+                {employeeNo}
+              </span>
+            ) : null}
           </div>
-          <div className={cn("inline-flex rounded-full border px-3 py-1 text-sm font-semibold", statusUi.badge)}>
-            {statusValue}
-          </div>
-        </div>
-      </div>
-
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <DailySummaryDetailField label="Branch" value={branchValue} />
-        <DailySummaryDetailField label="Department" value={departmentValue} />
-        <DailySummaryDetailField label="Position" value={positionValue} />
-        <DailySummaryDetailField label="Timetable" value={timetableValue} />
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <div className="rounded-2xl border border-border bg-card">
-          <div className="border-b border-border px-4 py-3">
-            <h3 className="text-sm font-semibold text-foreground">Schedule and punches</h3>
-            <p className="text-xs text-muted-foreground">Compare the planned window with the actual attendance marks.</p>
-          </div>
-          <div className="grid gap-3 p-4 sm:grid-cols-2">
-            <DailySummaryDetailField label="Scheduled window" value={scheduleValue} emphasized />
-            <DailySummaryDetailField label="Expected work time" value={expectedWorkValue} emphasized />
-            <DailySummaryDetailField label="Check in" value={checkInValue} emphasized />
-            <DailySummaryDetailField label="Check out" value={checkOutValue} emphasized />
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+            <span className="inline-flex items-center gap-1.5">
+              <CalendarDays className="size-3.5" />
+              {formatPrettyDate(readFirstValue(details, ["attendance_date"]))}
+            </span>
+            {contextItems.map((item) => (
+              <React.Fragment key={item}>
+                <span className="text-border">·</span>
+                <span>{item}</span>
+              </React.Fragment>
+            ))}
           </div>
         </div>
+        <motion.div
+          className={cn(
+            "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-sm font-semibold",
+            statusUi.badge,
+          )}
+          initial={motionPreset.reduce ? false : { scale: 0.86, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ type: "spring", stiffness: 420, damping: 22 }}
+        >
+          <span className={cn("size-1.5 rounded-full", statusUi.accent)} />
+          {statusValue}
+        </motion.div>
+      </motion.div>
 
-        <div className="rounded-2xl border border-border bg-card">
-          <div className="border-b border-border px-4 py-3">
-            <h3 className="text-sm font-semibold text-foreground">Time totals</h3>
-            <p className="text-xs text-muted-foreground">Attendance engine totals after processing the day.</p>
-          </div>
-          <div className="grid gap-3 p-4 sm:grid-cols-2">
-            <DailySummaryDetailField label="Worked time" value={workedValue} emphasized />
-            <DailySummaryDetailField label="Break time" value={breakValue} />
-            <DailySummaryDetailField label="Late time" value={lateValue} />
-            <DailySummaryDetailField label="Early departure" value={earlyDepartureValue} />
-            <DailySummaryDetailField label="Overtime" value={overtimeValue} />
-          </div>
-        </div>
-      </div>
-
-      <div className="grid gap-3 md:grid-cols-3">
-        <DailySummaryDetailField label="Approved leave" value={approvedLeaveValue} />
-        <DailySummaryDetailField label="Business trip" value={approvedBusinessTripValue} />
-        <DailySummaryDetailField label="Holiday" value={holidayValue} />
-      </div>
-
-      {remarksValue || adjustmentNotesValue ? (
-        <div className="grid gap-4 lg:grid-cols-2">
-          {remarksValue ? (
-            <div className="rounded-2xl border border-border bg-card px-4 py-4">
-              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                Remarks
-              </div>
-              <p className="mt-2 text-sm leading-6 text-foreground">{remarksValue}</p>
+      <motion.div
+        variants={motionPreset.item}
+        className="overflow-hidden rounded-2xl border border-border/80 bg-muted/20"
+      >
+        <div className="flex flex-wrap items-end justify-between gap-3 px-4 pt-4">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+              Day timeline
             </div>
-          ) : null}
-          {adjustmentNotesValue ? (
-            <div className="rounded-2xl border border-border bg-card px-4 py-4">
-              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                Adjustment notes
-              </div>
-              <p className="mt-2 text-sm leading-6 text-foreground">{adjustmentNotesValue}</p>
-            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Scheduled {scheduleValue}
+              {missingCheckout ? " · checkout still open" : ""}
+            </p>
+          </div>
+          {needsReview ? (
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-300">
+              <AlertTriangle className="size-3.5" />
+              Manual review
+            </span>
           ) : null}
         </div>
-      ) : null}
 
-      <div className="grid gap-3 md:grid-cols-2">
-        <DailySummaryDetailField label="Created" value={createdAtValue} />
-        <DailySummaryDetailField label="Last updated" value={updatedAtValue} />
-      </div>
-    </div>
+        <div className="px-4 pb-2 pt-6">
+          <div className="relative h-14">
+            <div className="absolute inset-x-0 top-6 h-2 rounded-full bg-border/70" />
+            {scheduledStart !== null && scheduledEnd !== null ? (
+              <motion.div
+                className="absolute top-6 h-2 rounded-full bg-primary/25"
+                initial={motionPreset.reduce ? false : { scaleX: 0, opacity: 0 }}
+                animate={{ scaleX: 1, opacity: 1 }}
+                transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+                style={{
+                  left: `${scheduledLeft}%`,
+                  width: `${Math.max(scheduledRight - scheduledLeft, 2)}%`,
+                  transformOrigin: "left center",
+                }}
+              />
+            ) : null}
+            {actualLeft !== null && actualRight !== null ? (
+              <motion.div
+                className={cn(
+                  "absolute top-[1.35rem] h-3 rounded-full",
+                  missingCheckout
+                    ? "bg-gradient-to-r from-amber-500 to-amber-400/10"
+                    : "bg-primary",
+                )}
+                initial={motionPreset.reduce ? false : { scaleX: 0, opacity: 0 }}
+                animate={{ scaleX: 1, opacity: 1 }}
+                transition={{ duration: 0.7, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}
+                style={{
+                  left: `${actualLeft}%`,
+                  width: `${Math.max(actualRight - actualLeft, 2)}%`,
+                  transformOrigin: "left center",
+                }}
+              />
+            ) : null}
+
+            {checkInLeft !== null ? (
+              <motion.div
+                className="absolute top-2 flex -translate-x-1/2 flex-col items-center"
+                style={{ left: `${checkInLeft}%` }}
+                initial={motionPreset.reduce ? false : { y: 8, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ type: "spring", stiffness: 380, damping: 22, delay: 0.16 }}
+              >
+                <span className="text-[10px] font-semibold tabular-nums text-foreground">{checkInValue}</span>
+                <span className="mt-1 size-2.5 rounded-full bg-emerald-500 ring-4 ring-background" />
+              </motion.div>
+            ) : null}
+
+            {checkOutLeft !== null ? (
+              <motion.div
+                className="absolute top-2 flex -translate-x-1/2 flex-col items-center"
+                style={{ left: `${checkOutLeft}%` }}
+                initial={motionPreset.reduce ? false : { y: 8, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ type: "spring", stiffness: 380, damping: 22, delay: 0.24 }}
+              >
+                <span className="text-[10px] font-semibold tabular-nums text-foreground">{checkOutValue}</span>
+                <span className="mt-1 size-2.5 rounded-full bg-primary ring-4 ring-background" />
+              </motion.div>
+            ) : scheduledEnd !== null && missingCheckout ? (
+              <motion.div
+                className="absolute top-2 flex -translate-x-1/2 flex-col items-center"
+                style={{ left: `${scheduledRight}%` }}
+                animate={
+                  motionPreset.reduce
+                    ? { opacity: 1 }
+                    : { opacity: [0.45, 1, 0.45] }
+                }
+                transition={motionPreset.reduce ? undefined : { duration: 1.6, repeat: Infinity }}
+              >
+                <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-300">Missing</span>
+                <span className="mt-1 size-2.5 rounded-full bg-amber-500 ring-4 ring-background" />
+              </motion.div>
+            ) : null}
+          </div>
+          <div className="mt-1 flex justify-between text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+            <span>In {checkInValue}</span>
+            <span>Out {checkOutValue}</span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 divide-y divide-border/70 border-t border-border/70 sm:grid-cols-3 lg:grid-cols-6 lg:divide-x lg:divide-y-0">
+          {metrics.map((metric) => (
+            <motion.div
+              key={metric.label}
+              className="px-4 py-3"
+              variants={motionPreset.item}
+            >
+              <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                {metric.label}
+              </div>
+              <div
+                className={cn(
+                  "mt-1 text-lg font-semibold tabular-nums tracking-tight",
+                  metric.warn ? "text-amber-700 dark:text-amber-300" : "text-foreground",
+                )}
+              >
+                {metric.value}
+              </div>
+              {metric.label === "Worked" && workedRatio !== null ? (
+                <div className="mt-2 h-1 overflow-hidden rounded-full bg-border/80">
+                  <motion.div
+                    className="h-full rounded-full bg-primary"
+                    initial={motionPreset.reduce ? false : { width: 0 }}
+                    animate={{ width: `${workedRatio}%` }}
+                    transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+                  />
+                </div>
+              ) : null}
+            </motion.div>
+          ))}
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/70 px-4 py-3">
+          <div className="flex flex-wrap gap-2">
+            {flags.map((flag) => (
+              <span
+                key={flag.label}
+                className={cn(
+                  "text-xs font-medium",
+                  flag.on ? "text-foreground" : "text-muted-foreground",
+                )}
+              >
+                {flag.label}
+                <span className="ml-1 text-muted-foreground">{flag.on ? "yes" : "no"}</span>
+              </span>
+            ))}
+          </div>
+          {remarksChips.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
+              {remarksChips.map((remark, index) => (
+                <motion.span
+                  key={remark}
+                  className="inline-flex items-center rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:text-amber-300"
+                  initial={motionPreset.reduce ? false : { opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.12 + index * 0.05 }}
+                >
+                  {remark}
+                </motion.span>
+              ))}
+            </div>
+          ) : null}
+        </div>
+
+        {adjustmentNotesValue ? (
+          <div className="border-t border-border/70 px-4 py-3 text-sm text-muted-foreground">
+            <span className="font-medium text-foreground">Adjustment · </span>
+            {adjustmentNotesValue}
+          </div>
+        ) : null}
+      </motion.div>
+
+      <motion.p variants={motionPreset.item} className="text-[11px] text-muted-foreground">
+        Created {formatPrettyDateTime(readFirstValue(details, ["created_at"]))}
+        <span className="mx-2 text-border">·</span>
+        Updated {formatPrettyDateTime(readFirstValue(details, ["updated_at"]))}
+      </motion.p>
+    </motion.div>
   )
 }
 
@@ -2773,7 +3022,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
         if (detailsError) {
           return `Review the processed attendance summary returned by the attendance engine. ${detailsError}`
       }
-      return "Review the processed attendance summary returned by the attendance engine."
+      return "Processed day from the attendance engine."
     }
     if (activeSection === "processing-exceptions") {
       if (detailsError) {
@@ -4848,6 +5097,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
         }}
         title={detailsTitle}
         description={detailsDescription}
+        popupClassName={activeSection === "daily-summaries" ? "sm:max-w-3xl" : undefined}
         row={detailsDisplayRow}
         content={
           activeSection === "daily-summaries" ? (
@@ -4861,18 +5111,18 @@ export function AttendanceActivityView({ section }: { section: string }) {
             <div className="flex w-full flex-wrap justify-end gap-2">
               <button
                 type="button"
-                className="inline-flex h-9 items-center justify-center rounded-lg border border-border px-3 text-sm font-medium text-foreground transition hover:bg-muted"
-                onClick={() => setAdjustmentDialogOpen(true)}
-              >
-                Adjust summary
-              </button>
-              <button
-                type="button"
-                className="inline-flex h-9 items-center justify-center rounded-lg border border-rose-300 px-3 text-sm font-medium text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60 dark:text-rose-300 dark:hover:bg-rose-950/40"
+                className="inline-flex h-9 items-center justify-center rounded-lg px-3 text-sm font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                 onClick={() => void clearDailySummaryAdjustment()}
                 disabled={detailsActionBusy === "clear-adjustment"}
               >
                 {detailsActionBusy === "clear-adjustment" ? "Clearing..." : "Clear adjustment"}
+              </button>
+              <button
+                type="button"
+                className="inline-flex h-9 items-center justify-center rounded-lg bg-primary px-3 text-sm font-medium !text-white transition hover:brightness-95"
+                onClick={() => setAdjustmentDialogOpen(true)}
+              >
+                Adjust summary
               </button>
             </div>
           ) : activeSection === "processing-exceptions" && detailsRow ? (
