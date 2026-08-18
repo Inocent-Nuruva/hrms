@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Loader2Icon, RefreshCwIcon } from "lucide-react"
+import { InfoIcon, Loader2Icon, RefreshCwIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { SearchToggleField } from "@/components/common/search-toggle-field"
@@ -47,6 +47,7 @@ import { useDashboardMotion } from "@/lib/dashboard-motion"
 import { useForbiddenRouteGuard, useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
 import { readStoredSessionTokens } from "@/lib/session-client"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { describeSecurityEvent } from "@/lib/security-event-plain"
 import {
   isEmployeeReady,
@@ -94,6 +95,38 @@ function schedulePreviewDays(record: AdminRecord | null) {
     }
   }
   return []
+}
+
+function TipIcon({ text }: { text: string }) {
+  const motionPreset = useDashboardMotion()
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <button
+            type="button"
+            className="inline-flex h-6 w-6 items-center justify-center rounded-full text-slate-500 hover:text-primary"
+            aria-label="More information"
+          />
+        }
+      >
+        <motion.span
+          className="inline-flex"
+          animate={
+            motionPreset.reduce
+              ? undefined
+              : { scale: [1, 1.15, 1], opacity: [0.65, 1, 0.65] }
+          }
+          transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
+        >
+          <InfoIcon className="h-3.5 w-3.5" />
+        </motion.span>
+      </TooltipTrigger>
+      <TooltipContent side="top" align="start" className="max-w-72 text-left leading-relaxed">
+        {text}
+      </TooltipContent>
+    </Tooltip>
+  )
 }
 
 function friendlyStatus(value: string) {
@@ -473,14 +506,18 @@ export function InsightsOperationsView({
             />
           </motion.div>
           <div className="rounded-xl border border-border bg-card p-4">
-            <h2 className="text-sm font-semibold">Clock-in setup</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {readString(
-                setup,
-                ["status", "message", "summary"],
-                "Create the default attendance rules so people can clock in.",
-              )}
-            </p>
+            <div className="flex items-center gap-1.5">
+              <h2 className="text-sm font-semibold">Clock-in setup</h2>
+              <TipIcon
+                text={
+                  readString(
+                    setup,
+                    ["status", "message", "summary"],
+                    "Create the default attendance rules so people can clock in.",
+                  )
+                }
+              />
+            </div>
             <div className="mt-3 flex flex-wrap items-end gap-2">
               <label className="space-y-1">
                 <span className="text-xs text-slate-500">Rule name</span>
@@ -491,7 +528,10 @@ export function InsightsOperationsView({
               </button>
             </div>
             <div className="mt-4 space-y-2">
-              <p className="text-sm font-medium text-foreground">See someone’s schedule</p>
+              <div className="flex items-center gap-1.5">
+                <p className="text-sm font-medium text-foreground">See someone’s schedule</p>
+                <TipIcon text="Pick a person and dates to see when they are expected at work." />
+              </div>
               <div className="flex flex-wrap items-end gap-2">
                 <label className="space-y-1">
                   <span className="text-xs text-slate-500">Employee</span>
@@ -540,39 +580,35 @@ export function InsightsOperationsView({
             </motion.ul>
           ) : null}
           <SearchToggleField value={search} onChange={setSearch} placeholder="Search people or activity" />
-          <div className="space-y-1">
-            <p className="text-sm text-muted-foreground">
-              Who can clock in, and what they still need.
-            </p>
-            <div className="overflow-hidden rounded-xl border border-border bg-card">
-              <ResizableTable
-                title="Employee"
-                data={visibleEmployees}
-                columns={employeeColumns}
-                loading={loading}
-                itemsPerPage={20}
-                showExport={false}
-                storageKey="insights-readiness-employees"
-                onRowSelect={(_, row) => row && setReadinessDetail(row)}
-              />
-            </div>
+          <div className="overflow-hidden rounded-xl border border-border bg-card">
+            <ResizableTable
+              title="Employee"
+              toolbarStart={
+                <TipIcon text="Who can clock in, and what they still need." />
+              }
+              data={visibleEmployees}
+              columns={employeeColumns}
+              loading={loading}
+              itemsPerPage={20}
+              showExport={false}
+              storageKey="insights-readiness-employees"
+              onRowSelect={(_, row) => row && setReadinessDetail(row)}
+            />
           </div>
-          <div className="space-y-1">
-            <p className="text-sm text-muted-foreground">
-              Times someone tried to open a page they do not have permission to use.
-            </p>
-            <div className="overflow-hidden rounded-xl border border-border bg-card">
-              <ResizableTable
-                title="Blocked action"
-                data={visibleEvents}
-                columns={eventColumns}
-                loading={false}
-                itemsPerPage={20}
-                showExport={false}
-                storageKey="insights-security-events"
-                onRowSelect={(_, row) => row && setEventDetail(row)}
-              />
-            </div>
+          <div className="overflow-hidden rounded-xl border border-border bg-card">
+            <ResizableTable
+              title="Blocked action"
+              toolbarStart={
+                <TipIcon text="Times someone tried to open a page they do not have permission to use." />
+              }
+              data={visibleEvents}
+              columns={eventColumns}
+              loading={false}
+              itemsPerPage={20}
+              showExport={false}
+              storageKey="insights-security-events"
+              onRowSelect={(_, row) => row && setEventDetail(row)}
+            />
           </div>
         </>
       )}
