@@ -1045,14 +1045,9 @@ export function HrAttendanceCorrectionApprovalsView() {
 
   const sectionTitleBlock = (
     <div className="min-w-0 flex flex-wrap items-center gap-x-2 gap-y-1">
-      <div className="min-w-0 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-        <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-          Correction Requests
-        </span>
-        <h1 className="truncate text-lg font-semibold tracking-tight text-foreground sm:text-xl">
-          Requests
-        </h1>
-      </div>
+      <h1 className="truncate text-lg font-semibold tracking-tight text-foreground sm:text-xl">
+        Correction Requests
+      </h1>
       <div className="flex flex-wrap items-center gap-x-2 text-[11px]">
         <span className="text-sky-700 dark:text-sky-300">
           <span className="font-semibold tabular-nums">{requests.length}</span> total
