@@ -474,11 +474,9 @@ export const INSIGHTS_SALES_FIELD_PERMISSION: PermissionRequirement = {
 
 export const NUMBERING_ROUTE_PERMISSION: PermissionRequirement = {
   permissions: [
-    "employees:create",
-    "employees:update",
     "employee_numbering:read",
     "employee_numbering:update",
-    "manage_employees",
+    "employee_numbering:create",
   ],
   mode: "any",
 }

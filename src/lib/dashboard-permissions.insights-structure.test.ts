@@ -32,6 +32,15 @@ describe("structure and insights route access", () => {
     ).toBe(true)
   })
 
+  it("does not treat employees:create as numbering access", () => {
+    expect(
+      canAccessDashboardRoute("/dashboard/structure/numbering", ["employees:create", "employees:update"], "admin"),
+    ).toBe(false)
+    expect(
+      canAccessDashboardRoute("/dashboard/structure/numbering", ["employee_numbering:read"], "admin"),
+    ).toBe(true)
+  })
+
   it("hides grades when the actor only has cost-center access", () => {
     expect(
       canAccessDashboardRoute("/dashboard/structure/grades", ["cost_centers:read"], "admin"),

@@ -28,6 +28,7 @@ import {
   type AdminRecord,
 } from "@/lib/admin-api"
 import { subscribeToDashboardActorSnapshot } from "@/lib/dashboard-permissions"
+import { useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
 import { readStoredSessionTokens } from "@/lib/session-client"
 
 type GradeFormState = {
@@ -149,6 +150,7 @@ function applyGradeToForm(row: AdminRecord): GradeFormState {
 }
 
 export function EmployeeSetupView({ mode = "full" }: { mode?: "full" | "numbering" }) {
+  const leaveIfForbidden = useLeaveIfForbidden()
   const [token, setToken] = React.useState("")
   const [numbering, setNumbering] = React.useState<AdminRecord | null>(null)
   const [numberingForm, setNumberingForm] = React.useState({
@@ -219,6 +221,9 @@ export function EmployeeSetupView({ mode = "full" }: { mode?: "full" | "numberin
         })
       )
     } catch (errorObject) {
+      if (leaveIfForbidden(errorObject)) {
+        return
+      }
       const message = apiErrorMessage(errorObject, "Failed to load employee setup data.")
       setNumberingError(message)
       setGradesError(message)
@@ -227,7 +232,7 @@ export function EmployeeSetupView({ mode = "full" }: { mode?: "full" | "numberin
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [leaveIfForbidden])
 
   React.useEffect(() => {
     void loadData()

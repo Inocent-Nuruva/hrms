@@ -686,37 +686,6 @@ export function EmployeesListView() {
 
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap items-center gap-1.5">
-        <SearchToggleField
-          className="min-w-0"
-          placeholder="Search name, email, phone, user_no"
-          value={query.search}
-          onChange={(value) => {
-            setPage(1)
-            setQuery((previous) => ({ ...previous, search: value }))
-          }}
-        />
-        <select
-          className="h-8 min-w-[8.5rem] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
-          value={query.employment_status}
-          onChange={(event) => {
-            setPage(1)
-            setQuery((previous) => ({
-              ...previous,
-              employment_status: event.target.value as typeof previous.employment_status,
-            }))
-          }}
-          aria-label="Filter employment status"
-        >
-          <option value="">All statuses</option>
-          <option value="onboarding">Onboarding</option>
-          <option value="active">Active</option>
-          <option value="suspended">Suspended</option>
-          <option value="terminated">Terminated</option>
-          <option value="exited">Exited</option>
-        </select>
-      </div>
-
       {error ? <p className="text-sm text-rose-600">{error}</p> : null}
 
       <ResizableTable
@@ -734,6 +703,38 @@ export function EmployeesListView() {
         totalPages={totalPages}
         totalItems={total}
         onPageChange={setPage}
+        toolbarStart={
+          <>
+            <SearchToggleField
+              className="min-w-0 !w-auto !max-w-[14rem] !flex-none"
+              placeholder="Search name, email, phone, user_no"
+              value={query.search}
+              onChange={(value) => {
+                setPage(1)
+                setQuery((previous) => ({ ...previous, search: value }))
+              }}
+            />
+            <select
+              className="h-8 w-[8.5rem] shrink-0 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
+              value={query.employment_status}
+              onChange={(event) => {
+                setPage(1)
+                setQuery((previous) => ({
+                  ...previous,
+                  employment_status: event.target.value as typeof previous.employment_status,
+                }))
+              }}
+              aria-label="Filter employment status"
+            >
+              <option value="">All statuses</option>
+              <option value="onboarding">Onboarding</option>
+              <option value="active">Active</option>
+              <option value="suspended">Suspended</option>
+              <option value="terminated">Terminated</option>
+              <option value="exited">Exited</option>
+            </select>
+          </>
+        }
       />
 
       <EmployeeAccessRemovalDialog

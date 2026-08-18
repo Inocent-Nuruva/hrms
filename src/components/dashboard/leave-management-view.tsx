@@ -2979,39 +2979,43 @@ export function LeaveManagementView({
 
       {tab === "types" ? (
         <div className="space-y-2">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <SearchToggleField
-              className="min-w-0"
-              placeholder="Search leave types"
-              value={typeSearch}
-              onChange={setTypeSearch}
-            />
-            <select
-              className="h-8 min-w-[8.5rem] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
-              value={typeStatusFilter}
-              onChange={(event) => setTypeStatusFilter(event.target.value)}
-              aria-label="Filter leave type status"
-            >
-              <option value="all">All statuses</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-            </select>
-            <div className="ml-auto flex flex-wrap items-center gap-1.5">
-              {canCreateTypes ? (
-                <button
-                  type="button"
-                  className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white"
-                  onClick={() => openTypeDialogForCreate()}
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  Create Leave Type
-                </button>
-              ) : null}
-              {refreshButton}
-            </div>
-          </div>
           <ResizableTable
             title="Leave Types"
+            toolbarStart={
+              <>
+                <SearchToggleField
+                  className="min-w-0 !w-auto !max-w-[12rem] !flex-none"
+                  placeholder="Search leave types"
+                  value={typeSearch}
+                  onChange={setTypeSearch}
+                />
+                <select
+                  className="h-8 w-[8.5rem] shrink-0 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
+                  value={typeStatusFilter}
+                  onChange={(event) => setTypeStatusFilter(event.target.value)}
+                  aria-label="Filter leave type status"
+                >
+                  <option value="all">All statuses</option>
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </>
+            }
+            toolbarActions={
+              <>
+                {canCreateTypes ? (
+                  <button
+                    type="button"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white"
+                    onClick={() => openTypeDialogForCreate()}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Create Leave Type
+                  </button>
+                ) : null}
+                {refreshButton}
+              </>
+            }
             data={filteredTypes}
             onRowSelect={(_, row) => {
               if (row) {
@@ -3190,16 +3194,16 @@ export function LeaveManagementView({
 
       {tab === "requests" ? (
         <div className="space-y-2">
-          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+          <div className="flex min-w-0 items-center justify-between gap-1.5 md:hidden">
+            <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto">
               <SearchToggleField
-                className="min-w-0 flex-1 sm:flex-none"
+                className="min-w-0 !w-auto !max-w-[12rem] !flex-none"
                 placeholder="Search leave requests"
                 value={requestSearch}
                 onChange={setRequestSearch}
               />
               <select
-                className="h-8 w-full min-w-[8.5rem] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900 sm:w-auto"
+                className="h-8 w-[8.5rem] shrink-0 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
                 value={requestStatusFilter}
                 onChange={(event) => setRequestStatusFilter(event.target.value)}
                 aria-label="Filter leave request status"
@@ -3214,11 +3218,11 @@ export function LeaveManagementView({
                 <option value="completed">completed</option>
               </select>
             </div>
-            <div className="flex flex-wrap items-center gap-1.5 sm:ml-auto">
+            <div className="flex shrink-0 items-center gap-1.5">
               {canCreateRequests ? (
                 <button
                   type="button"
-                  className="inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white sm:flex-none"
+                  className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white"
                   onClick={() => void openRequestDialog()}
                 >
                   <Plus className="h-3.5 w-3.5" />
@@ -3326,6 +3330,46 @@ export function LeaveManagementView({
           <div className="hidden min-w-0 md:block">
             <ResizableTable
               title="Leave Requests"
+              toolbarStart={
+                <>
+                  <SearchToggleField
+                    className="min-w-0 !w-auto !max-w-[12rem] !flex-none"
+                    placeholder="Search leave requests"
+                    value={requestSearch}
+                    onChange={setRequestSearch}
+                  />
+                  <select
+                    className="h-8 w-[8.5rem] shrink-0 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
+                    value={requestStatusFilter}
+                    onChange={(event) => setRequestStatusFilter(event.target.value)}
+                    aria-label="Filter leave request status"
+                  >
+                    <option value="all">All statuses</option>
+                    <option value="draft">draft</option>
+                    <option value="submitted">submitted</option>
+                    <option value="in_review">in_review</option>
+                    <option value="approved">approved</option>
+                    <option value="rejected">rejected</option>
+                    <option value="cancelled">cancelled</option>
+                    <option value="completed">completed</option>
+                  </select>
+                </>
+              }
+              toolbarActions={
+                <>
+                  {canCreateRequests ? (
+                    <button
+                      type="button"
+                      className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white"
+                      onClick={() => void openRequestDialog()}
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Create Leave Request
+                    </button>
+                  ) : null}
+                  {refreshButton}
+                </>
+              }
               data={filteredRequests}
               onRowSelect={(_, row) => {
                 if (row) {
@@ -4209,7 +4253,10 @@ export function LeaveManagementView({
 
       {tab === "balances" ? (
         <div className="space-y-2">
-          <div className="flex flex-wrap items-center justify-end gap-1.5">
+          <ResizableTable
+            title="Leave Balances"
+            toolbarActions={
+              <>
             {canAdjustBalances ? (
               <button
                 type="button"
@@ -4251,10 +4298,8 @@ export function LeaveManagementView({
               </button>
             ) : null}
             {refreshButton}
-          </div>
-
-          <ResizableTable
-            title="Leave Balances"
+              </>
+            }
             data={balances}
             columns={[
               { key: "employee", label: "Employee", defaultWidth: 100, render: (r) => employeeLabelFromRow(r) },
@@ -4306,42 +4351,43 @@ export function LeaveManagementView({
 
       {tab === "holidays" ? (
         <div className="space-y-2">
-          <div className="flex flex-wrap items-center justify-end gap-1.5">
-            {canMutateHolidays ? (
-              <button
-                type="button"
-                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-medium text-slate-700"
-                onClick={() => setHolidayImportDialogOpen(true)}
-              >
-                <Download className="h-3.5 w-3.5" />
-                Import
-              </button>
-            ) : null}
-            {canMutateHolidays ? (
-              <button
-                type="button"
-                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-rose-200 bg-white px-2.5 text-xs font-medium text-rose-700"
-                onClick={() => setHolidayRemoveDialogOpen(true)}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                Remove Country
-              </button>
-            ) : null}
-            {canMutateHolidays ? (
-              <button
-                type="button"
-                className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white"
-                onClick={() => setHolidayDialogOpen(true)}
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Add Holiday
-              </button>
-            ) : null}
-            {refreshButton}
-          </div>
-
           <ResizableTable
             title="Holidays"
+            toolbarActions={
+              <>
+                {canMutateHolidays ? (
+                  <button
+                    type="button"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-medium text-slate-700"
+                    onClick={() => setHolidayImportDialogOpen(true)}
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    Import
+                  </button>
+                ) : null}
+                {canMutateHolidays ? (
+                  <button
+                    type="button"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-md border border-rose-200 bg-white px-2.5 text-xs font-medium text-rose-700"
+                    onClick={() => setHolidayRemoveDialogOpen(true)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Remove Country
+                  </button>
+                ) : null}
+                {canMutateHolidays ? (
+                  <button
+                    type="button"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white"
+                    onClick={() => setHolidayDialogOpen(true)}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Add Holiday
+                  </button>
+                ) : null}
+                {refreshButton}
+              </>
+            }
             data={holidays}
             columns={[
               { key: "name", label: "Name", defaultWidth: 110, sortable: true, render: (r) => readString(r, ["name"]) },
@@ -4377,22 +4423,23 @@ export function LeaveManagementView({
 
       {tab === "policies" ? (
         <div className="space-y-2">
-          <div className="flex flex-wrap items-center justify-end gap-1.5">
-            {canMutatePolicies ? (
-              <button
-                type="button"
-                className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white"
-                onClick={openCreatePolicySheet}
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Create Policy
-              </button>
-            ) : null}
-            {refreshButton}
-          </div>
-
           <ResizableTable
             title="Leave Policies"
+            toolbarActions={
+              <>
+                {canMutatePolicies ? (
+                  <button
+                    type="button"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white"
+                    onClick={openCreatePolicySheet}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Create Policy
+                  </button>
+                ) : null}
+                {refreshButton}
+              </>
+            }
             data={policies}
             itemsPerPage={15}
             loading={loading}

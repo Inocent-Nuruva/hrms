@@ -233,7 +233,7 @@ export function PositionsView() {
     availableDepartmentIds.length > 0 &&
     availableDepartmentIds.every((id) => form.department_ids.includes(id))
 
-  const fetchPositions = React.useCallback(async (signal?: AbortSignal) => {
+  const fetchPositions = React.useCallback(async (signal?: AbortSignal, force = false) => {
     const token = readStoredToken()
     if (!token) {
       setError("Authentication required. Please log in again.")
@@ -252,7 +252,7 @@ export function PositionsView() {
         },
         {
           signal,
-          cacheTtlMs: env.NEXT_PUBLIC_LIST_CACHE_TTL_SHORT_MS,
+          cacheTtlMs: force ? 0 : env.NEXT_PUBLIC_LIST_CACHE_TTL_SHORT_MS,
         }
       )
       setRows(result.rows)
@@ -477,87 +477,6 @@ export function PositionsView() {
 
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap items-center gap-1.5">
-        <SearchToggleField
-          className="min-w-0"
-          placeholder="Search position"
-          value={query.search}
-          onChange={(value) => {
-            setPage(1)
-            setQuery((previous) => ({ ...previous, search: value }))
-          }}
-        />
-        <select
-          className="h-8 min-w-[8rem] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
-          value={query.status}
-          onChange={(event) => {
-            setPage(1)
-            setQuery((previous) => ({ ...previous, status: event.target.value }))
-          }}
-          aria-label="Filter position status"
-        >
-          <option value="">All statuses</option>
-          <option value="active">active</option>
-          <option value="inactive">inactive</option>
-        </select>
-        <select
-          className="h-8 min-w-[9rem] max-w-[12rem] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
-          value={query.department_id === 0 ? "" : String(query.department_id)}
-          onChange={(event) => {
-            setPage(1)
-            setQuery((previous) => ({
-              ...previous,
-              department_id: event.target.value ? Number(event.target.value) : 0,
-            }))
-          }}
-          aria-label="Filter by department"
-        >
-          <option value="">All departments</option>
-          {departments.map((department) => {
-            const id = readNumber(department, ["id"])
-            if (id === null) {
-              return null
-            }
-            return (
-              <option key={id} value={String(id)}>
-                {readString(department, ["name"])}
-              </option>
-            )
-          })}
-        </select>
-        <div className="ml-auto flex items-center gap-1.5">
-          {canCreatePositions ? (
-            <button
-              type="button"
-              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white transition hover:brightness-95 disabled:opacity-60"
-              onClick={() => {
-                editLoadSequence.current += 1
-                setError(null)
-                setEditingId(null)
-                setOriginalCode("")
-                setForm(emptyForm())
-                setOpenForm(true)
-              }}
-              aria-label="Add position"
-              title="Add position"
-            >
-              <Plus className="size-3.5" />
-              Add Position
-            </button>
-          ) : null}
-          <button
-            type="button"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 bg-white text-primary transition hover:bg-slate-50 disabled:opacity-60"
-            onClick={() => void fetchPositions()}
-            disabled={loading}
-            aria-label="Refresh"
-            title="Refresh"
-          >
-            <RefreshCw className={`size-3.5 text-primary ${loading ? "animate-spin" : ""}`} />
-          </button>
-        </div>
-      </div>
-
       {error ? <p className="text-sm text-rose-600">{error}</p> : null}
 
       <ResizableTable
@@ -567,6 +486,90 @@ export function PositionsView() {
         itemsPerPage={20}
         loading={loading}
         storageKey="positions"
+        toolbarStart={
+          <>
+            <SearchToggleField
+              className="min-w-0 !w-auto !max-w-[12rem] !flex-none"
+              placeholder="Search position"
+              value={query.search}
+              onChange={(value) => {
+                setPage(1)
+                setQuery((previous) => ({ ...previous, search: value }))
+              }}
+            />
+            <select
+              className="h-8 w-[8.5rem] shrink-0 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
+              value={query.status}
+              onChange={(event) => {
+                setPage(1)
+                setQuery((previous) => ({ ...previous, status: event.target.value }))
+              }}
+              aria-label="Filter position status"
+            >
+              <option value="">All statuses</option>
+              <option value="active">active</option>
+              <option value="inactive">inactive</option>
+            </select>
+            <select
+              className="h-8 w-[10rem] shrink-0 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
+              value={query.department_id === 0 ? "" : String(query.department_id)}
+              onChange={(event) => {
+                setPage(1)
+                setQuery((previous) => ({
+                  ...previous,
+                  department_id: event.target.value ? Number(event.target.value) : 0,
+                }))
+              }}
+              aria-label="Filter by department"
+            >
+              <option value="">All departments</option>
+              {departments.map((department) => {
+                const id = readNumber(department, ["id"])
+                if (id === null) {
+                  return null
+                }
+                return (
+                  <option key={id} value={String(id)}>
+                    {readString(department, ["name"])}
+                  </option>
+                )
+              })}
+            </select>
+          </>
+        }
+        toolbarActions={
+          <>
+            {canCreatePositions ? (
+              <button
+                type="button"
+                className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white transition hover:brightness-95 disabled:opacity-60"
+                onClick={() => {
+                  editLoadSequence.current += 1
+                  setError(null)
+                  setEditingId(null)
+                  setOriginalCode("")
+                  setForm(emptyForm())
+                  setOpenForm(true)
+                }}
+                aria-label="Add position"
+                title="Add position"
+              >
+                <Plus className="size-3.5" />
+                Add Position
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 bg-white text-primary transition hover:bg-slate-50 disabled:opacity-60"
+              onClick={() => void fetchPositions(undefined, true)}
+              disabled={loading}
+              aria-label="Refresh"
+              title="Refresh"
+            >
+              <RefreshCw className={`size-3.5 text-primary ${loading ? "animate-spin" : ""}`} />
+            </button>
+          </>
+        }
       />
 
       {openForm ? (
