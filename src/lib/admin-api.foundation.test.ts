@@ -8,6 +8,7 @@ import {
   getCurrentCompanyOnboardingStatus,
   getMyCompany,
   grantDepartmentAccess,
+  probePlatformCompaniesList,
   listDepartmentAccess,
   removeDepartmentPosition,
   revokeDepartmentAccess,
@@ -124,6 +125,34 @@ describe("foundation admin API helpers", () => {
         company_slug: "alliance",
       }),
     )
+  })
+
+  it("treats a platform-scope denial on GET /api/companies as a 403", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({ message: "Platform access is required" }, { status: 403 }),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+
+    await expect(probePlatformCompaniesList("token")).rejects.toMatchObject({
+      message: "Platform access is required",
+      status: 403,
+    })
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8888/api/companies",
+      expect.objectContaining({ method: "GET" }),
+    )
+  })
+
+  it("treats a 200 platform-denial envelope on GET /api/companies as a 403", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({ success: false, message: "Platform access is required" }),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+
+    await expect(probePlatformCompaniesList("token")).rejects.toMatchObject({
+      message: "Platform access is required",
+      status: 403,
+    })
   })
 
   it("loads current company onboarding status", async () => {

@@ -34,7 +34,10 @@ import {
   normalizePermissionLabels,
 } from "@/lib/dashboard-permissions"
 import { canSeeDashboardPage } from "@/lib/forbidden-routes"
-import { useForbiddenPrefixes } from "@/hooks/use-forbidden-route-guard"
+import {
+  useForbiddenPrefixes,
+  useProbePlatformCompaniesAccess,
+} from "@/hooks/use-forbidden-route-guard"
 
 const IUsers = <UsersRound size={48} animation="path-loop" />
 const ILeave = <Route size={48} animation="path-loop" />
@@ -777,6 +780,11 @@ export function AppSidebar({
   )
   const resolvedAccessMode = accessMode
   const forbiddenVersion = useForbiddenPrefixes()
+  useProbePlatformCompaniesAccess(
+    normalizedPermissions,
+    resolvedAccessMode,
+    identityReady,
+  )
   const [navReady, setNavReady] = React.useState(false)
   React.useEffect(() => {
     setNavReady(true)

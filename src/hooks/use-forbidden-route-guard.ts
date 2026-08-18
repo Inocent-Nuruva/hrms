@@ -5,13 +5,22 @@ import { usePathname, useRouter } from "next/navigation"
 
 import { isPermissionError } from "@/components/dashboard/talent-visuals"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
+import { probePlatformCompaniesList } from "@/lib/admin-api"
+import {
+  COMPANY_MANAGEMENT_ROUTE_PERMISSION,
+  hasPermission,
+  type DashboardAccessMode,
+} from "@/lib/dashboard-permissions"
 import {
   canSeeDashboardPage,
+  confirmPlatformRoute,
   firstVisibleSiblingOrHome,
   FORBIDDEN_ROUTES_EVENT,
+  isConfirmedPlatformRoute,
   isRememberedForbiddenRoute,
   rememberForbiddenRoute,
 } from "@/lib/forbidden-routes"
+import { readStoredSessionTokens } from "@/lib/session-client"
 
 export function useForbiddenPrefixes() {
   const [version, setVersion] = React.useState(0)
@@ -68,6 +77,7 @@ export function useHideRememberedForbiddenPath() {
   const router = useRouter()
   const pathname = usePathname()
   const actor = useDashboardActor()
+  const routeAccessVersion = useForbiddenPrefixes()
 
   React.useEffect(() => {
     if (!pathname || pathname === "/dashboard") return
@@ -75,5 +85,39 @@ export function useHideRememberedForbiddenPath() {
     router.replace(
       firstVisibleSiblingOrHome(pathname, actor.permissionLabels, actor.accessMode),
     )
-  }, [actor.accessMode, actor.permissionLabels, pathname, router])
+  }, [actor.accessMode, actor.permissionLabels, pathname, routeAccessVersion, router])
+}
+
+export function useProbePlatformCompaniesAccess(
+  permissionLabels: string[],
+  accessMode: DashboardAccessMode,
+  identityReady: boolean,
+) {
+  const permissionKey = permissionLabels.join("|")
+
+  React.useEffect(() => {
+    if (!identityReady || accessMode !== "admin") return
+    const labels = permissionKey ? permissionKey.split("|") : []
+    if (!hasPermission(labels, COMPANY_MANAGEMENT_ROUTE_PERMISSION)) return
+    if (isRememberedForbiddenRoute("/dashboard/companies")) return
+    if (isConfirmedPlatformRoute("/dashboard/companies")) return
+
+    const token = readStoredSessionTokens().accessToken.trim()
+    if (!token) return
+
+    let cancelled = false
+    void probePlatformCompaniesList(token)
+      .then(() => {
+        if (cancelled) return
+        confirmPlatformRoute("/dashboard/companies")
+      })
+      .catch((errorObject) => {
+        if (cancelled || !isPermissionError(errorObject)) return
+        rememberForbiddenRoute("/dashboard/companies")
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [accessMode, identityReady, permissionKey])
 }

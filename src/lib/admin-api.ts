@@ -9787,6 +9787,42 @@ export async function getMyCompany(token: string) {
   return extractCompanyRecord(payload);
 }
 
+function payloadDeniesPlatformAccess(payload: unknown) {
+  const record = asRecord(payload);
+  const haystack = [
+    record?.message,
+    record?.error,
+    record?.details,
+    record?.code,
+  ]
+    .flatMap((value) => (Array.isArray(value) ? value : [value]))
+    .filter((value): value is string => typeof value === "string")
+    .join(" ");
+  return /platform access is required/i.test(haystack);
+}
+
+/**
+ * GET /api/companies is platform-scope only. Company-scoped System
+ * Administrators receive 403 "Platform access is required" even when the JWT
+ * includes companies:read. Throws that as a 403 so the nav can hide the page.
+ */
+export async function probePlatformCompaniesList(token: string) {
+  const payload = await adminRequest<unknown>("/api/companies", {
+    token,
+    cacheTtlMs: 0,
+  });
+  if (payloadDeniesPlatformAccess(payload)) {
+    const error = new Error("Platform access is required") as Error & {
+      status?: number;
+      payload?: unknown;
+    };
+    error.status = 403;
+    error.payload = payload;
+    throw error;
+  }
+  return dedupeAdminRecordsById(normalizeList(payload));
+}
+
 export async function getAdminCompany(token: string) {
   return getMyCompany(token);
 }

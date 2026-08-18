@@ -4,10 +4,19 @@ import { allDashboardSectionTabGroups } from "@/lib/dashboard-sections"
 
 export const FORBIDDEN_ROUTES_EVENT = "hrms:forbidden-routes-changed"
 const STORAGE_KEY = "hrms.forbiddenRoutes"
+const CONFIRMED_STORAGE_KEY = "hrms.confirmedPlatformRoutes"
 
 // Attendance download still works without analytics grants. A 403 from
 // /api/analytics/* must not hide the whole Reports page or bounce to /dashboard.
 const DO_NOT_REMEMBER = new Set(["/dashboard/operations/reports"])
+
+/**
+ * JWT `companies:read` is also issued to company-scoped System Administrators.
+ * GET /api/companies is platform-scope only and returns
+ * "Platform access is required" for those users. Hide the nav item until the
+ * list call actually succeeds.
+ */
+const PLATFORM_SCOPED_ROUTES = new Set(["/dashboard/companies"])
 
 function normalizePath(url: string) {
   const path = url.split("?")[0] ?? url
@@ -49,17 +58,79 @@ function readPrefixes(): string[] {
   }
 }
 
+function notifyRouteAccessChanged() {
+  if (typeof window === "undefined") return
+  window.dispatchEvent(new Event(FORBIDDEN_ROUTES_EVENT))
+}
+
 function writePrefixes(prefixes: string[]) {
   if (typeof window === "undefined") return
   window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(prefixes))
-  window.dispatchEvent(new Event(FORBIDDEN_ROUTES_EVENT))
+  notifyRouteAccessChanged()
+}
+
+function readConfirmedPrefixes(): string[] {
+  if (typeof window === "undefined") return []
+  try {
+    const raw = window.sessionStorage.getItem(CONFIRMED_STORAGE_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw) as unknown
+    return Array.isArray(parsed)
+      ? parsed.filter(
+          (entry): entry is string =>
+            typeof entry === "string" && PLATFORM_SCOPED_ROUTES.has(entry),
+        )
+      : []
+  } catch {
+    return []
+  }
+}
+
+function writeConfirmedPrefixes(prefixes: string[]) {
+  if (typeof window === "undefined") return
+  window.sessionStorage.setItem(CONFIRMED_STORAGE_KEY, JSON.stringify(prefixes))
+  notifyRouteAccessChanged()
+}
+
+export function isPlatformScopedDashboardRoute(url: string) {
+  return PLATFORM_SCOPED_ROUTES.has(tabPrefix(url))
+}
+
+export function isConfirmedPlatformRoute(url: string) {
+  const prefix = tabPrefix(url)
+  return readConfirmedPrefixes().includes(prefix)
+}
+
+export function confirmPlatformRoute(url: string) {
+  const prefix = tabPrefix(url)
+  if (!PLATFORM_SCOPED_ROUTES.has(prefix)) return
+  const forbidden = readPrefixes().filter((entry) => entry !== prefix)
+  if (forbidden.length !== readPrefixes().length) {
+    if (typeof window === "undefined") return
+    window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(forbidden))
+  }
+  const confirmed = readConfirmedPrefixes()
+  if (confirmed.includes(prefix)) {
+    notifyRouteAccessChanged()
+    return
+  }
+  writeConfirmedPrefixes([...confirmed, prefix])
 }
 
 export function rememberForbiddenRoute(url: string) {
   const prefix = tabPrefix(url)
   if (DO_NOT_REMEMBER.has(prefix)) return
+  const confirmed = readConfirmedPrefixes().filter((entry) => entry !== prefix)
+  if (confirmed.length !== readConfirmedPrefixes().length) {
+    if (typeof window !== "undefined") {
+      window.sessionStorage.setItem(CONFIRMED_STORAGE_KEY, JSON.stringify(confirmed))
+    }
+  }
   const current = readPrefixes()
-  if (current.includes(prefix)) return
+  if (current.includes(prefix)) {
+    notifyRouteAccessChanged()
+    return
+  }
   writePrefixes([...current, prefix])
 }
 
@@ -69,6 +140,13 @@ export function forgetForbiddenRoute(url: string) {
   const next = current.filter((entry) => entry !== prefix)
   if (next.length === current.length) return
   writePrefixes(next)
+}
+
+export function clearDashboardRouteMemory() {
+  if (typeof window === "undefined") return
+  window.sessionStorage.removeItem(STORAGE_KEY)
+  window.sessionStorage.removeItem(CONFIRMED_STORAGE_KEY)
+  notifyRouteAccessChanged()
 }
 
 export function isRememberedForbiddenRoute(url: string) {
@@ -107,6 +185,11 @@ export function canSeeDashboardPage(
   accessMode?: DashboardAccessMode,
 ) {
   if (isRememberedForbiddenRoute(url)) {
+    return false
+  }
+  // Fail-closed: company-scoped admins have companies:read but cannot list
+  // the platform tenant registry. Do not paint Companies until confirmed.
+  if (isPlatformScopedDashboardRoute(url) && !isConfirmedPlatformRoute(url)) {
     return false
   }
   return canAccessDashboardRoute(url, permissionLabels, accessMode)

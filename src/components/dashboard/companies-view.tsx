@@ -19,6 +19,7 @@ import {
   listCurrentCompanyUsers,
   listResource,
   listUsers,
+  probePlatformCompaniesList,
   revokePermissionFromCurrentCompanyUser,
   revokeRoleFromCurrentCompanyUser,
   suspendCompany,
@@ -422,7 +423,7 @@ export function CompaniesView() {
     setMembersError(null)
     const settled = await Promise.allSettled([
       canListPlatformCompanies
-        ? listResource("companies", token, { pageAll: false })
+        ? probePlatformCompaniesList(token)
         : Promise.resolve([] as AdminRecord[]),
       getMyCompany(token),
       getCurrentCompanyOnboardingStatus(token),

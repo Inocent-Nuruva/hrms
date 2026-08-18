@@ -105,6 +105,9 @@ export function clearStoredSession() {
   window.localStorage.removeItem(AUTH_STORAGE_KEYS.user)
   window.sessionStorage.removeItem(LEGACY_SESSION_TOKEN_KEY)
   clearDashboardActorSnapshot()
+  void import("@/lib/forbidden-routes").then((mod) => {
+    mod.clearDashboardRouteMemory()
+  })
   // Dynamic import avoids a circular dependency with the photo store module.
   void import("@/lib/my-profile-photo").then((mod) => {
     mod.invalidateMyProfilePhoto()

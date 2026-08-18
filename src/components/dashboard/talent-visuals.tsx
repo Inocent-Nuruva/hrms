@@ -530,12 +530,17 @@ export function statusChartItems(rows: AdminRecord[]) {
 }
 
 export function isPermissionError(error: unknown) {
-  const status =
-    error && typeof error === "object" && "status" in error
-      ? Number((error as { status?: unknown }).status)
-      : NaN
+  const record = error && typeof error === "object" ? (error as Record<string, unknown>) : null
+  const status = Number(record?.status ?? record?.statusCode)
   if (status === 403) return true
-  const message = error instanceof Error ? error.message : String(error ?? "")
+  const payload = record?.payload
+  const payloadRecord =
+    payload && typeof payload === "object" ? (payload as Record<string, unknown>) : null
+  const message = [
+    error instanceof Error ? error.message : String(error ?? ""),
+    typeof payloadRecord?.message === "string" ? payloadRecord.message : "",
+    typeof payloadRecord?.error === "string" ? payloadRecord.error : "",
+  ].join(" ")
   return /do not have permission|forbidden|not allowed to perform|platform access is required/i.test(
     message,
   )

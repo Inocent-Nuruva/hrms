@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { canAccessDashboardRoute } from "./dashboard-permissions"
 import {
   canSeeDashboardPage,
+  confirmPlatformRoute,
   firstVisibleSiblingOrHome,
   isRememberedForbiddenRoute,
   rememberForbiddenRoute,
@@ -20,6 +21,9 @@ describe("forbidden route memory", () => {
         getItem: (key: string) => store.get(key) ?? null,
         setItem: (key: string, value: string) => {
           store.set(key, value)
+        },
+        removeItem: (key: string) => {
+          store.delete(key)
         },
         clear: () => store.clear(),
       },
@@ -59,5 +63,25 @@ describe("forbidden route memory", () => {
     expect(
       canSeeDashboardPage("/dashboard/operations/reports", ["attendance_summaries:read"], "admin"),
     ).toBe(true)
+  })
+
+  it("hides Companies until GET /api/companies is confirmed", () => {
+    stubSession()
+    expect(
+      canSeeDashboardPage("/dashboard/companies", ["companies:read"], "admin"),
+    ).toBe(false)
+    confirmPlatformRoute("/dashboard/companies")
+    expect(
+      canSeeDashboardPage("/dashboard/companies", ["companies:read"], "admin"),
+    ).toBe(true)
+  })
+
+  it("keeps Companies hidden after a platform-scope 403", () => {
+    stubSession()
+    confirmPlatformRoute("/dashboard/companies")
+    rememberForbiddenRoute("/dashboard/companies")
+    expect(
+      canSeeDashboardPage("/dashboard/companies", ["companies:read"], "admin"),
+    ).toBe(false)
   })
 })
