@@ -60,7 +60,7 @@ export function Tabs2({ groups, currentPath, className }: Tabs2Props) {
   const subTabs = activeGroup?.items ?? []
 
   return (
-    <div className={cn("flex min-w-0 items-center gap-2 border-b border-border/80", className)}>
+    <div className={cn("flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-border/80", className)}>
       <DropdownMenu>
         <DropdownMenuTrigger
           render={
@@ -104,24 +104,31 @@ export function Tabs2({ groups, currentPath, className }: Tabs2Props) {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <div className="tab-rail-scroll min-w-0 flex-1" role="tablist" aria-label="Section pages">
-        <div className="inline-flex min-w-full items-center gap-1">
-          {subTabs.map((item) => {
-            const isActive = isActivePath(currentPath, item.url)
-            return (
-              <Link
-                key={item.url}
-                href={item.url}
-                role="tab"
-                aria-selected={isActive}
-                className={tabTriggerClass(isActive)}
-              >
-                <span className="whitespace-nowrap text-[10px] font-bold leading-none">{item.title}</span>
-                <TabUnderline active={isActive} />
-              </Link>
-            )
-          })}
-        </div>
+      <div
+        className="hidden h-5 w-px shrink-0 self-center bg-border sm:block"
+        aria-hidden
+      />
+
+      <div
+        className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-0.5"
+        role="tablist"
+        aria-label="Section pages"
+      >
+        {subTabs.map((item) => {
+          const isActive = isActivePath(currentPath, item.url)
+          return (
+            <Link
+              key={item.url}
+              href={item.url}
+              role="tab"
+              aria-selected={isActive}
+              className={tabTriggerClass(isActive)}
+            >
+              <span className="text-[10px] font-bold leading-none">{item.title}</span>
+              <TabUnderline active={isActive} />
+            </Link>
+          )
+        })}
       </div>
     </div>
   )
