@@ -9901,6 +9901,32 @@ export async function listDepartmentPositions(
   return normalizeList(payload);
 }
 
+export async function assignDepartmentPosition(
+  token: string,
+  departmentId: string | number,
+  positionId: string | number,
+) {
+  return adminRequest<unknown>(`/api/departments/${departmentId}/positions`, {
+    method: "POST",
+    token,
+    body: { position_id: Number(positionId) },
+  });
+}
+
+export async function removeDepartmentPosition(
+  token: string,
+  departmentId: string | number,
+  positionId: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/departments/${departmentId}/positions/${positionId}`,
+    {
+      method: "DELETE",
+      token,
+    },
+  );
+}
+
 export async function patchEmployeeById(
   id: string | number,
   token: string,
@@ -12070,6 +12096,18 @@ export async function deleteEmployeeDocument(
       method: "DELETE",
       token,
     },
+  );
+}
+
+export async function downloadEmployeeDocument(
+  token: string,
+  employeeId: string | number,
+  documentId: string | number,
+): Promise<{ blob: Blob; filename: string; contentType: string | null }> {
+  return downloadAdminBlob(
+    `/api/employees/${employeeId}/documents/${documentId}/download`,
+    token,
+    `employee-${employeeId}-document-${documentId}`,
   );
 }
 

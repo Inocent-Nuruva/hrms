@@ -8,6 +8,7 @@ import {
   ChevronRightIcon,
   EyeIcon,
   EyeOffIcon,
+  DownloadIcon,
   PencilIcon,
   PlusIcon,
   SearchIcon,
@@ -39,6 +40,7 @@ import {
   deleteEmployeePosition,
   deleteEmployeeDocument,
   deleteEmployeeSectionItem,
+  downloadEmployeeDocument,
   EMPLOYEE_STATUS_VALUES,
   fileToBase64UploadDto,
   getEmployeeById,
@@ -1862,6 +1864,7 @@ function Section({
   const [documentUploadFile, setDocumentUploadFile] = React.useState<File | null>(null)
   const [mutationError, setMutationError] = React.useState<string | null>(null)
   const [submitting, setSubmitting] = React.useState(false)
+  const [downloadingId, setDownloadingId] = React.useState("")
   const token = readStoredToken()
   const apiSection = sectionTitleToApiSection(title)
   const isDocumentsSection = title.toLowerCase() === "documents"
@@ -1954,6 +1957,9 @@ function Section({
             </button>
           ) : null}
         </div>
+        {mutationError && !addingRecord && !deletingRecord && !editingRecord ? (
+          <p className="mb-2 text-sm text-rose-600">{mutationError}</p>
+        ) : null}
         {items.length === 0 ? (
           <p className="py-2 text-sm text-muted-foreground">No data available.</p>
         ) : (
@@ -1983,6 +1989,41 @@ function Section({
                     ) : null}
                   </div>
                   <div className="flex items-center gap-1">
+                    {isDocumentsSection && employeeId && token ? (
+                      <button
+                        type="button"
+                        aria-label={`Download ${title} record ${index + 1}`}
+                        className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-50"
+                        disabled={downloadingId === String(readNumber(item.id) ?? index)}
+                        onClick={() => {
+                          const itemId = readNumber(item.id)
+                          if (itemId === null) {
+                            setMutationError("This file does not have an id to download.")
+                            return
+                          }
+                          setDownloadingId(String(itemId))
+                          void downloadEmployeeDocument(token, employeeId, itemId)
+                            .then((result) => {
+                              const url = URL.createObjectURL(result.blob)
+                              const link = document.createElement("a")
+                              link.href = url
+                              link.download = result.filename
+                              link.click()
+                              URL.revokeObjectURL(url)
+                            })
+                            .catch((errorObject) => {
+                              setMutationError(
+                                errorObject instanceof Error
+                                  ? errorObject.message
+                                  : "Could not download this file.",
+                              )
+                            })
+                            .finally(() => setDownloadingId(""))
+                        }}
+                      >
+                        <DownloadIcon className="size-4" />
+                      </button>
+                    ) : null}
                     {supportsEdit ? (
                       <button
                         type="button"

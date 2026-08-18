@@ -27,6 +27,7 @@ import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import {
   getHrAttendanceSchedulePreview,
   getHrAttendanceSetupStatus,
+  exportAnalyticsReport,
   getAnalyticsDashboard,
   getHrDashboard,
   getHrLaunchReadiness,
@@ -104,6 +105,7 @@ export function InsightsOperationsView({
   const [dateTo, setDateTo] = React.useState("")
   const [policyName, setPolicyName] = React.useState("Default attendance policy")
   const [saving, setSaving] = React.useState(false)
+  const [exporting, setExporting] = React.useState(false)
   const [previewEmployeeId, setPreviewEmployeeId] = React.useState("")
 
   const load = React.useCallback(async () => {
@@ -203,6 +205,29 @@ export function InsightsOperationsView({
     }
   }
 
+  async function onExport() {
+    const token = readStoredToken()
+    if (!token) return
+    const datasetCode = activeTab === "sales-field" ? "sales_field" : "hr_headcount"
+    setExporting(true)
+    try {
+      await exportAnalyticsReport(token, {
+        dataset_code: datasetCode,
+        dimensions: ["department_name"],
+        measures: ["headcount"],
+        ...(dateFrom ? { date_from: dateFrom } : {}),
+        ...(dateTo ? { date_to: dateTo } : {}),
+        output_format: "CSV",
+        idempotency_key: `insights-${activeTab}-${Date.now()}`,
+      })
+      toast.success("Analytics export queued.")
+    } catch (errorObject) {
+      toast.error(errorObject instanceof Error ? errorObject.message : "Could not export this dashboard.")
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const employeeColumns = React.useMemo<Column<AdminRecord>[]>(() => [
     { key: "employee", label: "Employee", render: (row) => employeeLabel(row) },
     { key: "shift", label: "Shift", render: (row) => <StatusChip value={readString(row, ["shiftReady", "shift_ready", "hasShift", "has_shift"], "—")} /> },
@@ -242,10 +267,18 @@ export function InsightsOperationsView({
             : "Company dashboard payload from /api/dashboards. Shown only with a dashboards grant."
         }
         actions={
-          <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
-            {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
-            Refresh
-          </button>
+          <>
+            {activeTab !== "readiness" ? (
+              <button type="button" className={secondaryButtonClass} onClick={() => void onExport()} disabled={exporting}>
+                {exporting ? <Loader2Icon className="size-4 animate-spin" /> : null}
+                Export CSV
+              </button>
+            ) : null}
+            <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
+              {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+              Refresh
+            </button>
+          </>
         }
       />
       {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div> : null}

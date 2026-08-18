@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { useDebouncedValue } from "@/hooks/use-debounced-value"
 
 import {
+  assignDepartmentPosition,
   createDepartment,
   deleteDepartment,
   grantDepartmentAccess,
@@ -18,6 +19,7 @@ import {
   listPositions,
   listUsers,
   patchDepartment,
+  removeDepartmentPosition,
   revokeDepartmentAccess,
   type AdminRecord,
   type DepartmentsQueryParams,
@@ -126,6 +128,39 @@ function readPositionIds(row: AdminRecord) {
     if (id !== null) ids.add(id)
   }
   return Array.from(ids)
+}
+
+function asRecord(value: unknown): AdminRecord | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as AdminRecord) : null
+}
+
+function readCreatedDepartmentId(payload: unknown): number | null {
+  const root = asRecord(payload)
+  const nested = asRecord(root?.data) ?? asRecord(root?.result)
+  return readNumber(nested ?? root ?? {}, ["id", "department_id", "departmentId"])
+}
+
+async function syncDepartmentPositions(
+  token: string,
+  departmentId: number,
+  nextIds: number[],
+) {
+  const assigned = await listDepartmentPositions(token, departmentId)
+  const currentIds = assigned
+    .map((position) => readNumber(position, ["position_id", "positionId", "id"]))
+    .filter((id): id is number => id !== null)
+  const currentSet = new Set(currentIds)
+  const nextSet = new Set(nextIds)
+  for (const positionId of nextIds) {
+    if (!currentSet.has(positionId)) {
+      await assignDepartmentPosition(token, departmentId, positionId)
+    }
+  }
+  for (const positionId of currentIds) {
+    if (!nextSet.has(positionId)) {
+      await removeDepartmentPosition(token, departmentId, positionId)
+    }
+  }
 }
 
 function emptyForm(): DepartmentForm {
@@ -429,16 +464,26 @@ export function DepartmentsView() {
       status: form.status || "active",
       branch_id: form.branch_id.trim() ? Number(form.branch_id) : 0,
       parent_id: form.parent_id.trim() ? Number(form.parent_id) : undefined,
-      position_ids: form.position_ids.map(Number),
     }
+    const nextPositionIds = form.position_ids
+      .map(Number)
+      .filter((id) => Number.isFinite(id) && id > 0)
 
     setSaving(true)
     setError(null)
     try {
+      let departmentId = editingId
       if (editingId === null) {
-        await createDepartment(token, payload)
+        const created = await createDepartment(token, payload)
+        departmentId = readCreatedDepartmentId(created)
       } else {
         await patchDepartment(token, editingId, payload)
+      }
+      if (departmentId === null && nextPositionIds.length > 0) {
+        throw new Error("Department saved, but its id was missing so positions were not assigned.")
+      }
+      if (departmentId !== null) {
+        await syncDepartmentPositions(token, departmentId, nextPositionIds)
       }
       setOpenCreate(false)
       setEditingId(null)
@@ -905,7 +950,7 @@ export function DepartmentsView() {
                   </div>
                 </div>
                 <span className="text-[11px] text-slate-500">
-                  Select the existing positions assigned to this department.
+                  Saving assigns or removes these positions on the department.
                 </span>
               </fieldset>
             </div>
