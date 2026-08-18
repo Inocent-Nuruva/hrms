@@ -68,9 +68,24 @@ export function describePermission(permission: string): string {
   return permission.replace(/[_:]+/g, " ")
 }
 
+export function resolveSecurityActorName(
+  row: SecurityEventRow,
+  names?: { byCompanyUserId?: Map<number, string>; byUserId?: Map<number, string> },
+): string | null {
+  const companyUserId = Number(row.actor_company_user_id ?? row.actorCompanyUserId)
+  if (Number.isFinite(companyUserId) && names?.byCompanyUserId?.has(companyUserId)) {
+    return names.byCompanyUserId.get(companyUserId) ?? null
+  }
+  const userId = Number(row.actor_user_id ?? row.actorUserId ?? row.user_id ?? row.userId)
+  if (Number.isFinite(userId) && names?.byUserId?.has(userId)) {
+    return names.byUserId.get(userId) ?? null
+  }
+  return null
+}
+
 export function describeSecurityEvent(
   row: SecurityEventRow,
-  nameByActorId?: Map<number, string>,
+  names?: { byCompanyUserId?: Map<number, string>; byUserId?: Map<number, string> },
 ): {
   title: string
   what: string
@@ -86,18 +101,12 @@ export function describeSecurityEvent(
   const missingList = Array.isArray(missing)
     ? missing.map((entry) => describePermission(String(entry)))
     : []
-  const actorId = Number(
-    row.actor_user_id ?? row.actorUserId ?? row.actor_company_user_id ?? row.actorCompanyUserId ?? row.user_id ?? row.userId,
-  )
-  const named =
-    Number.isFinite(actorId) && nameByActorId
-      ? nameByActorId.get(actorId)
-      : undefined
+  const named = resolveSecurityActorName(row, names)
 
   return {
     title: "Access was blocked",
     what: path ? `Tried to open ${area}` : "Tried to open something they cannot use",
-    who: named || (Number.isFinite(actorId) ? "A team member" : "Someone"),
+    who: named ?? "Name not provided",
     why:
       missingList.length > 0
         ? `They do not have permission to ${missingList.join(" or ")}.`

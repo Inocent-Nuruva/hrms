@@ -35,6 +35,7 @@ import {
   getSystemHealth,
   getSystemHealthLive,
   getSystemHealthReady,
+  listAllCurrentCompanyUsers,
   listSecurityEvents,
   runHrAttendanceSetupWizard,
   type AdminRecord,
@@ -140,6 +141,7 @@ export function InsightsOperationsView({
   const [readiness, setReadiness] = React.useState<AdminRecord | null>(null)
   const [employees, setEmployees] = React.useState<AdminRecord[]>([])
   const [events, setEvents] = React.useState<AdminRecord[]>([])
+  const [companyUsers, setCompanyUsers] = React.useState<AdminRecord[]>([])
   const [setup, setSetup] = React.useState<AdminRecord | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
@@ -188,6 +190,7 @@ export function InsightsOperationsView({
         getSystemHealthLive(token).then(setLive).catch(() => setLive(null)),
         getSystemHealthReady(token).then(setReady).catch(() => setReady(null)),
         listSecurityEvents(token, { page: 1, limit: 20 }).then(setEvents).catch(() => setEvents([])),
+        listAllCurrentCompanyUsers(token).then(setCompanyUsers).catch(() => setCompanyUsers([])),
         getHrAttendanceSetupStatus(token).then(setSetup).catch(() => setSetup(null)),
       )
     }
@@ -212,22 +215,31 @@ export function InsightsOperationsView({
   const blockers = asRecordArray(readiness?.blockers ?? readiness?.items)
   const visibleEmployees = employees.filter((row) => !search || JSON.stringify(row).toLowerCase().includes(search.toLowerCase()))
   const visibleEvents = events.filter((row) => !search || JSON.stringify(row).toLowerCase().includes(search.toLowerCase()))
-  const actorNameById = React.useMemo(() => {
-    const names = new Map<number, string>()
-    employees.forEach((row) => {
-      const label = employeeLabel(row)
+  const actorNames = React.useMemo(() => {
+    const byCompanyUserId = new Map<number, string>()
+    const byUserId = new Map<number, string>()
+    companyUsers.forEach((row) => {
+      const nestedUser = row.user && typeof row.user === "object" ? (row.user as AdminRecord) : null
+      const label =
+        employeeLabel(nestedUser) !== "—"
+          ? employeeLabel(nestedUser)
+          : employeeLabel(row)
       if (!label || label === "—") {
         return
       }
-      ;(["id", "employee_id", "employeeId", "user_id", "userId"] as const).forEach((key) => {
-        const id = readNumber(row, [key])
-        if (id !== null && !names.has(id)) {
-          names.set(id, label)
-        }
-      })
+      const companyUserId = readNumber(row, ["id", "company_user_id", "companyUserId"])
+      if (companyUserId !== null) {
+        byCompanyUserId.set(companyUserId, label)
+      }
+      const userId =
+        readNumber(row, ["user_id", "userId"]) ??
+        (nestedUser ? readNumber(nestedUser, ["id", "user_id"]) : null)
+      if (userId !== null) {
+        byUserId.set(userId, label)
+      }
     })
-    return names
-  }, [employees])
+    return { byCompanyUserId, byUserId }
+  }, [companyUsers])
 
   async function onWizard() {
     const token = readStoredToken()
@@ -312,12 +324,12 @@ export function InsightsOperationsView({
     {
       key: "what",
       label: "What they tried",
-      render: (row) => describeSecurityEvent(row, actorNameById).what,
+      render: (row) => describeSecurityEvent(row, actorNames).what,
     },
     {
       key: "who",
       label: "Who",
-      render: (row) => describeSecurityEvent(row, actorNameById).who,
+      render: (row) => describeSecurityEvent(row, actorNames).who,
     },
     {
       key: "when",
@@ -329,7 +341,7 @@ export function InsightsOperationsView({
         return when === "—" ? "Time not recorded" : when
       },
     },
-  ], [actorNameById])
+  ], [actorNames])
 
   if (!canAccess) return null
 
@@ -537,24 +549,24 @@ export function InsightsOperationsView({
               <DialogHeader>
                 <DialogTitle>Access was blocked</DialogTitle>
                 <DialogDescription>
-                  {describeSecurityEvent(eventDetail, actorNameById).who} was stopped from opening something they cannot use.
+                  {describeSecurityEvent(eventDetail, actorNames).who} was stopped from opening something they cannot use.
                 </DialogDescription>
               </DialogHeader>
               <dl className="grid gap-2 text-sm">
                 <div className="rounded-md border border-border/60 px-2.5 py-2">
                   <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">What they tried</dt>
-                  <dd className="mt-0.5 font-medium">{describeSecurityEvent(eventDetail, actorNameById).what}</dd>
+                  <dd className="mt-0.5 font-medium">{describeSecurityEvent(eventDetail, actorNames).what}</dd>
                 </div>
                 <div className="rounded-md border border-border/60 px-2.5 py-2">
                   <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">Why</dt>
-                  <dd className="mt-0.5 font-medium">{describeSecurityEvent(eventDetail, actorNameById).why}</dd>
+                  <dd className="mt-0.5 font-medium">{describeSecurityEvent(eventDetail, actorNames).why}</dd>
                 </div>
                 <div className="rounded-md border border-border/60 px-2.5 py-2">
                   <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">When</dt>
                   <dd className="mt-0.5 font-medium">
-                    {formatDateTime(describeSecurityEvent(eventDetail, actorNameById).whenRaw) === "—"
+                    {formatDateTime(describeSecurityEvent(eventDetail, actorNames).whenRaw) === "—"
                       ? "Time not recorded"
-                      : formatDateTime(describeSecurityEvent(eventDetail, actorNameById).whenRaw)}
+                      : formatDateTime(describeSecurityEvent(eventDetail, actorNames).whenRaw)}
                   </dd>
                 </div>
               </dl>
