@@ -621,9 +621,9 @@ export function BranchesView() {
 
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap items-center gap-1.5">
+      <div className="flex min-w-0 flex-nowrap items-center gap-1.5 overflow-x-auto">
         <SearchToggleField
-          className="min-w-0"
+          className="min-w-0 !w-auto !max-w-[12rem] !flex-none"
           placeholder="Search branch"
           value={query.search}
           onChange={(value) => {
@@ -632,7 +632,7 @@ export function BranchesView() {
           }}
         />
         <select
-          className="h-8 min-w-[8rem] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
+          className="h-8 w-[8.5rem] shrink-0 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
           value={query.status}
           onChange={(event) => {
             setPage(1)
@@ -644,7 +644,7 @@ export function BranchesView() {
           <option value="active">active</option>
           <option value="inactive">inactive</option>
         </select>
-        <div className="ml-auto flex items-center gap-1.5">
+        <div className="ml-auto flex shrink-0 items-center gap-1.5">
           {canCreateBranches ? (
             <button
               type="button"
@@ -683,6 +683,7 @@ export function BranchesView() {
         itemsPerPage={20}
         loading={loading}
         storageKey="branches"
+        showToolbar={false}
       />
 
       {openForm ? (
