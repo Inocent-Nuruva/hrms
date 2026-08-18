@@ -72,6 +72,7 @@ import {
   formatBalanceDays,
   groupLeaveBalancesByEmployee,
   readBalanceDays,
+  readBalanceEmployeeId,
   readBalanceFiscalYear,
   resolveLeaveBalanceEmployeeName,
   sortLeaveBalanceRows,
@@ -80,6 +81,7 @@ import {
 import { cn } from "@/lib/utils"
 import { Switch } from "@/components/ui/switch"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
+import { TalentDoodle, TalentDoodleSprites } from "@/components/dashboard/talent-visuals"
 import ExampleProgress from "@/components/ui/progress-1"
 import { showErrorAlert } from "@/lib/error-alert"
 import { showSuccessAlert } from "@/lib/success-alert"
@@ -422,6 +424,26 @@ function formatLeaveDays(value: string) {
     return "0 (not fixed)"
   }
   return Number.isInteger(parsed) ? String(parsed) : parsed.toFixed(2)
+}
+
+function leaveTypeIdFromRow(row: AdminRecord) {
+  return readNumber(row, ["leave_type_id", "leaveTypeId", "type_id", "typeId"])
+}
+
+function formFromBalanceRow(row: AdminRecord) {
+  return {
+    employee_id: String(readNumber(row, ["employee_id", "employeeId"]) ?? ""),
+    leave_type_id: String(leaveTypeIdFromRow(row) ?? ""),
+    fiscal_year:
+      readString(row, ["fiscal_year", "fiscalYear"]) === "-"
+        ? String(new Date().getFullYear())
+        : readString(row, ["fiscal_year", "fiscalYear"]),
+    allocated_days: String(readNumber(row, ["allocated_days", "allocated"]) ?? 0),
+    carried_forward_days: String(
+      readNumber(row, ["carried_forward_days", "carried_forward", "carriedForwardDays", "carriedForward"]) ?? 0
+    ),
+    expired_days: String(readNumber(row, ["expired_days", "expired", "expiredDays"]) ?? 0),
+  }
 }
 
 function formatGenderRestriction(value: string) {
@@ -2190,6 +2212,45 @@ export function LeaveManagementView({
     }
   }
 
+  function findMatchingBalanceRow(employeeId: string, leaveTypeId: string, fiscalYear: string) {
+    const employeeNumber = Number(employeeId)
+    const typeNumber = Number(leaveTypeId)
+    if (!Number.isFinite(employeeNumber) || !Number.isFinite(typeNumber)) {
+      return null
+    }
+    const year = fiscalYear.trim()
+    const pool = [...(selectedBalanceGroup?.rows ?? []), ...balances]
+    return (
+      pool.find((row) => {
+        const rowEmployee = readBalanceEmployeeId(row)
+        const rowType = leaveTypeIdFromRow(row)
+        const rowYear = readString(row, ["fiscal_year", "fiscalYear"])
+        return (
+          rowEmployee === employeeNumber &&
+          rowType === typeNumber &&
+          (year === "" || rowYear === "-" || rowYear === year)
+        )
+      }) ?? null
+    )
+  }
+
+  function applyBalanceSelection(next: { employee_id: string; leave_type_id: string; fiscal_year: string }) {
+    const match = findMatchingBalanceRow(next.employee_id, next.leave_type_id, next.fiscal_year)
+    if (match) {
+      setSelectedBalanceRow(match)
+      setBalanceForm(formFromBalanceRow(match))
+      return
+    }
+    setSelectedBalanceRow(null)
+    setBalanceForm((prev) => ({
+      ...prev,
+      ...next,
+      allocated_days: "0",
+      carried_forward_days: "0",
+      expired_days: "0",
+    }))
+  }
+
   function openEmployeeBalanceDetails(group: LeaveBalanceEmployeeGroup) {
     setSelectedBalanceGroup(group)
     setEmployeeBalanceDetailsOpen(true)
@@ -2253,14 +2314,7 @@ export function LeaveManagementView({
       setReturnToEmployeeBalances(employeeBalanceDetailsOpen)
       setEmployeeBalanceDetailsOpen(false)
       setSelectedBalanceRow(row)
-      setBalanceForm({
-        employee_id: String(readNumber(row, ["employee_id", "employeeId"]) ?? ""),
-        leave_type_id: String(readNumber(row, ["leave_type_id", "leaveTypeId", "type_id", "typeId"]) ?? ""),
-        fiscal_year: readString(row, ["fiscal_year", "fiscalYear"]) === "-" ? String(new Date().getFullYear()) : readString(row, ["fiscal_year", "fiscalYear"]),
-        allocated_days: String(readNumber(row, ["allocated_days", "allocated"]) ?? 0),
-        carried_forward_days: String(readNumber(row, ["carried_forward_days", "carried_forward", "carriedForwardDays", "carriedForward"]) ?? 0),
-        expired_days: String(readNumber(row, ["expired_days", "expired", "expiredDays"]) ?? 0),
-      })
+      setBalanceForm(formFromBalanceRow(row))
     } else {
       returnToEmployeeBalancesRef.current = false
       setReturnToEmployeeBalances(false)
@@ -4167,17 +4221,35 @@ export function LeaveManagementView({
                 : "Enter the balance adjustment details, then save them."}
             </DialogDescription>
           </DialogHeader>
-          {selectedBalanceRow ? (
+          {balanceForm.employee_id || balanceForm.leave_type_id ? (
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-              <span className="font-medium text-slate-900">{employeeLabelFromRow(selectedBalanceRow)}</span>
+              <span className="font-medium text-slate-900">
+                {selectedBalanceRow
+                  ? employeeLabelFromRow(selectedBalanceRow)
+                  : employeeLabel(Number(balanceForm.employee_id) || null)}
+              </span>
               {" · "}
-              <span>{leaveTypeLabelFromRow(selectedBalanceRow)}</span>
+              <span>
+                {selectedBalanceRow
+                  ? leaveTypeLabelFromRow(selectedBalanceRow)
+                  : leaveTypeLabel(Number(balanceForm.leave_type_id) || null)}
+              </span>
               {" · FY "}
-              <span>{readString(selectedBalanceRow, ["fiscal_year", "fiscalYear"])}</span>
+              <span>{balanceForm.fiscal_year || "-"}</span>
             </div>
           ) : null}
           <div className="grid gap-3 md:grid-cols-3">
-            <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={balanceForm.employee_id} onChange={(event) => setBalanceForm((prev) => ({ ...prev, employee_id: event.target.value }))}>
+            <select
+              className="h-10 rounded-md border border-slate-300 px-3 text-sm"
+              value={balanceForm.employee_id}
+              onChange={(event) =>
+                applyBalanceSelection({
+                  employee_id: event.target.value,
+                  leave_type_id: balanceForm.leave_type_id,
+                  fiscal_year: balanceForm.fiscal_year,
+                })
+              }
+            >
               <option value="">Select employee</option>
               {employees.map((employee) => {
                 const id = readNumber(employee, ["id", "employee_id", "user_id"])
@@ -4185,7 +4257,17 @@ export function LeaveManagementView({
                 return <option key={id} value={String(id)}>{employeeLabel(id)}</option>
               })}
             </select>
-            <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={balanceForm.leave_type_id} onChange={(event) => setBalanceForm((prev) => ({ ...prev, leave_type_id: event.target.value }))}>
+            <select
+              className="h-10 rounded-md border border-slate-300 px-3 text-sm"
+              value={balanceForm.leave_type_id}
+              onChange={(event) =>
+                applyBalanceSelection({
+                  employee_id: balanceForm.employee_id,
+                  leave_type_id: event.target.value,
+                  fiscal_year: balanceForm.fiscal_year,
+                })
+              }
+            >
               <option value="">Select leave type</option>
               {types.map((type) => {
                 const id = readNumber(type, ["id"])
@@ -4195,7 +4277,18 @@ export function LeaveManagementView({
             </select>
             <div className="space-y-1">
               <p className="text-xs text-slate-500">Fiscal year to apply this balance adjustment.</p>
-              <input className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm" placeholder="Fiscal year" value={balanceForm.fiscal_year} onChange={(event) => setBalanceForm((prev) => ({ ...prev, fiscal_year: event.target.value }))} />
+              <input
+                className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                placeholder="Fiscal year"
+                value={balanceForm.fiscal_year}
+                onChange={(event) =>
+                  applyBalanceSelection({
+                    employee_id: balanceForm.employee_id,
+                    leave_type_id: balanceForm.leave_type_id,
+                    fiscal_year: event.target.value,
+                  })
+                }
+              />
             </div>
             <div className="space-y-1">
               <p className="text-xs text-slate-500">Total leave granted for this year.</p>
@@ -4266,66 +4359,65 @@ export function LeaveManagementView({
                 </div>
               </div>
 
-              <div className="overflow-hidden rounded-md border border-slate-200">
-                <div
-                  className={cn(
-                    "grid gap-2 border-b border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-500",
-                    canAdjustBalances
-                      ? "grid-cols-[minmax(0,1fr)_4.25rem_3.5rem_3.5rem_2rem]"
-                      : "grid-cols-[minmax(0,1fr)_4.25rem_3.5rem_3.5rem]"
-                  )}
-                >
-                  <span>Type</span>
-                  <span className="text-right">Alloc</span>
-                  <span className="text-right">Used</span>
-                  <span className="text-right">Rem</span>
-                  {canAdjustBalances ? <span className="sr-only">Actions</span> : null}
-                </div>
+              <div className="space-y-2">
+                <TalentDoodleSprites />
                 {selectedBalanceGroupRows.map((row, index) => {
                   const typeName = leaveTypeLabelFromRow(row)
                   const rowKey = String(
                     readNumber(row, ["id", "leave_type_id", "leaveTypeId"]) ?? `${typeName}-${index}`
                   )
                   return (
-                    <button
+                    <div
                       key={rowKey}
-                      type="button"
-                      className={cn(
-                        "grid w-full items-center gap-2 border-b border-slate-100 px-2.5 py-2 text-left text-xs last:border-b-0",
-                        index % 2 === 1
-                          ? "bg-primary/[0.08] hover:bg-primary/[0.13]"
-                          : "bg-background hover:bg-muted/20",
-                        canAdjustBalances
-                          ? "grid-cols-[minmax(0,1fr)_4.25rem_3.5rem_3.5rem_2rem]"
-                          : "grid-cols-[minmax(0,1fr)_4.25rem_3.5rem_3.5rem]"
-                      )}
-                      onClick={() => void openBalanceDialog(row)}
+                      className="relative overflow-hidden rounded-2xl p-3 text-white"
+                      style={{ backgroundColor: "var(--primary)" }}
                     >
-                      <div className="min-w-0">
-                        <p className="truncate font-medium text-slate-900" title={typeName}>
-                          {typeName}
-                        </p>
-                        {selectedBalanceGroup.fiscalYears.length > 1 ? (
-                          <p className="text-[10px] text-muted-foreground">
-                            FY {readBalanceFiscalYear(row) || "-"}
-                          </p>
-                        ) : null}
+                      <TalentDoodle />
+                      <div className="relative z-10 space-y-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="truncate font-medium" title={typeName}>
+                              {typeName}
+                            </p>
+                            {selectedBalanceGroup.fiscalYears.length > 1 ? (
+                              <p className="text-[10px] text-white/70">
+                                FY {readBalanceFiscalYear(row) || "-"}
+                              </p>
+                            ) : null}
+                          </div>
+                          {canAdjustBalances ? (
+                            <button
+                              type="button"
+                              className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-white/30 bg-white/15 px-2 text-[11px] font-medium text-white hover:bg-white/25"
+                              onClick={() => void openBalanceDialog(row)}
+                            >
+                              <Pencil className="size-3" />
+                              Edit
+                            </button>
+                          ) : null}
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 text-xs text-white/80">
+                          <div>
+                            <p className="text-[10px] uppercase tracking-wide text-white/60">Alloc</p>
+                            <p className="font-semibold tabular-nums text-white">
+                              {formatBalanceDays(readBalanceDays(row, ["allocated_days", "allocated", "allocatedDays"]))}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] uppercase tracking-wide text-white/60">Used</p>
+                            <p className="font-semibold tabular-nums text-white">
+                              {formatBalanceDays(readBalanceDays(row, ["used_days", "used", "usedDays"]))}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] uppercase tracking-wide text-white/60">Rem</p>
+                            <p className="font-semibold tabular-nums text-white">
+                              {formatBalanceDays(readBalanceDays(row, ["remaining_days", "remaining", "remainingDays"]))}
+                            </p>
+                          </div>
+                        </div>
                       </div>
-                      <span className="text-right tabular-nums text-slate-700">
-                        {formatBalanceDays(readBalanceDays(row, ["allocated_days", "allocated", "allocatedDays"]))}
-                      </span>
-                      <span className="text-right tabular-nums text-slate-700">
-                        {formatBalanceDays(readBalanceDays(row, ["used_days", "used", "usedDays"]))}
-                      </span>
-                      <span className="text-right tabular-nums font-medium text-slate-900">
-                        {formatBalanceDays(readBalanceDays(row, ["remaining_days", "remaining", "remainingDays"]))}
-                      </span>
-                      {canAdjustBalances ? (
-                        <span className="admin-table-icon-button pointer-events-none justify-self-end" title={`Adjust ${typeName}`}>
-                          <Pencil className="size-3.5" />
-                        </span>
-                      ) : null}
-                    </button>
+                    </div>
                   )
                 })}
               </div>
