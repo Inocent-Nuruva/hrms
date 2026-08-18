@@ -1017,12 +1017,12 @@ export function ResizableTable<T = Record<string, unknown>>({
   return (
     <div className={`w-full min-w-0 max-w-full ${className}`}>
       {showToolbar ? (
-        <div className="mb-2 flex min-w-0 max-w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-          <div className="flex min-w-0 max-w-full flex-1 items-center gap-2 overflow-hidden">
+        <div className="mb-2 flex min-w-0 max-w-full flex-nowrap items-center gap-1.5 overflow-x-auto">
+          <div className="flex min-w-0 shrink items-center gap-1.5">
             {toolbarStart}
           </div>
 
-          <div className="flex min-w-0 max-w-full shrink-0 flex-wrap items-center gap-1">
+          <div className="ml-auto flex shrink-0 flex-nowrap items-center gap-1">
             {toolbarActions}
 
             {enableColumnVisibility ? (

@@ -260,7 +260,7 @@ export function BranchesView() {
     [debouncedSearch, query]
   )
 
-  const fetchBranches = React.useCallback(async (signal?: AbortSignal) => {
+  const fetchBranches = React.useCallback(async (signal?: AbortSignal, force = false) => {
     const token = readStoredToken()
     if (!token) {
       setError("Authentication required. Please log in again.")
@@ -279,7 +279,7 @@ export function BranchesView() {
         },
         {
           signal,
-          cacheTtlMs: env.NEXT_PUBLIC_LIST_CACHE_TTL_SHORT_MS,
+          cacheTtlMs: force ? 0 : env.NEXT_PUBLIC_LIST_CACHE_TTL_SHORT_MS,
         }
       )
       setRows(result.rows)
@@ -621,59 +621,6 @@ export function BranchesView() {
 
   return (
     <div className="space-y-2">
-      <div className="flex min-w-0 flex-nowrap items-center gap-1.5 overflow-x-auto">
-        <SearchToggleField
-          className="min-w-0 !w-auto !max-w-[12rem] !flex-none"
-          placeholder="Search branch"
-          value={query.search}
-          onChange={(value) => {
-            setPage(1)
-            setQuery((previous) => ({ ...previous, search: value }))
-          }}
-        />
-        <select
-          className="h-8 w-[8.5rem] shrink-0 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
-          value={query.status}
-          onChange={(event) => {
-            setPage(1)
-            setQuery((previous) => ({ ...previous, status: event.target.value }))
-          }}
-          aria-label="Filter branch status"
-        >
-          <option value="">All statuses</option>
-          <option value="active">active</option>
-          <option value="inactive">inactive</option>
-        </select>
-        <div className="ml-auto flex shrink-0 items-center gap-1.5">
-          {canCreateBranches ? (
-            <button
-              type="button"
-              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[var(--primary)] px-2.5 text-xs font-semibold !text-white transition hover:brightness-95 disabled:opacity-60"
-              onClick={() => {
-                setEditingId(null)
-                setForm(emptyForm())
-                setOpenForm(true)
-              }}
-              aria-label="Add branch"
-              title="Add branch"
-            >
-              <Plus className="size-3.5" />
-              Add Branch
-            </button>
-          ) : null}
-          <button
-            type="button"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 bg-white text-primary transition hover:bg-slate-50 disabled:opacity-60"
-            onClick={() => void fetchBranches()}
-            disabled={loading}
-            aria-label="Refresh"
-            title="Refresh"
-          >
-            <RefreshCw className={`size-3.5 text-primary ${loading ? "animate-spin" : ""}`} />
-          </button>
-        </div>
-      </div>
-
       {error ? <p className="text-sm text-rose-600">{error}</p> : null}
 
       <ResizableTable
@@ -683,7 +630,62 @@ export function BranchesView() {
         itemsPerPage={20}
         loading={loading}
         storageKey="branches"
-        showToolbar={false}
+        toolbarStart={
+          <>
+            <SearchToggleField
+              className="min-w-0 !w-auto !max-w-[12rem] !flex-none"
+              placeholder="Search branch"
+              value={query.search}
+              onChange={(value) => {
+                setPage(1)
+                setQuery((previous) => ({ ...previous, search: value }))
+              }}
+            />
+            <select
+              className="h-8 w-[8.5rem] shrink-0 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
+              value={query.status}
+              onChange={(event) => {
+                setPage(1)
+                setQuery((previous) => ({ ...previous, status: event.target.value }))
+              }}
+              aria-label="Filter branch status"
+            >
+              <option value="">All statuses</option>
+              <option value="active">active</option>
+              <option value="inactive">inactive</option>
+            </select>
+          </>
+        }
+        toolbarActions={
+          <>
+            {canCreateBranches ? (
+              <button
+                type="button"
+                className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[var(--primary)] px-2.5 text-xs font-semibold !text-white transition hover:brightness-95 disabled:opacity-60"
+                onClick={() => {
+                  setEditingId(null)
+                  setForm(emptyForm())
+                  setOpenForm(true)
+                }}
+                aria-label="Add branch"
+                title="Add branch"
+              >
+                <Plus className="size-3.5" />
+                Add Branch
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 bg-white text-primary transition hover:bg-slate-50 disabled:opacity-60"
+              onClick={() => void fetchBranches(undefined, true)}
+              disabled={loading}
+              aria-label="Refresh"
+              title="Refresh"
+            >
+              <RefreshCw className={`size-3.5 text-primary ${loading ? "animate-spin" : ""}`} />
+            </button>
+          </>
+        }
       />
 
       {openForm ? (
