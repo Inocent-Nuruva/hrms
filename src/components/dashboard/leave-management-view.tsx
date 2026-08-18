@@ -1053,6 +1053,8 @@ export function LeaveManagementView({
   const [selectedBalanceRow, setSelectedBalanceRow] = React.useState<AdminRecord | null>(null)
   const [selectedBalanceGroup, setSelectedBalanceGroup] = React.useState<LeaveBalanceEmployeeGroup | null>(null)
   const [employeeBalanceDetailsOpen, setEmployeeBalanceDetailsOpen] = React.useState(false)
+  const [balanceBulkDialog, setBalanceBulkDialog] = React.useState<null | "generate" | "carry-forward">(null)
+  const [balanceBulkYear, setBalanceBulkYear] = React.useState(String(new Date().getFullYear()))
   const [workflowSteps, setWorkflowSteps] = React.useState<AdminRecord[]>([])
   const [workflowSheetOpen, setWorkflowSheetOpen] = React.useState(false)
   const [stepDialogOpen, setStepDialogOpen] = React.useState(false)
@@ -2173,6 +2175,54 @@ export function LeaveManagementView({
   function openEmployeeBalanceDetails(group: LeaveBalanceEmployeeGroup) {
     setSelectedBalanceGroup(group)
     setEmployeeBalanceDetailsOpen(true)
+  }
+
+  function openBalanceBulkDialog(action: "generate" | "carry-forward") {
+    const yearFromRows = groupedBalances.find((group) => group.fiscalYears.length > 0)?.fiscalYears[0]
+    setBalanceBulkYear(yearFromRows || String(new Date().getFullYear()))
+    setBalanceBulkDialog(action)
+  }
+
+  async function submitBalanceBulkAction() {
+    const token = readStoredToken()
+    if (!token || !balanceBulkDialog) {
+      return
+    }
+    const fiscalYear = balanceBulkYear.trim()
+    if (!/^\d{4}$/.test(fiscalYear)) {
+      showErrorAlert("Enter a valid four-digit fiscal year.")
+      return
+    }
+
+    setSaving(true)
+    setError(null)
+    try {
+      if (balanceBulkDialog === "generate") {
+        await generateLeaveBalances(token, {
+          fiscal_year: fiscalYear,
+          force_recalculate: true,
+        })
+        showSuccessAlert("Leave balances generated.")
+      } else {
+        await carryForwardLeaveBalances(token, {
+          fiscal_year: fiscalYear,
+        })
+        showSuccessAlert("Carry-forward calculated.")
+      }
+      setBalanceBulkDialog(null)
+      await reloadAll("balances", true)
+    } catch (errorObject) {
+      const message =
+        errorObject instanceof Error
+          ? errorObject.message
+          : balanceBulkDialog === "generate"
+            ? "Generate failed."
+            : "Carry-forward failed."
+      setError(message)
+      showErrorAlert(message)
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function openBalanceDialog(row?: AdminRecord) {
@@ -4467,14 +4517,9 @@ export function LeaveManagementView({
             {canAdjustBalances ? (
               <button
                 type="button"
-                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-medium"
-                onClick={() => {
-                  const token = readStoredToken()
-                  if (!token) return
-                  void generateLeaveBalances(token, { force_recalculate: true })
-                    .then(() => { showSuccessAlert("Leave balances generated."); return reloadAll("balances", true) })
-                    .catch((errorObject) => showErrorAlert(errorObject instanceof Error ? errorObject.message : "Generate failed."))
-                }}
+                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={saving}
+                onClick={() => openBalanceBulkDialog("generate")}
               >
                 Generate
               </button>
@@ -4482,14 +4527,9 @@ export function LeaveManagementView({
             {canAdjustBalances ? (
               <button
                 type="button"
-                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-medium"
-                onClick={() => {
-                  const token = readStoredToken()
-                  if (!token) return
-                  void carryForwardLeaveBalances(token, {})
-                    .then(() => { showSuccessAlert("Carry-forward calculated."); return reloadAll("balances", true) })
-                    .catch((errorObject) => showErrorAlert(errorObject instanceof Error ? errorObject.message : "Carry-forward failed."))
-                }}
+                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={saving}
+                onClick={() => openBalanceBulkDialog("carry-forward")}
               >
                 Carry forward
               </button>
@@ -5058,6 +5098,56 @@ export function LeaveManagementView({
 
         </div>
       ) : null}
+
+      <AlertDialog
+        open={Boolean(balanceBulkDialog)}
+        onOpenChange={(open) => {
+          if (!open && !saving) {
+            setBalanceBulkDialog(null)
+          }
+        }}
+      >
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {balanceBulkDialog === "carry-forward" ? "Carry forward leave balances" : "Generate leave balances"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {balanceBulkDialog === "carry-forward"
+                ? "Move unused days from the previous year into this fiscal year for leave types that allow carry forward."
+                : "Create or recalculate allocated balances for every employee in this fiscal year."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-1">
+            <p className="text-xs text-slate-500">Fiscal year</p>
+            <input
+              className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+              inputMode="numeric"
+              maxLength={4}
+              placeholder="2026"
+              value={balanceBulkYear}
+              onChange={(event) => setBalanceBulkYear(event.target.value.replace(/[^\d]/g, "").slice(0, 4))}
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={saving}>Cancel</AlertDialogCancel>
+            <button
+              type="button"
+              disabled={saving}
+              className="rounded-md bg-primary px-3 py-2 text-sm font-medium !text-white disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={() => void submitBalanceBulkAction()}
+            >
+              {saving
+                ? balanceBulkDialog === "carry-forward"
+                  ? "Calculating..."
+                  : "Generating..."
+                : balanceBulkDialog === "carry-forward"
+                  ? "Carry forward"
+                  : "Generate"}
+            </button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog
         open={Boolean(pendingTypeDelete)}
