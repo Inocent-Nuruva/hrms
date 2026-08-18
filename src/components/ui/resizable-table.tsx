@@ -1211,7 +1211,7 @@ export function ResizableTable<T = Record<string, unknown>>({
         >
           <div className="min-w-full align-top" style={{ minWidth: containerWidth ? `${containerWidth}px` : undefined }}>
             {/* Header */}
-            <div className="flex py-1 text-base font-semibold text-muted-foreground/70 bg-muted/5 border-b border-border w-full">
+            <div className="flex py-1 text-base font-bold text-foreground bg-muted/5 border-b border-border w-full">
               {showCheckboxes && (
                 <div className="flex items-center justify-center border-r border-border pr-1.5 flex-shrink-0" style={{ width: getColumnWidth('checkbox') || 36 }}>
                   <input
