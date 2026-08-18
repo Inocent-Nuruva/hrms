@@ -1247,7 +1247,7 @@ function enrichRowsWithReadableNames(rows: AdminRecord[], branches: AdminRecord[
         .join(" ")
         .trim()
     if (id !== null && fullName) {
-      employeeNameById.set(id, employeeNo ? `${fullName} (${employeeNo})` : fullName)
+      employeeNameById.set(id, composeEmployeeIdentity(fullName, employeeNo).name ?? fullName)
     }
   })
 
@@ -1285,7 +1285,8 @@ function enrichRowsWithReadableNames(rows: AdminRecord[], branches: AdminRecord[
           .trim()
 
       if (nestedEmployeeName) {
-        next.employee_name = nestedEmployeeNo ? `${nestedEmployeeName} (${nestedEmployeeNo})` : nestedEmployeeName
+        next.employee_name =
+          composeEmployeeIdentity(nestedEmployeeName, nestedEmployeeNo).name ?? nestedEmployeeName
       }
     }
 
@@ -1463,7 +1464,7 @@ function resolveDailySummaryCellValue(column: string, row: AdminRecord): React.R
         .join(" ")
         .trim() || null
 
-    return (
+    const rawName =
       readFirstValue(row, ["employee_name", "employeeName", "full_name", "fullName", "display_name", "displayName", "name"]) ??
       readFirstValue(nestedEmployee, [
         "full_name",
@@ -1475,7 +1476,10 @@ function resolveDailySummaryCellValue(column: string, row: AdminRecord): React.R
         "preferredName",
       ]) ??
       nestedEmployeeFullName
-    )
+    const employeeNo =
+      readStringFromRow(row, ["employee_no", "employeeNo", "employee_number", "employeeNumber"]) ??
+      readStringFromRow(nestedEmployee ?? {}, ["employee_no", "employeeNo", "employee_number"])
+    return composeEmployeeIdentity(rawName, employeeNo).name ?? rawName
   }
   if (column === "branch_name") {
     return readFirstValue(row, ["branch_name", "branchName", "branch", "location_name", "locationName", "site_name", "siteName"])
