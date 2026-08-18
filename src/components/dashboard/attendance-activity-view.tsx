@@ -2018,7 +2018,7 @@ function DailySummaryDetailsContent({
                 animate={{ y: 0, opacity: 1 }}
                 transition={{ type: "spring", stiffness: 380, damping: 22, delay: 0.16 }}
               >
-                <span className="text-[10px] font-semibold tabular-nums text-foreground">{checkInValue}</span>
+                <span className="text-xs font-bold tabular-nums text-foreground">{checkInValue}</span>
                 <span className="mt-1 size-2.5 rounded-full bg-emerald-500 ring-4 ring-background" />
               </motion.div>
             ) : null}
@@ -2031,7 +2031,7 @@ function DailySummaryDetailsContent({
                 animate={{ y: 0, opacity: 1 }}
                 transition={{ type: "spring", stiffness: 380, damping: 22, delay: 0.24 }}
               >
-                <span className="text-[10px] font-semibold tabular-nums text-foreground">{checkOutValue}</span>
+                <span className="text-xs font-bold tabular-nums text-foreground">{checkOutValue}</span>
                 <span className="mt-1 size-2.5 rounded-full bg-primary ring-4 ring-background" />
               </motion.div>
             ) : scheduledEnd !== null && missingCheckout ? (
@@ -2050,9 +2050,36 @@ function DailySummaryDetailsContent({
               </motion.div>
             ) : null}
           </div>
-          <div className="mt-1 flex justify-between text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-            <span>In {checkInValue}</span>
-            <span>Out {checkOutValue}</span>
+          <div className="mt-3 flex items-end justify-between gap-4">
+            <div>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                In
+              </div>
+              <div
+                className={cn(
+                  "mt-0.5 text-2xl font-bold tabular-nums tracking-tight",
+                  checkInValue === "—" ? "text-muted-foreground/50" : "text-foreground",
+                )}
+              >
+                {checkInValue}
+              </div>
+            </div>
+            <div className="mb-1.5 h-px min-w-8 flex-1 bg-border" />
+            <div className="text-right">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                Out
+              </div>
+              <div
+                className={cn(
+                  "mt-0.5 text-2xl font-bold tabular-nums tracking-tight",
+                  missingCheckout || checkOutValue === "—"
+                    ? "text-amber-700 dark:text-amber-300"
+                    : "text-foreground",
+                )}
+              >
+                {checkOutValue}
+              </div>
+            </div>
           </div>
         </div>
 
