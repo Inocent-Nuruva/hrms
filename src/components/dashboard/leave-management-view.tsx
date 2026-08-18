@@ -4344,23 +4344,46 @@ export function LeaveManagementView({
 
           {selectedBalanceGroup ? (
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain py-2">
-              <div className="grid grid-cols-3 gap-2 text-xs">
-                <div className="rounded-md border border-border/60 px-2.5 py-2">
-                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Allocated</p>
-                  <p className="font-medium text-foreground">{formatBalanceDays(selectedBalanceGroup.allocatedDays)}</p>
-                </div>
-                <div className="rounded-md border border-border/60 px-2.5 py-2">
-                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Used</p>
-                  <p className="font-medium text-foreground">{formatBalanceDays(selectedBalanceGroup.usedDays)}</p>
-                </div>
-                <div className="rounded-md border border-border/60 px-2.5 py-2">
-                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Remaining</p>
-                  <p className="font-medium text-foreground">{formatBalanceDays(selectedBalanceGroup.remainingDays)}</p>
-                </div>
+              <TalentDoodleSprites />
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { label: "Allocated", value: selectedBalanceGroup.allocatedDays },
+                  { label: "Used", value: selectedBalanceGroup.usedDays },
+                  { label: "Remaining", value: selectedBalanceGroup.remainingDays },
+                ].map((item) => (
+                  <div
+                    key={item.label}
+                    className="relative overflow-hidden rounded-2xl p-3 text-white"
+                    style={{ backgroundColor: "var(--primary)" }}
+                  >
+                    <TalentDoodle />
+                    <div className="relative z-10">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-white/70">
+                        {item.label}
+                      </p>
+                      <p className="mt-1 text-lg font-semibold tabular-nums leading-none">
+                        {formatBalanceDays(item.value)}
+                      </p>
+                    </div>
+                  </div>
+                ))}
               </div>
 
-              <div className="space-y-2">
-                <TalentDoodleSprites />
+              <div className="overflow-hidden rounded-md border border-slate-200">
+                <div
+                  className={cn(
+                    "grid gap-2 border-b border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-500",
+                    canAdjustBalances
+                      ? "grid-cols-[minmax(0,1fr)_4.25rem_3.5rem_3.5rem_2rem]"
+                      : "grid-cols-[minmax(0,1fr)_4.25rem_3.5rem_3.5rem]"
+                  )}
+                >
+                  <span>Type</span>
+                  <span className="text-right">Alloc</span>
+                  <span className="text-right">Used</span>
+                  <span className="text-right">Rem</span>
+                  {canAdjustBalances ? <span className="sr-only">Actions</span> : null}
+                </div>
                 {selectedBalanceGroupRows.map((row, index) => {
                   const typeName = leaveTypeLabelFromRow(row)
                   const rowKey = String(
@@ -4369,54 +4392,43 @@ export function LeaveManagementView({
                   return (
                     <div
                       key={rowKey}
-                      className="relative overflow-hidden rounded-2xl p-3 text-white"
-                      style={{ backgroundColor: "var(--primary)" }}
+                      className={cn(
+                        "grid items-center gap-2 border-b border-slate-100 px-2.5 py-2 text-xs last:border-b-0",
+                        index % 2 === 1 ? "bg-primary/[0.08]" : "bg-background",
+                        canAdjustBalances
+                          ? "grid-cols-[minmax(0,1fr)_4.25rem_3.5rem_3.5rem_2rem]"
+                          : "grid-cols-[minmax(0,1fr)_4.25rem_3.5rem_3.5rem]"
+                      )}
                     >
-                      <TalentDoodle />
-                      <div className="relative z-10 space-y-2">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="truncate font-medium" title={typeName}>
-                              {typeName}
-                            </p>
-                            {selectedBalanceGroup.fiscalYears.length > 1 ? (
-                              <p className="text-[10px] text-white/70">
-                                FY {readBalanceFiscalYear(row) || "-"}
-                              </p>
-                            ) : null}
-                          </div>
-                          {canAdjustBalances ? (
-                            <button
-                              type="button"
-                              className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-white/30 bg-white/15 px-2 text-[11px] font-medium text-white hover:bg-white/25"
-                              onClick={() => void openBalanceDialog(row)}
-                            >
-                              <Pencil className="size-3" />
-                              Edit
-                            </button>
-                          ) : null}
-                        </div>
-                        <div className="grid grid-cols-3 gap-2 text-xs text-white/80">
-                          <div>
-                            <p className="text-[10px] uppercase tracking-wide text-white/60">Alloc</p>
-                            <p className="font-semibold tabular-nums text-white">
-                              {formatBalanceDays(readBalanceDays(row, ["allocated_days", "allocated", "allocatedDays"]))}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-[10px] uppercase tracking-wide text-white/60">Used</p>
-                            <p className="font-semibold tabular-nums text-white">
-                              {formatBalanceDays(readBalanceDays(row, ["used_days", "used", "usedDays"]))}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-[10px] uppercase tracking-wide text-white/60">Rem</p>
-                            <p className="font-semibold tabular-nums text-white">
-                              {formatBalanceDays(readBalanceDays(row, ["remaining_days", "remaining", "remainingDays"]))}
-                            </p>
-                          </div>
-                        </div>
+                      <div className="min-w-0">
+                        <p className="truncate font-medium text-slate-900" title={typeName}>
+                          {typeName}
+                        </p>
+                        {selectedBalanceGroup.fiscalYears.length > 1 ? (
+                          <p className="text-[10px] text-muted-foreground">
+                            FY {readBalanceFiscalYear(row) || "-"}
+                          </p>
+                        ) : null}
                       </div>
+                      <span className="text-right tabular-nums text-slate-700">
+                        {formatBalanceDays(readBalanceDays(row, ["allocated_days", "allocated", "allocatedDays"]))}
+                      </span>
+                      <span className="text-right tabular-nums text-slate-700">
+                        {formatBalanceDays(readBalanceDays(row, ["used_days", "used", "usedDays"]))}
+                      </span>
+                      <span className="text-right tabular-nums font-medium text-slate-900">
+                        {formatBalanceDays(readBalanceDays(row, ["remaining_days", "remaining", "remainingDays"]))}
+                      </span>
+                      {canAdjustBalances ? (
+                        <button
+                          type="button"
+                          className="admin-table-icon-button justify-self-end"
+                          title={`Edit ${typeName}`}
+                          onClick={() => void openBalanceDialog(row)}
+                        >
+                          <Pencil className="size-3.5" />
+                        </button>
+                      ) : null}
                     </div>
                   )
                 })}
