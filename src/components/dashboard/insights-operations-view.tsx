@@ -377,11 +377,11 @@ export function InsightsOperationsView({
           <div className="flex flex-wrap items-end gap-2">
             <label className="space-y-1">
               <span className="text-xs text-slate-500">From</span>
-              <DatePickerPresets value={dateFrom} onChange={setDateFrom} placeholder="From" />
+              <DatePickerPresets value={dateFrom} onChange={setDateFrom} placeholder="Pick a date" />
             </label>
             <label className="space-y-1">
               <span className="text-xs text-slate-500">To</span>
-              <DatePickerPresets value={dateTo} onChange={setDateTo} placeholder="To" />
+              <DatePickerPresets value={dateTo} onChange={setDateTo} placeholder="Pick a date" />
             </label>
           </div>
           <motion.div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" variants={motionPreset.fast}>
@@ -464,12 +464,12 @@ export function InsightsOperationsView({
                   </select>
                 </label>
                 <label className="space-y-1">
-                  <span className="text-xs text-slate-500">From</span>
-                  <DatePickerPresets value={dateFrom} onChange={setDateFrom} placeholder="From" />
+                  <span className="text-xs text-slate-500">Start</span>
+                  <DatePickerPresets value={dateFrom} onChange={setDateFrom} placeholder="Pick a date" />
                 </label>
                 <label className="space-y-1">
-                  <span className="text-xs text-slate-500">To</span>
-                  <DatePickerPresets value={dateTo} onChange={setDateTo} placeholder="To" />
+                  <span className="text-xs text-slate-500">End</span>
+                  <DatePickerPresets value={dateTo} onChange={setDateTo} placeholder="Pick a date" />
                 </label>
                 <button type="button" className={secondaryButtonClass} onClick={() => void onPreview()}>
                   Show schedule
