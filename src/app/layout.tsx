@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Comfortaa, Poppins } from "next/font/google";
+import { Comfortaa } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -10,12 +10,6 @@ import { PwaProvider } from "@/components/pwa-provider";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 import { env } from "@/lib/env";
-
-const poppins = Poppins({
-  variable: "--font-poppins",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-});
 
 const comfortaa = Comfortaa({
   variable: "--font-comfortaa",
@@ -62,7 +56,7 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={cn("h-full", "antialiased", poppins.variable, comfortaa.variable)}
+      className={cn("h-full", "antialiased", comfortaa.variable, comfortaa.className)}
     >
       <body className="flex min-h-full flex-col">
         <ThemeProvider>
