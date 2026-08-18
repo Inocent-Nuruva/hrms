@@ -48,7 +48,7 @@ import {
   generateLeaveBalances,
   listLeaveBalanceAdjustments,
   listLeaveBalanceTransactions,
-  listLeaveBalances,
+  listAllLeaveBalances,
   listLeaveHolidays,
   listLeavePolicies,
   listLeaveRequests,
@@ -1327,7 +1327,11 @@ export function LeaveManagementView({
           break
         }
         case "balances": {
-          const result = await listLeaveBalances(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" })
+          const result = await listAllLeaveBalances(
+            token,
+            { sortBy: "created_at", sortOrder: "DESC" },
+            { cacheTtlMs: force ? 0 : undefined },
+          )
           setBalances(result.rows)
           const [adjustments, transactions] = await Promise.all([
             listLeaveBalanceAdjustments(token, { limit: 50 }).catch(() => []),

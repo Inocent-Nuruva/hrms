@@ -4060,12 +4060,16 @@ export async function listLeaveRequests(
 export async function listLeaveBalances(
   token: string,
   params: LeaveBalancesQueryParams = {},
+  options: ListRequestOptions = {},
 ): Promise<PaginatedUsersResult> {
   const fallbackPage = params.page && params.page > 0 ? params.page : 1;
   const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20;
   const query = buildLeaveBalancesQuery(params);
   const payload = await adminRequest<unknown>(`/api/leave/balances${query}`, {
     token,
+    signal: options.signal,
+    cacheTtlMs: options.cacheTtlMs,
+    dedupe: options.dedupe,
   });
   const rows = normalizeList(payload);
   const pagination = extractUsersPagination(
@@ -4074,6 +4078,56 @@ export async function listLeaveBalances(
     fallbackLimit,
   );
   return { rows, ...pagination };
+}
+
+export async function listAllLeaveBalances(
+  token: string,
+  params: LeaveBalancesQueryParams = {},
+  options: ListRequestOptions & { pageSize?: number; maxPages?: number } = {},
+): Promise<PaginatedUsersResult> {
+  const pageSize = Math.min(
+    Math.max(1, options.pageSize ?? 100),
+    env.NEXT_PUBLIC_MAX_PAGE_SIZE || 100,
+  );
+  const maxPages = Math.max(1, options.maxPages ?? 50);
+  const collected: AdminRecord[] = [];
+  let total: number | null = null;
+  let totalPages: number | null = null;
+
+  for (let page = 1; page <= maxPages; page += 1) {
+    const result = await listLeaveBalances(
+      token,
+      {
+        ...params,
+        page,
+        limit: pageSize,
+      },
+      options,
+    );
+    collected.push(...result.rows);
+    if (total === null && result.total !== null) {
+      total = result.total;
+    }
+    if (totalPages === null && result.totalPages !== null) {
+      totalPages = result.totalPages;
+    }
+    const reachedEnd =
+      result.rows.length === 0 ||
+      result.rows.length < pageSize ||
+      (result.totalPages !== null && page >= result.totalPages) ||
+      (result.total !== null && collected.length >= result.total);
+    if (reachedEnd) {
+      break;
+    }
+  }
+
+  return {
+    rows: collected,
+    page: 1,
+    limit: collected.length || pageSize,
+    total: total ?? collected.length,
+    totalPages: 1,
+  };
 }
 
 export async function listLeaveHolidays(
