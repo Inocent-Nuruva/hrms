@@ -36,7 +36,11 @@ export function AttendanceActivityClient({ section }: { section: string }) {
     }
   }, [actor.isAdmin, actor.ready, router, section])
 
-  if (actor.ready && actor.isAdmin && EMPLOYEE_SELF_SERVICE_ATTENDANCE_SECTIONS.has(section)) {
+  if (!actor.ready) {
+    return null
+  }
+
+  if (actor.isAdmin && EMPLOYEE_SELF_SERVICE_ATTENDANCE_SECTIONS.has(section)) {
     return null
   }
 

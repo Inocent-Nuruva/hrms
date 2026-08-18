@@ -42,6 +42,10 @@ import {
   createAttendanceResource,
   deleteAttendanceResourceById,
   activateAttendancePolicy,
+  activateAttendanceGeofence,
+  activateAttendanceWifiNetwork,
+  deactivateAttendanceGeofence,
+  deactivateAttendanceWifiNetwork,
   getAttendanceResourceById,
   listAttendanceCheckpoints,
   listAttendanceDeviceSyncLogs,
@@ -56,11 +60,14 @@ import {
   listBranches,
   listEmployees,
   updateAttendanceResourceById,
+  validateAttendanceGeofenceLocation,
+  validateAttendanceWifiNetwork,
   type AdminRecord,
   type AttendanceResourceKey,
 } from "@/lib/admin-api"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { canAccessDashboardRoute, canPerformPermission } from "@/lib/dashboard-permissions"
+import { AttendanceSetupWizard } from "@/components/dashboard/attendance-setup-wizard"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
@@ -698,6 +705,12 @@ function readStringFromRecord(row: AdminRecord, keys: string[]) {
     }
   }
   return null
+}
+
+function isAttendanceLocationActive(row: AdminRecord) {
+  if (row.is_active === true || row.isActive === true) return true
+  const status = readStringFromRecord(row, ["status"])?.toUpperCase()
+  return status === "ACTIVE"
 }
 
 function prettifyLabel(value: string): string {
@@ -2021,6 +2034,11 @@ export function AttendanceManagementView({ section }: { section: string }) {
   const [editingLoading, setEditingLoading] = React.useState(false)
   const [deletingId, setDeletingId] = React.useState("")
   const [activatingId, setActivatingId] = React.useState("")
+  const [validateOpen, setValidateOpen] = React.useState(false)
+  const [validateRow, setValidateRow] = React.useState<AdminRecord | null>(null)
+  const [validateValues, setValidateValues] = React.useState<Record<string, string>>({})
+  const [validateBusy, setValidateBusy] = React.useState(false)
+  const [validateResult, setValidateResult] = React.useState<string | null>(null)
   const [createOpen, setCreateOpen] = React.useState(false)
   const [editOpen, setEditOpen] = React.useState(false)
   const [deleteOpen, setDeleteOpen] = React.useState(false)
@@ -2053,6 +2071,11 @@ export function AttendanceManagementView({ section }: { section: string }) {
     setEditingLoading(false)
     setDeletingId("")
     setActivatingId("")
+    setValidateOpen(false)
+    setValidateRow(null)
+    setValidateValues({})
+    setValidateBusy(false)
+    setValidateResult(null)
     setSelectedRow(null)
     setDetailsOpen(false)
     setMobilePunchReviewNote("")
@@ -2596,6 +2619,97 @@ export function AttendanceManagementView({ section }: { section: string }) {
     }
   }
 
+  const onToggleLocation = async (row: AdminRecord, nextActive: boolean) => {
+    if (activeSection !== "geofences" && activeSection !== "wifi-networks") return
+    const recordId = row.id
+    if (recordId === null || recordId === undefined) {
+      setFormError("This record does not have an id.")
+      return
+    }
+    const token = readStoredToken()
+    if (!token) {
+      setFormError("Authentication required. Please log in again.")
+      return
+    }
+    setActivatingId(String(recordId))
+    try {
+      if (activeSection === "geofences") {
+        if (nextActive) await activateAttendanceGeofence(token, recordId as string | number)
+        else await deactivateAttendanceGeofence(token, recordId as string | number)
+      } else if (nextActive) {
+        await activateAttendanceWifiNetwork(token, recordId as string | number)
+      } else {
+        await deactivateAttendanceWifiNetwork(token, recordId as string | number)
+      }
+      setMessage(nextActive ? "Activated." : "Deactivated.")
+      setError(null)
+      setFormError(null)
+      await fetchRows()
+    } catch (errorObject) {
+      setFormError(errorObject instanceof Error ? errorObject.message : "Could not update status.")
+    } finally {
+      setActivatingId("")
+    }
+  }
+
+  const openValidateLocation = (row: AdminRecord) => {
+    setValidateRow(row)
+    setValidateResult(null)
+    setFormError(null)
+    if (activeSection === "wifi-networks") {
+      setValidateValues({
+        ssid: readStringFromRecord(row, ["ssid"]) ?? "",
+        bssid: readStringFromRecord(row, ["bssid"]) ?? "",
+        ipAddress: "",
+      })
+    } else {
+      setValidateValues({
+        latitude: String(readNumberFromRecord(row, ["latitude"]) ?? ""),
+        longitude: String(readNumberFromRecord(row, ["longitude"]) ?? ""),
+        accuracyMeters: String(readNumberFromRecord(row, ["allowedAccuracyMeters", "allowed_accuracy_meters"]) ?? ""),
+      })
+    }
+    setValidateOpen(true)
+  }
+
+  const onValidateLocation = async () => {
+    const token = readStoredToken()
+    const recordId = validateRow?.id
+    if (!token || recordId === null || recordId === undefined) return
+    setValidateBusy(true)
+    setValidateResult(null)
+    setFormError(null)
+    try {
+      if (activeSection === "wifi-networks") {
+        const payload = await validateAttendanceWifiNetwork(token, recordId as string | number, {
+          ssid: validateValues.ssid?.trim() || undefined,
+          bssid: validateValues.bssid?.trim() || undefined,
+          ipAddress: validateValues.ipAddress?.trim() || undefined,
+        })
+        setValidateResult(JSON.stringify(payload ?? { ok: true }, null, 2))
+        setMessage("Wi-Fi network validated.")
+      } else {
+        const latitude = Number(validateValues.latitude)
+        const longitude = Number(validateValues.longitude)
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+          throw new Error("Latitude and longitude are required.")
+        }
+        const accuracy = Number(validateValues.accuracyMeters)
+        const payload = await validateAttendanceGeofenceLocation(token, recordId as string | number, {
+          latitude,
+          longitude,
+          ...(Number.isFinite(accuracy) ? { accuracyMeters: accuracy } : {}),
+        })
+        setValidateResult(JSON.stringify(payload ?? { ok: true }, null, 2))
+        setMessage("Location checked against this geofence.")
+      }
+    } catch (errorObject) {
+      setFormError(errorObject instanceof Error ? errorObject.message : "Validation failed.")
+    } finally {
+      setValidateBusy(false)
+    }
+  }
+
   const openEditDialog = (row: AdminRecord) => {
     const rowId = row.id
     if (rowId === null || rowId === undefined) {
@@ -2918,6 +3032,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
 
   return (
     <div className="w-full space-y-2">
+      {activeSection === "policies" ? <AttendanceSetupWizard /> : null}
       {/* Dialogs stay mounted at root so toolbar actions only open them. */}
       {supportsCreate ? (
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
@@ -3077,6 +3192,145 @@ export function AttendanceManagementView({ section }: { section: string }) {
               </DialogFooter>
             </DialogPopup>
           </Dialog>
+          <Dialog
+            open={validateOpen}
+            onOpenChange={(open) => {
+              setValidateOpen(open)
+              if (!open) {
+                setValidateRow(null)
+                setValidateResult(null)
+                setValidateBusy(false)
+              }
+            }}
+          >
+            <DialogPopup className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>
+                  {activeSection === "wifi-networks" ? "Validate Wi-Fi network" : "Validate geofence location"}
+                </DialogTitle>
+                <DialogDescription>
+                  {activeSection === "wifi-networks"
+                    ? "Check whether this SSID, BSSID, or IP would be accepted for attendance."
+                    : "Check whether a point falls inside this geofence."}
+                </DialogDescription>
+              </DialogHeader>
+              {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
+              <div className="grid gap-2">
+                {activeSection === "wifi-networks" ? (
+                  <>
+                    <label className="grid gap-1 text-sm">
+                      <span>SSID</span>
+                      <input
+                        className="rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+                        value={validateValues.ssid ?? ""}
+                        onChange={(event) =>
+                          setValidateValues((current) => ({ ...current, ssid: event.target.value }))
+                        }
+                      />
+                    </label>
+                    <label className="grid gap-1 text-sm">
+                      <span>BSSID</span>
+                      <input
+                        className="rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+                        value={validateValues.bssid ?? ""}
+                        onChange={(event) =>
+                          setValidateValues((current) => ({ ...current, bssid: event.target.value }))
+                        }
+                      />
+                    </label>
+                    <label className="grid gap-1 text-sm">
+                      <span>IP address</span>
+                      <input
+                        className="rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+                        value={validateValues.ipAddress ?? ""}
+                        onChange={(event) =>
+                          setValidateValues((current) => ({ ...current, ipAddress: event.target.value }))
+                        }
+                      />
+                    </label>
+                  </>
+                ) : (
+                  <>
+                    <label className="grid gap-1 text-sm">
+                      <span>Latitude</span>
+                      <input
+                        className="rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+                        value={validateValues.latitude ?? ""}
+                        onChange={(event) =>
+                          setValidateValues((current) => ({ ...current, latitude: event.target.value }))
+                        }
+                      />
+                    </label>
+                    <label className="grid gap-1 text-sm">
+                      <span>Longitude</span>
+                      <input
+                        className="rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+                        value={validateValues.longitude ?? ""}
+                        onChange={(event) =>
+                          setValidateValues((current) => ({ ...current, longitude: event.target.value }))
+                        }
+                      />
+                    </label>
+                    <label className="grid gap-1 text-sm">
+                      <span>Accuracy meters</span>
+                      <input
+                        className="rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+                        value={validateValues.accuracyMeters ?? ""}
+                        onChange={(event) =>
+                          setValidateValues((current) => ({ ...current, accuracyMeters: event.target.value }))
+                        }
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className="justify-self-start rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+                      onClick={() => {
+                        if (!navigator.geolocation) {
+                          setFormError("Location is not available in this browser.")
+                          return
+                        }
+                        navigator.geolocation.getCurrentPosition(
+                          (position) => {
+                            setValidateValues((current) => ({
+                              ...current,
+                              latitude: String(position.coords.latitude),
+                              longitude: String(position.coords.longitude),
+                              accuracyMeters: String(position.coords.accuracy ?? current.accuracyMeters ?? ""),
+                            }))
+                          },
+                          () => setFormError("Could not read your location."),
+                        )
+                      }}
+                    >
+                      Use my location
+                    </button>
+                  </>
+                )}
+                {validateResult ? (
+                  <pre className="max-h-40 overflow-auto rounded-md border border-slate-200 bg-slate-50 p-2 text-[11px] leading-relaxed text-slate-700">
+                    {validateResult}
+                  </pre>
+                ) : null}
+              </div>
+              <DialogFooter>
+                <button
+                  type="button"
+                  className="rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+                  onClick={() => setValidateOpen(false)}
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md bg-[var(--primary)] px-3 py-1.5 text-sm !text-white disabled:opacity-50"
+                  disabled={validateBusy}
+                  onClick={() => void onValidateLocation()}
+                >
+                  {validateBusy ? "Checking…" : "Validate"}
+                </button>
+              </DialogFooter>
+            </DialogPopup>
+          </Dialog>
           <RecordDetailsDialog
             open={detailsOpen}
             onOpenChange={(open) => {
@@ -3213,7 +3467,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
                 : undefined,
           })),
           ...(showDeviceContextColumn ? [{ key: "related_device", label: "Device", defaultWidth: 75 }] : []),
-          ...(supportsEditDelete ? [{ key: "actions", label: "Actions", defaultWidth: 55, sortable: false, render: (row: AdminRecord) => (
+          ...(supportsEditDelete ? [{ key: "actions", label: "Actions", defaultWidth: activeSection === "geofences" || activeSection === "wifi-networks" ? 120 : 55, sortable: false, render: (row: AdminRecord) => (
             <div className="flex justify-end gap-1" onClick={e=>e.stopPropagation()}>
               {(activeSection === "policies" || activeSection === "settings") &&
               !(row.is_active === true || row.isActive === true) ? (
@@ -3224,6 +3478,29 @@ export function AttendanceManagementView({ section }: { section: string }) {
                 >
                   {activatingId === String(row.id) ? "Activating…" : "Activate"}
                 </button>
+              ) : null}
+              {activeSection === "geofences" || activeSection === "wifi-networks" ? (
+                <>
+                  <button
+                    type="button"
+                    className="admin-table-icon-button"
+                    disabled={activatingId === String(row.id)}
+                    onClick={() => void onToggleLocation(row, !isAttendanceLocationActive(row))}
+                  >
+                    {activatingId === String(row.id)
+                      ? "Saving…"
+                      : isAttendanceLocationActive(row)
+                        ? "Deactivate"
+                        : "Activate"}
+                  </button>
+                  <button
+                    type="button"
+                    className="admin-table-icon-button"
+                    onClick={() => openValidateLocation(row)}
+                  >
+                    Validate
+                  </button>
+                </>
               ) : null}
               <button className="admin-table-icon-button" aria-label="Edit" onClick={() => openEditDialog(row)}><PencilIcon className="h-3.5 w-3.5" /></button>
               <button className="admin-table-icon-button" data-variant="danger" aria-label="Delete" onClick={() => openDeleteDialog(row)}><Trash2Icon className="h-3.5 w-3.5" /></button>

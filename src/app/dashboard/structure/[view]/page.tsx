@@ -5,7 +5,7 @@ import {
   type StructureOpsTab,
 } from "@/components/dashboard/structure-operations-view"
 
-const ALLOWED_VIEWS = new Set<StructureOpsTab>(["cost-centers", "grades"])
+const ALLOWED_VIEWS = new Set<StructureOpsTab>(["cost-centers", "grades", "numbering"])
 
 interface StructureViewPageProps {
   params: Promise<{

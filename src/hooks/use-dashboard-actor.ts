@@ -10,6 +10,7 @@ import {
 
 const EMPTY_SNAPSHOT: DashboardActorSnapshot = {
   permissionLabels: [],
+  roleNames: [],
   accessMode: "employee",
   isAdmin: false,
   ready: false,
@@ -22,7 +23,9 @@ function snapshotsEqual(a: DashboardActorSnapshot, b: DashboardActorSnapshot) {
     a.accessMode === b.accessMode &&
     a.isAdmin === b.isAdmin &&
     a.permissionLabels.length === b.permissionLabels.length &&
-    a.permissionLabels.every((label, index) => label === b.permissionLabels[index])
+    a.permissionLabels.every((label, index) => label === b.permissionLabels[index]) &&
+    (a.roleNames ?? []).length === (b.roleNames ?? []).length &&
+    (a.roleNames ?? []).every((role, index) => role === (b.roleNames ?? [])[index])
   )
 }
 

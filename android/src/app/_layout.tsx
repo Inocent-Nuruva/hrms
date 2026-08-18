@@ -110,6 +110,11 @@ function RootNavigator({ backgroundColor }: { backgroundColor: string }) {
         <Stack.Screen name="promotions" />
         <Stack.Screen name="shift" />
         <Stack.Screen name="payroll" />
+        <Stack.Screen name="field" />
+        <Stack.Screen name="finance" />
+        <Stack.Screen name="performance" />
+        <Stack.Screen name="documents" />
+        <Stack.Screen name="activities" />
       </Stack>
 
       {auth.isLoading && (

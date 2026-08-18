@@ -248,7 +248,7 @@ export function PerformanceManagementView({
   const router = useRouter()
   const actor = useDashboardActor()
   const canAccess =
-    !actor.ready ||
+    actor.ready &&
     canAccessDashboardRoute("/dashboard/performance/overview", actor.permissionLabels, actor.accessMode)
   const canCreatePerformance = canPerformPermission(actor.permissionLabels, {
     permissions: ["performance:create", "performance:update", "manage_performance"],

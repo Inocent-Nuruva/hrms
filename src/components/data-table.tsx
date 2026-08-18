@@ -1071,7 +1071,11 @@ export function DataTable({
     () => toPermissionOptions(pickerPermissions.length > 0 ? pickerPermissions : permissions),
     [permissions, pickerPermissions]
   )
-  const filteredAccessControlRows = rows
+  const filteredAccessControlRows = React.useMemo(() => {
+    const query = accessControlSearch.trim().toLowerCase()
+    if (!query) return rows
+    return rows.filter((row) => accessControlSearchHaystack(row).includes(query))
+  }, [accessControlSearch, rows])
 
   const accessControlTableRows = React.useMemo((): AccessControlTableRow[] => {
     if (activeResource !== "roles" && activeResource !== "permissions") {
@@ -2529,11 +2533,23 @@ export function DataTable({
                     }
                   }}
                   loading={loading}
-                  itemsPerPage={catalogQuery.limit || 20}
-                  page={catalogQuery.page}
-                  totalPages={catalogTotalPages}
-                  totalItems={catalogTotal}
-                  onPageChange={(page) => onCatalogQueryChange?.({ page })}
+                  itemsPerPage={
+                    activeResource === "roles"
+                      ? Math.max(filteredAccessControlRows.length, catalogQuery.limit || 20)
+                      : catalogQuery.limit || 20
+                  }
+                  page={activeResource === "roles" ? 1 : catalogQuery.page}
+                  totalPages={activeResource === "roles" ? 1 : catalogTotalPages}
+                  totalItems={
+                    activeResource === "roles"
+                      ? filteredAccessControlRows.length
+                      : catalogTotal
+                  }
+                  onPageChange={
+                    activeResource === "roles"
+                      ? undefined
+                      : (page) => onCatalogQueryChange?.({ page })
+                  }
                   showExport={false}
                   enableColumnVisibility
                   enableAnimations={false}
@@ -2553,9 +2569,11 @@ export function DataTable({
                         className="h-5 border-border bg-muted/40 px-1.5 text-[10px] text-muted-foreground"
                       >
                         {filteredAccessControlRows.length}
-                        {filteredAccessControlRows.length !== rows.length
-                          ? ` of ${rows.length}`
-                          : ""}
+                        {catalogTotal != null && catalogTotal !== filteredAccessControlRows.length
+                          ? ` of ${catalogTotal}`
+                          : filteredAccessControlRows.length !== rows.length
+                            ? ` of ${rows.length}`
+                            : ""}
                       </Badge>
                     </div>
                   }

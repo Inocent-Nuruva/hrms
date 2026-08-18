@@ -3,6 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import {
+  DoorOpenIcon,
   DownloadIcon,
   EyeIcon,
   Loader2Icon,
@@ -23,10 +24,12 @@ import {
 import { ResizableTable } from "@/components/ui/resizable-table"
 import { Textarea } from "@/components/ui/textarea"
 import {
+  commandAccessControlDoor,
   createAccessControlResource,
   createAccessScheduleTemplate,
   deleteAccessControlResourceById,
   deleteAccessScheduleTemplate,
+  getAccessControlDoorDeviceConfig,
   getAccessControlResourceById,
   getAccessScheduleTemplate,
   listAttendanceDevices,
@@ -34,11 +37,13 @@ import {
   listAccessScheduleTemplates,
   listBranches,
   listDepartments,
+  syncAccessControlDoorToDevice,
   syncAccessScheduleTemplateToDevice,
   syncAccessScheduleTemplatesFromDevice,
   syncAccessControlDeviceWeekPlans,
   syncAccessWeekPlanToDevice,
   type AccessControlResourceKey,
+  type AccessDoorLiveCommand,
   type AdminRecord,
   updateAccessControlResourceById,
   updateAccessScheduleTemplate,
@@ -837,6 +842,11 @@ export function AccessControlManagementView({
   const [syncToRecordId, setSyncToRecordId] = React.useState("")
   const [syncToDeviceId, setSyncToDeviceId] = React.useState("")
   const [syncing, setSyncing] = React.useState(false)
+  const [doorControlOpen, setDoorControlOpen] = React.useState(false)
+  const [doorControlRow, setDoorControlRow] = React.useState<AdminRecord | null>(null)
+  const [doorControlId, setDoorControlId] = React.useState("")
+  const [doorBusy, setDoorBusy] = React.useState("")
+  const [doorConfig, setDoorConfig] = React.useState<AdminRecord | null>(null)
 
   React.useEffect(() => {
     setCreateValues(activeSection === "templates" ? emptyTemplateCreateValues() : buildInitialState(fields))
@@ -853,6 +863,11 @@ export function AccessControlManagementView({
     setSyncToOpen(false)
     setSyncToRecordId("")
     setSyncToDeviceId("")
+    setDoorControlOpen(false)
+    setDoorControlRow(null)
+    setDoorControlId("")
+    setDoorBusy("")
+    setDoorConfig(null)
   }, [activeSection, fields])
 
   React.useEffect(() => {
@@ -1228,6 +1243,55 @@ export function AccessControlManagementView({
     setSyncToOpen(true)
   }
 
+  const openDoorControl = (row: AdminRecord, fallbackIndex: number) => {
+    setDoorControlRow(row)
+    setDoorControlId(String(resolveRowId(row, fallbackIndex)))
+    setDoorConfig(null)
+    setFormError(null)
+    setMessage(null)
+    setDoorControlOpen(true)
+  }
+
+  const onDoorCommand = async (command: AccessDoorLiveCommand | "sync" | "config") => {
+    if (!canUpdate) {
+      setFormError("Missing permission: access_doors:update")
+      return
+    }
+    const token = readStoredToken()
+    if (!token || !doorControlId.trim()) {
+      setFormError("Authentication required. Please log in again.")
+      return
+    }
+    setDoorBusy(command)
+    setFormError(null)
+    try {
+      if (command === "config") {
+        const config = await getAccessControlDoorDeviceConfig(token, doorControlId)
+        setDoorConfig(config)
+        setMessage("Loaded device configuration for this door.")
+        return
+      }
+      if (command === "sync") {
+        await syncAccessControlDoorToDevice(token, doorControlId)
+        setMessage("Door settings were sent to the device.")
+      } else {
+        const labels: Record<AccessDoorLiveCommand, string> = {
+          open: "Door opened.",
+          close: "Door closed.",
+          "always-open": "Door set to always open.",
+          "always-close": "Door set to always closed.",
+        }
+        await commandAccessControlDoor(token, doorControlId, command)
+        setMessage(labels[command])
+      }
+      await fetchRows()
+    } catch (errorObject) {
+      setFormError(errorObject instanceof Error ? errorObject.message : "Door command failed.")
+    } finally {
+      setDoorBusy("")
+    }
+  }
+
   const onSyncResourceToDevice = async () => {
     const token = readStoredToken()
     if (!token) {
@@ -1354,7 +1418,8 @@ export function AccessControlManagementView({
           activeSection === "templates" ||
           activeSection === "week-plans" ||
           activeSection === "groups" ||
-          activeSection === "organizations"
+          activeSection === "organizations" ||
+          activeSection === "doors"
             ? [
                 {
                   key: "actions",
@@ -1363,7 +1428,8 @@ export function AccessControlManagementView({
                     activeSection === "templates" ||
                     activeSection === "week-plans" ||
                     activeSection === "groups" ||
-                    activeSection === "organizations"
+                    activeSection === "organizations" ||
+                    activeSection === "doors"
                       ? 100
                       : 55,
                   sortable: false,
@@ -1378,6 +1444,17 @@ export function AccessControlManagementView({
                         >
                           <EyeIcon className="h-3.5 w-3.5" />
                         </Link>
+                      ) : null}
+                      {activeSection === "doors" && canUpdate ? (
+                        <button
+                          type="button"
+                          className="admin-table-icon-button"
+                          aria-label="Control door"
+                          title="Live door control"
+                          onClick={() => openDoorControl(row, rows.indexOf(row))}
+                        >
+                          <DoorOpenIcon className="h-3.5 w-3.5" />
+                        </button>
                       ) : null}
                       {(activeSection === "templates" || activeSection === "week-plans") && canUpdate ? (
                         <button
@@ -1678,6 +1755,86 @@ export function AccessControlManagementView({
               className="rounded-md border border-red-300 px-3 py-1.5 text-sm text-red-700"
             >
               Delete
+            </button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
+
+      <Dialog
+        open={doorControlOpen}
+        onOpenChange={(open) => {
+          setDoorControlOpen(open)
+          if (!open) {
+            setDoorControlRow(null)
+            setDoorControlId("")
+            setDoorConfig(null)
+            setDoorBusy("")
+          }
+        }}
+      >
+        <DialogPopup className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Live door control</DialogTitle>
+            <DialogDescription>
+              Send an open, close, or lock command to door #{doorControlId || "—"}.
+              {readStringFromRecord(doorControlRow ?? {}, ["door_name", "doorName", "name"])
+                ? ` ${readStringFromRecord(doorControlRow ?? {}, ["door_name", "doorName", "name"])}`
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+          {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
+          {message ? <p className="text-sm text-green-700">{message}</p> : null}
+          <div className="grid grid-cols-2 gap-2">
+            {(
+              [
+                ["open", "Open"],
+                ["close", "Close"],
+                ["always-open", "Always open"],
+                ["always-close", "Always closed"],
+              ] as const
+            ).map(([command, label]) => (
+              <button
+                key={command}
+                type="button"
+                className="rounded-md border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-60"
+                disabled={Boolean(doorBusy)}
+                onClick={() => void onDoorCommand(command)}
+              >
+                {doorBusy === command ? "Sending…" : label}
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-60"
+              disabled={Boolean(doorBusy)}
+              onClick={() => void onDoorCommand("sync")}
+            >
+              {doorBusy === "sync" ? <Loader2Icon className="h-3.5 w-3.5 animate-spin" /> : <UploadIcon className="h-3.5 w-3.5" />}
+              {doorBusy === "sync" ? "Syncing…" : "Sync to device"}
+            </button>
+            <button
+              type="button"
+              className="rounded-md border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-60"
+              disabled={Boolean(doorBusy)}
+              onClick={() => void onDoorCommand("config")}
+            >
+              {doorBusy === "config" ? "Loading…" : "Load device config"}
+            </button>
+          </div>
+          {doorConfig ? (
+            <pre className="max-h-48 overflow-auto rounded-md border border-slate-200 bg-slate-50 p-2 text-[11px] leading-relaxed text-slate-700">
+              {JSON.stringify(doorConfig, null, 2)}
+            </pre>
+          ) : null}
+          <DialogFooter>
+            <button
+              type="button"
+              className="rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+              onClick={() => setDoorControlOpen(false)}
+            >
+              Close
             </button>
           </DialogFooter>
         </DialogPopup>

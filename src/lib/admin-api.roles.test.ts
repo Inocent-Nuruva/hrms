@@ -5,6 +5,7 @@ import {
   listResource,
   listResourcePage,
   listRolePermissions,
+  listRolesCatalog,
 } from "./admin-api"
 
 function jsonResponse(payload: unknown, init?: ResponseInit) {
@@ -121,6 +122,60 @@ describe("roles and permissions admin API helpers", () => {
     })
 
     expect(fetchMock).toHaveBeenCalledTimes(4)
+  })
+
+  it("loads roles from GET /api/roles without page/limit/search query params", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        data: {
+          total: 10,
+          users: [{ id: 99, name: "Not a role" }],
+          roles: [
+            { id: 1, name: "COMPANY_ADMIN", display_name: "Company Admin" },
+            { id: 2, name: "HR_MANAGER", display_name: "HR Manager" },
+          ],
+        },
+      }),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const result = await listRolesCatalog("token-roles-catalog", {
+      page: 1,
+      limit: 20,
+      search: "hr",
+    })
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8888/api/roles",
+      expect.objectContaining({ method: "GET" }),
+    )
+    expect(result.rows.map((row) => row.name)).toEqual(["HR_MANAGER"])
+    expect(result.total).toBe(1)
+  })
+
+  it("uses the unpaginated roles catalog when listResourcePage asks for roles", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        data: [
+          { id: 1, name: "COMPANY_USER", display_name: "Company User", is_system_generated: true },
+        ],
+      }),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const result = await listResourcePage("roles", "token-roles-page-helper", {
+      page: 1,
+      limit: 20,
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8888/api/roles",
+      expect.objectContaining({ method: "GET" }),
+    )
+    expect(result.rows).toEqual([
+      expect.objectContaining({ name: "COMPANY_USER" }),
+    ])
   })
 
   it("loads one backend page of permissions without walking the rest", async () => {

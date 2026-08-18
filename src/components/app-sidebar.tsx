@@ -228,6 +228,7 @@ const adminData: SidebarData = {
         "/dashboard/structure",
         "/dashboard/structure/cost-centers",
         "/dashboard/structure/grades",
+        "/dashboard/structure/numbering",
       ],
       icon: IStructure,
     },
@@ -239,12 +240,13 @@ const adminData: SidebarData = {
         "/dashboard/insights/hr",
         "/dashboard/insights/management",
         "/dashboard/insights/manager",
+        "/dashboard/insights/sales-field",
         "/dashboard/insights/readiness",
       ],
       icon: IInsights,
     },
     {
-      title: "Recruitment",
+      title: "Invite & register",
       url: "/dashboard/operations/recruitment",
       icon: IUsers,
     },
@@ -283,7 +285,7 @@ const adminData: SidebarData = {
   navSecondary: [
     {
       title: "Get Help",
-      url: "#",
+      url: "/dashboard/help",
       icon: IHelp,
     },
     {
@@ -379,7 +381,10 @@ const adminSearchIndex = [
   { title: "Departments", url: "/dashboard/departments", section: "Organization", keywords: ["department", "org"] },
   { title: "Branches", url: "/dashboard/branches", section: "Organization", keywords: ["branch", "location"] },
   { title: "Positions", url: "/dashboard/positions", section: "Organization", keywords: ["position", "job title"] },
-  { title: "Recruitment", url: "/dashboard/operations/recruitment", section: "Operations", keywords: ["hiring", "talent"] },
+  { title: "Invite & register", url: "/dashboard/operations/recruitment", section: "Operations", keywords: ["hiring", "talent", "recruitment", "invite"] },
+  { title: "Structure / Numbering", url: "/dashboard/structure/numbering", section: "Structure", keywords: ["employee number", "prefix"] },
+  { title: "Insights / Sales field", url: "/dashboard/insights/sales-field", section: "Insights", keywords: ["sales", "field", "analytics"] },
+  { title: "Help", url: "/dashboard/help", section: "General", keywords: ["help", "support", "sso", "shortcuts"] },
   { title: "Payroll", url: "/dashboard/operations/payroll", section: "Operations", keywords: ["payroll", "runs", "payslips", "salary", "banking"] },
   { title: "Reports", url: "/dashboard/operations/reports", section: "Operations", keywords: ["attendance", "download", "xlsx", "csv", "pdf", "scheduled", "smtp", "templates"] },
   { title: "Scheduled Reporting", url: "/dashboard/operations/scheduled-reporting", section: "Operations", keywords: ["scheduled reporting", "templates", "schedules", "executions", "smtp"] },
@@ -568,6 +573,7 @@ const employeeData: SidebarData = {
         "/dashboard/structure",
         "/dashboard/structure/cost-centers",
         "/dashboard/structure/grades",
+        "/dashboard/structure/numbering",
       ],
       icon: IStructure,
     },
@@ -579,6 +585,7 @@ const employeeData: SidebarData = {
         "/dashboard/insights/hr",
         "/dashboard/insights/management",
         "/dashboard/insights/manager",
+        "/dashboard/insights/sales-field",
         "/dashboard/insights/readiness",
       ],
       icon: IInsights,
@@ -609,7 +616,7 @@ const employeeData: SidebarData = {
   navSecondary: [
     {
       title: "Get Help",
-      url: "#",
+      url: "/dashboard/help",
       icon: IHelp,
     },
     {
@@ -658,6 +665,7 @@ const employeeSearchIndex = [
   { title: "Onboarding", url: "/dashboard/me/onboarding", section: "Employees", keywords: ["employee", "onboarding", "acknowledge"] },
   { title: "Offboarding", url: "/dashboard/me/offboarding", section: "Employees", keywords: ["employee", "exit"] },
   { title: "Settings", url: "/dashboard/settings", section: "General", keywords: ["preferences", "account"] },
+  { title: "Help", url: "/dashboard/help", section: "General", keywords: ["help", "support", "shortcuts", "sso"] },
 ]
 
 interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
@@ -666,6 +674,8 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
   userAvatar?: string | null
   accessMode?: AppSidebarAccessMode
   permissionLabels?: string[]
+  /** False until the dashboard shell has read the signed-in identity. */
+  identityReady?: boolean
   activeResource?: AdminResourceKey
   onSelectResource?: (resource: AdminResourceKey) => void
 }
@@ -741,6 +751,7 @@ export function AppSidebar({
   userAvatar,
   accessMode = "admin",
   permissionLabels = [],
+  identityReady = false,
   activeResource,
   onSelectResource,
   ...props
@@ -778,13 +789,18 @@ export function AppSidebar({
     }
   }, [pathname, isMobile, setOpenMobile])
 
+  const permissionsResolved = navReady && identityReady
+
   const navData = React.useMemo(() => {
     const source = resolvedAccessMode === "employee" ? employeeData : adminData
-    // First paint must match SSR. sessionStorage forbidden-routes only exist
-    // in the browser, so filtering here would swap "My Performance" for
-    // "My Probation" and fail hydration.
-    if (!navReady) {
-      return source
+    // Do not paint the full admin/employee catalog first and then hide items.
+    // SSR and the first client frame both render an empty rail; after identity
+    // is known we show only the routes this person may open.
+    if (!permissionsResolved) {
+      return {
+        ...source,
+        navMain: [] as SidebarNavItem[],
+      }
     }
     void forbiddenVersion
     return {
@@ -795,12 +811,12 @@ export function AppSidebar({
         resolvedAccessMode
       ),
     }
-  }, [forbiddenVersion, navReady, normalizedPermissions, resolvedAccessMode])
+  }, [forbiddenVersion, normalizedPermissions, permissionsResolved, resolvedAccessMode])
 
   const searchIndex = React.useMemo(() => {
     const source = resolvedAccessMode === "employee" ? employeeSearchIndex : adminSearchIndex
-    if (!navReady) {
-      return source
+    if (!permissionsResolved) {
+      return [] as SearchItem[]
     }
     void forbiddenVersion
     return filterAdminSearchByPermissions(
@@ -808,7 +824,7 @@ export function AppSidebar({
       normalizedPermissions,
       resolvedAccessMode
     )
-  }, [forbiddenVersion, navReady, normalizedPermissions, resolvedAccessMode])
+  }, [forbiddenVersion, normalizedPermissions, permissionsResolved, resolvedAccessMode])
 
   return (
     <Sidebar collapsible="offcanvas" className="app-sidebar" {...props}>
@@ -829,11 +845,19 @@ export function AppSidebar({
           </p>
           <div className="mt-1.5 h-px w-10 rounded-full bg-gradient-to-r from-primary/50 to-transparent" />
         </div>
-        <NavMain
-          items={navData.navMain}
-          activeResource={activeResource}
-          onSelectResource={onSelectResource}
-        />
+        {permissionsResolved ? (
+          <NavMain
+            items={navData.navMain}
+            activeResource={activeResource}
+            onSelectResource={onSelectResource}
+          />
+        ) : (
+          <div className="space-y-1.5 px-1" aria-hidden>
+            {Array.from({ length: 8 }, (_, index) => (
+              <div key={index} className="h-8 animate-pulse rounded-lg bg-muted/50" />
+            ))}
+          </div>
+        )}
         <NavSecondary items={navData.navSecondary} searchItems={searchIndex} className="mt-auto pt-1" />
       </SidebarContent>
       <SidebarFooter className="relative z-[1]">

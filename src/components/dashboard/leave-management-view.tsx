@@ -4210,32 +4210,36 @@ export function LeaveManagementView({
       {tab === "balances" ? (
         <div className="space-y-2">
           <div className="flex flex-wrap items-center justify-end gap-1.5">
-            <button
-              type="button"
-              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-medium"
-              onClick={() => {
-                const token = readStoredToken()
-                if (!token) return
-                void generateLeaveBalances(token, { force_recalculate: true })
-                  .then(() => { showSuccessAlert("Leave balances generated."); return reloadAll("balances", true) })
-                  .catch((errorObject) => showErrorAlert(errorObject instanceof Error ? errorObject.message : "Generate failed."))
-              }}
-            >
-              Generate
-            </button>
-            <button
-              type="button"
-              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-medium"
-              onClick={() => {
-                const token = readStoredToken()
-                if (!token) return
-                void carryForwardLeaveBalances(token, {})
-                  .then(() => { showSuccessAlert("Carry-forward calculated."); return reloadAll("balances", true) })
-                  .catch((errorObject) => showErrorAlert(errorObject instanceof Error ? errorObject.message : "Carry-forward failed."))
-              }}
-            >
-              Carry forward
-            </button>
+            {canAdjustBalances ? (
+              <button
+                type="button"
+                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-medium"
+                onClick={() => {
+                  const token = readStoredToken()
+                  if (!token) return
+                  void generateLeaveBalances(token, { force_recalculate: true })
+                    .then(() => { showSuccessAlert("Leave balances generated."); return reloadAll("balances", true) })
+                    .catch((errorObject) => showErrorAlert(errorObject instanceof Error ? errorObject.message : "Generate failed."))
+                }}
+              >
+                Generate
+              </button>
+            ) : null}
+            {canAdjustBalances ? (
+              <button
+                type="button"
+                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-medium"
+                onClick={() => {
+                  const token = readStoredToken()
+                  if (!token) return
+                  void carryForwardLeaveBalances(token, {})
+                    .then(() => { showSuccessAlert("Carry-forward calculated."); return reloadAll("balances", true) })
+                    .catch((errorObject) => showErrorAlert(errorObject instanceof Error ? errorObject.message : "Carry-forward failed."))
+                }}
+              >
+                Carry forward
+              </button>
+            ) : null}
             {canAdjustBalances ? (
               <button
                 type="button"
@@ -4303,22 +4307,26 @@ export function LeaveManagementView({
       {tab === "holidays" ? (
         <div className="space-y-2">
           <div className="flex flex-wrap items-center justify-end gap-1.5">
-            <button
-              type="button"
-              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-medium text-slate-700"
-              onClick={() => setHolidayImportDialogOpen(true)}
-            >
-              <Download className="h-3.5 w-3.5" />
-              Import
-            </button>
-            <button
-              type="button"
-              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-rose-200 bg-white px-2.5 text-xs font-medium text-rose-700"
-              onClick={() => setHolidayRemoveDialogOpen(true)}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              Remove Country
-            </button>
+            {canMutateHolidays ? (
+              <button
+                type="button"
+                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-medium text-slate-700"
+                onClick={() => setHolidayImportDialogOpen(true)}
+              >
+                <Download className="h-3.5 w-3.5" />
+                Import
+              </button>
+            ) : null}
+            {canMutateHolidays ? (
+              <button
+                type="button"
+                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-rose-200 bg-white px-2.5 text-xs font-medium text-rose-700"
+                onClick={() => setHolidayRemoveDialogOpen(true)}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Remove Country
+              </button>
+            ) : null}
             {canMutateHolidays ? (
               <button
                 type="button"

@@ -10,6 +10,7 @@ export default function LoginPage() {
   const router = useRouter();
   const prefillEmail =
     typeof router.query.email === "string" ? router.query.email : "";
+  const nextPath = typeof router.query.next === "string" ? router.query.next : "";
 
   const handleSuccess = (redirectUrl: string) => {
     if (typeof window !== "undefined") {
@@ -98,7 +99,7 @@ export default function LoginPage() {
                     </h2>
                   </div>
 
-                  <LoginFlow defaultEmail={prefillEmail} onSuccess={handleSuccess} />
+                  <LoginFlow defaultEmail={prefillEmail} nextPath={nextPath} onSuccess={handleSuccess} />
                 </div>
               </div>
             </div>

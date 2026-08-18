@@ -94,7 +94,7 @@ function statusOf(row: AdminRecord) {
 export function MovementOperationsView({ activeTab }: { activeTab: MovementOpsTab }) {
   const actor = useDashboardActor()
   const canAccess =
-    !actor.ready ||
+    actor.ready &&
     canAccessDashboardRoute("/dashboard/movements/overview", actor.permissionLabels, actor.accessMode)
   const leaveIfForbidden = useLeaveIfForbidden()
   useForbiddenRouteGuard(canAccess)

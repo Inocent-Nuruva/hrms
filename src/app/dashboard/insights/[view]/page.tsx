@@ -9,6 +9,7 @@ const ALLOWED_VIEWS = new Set<InsightsOpsTab>([
   "hr",
   "management",
   "manager",
+  "sales-field",
   "readiness",
 ])
 

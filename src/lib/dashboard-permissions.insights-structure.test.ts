@@ -48,6 +48,15 @@ describe("structure and insights route access", () => {
     expect(hasInsightsAccess(COMPANY_ADMIN_PERMISSIONS)).toBe(false)
   })
 
+  it("shows the sales-field dashboard for analytics:read", () => {
+    expect(
+      canAccessDashboardRoute("/dashboard/insights/sales-field", ["analytics:read"], "admin"),
+    ).toBe(true)
+    expect(
+      canAccessDashboardRoute("/dashboard/insights/sales-field", ["employees:read"], "admin"),
+    ).toBe(false)
+  })
+
   it("shows HR insights for dashboards:read but not readiness", () => {
     expect(canAccessDashboardRoute("/dashboard/insights/hr", ["dashboards:read"], "admin")).toBe(true)
     expect(canAccessDashboardRoute("/dashboard/insights/readiness", ["dashboards:read"], "employee")).toBe(false)

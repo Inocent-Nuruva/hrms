@@ -75,7 +75,7 @@ function settingEnabled(row: AdminRecord | null) {
 export function SmsOperationsView({ activeTab }: { activeTab: SmsOpsTab }) {
   const actor = useDashboardActor()
   const canAccess =
-    !actor.ready ||
+    actor.ready &&
     canAccessDashboardRoute("/dashboard/sms/overview", actor.permissionLabels, actor.accessMode)
   const leaveIfForbidden = useLeaveIfForbidden()
   useForbiddenRouteGuard(canAccess)

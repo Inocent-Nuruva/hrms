@@ -242,6 +242,7 @@ export const structureSectionTabGroups: DashboardSectionTabGroup[] = [
     items: [
       { title: "Cost centers", url: "/dashboard/structure/cost-centers" },
       { title: "Grades", url: "/dashboard/structure/grades" },
+      { title: "Numbering", url: "/dashboard/structure/numbering" },
     ],
   },
 ]
@@ -252,6 +253,7 @@ export const insightsSectionTabGroups: DashboardSectionTabGroup[] = [
       { title: "HR", url: "/dashboard/insights/hr" },
       { title: "Management", url: "/dashboard/insights/management" },
       { title: "Manager", url: "/dashboard/insights/manager" },
+      { title: "Sales field", url: "/dashboard/insights/sales-field" },
       { title: "Readiness", url: "/dashboard/insights/readiness" },
     ],
   },

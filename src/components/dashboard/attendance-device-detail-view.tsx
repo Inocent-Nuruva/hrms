@@ -45,12 +45,17 @@ import {
   getAccessControlAttendanceDeviceSyncStatus,
   getAttendanceDeviceSyncStatus,
   getAttendanceResourceById,
+  getHikvisionSyncJob,
   listAccessControlResources,
   listAttendanceDeviceAssignmentMatches,
   listAttendanceDeviceEmployees,
   listEmployeeDeviceFingerprints,
+  listAccessDeviceAuditLogs,
+  listAccessDeviceScopedCommandLogs,
+  listAccessEmployeeAuditLogs,
   listHikvisionDeviceAttendanceLogs,
   listEmployees,
+  manageHikvisionDevice,
   registerEmployeeDeviceUser,
   resyncEmployeeDeviceFingerprint,
   resyncEmployeeDeviceUser,
@@ -81,7 +86,20 @@ import { env } from "@/lib/env"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 
-type DeviceTabKey = "details" | "employees" | "sync"
+type DeviceTabKey = "details" | "employees" | "sync" | "logs"
+
+function readJobId(payload: unknown) {
+  if (!payload || typeof payload !== "object") return null
+  const record = payload as Record<string, unknown>
+  const nested =
+    record.data && typeof record.data === "object"
+      ? (record.data as Record<string, unknown>)
+      : {}
+  const value = record.jobId ?? record.job_id ?? nested.jobId ?? nested.job_id
+  if (value == null) return null
+  const text = String(value).trim()
+  return text || null
+}
 type DeviceSyncStepKey = "core" | "doors" | "templates" | "week-plans" | "users" | "fingerprints"
 type DeviceSyncStepState = "idle" | "running" | "success" | "error"
 type CredentialTypeValue = "CARD" | "FINGERPRINT" | "FACE" | "PASSWORD" | "QR" | "PIN"
@@ -839,6 +857,14 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
       actor.accessMode
     )
   const [testingConnection, setTestingConnection] = React.useState(false)
+  const [managingDevice, setManagingDevice] = React.useState(false)
+  const [deviceAuditLogs, setDeviceAuditLogs] = React.useState<AdminRecord[]>([])
+  const [deviceCommandLogs, setDeviceCommandLogs] = React.useState<AdminRecord[]>([])
+  const [deviceLogsLoading, setDeviceLogsLoading] = React.useState(false)
+  const [employeeLogsOpen, setEmployeeLogsOpen] = React.useState(false)
+  const [employeeLogs, setEmployeeLogs] = React.useState<AdminRecord[]>([])
+  const [employeeLogsLabel, setEmployeeLogsLabel] = React.useState("")
+  const [employeeLogsLoading, setEmployeeLogsLoading] = React.useState(false)
   const [attendanceSyncSnapshot, setAttendanceSyncSnapshot] = React.useState<AdminRecord | null>(null)
   const [accessSyncSnapshot, setAccessSyncSnapshot] = React.useState<AdminRecord | null>(null)
 
@@ -1343,6 +1369,79 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
       showErrorAlert(message)
     } finally {
       setTestingConnection(false)
+    }
+  }
+
+  const onManageHikvisionDevice = async () => {
+    const token = readStoredToken()
+    if (!token) {
+      setError("Authentication required. Please log in again.")
+      return
+    }
+    setManagingDevice(true)
+    try {
+      const payload = await manageHikvisionDevice(token, deviceId)
+      const jobId = readJobId(payload)
+      if (jobId) {
+        const job = await getHikvisionSyncJob(token, jobId)
+        const status =
+          readDisplayField(job, ["status", "state", "jobStatus"]) || "queued"
+        showSuccessAlert(`Hikvision manage job ${jobId} is ${status}.`)
+      } else {
+        showSuccessAlert("Hikvision manage command sent.")
+      }
+      setError(null)
+      await fetchDeviceData()
+    } catch (errorObject) {
+      const message = errorObject instanceof Error ? errorObject.message : "Manage command failed."
+      setError(message)
+      showErrorAlert(message)
+    } finally {
+      setManagingDevice(false)
+    }
+  }
+
+  const loadDeviceLogs = React.useCallback(async () => {
+    const token = readStoredToken()
+    if (!token) return
+    setDeviceLogsLoading(true)
+    try {
+      const [audit, commands] = await Promise.all([
+        listAccessDeviceAuditLogs(token, deviceId, { page: 1, limit: 20 }),
+        listAccessDeviceScopedCommandLogs(token, deviceId, { page: 1, limit: 20 }),
+      ])
+      setDeviceAuditLogs(audit.rows)
+      setDeviceCommandLogs(commands.rows)
+    } catch (errorObject) {
+      setError(errorObject instanceof Error ? errorObject.message : "Could not load device logs.")
+    } finally {
+      setDeviceLogsLoading(false)
+    }
+  }, [deviceId])
+
+  React.useEffect(() => {
+    if (activeTab !== "logs") return
+    void loadDeviceLogs()
+  }, [activeTab, loadDeviceLogs])
+
+  const openEmployeeAuditLogs = async (employee: AdminRecord) => {
+    const token = readStoredToken()
+    const employeeId = readNumberFromRecord(employee, ["id", "employee_id", "employeeId"])
+    if (!token || employeeId === null) return
+    setEmployeeLogsLabel(
+      readDisplayField(employee, ["full_name", "fullName", "employee_name", "employeeName", "name"]) ||
+        `Employee ${employeeId}`
+    )
+    setEmployeeLogsOpen(true)
+    setEmployeeLogsLoading(true)
+    try {
+      const result = await listAccessEmployeeAuditLogs(token, employeeId, { page: 1, limit: 20 })
+      setEmployeeLogs(result.rows)
+    } catch (errorObject) {
+      setEmployeeLogs([])
+      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Could not load employee logs.")
+    } finally {
+      setEmployeeLogsLoading(false)
     }
   }
 
@@ -2188,6 +2287,14 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
             </button>
             <button
               type="button"
+              onClick={() => void onManageHikvisionDevice()}
+              className="inline-flex h-9 items-center rounded-md border border-slate-300 px-3 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              disabled={managingDevice}
+            >
+              {managingDevice ? "Managing…" : "Manage device"}
+            </button>
+            <button
+              type="button"
               onClick={() => void fetchDeviceData()}
               className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-300 text-primary hover:bg-[color:rgb(var(--primary-rgb)/0.06)]"
               disabled={loading}
@@ -2209,6 +2316,7 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
             ["details", "Details"],
             ["employees", `Employees (${assignedEmployees.length})`],
             ["sync", "Sync"],
+            ["logs", "Logs"],
           ].map(([tabKey, label]) => {
             const isActive = activeTab === tabKey
             return (
@@ -2514,6 +2622,14 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
                               </button>
                               <button
                                 type="button"
+                                className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                                onClick={() => void openEmployeeAuditLogs(emp)}
+                                title="Access history"
+                              >
+                                History
+                              </button>
+                              <button
+                                type="button"
                                 className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs font-medium text-rose-600 hover:bg-rose-50"
                                 onClick={() => requestRemoveEmployee(emp)}
                                 title="Remove"
@@ -2613,6 +2729,89 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
               >
                 Sync attendance
               </button>
+            </div>
+          </div>
+        ) : null}
+
+        {activeTab === "logs" ? (
+          <div className="space-y-6">
+            <div>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-slate-900">Device audit</p>
+                <button
+                  type="button"
+                  className="text-xs font-medium text-primary hover:underline"
+                  onClick={() => void loadDeviceLogs()}
+                  disabled={deviceLogsLoading}
+                >
+                  {deviceLogsLoading ? "Refreshing…" : "Refresh"}
+                </button>
+              </div>
+              {deviceAuditLogs.length === 0 ? (
+                <p className="text-sm text-slate-500">
+                  {deviceLogsLoading ? "Loading audit logs…" : "No audit events for this device yet."}
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+                        <th className="py-2 pr-3">Action</th>
+                        <th className="py-2 pr-3">Status</th>
+                        <th className="py-2 pr-3">Employee</th>
+                        <th className="py-2">When</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {deviceAuditLogs.map((row, index) => (
+                        <tr key={`audit-${readNumberFromRecord(row, ["id"]) ?? index}`} className="border-b border-slate-100">
+                          <td className="py-2 pr-3">{readDisplayField(row, ["action", "event"]) || "—"}</td>
+                          <td className="py-2 pr-3">{readDisplayField(row, ["status"]) || "—"}</td>
+                          <td className="py-2 pr-3">
+                            {readDisplayField(row, ["employee_name", "employeeName", "employee_no", "employeeNo"]) || "—"}
+                          </td>
+                          <td className="py-2">
+                            {readDisplayField(row, ["created_at", "createdAt", "updated_at", "updatedAt"]) || "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+            <div>
+              <p className="mb-2 text-sm font-semibold text-slate-900">Device commands</p>
+              {deviceCommandLogs.length === 0 ? (
+                <p className="text-sm text-slate-500">
+                  {deviceLogsLoading ? "Loading command logs…" : "No command logs for this device yet."}
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+                        <th className="py-2 pr-3">Command</th>
+                        <th className="py-2 pr-3">Status</th>
+                        <th className="py-2">When</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {deviceCommandLogs.map((row, index) => (
+                        <tr key={`cmd-${readNumberFromRecord(row, ["id"]) ?? index}`} className="border-b border-slate-100">
+                          <td className="py-2 pr-3">
+                            {readDisplayField(row, ["commandType", "command_type", "command"]) || "—"}
+                          </td>
+                          <td className="py-2 pr-3">{readDisplayField(row, ["status"]) || "—"}</td>
+                          <td className="py-2">
+                            {readDisplayField(row, ["created_at", "createdAt", "updated_at", "updatedAt"]) || "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         ) : null}
@@ -3413,6 +3612,61 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
           void fetchDeviceData()
         }}
       />
+
+      <Dialog
+        open={employeeLogsOpen}
+        onOpenChange={(open) => {
+          setEmployeeLogsOpen(open)
+          if (!open) {
+            setEmployeeLogs([])
+            setEmployeeLogsLabel("")
+          }
+        }}
+      >
+        <DialogPopup className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Access history</DialogTitle>
+            <DialogDescription>{employeeLogsLabel || "Employee audit log"}</DialogDescription>
+          </DialogHeader>
+          {employeeLogsLoading ? (
+            <p className="text-sm text-slate-500">Loading…</p>
+          ) : employeeLogs.length === 0 ? (
+            <p className="text-sm text-slate-500">No audit events for this employee on this company yet.</p>
+          ) : (
+            <div className="max-h-80 overflow-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+                    <th className="py-2 pr-3">Action</th>
+                    <th className="py-2 pr-3">Status</th>
+                    <th className="py-2">When</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {employeeLogs.map((row, index) => (
+                    <tr key={`emp-audit-${readNumberFromRecord(row, ["id"]) ?? index}`} className="border-b border-slate-100">
+                      <td className="py-2 pr-3">{readDisplayField(row, ["action", "event"]) || "—"}</td>
+                      <td className="py-2 pr-3">{readDisplayField(row, ["status"]) || "—"}</td>
+                      <td className="py-2">
+                        {readDisplayField(row, ["created_at", "createdAt", "updated_at", "updatedAt"]) || "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <DialogFooter>
+            <button
+              type="button"
+              className="rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+              onClick={() => setEmployeeLogsOpen(false)}
+            >
+              Close
+            </button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
     </div>
   )
 }

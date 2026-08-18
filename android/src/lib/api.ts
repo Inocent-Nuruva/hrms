@@ -544,6 +544,26 @@ export const api = {
       body: data,
     });
   },
+
+  async listMyFieldVisits() {
+    return normalizeList(await request<unknown>('/api/me/field-visits'));
+  },
+
+  async listMyFinanceApplications() {
+    return normalizeList(await request<unknown>('/api/me/finance/applications'));
+  },
+
+  async listMyPerformanceAssignments() {
+    return normalizeList(await request<unknown>('/api/performance/me/assignments'));
+  },
+
+  async listMyDocuments() {
+    return normalizeList(await request<unknown>('/api/me/documents'));
+  },
+
+  async listMyActivities() {
+    return normalizeList(await request<unknown>('/api/me/activities'));
+  },
 };
 
 function buildQuery(params: Record<string, unknown>): string {

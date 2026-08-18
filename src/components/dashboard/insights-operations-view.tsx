@@ -27,6 +27,7 @@ import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import {
   getHrAttendanceSchedulePreview,
   getHrAttendanceSetupStatus,
+  getAnalyticsDashboard,
   getHrDashboard,
   getHrLaunchReadiness,
   getHrLaunchReadinessEmployees,
@@ -36,7 +37,6 @@ import {
   listSecurityEvents,
   runHrAttendanceSetupWizard,
   type AdminRecord,
-  type HrDashboardKind,
 } from "@/lib/admin-api"
 import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
 import { motion } from "framer-motion"
@@ -45,7 +45,7 @@ import { useForbiddenRouteGuard, useLeaveIfForbidden } from "@/hooks/use-forbidd
 import { readStoredSessionTokens } from "@/lib/session-client"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 
-export type InsightsOpsTab = "hr" | "management" | "manager" | "readiness"
+export type InsightsOpsTab = "hr" | "management" | "manager" | "sales-field" | "readiness"
 
 function readStoredToken() {
   return readStoredSessionTokens().accessToken.trim()
@@ -68,12 +68,23 @@ function metricEntries(record: AdminRecord | null) {
   return entries.slice(0, 8)
 }
 
-export function InsightsOperationsView({ activeTab }: { activeTab: InsightsOpsTab }) {
+export function InsightsOperationsView({
+  activeTab,
+  embedded = false,
+}: {
+  activeTab: InsightsOpsTab
+  embedded?: boolean
+}) {
   const actor = useDashboardActor()
   const motionPreset = useDashboardMotion()
   const canAccess =
-    !actor.ready ||
-    canAccessDashboardRoute("/dashboard/insights/hr", actor.permissionLabels, actor.accessMode)
+    embedded ||
+    (actor.ready &&
+      canAccessDashboardRoute(
+        `/dashboard/insights/${activeTab}`,
+        actor.permissionLabels,
+        actor.accessMode,
+      ))
   const leaveIfForbidden = useLeaveIfForbidden()
   useForbiddenRouteGuard(canAccess)
 
@@ -95,8 +106,6 @@ export function InsightsOperationsView({ activeTab }: { activeTab: InsightsOpsTa
   const [saving, setSaving] = React.useState(false)
   const [previewEmployeeId, setPreviewEmployeeId] = React.useState("")
 
-  const kind = activeTab as HrDashboardKind
-
   const load = React.useCallback(async () => {
     const token = readStoredToken()
     if (!token) {
@@ -108,11 +117,15 @@ export function InsightsOperationsView({ activeTab }: { activeTab: InsightsOpsTa
     setError(null)
     const tasks: Array<Promise<unknown>> = []
     if (activeTab !== "readiness") {
+      const query = {
+        ...(dateFrom ? { date_from: dateFrom } : {}),
+        ...(dateTo ? { date_to: dateTo } : {}),
+      }
       tasks.push(
-        getHrDashboard(token, kind, {
-          ...(dateFrom ? { date_from: dateFrom } : {}),
-          ...(dateTo ? { date_to: dateTo } : {}),
-        }).then(setDashboard).catch((errorObject) => {
+        (activeTab === "sales-field"
+          ? getAnalyticsDashboard(token, "sales-field", query)
+          : getHrDashboard(token, activeTab, query)
+        ).then(setDashboard).catch((errorObject) => {
           setDashboard(null)
           throw errorObject
         }),
@@ -141,7 +154,7 @@ export function InsightsOperationsView({ activeTab }: { activeTab: InsightsOpsTa
       setError(first.reason instanceof Error ? first.reason.message : "Could not load insights.")
     }
     setLoading(false)
-  }, [activeTab, dateFrom, dateTo, kind, leaveIfForbidden])
+  }, [activeTab, dateFrom, dateTo, leaveIfForbidden])
 
   React.useEffect(() => {
     if (!canAccess) return
@@ -215,8 +228,14 @@ export function InsightsOperationsView({ activeTab }: { activeTab: InsightsOpsTa
     >
       <TalentDoodleSprites />
       <HeroBand
-        eyebrow="Insights"
-        title={activeTab === "readiness" ? "Launch readiness" : `${prettify(activeTab)} dashboard`}
+        eyebrow={embedded ? "Home" : "Insights"}
+        title={
+          activeTab === "readiness"
+            ? "Launch readiness"
+            : activeTab === "sales-field"
+              ? "Sales-field dashboard"
+              : `${prettify(activeTab)} dashboard`
+        }
         description={
           activeTab === "readiness"
             ? "Health, launch blockers, attendance setup, and security events — one backend page each."

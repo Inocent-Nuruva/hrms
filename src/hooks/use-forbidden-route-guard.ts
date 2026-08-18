@@ -26,7 +26,9 @@ export function useForbiddenPrefixes() {
 export function useCanSeePage(url: string) {
   const actor = useDashboardActor()
   useForbiddenPrefixes()
-  if (!actor.ready) return true
+  // Hide until identity is known. Showing every page first and then
+  // removing the forbidden ones feels like the nav is collapsing.
+  if (!actor.ready) return false
   return canSeeDashboardPage(url, actor.permissionLabels, actor.accessMode)
 }
 

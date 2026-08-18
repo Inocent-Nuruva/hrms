@@ -10,6 +10,7 @@ import { AccountSettingsPanel } from "@/components/dashboard/account-settings-pa
 import { DashboardSectionTabs } from "@/components/dashboard/dashboard-section-tabs"
 import { SiteHeader } from "@/components/site-header"
 import { accessControlSectionTabGroups } from "@/lib/dashboard-sections"
+import { resolveHomeDashboardKind } from "@/lib/dashboard-home"
 import dynamic from "next/dynamic"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 
@@ -50,6 +51,7 @@ import {
   getCurrentAdmin,
   listEmployees,
   listResourcePage,
+  listRolesCatalog,
   listUsers,
   type CatalogQueryParams,
   patchResource,
@@ -63,7 +65,6 @@ import {
 import { useMyProfilePhoto } from "@/lib/my-profile-photo"
 import {
   buildDashboardActorSnapshotFromSources,
-  canViewCompanyDashboard,
   clearDashboardActorSnapshot,
   persistDashboardAccessToken,
   publishDashboardActorSnapshot,
@@ -373,7 +374,7 @@ export default function AdminDashboardView({
   const [catalogByResource, setCatalogByResource] = React.useState<
     Record<"roles" | "permissions", Required<CatalogQueryParams>>
   >({
-    roles: DEFAULT_CATALOG_QUERY,
+    roles: { page: 1, limit: 100, search: "" },
     permissions: DEFAULT_CATALOG_QUERY,
   })
   const [catalogMeta, setCatalogMeta] = React.useState<
@@ -547,7 +548,7 @@ export default function AdminDashboardView({
         const [usersResult, rolesResult, permissionsResult, admin] = await Promise.all([
           needsUsers ? listUsers(accessToken, usersQuery) : Promise.resolve(null),
           needsRoles
-            ? listResourcePage("roles", accessToken, rolesQuery)
+            ? listRolesCatalog(accessToken, rolesQuery)
             : Promise.resolve(null),
           needsPermissions
             ? listResourcePage("permissions", accessToken, permissionsQuery)
@@ -950,8 +951,12 @@ export default function AdminDashboardView({
   )
   const accessMode = actorSnapshot.accessMode
   const effectivePermissionLabels = actorSnapshot.permissionLabels
-  const showCompanyDashboard =
-    accessMode === "admin" && canViewCompanyDashboard(effectivePermissionLabels)
+  const homeDashboardKind = resolveHomeDashboardKind({
+    accessMode,
+    permissionLabels: effectivePermissionLabels,
+    roleNames: actorSnapshot.roleNames,
+  })
+  const showCompanyDashboard = identityReady && homeDashboardKind === "company"
 
   React.useEffect(() => {
     if (!resolvedUseApis || !identityReady || !token) {
@@ -1032,6 +1037,7 @@ export default function AdminDashboardView({
         userEmail={adminEmail}
         userAvatar={adminAvatar}
         accessMode={accessMode}
+        identityReady={identityReady}
         permissionLabels={effectivePermissionLabels}
         activeResource={resolvedActiveResource}
         onSelectResource={navigateToResource}
@@ -1046,7 +1052,6 @@ export default function AdminDashboardView({
         />
         <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain">
           <div className="@container/main flex min-w-0 max-w-full flex-col">
-            {/* Company overview is permission-gated (view_company_data / related labels). */}
             {resolvedShowOverview && showCompanyDashboard ? (
               <HrAnalyticsDashboard
                 refreshKey={overviewRefreshKey}

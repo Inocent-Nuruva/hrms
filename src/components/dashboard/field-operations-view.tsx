@@ -83,7 +83,7 @@ function readStoredToken() {
 export function FieldOperationsView({ activeTab }: { activeTab: FieldOpsTab }) {
   const actor = useDashboardActor()
   const canAccess =
-    !actor.ready ||
+    actor.ready &&
     canAccessDashboardRoute("/dashboard/field/overview", actor.permissionLabels, actor.accessMode)
   const leaveIfForbidden = useLeaveIfForbidden()
   useForbiddenRouteGuard(canAccess)

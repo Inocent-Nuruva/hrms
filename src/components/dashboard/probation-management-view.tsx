@@ -122,7 +122,7 @@ export function ProbationManagementView({
   const router = useRouter()
   const actor = useDashboardActor()
   const canAccess =
-    !actor.ready ||
+    actor.ready &&
     canAccessDashboardRoute("/dashboard/probation/overview", actor.permissionLabels, actor.accessMode)
   const canCreatePolicy = canPerformPermission(actor.permissionLabels, {
     permissions: ["probation:create", "probation:update", "probation_policies:create", "manage_probation"],

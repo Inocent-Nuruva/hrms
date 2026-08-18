@@ -2734,6 +2734,105 @@ export interface CatalogQueryParams {
   search?: string;
 }
 
+function isRoleCatalogRecord(row: AdminRecord): boolean {
+  if (
+    typeof row.is_system_generated === "boolean" ||
+    typeof row.isSystemGenerated === "boolean"
+  ) {
+    return true;
+  }
+  if (
+    typeof row.display_name === "string" ||
+    typeof row.displayName === "string"
+  ) {
+    return true;
+  }
+  if (
+    typeof row.company_scope_key === "number" ||
+    typeof row.companyScopeKey === "number"
+  ) {
+    return true;
+  }
+  const name = typeof row.name === "string" ? row.name.trim() : "";
+  return Boolean(name) && !name.includes(":");
+}
+
+function roleCatalogHaystack(row: AdminRecord): string {
+  const parts = [
+    row.name,
+    row.display_name,
+    row.displayName,
+    row.description,
+    row.title,
+    row.code,
+    row.key,
+    row.id,
+  ];
+  return parts
+    .filter((value) => value !== null && value !== undefined && String(value).trim())
+    .join(" ")
+    .toLowerCase();
+}
+
+function normalizeRoleCatalog(payload: unknown): AdminRecord[] {
+  const record = asRecord(payload);
+  const nested = record
+    ? (asRecord(record.data) ?? asRecord(record.result) ?? asRecord(record.payload))
+    : null;
+  for (const candidate of [record, nested]) {
+    if (!candidate) continue;
+    const fromRolesKey = asArray(candidate.roles);
+    if (fromRolesKey && fromRolesKey.length > 0) {
+      return fromRolesKey;
+    }
+  }
+
+  const list = normalizeList(payload);
+  const roleLike = list.filter(isRoleCatalogRecord);
+  return roleLike.length > 0 ? roleLike : list;
+}
+
+/**
+ * GET /api/roles has no documented query params. The Roles tab must not send
+ * page/limit/search — those can come back as `{ total: 10, items: [] }`.
+ */
+export async function listRolesCatalog(
+  token: string,
+  params: CatalogQueryParams = {},
+  options: ListRequestOptions = {},
+): Promise<PaginatedUsersResult> {
+  const payload = await adminRequest<unknown>("/api/roles", {
+    token,
+    signal: options.signal,
+    cacheTtlMs:
+      options.cacheTtlMs === undefined
+        ? env.NEXT_PUBLIC_LIST_CACHE_TTL_SHORT_MS
+        : options.cacheTtlMs,
+    dedupe: options.dedupe,
+  });
+  const all = dedupeAdminRecordsById(normalizeRoleCatalog(payload));
+  const search = params.search?.trim().toLowerCase() ?? "";
+  const filtered = search
+    ? all.filter((row) => roleCatalogHaystack(row).includes(search))
+    : all;
+  const page = params.page && params.page > 0 ? params.page : 1;
+  const limit =
+    params.limit && params.limit > 0
+      ? Math.min(params.limit, env.NEXT_PUBLIC_MAX_PAGE_SIZE || 100)
+      : Math.max(filtered.length, 1);
+  const total = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(total / limit) || 1);
+  const safePage = Math.min(page, totalPages);
+  const start = (safePage - 1) * limit;
+  return {
+    rows: filtered.slice(start, start + limit),
+    page: safePage,
+    limit,
+    total,
+    totalPages,
+  };
+}
+
 /**
  * One backend page of roles or permissions. Do not loop this from the UI —
  * GET /api/roles and GET /api/permissions are already paginated and throttled.
@@ -2744,6 +2843,9 @@ export async function listResourcePage(
   params: CatalogQueryParams = {},
   options: ListRequestOptions = {},
 ): Promise<PaginatedUsersResult> {
+  if (resource === "roles") {
+    return listRolesCatalog(token, params, options);
+  }
   const page = params.page && params.page > 0 ? params.page : 1;
   const limit =
     params.limit && params.limit > 0
@@ -5109,6 +5211,44 @@ export async function syncAccessControlDeviceDoors(
   );
 }
 
+export type AccessDoorLiveCommand =
+  | "open"
+  | "close"
+  | "always-open"
+  | "always-close";
+
+export async function commandAccessControlDoor(
+  token: string,
+  id: string | number,
+  command: AccessDoorLiveCommand,
+) {
+  return adminRequest<unknown>(`/api/access-control/doors/${id}/${command}`, {
+    method: "POST",
+    token,
+  });
+}
+
+export async function getAccessControlDoorDeviceConfig(
+  token: string,
+  id: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/access-control/doors/${id}/device-config`,
+    { token },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function syncAccessControlDoorToDevice(
+  token: string,
+  id: string | number,
+) {
+  return adminRequest<unknown>(`/api/access-control/doors/${id}/sync-to-device`, {
+    method: "POST",
+    token,
+  });
+}
+
 export async function syncAccessControlDeviceTemplates(
   token: string,
   id: string | number,
@@ -5632,6 +5772,29 @@ export async function pullHikvisionAttendancePage(
   );
 }
 
+export async function manageHikvisionDevice(
+  token: string,
+  deviceId: string | number,
+  data: AdminRecord = {},
+) {
+  return adminRequest<unknown>(`/api/hikvision/devices/${deviceId}/manage`, {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function getHikvisionSyncJob(
+  token: string,
+  jobId: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/hikvision/sync-jobs/${jobId}`,
+    { token },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
 export async function syncAccessControlDeviceWeekPlans(
   token: string,
   id: string | number,
@@ -5770,6 +5933,57 @@ export async function getAccessDeviceCommandLogById(
   return normalizeSingle(payload) ?? asRecord(payload);
 }
 
+export async function listAccessDeviceAuditLogs(
+  token: string,
+  deviceId: string | number,
+  params: AccessAuditLogQueryParams = {},
+): Promise<PaginatedUsersResult> {
+  const fallbackPage = params.page && params.page > 0 ? params.page : 1;
+  const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20;
+  const query = buildAccessAuditLogQuery(params);
+  const payload = await adminRequest<unknown>(
+    `/api/access-control/devices/${deviceId}/audit-logs${query}`,
+    { token },
+  );
+  const rows = normalizeList(payload);
+  const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit);
+  return { rows, ...pagination };
+}
+
+export async function listAccessDeviceScopedCommandLogs(
+  token: string,
+  deviceId: string | number,
+  params: AccessDeviceCommandLogQueryParams = {},
+): Promise<PaginatedUsersResult> {
+  const fallbackPage = params.page && params.page > 0 ? params.page : 1;
+  const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20;
+  const query = buildAccessDeviceCommandLogQuery(params);
+  const payload = await adminRequest<unknown>(
+    `/api/access-control/devices/${deviceId}/command-logs${query}`,
+    { token },
+  );
+  const rows = normalizeList(payload);
+  const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit);
+  return { rows, ...pagination };
+}
+
+export async function listAccessEmployeeAuditLogs(
+  token: string,
+  employeeId: string | number,
+  params: AccessAuditLogQueryParams = {},
+): Promise<PaginatedUsersResult> {
+  const fallbackPage = params.page && params.page > 0 ? params.page : 1;
+  const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20;
+  const query = buildAccessAuditLogQuery(params);
+  const payload = await adminRequest<unknown>(
+    `/api/access-control/employees/${employeeId}/audit-logs${query}`,
+    { token },
+  );
+  const rows = normalizeList(payload);
+  const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit);
+  return { rows, ...pagination };
+}
+
 export async function listHikvisionSyncLogs(
   token: string,
   params: HikvisionSyncLogQueryParams = {},
@@ -5808,6 +6022,84 @@ export async function activateAttendancePolicy(
       token,
     },
   );
+}
+
+export async function activateAttendanceGeofence(
+  token: string,
+  id: string | number,
+) {
+  return adminRequest<unknown>(`/api/attendance/geofences/${id}/activate`, {
+    method: "PATCH",
+    token,
+  });
+}
+
+export async function deactivateAttendanceGeofence(
+  token: string,
+  id: string | number,
+) {
+  return adminRequest<unknown>(`/api/attendance/geofences/${id}/deactivate`, {
+    method: "PATCH",
+    token,
+  });
+}
+
+export async function validateAttendanceGeofenceLocation(
+  token: string,
+  id: string | number,
+  data: {
+    latitude: number;
+    longitude: number;
+    accuracyMeters?: number;
+  },
+) {
+  return adminRequest<unknown>(
+    `/api/attendance/geofences/${id}/validate-location`,
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
+  );
+}
+
+export async function activateAttendanceWifiNetwork(
+  token: string,
+  id: string | number,
+) {
+  return adminRequest<unknown>(`/api/attendance/wifi-networks/${id}/activate`, {
+    method: "PATCH",
+    token,
+  });
+}
+
+export async function deactivateAttendanceWifiNetwork(
+  token: string,
+  id: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/attendance/wifi-networks/${id}/deactivate`,
+    {
+      method: "PATCH",
+      token,
+    },
+  );
+}
+
+export async function validateAttendanceWifiNetwork(
+  token: string,
+  id: string | number,
+  data: {
+    ssid?: string;
+    bssid?: string;
+    ipAddress?: string;
+  } = {},
+) {
+  return adminRequest<unknown>(`/api/attendance/wifi-networks/${id}/validate`, {
+    method: "POST",
+    token,
+    body: data,
+  });
 }
 
 export async function listEmployeePositions(
@@ -7150,11 +7442,12 @@ export async function uploadMyDocument(token: string, data: AdminRecord) {
   });
 }
 
-export async function downloadMyDocument(
+async function downloadAdminBlob(
+  path: string,
   token: string,
-  id: string | number,
+  fallbackName: string,
 ): Promise<{ blob: Blob; filename: string; contentType: string | null }> {
-  const response = await fetch(buildUrl(`/api/me/documents/${id}/download`), {
+  const response = await fetch(buildUrl(path), {
     method: "GET",
     headers: {
       accept: "*/*",
@@ -7183,9 +7476,20 @@ export async function downloadMyDocument(
   const filenameMatch = disposition.match(/filename\*?=(?:UTF-8''|"?)([^";]+)/i);
   return {
     blob,
-    filename: filenameMatch?.[1] ? decodeURIComponent(filenameMatch[1]) : `document-${id}`,
+    filename: filenameMatch?.[1] ? decodeURIComponent(filenameMatch[1]) : fallbackName,
     contentType: response.headers.get("content-type"),
   };
+}
+
+export async function downloadMyDocument(
+  token: string,
+  id: string | number,
+): Promise<{ blob: Blob; filename: string; contentType: string | null }> {
+  return downloadAdminBlob(
+    `/api/me/documents/${id}/download`,
+    token,
+    `document-${id}`,
+  );
 }
 
 export async function submitMyResignation(token: string, data: AdminRecord) {
@@ -7282,6 +7586,64 @@ export async function cancelMyProfileChangeRequest(
   });
 }
 
+export async function listMyProfileChangeRequestHistory(
+  token: string,
+  id: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/me/profile-change-requests/${id}/history`,
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function previewMyProfileChangeRequestFile(
+  token: string,
+  id: string | number,
+  fileId: string | number,
+): Promise<{ blob: Blob; filename: string; contentType: string | null }> {
+  return downloadAdminBlob(
+    `/api/me/profile-change-requests/${id}/files/${fileId}`,
+    token,
+    `profile-change-${id}-file-${fileId}`,
+  );
+}
+
+export async function uploadMyProfileChangePhoto(token: string, file: File) {
+  const formData = new FormData();
+  formData.set("file", file);
+
+  const response = await fetch(
+    buildUrl("/api/me/profile-change-requests/profile-photo"),
+    {
+      method: "POST",
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: formData,
+      cache: "no-store",
+    },
+  );
+
+  invalidateAdminGetCache();
+
+  const contentType = response.headers.get("content-type");
+  const text = await response.text();
+  const payload = parseResponseBodyText(text, contentType);
+
+  if (!response.ok) {
+    const error = new Error(extractMessage(payload, response.status)) as Error & {
+      status?: number;
+      payload?: unknown;
+    };
+    error.status = response.status;
+    error.payload = payload;
+    throw error;
+  }
+
+  return normalizeSingle(payload) ?? asRecord(payload) ?? payload;
+}
+
 export async function listHrProfileChangeRequests(
   token: string,
   params: Record<string, string | number | undefined> = {},
@@ -7347,6 +7709,29 @@ export async function requestHrProfileChangeCorrection(
   return adminRequest<unknown>(
     `/api/hr/profile-change-requests/${id}/request-correction`,
     { method: "POST", token, body: data },
+  );
+}
+
+export async function listHrProfileChangeRequestHistory(
+  token: string,
+  id: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/hr/profile-change-requests/${id}/history`,
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function previewHrProfileChangeRequestFile(
+  token: string,
+  id: string | number,
+  fileId: string | number,
+): Promise<{ blob: Blob; filename: string; contentType: string | null }> {
+  return downloadAdminBlob(
+    `/api/hr/profile-change-requests/${id}/files/${fileId}`,
+    token,
+    `profile-change-${id}-file-${fileId}`,
   );
 }
 
@@ -13388,8 +13773,14 @@ export async function addMyFieldVisitOpportunity(
   });
 }
 
-export async function listMyFieldFollowUps(token: string) {
-  const payload = await adminRequest<unknown>("/api/me/field-follow-ups", { token });
+export async function listMyFieldFollowUps(
+  token: string,
+  params: Record<string, string | number | undefined> = {},
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/me/field-visits/follow-ups/list${buildRecordQuery(params)}`,
+    { token },
+  );
   return normalizeList(payload);
 }
 
@@ -13398,12 +13789,18 @@ export async function completeMyFieldFollowUp(
   id: string | number,
   data: AdminRecord = {},
 ) {
-  return adminRequest<unknown>(`/api/me/field-follow-ups/${id}/complete`, {
-    method: "POST",
-    token,
-    body: data,
-  });
+  return adminRequest<unknown>(
+    `/api/me/field-visits/follow-ups/${id}/complete`,
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
+  );
 }
+
+export const listMyFieldVisitFollowUps = listMyFieldFollowUps;
+export const completeMyFieldVisitFollowUp = completeMyFieldFollowUp;
 
 export async function syncMyFieldWork(token: string, data: AdminRecord) {
   return adminRequest<unknown>("/api/me/field-sync", {

@@ -35,13 +35,17 @@ import {
   deleteMyProfileChangeRequest,
   downloadMyDocument,
   fileToBase64UploadDto,
+  getMyProfileChangeRequest,
   listMyActionItems,
   listMyDocuments,
+  listMyProfileChangeRequestHistory,
   listMyProfileChangeRequests,
   listMyRequests,
+  previewMyProfileChangeRequestFile,
   submitMyProfileChangeRequest,
   submitMyResignation,
   uploadMyDocument,
+  uploadMyProfileChangePhoto,
   validateMyProfileChangeRequest,
   type AdminRecord,
 } from "@/lib/admin-api"
@@ -142,6 +146,26 @@ function downloadBlob(blob: Blob, filename: string) {
   URL.revokeObjectURL(url)
 }
 
+function profileChangeFiles(row: AdminRecord | null) {
+  if (!row) return [] as Array<{ id: string; name: string }>
+  const candidates = [row.files, row.pendingFiles, row.pending_files, row.attachments, row.file]
+  const files: Array<{ id: string; name: string }> = []
+  for (const candidate of candidates) {
+    const list = Array.isArray(candidate) ? candidate : candidate ? [candidate] : []
+    for (const item of list) {
+      if (!item || typeof item !== "object") continue
+      const record = item as AdminRecord
+      const id = rowId(record)
+      if (!id) continue
+      files.push({
+        id,
+        name: readString(record, ["fileName", "file_name", "name", "originalName"], `File ${id}`),
+      })
+    }
+  }
+  return files
+}
+
 function collectChangePayload(requestType: string, form: Record<string, string>) {
   if (requestType === "OTHER_PROFILE_INFORMATION") {
     const field = form.field?.trim()
@@ -174,6 +198,9 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
   const [formError, setFormError] = React.useState<string | null>(null)
   const [saving, setSaving] = React.useState(false)
   const [busyId, setBusyId] = React.useState("")
+  const [historyOpen, setHistoryOpen] = React.useState(false)
+  const [historyRows, setHistoryRows] = React.useState<AdminRecord[]>([])
+  const [historyLoading, setHistoryLoading] = React.useState(false)
 
   const load = React.useCallback(async () => {
     const token = readStoredToken()
@@ -268,20 +295,23 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
       } else if (createMode === "change") {
         const requestType = form.request_type || "CONTACT_INFORMATION"
         if (requestType === "PROFILE_PHOTO") {
-          throw new Error("Change your photo from My Profile instead.")
+          if (!file) throw new Error("Choose a photo to send for HR approval.")
+          await uploadMyProfileChangePhoto(token, file)
+          toast.success("Photo sent to HR for review.")
+        } else {
+          const changesPayload = collectChangePayload(requestType, form)
+          if (Object.keys(changesPayload).length === 0) {
+            throw new Error("Fill in at least one new value.")
+          }
+          const payload = {
+            request_type: requestType,
+            changes: changesPayload,
+            reason: form.reason || undefined,
+          }
+          await validateMyProfileChangeRequest(token, payload)
+          await createMyProfileChangeRequest(token, payload)
+          toast.success("Sent to HR for review.")
         }
-        const changesPayload = collectChangePayload(requestType, form)
-        if (Object.keys(changesPayload).length === 0) {
-          throw new Error("Fill in at least one new value.")
-        }
-        const payload = {
-          request_type: requestType,
-          changes: changesPayload,
-          reason: form.reason || undefined,
-        }
-        await validateMyProfileChangeRequest(token, payload)
-        await createMyProfileChangeRequest(token, payload)
-        toast.success("Sent to HR for review.")
       } else {
         if (!form.last_working_date || !form.reason) {
           throw new Error("Last working day and a short reason are required.")
@@ -442,6 +472,51 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
                     Delete
                   </button>
                 ) : null}
+                <button
+                  type="button"
+                  className={actionButtonClass}
+                  disabled={busyId === `hist-${id}`}
+                  onClick={() => {
+                    const token = readStoredToken()
+                    if (!token || !id) return
+                    setBusyId(`hist-${id}`)
+                    setHistoryOpen(true)
+                    setHistoryLoading(true)
+                    void listMyProfileChangeRequestHistory(token, id)
+                      .then(setHistoryRows)
+                      .catch((errorObject) => {
+                        setHistoryRows([])
+                        toast.error(errorObject instanceof Error ? errorObject.message : "Could not load history.")
+                      })
+                      .finally(() => {
+                        setHistoryLoading(false)
+                        setBusyId("")
+                      })
+                  }}
+                >
+                  History
+                </button>
+                {profileChangeFiles(row).map((fileItem) => (
+                  <button
+                    key={fileItem.id}
+                    type="button"
+                    className={actionButtonClass}
+                    disabled={busyId === `file-${fileItem.id}`}
+                    onClick={() => {
+                      const token = readStoredToken()
+                      if (!token || !id) return
+                      setBusyId(`file-${fileItem.id}`)
+                      void previewMyProfileChangeRequestFile(token, id, fileItem.id)
+                        .then((result) => downloadBlob(result.blob, result.filename))
+                        .catch((errorObject) =>
+                          toast.error(errorObject instanceof Error ? errorObject.message : "Could not open file."),
+                        )
+                        .finally(() => setBusyId(""))
+                    }}
+                  >
+                    {fileItem.name}
+                  </button>
+                ))}
               </div>
             )
           },
@@ -611,7 +686,17 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
             itemsPerPage={20}
             showExport={false}
             storageKey={`me-requests-${activeTab}`}
-            onRowSelect={(_, row) => row && setDetail(row)}
+            onRowSelect={(_, row) => {
+              if (!row) return
+              setDetail(row)
+              const token = readStoredToken()
+              const id = rowId(row)
+              if (token && id && activeTab === "profile-changes") {
+                void getMyProfileChangeRequest(token, id)
+                  .then((record) => record && setDetail(record))
+                  .catch(() => undefined)
+              }
+            }}
           />
         </div>
       )}
@@ -707,20 +792,32 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
                     <option value="PERSONAL_INFORMATION">Name or personal details</option>
                     <option value="ADDRESS_INFORMATION">Address</option>
                     <option value="EMERGENCY_CONTACT">Emergency contact</option>
+                    <option value="PROFILE_PHOTO">Profile photo</option>
                     <option value="OTHER_PROFILE_INFORMATION">Something else</option>
                   </select>
                 </label>
-                {changeFields.map((field) => (
-                  <label key={field.key} className="grid gap-1.5 text-sm">
-                    <span className="font-medium">{field.label}</span>
+                {form.request_type === "PROFILE_PHOTO" ? (
+                  <label className="grid gap-1.5 text-sm">
+                    <span className="font-medium">Photo</span>
                     <input
-                      type={field.type ?? "text"}
-                      className={inputClass}
-                      value={form[field.key] ?? ""}
-                      onChange={(event) => setForm((current) => ({ ...current, [field.key]: event.target.value }))}
+                      type="file"
+                      accept="image/*"
+                      onChange={(event) => setFile(event.target.files?.[0] ?? null)}
                     />
                   </label>
-                ))}
+                ) : (
+                  changeFields.map((field) => (
+                    <label key={field.key} className="grid gap-1.5 text-sm">
+                      <span className="font-medium">{field.label}</span>
+                      <input
+                        type={field.type ?? "text"}
+                        className={inputClass}
+                        value={form[field.key] ?? ""}
+                        onChange={(event) => setForm((current) => ({ ...current, [field.key]: event.target.value }))}
+                      />
+                    </label>
+                  ))
+                )}
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Why (optional)</span>
                   <textarea
@@ -740,6 +837,38 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
             </button>
             <button type="button" className={primaryButtonClass} onClick={() => void onSave()} disabled={saving}>
               {saving ? <Loader2Icon className="size-4 animate-spin" /> : createMode === "change" ? "Send to HR" : "Upload"}
+            </button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
+
+      <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
+        <DialogPopup className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Request history</DialogTitle>
+            <DialogDescription>Audit events for this profile change request.</DialogDescription>
+          </DialogHeader>
+          {historyLoading ? (
+            <p className="text-sm text-muted-foreground">Loading…</p>
+          ) : historyRows.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No history yet.</p>
+          ) : (
+            <div className="max-h-80 space-y-2 overflow-auto">
+              {historyRows.map((row, index) => (
+                <div key={rowId(row) || index} className="border-b border-border py-2 text-sm last:border-0">
+                  <p className="font-medium">
+                    {prettify(readString(row, ["action", "event", "status", "type"], "Update"))}
+                  </p>
+                  <p className="text-muted-foreground">
+                    {readString(row, ["comment", "note", "message"], formatDate(row.createdAt ?? row.created_at))}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+          <DialogFooter>
+            <button type="button" className={secondaryButtonClass} onClick={() => setHistoryOpen(false)}>
+              Close
             </button>
           </DialogFooter>
         </DialogPopup>

@@ -16,7 +16,20 @@ import Link from "next/link";
 
 interface LoginFlowProps {
   defaultEmail?: string;
+  nextPath?: string;
   onSuccess?: (redirectUrl: string) => void;
+}
+
+function safeNextPath(value: string | undefined) {
+  if (!value) return "/dashboard"
+  const path = value.trim()
+  if (!path.startsWith("/") || path.startsWith("//") || path.includes("://")) {
+    return "/dashboard"
+  }
+  if (path.startsWith("/dashboard") || path.startsWith("/onboarding")) {
+    return path
+  }
+  return "/dashboard"
 }
 
 type LoginStep = "credentials" | "two-factor";
@@ -35,7 +48,8 @@ function isValidTwoFactorCode(value: string) {
   return /^(\d{6}|[A-Fa-f0-9]{10}|[A-Fa-f0-9]{5}-[A-Fa-f0-9]{5})$/.test(value.trim());
 }
 
-export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
+export function LoginFlow({ defaultEmail = "", nextPath, onSuccess }: LoginFlowProps) {
+  const homePath = safeNextPath(nextPath)
   const [email, setEmail] = useState(defaultEmail);
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState<string | null>(null);
@@ -179,7 +193,7 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
         normalizedEmail,
         response.requiresPasswordChange || response.user?.requiresPasswordChange
           ? "/change-password?required=1"
-          : "/dashboard",
+          : homePath,
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : "Login failed. Please try again.";
@@ -218,7 +232,7 @@ export function LoginFlow({ defaultEmail = "", onSuccess }: LoginFlowProps) {
         completedEmail,
         response.user.requiresPasswordChange
           ? "/change-password?required=1"
-          : "/dashboard",
+          : homePath,
       );
     } catch (err) {
       const message =

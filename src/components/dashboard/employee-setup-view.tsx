@@ -148,7 +148,7 @@ function applyGradeToForm(row: AdminRecord): GradeFormState {
   }
 }
 
-export function EmployeeSetupView() {
+export function EmployeeSetupView({ mode = "full" }: { mode?: "full" | "numbering" }) {
   const [token, setToken] = React.useState("")
   const [numbering, setNumbering] = React.useState<AdminRecord | null>(null)
   const [numberingForm, setNumberingForm] = React.useState({
@@ -406,7 +406,7 @@ export function EmployeeSetupView() {
 
   return (
     <>
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+      <div className={mode === "numbering" ? "grid gap-4" : "grid gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]"}>
         <Card className="min-w-0">
           <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
             <div className="space-y-1">
@@ -484,6 +484,7 @@ export function EmployeeSetupView() {
           </CardContent>
         </Card>
 
+        {mode === "full" ? (
         <Card className="min-w-0">
           <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
             <div className="space-y-1">
@@ -550,8 +551,11 @@ export function EmployeeSetupView() {
             )}
           </CardContent>
         </Card>
+        ) : null}
       </div>
 
+      {mode === "full" ? (
+      <>
       <AlertDialog
         open={editorOpen}
         onOpenChange={(open) => {
@@ -655,6 +659,8 @@ export function EmployeeSetupView() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      </>
+      ) : null}
     </>
   )
 }

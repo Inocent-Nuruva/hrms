@@ -34,7 +34,9 @@ import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import {
   approveHrProfileChangeRequest,
   getHrProfileChangeRequest,
+  listHrProfileChangeRequestHistory,
   listHrProfileChangeRequests,
+  previewHrProfileChangeRequestFile,
   rejectHrProfileChangeRequest,
   requestHrProfileChangeCorrection,
   startHrProfileChangeReview,
@@ -49,10 +51,39 @@ function readStoredToken() {
   return readStoredSessionTokens().accessToken.trim()
 }
 
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement("a")
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+function profileChangeFiles(row: AdminRecord | null) {
+  if (!row) return [] as Array<{ id: string; name: string }>
+  const candidates = [row.files, row.pendingFiles, row.pending_files, row.attachments, row.file]
+  const files: Array<{ id: string; name: string }> = []
+  for (const candidate of candidates) {
+    const list = Array.isArray(candidate) ? candidate : candidate ? [candidate] : []
+    for (const item of list) {
+      if (!item || typeof item !== "object") continue
+      const record = item as AdminRecord
+      const id = rowId(record)
+      if (!id) continue
+      files.push({
+        id,
+        name: readString(record, ["fileName", "file_name", "name", "originalName"], `File ${id}`),
+      })
+    }
+  }
+  return files
+}
+
 export function HrProfileChangeRequestsView() {
   const actor = useDashboardActor()
   const canAccess =
-    !actor.ready ||
+    actor.ready &&
     canAccessDashboardRoute("/dashboard/employees/profile-change-requests", actor.permissionLabels, actor.accessMode)
   const leaveIfForbidden = useLeaveIfForbidden()
   useForbiddenRouteGuard(canAccess)
@@ -67,6 +98,9 @@ export function HrProfileChangeRequestsView() {
   const [formError, setFormError] = React.useState<string | null>(null)
   const [saving, setSaving] = React.useState(false)
   const [busyId, setBusyId] = React.useState("")
+  const [historyOpen, setHistoryOpen] = React.useState(false)
+  const [historyRows, setHistoryRows] = React.useState<AdminRecord[]>([])
+  const [historyLoading, setHistoryLoading] = React.useState(false)
 
   const load = React.useCallback(async () => {
     const token = readStoredToken()
@@ -160,6 +194,30 @@ export function HrProfileChangeRequestsView() {
             <button type="button" className={actionButtonClass} onClick={() => { setForm({ id, mode: "approve" }); setFormOpen(true) }}>Approve</button>
             <button type="button" className={actionButtonClass} onClick={() => { setForm({ id, mode: "correct" }); setFormOpen(true) }}>Return</button>
             <button type="button" className={actionButtonClass} onClick={() => { setForm({ id, mode: "reject" }); setFormOpen(true) }}>Reject</button>
+            <button
+              type="button"
+              className={actionButtonClass}
+              disabled={busyId === `hist-${id}`}
+              onClick={() => {
+                const token = readStoredToken()
+                if (!token || !id) return
+                setBusyId(`hist-${id}`)
+                setHistoryOpen(true)
+                setHistoryLoading(true)
+                void listHrProfileChangeRequestHistory(token, id)
+                  .then(setHistoryRows)
+                  .catch((errorObject) => {
+                    setHistoryRows([])
+                    toast.error(errorObject instanceof Error ? errorObject.message : "Could not load history.")
+                  })
+                  .finally(() => {
+                    setHistoryLoading(false)
+                    setBusyId("")
+                  })
+              }}
+            >
+              History
+            </button>
           </div>
         )
       },
@@ -209,7 +267,69 @@ export function HrProfileChangeRequestsView() {
           }}
         />
       </div>
-      <RecordDetailsDialog open={Boolean(detail)} onOpenChange={(open) => !open && setDetail(null)} title={optionLabel(detail)} row={detail} />
+      <RecordDetailsDialog
+        open={Boolean(detail)}
+        onOpenChange={(open) => !open && setDetail(null)}
+        title={optionLabel(detail)}
+        row={detail}
+        footer={
+          profileChangeFiles(detail).length ? (
+            <div className="flex flex-wrap gap-2">
+              {profileChangeFiles(detail).map((fileItem) => (
+                <button
+                  key={fileItem.id}
+                  type="button"
+                  className={actionButtonClass}
+                  disabled={busyId === `file-${fileItem.id}`}
+                  onClick={() => {
+                    const token = readStoredToken()
+                    const id = detail ? rowId(detail) : ""
+                    if (!token || !id) return
+                    setBusyId(`file-${fileItem.id}`)
+                    void previewHrProfileChangeRequestFile(token, id, fileItem.id)
+                      .then((result) => downloadBlob(result.blob, result.filename))
+                      .catch((errorObject) =>
+                        toast.error(errorObject instanceof Error ? errorObject.message : "Could not open file."),
+                      )
+                      .finally(() => setBusyId(""))
+                  }}
+                >
+                  Preview {fileItem.name}
+                </button>
+              ))}
+            </div>
+          ) : undefined
+        }
+      />
+      <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
+        <DialogPopup className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Request history</DialogTitle>
+            <DialogDescription>Audit events for this profile change request.</DialogDescription>
+          </DialogHeader>
+          {historyLoading ? (
+            <p className="text-sm text-muted-foreground">Loading…</p>
+          ) : historyRows.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No history yet.</p>
+          ) : (
+            <div className="max-h-80 space-y-2 overflow-auto">
+              {historyRows.map((row, index) => (
+                <div key={rowId(row) || index} className="border-b border-border py-2 text-sm last:border-0">
+                  <p className="font-medium">{prettify(readString(row, ["action", "event", "status", "type"], "Update"))}</p>
+                  <p className="text-muted-foreground">
+                    {readString(row, ["comment", "note", "message"], formatDate(row.createdAt ?? row.created_at))}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+          <DialogFooter>
+            <button type="button" className={secondaryButtonClass} onClick={() => setHistoryOpen(false)}>
+              Close
+            </button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
         <DialogPopup className="max-w-xl">
           <DialogHeader>

@@ -66,7 +66,7 @@ function readStoredToken() {
 export function ActivityOperationsView({ activeTab }: { activeTab: ActivityOpsTab }) {
   const actor = useDashboardActor()
   const canAccess =
-    !actor.ready ||
+    actor.ready &&
     canAccessDashboardRoute("/dashboard/activities/overview", actor.permissionLabels, actor.accessMode)
   const leaveIfForbidden = useLeaveIfForbidden()
   useForbiddenRouteGuard(canAccess)

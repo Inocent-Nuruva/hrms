@@ -5,6 +5,7 @@ export const DASHBOARD_ACTOR_EVENT = "hrms:dashboard-actor-changed"
 export const DASHBOARD_PERMISSION_STORAGE_KEY = "hrms.dashboard.actorPermissions"
 export const DASHBOARD_ACCESS_MODE_STORAGE_KEY = "hrms.dashboard.accessMode"
 export const DASHBOARD_IS_ADMIN_STORAGE_KEY = "hrms.dashboard.isAdmin"
+export const DASHBOARD_ROLES_STORAGE_KEY = "hrms.dashboard.actorRoles"
 export const DASHBOARD_AUTH_COOKIE = "hrms_dashboard_auth"
 export const DASHBOARD_TOKEN_COOKIE = "hrms_dashboard_token"
 export const DASHBOARD_PERMISSIONS_COOKIE = "hrms_dashboard_permissions"
@@ -24,6 +25,7 @@ export type DashboardAccessMode = "admin" | "employee"
 
 export type DashboardActorSnapshot = {
   permissionLabels: string[]
+  roleNames: string[]
   accessMode: DashboardAccessMode
   isAdmin: boolean
   ready: boolean
@@ -32,6 +34,7 @@ export type DashboardActorSnapshot = {
 
 type DashboardActorIdentityResolution = {
   permissionLabels: string[]
+  roleNames: string[]
   hasExplicitAdminIdentity: boolean
   hasExplicitEmployeeIdentity: boolean
   hasPermissionBasedAdminAccess: boolean
@@ -413,6 +416,8 @@ export const INSIGHTS_ROUTE_PERMISSION: PermissionRequirement = {
     "manage_dashboards",
     "launch_readiness:read",
     "security_events:read",
+    "analytics:read",
+    "sales_field:read",
   ],
   mode: "any",
 }
@@ -452,6 +457,29 @@ export const INSIGHTS_MANAGER_PERMISSION: PermissionRequirement = {
 
 export const INSIGHTS_READINESS_PERMISSION: PermissionRequirement = {
   permissions: ["launch_readiness:read", "security_events:read", "view_launch_readiness"],
+  mode: "any",
+}
+
+export const INSIGHTS_SALES_FIELD_PERMISSION: PermissionRequirement = {
+  permissions: [
+    "analytics:read",
+    "dashboards:read",
+    "view_dashboards",
+    "view_sales_field",
+    "sales_field:read",
+    "manage_analytics",
+  ],
+  mode: "any",
+}
+
+export const NUMBERING_ROUTE_PERMISSION: PermissionRequirement = {
+  permissions: [
+    "employees:create",
+    "employees:update",
+    "employee_numbering:read",
+    "employee_numbering:update",
+    "manage_employees",
+  ],
   mode: "any",
 }
 
@@ -890,11 +918,14 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/structure": STRUCTURE_ROUTE_PERMISSION,
   "/dashboard/structure/cost-centers": COST_CENTER_ROUTE_PERMISSION,
   "/dashboard/structure/grades": GRADE_ROUTE_PERMISSION,
+  "/dashboard/structure/numbering": NUMBERING_ROUTE_PERMISSION,
   "/dashboard/insights": INSIGHTS_ROUTE_PERMISSION,
   "/dashboard/insights/hr": INSIGHTS_HR_PERMISSION,
   "/dashboard/insights/management": INSIGHTS_MANAGEMENT_PERMISSION,
   "/dashboard/insights/manager": INSIGHTS_MANAGER_PERMISSION,
+  "/dashboard/insights/sales-field": INSIGHTS_SALES_FIELD_PERMISSION,
   "/dashboard/insights/readiness": INSIGHTS_READINESS_PERMISSION,
+  "/dashboard/help": null,
   "/dashboard/users": {
     permissions: [
       "users:read",
@@ -1224,6 +1255,70 @@ function collectDashboardIdentityHintsFromUnknown(
   for (const key of ["user", "profile", "role", "roles", "data", "items", "results"]) {
     collectDashboardIdentityHintsFromUnknown(record[key], sink)
   }
+}
+
+function collectRoleNamesFromUnknown(value: unknown, sink: Set<string>) {
+  if (typeof value === "string" && value.trim()) {
+    const text = value.trim()
+    if (!text.includes(":") && !text.startsWith("view_")) {
+      sink.add(text)
+    }
+    return
+  }
+
+  if (Array.isArray(value)) {
+    value.forEach((entry) => collectRoleNamesFromUnknown(entry, sink))
+    return
+  }
+
+  const record = asRecord(value)
+  if (!record) {
+    return
+  }
+
+  const direct = readString(record, [
+    "name",
+    "display_name",
+    "displayName",
+    "title",
+    "role_name",
+    "roleName",
+  ])
+  if (direct && !direct.includes(":") && !direct.startsWith("view_")) {
+    sink.add(direct)
+  }
+
+  for (const key of [
+    "role",
+    "roles",
+    "user_roles",
+    "userRoles",
+    "assigned_roles",
+    "assignedRoles",
+  ]) {
+    collectRoleNamesFromUnknown(record[key], sink)
+  }
+
+  for (const key of ["user", "profile", "data"]) {
+    const nested = asRecord(record[key])
+    if (nested) {
+      collectRoleNamesFromUnknown(nested.role, sink)
+      collectRoleNamesFromUnknown(nested.roles, sink)
+    }
+  }
+}
+
+export function readRoleNamesFromUnknown(...sources: unknown[]): string[] {
+  const sink = new Set<string>()
+  for (const source of sources) {
+    if (!source) continue
+    if (typeof source === "string" && source.includes(".")) {
+      collectRoleNamesFromUnknown(decodeJwtPayload(source), sink)
+      continue
+    }
+    collectRoleNamesFromUnknown(source, sink)
+  }
+  return Array.from(sink)
 }
 
 function readDashboardIdentityHintsFromUnknown(...sources: unknown[]) {
@@ -1599,6 +1694,7 @@ export function hasAdminDashboardAccess(permissionLabels: string[]) {
 function resolveDashboardActorIdentity(...sources: unknown[]): DashboardActorIdentityResolution {
   const explicitAccessMode = readExplicitDashboardAccessMode(...sources)
   const permissionLabels = readPermissionLabelsFromUnknown(...sources)
+  const roleNames = readRoleNamesFromUnknown(...sources)
   const identityHints = readDashboardIdentityHintsFromUnknown(...sources)
   const hasExplicitAdminIdentity = Array.from(identityHints).some((hint) =>
     ADMIN_IDENTITY_HINTS.has(hint)
@@ -1613,6 +1709,7 @@ function resolveDashboardActorIdentity(...sources: unknown[]): DashboardActorIde
 
   return {
     permissionLabels,
+    roleNames,
     hasExplicitAdminIdentity:
       explicitAccessMode === "admin" || hasExplicitAdminIdentity,
     hasExplicitEmployeeIdentity:
@@ -1645,10 +1742,12 @@ function clearCookie(name: string) {
 export function buildDashboardActorSnapshotFromSources(
   ...sources: unknown[]
 ): DashboardActorSnapshot {
-  const { permissionLabels, accessMode, isAdmin } = resolveDashboardActorIdentity(...sources)
+  const { permissionLabels, roleNames, accessMode, isAdmin } =
+    resolveDashboardActorIdentity(...sources)
 
   return {
     permissionLabels,
+    roleNames,
     accessMode,
     isAdmin,
     ready: true,
@@ -1667,6 +1766,10 @@ export function publishDashboardActorSnapshot(snapshot: DashboardActorSnapshot) 
   )
   window.sessionStorage.setItem(DASHBOARD_ACCESS_MODE_STORAGE_KEY, snapshot.accessMode)
   window.sessionStorage.setItem(DASHBOARD_IS_ADMIN_STORAGE_KEY, snapshot.isAdmin ? "1" : "0")
+  window.sessionStorage.setItem(
+    DASHBOARD_ROLES_STORAGE_KEY,
+    JSON.stringify(snapshot.roleNames ?? []),
+  )
 
   writeCookie(DASHBOARD_AUTH_COOKIE, "1")
   writeCookie(DASHBOARD_PERMISSIONS_COOKIE, JSON.stringify(snapshot.permissionLabels))
@@ -1692,6 +1795,7 @@ export function clearDashboardActorSnapshot() {
   window.sessionStorage.removeItem(DASHBOARD_PERMISSION_STORAGE_KEY)
   window.sessionStorage.removeItem(DASHBOARD_ACCESS_MODE_STORAGE_KEY)
   window.sessionStorage.removeItem(DASHBOARD_IS_ADMIN_STORAGE_KEY)
+  window.sessionStorage.removeItem(DASHBOARD_ROLES_STORAGE_KEY)
 
   clearCookie(DASHBOARD_AUTH_COOKIE)
   clearCookie(DASHBOARD_TOKEN_COOKIE)
@@ -1701,6 +1805,7 @@ export function clearDashboardActorSnapshot() {
     new CustomEvent<DashboardActorSnapshot>(DASHBOARD_ACTOR_EVENT, {
       detail: {
         permissionLabels: [],
+        roleNames: [],
         accessMode: "employee",
         isAdmin: false,
         ready: true,
@@ -1788,6 +1893,7 @@ export function readDashboardActorSnapshotFromBrowser(): DashboardActorSnapshot 
   if (typeof window === "undefined") {
     return {
       permissionLabels: [],
+      roleNames: [],
       accessMode: "employee",
       isAdmin: false,
       ready: false,
@@ -1812,6 +1918,7 @@ export function readDashboardActorSnapshotFromBrowser(): DashboardActorSnapshot 
       return {
         permissionLabels:
           permissionLabels.length > 0 ? permissionLabels : derivedSnapshot.permissionLabels,
+        roleNames: derivedSnapshot.roleNames,
         accessMode,
         isAdmin: accessMode === "admin",
         ready: true,

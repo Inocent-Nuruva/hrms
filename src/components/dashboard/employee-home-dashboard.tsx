@@ -2064,7 +2064,7 @@ export function EmployeeDashboardView({
               { href: "/dashboard/me/requests/actions", title: "My requests", icon: <FileText /> },
               { href: holidaysHref, title: "Holidays", icon: <CalendarIcon /> },
             ].filter((action) =>
-              !actor.ready ||
+              actor.ready &&
               canSeeDashboardPage(action.href, actor.permissionLabels, actor.accessMode)
             ).map((action, index) => (
               <motion.div

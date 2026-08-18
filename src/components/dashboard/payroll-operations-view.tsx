@@ -897,9 +897,11 @@ function PayrollDetailsContent({
 export function PayrollOperationsView() {
   const router = useRouter()
   const actor = useDashboardActor()
-  const canAccessPayroll =
-    !actor.ready ||
-    canAccessDashboardRoute("/dashboard/operations/payroll", actor.permissionLabels, actor.accessMode)
+  const canAccessPayroll = canAccessDashboardRoute(
+    "/dashboard/operations/payroll",
+    actor.permissionLabels,
+    actor.accessMode,
+  )
 
   React.useEffect(() => {
     if (!actor.ready) {
@@ -1349,39 +1351,45 @@ export function PayrollOperationsView() {
                     Approve
                   </button>
                 ) : null}
-                <button
-                  type="button"
-                  className={actionButtonClass}
-                  disabled={lockingRunId === id}
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    void onLockRun(row)
-                  }}
-                >
-                  {lockingRunId === id ? <Loader2Icon className="size-3.5 animate-spin" /> : "Lock"}
-                </button>
-                <button
-                  type="button"
-                  className={actionButtonClass}
-                  disabled={payslipRunId === id || status.toUpperCase() === "DRAFT"}
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    void onGeneratePayslips(row)
-                  }}
-                >
-                  {payslipRunId === id ? <Loader2Icon className="size-3.5 animate-spin" /> : "Payslips"}
-                </button>
-                <button
-                  type="button"
-                  className={actionButtonClass}
-                  disabled={bankingRunId === id}
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    void onGenerateBankingBatch(row)
-                  }}
-                >
-                  {bankingRunId === id ? <Loader2Icon className="size-3.5 animate-spin" /> : "Bank file"}
-                </button>
+                {canApprovePayroll ? (
+                  <button
+                    type="button"
+                    className={actionButtonClass}
+                    disabled={lockingRunId === id}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      void onLockRun(row)
+                    }}
+                  >
+                    {lockingRunId === id ? <Loader2Icon className="size-3.5 animate-spin" /> : "Lock"}
+                  </button>
+                ) : null}
+                {canMutatePayroll ? (
+                  <button
+                    type="button"
+                    className={actionButtonClass}
+                    disabled={payslipRunId === id || status.toUpperCase() === "DRAFT"}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      void onGeneratePayslips(row)
+                    }}
+                  >
+                    {payslipRunId === id ? <Loader2Icon className="size-3.5 animate-spin" /> : "Payslips"}
+                  </button>
+                ) : null}
+                {canMutatePayroll ? (
+                  <button
+                    type="button"
+                    className={actionButtonClass}
+                    disabled={bankingRunId === id}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      void onGenerateBankingBatch(row)
+                    }}
+                  >
+                    {bankingRunId === id ? <Loader2Icon className="size-3.5 animate-spin" /> : "Bank file"}
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className={actionButtonClass}
@@ -2889,7 +2897,16 @@ export function PayrollOperationsView() {
     return { activeRuns, openInputs, enabledProfiles, totalPeriods }
   }, [dashboard, periods.length, recentRuns])
 
-  if (actor.ready && !canAccessPayroll) {
+  if (!actor.ready) {
+    return (
+      <div className="flex items-center gap-2 py-10 text-sm text-muted-foreground">
+        <Loader2Icon className="size-4 animate-spin" />
+        Checking payroll access…
+      </div>
+    )
+  }
+
+  if (!canAccessPayroll) {
     return null
   }
 

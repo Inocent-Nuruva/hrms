@@ -45,11 +45,12 @@ import {
   type AdminRecord,
 } from "@/lib/admin-api"
 import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
+import { EmployeeSetupView } from "@/components/dashboard/employee-setup-view"
 import { useForbiddenRouteGuard, useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
 import { readStoredSessionTokens } from "@/lib/session-client"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 
-export type StructureOpsTab = "cost-centers" | "grades"
+export type StructureOpsTab = "cost-centers" | "grades" | "numbering"
 
 function readStoredToken() {
   return readStoredSessionTokens().accessToken.trim()
@@ -58,12 +59,21 @@ function readStoredToken() {
 export function StructureOperationsView({ activeTab }: { activeTab: StructureOpsTab }) {
   const actor = useDashboardActor()
   const structurePath =
-    activeTab === "grades" ? "/dashboard/structure/grades" : "/dashboard/structure/cost-centers"
+    activeTab === "grades"
+      ? "/dashboard/structure/grades"
+      : activeTab === "numbering"
+        ? "/dashboard/structure/numbering"
+        : "/dashboard/structure/cost-centers"
   const canAccess =
-    !actor.ready ||
+    actor.ready &&
     canAccessDashboardRoute(structurePath, actor.permissionLabels, actor.accessMode)
   const leaveIfForbidden = useLeaveIfForbidden()
   useForbiddenRouteGuard(canAccess)
+
+  if (activeTab === "numbering") {
+    if (!canAccess) return null
+    return <EmployeeSetupView mode="numbering" />
+  }
 
   const [rows, setRows] = React.useState<AdminRecord[]>([])
   const [branches, setBranches] = React.useState<AdminRecord[]>([])

@@ -6,10 +6,14 @@ import {
   DASHBOARD_TOKEN_COOKIE,
 } from "@/lib/dashboard-permissions"
 
+function isSafeNextPath(pathname: string) {
+  return pathname.startsWith("/dashboard") || pathname.startsWith("/onboarding")
+}
+
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  if (!pathname.startsWith("/dashboard") && !pathname.startsWith("/onboarding")) {
+  if (!isSafeNextPath(pathname)) {
     return NextResponse.next()
   }
 
@@ -17,10 +21,10 @@ export function proxy(request: NextRequest) {
     request.cookies.get(DASHBOARD_AUTH_COOKIE)?.value === "1" ||
     Boolean(request.cookies.get(DASHBOARD_TOKEN_COOKIE)?.value)
 
-  // Optimistic guard: if this session has not been synced into cookies yet,
-  // fall through and let the client-side guard bootstrap the snapshot.
   if (!hasAuthCookie) {
-    return NextResponse.next()
+    const loginUrl = new URL("/login", request.url)
+    loginUrl.searchParams.set("next", pathname)
+    return NextResponse.redirect(loginUrl)
   }
 
   return NextResponse.next()

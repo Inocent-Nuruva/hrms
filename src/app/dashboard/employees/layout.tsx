@@ -35,8 +35,9 @@ export default function EmployeesLayout({
     }
   }, [actor.accessMode, actor.ready, pathname, router])
 
-  // Avoid a blank flash for true self-service users; HR/admin keeps rendering.
-  if (actor.ready && actor.accessMode === "employee") {
+  // Do not paint the HR Employees shell as a fallback while identity is
+  // unknown — employees would see it first, then watch it disappear.
+  if (!actor.ready || actor.accessMode === "employee") {
     return null
   }
 

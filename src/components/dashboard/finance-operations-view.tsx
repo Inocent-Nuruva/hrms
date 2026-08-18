@@ -66,7 +66,7 @@ function readStoredToken() {
 export function FinanceOperationsView({ activeTab }: { activeTab: FinanceOpsTab }) {
   const actor = useDashboardActor()
   const canAccess =
-    !actor.ready ||
+    actor.ready &&
     canAccessDashboardRoute("/dashboard/finance/overview", actor.permissionLabels, actor.accessMode)
   const leaveIfForbidden = useLeaveIfForbidden()
   useForbiddenRouteGuard(canAccess)

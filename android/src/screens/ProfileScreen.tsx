@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -7,6 +8,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BadgeCheck, BellRing, BriefcaseBusiness, Building2, CreditCard, Fingerprint, Mail, Phone, UserRound } from 'lucide-react-native';
@@ -41,6 +43,7 @@ interface Props {
 }
 
 export function ProfileScreen({ auth }: Props) {
+  const router = useRouter();
   const { isDark } = useThemePreference();
   const backgroundColor = isDark ? COLORS.backgroundDark : COLORS.background;
   const textColor = isDark ? COLORS.onSurfaceDark : COLORS.onSurface;
@@ -327,6 +330,17 @@ export function ProfileScreen({ auth }: Props) {
               {!identifications.length && !bankAccounts.length ? (
                 <Text style={[styles.emptyText, { color: mutedColor }]}>Detailed records are best reviewed on the web portal.</Text>
               ) : null}
+              {([
+                { href: '/field', label: 'Field visits' },
+                { href: '/finance', label: 'Finance applications' },
+                { href: '/performance', label: 'Performance' },
+                { href: '/activities', label: 'Daily activities' },
+                { href: '/documents', label: 'Documents' },
+              ] as const).map((item) => (
+                <Pressable key={item.href} onPress={() => router.push(item.href)} style={{ paddingVertical: 10 }}>
+                  <Text style={{ color: COLORS.primary, fontWeight: '700' }}>{item.label}</Text>
+                </Pressable>
+              ))}
             </View>
           ) : null}
         </ScreenTransition>

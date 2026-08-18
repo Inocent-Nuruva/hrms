@@ -424,7 +424,7 @@ export function AccessControlActivityView({
   const config = SECTION_CONFIG[activeSection]
   const sectionPath = `/dashboard/access-control/${activeSection}`
   const canAccess =
-    !actor.ready ||
+    actor.ready &&
     canAccessDashboardRoute(sectionPath, actor.permissionLabels, actor.accessMode)
   useForbiddenRouteGuard(canAccess)
 
