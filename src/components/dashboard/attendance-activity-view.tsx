@@ -2611,10 +2611,9 @@ export function AttendanceActivityView({ section }: { section: string }) {
     if (appliedDailySummaryFilters.status) count += 1
     if (appliedDailySummaryFilters.check_in_after) count += 1
     if (appliedDailySummaryFilters.check_in_before) count += 1
-    if (recordSearch.trim()) count += 1
     if (dailySummaryPageSize !== DEFAULT_DAILY_SUMMARY_PAGE_SIZE) count += 1
     return count
-  }, [appliedDailySummaryFilters, dailySummaryPageSize, recordSearch])
+  }, [appliedDailySummaryFilters, dailySummaryPageSize])
 
   const branchNameById = React.useMemo(() => {
     const map = new Map<string, string>()
@@ -2646,7 +2645,6 @@ export function AttendanceActivityView({ section }: { section: string }) {
       check_in_after: "",
       check_in_before: "",
     }
-    setRecordSearch("")
     setDailySummaryPage(1)
     setDailySummaryPageSize(DEFAULT_DAILY_SUMMARY_PAGE_SIZE)
     setDailySummaryFilters(resetFilters)
@@ -3480,27 +3478,6 @@ export function AttendanceActivityView({ section }: { section: string }) {
               </button>
             </div>
           </div>
-
-          <label className="relative block w-full">
-            <SearchIcon className="pointer-events-none absolute left-1.5 top-1/2 size-2.5 -translate-y-1/2 text-slate-400" />
-            <input
-              className={cn(dailySummaryFilterControlClass, "pl-6 pr-6")}
-              value={recordSearch}
-              onChange={(event) => setRecordSearch(event.target.value)}
-              placeholder="Search…"
-              aria-label="Search daily summaries by any field"
-            />
-            {recordSearch.trim() ? (
-              <button
-                type="button"
-                className="absolute right-1 top-1/2 -translate-y-1/2 rounded px-0.5 text-[9px] font-medium text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
-                onClick={() => setRecordSearch("")}
-                aria-label="Clear search"
-              >
-                ×
-              </button>
-            ) : null}
-          </label>
 
           <div className="grid grid-cols-2 gap-1">
             <label className={dailySummaryFilterLabelClass}>
@@ -4742,11 +4719,6 @@ export function AttendanceActivityView({ section }: { section: string }) {
                     {dailySummaryPageSize}/pg
                   </span>
                 ) : null}
-                {recordSearch.trim() ? (
-                  <span className="max-w-[7rem] truncate rounded border border-border bg-muted/40 px-1.5 py-px">
-                    “{recordSearch.trim()}”
-                  </span>
-                ) : null}
                 <button
                   type="button"
                   className="text-[10px] font-medium text-primary hover:underline"
@@ -4780,6 +4752,26 @@ export function AttendanceActivityView({ section }: { section: string }) {
               toolbarStart={sectionTitleBlock}
               toolbarActions={
                 <>
+                  <label className="relative inline-flex h-7 min-w-[10rem] max-w-[16rem] flex-1 items-center sm:min-w-[12rem]">
+                    <SearchIcon className="pointer-events-none absolute left-2 size-3 text-muted-foreground" />
+                    <input
+                      className="h-7 w-full rounded-md border border-border bg-background py-0 pl-7 pr-6 text-xs text-foreground outline-none placeholder:text-muted-foreground"
+                      value={recordSearch}
+                      onChange={(event) => setRecordSearch(event.target.value)}
+                      placeholder="Search names…"
+                      aria-label="Search daily summaries by name or any field"
+                    />
+                    {recordSearch.trim() ? (
+                      <button
+                        type="button"
+                        className="absolute right-1.5 text-xs text-muted-foreground hover:text-foreground"
+                        onClick={() => setRecordSearch("")}
+                        aria-label="Clear search"
+                      >
+                        ×
+                      </button>
+                    ) : null}
+                  </label>
                   <label className="inline-flex h-7 items-center gap-0.5 rounded-md border border-border bg-background px-1 text-[10px] text-muted-foreground">
                     <span className="hidden sm:inline pl-0.5">Rows</span>
                     <select
