@@ -1065,6 +1065,8 @@ export function LeaveManagementView({
   const [requestStatusFilter, setRequestStatusFilter] = React.useState("all")
   const [typeSearch, setTypeSearch] = React.useState("")
   const [typeStatusFilter, setTypeStatusFilter] = React.useState("all")
+  const [workflowSearch, setWorkflowSearch] = React.useState("")
+  const [workflowStatusFilter, setWorkflowStatusFilter] = React.useState("all")
   const [balances, setBalances] = React.useState<AdminRecord[]>([])
   const [balanceAdjustments, setBalanceAdjustments] = React.useState<AdminRecord[]>([])
   const [balanceTransactions, setBalanceTransactions] = React.useState<AdminRecord[]>([])
@@ -1858,6 +1860,25 @@ export function LeaveManagementView({
       return { value: String(id), label: readString(row, ["name", "title"]) }
     })
     .filter((option): option is SearchableOption => Boolean(option))
+
+  const filteredWorkflows = workflows.filter((row) => {
+    const status = readString(row, ["status"]).toLowerCase()
+    if (workflowStatusFilter !== "all" && status !== workflowStatusFilter) {
+      return false
+    }
+    const query = workflowSearch.trim().toLowerCase()
+    if (!query) {
+      return true
+    }
+    return [
+      readString(row, ["name"]),
+      readString(row, ["status"]),
+      readString(row, ["leave_type_name", "leaveTypeName"]),
+    ]
+      .join(" ")
+      .toLowerCase()
+      .includes(query)
+  })
 
   const filteredTypes = types.filter((row) => {
     const status = readString(row, ["status"]).toLowerCase()
@@ -5076,24 +5097,44 @@ export function LeaveManagementView({
 
       {tab === "workflows" ? (
         <div className="space-y-2">
-          <div className="flex flex-wrap items-center justify-end gap-1.5">
-            {canMutateWorkflows ? (
-              <button
-                type="button"
-                className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white"
-                onClick={openCreateWorkflowSheet}
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Create Workflow
-              </button>
-            ) : null}
-            {refreshButton}
-          </div>
-
-          <div className="space-y-2">
             <ResizableTable
               title="Leave Workflows"
-              data={workflows}
+              toolbarStart={
+                <>
+                  <SearchToggleField
+                    className="min-w-0 !w-auto !max-w-[12rem] !flex-none"
+                    placeholder="Search workflows"
+                    value={workflowSearch}
+                    onChange={setWorkflowSearch}
+                  />
+                  <select
+                    className="h-8 w-[8.5rem] shrink-0 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
+                    value={workflowStatusFilter}
+                    onChange={(event) => setWorkflowStatusFilter(event.target.value)}
+                    aria-label="Filter workflow status"
+                  >
+                    <option value="all">All statuses</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                  </select>
+                </>
+              }
+              toolbarActions={
+                <>
+                  {canMutateWorkflows ? (
+                    <button
+                      type="button"
+                      className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white"
+                      onClick={openCreateWorkflowSheet}
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Create Workflow
+                    </button>
+                  ) : null}
+                  {refreshButton}
+                </>
+              }
+              data={filteredWorkflows}
               itemsPerPage={15}
               loading={loading}
               storageKey="leave-workflows"
@@ -5133,7 +5174,6 @@ export function LeaveManagementView({
                 },
               ]}
             />
-          </div>
 
           <Sheet open={workflowSheetOpen} onOpenChange={setWorkflowSheetOpen}>
             <SheetContent side="right" className="w-full overflow-y-auto data-[side=right]:w-1/2 sm:max-w-none">
