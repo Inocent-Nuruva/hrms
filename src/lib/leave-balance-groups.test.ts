@@ -66,6 +66,38 @@ describe("groupLeaveBalancesByEmployee", () => {
     expect(grouped[1]?.typeCount).toBe(1)
   })
 
+  it("reads a nested employee id and still groups the same person", () => {
+    const grouped = groupLeaveBalancesByEmployee(
+      [
+        { employee: { id: 12, full_name: "Audifas August Riwa" }, leave_type_name: "Sick Leave", allocated_days: 126, remaining_days: 126 },
+        { employee: { id: 12, full_name: "Audifas August Riwa" }, leave_type_name: "Annual Leave", allocated_days: 28, remaining_days: 13 },
+      ],
+      (row) => String((row.employee as { full_name: string }).full_name),
+    )
+
+    expect(grouped).toHaveLength(1)
+    expect(grouped[0]?.employeeId).toBe(12)
+    expect(grouped[0]?.typeCount).toBe(2)
+  })
+
+  it("merges same-name rows when each leave type has a unique employee_id", () => {
+    const grouped = groupLeaveBalancesByEmployee(
+      [
+        { employee_id: 101, employee_name: "Audifas August Riwa", leave_type_name: "Sick Leave", allocated_days: 126, remaining_days: 126 },
+        { employee_id: 102, employee_name: "Audifas August Riwa", leave_type_name: "Annual Leave", allocated_days: 28, remaining_days: 13 },
+        { employee_id: 201, employee_name: "Paulina Sebastian Mpanduji", leave_type_name: "Sick Leave", allocated_days: 126, remaining_days: 126 },
+      ],
+      (row) => String(row.employee_name),
+    )
+
+    expect(grouped.map((group) => group.employeeName)).toEqual([
+      "Audifas August Riwa",
+      "Paulina Sebastian Mpanduji",
+    ])
+    expect(grouped[0]?.typeCount).toBe(2)
+    expect(grouped[1]?.typeCount).toBe(1)
+  })
+
   it("groups by employee name when an id is missing", () => {
     const grouped = groupLeaveBalancesByEmployee(
       [

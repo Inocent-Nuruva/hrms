@@ -1195,8 +1195,11 @@ export function LeaveManagementView({
     setLeaveDocumentFile(null)
   }, [hydrateLeaveMedicalForm, selectedLeaveRequestRow])
 
+  const loadedLookupsRef = React.useRef(loadedLookups)
+  loadedLookupsRef.current = loadedLookups
+
   const loadLookups = React.useCallback(async (token: string, lookupKeys: LeaveLookupKey[], force = false) => {
-    const missingKeys = force ? lookupKeys : lookupKeys.filter((key) => !loadedLookups[key])
+    const missingKeys = force ? lookupKeys : lookupKeys.filter((key) => !loadedLookupsRef.current[key])
     if (missingKeys.length === 0) {
       return
     }
@@ -1256,13 +1259,17 @@ export function LeaveManagementView({
     })
 
     setLoadedLookups((current) => {
+      let changed = false
       const next = { ...current }
       missingKeys.forEach((key) => {
-        next[key] = true
+        if (!next[key]) {
+          next[key] = true
+          changed = true
+        }
       })
-      return next
+      return changed ? next : current
     })
-  }, [loadedLookups])
+  }, [])
 
   const ensureLookups = React.useCallback(async (lookupKeys: LeaveLookupKey[], force = false) => {
     const token = readStoredToken()
@@ -1611,11 +1618,11 @@ export function LeaveManagementView({
       if (nestedName) return nestedName
     }
     const inlineEmployeeName =
-      readString(row, ["employee_name", "employeeName", "full_name", "fullName", "name"])
+      readString(row, ["employee_name", "employeeName", "full_name", "fullName"])
     if (inlineEmployeeName !== "-") {
       return inlineEmployeeName
     }
-    return employeeLabel(readNumber(row, ["employee_id"]))
+    return employeeLabel(readNumber(row, ["employee_id", "employeeId"]) ?? readNumber(asRecord(row.employee) ?? {}, ["id", "employee_id"]))
   }
 
   const leaveTypeLabelFromRequest = (row: AdminRecord) => {
@@ -1697,6 +1704,54 @@ export function LeaveManagementView({
   const groupedBalances = React.useMemo(
     () => groupLeaveBalancesByEmployee(balances, (row) => employeeLabelFromRow(row)),
     [balances, employees]
+  )
+
+  const balanceGroupColumns = React.useMemo(
+    () => [
+      {
+        key: "employee",
+        label: "Employee",
+        defaultWidth: 160,
+        sortValue: (group: LeaveBalanceEmployeeGroup) => group.employeeName,
+        render: (group: LeaveBalanceEmployeeGroup) => group.employeeName,
+      },
+      {
+        key: "types",
+        label: "Types",
+        defaultWidth: 60,
+        sortValue: (group: LeaveBalanceEmployeeGroup) => group.typeCount,
+        render: (group: LeaveBalanceEmployeeGroup) => String(group.typeCount),
+      },
+      {
+        key: "fiscal_year",
+        label: "FY",
+        defaultWidth: 70,
+        sortValue: (group: LeaveBalanceEmployeeGroup) => group.fiscalYears.join(", "),
+        render: (group: LeaveBalanceEmployeeGroup) => group.fiscalYears.join(", ") || "-",
+      },
+      {
+        key: "allocated_days",
+        label: "Alloc",
+        defaultWidth: 70,
+        sortValue: (group: LeaveBalanceEmployeeGroup) => group.allocatedDays,
+        render: (group: LeaveBalanceEmployeeGroup) => formatBalanceDays(group.allocatedDays),
+      },
+      {
+        key: "used_days",
+        label: "Used",
+        defaultWidth: 60,
+        sortValue: (group: LeaveBalanceEmployeeGroup) => group.usedDays,
+        render: (group: LeaveBalanceEmployeeGroup) => formatBalanceDays(group.usedDays),
+      },
+      {
+        key: "remaining",
+        label: "Rem",
+        defaultWidth: 60,
+        sortValue: (group: LeaveBalanceEmployeeGroup) => group.remainingDays,
+        render: (group: LeaveBalanceEmployeeGroup) => formatBalanceDays(group.remainingDays),
+      },
+    ],
+    []
   )
 
   const selectedBalanceGroupRows = React.useMemo(
@@ -4459,54 +4514,12 @@ export function LeaveManagementView({
                 openEmployeeBalanceDetails(group)
               }
             }}
-            columns={[
-              {
-                key: "employee",
-                label: "Employee",
-                defaultWidth: 160,
-                sortValue: (group) => group.employeeName,
-                render: (group) => group.employeeName,
-              },
-              {
-                key: "types",
-                label: "Types",
-                defaultWidth: 60,
-                sortValue: (group) => group.typeCount,
-                render: (group) => String(group.typeCount),
-              },
-              {
-                key: "fiscal_year",
-                label: "FY",
-                defaultWidth: 70,
-                sortValue: (group) => group.fiscalYears.join(", "),
-                render: (group) => group.fiscalYears.join(", ") || "-",
-              },
-              {
-                key: "allocated_days",
-                label: "Alloc",
-                defaultWidth: 70,
-                sortValue: (group) => group.allocatedDays,
-                render: (group) => formatBalanceDays(group.allocatedDays),
-              },
-              {
-                key: "used_days",
-                label: "Used",
-                defaultWidth: 60,
-                sortValue: (group) => group.usedDays,
-                render: (group) => formatBalanceDays(group.usedDays),
-              },
-              {
-                key: "remaining",
-                label: "Rem",
-                defaultWidth: 60,
-                sortValue: (group) => group.remainingDays,
-                render: (group) => formatBalanceDays(group.remainingDays),
-              },
-            ]}
+            columns={balanceGroupColumns}
             itemsPerPage={20}
             loading={loading}
             storageKey="leave-balances-by-employee"
           />
+          {balanceAdjustments.length > 0 ? (
           <ResizableTable
             title="Balance adjustments"
             data={balanceAdjustments}
@@ -4520,6 +4533,8 @@ export function LeaveManagementView({
             showExport={false}
             storageKey="leave-balance-adjustments"
           />
+          ) : null}
+          {balanceTransactions.length > 0 ? (
           <ResizableTable
             title="Balance transactions"
             data={balanceTransactions}
@@ -4533,6 +4548,7 @@ export function LeaveManagementView({
             showExport={false}
             storageKey="leave-balance-transactions"
           />
+          ) : null}
         </div>
       ) : null}
 

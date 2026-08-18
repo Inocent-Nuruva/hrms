@@ -352,6 +352,15 @@ function areStringArraysEqual(left: string[], right: string[]): boolean {
   return left.every((value, index) => value === right[index]);
 }
 
+function areWidthMapsEqual(left: Record<string, number>, right: Record<string, number>): boolean {
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  if (leftKeys.length !== rightKeys.length) {
+    return false;
+  }
+  return leftKeys.every((key) => left[key] === right[key]);
+}
+
 interface ResizableTableProps<T = Record<string, unknown>> {
   title?: string;
   data?: T[];
@@ -601,7 +610,7 @@ export function ResizableTable<T = Record<string, unknown>>({
       res[col.key] = w;
       baseSum += w;
     });
-    if (containerWidth > 0 && baseSum < containerWidth) {
+    if (containerWidth > 0 && baseSum < containerWidth - 2) {
       const extra = containerWidth - baseSum;
       const growSum = baseSum - cbW;
       if (growSum > 0) {
@@ -620,34 +629,33 @@ export function ResizableTable<T = Record<string, unknown>>({
     return displayWidths[key] ?? columnWidths[key] ?? (typeof col === 'string' ? 36 : col.defaultWidth ?? 105);
   };
 
-  // Reset widths if columns definition changes significantly
-  useEffect(() => {
-    setColumnWidths((prev) => {
-      const next: Record<string, number> = showCheckboxes ? { checkbox: prev.checkbox || 36 } : {};
-      visibleTableColumns.forEach((col) => {
-        next[col.key] = prev[col.key] ?? col.defaultWidth ?? 105;
-      });
-      return next;
-    });
-  }, [visibleTableColumns, showCheckboxes]);
+  const visibleColumnSignature = useMemo(
+    () =>
+      `${showCheckboxes ? "cb|" : ""}${visibleTableColumns
+        .map((col) => `${col.key}:${col.defaultWidth ?? 105}`)
+        .join("|")}`,
+    [showCheckboxes, visibleTableColumns]
+  );
 
-  // Restore saved widths after hydration so SSR and the first client render match.
+  // Restore saved widths after hydration, and when the visible column set actually changes.
   useEffect(() => {
     const base = buildInitialColumnWidths(visibleTableColumns, showCheckboxes);
-    setColumnWidths(mergePersistedColumnWidths(base, effectiveStorageKey));
-  }, [effectiveStorageKey, visibleTableColumns, showCheckboxes]);
+    const next = mergePersistedColumnWidths(base, effectiveStorageKey);
+    setColumnWidths((prev) => (areWidthMapsEqual(prev, next) ? prev : next));
+  }, [effectiveStorageKey, showCheckboxes, visibleColumnSignature, visibleTableColumns]);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  // Measure available width for filling the table
+  // Measure available width for filling the table. Ignore sub-pixel jitter so
+  // fill-to-width + scrollbar changes cannot loop and shake the page.
   useEffect(() => {
     const el = overflowRef.current;
     if (!el) return;
     const update = () => {
-      const w = el.clientWidth || 0;
-      setContainerWidth(w);
+      const w = Math.round(el.clientWidth || 0);
+      setContainerWidth((current) => (Math.abs(current - w) < 2 ? current : w));
     };
     update();
     const ro = new ResizeObserver(update);
@@ -1173,7 +1181,7 @@ export function ResizableTable<T = Record<string, unknown>>({
           className="max-w-full overflow-x-auto overflow-y-clip overscroll-x-contain"
           ref={overflowRef}
         >
-          <div className="min-w-full align-top" style={{ minWidth: containerWidth ? `${containerWidth}px` : undefined }}>
+          <div className="min-w-full align-top">
             {/* Header */}
             <div className="flex py-1 text-base font-bold text-foreground bg-muted/5 border-b border-border w-full">
               {showCheckboxes && (
