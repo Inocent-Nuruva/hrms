@@ -1253,9 +1253,14 @@ export function ResizableTable<T = Record<string, unknown>>({
                   return (
                       <div
                         key={rowId}
-                        className={`py-1 group relative border-b border-border flex cursor-pointer w-full ${
-                          isSelected ? "bg-muted/30" : "bg-muted/5 hover:bg-muted/20"
-                        }`}
+                        className={cn(
+                          "group relative flex w-full cursor-pointer border-b border-border py-1",
+                          isSelected
+                            ? "bg-muted/30"
+                            : index % 2 === 1
+                              ? "bg-primary/[0.08] hover:bg-primary/[0.13]"
+                              : "bg-background hover:bg-muted/20"
+                        )}
                         onClick={() => handleRowSelect(rowId, item)}
                       >
                         {/* Checkbox */}
@@ -1308,7 +1313,10 @@ export function ResizableTable<T = Record<string, unknown>>({
                     {loadingSkeletonRows.map((_, index) => (
                       <div
                         key={`skeleton-row-${index}`}
-                        className="flex w-full border-b border-border/60 px-1.5 py-2 last:border-b-0"
+                        className={cn(
+                          "flex w-full border-b border-border/60 px-1.5 py-2 last:border-b-0",
+                          index % 2 === 1 ? "bg-primary/[0.08]" : "bg-background"
+                        )}
                       >
                         {allColumnKeys.map((columnKey) => (
                           <div
