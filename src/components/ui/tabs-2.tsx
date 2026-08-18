@@ -68,16 +68,16 @@ export function Tabs2({ groups, currentPath, className }: Tabs2Props) {
               type="button"
               className={cn(
                 tabTriggerClass(true),
-                "shrink-0 gap-1 px-1.5 py-1.5 text-sm leading-none [font-size:14px]",
+                "shrink-0 gap-1.5 px-2 py-2 text-base leading-none [font-size:18px]",
               )}
               aria-label="Switch section"
             />
           }
         >
-          <span className="truncate whitespace-nowrap text-sm font-bold leading-none">
+          <span className="truncate whitespace-nowrap text-lg font-bold leading-none">
             {activeGroupLabel}
           </span>
-          <ChevronDownIcon className="size-3.5 shrink-0 opacity-70" />
+          <ChevronDownIcon className="size-4 shrink-0 opacity-70" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="min-w-52">
           <DropdownMenuGroup>
@@ -89,7 +89,7 @@ export function Tabs2({ groups, currentPath, className }: Tabs2Props) {
               return (
                 <DropdownMenuItem
                   key={group.title ?? firstItem.url}
-                  className="justify-between gap-2 py-2 text-sm"
+                  className="justify-between gap-2 py-2.5 text-base"
                   onClick={() => {
                     if (isActive) return
                     router.push(firstItem.url)
