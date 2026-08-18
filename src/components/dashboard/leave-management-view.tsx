@@ -68,6 +68,14 @@ import {
   type AdminRecord,
 } from "@/lib/admin-api"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
+import {
+  formatBalanceDays,
+  groupLeaveBalancesByEmployee,
+  readBalanceDays,
+  readBalanceFiscalYear,
+  sortLeaveBalanceRows,
+  type LeaveBalanceEmployeeGroup,
+} from "@/lib/leave-balance-groups"
 import { cn } from "@/lib/utils"
 import { Switch } from "@/components/ui/switch"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
@@ -1043,6 +1051,8 @@ export function LeaveManagementView({
   const [policyPreviewOpen, setPolicyPreviewOpen] = React.useState(false)
   const [selectedPolicyRow, setSelectedPolicyRow] = React.useState<AdminRecord | null>(null)
   const [selectedBalanceRow, setSelectedBalanceRow] = React.useState<AdminRecord | null>(null)
+  const [selectedBalanceGroup, setSelectedBalanceGroup] = React.useState<LeaveBalanceEmployeeGroup | null>(null)
+  const [employeeBalanceDetailsOpen, setEmployeeBalanceDetailsOpen] = React.useState(false)
   const [workflowSteps, setWorkflowSteps] = React.useState<AdminRecord[]>([])
   const [workflowSheetOpen, setWorkflowSheetOpen] = React.useState(false)
   const [stepDialogOpen, setStepDialogOpen] = React.useState(false)
@@ -1684,6 +1694,19 @@ export function LeaveManagementView({
     )
   }
 
+  const groupedBalances = React.useMemo(
+    () => groupLeaveBalancesByEmployee(balances, (row) => employeeLabelFromRow(row)),
+    [balances, employees]
+  )
+
+  const selectedBalanceGroupRows = React.useMemo(
+    () =>
+      selectedBalanceGroup
+        ? sortLeaveBalanceRows(selectedBalanceGroup.rows, (row) => leaveTypeLabelFromRow(row))
+        : [],
+    [selectedBalanceGroup, types]
+  )
+
   const resetBalanceForm = React.useCallback(() => {
     setBalanceForm({
       employee_id: "",
@@ -2092,12 +2115,18 @@ export function LeaveManagementView({
     }
   }
 
+  function openEmployeeBalanceDetails(group: LeaveBalanceEmployeeGroup) {
+    setSelectedBalanceGroup(group)
+    setEmployeeBalanceDetailsOpen(true)
+  }
+
   async function openBalanceDialog(row?: AdminRecord) {
     const loaded = await ensureLookups(["types", "employees"])
     if (!loaded) {
       return
     }
     if (row) {
+      setEmployeeBalanceDetailsOpen(false)
       setSelectedBalanceRow(row)
       setBalanceForm({
         employee_id: String(readNumber(row, ["employee_id", "employeeId"]) ?? ""),
@@ -4055,6 +4084,129 @@ export function LeaveManagementView({
         </DialogPopup>
       </Dialog>
 
+      <Dialog
+        open={employeeBalanceDetailsOpen}
+        onOpenChange={(open) => {
+          setEmployeeBalanceDetailsOpen(open)
+          if (!open) {
+            setSelectedBalanceGroup(null)
+          }
+        }}
+      >
+        <DialogPopup
+          from="bottom"
+          className="flex max-h-[min(92dvh,40rem)] w-[calc(100%-1rem)] max-w-lg flex-col gap-0 overflow-hidden p-3 sm:max-w-xl sm:p-4"
+        >
+          <DialogHeader className="shrink-0 space-y-1 pr-8 text-left">
+            <DialogTitle className="text-base leading-snug sm:text-lg">
+              {selectedBalanceGroup?.employeeName ?? "Leave balances"}
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              {selectedBalanceGroup
+                ? `${selectedBalanceGroup.typeCount} leave type${selectedBalanceGroup.typeCount === 1 ? "" : "s"}${
+                    selectedBalanceGroup.fiscalYears.length > 0
+                      ? ` · FY ${selectedBalanceGroup.fiscalYears.join(", ")}`
+                      : ""
+                  }`
+                : "All leave balances for this employee."}
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedBalanceGroup ? (
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain py-2">
+              <div className="grid grid-cols-3 gap-2 text-xs">
+                <div className="rounded-md border border-border/60 px-2.5 py-2">
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Allocated</p>
+                  <p className="font-medium text-foreground">{formatBalanceDays(selectedBalanceGroup.allocatedDays)}</p>
+                </div>
+                <div className="rounded-md border border-border/60 px-2.5 py-2">
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Used</p>
+                  <p className="font-medium text-foreground">{formatBalanceDays(selectedBalanceGroup.usedDays)}</p>
+                </div>
+                <div className="rounded-md border border-border/60 px-2.5 py-2">
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Remaining</p>
+                  <p className="font-medium text-foreground">{formatBalanceDays(selectedBalanceGroup.remainingDays)}</p>
+                </div>
+              </div>
+
+              <div className="overflow-hidden rounded-md border border-slate-200">
+                <div
+                  className={cn(
+                    "grid gap-2 border-b border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-500",
+                    canAdjustBalances
+                      ? "grid-cols-[minmax(0,1fr)_4.25rem_3.5rem_3.5rem_2rem]"
+                      : "grid-cols-[minmax(0,1fr)_4.25rem_3.5rem_3.5rem]"
+                  )}
+                >
+                  <span>Type</span>
+                  <span className="text-right">Alloc</span>
+                  <span className="text-right">Used</span>
+                  <span className="text-right">Rem</span>
+                  {canAdjustBalances ? <span className="sr-only">Actions</span> : null}
+                </div>
+                {selectedBalanceGroupRows.map((row, index) => {
+                  const typeName = leaveTypeLabelFromRow(row)
+                  const rowKey = String(
+                    readNumber(row, ["id", "leave_type_id", "leaveTypeId"]) ?? `${typeName}-${index}`
+                  )
+                  return (
+                    <div
+                      key={rowKey}
+                      className={cn(
+                        "grid items-center gap-2 border-b border-slate-100 px-2.5 py-2 text-xs last:border-b-0",
+                        canAdjustBalances
+                          ? "grid-cols-[minmax(0,1fr)_4.25rem_3.5rem_3.5rem_2rem]"
+                          : "grid-cols-[minmax(0,1fr)_4.25rem_3.5rem_3.5rem]"
+                      )}
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate font-medium text-slate-900" title={typeName}>
+                          {typeName}
+                        </p>
+                        {selectedBalanceGroup.fiscalYears.length > 1 ? (
+                          <p className="text-[10px] text-muted-foreground">
+                            FY {readBalanceFiscalYear(row) || "-"}
+                          </p>
+                        ) : null}
+                      </div>
+                      <span className="text-right tabular-nums text-slate-700">
+                        {formatBalanceDays(readBalanceDays(row, ["allocated_days", "allocated", "allocatedDays"]))}
+                      </span>
+                      <span className="text-right tabular-nums text-slate-700">
+                        {formatBalanceDays(readBalanceDays(row, ["used_days", "used", "usedDays"]))}
+                      </span>
+                      <span className="text-right tabular-nums font-medium text-slate-900">
+                        {formatBalanceDays(readBalanceDays(row, ["remaining_days", "remaining", "remainingDays"]))}
+                      </span>
+                      {canAdjustBalances ? (
+                        <button
+                          type="button"
+                          className="admin-table-icon-button justify-self-end"
+                          title={`Adjust ${typeName}`}
+                          onClick={() => void openBalanceDialog(row)}
+                        >
+                          <Pencil className="size-3.5" />
+                        </button>
+                      ) : null}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          ) : null}
+
+          <DialogFooter className="mt-2 shrink-0 border-t border-slate-100 pt-2 sm:justify-end">
+            <button
+              type="button"
+              className="inline-flex h-8 items-center justify-center rounded-md border border-slate-300 px-3 text-xs font-medium text-slate-700"
+              onClick={() => setEmployeeBalanceDetailsOpen(false)}
+            >
+              Close
+            </button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
+
       <Dialog open={holidayDialogOpen} onOpenChange={setHolidayDialogOpen}>
         <DialogPopup from="bottom" className="sm:max-w-3xl">
           <DialogHeader>
@@ -4300,25 +4452,60 @@ export function LeaveManagementView({
             {refreshButton}
               </>
             }
-            data={balances}
+            data={groupedBalances}
+            getRowId={(group) => group.key}
+            onRowSelect={(_, group) => {
+              if (group) {
+                openEmployeeBalanceDetails(group)
+              }
+            }}
             columns={[
-              { key: "employee", label: "Employee", defaultWidth: 100, render: (r) => employeeLabelFromRow(r) },
-              { key: "type", label: "Type", defaultWidth: 75, render: (r) => leaveTypeLabelFromRow(r) },
-              { key: "fiscal_year", label: "FY", defaultWidth: 55, render: (r) => readString(r, ["fiscal_year"]) },
-              { key: "allocated_days", label: "Alloc", defaultWidth: 55, render: (r) => readString(r, ["allocated_days", "allocated"]) },
-              { key: "used_days", label: "Used", defaultWidth: 45, render: (r) => readString(r, ["used_days", "used"]) },
-              { key: "remaining", label: "Rem", defaultWidth: 45, render: (r) => readString(r, ["remaining_days", "remaining"]) },
-              { key: "actions", label: "Act", defaultWidth: 50, sortable: false, render: (row) => (
-                <div className="flex justify-end" onClick={e=>e.stopPropagation()}>
-                  <button type="button" className="admin-table-icon-button" onClick={() => void openBalanceDialog(row)}>
-                    <Pencil className="size-4" />
-                  </button>
-                </div>
-              ) },
+              {
+                key: "employee",
+                label: "Employee",
+                defaultWidth: 160,
+                sortValue: (group) => group.employeeName,
+                render: (group) => group.employeeName,
+              },
+              {
+                key: "types",
+                label: "Types",
+                defaultWidth: 60,
+                sortValue: (group) => group.typeCount,
+                render: (group) => String(group.typeCount),
+              },
+              {
+                key: "fiscal_year",
+                label: "FY",
+                defaultWidth: 70,
+                sortValue: (group) => group.fiscalYears.join(", "),
+                render: (group) => group.fiscalYears.join(", ") || "-",
+              },
+              {
+                key: "allocated_days",
+                label: "Alloc",
+                defaultWidth: 70,
+                sortValue: (group) => group.allocatedDays,
+                render: (group) => formatBalanceDays(group.allocatedDays),
+              },
+              {
+                key: "used_days",
+                label: "Used",
+                defaultWidth: 60,
+                sortValue: (group) => group.usedDays,
+                render: (group) => formatBalanceDays(group.usedDays),
+              },
+              {
+                key: "remaining",
+                label: "Rem",
+                defaultWidth: 60,
+                sortValue: (group) => group.remainingDays,
+                render: (group) => formatBalanceDays(group.remainingDays),
+              },
             ]}
             itemsPerPage={20}
             loading={loading}
-            storageKey="leave-balances"
+            storageKey="leave-balances-by-employee"
           />
           <ResizableTable
             title="Balance adjustments"
