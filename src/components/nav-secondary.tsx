@@ -74,20 +74,10 @@ export function NavSecondary({
   const { isMobile, setOpenMobile } = useSidebar()
   const [query, setQuery] = React.useState("")
   const [isSearchOpen, setIsSearchOpen] = React.useState(false)
-  const [hoveredLink, setHoveredLink] = React.useState<string | null>(null)
   const [activeIndex, setActiveIndex] = React.useState(0)
   const [recentItems, setRecentItems] = React.useState<SearchItem[]>([])
   const searchInputRef = React.useRef<HTMLInputElement | null>(null)
   const normalizedQuery = normalizeSearchValue(query)
-  const renderAnimatedIcon = React.useCallback((icon: React.ReactNode, key: string) => {
-    if (!React.isValidElement(icon)) {
-      return icon
-    }
-    return React.cloneElement(icon as React.ReactElement<Record<string, unknown>>, {
-      animate: hoveredLink === key ? "path-loop" : false,
-      size: 20,
-    })
-  }, [hoveredLink])
 
   const searchableItems = React.useMemo(
     () => searchItems.filter((item) => item.url && item.url !== "#"),
@@ -229,12 +219,10 @@ export function NavSecondary({
                           isActive={false}
                           className="h-8 min-h-8 cursor-pointer rounded-lg px-2 py-1.5 text-[0.8125rem] font-medium leading-none !text-foreground [&_svg]:!size-[1.125rem] [&_svg]:!text-[var(--sidebar-icon-color)]"
                           aria-label="Open global search"
-                          onMouseEnter={() => setHoveredLink(item.title)}
-                          onMouseLeave={() => setHoveredLink((value) => (value === item.title ? null : value))}
                         />
                       }
                     >
-                      {renderAnimatedIcon(item.icon, item.title)}
+                      {item.icon}
                       <span className="truncate">{item.title}</span>
                       <span className="ml-auto rounded border border-border bg-muted/50 px-1 py-0.5 text-[10px] font-medium text-muted-foreground">
                         Ctrl K
@@ -350,10 +338,8 @@ export function NavSecondary({
                       setOpenMobile(false)
                     }
                   }}
-                  onMouseEnter={() => setHoveredLink(item.title)}
-                  onMouseLeave={() => setHoveredLink((value) => (value === item.title ? null : value))}
                 >
-                  {renderAnimatedIcon(item.icon, item.title)}
+                  {item.icon}
                   <span className="truncate">{item.title}</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
