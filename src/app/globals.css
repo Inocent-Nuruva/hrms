@@ -1244,12 +1244,11 @@ table.min-w-full > tbody > tr > td {
   display: none !important;
 }
 
-/* Active nav item: muted surface + primary edge (not full blue wash) */
-[data-sidebar="menu-button"][data-active="true"],
-[data-sidebar="menu-button"][data-active] {
+/* Active nav item: muted surface, no leading color bar */
+[data-sidebar="menu-button"][data-active="true"] {
   background: var(--sidebar-accent) !important;
   color: var(--sidebar-accent-foreground) !important;
-  box-shadow: inset 3px 0 0 0 rgb(var(--primary-rgb));
+  box-shadow: none;
 }
 
 .dark .app-sidebar-surface,
@@ -1280,8 +1279,7 @@ table.min-w-full > tbody > tr > td {
   background: var(--sidebar);
 }
 
-.dark [data-sidebar="menu-button"][data-active="true"],
-.dark [data-sidebar="menu-button"][data-active] {
+.dark [data-sidebar="menu-button"][data-active="true"] {
   background: var(--sidebar-accent) !important;
 }
 
