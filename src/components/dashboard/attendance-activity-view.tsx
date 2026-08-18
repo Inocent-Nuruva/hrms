@@ -3049,10 +3049,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
         if (detailsLoading) {
           return "Loading the latest processed attendance summary details."
         }
-        if (detailsError) {
-          return `Review the processed attendance summary returned by the attendance engine. ${detailsError}`
-      }
-      return "Processed day from the attendance engine."
+        return undefined
     }
     if (activeSection === "processing-exceptions") {
       if (detailsError) {
