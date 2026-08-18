@@ -532,26 +532,12 @@ export const ATTENDANCE_REPORTS_ROUTE_PERMISSION: PermissionRequirement = {
 }
 
 /**
- * Platform tenant registry (`GET /api/companies`). Company-scoped
- * `company_users:*` is not enough for that list.
+ * Platform tenant registry at `/dashboard/companies`.
+ * `company_users:*` is company-scoped membership and must not unlock this
+ * page — those users get "Platform access is required" from GET /api/companies.
  */
 export const COMPANY_MANAGEMENT_ROUTE_PERMISSION: PermissionRequirement = {
   permissions: ["companies:read", "companies:update"],
-  mode: "any",
-}
-
-/**
- * Current-company workspace at `/dashboard/companies`.
- * Company admins manage members here; platform operators also see the tenant list.
- */
-export const COMPANY_WORKSPACE_ROUTE_PERMISSION: PermissionRequirement = {
-  permissions: [
-    "companies:read",
-    "companies:update",
-    "company_users:read",
-    "company_users:update",
-    "company_users:create",
-  ],
   mode: "any",
 }
 
@@ -845,7 +831,7 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/departments": "departments:read",
   "/dashboard/branches": "branches:read",
   "/dashboard/positions": "positions:read",
-  "/dashboard/companies": COMPANY_WORKSPACE_ROUTE_PERMISSION,
+  "/dashboard/companies": COMPANY_MANAGEMENT_ROUTE_PERMISSION,
   "/dashboard/leave-management": {
     permissions: [
       "leave_types:read",

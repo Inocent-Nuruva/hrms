@@ -26,9 +26,8 @@ import {
   type AdminRecord,
   type UsersQueryParams,
 } from "@/lib/admin-api"
-import { useRouter } from "next/navigation"
-
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
+import { useForbiddenRouteGuard, useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
 import {
   canAccessDashboardRoute,
   canPerformPermission,
@@ -344,7 +343,6 @@ function memberPermissionIds(row: AdminRecord) {
 }
 
 export function CompaniesView() {
-  const router = useRouter()
   const actor = useDashboardActor()
   const actorPermissions = actor.permissionLabels
   const permissionsReady = actor.ready
@@ -353,6 +351,8 @@ export function CompaniesView() {
     canAccessDashboardRoute("/dashboard/companies", actorPermissions, actor.accessMode)
   const canListPlatformCompanies =
     permissionsReady && canPerformPermission(actorPermissions, COMPANY_MANAGEMENT_ROUTE_PERMISSION)
+  const leaveIfForbidden = useLeaveIfForbidden()
+  useForbiddenRouteGuard(canAccessCompaniesRoute)
   const [rows, setRows] = React.useState<AdminRecord[]>([])
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
@@ -395,15 +395,6 @@ export function CompaniesView() {
     (canPerformPermission(actorPermissions, "company_users:update") ||
       canPerformPermission(actorPermissions, "permissions:update") ||
       canPerformPermission(actorPermissions, "users:update"))
-
-  React.useEffect(() => {
-    if (!permissionsReady) {
-      return
-    }
-    if (!canAccessCompaniesRoute) {
-      router.replace("/dashboard")
-    }
-  }, [canAccessCompaniesRoute, permissionsReady, router])
 
   const loadData = React.useCallback(async () => {
     if (!permissionsReady) {
@@ -469,11 +460,16 @@ export function CompaniesView() {
     setPermissions(value(6, [] as AdminRecord[]))
 
     const platformError = canListPlatformCompanies ? reason(0) : null
+    if (platformError && /platform access is required|forbidden/i.test(platformError)) {
+      leaveIfForbidden(Object.assign(new Error(platformError), { status: 403 }))
+      setLoading(false)
+      return
+    }
     const contextError = reason(1) || reason(3)
     setError(platformError || contextError)
     setMembersError(reason(3))
     setLoading(false)
-  }, [canAccessCompaniesRoute, canListPlatformCompanies, permissionsReady])
+  }, [canAccessCompaniesRoute, canListPlatformCompanies, leaveIfForbidden, permissionsReady])
 
   React.useEffect(() => {
     void loadData()

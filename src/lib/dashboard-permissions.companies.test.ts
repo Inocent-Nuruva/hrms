@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest"
 import {
   canAccessDashboardRoute,
   COMPANY_MANAGEMENT_ROUTE_PERMISSION,
-  COMPANY_WORKSPACE_ROUTE_PERMISSION,
   hasPermission,
 } from "./dashboard-permissions"
 
@@ -25,13 +24,10 @@ const PLATFORM_OWNER_PERMISSIONS = [
 ]
 
 describe("companies route access", () => {
-  it("opens the current-company workspace for company-scoped admins", () => {
+  it("hides /dashboard/companies from company-scoped admins", () => {
     expect(
       canAccessDashboardRoute("/dashboard/companies", COMPANY_ADMIN_PERMISSIONS, "admin"),
-    ).toBe(true)
-    expect(
-      hasPermission(COMPANY_ADMIN_PERMISSIONS, COMPANY_WORKSPACE_ROUTE_PERMISSION),
-    ).toBe(true)
+    ).toBe(false)
     expect(
       hasPermission(COMPANY_ADMIN_PERMISSIONS, COMPANY_MANAGEMENT_ROUTE_PERMISSION),
     ).toBe(false)
@@ -43,19 +39,13 @@ describe("companies route access", () => {
     ).toBe(true)
   })
 
-  it("does not treat company_users permissions as platform tenant-list access", () => {
-    expect(
-      hasPermission(
-        ["company_users:read", "company_users:update"],
-        COMPANY_MANAGEMENT_ROUTE_PERMISSION,
-      ),
-    ).toBe(false)
+  it("does not treat company_users permissions as platform company access", () => {
     expect(
       canAccessDashboardRoute(
         "/dashboard/companies",
         ["company_users:read", "company_users:update"],
         "admin",
       ),
-    ).toBe(true)
+    ).toBe(false)
   })
 })
