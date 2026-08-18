@@ -1491,11 +1491,23 @@ export function hasActivitiesAccess(permissionLabels: string[]) {
 }
 
 export function hasSmsAccess(permissionLabels: string[]) {
-  return hasPrefixedAccess(permissionLabels, SMS_ROUTE_PERMISSION, [
-    "sms",
-    "view_sms",
-    "manage_sms",
-  ])
+  if (hasPermission(permissionLabels, SMS_ROUTE_PERMISSION)) {
+    return true
+  }
+  // "sms" is too short for hasPrefixedAccess — `*_sms` would treat OTP or
+  // notification channel grants as company SMS admin.
+  return normalizePermissionLabels(permissionLabels).some((label) => {
+    const compact = label.replace(/[.-]/g, "_")
+    return (
+      compact === "sms" ||
+      compact.startsWith("sms:") ||
+      compact.startsWith("sms_") ||
+      compact === "view_sms" ||
+      compact === "manage_sms" ||
+      compact.startsWith("view_sms_") ||
+      compact.startsWith("manage_sms_")
+    )
+  })
 }
 
 export function hasCostCenterAccess(permissionLabels: string[]) {
@@ -1599,6 +1611,10 @@ export function canAccessDashboardRoute(
 
   if (path === "/dashboard/sms/platform" || path.startsWith("/dashboard/sms/platform/")) {
     return hasSmsPlatformAccess(permissionLabels)
+  }
+
+  if (path === "/dashboard/sms") {
+    return hasSmsAccess(permissionLabels)
   }
 
   // Admin / HR shell: allow directory (and section root) with employees:read.

@@ -8,7 +8,15 @@ const CONFIRMED_STORAGE_KEY = "hrms.confirmedPlatformRoutes"
 
 // Attendance download still works without analytics grants. A 403 from
 // /api/analytics/* must not hide the whole Reports page or bounce to /dashboard.
-const DO_NOT_REMEMBER = new Set(["/dashboard/operations/reports"])
+// Company SMS pages are the same: a 403 from /api/sms/* must not hide the
+// section root or bounce Overview / Registry / Logs back to /dashboard.
+const DO_NOT_REMEMBER = new Set([
+  "/dashboard/operations/reports",
+  "/dashboard/sms",
+  "/dashboard/sms/overview",
+  "/dashboard/sms/registry",
+  "/dashboard/sms/logs",
+])
 
 /**
  * JWT `companies:read` is also issued to company-scoped System Administrators.
@@ -160,6 +168,14 @@ export function isRememberedForbiddenRoute(url: string) {
   })
 }
 
+function isPathInSectionGroup(path: string, itemUrl: string) {
+  if (path === itemUrl || path.startsWith(`${itemUrl}/`)) return true
+  // Section roots like /dashboard/sms are not tab urls. Still treat them as
+  // part of the group so a missing grant on the parent opens the first child
+  // instead of bouncing to /dashboard.
+  return path !== "/dashboard" && itemUrl.startsWith(`${path}/`)
+}
+
 export function firstVisibleSiblingOrHome(
   url: string,
   permissionLabels: string[],
@@ -167,9 +183,7 @@ export function firstVisibleSiblingOrHome(
 ) {
   const path = normalizePath(url)
   for (const group of allDashboardSectionTabGroups()) {
-    const inGroup = group.items.some(
-      (item) => path === item.url || path.startsWith(`${item.url}/`),
-    )
+    const inGroup = group.items.some((item) => isPathInSectionGroup(path, item.url))
     if (!inGroup) continue
     const visible = group.items.find((item) =>
       canSeeDashboardPage(item.url, permissionLabels, accessMode),
@@ -183,6 +197,13 @@ const STRUCTURE_CHILD_ROUTES = [
   "/dashboard/structure/cost-centers",
   "/dashboard/structure/grades",
   "/dashboard/structure/numbering",
+]
+
+const SMS_CHILD_ROUTES = [
+  "/dashboard/sms/overview",
+  "/dashboard/sms/registry",
+  "/dashboard/sms/logs",
+  "/dashboard/sms/platform",
 ]
 
 function canSeeStructureSection(
@@ -204,6 +225,25 @@ export function hideStructureNavIfEmpty(
   rememberForbiddenRoute("/dashboard/structure")
 }
 
+function canSeeSmsSection(
+  permissionLabels: string[],
+  accessMode?: DashboardAccessMode,
+) {
+  return SMS_CHILD_ROUTES.some(
+    (child) =>
+      !isRememberedForbiddenRoute(child) &&
+      canAccessDashboardRoute(child, permissionLabels, accessMode),
+  )
+}
+
+export function hideSmsNavIfEmpty(
+  permissionLabels: string[],
+  accessMode?: DashboardAccessMode,
+) {
+  if (canSeeSmsSection(permissionLabels, accessMode)) return
+  rememberForbiddenRoute("/dashboard/sms")
+}
+
 export function canSeeDashboardPage(
   url: string,
   permissionLabels: string[],
@@ -220,6 +260,9 @@ export function canSeeDashboardPage(
   const path = url.split("?")[0] ?? url
   if (path === "/dashboard/structure") {
     return canSeeStructureSection(permissionLabels, accessMode)
+  }
+  if (path === "/dashboard/sms") {
+    return canSeeSmsSection(permissionLabels, accessMode)
   }
   return canAccessDashboardRoute(url, permissionLabels, accessMode)
 }

@@ -97,7 +97,13 @@ function schedulePreviewDays(record: AdminRecord | null) {
   return []
 }
 
-function TipIcon({ text }: { text: string }) {
+function TipIcon({
+  text,
+  variant = "default",
+}: {
+  text: string
+  variant?: "default" | "onPrimary"
+}) {
   const motionPreset = useDashboardMotion()
   return (
     <Tooltip>
@@ -105,7 +111,11 @@ function TipIcon({ text }: { text: string }) {
         render={
           <button
             type="button"
-            className="inline-flex h-6 w-6 items-center justify-center rounded-full text-slate-500 hover:text-primary"
+            className={
+              variant === "onPrimary"
+                ? "inline-flex h-6 w-6 items-center justify-center rounded-full text-white/80 hover:text-white"
+                : "inline-flex h-6 w-6 items-center justify-center rounded-full text-slate-500 hover:text-primary"
+            }
             aria-label="More information"
           />
         }
@@ -426,16 +436,21 @@ export function InsightsOperationsView({
       <HeroBand
         eyebrow={embedded ? "Home" : "Insights"}
         title={
-          activeTab === "readiness"
-            ? "Are we ready?"
-            : activeTab === "sales-field"
-              ? "Sales and field overview"
-              : `${prettify(activeTab)} overview`
-        }
-        description={
-          activeTab === "readiness"
-            ? "Check that the system is working, see what still needs fixing, set up clock-in, and review recent security activity."
-            : "A snapshot of how the company is doing for the dates you pick."
+          <>
+            {activeTab === "readiness"
+              ? "Are we ready?"
+              : activeTab === "sales-field"
+                ? "Sales and field overview"
+                : `${prettify(activeTab)} overview`}
+            <TipIcon
+              variant="onPrimary"
+              text={
+                activeTab === "readiness"
+                  ? "Check that the system is working, see what still needs fixing, set up clock-in, and review recent security activity."
+                  : "A snapshot of how the company is doing for the dates you pick."
+              }
+            />
+          </>
         }
         actions={
           <>

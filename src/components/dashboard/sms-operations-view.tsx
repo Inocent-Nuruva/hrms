@@ -74,9 +74,11 @@ function settingEnabled(row: AdminRecord | null) {
 
 export function SmsOperationsView({ activeTab }: { activeTab: SmsOpsTab }) {
   const actor = useDashboardActor()
+  const smsRoute =
+    activeTab === "platform" ? "/dashboard/sms/platform" : `/dashboard/sms/${activeTab}`
   const canAccess =
     actor.ready &&
-    canAccessDashboardRoute("/dashboard/sms/overview", actor.permissionLabels, actor.accessMode)
+    canAccessDashboardRoute(smsRoute, actor.permissionLabels, actor.accessMode)
   const leaveIfForbidden = useLeaveIfForbidden()
   useForbiddenRouteGuard(canAccess)
   const hasPlatformAccess =
@@ -168,7 +170,9 @@ export function SmsOperationsView({ activeTab }: { activeTab: SmsOpsTab }) {
     const results = await Promise.allSettled(tasks)
     const first = results.find((result) => result.status === "rejected")
     if (first && first.status === "rejected") {
-      if (leaveIfForbidden(first.reason)) {
+      // Company SMS pages stay open and show the API error. Only platform
+      // SMS is fail-closed (same "platform access required" case as Companies).
+      if (activeTab === "platform" && leaveIfForbidden(first.reason)) {
         setLoading(false)
         return
       }

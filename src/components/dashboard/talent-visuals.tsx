@@ -230,8 +230,8 @@ export function HeroBand({
   actions,
 }: {
   eyebrow: string
-  title: string
-  description: string
+  title: React.ReactNode
+  description?: string
   actions?: React.ReactNode
 }) {
   const motionPreset = useDashboardMotion()
@@ -265,21 +265,23 @@ export function HeroBand({
             {eyebrow}
           </motion.p>
           <motion.h1
-            className="text-2xl font-semibold tracking-tight sm:text-3xl"
+            className="flex flex-wrap items-center gap-2 text-2xl font-semibold tracking-tight sm:text-3xl"
             initial={motionPreset.reduce ? false : { opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.06 }}
           >
             {title}
           </motion.h1>
-          <motion.p
-            className="text-sm text-white/75"
-            initial={motionPreset.reduce ? false : { opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.38, delay: 0.12 }}
-          >
-            {description}
-          </motion.p>
+          {description ? (
+            <motion.p
+              className="text-sm text-white/75"
+              initial={motionPreset.reduce ? false : { opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.38, delay: 0.12 }}
+            >
+              {description}
+            </motion.p>
+          ) : null}
         </div>
         {actions ? (
           <motion.div

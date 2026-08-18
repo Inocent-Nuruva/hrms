@@ -46,6 +46,25 @@ describe("forbidden route memory", () => {
   it("still hides operations routes that lack JWT grants", () => {
     expect(canAccessDashboardRoute("/dashboard/field/overview", ["employees:read"], "admin")).toBe(false)
     expect(canSeeDashboardPage("/dashboard/sms/overview", ["employees:read"], "admin")).toBe(false)
+    expect(canSeeDashboardPage("/dashboard/sms", ["employees:read"], "admin")).toBe(false)
+  })
+
+  it("opens the first SMS tab from the section root instead of the dashboard", () => {
+    expect(firstVisibleSiblingOrHome("/dashboard/sms", ["sms:read"], "admin")).toBe(
+      "/dashboard/sms/overview",
+    )
+    expect(canSeeDashboardPage("/dashboard/sms", ["sms:read"], "admin")).toBe(true)
+  })
+
+  it("does not hide company SMS after an API permission error", () => {
+    stubSession()
+    rememberForbiddenRoute("/dashboard/sms")
+    rememberForbiddenRoute("/dashboard/sms/overview")
+    rememberForbiddenRoute("/dashboard/sms/registry")
+    rememberForbiddenRoute("/dashboard/sms/logs")
+    expect(isRememberedForbiddenRoute("/dashboard/sms/overview")).toBe(false)
+    expect(canSeeDashboardPage("/dashboard/sms/overview", ["sms:read"], "admin")).toBe(true)
+    expect(canSeeDashboardPage("/dashboard/sms", ["sms:read"], "admin")).toBe(true)
   })
 
   it("sends a forbidden tab to the next visible sibling", () => {

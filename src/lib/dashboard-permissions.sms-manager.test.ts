@@ -22,8 +22,19 @@ describe("sms and manager route access", () => {
   })
 
   it("shows SMS operations for sms:read regardless of access mode", () => {
+    expect(canAccessDashboardRoute("/dashboard/sms", ["sms:read"], "admin")).toBe(true)
     expect(canAccessDashboardRoute("/dashboard/sms/logs", ["sms:read"], "admin")).toBe(true)
     expect(canAccessDashboardRoute("/dashboard/sms/registry", ["sms:read"], "employee")).toBe(true)
+  })
+
+  it("does not treat a loose *_sms grant as company SMS admin", () => {
+    expect(hasSmsAccess(["send_sms", "notification_sms:read", "otp_sms"])).toBe(false)
+    expect(
+      canAccessDashboardRoute("/dashboard/sms", ["send_sms", "companies:read"], "admin"),
+    ).toBe(false)
+    expect(
+      canAccessDashboardRoute("/dashboard/sms/platform", ["send_sms", "companies:read"], "admin"),
+    ).toBe(false)
   })
 
   it("hides personal team pages without a manager grant", () => {
