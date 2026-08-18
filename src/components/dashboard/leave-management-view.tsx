@@ -1054,6 +1054,8 @@ export function LeaveManagementView({
   const [selectedBalanceRow, setSelectedBalanceRow] = React.useState<AdminRecord | null>(null)
   const [selectedBalanceGroup, setSelectedBalanceGroup] = React.useState<LeaveBalanceEmployeeGroup | null>(null)
   const [employeeBalanceDetailsOpen, setEmployeeBalanceDetailsOpen] = React.useState(false)
+  const [returnToEmployeeBalances, setReturnToEmployeeBalances] = React.useState(false)
+  const returnToEmployeeBalancesRef = React.useRef(false)
   const [balanceBulkDialog, setBalanceBulkDialog] = React.useState<null | "generate" | "carry-forward">(null)
   const [balanceBulkYear, setBalanceBulkYear] = React.useState(String(new Date().getFullYear()))
   const [workflowSteps, setWorkflowSteps] = React.useState<AdminRecord[]>([])
@@ -1763,6 +1765,15 @@ export function LeaveManagementView({
     []
   )
 
+  React.useEffect(() => {
+    setSelectedBalanceGroup((current) => {
+      if (!current) {
+        return current
+      }
+      return groupedBalances.find((group) => group.key === current.key) ?? current
+    })
+  }, [groupedBalances])
+
   const selectedBalanceGroupRows = React.useMemo(
     () =>
       selectedBalanceGroup
@@ -2238,6 +2249,8 @@ export function LeaveManagementView({
       return
     }
     if (row) {
+      returnToEmployeeBalancesRef.current = employeeBalanceDetailsOpen
+      setReturnToEmployeeBalances(employeeBalanceDetailsOpen)
       setEmployeeBalanceDetailsOpen(false)
       setSelectedBalanceRow(row)
       setBalanceForm({
@@ -2249,6 +2262,8 @@ export function LeaveManagementView({
         expired_days: String(readNumber(row, ["expired_days", "expired", "expiredDays"]) ?? 0),
       })
     } else {
+      returnToEmployeeBalancesRef.current = false
+      setReturnToEmployeeBalances(false)
       setSelectedBalanceRow(null)
       resetBalanceForm()
     }
@@ -4130,6 +4145,16 @@ export function LeaveManagementView({
           if (!open) {
             setSelectedBalanceRow(null)
             resetBalanceForm()
+            if (returnToEmployeeBalancesRef.current && selectedBalanceGroup) {
+              returnToEmployeeBalancesRef.current = false
+              setReturnToEmployeeBalances(false)
+              window.setTimeout(() => {
+                setEmployeeBalanceDetailsOpen(true)
+              }, 0)
+            } else {
+              returnToEmployeeBalancesRef.current = false
+              setReturnToEmployeeBalances(false)
+            }
           }
         }}
       >
@@ -4200,7 +4225,7 @@ export function LeaveManagementView({
         open={employeeBalanceDetailsOpen}
         onOpenChange={(open) => {
           setEmployeeBalanceDetailsOpen(open)
-          if (!open) {
+          if (!open && !returnToEmployeeBalancesRef.current) {
             setSelectedBalanceGroup(null)
           }
         }}
@@ -4262,14 +4287,16 @@ export function LeaveManagementView({
                     readNumber(row, ["id", "leave_type_id", "leaveTypeId"]) ?? `${typeName}-${index}`
                   )
                   return (
-                    <div
+                    <button
                       key={rowKey}
+                      type="button"
                       className={cn(
-                        "grid items-center gap-2 border-b border-slate-100 px-2.5 py-2 text-xs last:border-b-0",
+                        "grid w-full items-center gap-2 border-b border-slate-100 px-2.5 py-2 text-left text-xs last:border-b-0 hover:bg-slate-50",
                         canAdjustBalances
                           ? "grid-cols-[minmax(0,1fr)_4.25rem_3.5rem_3.5rem_2rem]"
                           : "grid-cols-[minmax(0,1fr)_4.25rem_3.5rem_3.5rem]"
                       )}
+                      onClick={() => void openBalanceDialog(row)}
                     >
                       <div className="min-w-0">
                         <p className="truncate font-medium text-slate-900" title={typeName}>
@@ -4291,16 +4318,11 @@ export function LeaveManagementView({
                         {formatBalanceDays(readBalanceDays(row, ["remaining_days", "remaining", "remainingDays"]))}
                       </span>
                       {canAdjustBalances ? (
-                        <button
-                          type="button"
-                          className="admin-table-icon-button justify-self-end"
-                          title={`Adjust ${typeName}`}
-                          onClick={() => void openBalanceDialog(row)}
-                        >
+                        <span className="admin-table-icon-button pointer-events-none justify-self-end" title={`Adjust ${typeName}`}>
                           <Pencil className="size-3.5" />
-                        </button>
+                        </span>
                       ) : null}
-                    </div>
+                    </button>
                   )
                 })}
               </div>
