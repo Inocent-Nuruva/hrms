@@ -427,12 +427,20 @@ function formatLeaveDays(value: string) {
 }
 
 function leaveTypeIdFromRow(row: AdminRecord) {
-  return readNumber(row, ["leave_type_id", "leaveTypeId", "type_id", "typeId"])
+  const direct = readNumber(row, ["leave_type_id", "leaveTypeId", "type_id", "typeId"])
+  if (direct !== null) {
+    return direct
+  }
+  const nested = asRecord(row.leave_type) ?? asRecord(row.leaveType) ?? asRecord(row.type)
+  if (nested) {
+    return readNumber(nested, ["id", "leave_type_id", "leaveTypeId", "type_id", "typeId"])
+  }
+  return null
 }
 
 function formFromBalanceRow(row: AdminRecord) {
   return {
-    employee_id: String(readNumber(row, ["employee_id", "employeeId"]) ?? ""),
+    employee_id: String(readBalanceEmployeeId(row) ?? readNumber(row, ["employee_id", "employeeId"]) ?? ""),
     leave_type_id: String(leaveTypeIdFromRow(row) ?? ""),
     fiscal_year:
       readString(row, ["fiscal_year", "fiscalYear"]) === "-"
@@ -4212,95 +4220,97 @@ export function LeaveManagementView({
           }
         }}
       >
-        <DialogPopup from="bottom" className="sm:max-w-4xl">
+        <DialogPopup from="bottom" className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Adjust Leave Balance</DialogTitle>
+            <DialogTitle>{selectedBalanceRow || returnToEmployeeBalances ? "Edit leave balance" : "Adjust leave balance"}</DialogTitle>
             <DialogDescription>
-              {selectedBalanceRow
-                ? `Editing ${employeeLabelFromRow(selectedBalanceRow)} for ${leaveTypeLabelFromRow(selectedBalanceRow)}. You can update the values below before saving.`
-                : "Enter the balance adjustment details, then save them."}
+              {returnToEmployeeBalances && selectedBalanceGroup
+                ? `${selectedBalanceGroup.employeeName}${balanceForm.fiscal_year ? ` · FY ${balanceForm.fiscal_year}` : ""}`
+                : selectedBalanceRow
+                  ? `${employeeLabelFromRow(selectedBalanceRow)}${balanceForm.fiscal_year ? ` · FY ${balanceForm.fiscal_year}` : ""}`
+                  : "Choose an employee and leave type, then set the days."}
             </DialogDescription>
           </DialogHeader>
-          {balanceForm.employee_id || balanceForm.leave_type_id ? (
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-              <span className="font-medium text-slate-900">
-                {selectedBalanceRow
-                  ? employeeLabelFromRow(selectedBalanceRow)
-                  : employeeLabel(Number(balanceForm.employee_id) || null)}
-              </span>
-              {" · "}
-              <span>
-                {selectedBalanceRow
-                  ? leaveTypeLabelFromRow(selectedBalanceRow)
-                  : leaveTypeLabel(Number(balanceForm.leave_type_id) || null)}
-              </span>
-              {" · FY "}
-              <span>{balanceForm.fiscal_year || "-"}</span>
-            </div>
-          ) : null}
-          <div className="grid gap-3 md:grid-cols-3">
-            <select
-              className="h-10 rounded-md border border-slate-300 px-3 text-sm"
-              value={balanceForm.employee_id}
-              onChange={(event) =>
-                applyBalanceSelection({
-                  employee_id: event.target.value,
-                  leave_type_id: balanceForm.leave_type_id,
-                  fiscal_year: balanceForm.fiscal_year,
-                })
-              }
-            >
-              <option value="">Select employee</option>
-              {employees.map((employee) => {
-                const id = readNumber(employee, ["id", "employee_id", "user_id"])
-                if (id === null) return null
-                return <option key={id} value={String(id)}>{employeeLabel(id)}</option>
-              })}
-            </select>
-            <select
-              className="h-10 rounded-md border border-slate-300 px-3 text-sm"
-              value={balanceForm.leave_type_id}
-              onChange={(event) =>
-                applyBalanceSelection({
-                  employee_id: balanceForm.employee_id,
-                  leave_type_id: event.target.value,
-                  fiscal_year: balanceForm.fiscal_year,
-                })
-              }
-            >
-              <option value="">Select leave type</option>
-              {types.map((type) => {
-                const id = readNumber(type, ["id"])
-                if (id === null) return null
-                return <option key={id} value={String(id)}>{readString(type, ["name"])}</option>
-              })}
-            </select>
-            <div className="space-y-1">
-              <p className="text-xs text-slate-500">Fiscal year to apply this balance adjustment.</p>
-              <input
+          <div className="grid gap-3">
+            {returnToEmployeeBalances ? null : (
+              <label className="space-y-1">
+                <span className="text-xs text-slate-500">Employee</span>
+                <select
+                  className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                  value={balanceForm.employee_id}
+                  onChange={(event) =>
+                    applyBalanceSelection({
+                      employee_id: event.target.value,
+                      leave_type_id: balanceForm.leave_type_id,
+                      fiscal_year: balanceForm.fiscal_year,
+                    })
+                  }
+                >
+                  <option value="">Select employee</option>
+                  {employees.map((employee) => {
+                    const id = readNumber(employee, ["id", "employee_id", "user_id"])
+                    if (id === null) return null
+                    return <option key={id} value={String(id)}>{employeeLabel(id)}</option>
+                  })}
+                </select>
+              </label>
+            )}
+            <label className="space-y-1">
+              <span className="text-xs text-slate-500">Leave type</span>
+              <select
                 className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
-                placeholder="Fiscal year"
-                value={balanceForm.fiscal_year}
+                value={balanceForm.leave_type_id}
                 onChange={(event) =>
                   applyBalanceSelection({
                     employee_id: balanceForm.employee_id,
-                    leave_type_id: balanceForm.leave_type_id,
-                    fiscal_year: event.target.value,
+                    leave_type_id: event.target.value,
+                    fiscal_year: balanceForm.fiscal_year,
                   })
                 }
-              />
-            </div>
-            <div className="space-y-1">
-              <p className="text-xs text-slate-500">Total leave granted for this year.</p>
-              <input type="number" min={0} className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm" placeholder="Allocated days" value={balanceForm.allocated_days} onChange={(event) => setBalanceForm((prev) => ({ ...prev, allocated_days: event.target.value }))} />
-            </div>
-            <div className="space-y-1">
-              <p className="text-xs text-slate-500">Unused days moved from the previous year.</p>
-              <input type="number" min={0} className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm" placeholder="Carried forward" value={balanceForm.carried_forward_days} onChange={(event) => setBalanceForm((prev) => ({ ...prev, carried_forward_days: event.target.value }))} />
-            </div>
-            <div className="space-y-1">
-              <p className="text-xs text-slate-500">Days removed because they are no longer valid.</p>
-              <input type="number" min={0} className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm" placeholder="Expired days" value={balanceForm.expired_days} onChange={(event) => setBalanceForm((prev) => ({ ...prev, expired_days: event.target.value }))} />
+              >
+                <option value="">Select leave type</option>
+                {(returnToEmployeeBalances && selectedBalanceGroup ? selectedBalanceGroup.rows : types).map((entry, index) => {
+                  const id = leaveTypeIdFromRow(entry) ?? readNumber(entry, ["id"])
+                  if (id === null) return null
+                  const label = returnToEmployeeBalances ? leaveTypeLabelFromRow(entry) : readString(entry, ["name"])
+                  return (
+                    <option key={`${id}-${index}`} value={String(id)}>
+                      {label}
+                    </option>
+                  )
+                })}
+              </select>
+            </label>
+            {returnToEmployeeBalances ? null : (
+              <label className="space-y-1">
+                <span className="text-xs text-slate-500">Fiscal year</span>
+                <input
+                  className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                  placeholder="2026"
+                  value={balanceForm.fiscal_year}
+                  onChange={(event) =>
+                    applyBalanceSelection({
+                      employee_id: balanceForm.employee_id,
+                      leave_type_id: balanceForm.leave_type_id,
+                      fiscal_year: event.target.value,
+                    })
+                  }
+                />
+              </label>
+            )}
+            <div className="grid gap-3 sm:grid-cols-3">
+              <label className="space-y-1">
+                <span className="text-xs text-slate-500">Allocated</span>
+                <input type="number" min={0} className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm" value={balanceForm.allocated_days} onChange={(event) => setBalanceForm((prev) => ({ ...prev, allocated_days: event.target.value }))} />
+              </label>
+              <label className="space-y-1">
+                <span className="text-xs text-slate-500">Carried forward</span>
+                <input type="number" min={0} className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm" value={balanceForm.carried_forward_days} onChange={(event) => setBalanceForm((prev) => ({ ...prev, carried_forward_days: event.target.value }))} />
+              </label>
+              <label className="space-y-1">
+                <span className="text-xs text-slate-500">Expired</span>
+                <input type="number" min={0} className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm" value={balanceForm.expired_days} onChange={(event) => setBalanceForm((prev) => ({ ...prev, expired_days: event.target.value }))} />
+              </label>
             </div>
           </div>
           <DialogFooter>
@@ -4308,7 +4318,7 @@ export function LeaveManagementView({
               Cancel
             </button>
             <button type="button" className="rounded-md bg-primary px-4 py-2 text-sm font-medium !text-white" disabled={saving} onClick={() => void submitBalanceAdjustment()}>
-              {saving ? "Saving..." : selectedBalanceRow ? "Save Balance Changes" : "Adjust Leave Balance"}
+              {saving ? "Saving..." : selectedBalanceRow ? "Save" : "Adjust"}
             </button>
           </DialogFooter>
         </DialogPopup>
