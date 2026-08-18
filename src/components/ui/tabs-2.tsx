@@ -29,7 +29,7 @@ function isActivePath(currentPath: string, url: string) {
 
 const tabTriggerClass = (active: boolean) =>
   cn(
-    "relative inline-flex min-w-0 shrink-0 items-center gap-0.5 px-1 py-1.5 text-left text-xs font-medium outline-none transition-colors",
+    "relative inline-flex min-w-0 shrink-0 items-center gap-0.5 px-1 py-1.5 text-left text-[11px] font-bold outline-none transition-colors",
     active
       ? "text-[var(--primary)]"
       : "text-muted-foreground hover:text-foreground dark:text-slate-100 dark:hover:text-white"
@@ -92,7 +92,7 @@ export function Tabs2({ groups, currentPath, className }: Tabs2Props) {
                 href={only.url}
                 className={tabTriggerClass(isActivePath(currentPath, only.url))}
               >
-                <span className="truncate whitespace-nowrap">{label}</span>
+                <span className="truncate whitespace-nowrap font-bold">{label}</span>
                 <TabUnderline active={isActivePath(currentPath, only.url)} />
               </Link>
             )
@@ -111,11 +111,11 @@ export function Tabs2({ groups, currentPath, className }: Tabs2Props) {
                 }
               >
                 {/* Group title stays stable so layout does not jump when a child becomes active. */}
-                <span className="truncate whitespace-nowrap">{groupLabel}</span>
+                <span className="truncate whitespace-nowrap font-bold">{groupLabel}</span>
                 {showChildPreview ? (
                   <span
                     className={cn(
-                      "hidden max-w-28 truncate text-[11px] font-normal whitespace-nowrap lg:inline",
+                      "hidden max-w-24 truncate text-[10px] font-medium whitespace-nowrap lg:inline",
                       isActiveGroup
                         ? "text-[var(--primary)]/80"
                         : "text-muted-foreground/80 dark:text-slate-300"
