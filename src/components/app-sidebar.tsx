@@ -236,19 +236,6 @@ const adminData: SidebarData = {
       icon: IStructure,
     },
     {
-      title: "Insights",
-      url: "/dashboard/insights",
-      matchUrls: [
-        "/dashboard/insights",
-        "/dashboard/insights/hr",
-        "/dashboard/insights/management",
-        "/dashboard/insights/manager",
-        "/dashboard/insights/sales-field",
-        "/dashboard/insights/readiness",
-      ],
-      icon: IInsights,
-    },
-    {
       title: "Invite & register",
       url: "/dashboard/operations/recruitment",
       icon: IUsers,
@@ -283,6 +270,19 @@ const adminData: SidebarData = {
         "/dashboard/sms/platform",
       ],
       icon: ISms,
+    },
+    {
+      title: "Insights",
+      url: "/dashboard/insights",
+      matchUrls: [
+        "/dashboard/insights",
+        "/dashboard/insights/hr",
+        "/dashboard/insights/management",
+        "/dashboard/insights/manager",
+        "/dashboard/insights/sales-field",
+        "/dashboard/insights/readiness",
+      ],
+      icon: IInsights,
     },
   ],
   navSecondary: [
@@ -581,19 +581,6 @@ const employeeData: SidebarData = {
       icon: IStructure,
     },
     {
-      title: "Insights",
-      url: "/dashboard/insights",
-      matchUrls: [
-        "/dashboard/insights",
-        "/dashboard/insights/hr",
-        "/dashboard/insights/management",
-        "/dashboard/insights/manager",
-        "/dashboard/insights/sales-field",
-        "/dashboard/insights/readiness",
-      ],
-      icon: IInsights,
-    },
-    {
       title: "My Leave",
       icon: ILeave,
       url: "/dashboard/me/leave/requests",
@@ -614,6 +601,19 @@ const employeeData: SidebarData = {
       icon: IOffboarding,
       // Self-service path — does not mount the HR Employees section tabs.
       url: "/dashboard/me/offboarding",
+    },
+    {
+      title: "Insights",
+      url: "/dashboard/insights",
+      matchUrls: [
+        "/dashboard/insights",
+        "/dashboard/insights/hr",
+        "/dashboard/insights/management",
+        "/dashboard/insights/manager",
+        "/dashboard/insights/sales-field",
+        "/dashboard/insights/readiness",
+      ],
+      icon: IInsights,
     },
   ],
   navSecondary: [

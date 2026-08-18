@@ -312,9 +312,9 @@ export function allDashboardSectionTabGroups(): DashboardSectionTabGroup[] {
     smsSectionTabGroups,
     selfTeamSectionTabGroups,
     structureSectionTabGroups,
-    insightsSectionTabGroups,
     leaveManagementSectionTabGroups,
     accessControlSectionTabGroups,
+    insightsSectionTabGroups,
   ].flat()
 }
 

@@ -10,7 +10,6 @@ import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared"
 import {
   HeroBand,
   MetricTile,
-  StatusChip,
   TalentDoodleSprites,
   asRecordArray,
   employeeLabel,
@@ -51,6 +50,42 @@ export type InsightsOpsTab = "hr" | "management" | "manager" | "sales-field" | "
 
 function readStoredToken() {
   return readStoredSessionTokens().accessToken.trim()
+}
+
+function yesNoLabel(value: string) {
+  const normalized = value.trim().toLowerCase()
+  if (!normalized || normalized === "—" || normalized === "-" || normalized === "pending" || normalized === "false" || normalized === "0" || normalized === "no" || normalized === "missing") {
+    return "Not yet"
+  }
+  if (["true", "1", "yes", "ready", "ok", "assigned", "linked"].includes(normalized)) {
+    return "Yes"
+  }
+  return value
+}
+
+function readyLabel(value: string) {
+  const normalized = value.trim().toLowerCase()
+  if (!normalized || ["pending", "false", "0", "no", "—", "-"].includes(normalized)) {
+    return "Not ready"
+  }
+  if (["ready", "true", "1", "yes", "ok"].includes(normalized)) {
+    return "Ready"
+  }
+  return value
+}
+
+function securityEventLabel(value: string) {
+  const normalized = value.trim().toLowerCase().replace(/[_-]+/g, " ")
+  if (normalized.includes("access denied") || normalized === "denied") {
+    return "Sign-in was blocked"
+  }
+  if (normalized.includes("login") && normalized.includes("fail")) {
+    return "Sign-in failed"
+  }
+  if (!normalized || normalized === "event") {
+    return "Security alert"
+  }
+  return value
 }
 
 function friendlyStatus(value: string) {
@@ -243,16 +278,37 @@ export function InsightsOperationsView({
 
   const employeeColumns = React.useMemo<Column<AdminRecord>[]>(() => [
     { key: "employee", label: "Employee", render: (row) => employeeLabel(row) },
-    { key: "shift", label: "Shift", render: (row) => <StatusChip value={readString(row, ["shiftReady", "shift_ready", "hasShift", "has_shift"], "—")} /> },
-    { key: "device", label: "Device", render: (row) => <StatusChip value={readString(row, ["deviceReady", "device_ready", "hasDevice", "has_device"], "—")} /> },
-    { key: "status", label: "Status", render: (row) => <StatusChip value={readString(row, ["status", "readiness", "ready"], "PENDING")} /> },
+    {
+      key: "shift",
+      label: "Has a shift",
+      render: (row) => yesNoLabel(readString(row, ["shiftReady", "shift_ready", "hasShift", "has_shift"], "")),
+    },
+    {
+      key: "device",
+      label: "Has a clock-in device",
+      render: (row) => yesNoLabel(readString(row, ["deviceReady", "device_ready", "hasDevice", "has_device"], "")),
+    },
+    {
+      key: "status",
+      label: "Can clock in",
+      render: (row) => readyLabel(readString(row, ["status", "readiness", "ready"], "PENDING")),
+    },
   ], [])
 
   const eventColumns = React.useMemo<Column<AdminRecord>[]>(() => [
-    { key: "type", label: "Event", render: (row) => prettify(readString(row, ["eventType", "event_type", "type"], "Event")) },
-    { key: "outcome", label: "Outcome", render: (row) => <StatusChip value={readString(row, ["outcome", "status"], "—")} /> },
-    { key: "when", label: "When", render: (row) => formatDate(row.createdAt ?? row.created_at ?? row.occurredAt) },
-    { key: "request", label: "Request", render: (row) => readString(row, ["requestId", "request_id"], "—") },
+    {
+      key: "type",
+      label: "What happened",
+      render: (row) => securityEventLabel(readString(row, ["eventType", "event_type", "type", "message"], "Event")),
+    },
+    {
+      key: "when",
+      label: "When",
+      render: (row) => {
+        const when = formatDate(row.createdAt ?? row.created_at ?? row.occurredAt ?? row.occurred_at ?? row.timestamp)
+        return when === "—" ? "Time not recorded" : when
+      },
+    },
   ], [])
 
   if (!canAccess) return null
@@ -415,29 +471,39 @@ export function InsightsOperationsView({
             </motion.ul>
           ) : null}
           <SearchToggleField value={search} onChange={setSearch} placeholder="Search people or activity" />
-          <div className="overflow-hidden rounded-xl border border-border bg-card">
-            <ResizableTable
-              title="Who is ready to clock in"
-              data={visibleEmployees}
-              columns={employeeColumns}
-              loading={loading}
-              itemsPerPage={20}
-              showExport={false}
-              storageKey="insights-readiness-employees"
-              onRowSelect={(_, row) => row && setDetail(row)}
-            />
+          <div className="space-y-1">
+            <p className="text-sm text-muted-foreground">
+              These people still need a shift or a clock-in device before they can punch in.
+            </p>
+            <div className="overflow-hidden rounded-xl border border-border bg-card">
+              <ResizableTable
+                title="Employee"
+                data={visibleEmployees}
+                columns={employeeColumns}
+                loading={loading}
+                itemsPerPage={20}
+                showExport={false}
+                storageKey="insights-readiness-employees"
+                onRowSelect={(_, row) => row && setDetail(row)}
+              />
+            </div>
           </div>
-          <div className="overflow-hidden rounded-xl border border-border bg-card">
-            <ResizableTable
-              title="Recent security activity"
-              data={visibleEvents}
-              columns={eventColumns}
-              loading={false}
-              itemsPerPage={20}
-              showExport={false}
-              storageKey="insights-security-events"
-              onRowSelect={(_, row) => row && setDetail(row)}
-            />
+          <div className="space-y-1">
+            <p className="text-sm text-muted-foreground">
+              Recent times someone was blocked from signing in.
+            </p>
+            <div className="overflow-hidden rounded-xl border border-border bg-card">
+              <ResizableTable
+                title="Blocked sign-in"
+                data={visibleEvents}
+                columns={eventColumns}
+                loading={false}
+                itemsPerPage={20}
+                showExport={false}
+                storageKey="insights-security-events"
+                onRowSelect={(_, row) => row && setDetail(row)}
+              />
+            </div>
           </div>
         </>
       )}
