@@ -1053,21 +1053,13 @@ export function HrAttendanceCorrectionApprovalsView() {
           Requests
         </h1>
       </div>
-      <div className="flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground">
-        <span>
-          <span className="font-semibold tabular-nums text-foreground">{requests.length}</span> total
+      <div className="flex flex-wrap items-center gap-x-2 text-[11px]">
+        <span className="text-sky-700 dark:text-sky-300">
+          <span className="font-semibold tabular-nums">{requests.length}</span> total
         </span>
         <span className="text-border">·</span>
-        <span>
-          <span
-            className={cn(
-              "font-semibold tabular-nums",
-              pendingCount > 0 ? "text-amber-700 dark:text-amber-300" : "text-foreground",
-            )}
-          >
-            {pendingCount}
-          </span>{" "}
-          pending
+        <span className="text-amber-700 dark:text-amber-300">
+          <span className="font-semibold tabular-nums">{pendingCount}</span> pending
         </span>
       </div>
     </div>
