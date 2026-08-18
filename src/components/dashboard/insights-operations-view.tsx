@@ -13,7 +13,7 @@ import {
   TalentDoodleSprites,
   asRecordArray,
   employeeLabel,
-  formatDate,
+  formatDateTime,
   inputClass,
   optionLabel,
   prettify,
@@ -45,6 +45,16 @@ import { useDashboardMotion } from "@/lib/dashboard-motion"
 import { useForbiddenRouteGuard, useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
 import { readStoredSessionTokens } from "@/lib/session-client"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
+import { describeSecurityEvent } from "@/lib/security-event-plain"
+
+import {
+  Dialog,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogPopup,
+  DialogTitle,
+} from "@/components/animate-ui/components/base/dialog"
 
 export type InsightsOpsTab = "hr" | "management" | "manager" | "sales-field" | "readiness"
 
@@ -70,20 +80,6 @@ function readyLabel(value: string) {
   }
   if (["ready", "true", "1", "yes", "ok"].includes(normalized)) {
     return "Ready"
-  }
-  return value
-}
-
-function securityEventLabel(value: string) {
-  const normalized = value.trim().toLowerCase().replace(/[_-]+/g, " ")
-  if (normalized.includes("access denied") || normalized === "denied") {
-    return "Sign-in was blocked"
-  }
-  if (normalized.includes("login") && normalized.includes("fail")) {
-    return "Sign-in failed"
-  }
-  if (!normalized || normalized === "event") {
-    return "Security alert"
   }
   return value
 }
@@ -149,6 +145,7 @@ export function InsightsOperationsView({
   const [error, setError] = React.useState<string | null>(null)
   const [search, setSearch] = React.useState("")
   const [detail, setDetail] = React.useState<AdminRecord | null>(null)
+  const [eventDetail, setEventDetail] = React.useState<AdminRecord | null>(null)
   const [dateFrom, setDateFrom] = React.useState("")
   const [dateTo, setDateTo] = React.useState("")
   const [policyName, setPolicyName] = React.useState("Default attendance policy")
@@ -215,6 +212,22 @@ export function InsightsOperationsView({
   const blockers = asRecordArray(readiness?.blockers ?? readiness?.items)
   const visibleEmployees = employees.filter((row) => !search || JSON.stringify(row).toLowerCase().includes(search.toLowerCase()))
   const visibleEvents = events.filter((row) => !search || JSON.stringify(row).toLowerCase().includes(search.toLowerCase()))
+  const actorNameById = React.useMemo(() => {
+    const names = new Map<number, string>()
+    employees.forEach((row) => {
+      const label = employeeLabel(row)
+      if (!label || label === "—") {
+        return
+      }
+      ;(["id", "employee_id", "employeeId", "user_id", "userId"] as const).forEach((key) => {
+        const id = readNumber(row, [key])
+        if (id !== null && !names.has(id)) {
+          names.set(id, label)
+        }
+      })
+    })
+    return names
+  }, [employees])
 
   async function onWizard() {
     const token = readStoredToken()
@@ -297,19 +310,26 @@ export function InsightsOperationsView({
 
   const eventColumns = React.useMemo<Column<AdminRecord>[]>(() => [
     {
-      key: "type",
-      label: "What happened",
-      render: (row) => securityEventLabel(readString(row, ["eventType", "event_type", "type", "message"], "Event")),
+      key: "what",
+      label: "What they tried",
+      render: (row) => describeSecurityEvent(row, actorNameById).what,
+    },
+    {
+      key: "who",
+      label: "Who",
+      render: (row) => describeSecurityEvent(row, actorNameById).who,
     },
     {
       key: "when",
       label: "When",
       render: (row) => {
-        const when = formatDate(row.createdAt ?? row.created_at ?? row.occurredAt ?? row.occurred_at ?? row.timestamp)
+        const when = formatDateTime(
+          row.occurred_at ?? row.occurredAt ?? row.createdAt ?? row.created_at ?? row.timestamp,
+        )
         return when === "—" ? "Time not recorded" : when
       },
     },
-  ], [])
+  ], [actorNameById])
 
   if (!canAccess) return null
 
@@ -490,18 +510,18 @@ export function InsightsOperationsView({
           </div>
           <div className="space-y-1">
             <p className="text-sm text-muted-foreground">
-              Recent times someone was blocked from signing in.
+              Times someone tried to open a page they do not have permission to use.
             </p>
             <div className="overflow-hidden rounded-xl border border-border bg-card">
               <ResizableTable
-                title="Blocked sign-in"
+                title="Blocked action"
                 data={visibleEvents}
                 columns={eventColumns}
                 loading={false}
                 itemsPerPage={20}
                 showExport={false}
                 storageKey="insights-security-events"
-                onRowSelect={(_, row) => row && setDetail(row)}
+                onRowSelect={(_, row) => row && setEventDetail(row)}
               />
             </div>
           </div>
@@ -509,6 +529,48 @@ export function InsightsOperationsView({
       )}
 
       <RecordDetailsDialog open={Boolean(detail)} onOpenChange={(open) => !open && setDetail(null)} title={optionLabel(detail) || "Details"} row={detail} />
+
+      <Dialog open={Boolean(eventDetail)} onOpenChange={(open) => !open && setEventDetail(null)}>
+        <DialogPopup from="bottom" className="sm:max-w-md">
+          {eventDetail ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>Access was blocked</DialogTitle>
+                <DialogDescription>
+                  {describeSecurityEvent(eventDetail, actorNameById).who} was stopped from opening something they cannot use.
+                </DialogDescription>
+              </DialogHeader>
+              <dl className="grid gap-2 text-sm">
+                <div className="rounded-md border border-border/60 px-2.5 py-2">
+                  <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">What they tried</dt>
+                  <dd className="mt-0.5 font-medium">{describeSecurityEvent(eventDetail, actorNameById).what}</dd>
+                </div>
+                <div className="rounded-md border border-border/60 px-2.5 py-2">
+                  <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">Why</dt>
+                  <dd className="mt-0.5 font-medium">{describeSecurityEvent(eventDetail, actorNameById).why}</dd>
+                </div>
+                <div className="rounded-md border border-border/60 px-2.5 py-2">
+                  <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">When</dt>
+                  <dd className="mt-0.5 font-medium">
+                    {formatDateTime(describeSecurityEvent(eventDetail, actorNameById).whenRaw) === "—"
+                      ? "Time not recorded"
+                      : formatDateTime(describeSecurityEvent(eventDetail, actorNameById).whenRaw)}
+                  </dd>
+                </div>
+              </dl>
+              <DialogFooter>
+                <button
+                  type="button"
+                  className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+                  onClick={() => setEventDetail(null)}
+                >
+                  Close
+                </button>
+              </DialogFooter>
+            </>
+          ) : null}
+        </DialogPopup>
+      </Dialog>
     </motion.section>
   )
 }
