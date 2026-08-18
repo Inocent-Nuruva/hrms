@@ -53,6 +53,9 @@ import {
   canAccessDashboardRoute,
   canPerformPermission,
   COMPANY_MANAGEMENT_ROUTE_PERMISSION,
+  SMS_LOGS_RETRY_PERMISSION,
+  SMS_SETTINGS_UPDATE_PERMISSION,
+  SMS_TEST_PERMISSION,
 } from "@/lib/dashboard-permissions"
 import { useForbiddenRouteGuard, useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
 import { readStoredSessionTokens } from "@/lib/session-client"
@@ -83,6 +86,12 @@ export function SmsOperationsView({ activeTab }: { activeTab: SmsOpsTab }) {
   useForbiddenRouteGuard(canAccess)
   const hasPlatformAccess =
     actor.ready && canPerformPermission(actor.permissionLabels, COMPANY_MANAGEMENT_ROUTE_PERMISSION)
+  const canUpdateSettings =
+    actor.ready && canPerformPermission(actor.permissionLabels, SMS_SETTINGS_UPDATE_PERMISSION)
+  const canRetryLogs =
+    actor.ready && canPerformPermission(actor.permissionLabels, SMS_LOGS_RETRY_PERMISSION)
+  const canSendTest =
+    actor.ready && canPerformPermission(actor.permissionLabels, SMS_TEST_PERMISSION)
 
   const [global, setGlobal] = React.useState<AdminRecord | null>(null)
   const [platformGlobal, setPlatformGlobal] = React.useState<AdminRecord | null>(null)
@@ -267,30 +276,34 @@ export function SmsOperationsView({ activeTab }: { activeTab: SmsOpsTab }) {
         { key: "name", label: "Name", render: (row) => readString(row, ["name", "notificationName", "notification_name"], "—") },
         { key: "module", label: "Module", render: (row) => prettify(readString(row, ["module"], "—")) },
         { key: "status", label: "Status", render: (row) => <StatusChip value={settingEnabled(row) ? "ENABLED" : "DISABLED"} /> },
-        {
-          key: "actions",
-          label: "Actions",
-          render: (row) => (
-            <button
-              type="button"
-              className={actionButtonClass}
-              onClick={(event) => {
-                event.stopPropagation()
-                setCreateMode("registry")
-                setForm({
-                  code: registryCode(row),
-                  sms_template: readString(row, ["smsTemplate", "sms_template"]),
-                  description: readString(row, ["description"]),
-                  is_enabled: settingEnabled(row) ? "true" : "false",
-                  platform: activeTab === "platform" ? "true" : "false",
-                })
-                setCreateOpen(true)
-              }}
-            >
-              Edit
-            </button>
-          ),
-        },
+        ...(canUpdateSettings
+          ? [
+              {
+                key: "actions",
+                label: "Actions",
+                render: (row: AdminRecord) => (
+                  <button
+                    type="button"
+                    className={actionButtonClass}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      setCreateMode("registry")
+                      setForm({
+                        code: registryCode(row),
+                        sms_template: readString(row, ["smsTemplate", "sms_template"]),
+                        description: readString(row, ["description"]),
+                        is_enabled: settingEnabled(row) ? "true" : "false",
+                        platform: activeTab === "platform" ? "true" : "false",
+                      })
+                      setCreateOpen(true)
+                    }}
+                  >
+                    Edit
+                  </button>
+                ),
+              } satisfies Column<AdminRecord>,
+            ]
+          : []),
       ]
     }
     return [
@@ -298,25 +311,29 @@ export function SmsOperationsView({ activeTab }: { activeTab: SmsOpsTab }) {
       { key: "code", label: "Code", render: (row) => readString(row, ["notificationCode", "notification_code"], "—") },
       { key: "status", label: "Status", render: (row) => <StatusChip value={readString(row, ["status"], "PENDING")} /> },
       { key: "error", label: "Error", render: (row) => readString(row, ["errorMessage", "error_message"], "—") },
-      {
-        key: "actions",
-        label: "Actions",
-        render: (row) => (
-          <button
-            type="button"
-            className={actionButtonClass}
-            disabled={busyId === `retry-${rowId(row)}`}
-            onClick={(event) => {
-              event.stopPropagation()
-              void retry(row, activeTab === "platform")
-            }}
-          >
-            Retry
-          </button>
-        ),
-      },
+      ...(canRetryLogs
+        ? [
+            {
+              key: "actions",
+              label: "Actions",
+              render: (row: AdminRecord) => (
+                <button
+                  type="button"
+                  className={actionButtonClass}
+                  disabled={busyId === `retry-${rowId(row)}`}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    void retry(row, activeTab === "platform")
+                  }}
+                >
+                  Retry
+                </button>
+              ),
+            } satisfies Column<AdminRecord>,
+          ]
+        : []),
     ]
-  }, [activeTab, busyId, platformKind])
+  }, [activeTab, busyId, canRetryLogs, canUpdateSettings, platformKind])
 
   if (!canAccess) return null
 
@@ -337,17 +354,19 @@ export function SmsOperationsView({ activeTab }: { activeTab: SmsOpsTab }) {
                   {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
                   Refresh
                 </button>
-                <button
-                  type="button"
-                  className={primaryButtonClass}
-                  onClick={() => {
-                    setCreateMode("test")
-                    setForm({ recipient_phone: "", message: "" })
-                    setCreateOpen(true)
-                  }}
-                >
-                  Send test
-                </button>
+                {canSendTest ? (
+                  <button
+                    type="button"
+                    className={primaryButtonClass}
+                    onClick={() => {
+                      setCreateMode("test")
+                      setForm({ recipient_phone: "", message: "" })
+                      setCreateOpen(true)
+                    }}
+                  >
+                    Send test
+                  </button>
+                ) : null}
               </div>
             }
           />
@@ -363,9 +382,11 @@ export function SmsOperationsView({ activeTab }: { activeTab: SmsOpsTab }) {
                 <h2 className="text-sm font-semibold">Global setting</h2>
                 <p className="text-sm text-muted-foreground">{readString(global, ["description"], "Turns company SMS notifications on or off.")}</p>
               </div>
-              <button type="button" className={actionButtonClass} disabled={!global || busyId === "global"} onClick={() => void toggleGlobal(false)}>
-                {settingEnabled(global) ? "Disable" : "Enable"}
-              </button>
+              {canUpdateSettings ? (
+                <button type="button" className={actionButtonClass} disabled={!global || busyId === "global"} onClick={() => void toggleGlobal(false)}>
+                  {settingEnabled(global) ? "Disable" : "Enable"}
+                </button>
+              ) : null}
             </div>
           </div>
         </>
@@ -411,9 +432,11 @@ export function SmsOperationsView({ activeTab }: { activeTab: SmsOpsTab }) {
               <h2 className="text-sm font-semibold">Platform SMS</h2>
               <p className="text-sm text-muted-foreground">{readString(platformGlobal, ["description"], "Turns platform SMS on or off.")}</p>
             </div>
-            <button type="button" className={actionButtonClass} disabled={!platformGlobal || busyId === "platform-global"} onClick={() => void toggleGlobal(true)}>
-              {settingEnabled(platformGlobal) ? "Disable" : "Enable"}
-            </button>
+            {canUpdateSettings ? (
+              <button type="button" className={actionButtonClass} disabled={!platformGlobal || busyId === "platform-global"} onClick={() => void toggleGlobal(true)}>
+                {settingEnabled(platformGlobal) ? "Disable" : "Enable"}
+              </button>
+            ) : null}
           </div>
         </div>
       ) : null}

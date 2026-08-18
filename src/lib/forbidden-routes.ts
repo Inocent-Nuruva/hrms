@@ -24,7 +24,10 @@ const DO_NOT_REMEMBER = new Set([
  * "Platform access is required" for those users. Hide the nav item until the
  * list call actually succeeds.
  */
-const PLATFORM_SCOPED_ROUTES = new Set(["/dashboard/companies"])
+const PLATFORM_SCOPED_ROUTES = new Set([
+  "/dashboard/companies",
+  "/dashboard/sms/platform",
+])
 
 function normalizePath(url: string) {
   const path = url.split("?")[0] ?? url
@@ -106,7 +109,13 @@ export function isPlatformScopedDashboardRoute(url: string) {
 
 export function isConfirmedPlatformRoute(url: string) {
   const prefix = tabPrefix(url)
-  return readConfirmedPrefixes().includes(prefix)
+  const confirmed = readConfirmedPrefixes()
+  if (confirmed.includes(prefix)) return true
+  // Company SMS platform uses the same platform gate as Companies.
+  if (prefix === "/dashboard/sms/platform") {
+    return confirmed.includes("/dashboard/companies")
+  }
+  return false
 }
 
 export function confirmPlatformRoute(url: string) {

@@ -54,6 +54,19 @@ describe("forbidden route memory", () => {
       "/dashboard/sms/overview",
     )
     expect(canSeeDashboardPage("/dashboard/sms", ["sms:read"], "admin")).toBe(true)
+    expect(
+      firstVisibleSiblingOrHome(
+        "/dashboard/sms",
+        ["sms:settings:read", "sms:logs:read", "companies:read"],
+        "admin",
+      ),
+    ).toBe("/dashboard/sms/overview")
+    expect(
+      canSeeDashboardPage("/dashboard/sms/overview", ["sms:settings:read"], "admin"),
+    ).toBe(true)
+    expect(
+      canSeeDashboardPage("/dashboard/sms/platform", ["sms:settings:read", "companies:read"], "admin"),
+    ).toBe(false)
   })
 
   it("does not hide company SMS after an API permission error", () => {

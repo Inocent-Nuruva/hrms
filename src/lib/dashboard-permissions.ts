@@ -339,19 +339,77 @@ export const MOVEMENT_OPERATIONS_PERMISSION: PermissionRequirement = {
   mode: "any",
 }
 
+const SMS_SETTINGS_READ_LABELS = [
+  "sms:settings:read",
+  "sms:read",
+  "sms_registry:read",
+  "view_sms",
+  "manage_sms",
+]
+
+const SMS_SETTINGS_UPDATE_LABELS = [
+  "sms:settings:update",
+  "sms:update",
+  "manage_sms",
+]
+
+const SMS_LOGS_READ_LABELS = [
+  "sms:logs:read",
+  "sms:read",
+  "sms_logs:read",
+  "view_sms",
+  "manage_sms",
+]
+
+const SMS_LOGS_RETRY_LABELS = [
+  "sms:logs:retry",
+  "sms:update",
+  "manage_sms",
+]
+
+const SMS_TEST_LABELS = [
+  "sms:test",
+  "sms:create",
+  "manage_sms",
+]
+
 /**
  * Company SMS operations (`/dashboard/sms/*`).
+ * Live API labels are `sms:settings:*`, `sms:logs:*`, and `sms:test`.
  * Platform SMS tabs still require companies:read, same as notification platform.
  */
+export const SMS_SETTINGS_READ_PERMISSION: PermissionRequirement = {
+  permissions: SMS_SETTINGS_READ_LABELS,
+  mode: "any",
+}
+
+export const SMS_SETTINGS_UPDATE_PERMISSION: PermissionRequirement = {
+  permissions: SMS_SETTINGS_UPDATE_LABELS,
+  mode: "any",
+}
+
+export const SMS_LOGS_READ_PERMISSION: PermissionRequirement = {
+  permissions: SMS_LOGS_READ_LABELS,
+  mode: "any",
+}
+
+export const SMS_LOGS_RETRY_PERMISSION: PermissionRequirement = {
+  permissions: SMS_LOGS_RETRY_LABELS,
+  mode: "any",
+}
+
+export const SMS_TEST_PERMISSION: PermissionRequirement = {
+  permissions: SMS_TEST_LABELS,
+  mode: "any",
+}
+
 export const SMS_ROUTE_PERMISSION: PermissionRequirement = {
   permissions: [
-    "sms:read",
-    "sms:update",
-    "sms:create",
-    "sms_logs:read",
-    "sms_registry:read",
-    "view_sms",
-    "manage_sms",
+    ...SMS_SETTINGS_READ_LABELS,
+    ...SMS_SETTINGS_UPDATE_LABELS,
+    ...SMS_LOGS_READ_LABELS,
+    ...SMS_LOGS_RETRY_LABELS,
+    ...SMS_TEST_LABELS,
   ],
   mode: "any",
 }
@@ -910,8 +968,8 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/movements/operations": MOVEMENT_OPERATIONS_PERMISSION,
   "/dashboard/sms": SMS_ROUTE_PERMISSION,
   "/dashboard/sms/overview": SMS_ROUTE_PERMISSION,
-  "/dashboard/sms/registry": SMS_ROUTE_PERMISSION,
-  "/dashboard/sms/logs": SMS_ROUTE_PERMISSION,
+  "/dashboard/sms/registry": SMS_SETTINGS_READ_PERMISSION,
+  "/dashboard/sms/logs": SMS_LOGS_READ_PERMISSION,
   "/dashboard/sms/platform": COMPANY_MANAGEMENT_ROUTE_PERMISSION,
   "/dashboard/structure": STRUCTURE_ROUTE_PERMISSION,
   "/dashboard/structure/cost-centers": COST_CENTER_ROUTE_PERMISSION,
@@ -1613,7 +1671,7 @@ export function canAccessDashboardRoute(
     return hasSmsPlatformAccess(permissionLabels)
   }
 
-  if (path === "/dashboard/sms") {
+  if (path === "/dashboard/sms" || path.startsWith("/dashboard/sms/")) {
     return hasSmsAccess(permissionLabels)
   }
 

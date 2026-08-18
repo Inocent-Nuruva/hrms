@@ -13,6 +13,14 @@ const COMPANY_ADMIN_PERMISSIONS = [
   "roles:read",
 ]
 
+const COMPANY_ADMIN_SMS_PERMISSIONS = [
+  "sms:settings:read",
+  "sms:settings:update",
+  "sms:logs:read",
+  "sms:logs:retry",
+  "sms:test",
+]
+
 describe("sms and manager route access", () => {
   it("hides SMS operations without an sms permission", () => {
     expect(
@@ -25,6 +33,22 @@ describe("sms and manager route access", () => {
     expect(canAccessDashboardRoute("/dashboard/sms", ["sms:read"], "admin")).toBe(true)
     expect(canAccessDashboardRoute("/dashboard/sms/logs", ["sms:read"], "admin")).toBe(true)
     expect(canAccessDashboardRoute("/dashboard/sms/registry", ["sms:read"], "employee")).toBe(true)
+  })
+
+  it("shows company SMS for the live sms:settings and sms:logs grants", () => {
+    expect(hasSmsAccess(COMPANY_ADMIN_SMS_PERMISSIONS)).toBe(true)
+    expect(
+      canAccessDashboardRoute("/dashboard/sms/overview", COMPANY_ADMIN_SMS_PERMISSIONS, "admin"),
+    ).toBe(true)
+    expect(
+      canAccessDashboardRoute("/dashboard/sms/registry", COMPANY_ADMIN_SMS_PERMISSIONS, "admin"),
+    ).toBe(true)
+    expect(
+      canAccessDashboardRoute("/dashboard/sms/logs", COMPANY_ADMIN_SMS_PERMISSIONS, "admin"),
+    ).toBe(true)
+    expect(
+      canAccessDashboardRoute("/dashboard/sms/platform", COMPANY_ADMIN_SMS_PERMISSIONS, "admin"),
+    ).toBe(false)
   })
 
   it("does not treat a loose *_sms grant as company SMS admin", () => {
