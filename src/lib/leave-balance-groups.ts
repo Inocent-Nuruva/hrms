@@ -67,11 +67,72 @@ export function readBalanceEmployeeId(row: LeaveBalanceRow): number | null {
   if (direct !== null) {
     return direct
   }
-  const nested = asRecord(row.employee) ?? asRecord(row.Employee)
-  if (!nested) {
-    return null
+  if (typeof row.employee === "number" && Number.isFinite(row.employee)) {
+    return row.employee
   }
-  return readNumber(nested, ["id", "employee_id", "employeeId"])
+  const nested = asRecord(row.employee) ?? asRecord(row.Employee) ?? asRecord(row.user)
+  if (!nested) {
+    return readNumber(row, ["user_id", "userId"])
+  }
+  return readNumber(nested, ["id", "employee_id", "employeeId", "user_id", "userId"])
+}
+
+function isBareEmployeeId(value: string): boolean {
+  return /^\d+$/.test(value) || /^#\d+$/.test(value)
+}
+
+function composedPersonName(row: LeaveBalanceRow): string {
+  const first = readString(row, ["first_name", "firstName"])
+  const last = readString(row, ["last_name", "lastName"])
+  return [first, last].filter(Boolean).join(" ").trim()
+}
+
+export function resolveLeaveBalanceEmployeeName(
+  row: LeaveBalanceRow,
+  nameById?: Map<number, string>,
+): string {
+  const nested = asRecord(row.employee) ?? asRecord(row.Employee) ?? asRecord(row.user)
+  if (nested) {
+    const nestedFull = readString(nested, ["full_name", "fullName", "employee_name", "employeeName", "name"])
+    if (nestedFull && !isBareEmployeeId(nestedFull)) {
+      return nestedFull
+    }
+    const nestedComposed = composedPersonName(nested)
+    if (nestedComposed) {
+      return nestedComposed
+    }
+  }
+
+  const composed = composedPersonName(row)
+  if (composed) {
+    return composed
+  }
+
+  const inline = readString(row, ["employee_name", "employeeName", "full_name", "fullName"])
+  if (inline && !isBareEmployeeId(inline)) {
+    return inline
+  }
+
+  const leaveTypeName = readString(row, [
+    "leave_type_name",
+    "leaveTypeName",
+    "type_name",
+    "typeName",
+  ])
+  const rawName = readString(row, ["name"])
+  if (rawName && !isBareEmployeeId(rawName) && rawName.toLowerCase() !== leaveTypeName.toLowerCase()) {
+    return rawName
+  }
+
+  const employeeId = readBalanceEmployeeId(row)
+  if (employeeId !== null) {
+    const mapped = nameById?.get(employeeId)?.trim()
+    if (mapped && !isBareEmployeeId(mapped)) {
+      return mapped
+    }
+  }
+
+  return employeeId !== null ? `#${employeeId}` : "Unknown employee"
 }
 
 function compareText(left: string, right: string): number {

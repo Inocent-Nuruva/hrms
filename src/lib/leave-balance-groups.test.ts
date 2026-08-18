@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 import {
   formatBalanceDays,
   groupLeaveBalancesByEmployee,
+  resolveLeaveBalanceEmployeeName,
   sortLeaveBalanceRows,
 } from "./leave-balance-groups"
 
@@ -129,6 +130,33 @@ describe("sortLeaveBalanceRows", () => {
       "Annual Leave",
       "Sick Leave",
     ])
+  })
+})
+
+describe("resolveLeaveBalanceEmployeeName", () => {
+  it("uses the employee directory when the balance row only has an id", () => {
+    const names = new Map<number, string>([[44, "Paulina Sebastian Mpanduji"]])
+    expect(resolveLeaveBalanceEmployeeName({ employee_id: 44 }, names)).toBe(
+      "Paulina Sebastian Mpanduji",
+    )
+  })
+
+  it("does not treat the leave type name as the employee name", () => {
+    expect(
+      resolveLeaveBalanceEmployeeName({
+        employee_id: 9,
+        name: "Sick Leave",
+        leave_type_name: "Sick Leave",
+      }),
+    ).toBe("#9")
+  })
+
+  it("reads a nested employee full name", () => {
+    expect(
+      resolveLeaveBalanceEmployeeName({
+        employee: { id: 3, first_name: "Audifas", last_name: "Riwa" },
+      }),
+    ).toBe("Audifas Riwa")
   })
 })
 

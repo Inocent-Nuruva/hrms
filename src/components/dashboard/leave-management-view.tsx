@@ -44,7 +44,7 @@ import {
   leaveRequestApprovalAction,
   listBranches,
   listDepartments,
-  listEmployees,
+  listAllEmployees,
   generateLeaveBalances,
   listLeaveBalanceAdjustments,
   listLeaveBalanceTransactions,
@@ -73,6 +73,7 @@ import {
   groupLeaveBalancesByEmployee,
   readBalanceDays,
   readBalanceFiscalYear,
+  resolveLeaveBalanceEmployeeName,
   sortLeaveBalanceRows,
   type LeaveBalanceEmployeeGroup,
 } from "@/lib/leave-balance-groups"
@@ -1212,7 +1213,12 @@ export function LeaveManagementView({
           case "types":
             return { key, result: await listLeaveTypes(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }) }
           case "employees":
-            return { key, result: await listEmployees(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }) }
+            return {
+              key,
+              result: {
+                rows: await listAllEmployees(token, {}, { cacheTtlMs: force ? 0 : undefined }),
+              },
+            }
           case "departments":
             return { key, result: await listDepartments(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }) }
           case "positions":
@@ -1600,35 +1606,32 @@ export function LeaveManagementView({
     )
   }, [holidayRemoveCatalog, holidays])
 
+  const employeeNameById = React.useMemo(() => {
+    const names = new Map<number, string>()
+    employees.forEach((row) => {
+      const label = personName(row, "")
+      if (!label) {
+        return
+      }
+      ;(["id", "employee_id", "employeeId", "user_id", "userId"] as const).forEach((key) => {
+        const id = readNumber(row, [key])
+        if (id !== null && !names.has(id)) {
+          names.set(id, label)
+        }
+      })
+    })
+    return names
+  }, [employees])
+
   const employeeLabel = (employeeId: number | null) => {
     if (employeeId === null) {
       return "-"
     }
-    const match = employees.find((row) => readNumber(row, ["id", "employee_id", "user_id"]) === employeeId)
-    if (!match) {
-      return `#${employeeId}`
-    }
-    const fullName = readString(match, ["full_name", "fullName", "employee_name", "employeeName", "name"])
-    if (fullName !== "-") {
-      return fullName
-    }
-    return [readString(match, ["first_name", "firstName"]), readString(match, ["last_name", "lastName"])]
-      .filter((part) => part !== "-")
-      .join(" ")
+    return employeeNameById.get(employeeId) ?? `#${employeeId}`
   }
 
   const employeeLabelFromRow = (row: AdminRecord) => {
-    const nestedEmployee = asRecord(row.employee)
-    if (nestedEmployee) {
-      const nestedName = personName(nestedEmployee, "")
-      if (nestedName) return nestedName
-    }
-    const inlineEmployeeName =
-      readString(row, ["employee_name", "employeeName", "full_name", "fullName"])
-    if (inlineEmployeeName !== "-") {
-      return inlineEmployeeName
-    }
-    return employeeLabel(readNumber(row, ["employee_id", "employeeId"]) ?? readNumber(asRecord(row.employee) ?? {}, ["id", "employee_id"]))
+    return resolveLeaveBalanceEmployeeName(row, employeeNameById)
   }
 
   const leaveTypeLabelFromRequest = (row: AdminRecord) => {
