@@ -10,7 +10,6 @@ import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared"
 import {
   HeroBand,
   MetricTile,
-  TalentDoodle,
   TalentDoodleSprites,
   asRecordArray,
   employeeLabel,
@@ -500,41 +499,38 @@ export function InsightsOperationsView({
       ) : (
         <>
           <motion.div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" variants={motionPreset.fast}>
-            {[
-              {
-                label: "System",
-                value: friendlyStatus(readString(health, ["status", "state"], health ? "OK" : "—")),
-              },
-              {
-                label: "Online",
-                value: friendlyStatus(readString(live, ["status", "state"], live ? "OK" : "—")),
-              },
-              {
-                label: "Ready to use",
-                value: friendlyStatus(readString(ready, ["status", "state"], ready ? "OK" : "—")),
-              },
-              {
-                label: "Issues to fix",
-                value: readNumber(readiness, ["blockerCount", "blocker_count", "blockers"]) ?? blockers.length,
-              },
-            ].map((item) => (
-              <motion.div
-                key={item.label}
-                className="relative overflow-hidden rounded-2xl p-4 text-white"
-                style={{ backgroundColor: "var(--primary)" }}
-                variants={motionPreset.item}
-              >
-                <TalentDoodle />
-                <div className="relative z-10">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-white/80">
-                    {item.label}
-                  </p>
-                  <p className="mt-1 text-2xl font-semibold tracking-tight text-white">
-                    {item.value}
-                  </p>
-                </div>
-              </motion.div>
-            ))}
+            <MetricTile
+              label="System"
+              value={
+                <span className="text-primary">
+                  {friendlyStatus(readString(health, ["status", "state"], health ? "OK" : "—"))}
+                </span>
+              }
+            />
+            <MetricTile
+              label="Online"
+              value={
+                <span className="text-primary">
+                  {friendlyStatus(readString(live, ["status", "state"], live ? "OK" : "—"))}
+                </span>
+              }
+            />
+            <MetricTile
+              label="Ready to use"
+              value={
+                <span className="text-primary">
+                  {friendlyStatus(readString(ready, ["status", "state"], ready ? "OK" : "—"))}
+                </span>
+              }
+            />
+            <MetricTile
+              label="Issues to fix"
+              value={
+                <span className="text-primary">
+                  {readNumber(readiness, ["blockerCount", "blocker_count", "blockers"]) ?? blockers.length}
+                </span>
+              }
+            />
           </motion.div>
           <div className="rounded-xl border border-border bg-card p-4">
             <div className="flex items-center gap-1.5">
