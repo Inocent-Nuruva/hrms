@@ -50,6 +50,7 @@ import {
   changeCurrentUserPassword,
   getCurrentAdmin,
   listEmployees,
+  listResource,
   listResourcePage,
   listRolesCatalog,
   listUsers,
@@ -66,6 +67,8 @@ import { useMyProfilePhoto } from "@/lib/my-profile-photo"
 import {
   buildDashboardActorSnapshotFromSources,
   clearDashboardActorSnapshot,
+  COMPANY_MANAGEMENT_ROUTE_PERMISSION,
+  hasPermission,
   persistDashboardAccessToken,
   publishDashboardActorSnapshot,
 } from "@/lib/dashboard-permissions"
@@ -73,7 +76,13 @@ import { authService } from "@/services/authService"
 import { asRecord, isLikelyRefreshToken, readString } from "@/utils/token-utils"
 import { env } from "@/lib/env"
 import { AUTH_STORAGE_KEYS, ROUTES } from "@/utils/constants"
-import { canSeeDashboardPage, firstVisibleSiblingOrHome, rememberForbiddenRoute } from "@/lib/forbidden-routes"
+import { isPermissionError } from "@/components/dashboard/talent-visuals"
+import {
+  canSeeDashboardPage,
+  firstVisibleSiblingOrHome,
+  isRememberedForbiddenRoute,
+  rememberForbiddenRoute,
+} from "@/lib/forbidden-routes"
 import { useHideRememberedForbiddenPath } from "@/hooks/use-forbidden-route-guard"
 import { useDashboardMotion } from "@/lib/dashboard-motion"
 
@@ -980,6 +989,33 @@ export default function AdminDashboardView({
 
     publishDashboardActorSnapshot(actorSnapshot)
   }, [actorSnapshot, identityReady])
+
+  React.useEffect(() => {
+    if (!identityReady || !token || accessMode !== "admin") {
+      return
+    }
+    if (!hasPermission(effectivePermissionLabels, COMPANY_MANAGEMENT_ROUTE_PERMISSION)) {
+      return
+    }
+    if (isRememberedForbiddenRoute("/dashboard/companies")) {
+      return
+    }
+
+    let cancelled = false
+    void listResource("companies", token, { pageAll: false, cacheTtlMs: 0 }).catch((errorObject) => {
+      if (cancelled || !isPermissionError(errorObject)) {
+        return
+      }
+      rememberForbiddenRoute("/dashboard/companies")
+      if (currentPath === "/dashboard/companies" || currentPath.startsWith("/dashboard/companies/")) {
+        router.replace(firstVisibleSiblingOrHome(currentPath, effectivePermissionLabels, accessMode))
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [accessMode, currentPath, effectivePermissionLabels, identityReady, router, token])
 
   React.useEffect(() => {
     if (typeof window === "undefined") {
