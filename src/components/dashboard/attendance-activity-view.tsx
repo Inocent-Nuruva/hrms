@@ -1922,16 +1922,13 @@ function DailySummaryDetailsContent({
           </div>
         </div>
         <motion.div
-          className={cn(
-            "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-sm font-semibold",
-            statusUi.badge,
-          )}
-          initial={motionPreset.reduce ? false : { scale: 0.86, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
+          className="inline-flex items-center gap-2 text-sm font-semibold"
+          initial={motionPreset.reduce ? false : { opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
           transition={{ type: "spring", stiffness: 420, damping: 22 }}
         >
           <span className={cn("size-1.5 rounded-full", statusUi.accent)} />
-          {statusValue}
+          <span className={statusUi.accent.replace("bg-", "text-")}>{statusValue}</span>
         </motion.div>
       </motion.div>
 
