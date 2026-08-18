@@ -4291,7 +4291,10 @@ export function LeaveManagementView({
                       key={rowKey}
                       type="button"
                       className={cn(
-                        "grid w-full items-center gap-2 border-b border-slate-100 px-2.5 py-2 text-left text-xs last:border-b-0 hover:bg-slate-50",
+                        "grid w-full items-center gap-2 border-b border-slate-100 px-2.5 py-2 text-left text-xs last:border-b-0",
+                        index % 2 === 1
+                          ? "bg-primary/[0.08] hover:bg-primary/[0.13]"
+                          : "bg-background hover:bg-muted/20",
                         canAdjustBalances
                           ? "grid-cols-[minmax(0,1fr)_4.25rem_3.5rem_3.5rem_2rem]"
                           : "grid-cols-[minmax(0,1fr)_4.25rem_3.5rem_3.5rem]"
