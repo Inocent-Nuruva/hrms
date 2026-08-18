@@ -13,6 +13,7 @@ import {
   TalentDoodleSprites,
   asRecordArray,
   employeeLabel,
+  formatDate,
   formatDateTime,
   inputClass,
   optionLabel,
@@ -68,6 +69,31 @@ export type InsightsOpsTab = "hr" | "management" | "manager" | "sales-field" | "
 
 function readStoredToken() {
   return readStoredSessionTokens().accessToken.trim()
+}
+
+function localDateString(date: Date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
+}
+
+function defaultScheduleRange() {
+  const start = new Date()
+  const end = new Date()
+  end.setDate(end.getDate() + 6)
+  return { from: localDateString(start), to: localDateString(end) }
+}
+
+function schedulePreviewDays(record: AdminRecord | null) {
+  if (!record) return []
+  for (const key of ["days", "items", "rows", "schedule", "preview"]) {
+    const value = record[key]
+    if (Array.isArray(value)) {
+      return value.filter((entry): entry is AdminRecord => typeof entry === "object" && entry !== null)
+    }
+  }
+  return []
 }
 
 function friendlyStatus(value: string) {
@@ -134,12 +160,13 @@ export function InsightsOperationsView({
   const [detail, setDetail] = React.useState<AdminRecord | null>(null)
   const [eventDetail, setEventDetail] = React.useState<AdminRecord | null>(null)
   const [readinessDetail, setReadinessDetail] = React.useState<AdminRecord | null>(null)
-  const [dateFrom, setDateFrom] = React.useState("")
-  const [dateTo, setDateTo] = React.useState("")
+  const [dateFrom, setDateFrom] = React.useState(() => defaultScheduleRange().from)
+  const [dateTo, setDateTo] = React.useState(() => defaultScheduleRange().to)
   const [policyName, setPolicyName] = React.useState("Default attendance policy")
   const [saving, setSaving] = React.useState(false)
   const [exporting, setExporting] = React.useState(false)
   const [previewEmployeeId, setPreviewEmployeeId] = React.useState("")
+  const [schedulePreview, setSchedulePreview] = React.useState<AdminRecord | null>(null)
 
   const load = React.useCallback(async () => {
     const token = readStoredToken()
@@ -256,19 +283,28 @@ export function InsightsOperationsView({
 
   async function onPreview() {
     const token = readStoredToken()
-    if (!token || !previewEmployeeId) {
+    if (!token) return
+    if (!previewEmployeeId) {
       toast.error("Choose an employee to preview their schedule.")
+      return
+    }
+    if (!dateFrom || !dateTo) {
+      toast.error("Pick a start and end date.")
+      return
+    }
+    if (dateTo < dateFrom) {
+      toast.error("End date must be on or after the start date.")
       return
     }
     try {
       const record = await getHrAttendanceSchedulePreview(token, {
         employee_id: Number(previewEmployeeId),
-        ...(dateFrom ? { from_date: dateFrom } : {}),
-        ...(dateTo ? { to_date: dateTo } : {}),
+        from_date: dateFrom,
+        to_date: dateTo,
       })
-      setDetail(record)
+      setSchedulePreview(record)
     } catch (errorObject) {
-      toast.error(errorObject instanceof Error ? errorObject.message : "Preview failed.")
+      toast.error(errorObject instanceof Error ? errorObject.message : "Could not load that schedule.")
     }
   }
 
@@ -542,6 +578,56 @@ export function InsightsOperationsView({
       )}
 
       <RecordDetailsDialog open={Boolean(detail)} onOpenChange={(open) => !open && setDetail(null)} title={optionLabel(detail) || "Details"} row={detail} />
+
+      <Dialog open={Boolean(schedulePreview)} onOpenChange={(open) => !open && setSchedulePreview(null)}>
+        <DialogPopup from="bottom" className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Schedule</DialogTitle>
+            <DialogDescription>
+              {employees.find((row) => String(readNumber(row, ["id", "employee_id", "employeeId"])) === previewEmployeeId)
+                ? readinessPersonName(
+                    employees.find((row) => String(readNumber(row, ["id", "employee_id", "employeeId"])) === previewEmployeeId) as AdminRecord,
+                  )
+                : "Selected employee"}{" "}
+              · {formatDate(dateFrom)} to {formatDate(dateTo)}
+            </DialogDescription>
+          </DialogHeader>
+          {schedulePreviewDays(schedulePreview).length === 0 ? (
+            <p className="text-sm text-muted-foreground">No scheduled days in this range.</p>
+          ) : (
+            <ul className="max-h-72 space-y-1.5 overflow-y-auto text-sm">
+              {schedulePreviewDays(schedulePreview).map((day, index) => {
+                const dateLabel = formatDate(day.date ?? day.work_date ?? day.workDate ?? day.day)
+                const shift =
+                  readString(day, ["shift_name", "shiftName", "shift", "status", "kind", "type"], "")
+                const start = readString(day, ["start_time", "startTime", "in", "planned_in"], "")
+                const end = readString(day, ["end_time", "endTime", "out", "planned_out"], "")
+                const hours =
+                  start && end && start !== "-" && end !== "-"
+                    ? `${start} – ${end}`
+                    : shift && shift !== "-"
+                      ? shift
+                      : "Off"
+                return (
+                  <li key={`${dateLabel}-${index}`} className="flex items-center justify-between gap-3 rounded-md border border-border/60 px-2.5 py-1.5">
+                    <span>{dateLabel === "—" ? `Day ${index + 1}` : dateLabel}</span>
+                    <span className="font-medium">{hours}</span>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+          <DialogFooter>
+            <button
+              type="button"
+              className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+              onClick={() => setSchedulePreview(null)}
+            >
+              Close
+            </button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
 
       <Dialog open={Boolean(readinessDetail)} onOpenChange={(open) => !open && setReadinessDetail(null)}>
         <DialogPopup from="bottom" className="sm:max-w-md">
