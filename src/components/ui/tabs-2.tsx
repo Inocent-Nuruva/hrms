@@ -67,9 +67,8 @@ export function Tabs2({ groups, currentPath, className }: Tabs2Props) {
 
   return (
     <div className={cn("flex flex-col gap-1.5", className)}>
-      {/* Desktop: one compact row — grouped dropdowns + direct links */}
-      <div className="tab-rail-scroll hidden md:block">
-        <div className="inline-flex min-w-full items-center gap-0.5 border-b border-border/80">
+      {/* Desktop: compact titles on one row, wrap only when they no longer fit */}
+      <div className="hidden flex-wrap items-center gap-x-1 gap-y-0.5 border-b border-border/80 md:flex">
         {groups.map((group) => {
           // Prefer the path-matched child; when this group is inactive fall back to first item
           // only for the secondary preview — never replace the group title itself.
@@ -155,7 +154,6 @@ export function Tabs2({ groups, currentPath, className }: Tabs2Props) {
             </DropdownMenu>
           )
         })}
-        </div>
       </div>
 
       {/* Mobile: swipeable flat tab rail — blue underline only, no scrollbar / no select */}
