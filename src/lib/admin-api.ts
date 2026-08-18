@@ -9748,16 +9748,47 @@ export async function getCurrentAdminProfile(token: string) {
   return normalizeSingle(payload);
 }
 
+function looksLikeCompanyRecord(row: AdminRecord | null): row is AdminRecord {
+  if (!row) return false;
+  return (
+    typeof row.company_name === "string" ||
+    typeof row.companyName === "string" ||
+    typeof row.company_slug === "string" ||
+    typeof row.companySlug === "string" ||
+    typeof row.slug === "string" ||
+    (typeof row.name === "string" &&
+      (row.company_id !== undefined ||
+        row.companyId !== undefined ||
+        row.setup_complete !== undefined ||
+        row.setupComplete !== undefined ||
+        row.company_status !== undefined))
+  );
+}
+
+function extractCompanyRecord(payload: unknown): AdminRecord | null {
+  const root = asRecord(payload);
+  const nested =
+    asRecord(root?.data) ??
+    asRecord(root?.result) ??
+    asRecord(root?.company) ??
+    asRecord(asRecord(root?.data)?.company);
+  if (looksLikeCompanyRecord(nested)) {
+    return nested;
+  }
+  if (looksLikeCompanyRecord(root)) {
+    return root;
+  }
+  const list = normalizeList(payload);
+  return list.find(looksLikeCompanyRecord) ?? null;
+}
+
 export async function getMyCompany(token: string) {
   const payload = await adminRequest<unknown>("/api/companies/my", { token });
-  const companies = normalizeList(payload);
-  return companies[0] ?? normalizeSingle(payload);
+  return extractCompanyRecord(payload);
 }
 
 export async function getAdminCompany(token: string) {
-  const payload = await adminRequest<unknown>("/api/companies/my", { token });
-  const companies = normalizeList(payload);
-  return companies[0] ?? normalizeSingle(payload);
+  return getMyCompany(token);
 }
 
 export async function getCompanyById(token: string, id: string | number) {

@@ -32,6 +32,7 @@ import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import {
   canAccessDashboardRoute,
   canPerformPermission,
+  COMPANY_MANAGEMENT_ROUTE_PERMISSION,
 } from "@/lib/dashboard-permissions"
 import { env } from "@/lib/env"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
@@ -131,9 +132,27 @@ function formatMetadata(value: unknown) {
   }
 }
 
+function readCompletedStepNames(status: AdminRecord) {
+  for (const key of ["completed_steps", "completedSteps", "steps_completed", "stepsCompleted"]) {
+    const value = status[key]
+    if (Array.isArray(value)) {
+      return value
+        .map((entry) => {
+          if (typeof entry === "string" && entry.trim()) return entry.trim()
+          if (entry && typeof entry === "object") {
+            return readString(entry as AdminRecord, ["name", "code", "step", "key"])
+          }
+          return ""
+        })
+        .filter((entry) => entry && entry !== "-")
+    }
+  }
+  return []
+}
+
 function summarizeOnboardingStatus(status: AdminRecord | null) {
   if (!status) {
-    return "No onboarding status record returned."
+    return "Onboarding status is not available yet."
   }
 
   const statusLabel = readString(status, [
@@ -144,7 +163,11 @@ function summarizeOnboardingStatus(status: AdminRecord | null) {
     "currentStatus",
   ])
   const currentStep = readString(status, ["current_step", "currentStep", "step_name", "stepName"])
-  const completedSteps = readNumber(status, ["completed_steps", "completedSteps"])
+  const completedNames = readCompletedStepNames(status)
+  const completedSteps =
+    completedNames.length > 0
+      ? completedNames.length
+      : readNumber(status, ["completed_steps", "completedSteps"])
   const totalSteps = readNumber(status, ["total_steps", "totalSteps"])
   const percentage = readNumber(status, [
     "progress_percentage",
@@ -156,9 +179,11 @@ function summarizeOnboardingStatus(status: AdminRecord | null) {
   const summaryParts = [
     statusLabel !== "-" ? statusLabel : "",
     currentStep !== "-" ? `Current step: ${currentStep}` : "",
-    completedSteps !== null && totalSteps !== null
-      ? `${completedSteps}/${totalSteps} steps complete`
-      : "",
+    completedNames.length > 0
+      ? `${completedNames.length} step${completedNames.length === 1 ? "" : "s"} done`
+      : completedSteps !== null && totalSteps !== null
+        ? `${completedSteps}/${totalSteps} steps complete`
+        : "",
     percentage !== null ? `${percentage}% complete` : "",
   ].filter(Boolean)
 
@@ -166,15 +191,46 @@ function summarizeOnboardingStatus(status: AdminRecord | null) {
     return summaryParts.join(" · ")
   }
 
+  const complete =
+    status.setup_complete ?? status.setupComplete ?? status.is_complete ?? status.isComplete
+  if (complete === true) return "Setup is complete."
+  if (complete === false) return "Setup is still in progress."
   return "Status record loaded."
 }
 
 function companyName(row: AdminRecord) {
-  return readString(row, ["company_name", "name", "display_name"])
+  return readString(row, ["company_name", "companyName", "name", "display_name"])
 }
 
 function companySlug(row: AdminRecord) {
-  return readString(row, ["company_slug", "slug", "code"])
+  return readString(row, ["company_slug", "companySlug", "slug", "code"])
+}
+
+function companyFromStoredUser(): AdminRecord | null {
+  if (typeof window === "undefined") return null
+  const raw = window.localStorage.getItem(AUTH_STORAGE_KEYS.user)
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw) as AdminRecord
+    const nested =
+      parsed.company && typeof parsed.company === "object"
+        ? (parsed.company as AdminRecord)
+        : null
+    if (nested && (nested.company_name || nested.name || nested.company_slug || nested.slug)) {
+      return nested
+    }
+    const name = readString(parsed, ["company_name", "companyName"])
+    const slug = readString(parsed, ["company_slug", "companySlug", "company_code"])
+    const id = readNumber(parsed, ["company_id", "companyId"])
+    if (name === "-" && slug === "-" && id === null) return null
+    return {
+      id: id ?? undefined,
+      company_name: name === "-" ? undefined : name,
+      company_slug: slug === "-" ? undefined : slug,
+    }
+  } catch {
+    return null
+  }
 }
 
 function companyStatus(row: AdminRecord) {
@@ -293,8 +349,10 @@ export function CompaniesView() {
   const actorPermissions = actor.permissionLabels
   const permissionsReady = actor.ready
   const canAccessCompaniesRoute =
-    !permissionsReady ||
+    permissionsReady &&
     canAccessDashboardRoute("/dashboard/companies", actorPermissions, actor.accessMode)
+  const canListPlatformCompanies =
+    permissionsReady && canPerformPermission(actorPermissions, COMPANY_MANAGEMENT_ROUTE_PERMISSION)
   const [rows, setRows] = React.useState<AdminRecord[]>([])
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
@@ -371,39 +429,51 @@ export function CompaniesView() {
     setLoading(true)
     setError(null)
     setMembersError(null)
-    try {
-      const [companies, currentCompany, status, companyUsers, platformUsers, roleRows, permissionRows] =
-        await Promise.all([
-          listResource("companies", token),
-          getMyCompany(token).catch(() => null),
-          getCurrentCompanyOnboardingStatus(token).catch(() => null),
-          listCurrentCompanyUsers(token, DEFAULT_MEMBERS_QUERY, {
-            cacheTtlMs: env.NEXT_PUBLIC_LIST_CACHE_TTL_SHORT_MS,
-          }).then((result) => result.rows),
-          listUsers(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }, {
-            cacheTtlMs: env.NEXT_PUBLIC_LIST_CACHE_TTL_SHORT_MS,
-          }).then((result) => result.rows),
-          listResource("roles", token),
-          listResource("permissions", token),
-        ])
-      setRows(companies)
-      setMyCompany(currentCompany)
-      setOnboardingStatus(status ?? null)
-      setMembers(companyUsers)
-      setAllUsers(platformUsers)
-      setRoles(roleRows)
-      setPermissions(permissionRows)
-    } catch (errorObject) {
-      setRows([])
-      setMembers([])
-      setAllUsers([])
-      setRoles([])
-      setPermissions([])
-      setError(errorObject instanceof Error ? errorObject.message : "Failed to load companies.")
-    } finally {
-      setLoading(false)
+    const settled = await Promise.allSettled([
+      canListPlatformCompanies
+        ? listResource("companies", token, { pageAll: false })
+        : Promise.resolve([] as AdminRecord[]),
+      getMyCompany(token),
+      getCurrentCompanyOnboardingStatus(token),
+      listCurrentCompanyUsers(token, DEFAULT_MEMBERS_QUERY, {
+        cacheTtlMs: env.NEXT_PUBLIC_LIST_CACHE_TTL_SHORT_MS,
+      }).then((result) => result.rows),
+      listUsers(
+        token,
+        { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" },
+        { cacheTtlMs: env.NEXT_PUBLIC_LIST_CACHE_TTL_SHORT_MS },
+      ).then((result) => result.rows),
+      listResource("roles", token, { pageAll: false }),
+      listResource("permissions", token, { pageAll: false }),
+    ])
+
+    const value = <T,>(index: number, fallback: T): T => {
+      const result = settled[index]
+      return result.status === "fulfilled" ? (result.value as T) : fallback
     }
-  }, [canAccessCompaniesRoute, permissionsReady])
+    const reason = (index: number) => {
+      const result = settled[index]
+      return result.status === "rejected" && result.reason instanceof Error
+        ? result.reason.message
+        : result.status === "rejected"
+          ? String(result.reason)
+          : null
+    }
+
+    setRows(value(0, [] as AdminRecord[]))
+    setMyCompany(value(1, null) ?? companyFromStoredUser())
+    setOnboardingStatus(value(2, null))
+    setMembers(value(3, [] as AdminRecord[]))
+    setAllUsers(value(4, [] as AdminRecord[]))
+    setRoles(value(5, [] as AdminRecord[]))
+    setPermissions(value(6, [] as AdminRecord[]))
+
+    const platformError = canListPlatformCompanies ? reason(0) : null
+    const contextError = reason(1) || reason(3)
+    setError(platformError || contextError)
+    setMembersError(reason(3))
+    setLoading(false)
+  }, [canAccessCompaniesRoute, canListPlatformCompanies, permissionsReady])
 
   React.useEffect(() => {
     void loadData()
@@ -831,7 +901,7 @@ export function CompaniesView() {
             <div className="rounded-lg border border-border/60 bg-background px-3 py-3">
               <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Onboarding</p>
               <p className="mt-1 text-sm font-medium text-foreground">
-                {onboardingCompleted ? "Complete" : "In progress"}
+                {!onboardingStatus ? "Unknown" : onboardingCompleted ? "Complete" : "In progress"}
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
                 {summarizeOnboardingStatus(onboardingStatus)}
@@ -918,30 +988,34 @@ export function CompaniesView() {
         </div>
       </div>
 
-      <div className="rounded-xl border border-border/70 bg-card p-4">
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          <SearchToggleField
-            className="min-w-0"
-            placeholder="Search company"
-            value={search}
-            onChange={setSearch}
-          />
-          <div className="ml-auto text-xs text-muted-foreground">
-            {filteredRows.length} compan{filteredRows.length === 1 ? "y" : "ies"}
+      {canListPlatformCompanies ? (
+        <div className="rounded-xl border border-border/70 bg-card p-4">
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <SearchToggleField
+              className="min-w-0"
+              placeholder="Search company"
+              value={search}
+              onChange={setSearch}
+            />
+            <div className="ml-auto text-xs text-muted-foreground">
+              {filteredRows.length} compan{filteredRows.length === 1 ? "y" : "ies"}
+            </div>
           </div>
+
+          {error ? <p className="mb-3 text-sm text-rose-600">{error}</p> : null}
+
+          <ResizableTable
+            title="Companies"
+            data={filteredRows}
+            columns={companyColumns}
+            itemsPerPage={20}
+            loading={loading}
+            storageKey="companies"
+          />
         </div>
-
-        {error ? <p className="mb-3 text-sm text-rose-600">{error}</p> : null}
-
-        <ResizableTable
-          title="Companies"
-          data={filteredRows}
-          columns={companyColumns}
-          itemsPerPage={20}
-          loading={loading}
-          storageKey="companies"
-        />
-      </div>
+      ) : error ? (
+        <p className="text-sm text-rose-600">{error}</p>
+      ) : null}
 
       <div className="rounded-xl border border-border/70 bg-card p-4">
         <h3 className="mb-3 text-base font-semibold text-foreground">Active Company Members</h3>

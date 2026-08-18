@@ -6,6 +6,7 @@ import {
   downloadEmployeeDocument,
   getCompanyById,
   getCurrentCompanyOnboardingStatus,
+  getMyCompany,
   grantDepartmentAccess,
   listDepartmentAccess,
   removeDepartmentPosition,
@@ -94,6 +95,34 @@ describe("foundation admin API helpers", () => {
       2,
       "http://localhost:8888/api/companies/4/suspend",
       expect.objectContaining({ method: "POST" })
+    )
+  })
+
+  it("reads the current company from GET /api/companies/my without picking nested users", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        data: {
+          id: 4,
+          company_name: "Alliance Insurance",
+          company_slug: "alliance",
+          users: [{ id: 71, email: "manager@example.com" }],
+        },
+      }),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const result = await getMyCompany("token")
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8888/api/companies/my",
+      expect.objectContaining({ method: "GET" }),
+    )
+    expect(result).toEqual(
+      expect.objectContaining({
+        id: 4,
+        company_name: "Alliance Insurance",
+        company_slug: "alliance",
+      }),
     )
   })
 
