@@ -4949,6 +4949,75 @@ export async function listAttendanceBusinessTrips(
   return { rows, ...pagination };
 }
 
+export async function listAllAttendanceBusinessTrips(
+  token: string,
+  params: AttendanceQueryParams = {},
+  options: ListRequestOptions & { pageSize?: number; maxPages?: number } = {},
+): Promise<PaginatedUsersResult> {
+  const pageSize = Math.min(
+    Math.max(1, options.pageSize ?? 100),
+    env.NEXT_PUBLIC_MAX_PAGE_SIZE || 100,
+  );
+  const maxPages = Math.max(1, options.maxPages ?? 50);
+  const collected: AdminRecord[] = [];
+  let total: number | null = null;
+
+  for (let page = 1; page <= maxPages; page += 1) {
+    const result = await listAttendanceBusinessTrips(token, {
+      ...params,
+      page,
+      limit: pageSize,
+    });
+    collected.push(...result.rows);
+    if (total === null && result.total !== null) {
+      total = result.total;
+    }
+    const reachedEnd =
+      result.rows.length === 0 ||
+      result.rows.length < pageSize ||
+      (result.totalPages !== null && page >= result.totalPages) ||
+      (result.total !== null && collected.length >= result.total);
+    if (reachedEnd) {
+      break;
+    }
+  }
+
+  return {
+    rows: collected,
+    page: 1,
+    limit: collected.length || pageSize,
+    total: total ?? collected.length,
+    totalPages: 1,
+  };
+}
+
+export function buildAttendanceBusinessTripPayload(data: {
+  employee_id: number;
+  start_date: string;
+  end_date: string;
+  reason?: string;
+  submit?: boolean;
+}) {
+  const body: {
+    employee_id: number;
+    start_date: string;
+    end_date: string;
+    reason?: string;
+    submit?: boolean;
+  } = {
+    employee_id: data.employee_id,
+    start_date: data.start_date,
+    end_date: data.end_date,
+  };
+  if (data.reason?.trim()) {
+    body.reason = data.reason.trim();
+  }
+  if (typeof data.submit === "boolean") {
+    body.submit = data.submit;
+  }
+  return body;
+}
+
 export async function getAttendanceBusinessTrip(
   token: string,
   id: string | number,
@@ -4964,24 +5033,36 @@ export async function getAttendanceBusinessTrip(
 
 export async function createAttendanceBusinessTrip(
   token: string,
-  data: AdminRecord,
+  data: {
+    employee_id: number;
+    start_date: string;
+    end_date: string;
+    reason?: string;
+    submit?: boolean;
+  },
 ) {
   return adminRequest<unknown>("/api/attendance/business-trips", {
     method: "POST",
     token,
-    body: data,
+    body: buildAttendanceBusinessTripPayload(data),
   });
 }
 
 export async function updateAttendanceBusinessTrip(
   token: string,
   id: string | number,
-  data: AdminRecord,
+  data: {
+    employee_id: number;
+    start_date: string;
+    end_date: string;
+    reason?: string;
+    submit?: boolean;
+  },
 ) {
   return adminRequest<unknown>(`/api/attendance/business-trips/${id}`, {
     method: "PATCH",
     token,
-    body: data,
+    body: buildAttendanceBusinessTripPayload(data),
   });
 }
 
@@ -4998,24 +5079,24 @@ export async function submitAttendanceBusinessTrip(
 export async function approveAttendanceBusinessTrip(
   token: string,
   id: string | number,
-  comments?: string,
+  note?: string,
 ) {
   return adminRequest<unknown>(`/api/attendance/business-trips/${id}/approve`, {
     method: "POST",
     token,
-    body: comments?.trim() ? { comments: comments.trim() } : {},
+    body: note?.trim() ? { note: note.trim() } : {},
   });
 }
 
 export async function rejectAttendanceBusinessTrip(
   token: string,
   id: string | number,
-  comments?: string,
+  note?: string,
 ) {
   return adminRequest<unknown>(`/api/attendance/business-trips/${id}/reject`, {
     method: "POST",
     token,
-    body: comments?.trim() ? { comments: comments.trim() } : {},
+    body: note?.trim() ? { note: note.trim() } : {},
   });
 }
 

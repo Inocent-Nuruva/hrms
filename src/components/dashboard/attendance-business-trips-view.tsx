@@ -6,40 +6,30 @@ import { Loader2, Pencil, Plus, RefreshCw } from "lucide-react"
 
 import {
   Dialog,
-  DialogClose,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogPopup,
   DialogTitle,
 } from "@/components/animate-ui/components/base/dialog"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { SearchToggleField } from "@/components/common/search-toggle-field"
+import { TalentDoodle, TalentDoodleSprites } from "@/components/dashboard/talent-visuals"
 import {
   approveAttendanceBusinessTrip,
   cancelAttendanceBusinessTrip,
   createAttendanceBusinessTrip,
-  getAttendanceBusinessTrip,
-  listAttendanceBusinessTrips,
-  listEmployees,
+  listAllAttendanceBusinessTrips,
+  listAllEmployees,
   rejectAttendanceBusinessTrip,
   submitAttendanceBusinessTrip,
   updateAttendanceBusinessTrip,
   type AdminRecord,
 } from "@/lib/admin-api"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
+import { canPerformPermission } from "@/lib/dashboard-permissions"
 import { showErrorAlert } from "@/lib/error-alert"
 import { showSuccessAlert } from "@/lib/success-alert"
 import { cn } from "@/lib/utils"
@@ -61,6 +51,7 @@ type TripFormState = {
 }
 
 type TripActionKind = "submit" | "approve" | "reject" | "cancel"
+type TripStatus = "draft" | "submitted" | "approved" | "rejected" | "cancelled"
 
 const EMPTY_FORM: TripFormState = {
   employeeId: null,
@@ -71,7 +62,9 @@ const EMPTY_FORM: TripFormState = {
 }
 
 function asRecord(value: unknown): AdminRecord | null {
-  return typeof value === "object" && value !== null ? (value as AdminRecord) : null
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as AdminRecord)
+    : null
 }
 
 function readStoredToken() {
@@ -134,6 +127,20 @@ function getTripId(row: AdminRecord | null) {
   return id === null ? "" : String(id)
 }
 
+function getTripStatus(row: AdminRecord | null): TripStatus | "" {
+  const raw = readString(row, ["status"], "").toLowerCase()
+  if (
+    raw === "draft" ||
+    raw === "submitted" ||
+    raw === "approved" ||
+    raw === "rejected" ||
+    raw === "cancelled"
+  ) {
+    return raw
+  }
+  return ""
+}
+
 function formatDateOnly(value: unknown) {
   if (typeof value !== "string" || !value.trim()) {
     return "-"
@@ -162,103 +169,51 @@ function formatDateOnly(value: unknown) {
   }).format(date)
 }
 
-function formatDateTime(value: unknown) {
-  if (typeof value !== "string" || !value.trim()) {
-    return "-"
-  }
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) {
-    return value
-  }
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(date)
-}
-
 function getStatusMeta(value: unknown) {
   const raw = typeof value === "string" ? value.trim() : ""
   const normalized = raw.toLowerCase()
 
   if (normalized === "approved") {
-    return {
-      label: raw || "Approved",
-      className: "border-emerald-200 bg-emerald-50 text-emerald-700",
-      terminal: true,
-    }
+    return { label: "Approved", className: "text-emerald-700" }
   }
   if (normalized === "rejected") {
-    return {
-      label: raw || "Rejected",
-      className: "border-rose-200 bg-rose-50 text-rose-700",
-      terminal: true,
-    }
+    return { label: "Rejected", className: "text-rose-700" }
   }
   if (normalized === "cancelled") {
-    return {
-      label: raw || "Cancelled",
-      className: "border-slate-200 bg-slate-100 text-slate-700",
-      terminal: true,
-    }
+    return { label: "Cancelled", className: "text-slate-500" }
   }
   if (normalized === "submitted") {
-    return {
-      label: raw || "Submitted",
-      className: "border-amber-200 bg-amber-50 text-amber-700",
-      terminal: false,
-    }
+    return { label: "Awaiting approval", className: "text-amber-700" }
   }
   if (normalized === "draft") {
-    return {
-      label: raw || "Draft",
-      className: "border-slate-200 bg-white text-slate-600",
-      terminal: false,
-    }
+    return { label: "Draft", className: "text-slate-600" }
   }
 
-  return {
-    label: raw || "—",
-    className: "border-slate-200 bg-white text-slate-700",
-    terminal: false,
-  }
+  return { label: raw || "—", className: "text-slate-700" }
 }
 
 function getEmployeeLabel(row: AdminRecord | null) {
   const nestedEmployee = asRecord(row?.employee)
   const nestedUser = asRecord(nestedEmployee?.user) ?? asRecord(row?.user)
   const explicit =
-    readString(row, ["employee_name", "full_name", "employee_full_name", "name"], "") ||
+    readString(row, ["employee_name", "full_name", "employee_full_name"], "") ||
     readString(nestedEmployee, ["full_name", "name"], "") ||
     readString(nestedUser, ["full_name", "name"], "")
-
-  const employeeNo =
-    readString(row, ["employee_no", "employeeNo", "user_no"], "") ||
-    readString(nestedEmployee, ["employee_no", "employeeNo", "user_no"], "") ||
-    readString(nestedUser, ["employee_no", "employeeNo", "user_no"], "")
-
-  if (explicit) {
-    return employeeNo ? `${explicit} (${employeeNo})` : explicit
+  if (explicit && explicit !== "-") {
+    return explicit
   }
 
   const firstName =
-    readString(row, ["first_name"], "") ||
-    readString(nestedEmployee, ["first_name"], "") ||
-    readString(nestedUser, ["first_name"], "")
+    readString(row, ["first_name", "firstName"], "") ||
+    readString(nestedEmployee, ["first_name", "firstName"], "") ||
+    readString(nestedUser, ["first_name", "firstName"], "")
   const lastName =
-    readString(row, ["last_name"], "") ||
-    readString(nestedEmployee, ["last_name"], "") ||
-    readString(nestedUser, ["last_name"], "")
-
-  if (firstName || lastName) {
-    const fullName = [firstName, lastName].filter(Boolean).join(" ")
-    return employeeNo ? `${fullName} (${employeeNo})` : fullName
-  }
-
-  if (employeeNo) {
-    return employeeNo
+    readString(row, ["last_name", "lastName"], "") ||
+    readString(nestedEmployee, ["last_name", "lastName"], "") ||
+    readString(nestedUser, ["last_name", "lastName"], "")
+  const composed = [firstName, lastName].filter((part) => part && part !== "-").join(" ").trim()
+  if (composed) {
+    return composed
   }
 
   const employeeId = readNumber(row, ["employee_id", "user_id"])
@@ -272,96 +227,21 @@ function buildEmployeeOptions(rows: AdminRecord[]): EmployeeOption[] {
       if (id === null) {
         return null
       }
-
-      const employeeNo = readString(row, [
-        "employee_no",
-        "employeeNo",
-        "employee_number",
-        "user_no",
-      ], "")
       const fullName =
-        readString(row, [
-          "employee_name",
-          "full_name",
-          "fullName",
-          "display_name",
-          "displayName",
-          "name",
-        ], "") ||
-        [
-          readString(row, ["first_name", "firstName"], ""),
-          readString(row, ["last_name", "lastName"], ""),
-        ]
-          .filter(Boolean)
+        readString(row, ["employee_name", "full_name", "fullName", "display_name", "displayName"], "") ||
+        [readString(row, ["first_name", "firstName"], ""), readString(row, ["last_name", "lastName"], "")]
+          .filter((part) => part && part !== "-")
           .join(" ")
           .trim()
-
-      const label =
-        fullName && employeeNo
-          ? `${fullName} (${employeeNo})`
-          : fullName || employeeNo || `Employee ${id}`
-
-      return { id, label }
+      return { id, label: fullName || `Employee ${id}` }
     })
     .filter((option): option is EmployeeOption => option !== null)
 }
 
-function Field({
-  label,
-  htmlFor,
-  children,
-}: {
-  label: string
-  htmlFor?: string
-  children: React.ReactNode
-}) {
-  return (
-    <div className="flex min-w-0 flex-col gap-1.5">
-      <Label htmlFor={htmlFor} className="text-sm font-medium text-foreground">
-        {label}
-      </Label>
-      {children}
-    </div>
-  )
-}
-
-function MetaChip({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-0 rounded-md border border-slate-200/80 bg-slate-50/80 px-2 py-1">
-      <p className="text-[10px] font-medium tracking-wide text-slate-500 uppercase">{label}</p>
-      <p className="truncate text-xs font-medium text-slate-900" title={value}>
-        {value}
-      </p>
-    </div>
-  )
-}
-
-function ToolbarButton({
-  children,
-  onClick,
-  disabled,
-  variant = "outline",
-}: {
-  children: React.ReactNode
-  onClick?: () => void
-  disabled?: boolean
-  variant?: "outline" | "primary"
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={cn(
-        "inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50",
-        variant === "primary"
-          ? "bg-primary !text-white hover:brightness-95"
-          : "border border-slate-300 text-slate-700 hover:bg-slate-50"
-      )}
-    >
-      {children}
-    </button>
-  )
+function tripDateRange(row: AdminRecord) {
+  const start = formatDateOnly(row.start_date ?? row.startDate ?? row.from_date)
+  const end = formatDateOnly(row.end_date ?? row.endDate ?? row.to_date)
+  return start === end ? start : `${start} – ${end}`
 }
 
 export function AttendanceBusinessTripsView() {
@@ -369,18 +249,18 @@ export function AttendanceBusinessTripsView() {
   const actor = useDashboardActor()
   const [trips, setTrips] = React.useState<AdminRecord[]>([])
   const [employees, setEmployees] = React.useState<AdminRecord[]>([])
-  const [selectedTripId, setSelectedTripId] = React.useState("")
-  const [selectedTripDetail, setSelectedTripDetail] = React.useState<AdminRecord | null>(null)
+  const [selectedTrip, setSelectedTrip] = React.useState<AdminRecord | null>(null)
+  const [detailsOpen, setDetailsOpen] = React.useState(false)
   const [allowed, setAllowed] = React.useState<boolean | null>(null)
 
   const [statusFilter, setStatusFilter] = React.useState("all")
   const [dateFrom, setDateFrom] = React.useState("")
   const [dateTo, setDateTo] = React.useState("")
+  const [searchInput, setSearchInput] = React.useState("")
   const [search, setSearch] = React.useState("")
   const [employeeFilterId, setEmployeeFilterId] = React.useState<number | null>(null)
 
   const [loading, setLoading] = React.useState(false)
-  const [detailLoading, setDetailLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
 
@@ -390,9 +270,14 @@ export function AttendanceBusinessTripsView() {
   const [actionDialogOpen, setActionDialogOpen] = React.useState(false)
   const [pendingAction, setPendingAction] = React.useState<TripActionKind | null>(null)
   const [actionTrip, setActionTrip] = React.useState<AdminRecord | null>(null)
-  const [actionReason, setActionReason] = React.useState("")
+  const [actionNote, setActionNote] = React.useState("")
 
-  // HR/admin only — never show business trips on employee (user) side.
+  const canCreate = canPerformPermission(actor.permissionLabels, {
+    permissions: ["attendance_business_trips:create", "attendance_business_trips:update"],
+    mode: "any",
+  })
+  const canManage = canPerformPermission(actor.permissionLabels, "attendance_business_trips:update")
+
   React.useEffect(() => {
     if (!actor.ready) {
       return
@@ -405,55 +290,20 @@ export function AttendanceBusinessTripsView() {
     setAllowed(true)
   }, [actor.isAdmin, actor.ready, router])
 
+  React.useEffect(() => {
+    const timer = window.setTimeout(() => setSearch(searchInput.trim()), 300)
+    return () => window.clearTimeout(timer)
+  }, [searchInput])
+
   const employeeOptions = React.useMemo(() => buildEmployeeOptions(employees), [employees])
 
-  const selectedListTrip = React.useMemo(
-    () => trips.find((row) => getTripId(row) === selectedTripId) ?? null,
-    [trips, selectedTripId]
-  )
-
-  const activeTrip = React.useMemo(() => {
-    if (!selectedListTrip && !selectedTripDetail) {
-      return null
-    }
+  const statusCounts = React.useMemo(() => {
     return {
-      ...(selectedListTrip ?? {}),
-      ...(selectedTripDetail ?? {}),
-    } as AdminRecord
-  }, [selectedListTrip, selectedTripDetail])
-
-  const activeStatus = getStatusMeta(activeTrip?.status)
-  const canEditActive =
-    Boolean(activeTrip) && ["draft", "submitted"].includes(String(activeTrip?.status ?? "").toLowerCase())
-  const activeTripStatus = String(activeTrip?.status ?? "").toLowerCase()
-
-  const selectedTripIdRef = React.useRef(selectedTripId)
-
-  React.useEffect(() => {
-    selectedTripIdRef.current = selectedTripId
-  }, [selectedTripId])
-
-  const loadTripDetail = React.useCallback(async (tripId: string) => {
-    const token = readStoredToken()
-    if (!token || !tripId) {
-      return
+      draft: trips.filter((row) => getTripStatus(row) === "draft").length,
+      submitted: trips.filter((row) => getTripStatus(row) === "submitted").length,
+      approved: trips.filter((row) => getTripStatus(row) === "approved").length,
     }
-
-    setDetailLoading(true)
-    try {
-      const detail = await getAttendanceBusinessTrip(token, tripId)
-      setSelectedTripDetail(detail)
-    } catch (errorObject) {
-      const message =
-        errorObject instanceof Error
-          ? errorObject.message
-          : "Failed to load business trip details."
-      setError(message)
-      showErrorAlert(message)
-    } finally {
-      setDetailLoading(false)
-    }
-  }, [])
+  }, [trips])
 
   const loadTrips = React.useCallback(async () => {
     const token = readStoredToken()
@@ -461,52 +311,37 @@ export function AttendanceBusinessTripsView() {
       const message = "Authentication required. Please log in again."
       setError(message)
       setTrips([])
-      setSelectedTripId("")
-      setSelectedTripDetail(null)
       return
     }
 
     setLoading(true)
     setError(null)
     try {
-      const result = await listAttendanceBusinessTrips(token, {
+      const result = await listAllAttendanceBusinessTrips(token, {
         page: 1,
         limit: 100,
-        sortBy: "created_at",
-        sortOrder: "DESC",
-        search: search.trim() || undefined,
+        search: search || undefined,
         status: statusFilter === "all" ? undefined : statusFilter,
         from_date: dateFrom || undefined,
         to_date: dateTo || undefined,
         employee_id: employeeFilterId ?? undefined,
       })
       setTrips(result.rows)
-
-      const currentSelection =
-        result.rows.find((row) => getTripId(row) === selectedTripIdRef.current) ??
-        result.rows[0] ??
-        null
-
-      if (!currentSelection) {
-        setSelectedTripId("")
-        setSelectedTripDetail(null)
-        return
-      }
-
-      const nextId = getTripId(currentSelection)
-      setSelectedTripId(nextId)
-      await loadTripDetail(nextId)
+      setSelectedTrip((current) => {
+        if (!current) {
+          return current
+        }
+        return result.rows.find((row) => getTripId(row) === getTripId(current)) ?? current
+      })
     } catch (errorObject) {
       const message =
-        errorObject instanceof Error
-          ? errorObject.message
-          : "Failed to load attendance business trips."
+        errorObject instanceof Error ? errorObject.message : "Failed to load business trips."
       setError(message)
       showErrorAlert(message)
     } finally {
       setLoading(false)
     }
-  }, [dateFrom, dateTo, employeeFilterId, loadTripDetail, search, statusFilter])
+  }, [dateFrom, dateTo, employeeFilterId, search, statusFilter])
 
   React.useEffect(() => {
     if (allowed !== true) {
@@ -525,15 +360,10 @@ export function AttendanceBusinessTripsView() {
     }
 
     let cancelled = false
-    void listEmployees(token, {
-      page: 1,
-      limit: 200,
-      sortBy: "first_name",
-      sortOrder: "ASC",
-    })
-      .then((result) => {
+    void listAllEmployees(token, {})
+      .then((rows) => {
         if (!cancelled) {
-          setEmployees(result.rows || [])
+          setEmployees(rows)
         }
       })
       .catch(() => {
@@ -547,43 +377,46 @@ export function AttendanceBusinessTripsView() {
     }
   }, [allowed])
 
-  const openCreateDialog = () => {
+  function openCreateDialog() {
     setEditingTripId(null)
     setForm(EMPTY_FORM)
     setDialogOpen(true)
   }
 
-  const openEditDialog = (row: AdminRecord) => {
+  function openEditDialog(row: AdminRecord) {
     const id = getTripId(row)
     if (!id) {
       return
     }
-
     const nestedEmployee = asRecord(row.employee)
     const employeeId =
       readNumber(row, ["employee_id", "employeeId"]) ??
       readNumber(nestedEmployee, ["id", "employee_id"])
-
     setEditingTripId(id)
     setForm({
       employeeId,
       startDate: readString(row, ["start_date", "startDate", "from_date"], "").slice(0, 10),
       endDate: readString(row, ["end_date", "endDate", "to_date"], "").slice(0, 10),
       reason: readString(row, ["reason", "notes", "description"], ""),
-      submit: String(row.status ?? "").toLowerCase() !== "draft",
+      submit: getTripStatus(row) !== "draft",
     })
+    setDetailsOpen(false)
     setDialogOpen(true)
   }
 
-  const handleSave = async () => {
+  function openDetails(row: AdminRecord) {
+    setSelectedTrip(row)
+    setDetailsOpen(true)
+  }
+
+  async function handleSave() {
     const token = readStoredToken()
     if (!token) {
       showErrorAlert("Authentication required. Please log in again.")
       return
     }
-
     if (!form.employeeId) {
-      showErrorAlert("Select an employee for this business trip.")
+      showErrorAlert("Select who is travelling.")
       return
     }
     if (!form.startDate || !form.endDate) {
@@ -594,85 +427,55 @@ export function AttendanceBusinessTripsView() {
       showErrorAlert("End date must be on or after the start date.")
       return
     }
-    if (!form.reason.trim()) {
-      showErrorAlert("Add a reason for the business trip.")
-      return
-    }
 
     setSaving(true)
     try {
+      const payload = {
+        employee_id: form.employeeId,
+        start_date: form.startDate,
+        end_date: form.endDate,
+        reason: form.reason.trim() || undefined,
+        submit: form.submit,
+      }
       if (editingTripId) {
-        await updateAttendanceBusinessTrip(token, editingTripId, {
-          employee_id: form.employeeId,
-          start_date: form.startDate,
-          end_date: form.endDate,
-          reason: form.reason.trim(),
-          submit: form.submit,
-          metadata: {},
-        })
-        showSuccessAlert("Business trip updated successfully.")
+        await updateAttendanceBusinessTrip(token, editingTripId, payload)
+        showSuccessAlert("Business trip updated.")
       } else {
-        await createAttendanceBusinessTrip(token, {
-          employee_id: form.employeeId,
-          start_date: form.startDate,
-          end_date: form.endDate,
-          reason: form.reason.trim(),
-          submit: form.submit,
-          metadata: {},
-        })
-        showSuccessAlert(
-          form.submit
-            ? "Business trip created and submitted."
-            : "Business trip draft created."
-        )
+        await createAttendanceBusinessTrip(token, payload)
+        showSuccessAlert(form.submit ? "Trip sent for approval." : "Draft trip saved.")
       }
       setDialogOpen(false)
       setForm(EMPTY_FORM)
       setEditingTripId(null)
       await loadTrips()
     } catch (errorObject) {
-      const message =
+      showErrorAlert(
         errorObject instanceof Error
           ? errorObject.message
           : editingTripId
             ? "Failed to update business trip."
             : "Failed to create business trip."
-      showErrorAlert(message)
-      setError(message)
+      )
     } finally {
       setSaving(false)
     }
   }
 
-  const openActionDialog = React.useCallback(
-    (trip: AdminRecord, action: TripActionKind) => {
-      setActionTrip(trip)
-      setPendingAction(action)
-      setActionReason(
-        action === "cancel"
-          ? "Cancelled by admin"
-          : action === "reject"
-            ? "Rejected by admin"
-            : ""
-      )
-      setActionDialogOpen(true)
-    },
-    []
-  )
+  function openActionDialog(trip: AdminRecord, action: TripActionKind) {
+    setActionTrip(trip)
+    setPendingAction(action)
+    setActionNote(action === "cancel" ? "Cancelled by admin" : action === "reject" ? "" : "")
+    setActionDialogOpen(true)
+  }
 
-  const handleTripAction = React.useCallback(async () => {
+  async function handleTripAction() {
     const token = readStoredToken()
     const tripId = getTripId(actionTrip)
     if (!token || !tripId || !pendingAction) {
       return
     }
-
-    if ((pendingAction === "reject" || pendingAction === "cancel") && !actionReason.trim()) {
-      showErrorAlert(
-        pendingAction === "cancel"
-          ? "Enter a reason for cancellation."
-          : "Enter a reason for rejection."
-      )
+    if ((pendingAction === "reject" || pendingAction === "cancel") && !actionNote.trim()) {
+      showErrorAlert(pendingAction === "cancel" ? "Enter a cancellation reason." : "Enter a rejection reason.")
       return
     }
 
@@ -680,573 +483,460 @@ export function AttendanceBusinessTripsView() {
     try {
       if (pendingAction === "submit") {
         await submitAttendanceBusinessTrip(token, tripId)
-        showSuccessAlert("Business trip submitted.")
+        showSuccessAlert("Trip submitted for approval.")
       } else if (pendingAction === "approve") {
-        await approveAttendanceBusinessTrip(token, tripId, actionReason)
-        showSuccessAlert("Business trip approved.")
+        await approveAttendanceBusinessTrip(token, tripId, actionNote)
+        showSuccessAlert("Trip approved.")
       } else if (pendingAction === "reject") {
-        await rejectAttendanceBusinessTrip(token, tripId, actionReason)
-        showSuccessAlert("Business trip rejected.")
+        await rejectAttendanceBusinessTrip(token, tripId, actionNote)
+        showSuccessAlert("Trip rejected.")
       } else {
-        await cancelAttendanceBusinessTrip(token, tripId, actionReason)
-        showSuccessAlert("Business trip cancelled.")
+        await cancelAttendanceBusinessTrip(token, tripId, actionNote)
+        showSuccessAlert("Trip cancelled.")
       }
-
       setActionDialogOpen(false)
       setPendingAction(null)
       setActionTrip(null)
-      setActionReason("")
+      setActionNote("")
+      setDetailsOpen(false)
       await loadTrips()
     } catch (errorObject) {
-      const message =
-        errorObject instanceof Error
-          ? errorObject.message
-          : "Failed to update business trip status."
-      showErrorAlert(message)
-      setError(message)
+      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to update the trip.")
     } finally {
       setSaving(false)
     }
-  }, [actionReason, actionTrip, loadTrips, pendingAction])
+  }
 
   const columns = React.useMemo<Array<Column<AdminRecord>>>(
     () => [
       {
         key: "employee",
         label: "Employee",
-        defaultWidth: 130,
-        render: (row) => (
-          <span className="text-xs font-medium text-slate-900">{getEmployeeLabel(row)}</span>
-        ),
+        defaultWidth: 160,
+        sortValue: (row) => getEmployeeLabel(row),
+        render: (row) => getEmployeeLabel(row),
       },
       {
         key: "dates",
-        label: "Dates",
-        defaultWidth: 120,
-        render: (row) => {
-          const start = formatDateOnly(row.start_date ?? row.startDate ?? row.from_date)
-          const end = formatDateOnly(row.end_date ?? row.endDate ?? row.to_date)
-          return (
-            <span className="text-xs text-slate-700 tabular-nums">
-              {start === end ? start : `${start} – ${end}`}
-            </span>
-          )
-        },
+        label: "Travel dates",
+        defaultWidth: 150,
+        sortValue: (row) => String(row.start_date ?? row.startDate ?? ""),
+        render: (row) => tripDateRange(row),
       },
       {
         key: "reason",
-        label: "Reason",
-        defaultWidth: 160,
+        label: "Purpose",
+        defaultWidth: 180,
+        sortValue: (row) => readString(row, ["reason", "notes", "description"], ""),
         render: (row) => (
-          <span className="line-clamp-1 text-xs text-slate-600">
-            {readString(row, ["reason", "notes", "description"], "—")}
-          </span>
+          <span className="line-clamp-1">{readString(row, ["reason", "notes", "description"], "—")}</span>
         ),
       },
       {
         key: "status",
         label: "Status",
-        defaultWidth: 78,
+        defaultWidth: 110,
+        sortValue: (row) => getTripStatus(row),
         render: (row) => {
           const meta = getStatusMeta(row.status)
-          return (
-            <Badge
-              variant="outline"
-              className={cn("px-1.5 py-0 text-[10px] capitalize", meta.className)}
-            >
-              {meta.label}
-            </Badge>
-          )
+          return <span className={cn("font-medium", meta.className)}>{meta.label}</span>
         },
       },
       {
         key: "actions",
-        label: "",
-        defaultWidth: 88,
+        label: "Act",
+        defaultWidth: 50,
         sortable: false,
         render: (row) => {
-          const rowId = getTripId(row)
-          const isSelected = rowId === selectedTripId
-          const status = String(row.status ?? "").toLowerCase()
-          const editable = status === "draft" || status === "submitted"
+          const status = getTripStatus(row)
+          const editable = canCreate && (status === "draft" || status === "submitted")
+          if (!editable) {
+            return null
+          }
           return (
-            <div className="flex justify-end gap-0.5" onClick={(event) => event.stopPropagation()}>
-              {editable ? (
-                <button
-                  type="button"
-                  className="rounded px-1.5 py-0.5 text-[11px] font-medium text-slate-600 hover:bg-slate-100"
-                  onClick={() => openEditDialog(row)}
-                >
-                  Edit
-                </button>
-              ) : null}
+            <div className="flex justify-end" onClick={(event) => event.stopPropagation()}>
               <button
                 type="button"
-                className={cn(
-                  "rounded px-1.5 py-0.5 text-[11px] font-medium transition-colors",
-                  isSelected
-                    ? "bg-primary !text-white"
-                    : "text-slate-600 hover:bg-slate-100"
-                )}
-                onClick={() => {
-                  setSelectedTripId(rowId)
-                  void loadTripDetail(rowId)
-                }}
+                className="admin-table-icon-button"
+                title="Edit trip"
+                onClick={() => openEditDialog(row)}
               >
-                {isSelected ? "Open" : "View"}
+                <Pencil className="size-4" />
               </button>
             </div>
           )
         },
       },
     ],
-    [loadTripDetail, selectedTripId]
+    [canCreate]
   )
+
+  const selectedStatus = getTripStatus(selectedTrip)
+  const selectedMeta = getStatusMeta(selectedTrip?.status)
 
   if (allowed !== true) {
     return (
       <div className="rounded-md border border-slate-200 bg-white px-3 py-6 text-center text-xs text-slate-500">
-        {allowed === false
-          ? "Business trips are only available to HR administrators."
-          : "Checking access…"}
+        {allowed === false ? "Business trips are only available to HR administrators." : "Checking access…"}
       </div>
     )
   }
 
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2 py-1.5">
-        <h2 className="shrink-0 text-sm font-semibold text-slate-900">Business Trips</h2>
-        <Badge
-          variant="outline"
-          className="h-5 border-slate-200 bg-slate-50 px-1.5 text-[10px] text-slate-600"
-        >
-          {trips.length}
-        </Badge>
-
-        <div className="mx-0.5 hidden h-4 w-px bg-slate-200 sm:block" />
-
-        <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value ?? "all")}>
-          <SelectTrigger className="h-7 w-auto min-w-[7.5rem] text-xs">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All statuses</SelectItem>
-            <SelectItem value="draft">Draft</SelectItem>
-            <SelectItem value="submitted">Submitted</SelectItem>
-            <SelectItem value="approved">Approved</SelectItem>
-            <SelectItem value="rejected">Rejected</SelectItem>
-            <SelectItem value="cancelled">Cancelled</SelectItem>
-          </SelectContent>
-        </Select>
-
-        <Select
-          value={employeeFilterId != null ? String(employeeFilterId) : "all"}
-          onValueChange={(value) =>
-            setEmployeeFilterId(value && value !== "all" ? Number(value) : null)
-          }
-        >
-          <SelectTrigger className="h-7 w-auto min-w-[9rem] max-w-[12rem] text-xs">
-            <SelectValue placeholder="Employee">
-              {employeeFilterId != null
-                ? employeeOptions.find((option) => option.id === employeeFilterId)?.label ??
-                  "Employee"
-                : "All employees"}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all" data-search-text="all employees">
-              All employees
-            </SelectItem>
-            {employeeOptions.map((option) => (
-              <SelectItem
-                key={option.id}
-                value={String(option.id)}
-                data-search-text={option.label}
-              >
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <div className="min-w-[7.5rem]">
-          <DatePickerPresets
-            value={dateFrom}
-            onChange={setDateFrom}
-            placeholder="From"
-            className="h-7 px-2 text-xs"
-          />
-        </div>
-        <div className="min-w-[7.5rem]">
-          <DatePickerPresets
-            value={dateTo}
-            onChange={setDateTo}
-            placeholder="To"
-            className="h-7 px-2 text-xs"
-          />
-        </div>
-        <Input
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search…"
-          className="h-7 w-28 text-xs"
-        />
-
-        <div className="ml-auto flex flex-wrap items-center gap-1">
-          <ToolbarButton
-            onClick={() => {
-              setStatusFilter("all")
-              setDateFrom("")
-              setDateTo("")
-              setSearch("")
-              setEmployeeFilterId(null)
-            }}
+      <TalentDoodleSprites />
+      <div className="grid grid-cols-3 gap-2">
+        {[
+          { label: "Drafts", value: statusCounts.draft },
+          { label: "Awaiting approval", value: statusCounts.submitted },
+          { label: "Approved", value: statusCounts.approved },
+        ].map((item) => (
+          <div
+            key={item.label}
+            className="relative overflow-hidden rounded-2xl p-3 text-white"
+            style={{ backgroundColor: "var(--primary)" }}
           >
-            Reset
-          </ToolbarButton>
-          <ToolbarButton onClick={() => void loadTrips()} disabled={loading}>
-            <RefreshCw className={cn("size-3", loading ? "animate-spin" : "")} />
-            Refresh
-          </ToolbarButton>
-          <ToolbarButton variant="primary" onClick={openCreateDialog}>
-            <Plus className="size-3" />
-            New
-          </ToolbarButton>
-        </div>
+            <TalentDoodle />
+            <div className="relative z-10">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-white/70">{item.label}</p>
+              <p className="mt-1 text-lg font-semibold tabular-nums leading-none">{item.value}</p>
+            </div>
+          </div>
+        ))}
       </div>
 
-      {error ? (
-        <div className="rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs text-rose-700">
-          {error}
-        </div>
-      ) : null}
+      {error ? <p className="text-sm text-rose-600">{error}</p> : null}
 
-      <div className="grid gap-2 xl:grid-cols-[minmax(0,1fr)_minmax(17rem,19rem)]">
-        <div className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white">
-          <div className="flex items-center justify-between border-b border-slate-100 px-2.5 py-1.5">
-            <p className="text-xs font-semibold text-slate-800">Trips</p>
-            <p className="text-[11px] text-slate-500">Select a row to review</p>
-          </div>
-          <div className="p-1.5">
-            <ResizableTable
-              title="Business Trips"
-              data={trips}
-              columns={columns}
-              itemsPerPage={12}
-              loading={loading}
-              storageKey="leave-business-trips-v2"
+      <ResizableTable
+        title="Business trips"
+        toolbarStart={
+          <>
+            <SearchToggleField
+              className="min-w-0 !w-auto !max-w-[12rem] !flex-none"
+              placeholder="Search trips"
+              value={searchInput}
+              onChange={setSearchInput}
             />
-            {!loading && trips.length === 0 ? (
-              <div className="rounded-md border border-dashed border-slate-200 px-3 py-5 text-center text-xs text-slate-500">
-                No business trips match the current filters.
-              </div>
-            ) : null}
-          </div>
-        </div>
-
-        <aside className="flex min-h-[14rem] flex-col rounded-lg border border-slate-200 bg-white">
-          <div className="flex items-center justify-between border-b border-slate-100 px-2.5 py-1.5">
-            <p className="text-xs font-semibold text-slate-800">Details</p>
-            {activeTrip ? (
-              <Badge
-                variant="outline"
-                className={cn("px-1.5 py-0 text-[10px] capitalize", activeStatus.className)}
+            <select
+              className="h-8 w-[9.5rem] shrink-0 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value)}
+              aria-label="Filter trip status"
+            >
+              <option value="all">All statuses</option>
+              <option value="draft">Draft</option>
+              <option value="submitted">Awaiting approval</option>
+              <option value="approved">Approved</option>
+              <option value="rejected">Rejected</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+            <select
+              className="h-8 max-w-[12rem] shrink-0 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
+              value={employeeFilterId != null ? String(employeeFilterId) : "all"}
+              onChange={(event) =>
+                setEmployeeFilterId(event.target.value === "all" ? null : Number(event.target.value))
+              }
+              aria-label="Filter employee"
+            >
+              <option value="all">All employees</option>
+              {employeeOptions.map((option) => (
+                <option key={option.id} value={String(option.id)}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <DatePickerPresets value={dateFrom} onChange={setDateFrom} placeholder="From" />
+            <DatePickerPresets value={dateTo} onChange={setDateTo} placeholder="To" />
+          </>
+        }
+        toolbarActions={
+          <>
+            {canCreate ? (
+              <button
+                type="button"
+                className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white"
+                onClick={openCreateDialog}
               >
-                {activeStatus.label}
-              </Badge>
+                <Plus className="h-3.5 w-3.5" />
+                New trip
+              </button>
             ) : null}
-          </div>
+            <button
+              type="button"
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-slate-300 bg-white"
+              onClick={() => void loadTrips()}
+              disabled={loading}
+              aria-label="Refresh"
+              title="Refresh"
+            >
+              <RefreshCw className={cn("h-3.5 w-3.5 text-primary", loading ? "animate-spin" : "")} />
+            </button>
+          </>
+        }
+        data={trips}
+        columns={columns}
+        itemsPerPage={20}
+        loading={loading}
+        storageKey="leave-business-trips-v3"
+        getRowId={(row) => getTripId(row)}
+        onRowSelect={(_, row) => {
+          if (row) {
+            openDetails(row)
+          }
+        }}
+      />
 
-          <div className="flex flex-1 flex-col gap-2 p-2.5">
-            {detailLoading ? (
-              <div className="flex flex-1 items-center justify-center gap-1.5 text-xs text-slate-500">
-                <Loader2 className="size-3.5 animate-spin" />
-                Loading…
-              </div>
-            ) : null}
-
-            {!detailLoading && !activeTrip ? (
-              <div className="flex flex-1 items-center justify-center rounded-md border border-dashed border-slate-200 px-3 py-6 text-center text-xs text-slate-500">
-                Select a trip to view details
-              </div>
-            ) : null}
-
-            {!detailLoading && activeTrip ? (
-              <>
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-slate-900">
-                    {getEmployeeLabel(activeTrip)}
-                  </p>
-                  <p className="mt-0.5 line-clamp-2 text-xs leading-snug text-slate-500">
-                    {readString(activeTrip, ["reason", "notes", "description"], "No reason")}
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-2 gap-1.5">
-                  <MetaChip
-                    label="Start"
-                    value={formatDateOnly(
-                      activeTrip.start_date ?? activeTrip.startDate ?? activeTrip.from_date
-                    )}
-                  />
-                  <MetaChip
-                    label="End"
-                    value={formatDateOnly(
-                      activeTrip.end_date ?? activeTrip.endDate ?? activeTrip.to_date
-                    )}
-                  />
-                  <MetaChip label="ID" value={getTripId(activeTrip) || "—"} />
-                  <MetaChip
-                    label="Created"
-                    value={formatDateTime(activeTrip.created_at ?? activeTrip.createdAt)}
-                  />
-                </div>
-
-                <div className="mt-auto space-y-1.5 border-t border-slate-100 pt-2">
-                  {canEditActive ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-7 w-full text-xs"
-                      onClick={() => openEditDialog(activeTrip)}
-                    >
-                      <Pencil className="mr-1 size-3" />
-                      Edit trip
-                    </Button>
-                  ) : null}
-
-                  {activeTripStatus === "draft" ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="h-7 w-full text-xs"
-                      onClick={() => openActionDialog(activeTrip, "submit")}
-                      disabled={saving}
-                    >
-                      Submit trip
-                    </Button>
-                  ) : null}
-
-                  {activeTripStatus === "submitted" ? (
-                    <div className="grid grid-cols-2 gap-1.5">
-                      <Button
-                        type="button"
-                        size="sm"
-                        className="h-7 text-xs"
-                        onClick={() => openActionDialog(activeTrip, "approve")}
-                        disabled={saving}
-                      >
-                        Approve
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-7 text-xs"
-                        onClick={() => openActionDialog(activeTrip, "reject")}
-                        disabled={saving}
-                      >
-                        Reject
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="col-span-2 h-7 text-xs"
-                        onClick={() => openActionDialog(activeTrip, "cancel")}
-                        disabled={saving}
-                      >
-                        Cancel trip
-                      </Button>
-                    </div>
-                  ) : null}
-                </div>
-              </>
-            ) : null}
-          </div>
-        </aside>
-      </div>
-
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogPopup className="max-h-[min(90vh,36rem)] max-w-md overflow-y-auto" from="center">
-          <DialogHeader>
-            <DialogTitle className="text-base">
-              {editingTripId ? "Edit business trip" : "New business trip"}
+      <Dialog
+        open={detailsOpen}
+        onOpenChange={(open) => {
+          setDetailsOpen(open)
+          if (!open) {
+            setSelectedTrip(null)
+          }
+        }}
+      >
+        <DialogPopup from="bottom" className="flex max-h-[min(92dvh,36rem)] w-[calc(100%-1rem)] max-w-lg flex-col gap-0 overflow-hidden p-3 sm:p-4">
+          <DialogHeader className="shrink-0 space-y-1 pr-8 text-left">
+            <DialogTitle className="text-base leading-snug sm:text-lg">
+              {selectedTrip ? getEmployeeLabel(selectedTrip) : "Business trip"}
             </DialogTitle>
             <DialogDescription className="text-xs">
-              {editingTripId
-                ? "Update dates, reason, or submission status."
-                : "Record a trip for an employee in the active company."}
+              {selectedTrip
+                ? `${selectedMeta.label} · ${tripDateRange(selectedTrip)}`
+                : "Trip details"}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="mt-3 grid grid-cols-1 gap-3">
-            <Field label="Employee">
-              <Select
+          {selectedTrip ? (
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto py-2">
+              <p className="rounded-md border border-slate-200 bg-slate-50/80 px-2.5 py-2 text-sm text-slate-700">
+                {readString(selectedTrip, ["reason", "notes", "description"], "No purpose recorded.")}
+              </p>
+              <dl className="grid grid-cols-2 gap-2 text-xs">
+                <div className="rounded-md border border-border/60 px-2.5 py-2">
+                  <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">Start</dt>
+                  <dd className="mt-0.5 font-medium">
+                    {formatDateOnly(selectedTrip.start_date ?? selectedTrip.startDate)}
+                  </dd>
+                </div>
+                <div className="rounded-md border border-border/60 px-2.5 py-2">
+                  <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">End</dt>
+                  <dd className="mt-0.5 font-medium">
+                    {formatDateOnly(selectedTrip.end_date ?? selectedTrip.endDate)}
+                  </dd>
+                </div>
+              </dl>
+            </div>
+          ) : null}
+
+          <DialogFooter className="mt-2 shrink-0 flex-wrap border-t border-slate-100 pt-2">
+            <button
+              type="button"
+              className="inline-flex h-8 items-center justify-center rounded-md border border-slate-300 px-3 text-xs font-medium text-slate-700"
+              onClick={() => setDetailsOpen(false)}
+            >
+              Close
+            </button>
+            {selectedTrip && canCreate && (selectedStatus === "draft" || selectedStatus === "submitted") ? (
+              <button
+                type="button"
+                className="inline-flex h-8 items-center justify-center rounded-md border border-slate-300 px-3 text-xs font-medium text-slate-700"
+                onClick={() => openEditDialog(selectedTrip)}
+              >
+                Edit
+              </button>
+            ) : null}
+            {selectedTrip && canCreate && selectedStatus === "draft" ? (
+              <button
+                type="button"
+                className="inline-flex h-8 items-center justify-center rounded-md bg-primary px-3 text-xs font-medium !text-white"
+                disabled={saving}
+                onClick={() => openActionDialog(selectedTrip, "submit")}
+              >
+                Send for approval
+              </button>
+            ) : null}
+            {selectedTrip && canManage && selectedStatus === "submitted" ? (
+              <>
+                <button
+                  type="button"
+                  className="inline-flex h-8 items-center justify-center rounded-md border border-emerald-300 px-3 text-xs font-medium text-emerald-700"
+                  disabled={saving}
+                  onClick={() => openActionDialog(selectedTrip, "approve")}
+                >
+                  Approve
+                </button>
+                <button
+                  type="button"
+                  className="inline-flex h-8 items-center justify-center rounded-md border border-amber-300 px-3 text-xs font-medium text-amber-700"
+                  disabled={saving}
+                  onClick={() => openActionDialog(selectedTrip, "reject")}
+                >
+                  Reject
+                </button>
+                <button
+                  type="button"
+                  className="inline-flex h-8 items-center justify-center rounded-md border border-rose-300 px-3 text-xs font-medium text-rose-700"
+                  disabled={saving}
+                  onClick={() => openActionDialog(selectedTrip, "cancel")}
+                >
+                  Cancel trip
+                </button>
+              </>
+            ) : null}
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogPopup from="bottom" className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{editingTripId ? "Edit trip" : "New business trip"}</DialogTitle>
+            <DialogDescription>
+              {editingTripId
+                ? "Update the travel dates or purpose."
+                : "Record official travel so those days are treated as a business trip."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <label className="space-y-1">
+              <span className="text-xs text-slate-500">Employee</span>
+              <select
+                className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
                 value={form.employeeId != null ? String(form.employeeId) : ""}
-                onValueChange={(value) =>
+                onChange={(event) =>
                   setForm((prev) => ({
                     ...prev,
-                    employeeId: value ? Number(value) : null,
+                    employeeId: event.target.value ? Number(event.target.value) : null,
                   }))
                 }
                 disabled={saving}
               >
-                <SelectTrigger className="h-8 w-full text-xs">
-                  <SelectValue placeholder="Select employee">
-                    {form.employeeId != null
-                      ? employeeOptions.find((option) => option.id === form.employeeId)?.label ??
-                        "Select employee"
-                      : "Select employee"}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {employeeOptions.map((option) => (
-                    <SelectItem
-                      key={option.id}
-                      value={String(option.id)}
-                      data-search-text={option.label}
-                    >
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-
-            <div className="grid grid-cols-2 gap-2">
-              <Field label="Start date">
+                <option value="">Select employee</option>
+                {employeeOptions.map((option) => (
+                  <option key={option.id} value={String(option.id)}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="space-y-1">
+                <span className="text-xs text-slate-500">Start</span>
                 <DatePickerPresets
                   value={form.startDate}
                   onChange={(value) => setForm((prev) => ({ ...prev, startDate: value }))}
-                  placeholder="Start"
+                  placeholder="Start date"
                 />
-              </Field>
-              <Field label="End date">
+              </label>
+              <label className="space-y-1">
+                <span className="text-xs text-slate-500">End</span>
                 <DatePickerPresets
                   value={form.endDate}
                   onChange={(value) => setForm((prev) => ({ ...prev, endDate: value }))}
-                  placeholder="End"
+                  placeholder="End date"
                 />
-              </Field>
+              </label>
             </div>
-
-            <Field label="Reason" htmlFor="business-trip-reason">
+            <label className="space-y-1">
+              <span className="text-xs text-slate-500">Purpose</span>
               <Textarea
-                id="business-trip-reason"
-                value={form.reason}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, reason: event.target.value }))
-                }
+                className="min-h-20 rounded-md border border-slate-300 px-3 py-2 text-sm"
                 placeholder="e.g. Client visit in Arusha"
-                className="min-h-20 text-xs"
+                value={form.reason}
+                onChange={(event) => setForm((prev) => ({ ...prev, reason: event.target.value }))}
                 disabled={saving}
               />
-            </Field>
-
-            <label className="flex items-center gap-2 text-xs text-slate-700">
-              <input
-                type="checkbox"
-                className="size-3.5 rounded border-slate-300"
-                checked={form.submit}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, submit: event.target.checked }))
-                }
-                disabled={saving}
-              />
-              Submit immediately (uncheck for draft)
             </label>
+            {editingTripId ? null : (
+              <label className="flex items-center gap-2 text-xs text-slate-700">
+                <input
+                  type="checkbox"
+                  className="size-3.5 rounded border-slate-300"
+                  checked={form.submit}
+                  onChange={(event) => setForm((prev) => ({ ...prev, submit: event.target.checked }))}
+                  disabled={saving}
+                />
+                Send for approval now
+              </label>
+            )}
           </div>
-
-          <DialogFooter className="mt-4">
-            <DialogClose
-              render={
-                <Button type="button" variant="outline" size="sm" disabled={saving}>
-                  Cancel
-                </Button>
-              }
-            />
-            <Button type="button" size="sm" onClick={() => void handleSave()} disabled={saving}>
-              {saving ? (
-                <>
-                  <Loader2 className="mr-1 size-3.5 animate-spin" />
-                  Saving…
-                </>
-              ) : editingTripId ? (
-                "Save"
-              ) : form.submit ? (
-                "Create & submit"
-              ) : (
-                "Save draft"
-              )}
-            </Button>
+          <DialogFooter>
+            <button
+              type="button"
+              className="rounded-md border border-slate-300 px-4 py-2 text-sm"
+              onClick={() => setDialogOpen(false)}
+              disabled={saving}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="rounded-md bg-primary px-4 py-2 text-sm font-medium !text-white disabled:opacity-60"
+              onClick={() => void handleSave()}
+              disabled={saving}
+            >
+              {saving ? "Saving..." : editingTripId ? "Save" : form.submit ? "Create and send" : "Save draft"}
+            </button>
           </DialogFooter>
         </DialogPopup>
       </Dialog>
 
       <Dialog open={actionDialogOpen} onOpenChange={setActionDialogOpen}>
-        <DialogPopup className="max-w-md" from="center">
+        <DialogPopup from="bottom" className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-base capitalize">
+            <DialogTitle>
               {pendingAction === "submit"
-                ? "Submit business trip"
+                ? "Send for approval"
                 : pendingAction === "approve"
-                  ? "Approve business trip"
+                  ? "Approve trip"
                   : pendingAction === "reject"
-                    ? "Reject business trip"
-                    : "Cancel business trip"}
+                    ? "Reject trip"
+                    : "Cancel trip"}
             </DialogTitle>
-            <DialogDescription className="text-xs">
+            <DialogDescription>
               {actionTrip ? getEmployeeLabel(actionTrip) : "Business trip"}
             </DialogDescription>
           </DialogHeader>
-
-          {pendingAction === "reject" || pendingAction === "cancel" || pendingAction === "approve" ? (
-            <div className="mt-3">
-              <Field label={pendingAction === "cancel" ? "Reason" : "Comments"}>
-                <Textarea
-                  value={actionReason}
-                  onChange={(event) => setActionReason(event.target.value)}
-                  className="min-h-20 text-xs"
-                  placeholder={
-                    pendingAction === "cancel"
-                      ? "Reason for cancellation"
-                      : pendingAction === "reject"
-                        ? "Reason for rejection"
-                        : "Optional approval note"
-                  }
-                  disabled={saving}
-                />
-              </Field>
-            </div>
-          ) : null}
-
-          <DialogFooter className="mt-4">
-            <DialogClose
-              render={
-                <Button type="button" variant="outline" size="sm" disabled={saving}>
-                  Close
-                </Button>
-              }
-            />
-            <Button type="button" size="sm" onClick={() => void handleTripAction()} disabled={saving}>
-              {saving ? (
-                <>
-                  <Loader2 className="mr-1 size-3.5 animate-spin" />
-                  Working…
-                </>
-              ) : pendingAction === "submit" ? (
-                "Submit"
-              ) : pendingAction === "approve" ? (
-                "Approve"
-              ) : pendingAction === "reject" ? (
-                "Reject"
-              ) : (
-                "Cancel trip"
-              )}
-            </Button>
+          {pendingAction === "submit" ? (
+            <p className="text-sm text-slate-600">This trip will move to awaiting approval.</p>
+          ) : (
+            <label className="space-y-1">
+              <span className="text-xs text-slate-500">
+                {pendingAction === "approve" ? "Note (optional)" : "Reason"}
+              </span>
+              <Textarea
+                className="min-h-20 rounded-md border border-slate-300 px-3 py-2 text-sm"
+                value={actionNote}
+                onChange={(event) => setActionNote(event.target.value)}
+                disabled={saving}
+              />
+            </label>
+          )}
+          <DialogFooter>
+            <button
+              type="button"
+              className="rounded-md border border-slate-300 px-4 py-2 text-sm"
+              onClick={() => setActionDialogOpen(false)}
+              disabled={saving}
+            >
+              Close
+            </button>
+            <button
+              type="button"
+              className="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium !text-white disabled:opacity-60"
+              onClick={() => void handleTripAction()}
+              disabled={saving}
+            >
+              {saving ? <Loader2 className="mr-1 size-3.5 animate-spin" /> : null}
+              {pendingAction === "submit"
+                ? "Send"
+                : pendingAction === "approve"
+                  ? "Approve"
+                  : pendingAction === "reject"
+                    ? "Reject"
+                    : "Cancel trip"}
+            </button>
           </DialogFooter>
         </DialogPopup>
       </Dialog>
