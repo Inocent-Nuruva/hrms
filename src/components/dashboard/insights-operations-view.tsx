@@ -5,6 +5,7 @@ import { Loader2Icon, RefreshCwIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { SearchToggleField } from "@/components/common/search-toggle-field"
+import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared"
 import {
   HeroBand,
@@ -50,6 +51,18 @@ export type InsightsOpsTab = "hr" | "management" | "manager" | "sales-field" | "
 
 function readStoredToken() {
   return readStoredSessionTokens().accessToken.trim()
+}
+
+function friendlyStatus(value: string) {
+  const normalized = value.trim().toLowerCase()
+  if (!normalized || normalized === "—") return "—"
+  if (["ok", "up", "healthy", "ready", "live", "true", "yes"].includes(normalized)) {
+    return "Working"
+  }
+  if (["down", "fail", "failed", "unhealthy", "error", "false", "no"].includes(normalized)) {
+    return "Needs attention"
+  }
+  return value
 }
 
 function metricEntries(record: AdminRecord | null) {
@@ -190,7 +203,7 @@ export function InsightsOperationsView({
   async function onPreview() {
     const token = readStoredToken()
     if (!token || !previewEmployeeId) {
-      toast.error("Employee id is required for a schedule preview.")
+      toast.error("Choose an employee to preview their schedule.")
       return
     }
     try {
@@ -256,15 +269,15 @@ export function InsightsOperationsView({
         eyebrow={embedded ? "Home" : "Insights"}
         title={
           activeTab === "readiness"
-            ? "Launch readiness"
+            ? "Are we ready?"
             : activeTab === "sales-field"
-              ? "Sales-field dashboard"
-              : `${prettify(activeTab)} dashboard`
+              ? "Sales and field overview"
+              : `${prettify(activeTab)} overview`
         }
         description={
           activeTab === "readiness"
-            ? "Health, launch blockers, attendance setup, and security events — one backend page each."
-            : "Company dashboard payload from /api/dashboards. Shown only with a dashboards grant."
+            ? "Check that the system is working, see what still needs fixing, set up clock-in, and review recent security activity."
+            : "A snapshot of how the company is doing for the dates you pick."
         }
         actions={
           <>
@@ -285,9 +298,15 @@ export function InsightsOperationsView({
 
       {activeTab !== "readiness" ? (
         <>
-          <div className="flex flex-wrap gap-2">
-            <input type="date" className={inputClass + " max-w-40"} value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
-            <input type="date" className={inputClass + " max-w-40"} value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="space-y-1">
+              <span className="text-xs text-slate-500">From</span>
+              <DatePickerPresets value={dateFrom} onChange={setDateFrom} placeholder="From" />
+            </label>
+            <label className="space-y-1">
+              <span className="text-xs text-slate-500">To</span>
+              <DatePickerPresets value={dateTo} onChange={setDateTo} placeholder="To" />
+            </label>
           </div>
           <motion.div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" variants={motionPreset.fast}>
             {metrics.length > 0 ? metrics.map((item) => (
@@ -307,27 +326,79 @@ export function InsightsOperationsView({
       ) : (
         <>
           <motion.div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" variants={motionPreset.fast}>
-            <MetricTile label="Health" value={readString(health, ["status", "state"], health ? "OK" : "—")} />
-            <MetricTile label="Live" value={readString(live, ["status", "state"], live ? "OK" : "—")} />
-            <MetricTile label="Ready" value={readString(ready, ["status", "state"], ready ? "OK" : "—")} />
-            <MetricTile label="Blockers" value={readNumber(readiness, ["blockerCount", "blocker_count", "blockers"]) ?? blockers.length} />
+            <MetricTile
+              label="System"
+              value={friendlyStatus(readString(health, ["status", "state"], health ? "OK" : "—"))}
+              hint="Is the HR system itself running?"
+            />
+            <MetricTile
+              label="Online"
+              value={friendlyStatus(readString(live, ["status", "state"], live ? "OK" : "—"))}
+              hint="Can people reach the service right now?"
+            />
+            <MetricTile
+              label="Ready to use"
+              value={friendlyStatus(readString(ready, ["status", "state"], ready ? "OK" : "—"))}
+              hint="Are the core pieces in place?"
+            />
+            <MetricTile
+              label="Issues to fix"
+              value={readNumber(readiness, ["blockerCount", "blocker_count", "blockers"]) ?? blockers.length}
+              hint="Items that still block go-live."
+            />
           </motion.div>
           <div className="rounded-xl border border-border bg-card p-4">
-            <h2 className="text-sm font-semibold">Attendance setup</h2>
+            <h2 className="text-sm font-semibold">Clock-in setup</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              {readString(setup, ["status", "message", "summary"], "Run the documented wizard with a policy name.")}
+              {readString(
+                setup,
+                ["status", "message", "summary"],
+                "Create the default attendance rules so people can clock in.",
+              )}
             </p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <input className={inputClass + " max-w-xs"} value={policyName} onChange={(event) => setPolicyName(event.target.value)} />
+            <div className="mt-3 flex flex-wrap items-end gap-2">
+              <label className="space-y-1">
+                <span className="text-xs text-slate-500">Rule name</span>
+                <input className={inputClass + " max-w-xs"} value={policyName} onChange={(event) => setPolicyName(event.target.value)} />
+              </label>
               <button type="button" className={primaryButtonClass} disabled={saving} onClick={() => void onWizard()}>
-                {saving ? <Loader2Icon className="size-4 animate-spin" /> : "Run wizard"}
+                {saving ? <Loader2Icon className="size-4 animate-spin" /> : "Create default rules"}
               </button>
             </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <input className={inputClass + " max-w-[8rem]"} placeholder="Employee id" value={previewEmployeeId} onChange={(event) => setPreviewEmployeeId(event.target.value)} />
-              <input type="date" className={inputClass + " max-w-40"} value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
-              <input type="date" className={inputClass + " max-w-40"} value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
-              <button type="button" className={secondaryButtonClass} onClick={() => void onPreview()}>Preview schedule</button>
+            <div className="mt-4 space-y-2">
+              <p className="text-sm font-medium text-foreground">See someone’s schedule</p>
+              <div className="flex flex-wrap items-end gap-2">
+                <label className="space-y-1">
+                  <span className="text-xs text-slate-500">Employee</span>
+                  <select
+                    className={inputClass + " max-w-xs"}
+                    value={previewEmployeeId}
+                    onChange={(event) => setPreviewEmployeeId(event.target.value)}
+                  >
+                    <option value="">Select employee</option>
+                    {employees.map((row, index) => {
+                      const id = readNumber(row, ["id", "employee_id", "employeeId"])
+                      if (id === null) return null
+                      return (
+                        <option key={`${id}-${index}`} value={String(id)}>
+                          {employeeLabel(row)}
+                        </option>
+                      )
+                    })}
+                  </select>
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs text-slate-500">From</span>
+                  <DatePickerPresets value={dateFrom} onChange={setDateFrom} placeholder="From" />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs text-slate-500">To</span>
+                  <DatePickerPresets value={dateTo} onChange={setDateTo} placeholder="To" />
+                </label>
+                <button type="button" className={secondaryButtonClass} onClick={() => void onPreview()}>
+                  Show schedule
+                </button>
+              </div>
             </div>
           </div>
           {blockers.length > 0 ? (
@@ -343,10 +414,10 @@ export function InsightsOperationsView({
               ))}
             </motion.ul>
           ) : null}
-          <SearchToggleField value={search} onChange={setSearch} placeholder="Search employees or events" />
+          <SearchToggleField value={search} onChange={setSearch} placeholder="Search people or activity" />
           <div className="overflow-hidden rounded-xl border border-border bg-card">
             <ResizableTable
-              title="Employee readiness"
+              title="Who is ready to clock in"
               data={visibleEmployees}
               columns={employeeColumns}
               loading={loading}
@@ -358,7 +429,7 @@ export function InsightsOperationsView({
           </div>
           <div className="overflow-hidden rounded-xl border border-border bg-card">
             <ResizableTable
-              title="Security events"
+              title="Recent security activity"
               data={visibleEvents}
               columns={eventColumns}
               loading={false}
