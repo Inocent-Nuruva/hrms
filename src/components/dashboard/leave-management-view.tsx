@@ -1086,6 +1086,8 @@ export function LeaveManagementView({
   const [employeeBalanceDetailsOpen, setEmployeeBalanceDetailsOpen] = React.useState(false)
   const [returnToEmployeeBalances, setReturnToEmployeeBalances] = React.useState(false)
   const returnToEmployeeBalancesRef = React.useRef(false)
+  const selectedBalanceGroupRef = React.useRef<LeaveBalanceEmployeeGroup | null>(null)
+  selectedBalanceGroupRef.current = selectedBalanceGroup
   const [balanceBulkDialog, setBalanceBulkDialog] = React.useState<null | "generate" | "carry-forward">(null)
   const [balanceBulkYear, setBalanceBulkYear] = React.useState(String(new Date().getFullYear()))
   const [workflowSteps, setWorkflowSteps] = React.useState<AdminRecord[]>([])
@@ -2209,7 +2211,8 @@ export function LeaveManagementView({
         carried_forward_days: Number(balanceForm.carried_forward_days),
         expired_days: Number(balanceForm.expired_days),
       })
-      setBalanceDialogOpen(false)
+      showSuccessAlert("Leave balance updated.")
+      finishBalanceEditor()
       await reloadAll(tab, true)
     } catch (errorObject) {
       const message = errorObject instanceof Error ? errorObject.message : "Failed to adjust leave balance."
@@ -2312,14 +2315,37 @@ export function LeaveManagementView({
     }
   }
 
+  function finishBalanceEditor() {
+    const shouldReturn = returnToEmployeeBalancesRef.current && Boolean(selectedBalanceGroupRef.current)
+    returnToEmployeeBalancesRef.current = false
+    setReturnToEmployeeBalances(false)
+    setBalanceDialogOpen(false)
+    setSelectedBalanceRow(null)
+    resetBalanceForm()
+    if (shouldReturn) {
+      window.setTimeout(() => {
+        setEmployeeBalanceDetailsOpen(true)
+      }, 50)
+    }
+  }
+
   async function openBalanceDialog(row?: AdminRecord) {
+    const cameFromEmployee = employeeBalanceDetailsOpen
+    if (row && cameFromEmployee) {
+      returnToEmployeeBalancesRef.current = true
+      setReturnToEmployeeBalances(true)
+    }
     const loaded = await ensureLookups(["types", "employees"])
     if (!loaded) {
+      if (row && cameFromEmployee) {
+        returnToEmployeeBalancesRef.current = false
+        setReturnToEmployeeBalances(false)
+      }
       return
     }
     if (row) {
-      returnToEmployeeBalancesRef.current = employeeBalanceDetailsOpen
-      setReturnToEmployeeBalances(employeeBalanceDetailsOpen)
+      returnToEmployeeBalancesRef.current = cameFromEmployee
+      setReturnToEmployeeBalances(cameFromEmployee)
       setEmployeeBalanceDetailsOpen(false)
       setSelectedBalanceRow(row)
       setBalanceForm(formFromBalanceRow(row))
@@ -4203,21 +4229,11 @@ export function LeaveManagementView({
       <Dialog
         open={balanceDialogOpen}
         onOpenChange={(open) => {
-          setBalanceDialogOpen(open)
           if (!open) {
-            setSelectedBalanceRow(null)
-            resetBalanceForm()
-            if (returnToEmployeeBalancesRef.current && selectedBalanceGroup) {
-              returnToEmployeeBalancesRef.current = false
-              setReturnToEmployeeBalances(false)
-              window.setTimeout(() => {
-                setEmployeeBalanceDetailsOpen(true)
-              }, 0)
-            } else {
-              returnToEmployeeBalancesRef.current = false
-              setReturnToEmployeeBalances(false)
-            }
+            finishBalanceEditor()
+            return
           }
+          setBalanceDialogOpen(true)
         }}
       >
         <DialogPopup from="bottom" className="sm:max-w-lg">
@@ -4314,7 +4330,7 @@ export function LeaveManagementView({
             </div>
           </div>
           <DialogFooter>
-            <button type="button" className="rounded-md border border-slate-300 px-4 py-2 text-sm" onClick={() => setBalanceDialogOpen(false)}>
+            <button type="button" className="rounded-md border border-slate-300 px-4 py-2 text-sm" onClick={() => finishBalanceEditor()}>
               Cancel
             </button>
             <button type="button" className="rounded-md bg-primary px-4 py-2 text-sm font-medium !text-white" disabled={saving} onClick={() => void submitBalanceAdjustment()}>
