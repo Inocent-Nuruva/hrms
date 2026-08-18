@@ -18,6 +18,7 @@ import {
   TimerResetIcon,
 } from "lucide-react"
 
+import { useDebouncedValue } from "@/hooks/use-debounced-value"
 import { ResizableTable } from "@/components/ui/resizable-table"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 import { TimeClockPicker } from "@/components/ui/time-clock-picker"
@@ -1210,6 +1211,22 @@ function filterDailySummaryRowsByCheckInTime(
     }
     return true
   })
+}
+
+function matchDailySummaryEmployeeIds(employees: AdminRecord[], search: string) {
+  const term = search.trim().toLowerCase()
+  if (!term) return [] as number[]
+  const tokens = term.split(/\s+/).filter(Boolean)
+  const ids: number[] = []
+  for (const employee of employees) {
+    const id = readNumberFromRow(employee, ["id", "employee_id", "employeeId"])
+    if (id === null) continue
+    const label = getEmployeeOptionLabel(employee).toLowerCase()
+    if (tokens.every((token) => label.includes(token))) {
+      ids.push(id)
+    }
+  }
+  return ids
 }
 
 function filterDailySummaryDisplayRows(
@@ -2540,8 +2557,9 @@ export function AttendanceActivityView({ section }: { section: string }) {
   const [employees, setEmployees] = React.useState<AdminRecord[]>([])
   const branchesRef = React.useRef<AdminRecord[]>([])
   const employeesRef = React.useRef<AdminRecord[]>([])
-  /** Free-text search across the current loaded page (employee, branch, status, dates, etc.). */
+  /** Free-text search — sent to GET /api/attendance/daily-summaries after a short debounce. */
   const [recordSearch, setRecordSearch] = React.useState("")
+  const debouncedRecordSearch = useDebouncedValue(recordSearch, 300)
   const [dailySummaryFilters, setDailySummaryFilters] = React.useState<Record<string, string>>(() => {
     const today = getTodayDateInputValue()
     return {
@@ -2842,20 +2860,32 @@ export function AttendanceActivityView({ section }: { section: string }) {
           return
         }
 
-        // Server page size is user-selectable. Free-text search stays client-side on the loaded page.
         const branchId = appliedDailySummaryFilters.branch_id
           ? Number(appliedDailySummaryFilters.branch_id)
           : undefined
+        const searchTerm = debouncedRecordSearch.trim()
+        const filterEmployeeId = appliedDailySummaryFilters.employee_id
+          ? Number(appliedDailySummaryFilters.employee_id)
+          : undefined
+        const matchedEmployeeIds = searchTerm
+          ? matchDailySummaryEmployeeIds(employeesRef.current, searchTerm)
+          : []
+        const resolvedEmployeeId =
+          filterEmployeeId && Number.isFinite(filterEmployeeId)
+            ? filterEmployeeId
+            : matchedEmployeeIds.length === 1
+              ? matchedEmployeeIds[0]
+              : undefined
         const result = await listAttendanceDailySummariesPage(token, {
           page: dailySummaryPage,
           limit: dailySummaryPageSize,
           sortBy: "created_at",
           sortOrder: "DESC",
+          search: searchTerm || undefined,
+          employee_no: searchTerm.includes("/") ? searchTerm : undefined,
           from_date: appliedDailySummaryFilters.from_date || undefined,
           to_date: appliedDailySummaryFilters.to_date || undefined,
-          employee_id: appliedDailySummaryFilters.employee_id
-            ? Number(appliedDailySummaryFilters.employee_id)
-            : undefined,
+          employee_id: resolvedEmployeeId,
           // Prefer branch_id; also send organization_id for APIs that scope branches that way.
           branch_id: branchId && Number.isFinite(branchId) ? branchId : undefined,
           organization_id: branchId && Number.isFinite(branchId) ? branchId : undefined,
@@ -2949,6 +2979,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
     config.title,
     dailySummaryPage,
     dailySummaryPageSize,
+    debouncedRecordSearch,
     hasAppliedDailySummaryFilters,
     historyFilters,
   ])
@@ -3058,6 +3089,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
       dailySummaryFilters: appliedDailySummaryFilters,
       dailySummaryPage,
       dailySummaryPageSize,
+      dailySummarySearch: debouncedRecordSearch,
       hasAppliedDailySummaryFilters,
     })
 
@@ -3076,6 +3108,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
     appliedDailySummaryFilters,
     dailySummaryPage,
     dailySummaryPageSize,
+    debouncedRecordSearch,
     hasAppliedDailySummaryFilters,
     historyFilters,
     loadSectionData,
@@ -3085,18 +3118,23 @@ export function AttendanceActivityView({ section }: { section: string }) {
     void fetchSectionData()
   }, [fetchSectionData])
 
-  // Free-text + check-in time filters are display-only over the stored server page.
-  // Clearing them restores every loaded row immediately (dailySummaryRows is never shrunk).
+  React.useEffect(() => {
+    if (activeSection !== "daily-summaries") return
+    setDailySummaryPage((current) => (current === 1 ? current : 1))
+  }, [activeSection, debouncedRecordSearch])
+
   const displayedDailySummaryRows = React.useMemo(() => {
     if (activeSection !== "daily-summaries") {
       return rows
     }
-    return filterDailySummaryDisplayRows(
-      dailySummaryRows,
-      recordSearch,
-      appliedDailySummaryFilters.check_in_after || "",
-      appliedDailySummaryFilters.check_in_before || ""
-    )
+    const after = appliedDailySummaryFilters.check_in_after || ""
+    const before = appliedDailySummaryFilters.check_in_before || ""
+    const narrowed = filterDailySummaryDisplayRows(dailySummaryRows, recordSearch, after, before)
+    if (narrowed.length > 0 || !recordSearch.trim()) {
+      return narrowed
+    }
+    // Name is not on this page yet — keep the loaded rows until the server search returns.
+    return filterDailySummaryDisplayRows(dailySummaryRows, "", after, before)
   }, [
     activeSection,
     appliedDailySummaryFilters.check_in_after,
@@ -4732,20 +4770,11 @@ export function AttendanceActivityView({ section }: { section: string }) {
               rows={displayedDailySummaryRows}
               section={activeSection}
               loading={loading}
-              itemsPerPage={
-                recordSearch.trim()
-                  ? Math.max(displayedDailySummaryRows.length, 1)
-                  : dailySummaryPageSize
-              }
-              page={recordSearch.trim() ? 1 : dailySummaryPage}
-              totalPages={recordSearch.trim() ? 1 : dailySummaryTotalPages}
-              totalItems={
-                recordSearch.trim()
-                  ? displayedDailySummaryRows.length
-                  : dailySummaryTotal
-              }
-              // While free-text searching, page over the filtered subset only (no server page jumps).
-              onPageChange={recordSearch.trim() ? undefined : setDailySummaryPage}
+              itemsPerPage={dailySummaryPageSize}
+              page={dailySummaryPage}
+              totalPages={dailySummaryTotalPages}
+              totalItems={dailySummaryTotal}
+              onPageChange={setDailySummaryPage}
               onRowSelect={(_, row) => {
                 void openRecordDetails(row)
               }}
