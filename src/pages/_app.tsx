@@ -1,5 +1,5 @@
 import type { AppProps } from "next/app";
-import { Poppins } from "next/font/google";
+import { Comfortaa, Poppins } from "next/font/google";
 import App from "@/App";
 import { SessionExpiryGuard } from "@/components/auth/session-expiry-guard";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -11,9 +11,15 @@ const poppins = Poppins({
   weight: ["400", "500", "600", "700"],
 });
 
+const comfortaa = Comfortaa({
+  variable: "--font-comfortaa",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+});
+
 export default function MyApp(props: AppProps) {
   return (
-    <main className={`${poppins.variable} ${poppins.className}`}>
+    <main className={`${poppins.variable} ${comfortaa.variable} ${poppins.className}`}>
       <ThemeProvider>
         <SessionExpiryGuard />
         <App {...props} />
