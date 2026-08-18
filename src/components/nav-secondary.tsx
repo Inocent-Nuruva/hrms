@@ -3,7 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { SearchIcon, ArrowRightIcon, Clock3Icon, CornerDownLeftIcon } from "lucide-react"
+import { SearchIcon } from "lucide-react"
 import {
   Dialog,
   DialogHeader,
@@ -224,102 +224,61 @@ export function NavSecondary({
                     >
                       {item.icon}
                       <span className="truncate">{item.title}</span>
-                      <span className="ml-auto rounded border border-border bg-muted/50 px-1 py-0.5 text-[10px] font-medium text-muted-foreground">
+                      <kbd className="ml-auto rounded border border-primary/20 bg-primary/10 px-1 py-px text-[10px] font-medium leading-none text-primary">
                         Ctrl K
-                      </span>
+                      </kbd>
                     </DialogTrigger>
                     <DialogPopup
                       from="top"
-                      showCloseButton
-                      className="overflow-hidden border-slate-200 bg-white p-0 shadow-[0_32px_90px_rgba(15,23,42,0.18)] sm:max-w-[680px]"
+                      showCloseButton={false}
+                      className="overflow-hidden p-0 sm:max-w-md"
                     >
-                      <DialogHeader>
-                        <div className="relative overflow-hidden rounded-t-2xl border-b border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.10),_transparent_42%),linear-gradient(180deg,_rgba(248,250,252,1),_rgba(255,255,255,1))] px-5 py-5">
-                          <div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-sky-100/60 blur-2xl" />
-                          <DialogTitle className="relative text-left text-lg font-semibold text-slate-900">
-                            Global Search
-                          </DialogTitle>
-                          <p className="relative mt-1 text-sm text-slate-500">
-                            Jump anywhere in the app from one place.
-                          </p>
-                        </div>
+                      <DialogHeader className="sr-only">
+                        <DialogTitle>Search</DialogTitle>
                       </DialogHeader>
-                      <div className="space-y-4 px-5 pb-5 pt-4">
-                        <div className="relative">
-                          <SearchIcon className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                          <input
-                            ref={searchInputRef}
-                            value={query}
-                            onChange={(event) => setQuery(event.target.value)}
-                            placeholder="Search pages, teams, tools, settings, attendance..."
-                            autoFocus
-                            className="h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-24 text-sm text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-slate-200"
-                          />
-                          <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500">
-                            Enter
-                          </div>
-                        </div>
-                        <div className="flex items-center justify-between text-xs text-slate-500">
-                          <span>{normalizedQuery ? "Best matches" : "Recent and suggested destinations"}</span>
-                          <span>Use ↑ ↓ to move</span>
-                        </div>
-                        <div className="max-h-96 overflow-y-auto rounded-2xl border border-slate-200 bg-slate-50/60 p-2">
-                          {searchResults.length > 0 ? (
-                            searchResults.map((result, index) => (
-                              <button
-                                key={`${result.url}-${result.title}`}
-                                type="button"
-                                className={`group flex w-full items-start justify-between gap-3 rounded-xl px-3 py-3 text-left transition-all duration-200 ${
-                                  activeIndex === index
-                                    ? "bg-white shadow-sm ring-1 ring-slate-200"
-                                    : "hover:bg-white/90 hover:shadow-sm"
-                                }`}
-                                onClick={() => runGlobalNavigation(result.url)}
-                                onMouseEnter={() => setActiveIndex(index)}
-                                onKeyDown={(event) => {
-                                  if (event.key === "Enter") {
-                                    runGlobalNavigation(result.url)
-                                  }
-                                }}
-                              >
-                                <div className="flex min-w-0 flex-1 flex-col items-start gap-1">
-                                  <div className="flex items-center gap-2">
-                                    {normalizedQuery ? (
-                                      <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-600">
-                                        Match
-                                      </span>
-                                    ) : (
-                                      <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-600">
-                                        Recent
-                                      </span>
-                                    )}
-                                    {result.section ? (
-                                      <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-slate-500">
-                                        {result.section}
-                                      </span>
-                                    ) : null}
-                                  </div>
-                                  <span className="truncate text-sm font-semibold text-slate-900">
-                                    {result.title}
-                                  </span>
-                                  <span className="truncate text-xs text-slate-500">{result.url}</span>
-                                </div>
-                                <div className="flex items-center gap-2 text-slate-400 transition group-hover:text-slate-600">
-                                  {normalizedQuery ? (
-                                    <CornerDownLeftIcon className="h-4 w-4" />
-                                  ) : (
-                                    <Clock3Icon className="h-4 w-4" />
-                                  )}
-                                  <ArrowRightIcon className="h-4 w-4" />
-                                </div>
-                              </button>
-                            ))
-                          ) : (
-                            <div className="px-3 py-8 text-sm text-slate-500">
-                              No results found.
-                            </div>
-                          )}
-                        </div>
+                      <div className="flex h-10 items-center gap-2 border-b border-slate-200 px-3 dark:border-border">
+                        <SearchIcon className="size-3.5 shrink-0 text-primary" />
+                        <input
+                          ref={searchInputRef}
+                          value={query}
+                          onChange={(event) => setQuery(event.target.value)}
+                          placeholder="Search pages…"
+                          autoFocus
+                          className="h-10 min-w-0 flex-1 border-0 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400 dark:text-foreground dark:placeholder:text-muted-foreground"
+                        />
+                        <kbd className="rounded border border-slate-200 px-1 py-px text-[10px] text-slate-500 dark:border-border">
+                          Esc
+                        </kbd>
+                      </div>
+                      <div className="max-h-72 overflow-y-auto p-1.5">
+                        {searchResults.length > 0 ? (
+                          searchResults.map((result, index) => (
+                            <button
+                              key={`${result.url}-${result.title}`}
+                              type="button"
+                              className={`flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-sm ${
+                                activeIndex === index
+                                  ? "bg-primary/10 text-primary"
+                                  : "text-slate-900 hover:bg-primary/5 dark:text-foreground"
+                              }`}
+                              onClick={() => runGlobalNavigation(result.url)}
+                              onMouseEnter={() => setActiveIndex(index)}
+                            >
+                              <span className="min-w-0 truncate font-medium">{result.title}</span>
+                              {result.section ? (
+                                <span
+                                  className={`shrink-0 text-[11px] ${
+                                    activeIndex === index ? "text-primary/70" : "text-slate-400"
+                                  }`}
+                                >
+                                  {result.section}
+                                </span>
+                              ) : null}
+                            </button>
+                          ))
+                        ) : (
+                          <p className="px-2 py-6 text-center text-sm text-slate-500">No matches</p>
+                        )}
                       </div>
                     </DialogPopup>
                   </Dialog>

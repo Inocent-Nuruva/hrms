@@ -606,18 +606,12 @@ export function InsightsOperationsView({
               ))}
             </motion.ul>
           ) : null}
+          <SearchToggleField value={search} onChange={setSearch} placeholder="Search people or activity" />
           <div className="overflow-hidden rounded-xl border border-border bg-card">
             <ResizableTable
               title="Employee"
               toolbarStart={
-                <>
-                  <TipIcon text="Who can clock in, and what they still need." />
-                  <SearchToggleField
-                    value={search}
-                    onChange={setSearch}
-                    placeholder="Search people or activity"
-                  />
-                </>
+                <TipIcon text="Who can clock in, and what they still need." />
               }
               data={visibleEmployees}
               columns={employeeColumns}
@@ -632,14 +626,7 @@ export function InsightsOperationsView({
             <ResizableTable
               title="Blocked action"
               toolbarStart={
-                <>
-                  <TipIcon text="Times someone tried to open a page they do not have permission to use." />
-                  <SearchToggleField
-                    value={search}
-                    onChange={setSearch}
-                    placeholder="Search people or activity"
-                  />
-                </>
+                <TipIcon text="Times someone tried to open a page they do not have permission to use." />
               }
               data={visibleEvents}
               columns={eventColumns}
