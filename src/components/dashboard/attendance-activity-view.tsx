@@ -3172,10 +3172,10 @@ export function AttendanceActivityView({ section }: { section: string }) {
       setDetailsRow((current) =>
         current ? { ...current, ...(asRecordValue(updated) ?? {}) } : current
       )
-      setMessage("Attendance daily summary adjustment saved.")
+      toast.success("Attendance daily summary adjustment saved.")
       await fetchSectionData(true)
     } catch (errorObject) {
-      setError(formatLoadError(errorObject, "Could not save the attendance summary adjustment."))
+      toast.error(formatLoadError(errorObject, "Could not save the attendance summary adjustment."))
     } finally {
       setAdjustmentBusy(false)
     }
@@ -3199,7 +3199,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
     setMessage(null)
     try {
       await clearAttendanceDailySummaryAdjustment(token, employeeId, attendanceDate)
-      setMessage("Attendance daily summary adjustment cleared.")
+      toast.success("Attendance daily summary adjustment cleared.")
       await fetchSectionData(true)
       const fresh = await getAttendanceDailySummary(token, employeeId, attendanceDate).catch(() => null)
       setDetailsRow((current) =>
@@ -3207,7 +3207,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
       )
       setAdjustmentForm(readDailySummaryAdjustmentForm(fresh))
     } catch (errorObject) {
-      setError(formatLoadError(errorObject, "Could not clear the attendance summary adjustment."))
+      toast.error(formatLoadError(errorObject, "Could not clear the attendance summary adjustment."))
     } finally {
       setDetailsActionBusy("")
     }
