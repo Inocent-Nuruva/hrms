@@ -6,8 +6,7 @@ import { AccentColorPicker } from "@/components/accent-color-picker"
 import { ThemeTogglerButton } from "@/components/animate-ui/components/buttons/theme-toggler"
 import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
-import { CheckCheck, RefreshCwIcon } from "lucide-react"
-import { Bell } from "@/components/animate-ui/icons/bell"
+import { Bell, CheckCheck, RefreshCwIcon } from "lucide-react"
 import {
   Dialog,
   DialogClose,
@@ -95,7 +94,7 @@ export function SiteHeader({
                   />
                 }
               >
-                <Bell size={18} animation="path-loop" animateOnHover="path-loop" />
+                <Bell className="size-4" />
                 <span className="sr-only">Notifications</span>
               </DialogTrigger>
               {unreadNotificationCount > 0 ? (

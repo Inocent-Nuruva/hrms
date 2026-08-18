@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { motion, useReducedMotion, AnimatePresence, type Variants } from "framer-motion";
 import { Download, ChevronDown } from "lucide-react";
 import { Resizable } from "react-resizable";
 import "react-resizable/css/styles.css";
@@ -463,7 +462,6 @@ export function ResizableTable<T = Record<string, unknown>>({
   const overflowRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
 
-  const shouldReduceMotion = useReducedMotion();
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === "dark";
 
@@ -961,41 +959,7 @@ export function ResizableTable<T = Record<string, unknown>>({
     link.click();
   };
 
-  const shouldAnimate = enableAnimations && !shouldReduceMotion;
-
-  // Re-run enter animations when page changes or when async data arrives
-  // (same page key alone would skip the stagger after loading finishes).
-  const populationKey = useMemo(() => {
-    if (loading && tableData.length === 0) {
-      return `loading-${activePage}`
-    }
-    const head = paginatedData
-      .slice(0, 12)
-      .map((item, index) => getRowIdentifier(item, index))
-      .join("|")
-    return `${activePage}:${paginatedData.length}:${head}`
-  }, [activePage, getRowIdentifier, loading, paginatedData, tableData.length])
-
-  const containerVariants: Variants = {
-    hidden: {},
-    visible: {
-      transition: {
-        staggerChildren: 0.03,
-        delayChildren: 0.05,
-      },
-    },
-  };
-
-  // Keep enter motion inside the row box (no y/scale/blur) so overflow containers
-  // don't flash a temporary scrollbar while rows stagger in.
-  const rowVariants: Variants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: { duration: 0.18, ease: "easeOut" },
-    },
-    exit: { opacity: 0, transition: { duration: 0.12 } },
-  };
+  void enableAnimations
 
   // Cell renderer helper
   const renderCell = (col: Column<T>, item: T) => {
@@ -1273,27 +1237,15 @@ export function ResizableTable<T = Record<string, unknown>>({
             </div>
 
             {/* Rows */}
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={populationKey}
-                className="overflow-hidden"
-                variants={shouldAnimate ? containerVariants : undefined}
-                initial={shouldAnimate ? "hidden" : false}
-                animate="visible"
-              >
+            <div className="overflow-hidden">
                 {paginatedData.map((item, index) => {
                   const rowId = getRowIdentifier(item, index);
                   const isSelected = selectedIds.includes(rowId);
 
                   return (
-                    <motion.div
-                      key={rowId}
-                      variants={shouldAnimate ? rowVariants : undefined}
-                      initial={shouldAnimate ? "hidden" : false}
-                      animate="visible"
-                    >
                       <div
-                        className={`py-1 group relative transition-all duration-150 border-b border-border flex cursor-pointer w-full ${
+                        key={rowId}
+                        className={`py-1 group relative border-b border-border flex cursor-pointer w-full ${
                           isSelected ? "bg-muted/30" : "bg-muted/5 hover:bg-muted/20"
                         }`}
                         onClick={() => handleRowSelect(rowId, item)}
@@ -1340,7 +1292,6 @@ export function ResizableTable<T = Record<string, unknown>>({
                           )
                         })}
                       </div>
-                    </motion.div>
                   );
                 })}
 
@@ -1368,8 +1319,7 @@ export function ResizableTable<T = Record<string, unknown>>({
                     No records found.
                   </div>
                 ) : null}
-              </motion.div>
-            </AnimatePresence>
+            </div>
           </div>
         </div>
       </div>

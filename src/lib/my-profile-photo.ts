@@ -2,7 +2,6 @@
 
 import * as React from "react"
 
-import { getMyProfilePhotoUrl } from "@/lib/admin-api"
 import { readStoredSessionTokens } from "@/lib/session-client"
 
 type Listener = () => void
@@ -92,7 +91,8 @@ export async function ensureMyProfilePhotoUrl(
   // Capture generation at request start; ignore result if a newer setMyProfilePhotoUrl ran.
   const requestGeneration = photoGeneration
   inflightGeneration = requestGeneration
-  inflight = getMyProfilePhotoUrl(resolvedToken)
+  inflight = import("@/lib/admin-api")
+    .then((mod) => mod.getMyProfilePhotoUrl(resolvedToken))
     .then((url) => {
       if (requestGeneration !== photoGeneration) {
         // A newer optimistic/local URL was published while this GET was in flight.

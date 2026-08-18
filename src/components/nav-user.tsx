@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/sidebar"
 import { EllipsisVerticalIcon, CircleUserRoundIcon, BellIcon, LogOutIcon } from "lucide-react"
 import { useAuth } from "@/hooks/useAuth"
-import { resolveBackendMediaUrl } from "@/lib/admin-api"
+import { resolveBackendMediaUrl } from "@/lib/backend-media-url"
 import {
   getCachedMyProfilePhotoUrl,
   getMyProfilePhotoRevision,

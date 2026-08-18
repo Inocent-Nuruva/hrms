@@ -14,8 +14,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 import type { AdminResourceKey } from "@/lib/admin-api"
-import { ChevronDownIcon } from "lucide-react"
-import { LayoutDashboard } from "@/components/animate-ui/icons/layout-dashboard"
+import { ChevronDownIcon, LayoutDashboard } from "lucide-react"
 import { motion } from "framer-motion"
 import { useDashboardMotion } from "@/lib/dashboard-motion"
 
@@ -120,22 +119,11 @@ export function NavMain({
   const [openGroups, setOpenGroups] = React.useState<Record<string, boolean>>(() => {
     return defaultOpenGroups
   })
-  const [hoveredLink, setHoveredLink] = React.useState<string | null>(null)
   const groupedItems = React.useMemo(() => {
     const expandable = items.filter((item) => item.items?.length)
     const directLinks = items.filter((item) => !item.items?.length)
     return { expandable, directLinks }
   }, [items])
-
-  const renderAnimatedIcon = React.useCallback((icon: React.ReactNode, key: string) => {
-    if (!React.isValidElement(icon)) {
-      return icon
-    }
-    return React.cloneElement(icon as React.ReactElement<Record<string, unknown>>, {
-      animate: hoveredLink === key ? "path-loop" : false,
-      size: 20,
-    })
-  }, [hoveredLink])
 
   React.useEffect(() => {
     setOpenGroups((previous) => ({ ...defaultOpenGroups, ...previous }))
@@ -265,11 +253,9 @@ export function NavMain({
               onClick={() => {
                 navigateTo("/dashboard")
               }}
-              onMouseEnter={() => setHoveredLink("__dashboard")}
-              onMouseLeave={() => setHoveredLink((value) => (value === "__dashboard" ? null : value))}
             >
               <NavActiveGlow active={currentPath === "/dashboard"} />
-              <LayoutDashboard size={20} animation="path-loop" animate={hoveredLink === "__dashboard" ? "path-loop" : false} />
+              <LayoutDashboard className="size-4" />
               <span className="relative z-[1] min-w-0 flex-1 truncate text-left">Dashboard</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -298,11 +284,9 @@ export function NavMain({
                     navigateTo(item.url)
                   }
                 }}
-                onMouseEnter={() => setHoveredLink(item.title)}
-                onMouseLeave={() => setHoveredLink((value) => (value === item.title ? null : value))}
               >
                 <NavActiveGlow active={nodeContainsCurrentPath(item, currentPath)} />
-                {renderAnimatedIcon(item.icon, item.title)}
+                {item.icon}
                 <span className="relative z-[1] min-w-0 flex-1 truncate text-left">{item.title}</span>
                 {item.items ? (
                   <ChevronDownIcon
@@ -353,11 +337,9 @@ export function NavMain({
                     [item.title]: !previous[item.title],
                   }))
                 }}
-                onMouseEnter={() => setHoveredLink(item.title)}
-                onMouseLeave={() => setHoveredLink((value) => (value === item.title ? null : value))}
               >
                 <NavActiveGlow active={nodeContainsCurrentPath(item, currentPath)} />
-                {renderAnimatedIcon(item.icon, item.title)}
+                {item.icon}
                 <span className="relative z-[1] min-w-0 flex-1 truncate text-left">{item.title}</span>
                 {item.items ? (
                   <ChevronDownIcon

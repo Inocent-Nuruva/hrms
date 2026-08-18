@@ -2,17 +2,27 @@
 
 import * as React from "react"
 import { usePathname, useRouter } from "next/navigation"
-import { AnimatePresence, motion } from "framer-motion"
+
 
 import { AppSidebar } from "@/components/app-sidebar"
-import { DataTable } from "@/components/data-table"
-import { AccountSettingsPanel } from "@/components/dashboard/account-settings-panel"
 import { DashboardSectionTabs } from "@/components/dashboard/dashboard-section-tabs"
 import { SiteHeader } from "@/components/site-header"
 import { accessControlSectionTabGroups } from "@/lib/dashboard-sections"
 import { resolveHomeDashboardKind } from "@/lib/dashboard-home"
 import dynamic from "next/dynamic"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
+
+const DataTable = dynamic(
+  () => import("@/components/data-table").then((mod) => mod.DataTable),
+  { ssr: false },
+)
+const AccountSettingsPanel = dynamic(
+  () =>
+    import("@/components/dashboard/account-settings-panel").then(
+      (mod) => mod.AccountSettingsPanel,
+    ),
+  { ssr: false },
+)
 
 const HrAnalyticsDashboard = dynamic(
   () => import("@/components/dashboard/hr-analytics-dashboard"),
@@ -43,25 +53,17 @@ const HrAnalyticsDashboard = dynamic(
     },
   }
 )
-import {
-  createResource,
-  deleteResource,
-  assignRoleToCurrentCompanyUser,
-  changeCurrentUserPassword,
-  getCurrentAdmin,
-  listEmployees,
-  listResourcePage,
-  listRolesCatalog,
-  listUsers,
-  type CatalogQueryParams,
-  patchResource,
-  revokeRoleFromCurrentCompanyUser,
-  updateUserById,
-  type AdminRecord,
-  type AdminResourceCollections,
-  type AdminResourceKey,
-  type UsersQueryParams,
+import type {
+  CatalogQueryParams,
+  AdminRecord,
+  AdminResourceCollections,
+  AdminResourceKey,
+  UsersQueryParams,
 } from "@/lib/admin-api"
+
+function loadAdminApi() {
+  return import("@/lib/admin-api")
+}
 import { useMyProfilePhoto } from "@/lib/my-profile-photo"
 import {
   buildDashboardActorSnapshotFromSources,
@@ -79,7 +81,7 @@ import {
   rememberForbiddenRoute,
 } from "@/lib/forbidden-routes"
 import { useHideRememberedForbiddenPath } from "@/hooks/use-forbidden-route-guard"
-import { useDashboardMotion } from "@/lib/dashboard-motion"
+
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 const LEGACY_TOKEN_STORAGE_KEY = "ess_auth_token"
@@ -339,7 +341,6 @@ export default function AdminDashboardView({
   const router = useRouter()
   const pathname = usePathname()
   const currentPath = pathname ?? ""
-  const motionPreset = useDashboardMotion()
   useHideRememberedForbiddenPath()
   const inferredActiveResource = React.useMemo(() => {
     const match = currentPath.match(
@@ -549,15 +550,16 @@ export default function AdminDashboardView({
 
         const rolesQuery = catalogByResource.roles
         const permissionsQuery = catalogByResource.permissions
+        const api = await loadAdminApi()
         const [usersResult, rolesResult, permissionsResult, admin] = await Promise.all([
-          needsUsers ? listUsers(accessToken, usersQuery) : Promise.resolve(null),
+          needsUsers ? api.listUsers(accessToken, usersQuery) : Promise.resolve(null),
           needsRoles
-            ? listRolesCatalog(accessToken, rolesQuery)
+            ? api.listRolesCatalog(accessToken, rolesQuery)
             : Promise.resolve(null),
           needsPermissions
-            ? listResourcePage("permissions", accessToken, permissionsQuery)
+            ? api.listResourcePage("permissions", accessToken, permissionsQuery)
             : Promise.resolve(null),
-          getCurrentAdmin(accessToken).catch(() => null),
+          api.getCurrentAdmin(accessToken).catch(() => null),
         ])
 
         setCollections((previous) => ({
@@ -680,7 +682,8 @@ export default function AdminDashboardView({
     if (accessToken !== token) {
       setToken(accessToken)
     }
-    await createResource(resource, accessToken, payload)
+    const api = await loadAdminApi()
+    await api.createResource(resource, accessToken, payload)
     await loadData(accessToken)
   }
 
@@ -696,7 +699,8 @@ export default function AdminDashboardView({
     if (accessToken !== token) {
       setToken(accessToken)
     }
-    await patchResource(resource, id, accessToken, payload)
+    const api = await loadAdminApi()
+    await api.patchResource(resource, id, accessToken, payload)
     await loadData(accessToken)
   }
 
@@ -711,7 +715,8 @@ export default function AdminDashboardView({
     if (accessToken !== token) {
       setToken(accessToken)
     }
-    await deleteResource(resource, id, accessToken)
+    const api = await loadAdminApi()
+    await api.deleteResource(resource, id, accessToken)
     await loadData(accessToken)
   }
 
@@ -752,7 +757,8 @@ export default function AdminDashboardView({
     if (accessToken !== token) {
       setToken(accessToken)
     }
-    await updateUserById(id, accessToken, payload)
+    const api = await loadAdminApi()
+    await api.updateUserById(id, accessToken, payload)
     await loadData(accessToken)
   }
 
@@ -764,7 +770,8 @@ export default function AdminDashboardView({
     if (accessToken !== token) {
       setToken(accessToken)
     }
-    await changeCurrentUserPassword(accessToken, oldPassword, newPassword)
+    const api = await loadAdminApi()
+    await api.changeCurrentUserPassword(accessToken, oldPassword, newPassword)
   }
 
   const handleSetUserPassword = async (id: string | number, newPassword: string) => {
@@ -775,7 +782,8 @@ export default function AdminDashboardView({
     if (accessToken !== token) {
       setToken(accessToken)
     }
-    await updateUserById(id, accessToken, { password: newPassword })
+    const api = await loadAdminApi()
+    await api.updateUserById(id, accessToken, { password: newPassword })
     await loadData(accessToken)
   }
 
@@ -792,11 +800,12 @@ export default function AdminDashboardView({
       setToken(accessToken)
     }
 
+    const api = await loadAdminApi()
     for (const roleId of addRoleIds) {
-      await assignRoleToCurrentCompanyUser(accessToken, userId, roleId)
+      await api.assignRoleToCurrentCompanyUser(accessToken, userId, roleId)
     }
     for (const roleId of removeRoleIds) {
-      await revokeRoleFromCurrentCompanyUser(accessToken, userId, roleId)
+      await api.revokeRoleFromCurrentCompanyUser(accessToken, userId, roleId)
     }
     await loadData(accessToken)
   }
@@ -995,9 +1004,13 @@ export default function AdminDashboardView({
     }
 
     const prefetchEmployees = () => {
-      void listEmployees(token, DEFAULT_EMPLOYEE_PREFETCH_QUERY, {
-        cacheTtlMs: env.NEXT_PUBLIC_LIST_CACHE_TTL_SHORT_MS,
-      }).catch(() => undefined)
+      void loadAdminApi()
+        .then((api) =>
+          api.listEmployees(token, DEFAULT_EMPLOYEE_PREFETCH_QUERY, {
+            cacheTtlMs: env.NEXT_PUBLIC_LIST_CACHE_TTL_SHORT_MS,
+          }),
+        )
+        .catch(() => undefined)
     }
 
     if (typeof window.requestIdleCallback === "function") {
@@ -1067,17 +1080,7 @@ export default function AdminDashboardView({
               {showAccessControlTabs ? (
                 <DashboardSectionTabs groups={accessControlSectionTabGroups} />
               ) : null}
-              <AnimatePresence mode="popLayout" initial={false}>
-                <motion.div
-                  key={currentPath}
-                  variants={motionPreset.page}
-                  initial="hidden"
-                  animate="show"
-                  className="min-w-0"
-                >
-                  {children}
-                </motion.div>
-              </AnimatePresence>
+              <div className="min-w-0">{children}</div>
               {resolvedActiveResource && resolvedUseApis && resolvedActiveResource !== "companies" ? (
                 <DataTable
                   token={token}

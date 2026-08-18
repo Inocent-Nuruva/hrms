@@ -13,22 +13,22 @@ import {
   SidebarRail,
   useSidebar,
 } from "@/components/ui/sidebar"
-import { resolveBackendMediaUrl } from "@/lib/admin-api"
+import { resolveBackendMediaUrl } from "@/lib/backend-media-url"
 import { useMyProfilePhoto } from "@/lib/my-profile-photo"
-import { UsersRound } from "@/components/animate-ui/icons/users-round"
-import { Route } from "@/components/animate-ui/icons/route"
-import { CircleX } from "@/components/animate-ui/icons/circle-x"
-import { ChartColumn } from "@/components/animate-ui/icons/chart-column"
-import { ChartSpline } from "@/components/animate-ui/icons/chart-spline"
-import { BadgeCheck } from "@/components/animate-ui/icons/badge-check"
-import { MapPin } from "@/components/animate-ui/icons/map-pin"
-import { ChartBar } from "@/components/animate-ui/icons/chart-bar"
-import { Bell } from "@/components/animate-ui/icons/bell"
-import { LayoutDashboard } from "@/components/animate-ui/icons/layout-dashboard"
-import { Settings } from "@/components/animate-ui/icons/settings"
-import { Search } from "@/components/animate-ui/icons/search"
-import { MessageCircleQuestion } from "@/components/animate-ui/icons/message-circle-question"
-import { Kanban } from "@/components/animate-ui/icons/kanban"
+import {
+  BadgeCheck,
+  BarChart3,
+  Bell,
+  HelpCircle,
+  Kanban,
+  LayoutDashboard,
+  MapPin,
+  Route,
+  Search,
+  Settings,
+  Users,
+  XCircle,
+} from "lucide-react"
 import type { AdminResourceKey } from "@/lib/admin-api"
 import {
   normalizePermissionLabels,
@@ -39,23 +39,23 @@ import {
   useProbePlatformCompaniesAccess,
 } from "@/hooks/use-forbidden-route-guard"
 
-const IUsers = <UsersRound size={48} animation="path-loop" />
-const ILeave = <Route size={48} animation="path-loop" />
-const IOffboarding = <CircleX size={48} animation="path-loop" />
-const IAttendance = <ChartColumn size={48} animation="path-loop" />
-const IPerformance = <ChartSpline size={48} animation="default-loop" />
-const IProbation = <BadgeCheck size={48} animation="default" />
-const IField = <MapPin size={48} animation="default" />
-const IActivities = <ChartBar size={48} animation="default" />
-const IMovements = <Route size={48} animation="default" />
-const ISms = <Bell size={48} animation="default" />
-const ITeam = <UsersRound size={48} animation="default" />
-const IStructure = <Kanban size={48} animation="default" />
-const IInsights = <LayoutDashboard size={48} animation="default" />
-const IDepartments = <Kanban size={48} animation="default" />
-const ISettings = <Settings size={48} animation="path-loop" />
-const IHelp = <MessageCircleQuestion size={48} animation="path-loop" />
-const ISearch = <Search size={48} animation="path-loop" />
+const IUsers = <Users />
+const ILeave = <Route />
+const IOffboarding = <XCircle />
+const IAttendance = <BarChart3 />
+const IPerformance = <BarChart3 />
+const IProbation = <BadgeCheck />
+const IField = <MapPin />
+const IActivities = <LayoutDashboard />
+const IMovements = <Route />
+const ISms = <Bell />
+const ITeam = <Users />
+const IStructure = <Kanban />
+const IInsights = <LayoutDashboard />
+const IDepartments = <Kanban />
+const ISettings = <Settings />
+const IHelp = <HelpCircle />
+const ISearch = <Search />
 
 type AppSidebarAccessMode = "admin" | "employee"
 

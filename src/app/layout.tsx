@@ -14,7 +14,7 @@ import { env } from "@/lib/env";
 const comfortaa = Comfortaa({
   variable: "--font-comfortaa",
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+  weight: ["400", "700"],
 });
 
 export const metadata: Metadata = {

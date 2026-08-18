@@ -1,4 +1,7 @@
 import { env } from "@/lib/env";
+import { resolveBackendMediaUrl } from "@/lib/backend-media-url";
+
+export { resolveBackendMediaUrl } from "@/lib/backend-media-url";
 
 export type AdminResourceKey = "users" | "roles" | "permissions" | "companies";
 
@@ -10070,64 +10073,6 @@ const PROFILE_PHOTO_URL_KEYS = [
  *   so environments can move without broken images.
  * - `data:` / `blob:` URLs are left unchanged.
  */
-export function resolveBackendMediaUrl(
-  value: string | null | undefined,
-): string | null {
-  if (!value?.trim()) return null;
-  const raw = value.trim();
-  if (raw.startsWith("data:") || raw.startsWith("blob:")) return raw;
-
-  const base = getBaseUrl().replace(/\/$/, "");
-
-  if (/^https?:\/\//i.test(raw)) {
-    try {
-      const url = new URL(raw);
-      // Backend-hosted assets always rebind to the active API origin.
-      if (
-        url.pathname.startsWith("/uploads/") ||
-        url.pathname.includes("/default-avatars/") ||
-        url.pathname.includes("/profile-photos/")
-      ) {
-        return `${base}${url.pathname}${url.search}`;
-      }
-      return raw;
-    } catch {
-      return raw;
-    }
-  }
-
-  if (raw.startsWith("//")) {
-    try {
-      const url = new URL(`http:${raw}`);
-      if (
-        url.pathname.startsWith("/uploads/") ||
-        url.pathname.includes("/default-avatars/") ||
-        url.pathname.includes("/profile-photos/")
-      ) {
-        return `${base}${url.pathname}${url.search}`;
-      }
-    } catch {
-      // fall through
-    }
-  }
-
-  // Relative path or bare filename under uploads.
-  let path = raw.replace(/\\/g, "/");
-  if (!path.startsWith("/")) {
-    // e.g. uploads/default-avatars/... or default-avatars/company-1/...
-    if (
-      path.startsWith("uploads/") ||
-      path.startsWith("default-avatars/") ||
-      path.startsWith("profile-photos/")
-    ) {
-      path = path.startsWith("uploads/") ? `/${path}` : `/uploads/${path}`;
-    } else {
-      path = `/${path}`;
-    }
-  }
-  return `${base}${path}`;
-}
-
 /**
  * Extract a profile picture URL from common API response shapes.
  * Supports plain strings, `{ url }`, nested `data`/`result`/`user`/`employee` objects.
