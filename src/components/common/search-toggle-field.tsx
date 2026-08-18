@@ -22,76 +22,50 @@ export function SearchToggleField({
   className,
   onKeyDown,
 }: SearchToggleFieldProps) {
-  const [isOpen, setIsOpen] = React.useState(Boolean(value))
   const inputRef = React.useRef<HTMLInputElement | null>(null)
+  const hasValue = value.trim().length > 0
 
-  React.useEffect(() => {
-    if (value.trim()) {
-      setIsOpen(true)
-    }
-  }, [value])
-
-  React.useEffect(() => {
-    if (!isOpen) {
+  function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Escape" && hasValue) {
+      event.preventDefault()
+      onChange("")
       return
     }
-
-    const frame = window.requestAnimationFrame(() => {
-      inputRef.current?.focus()
-    })
-
-    return () => window.cancelAnimationFrame(frame)
-  }, [isOpen])
-
-  function handleClose() {
-    onChange("")
-    setIsOpen(false)
-  }
-
-  if (!isOpen) {
-    return (
-      <div className={cn("flex shrink-0 items-center", className)}>
-        <button
-          type="button"
-          aria-label={`Open ${label.toLowerCase()}`}
-          title={label}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          onClick={() => setIsOpen(true)}
-        >
-          <SearchIcon className="size-3.5" />
-        </button>
-      </div>
-    )
+    onKeyDown?.(event)
   }
 
   return (
-    <div
+    <label
       className={cn(
-        "flex min-w-0 w-full max-w-full flex-1 items-center sm:min-w-[14rem] sm:max-w-xs",
-        className
+        "flex h-8 w-[13.5rem] max-w-full shrink-0 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900 transition-colors dark:border-border dark:bg-background dark:text-foreground",
+        "focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/25",
+        className,
       )}
     >
-      <div className="flex h-8 w-full min-w-0 items-center gap-1.5 rounded-md border border-border bg-background px-2 text-xs text-foreground transition-all duration-200">
-        <SearchIcon className="size-3.5 shrink-0 text-muted-foreground" />
-        <input
-          ref={inputRef}
-          aria-label={label}
-          className="min-w-0 w-full border-0 bg-transparent p-0 text-xs text-foreground outline-none placeholder:text-muted-foreground"
-          placeholder={placeholder}
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          onKeyDown={onKeyDown}
-        />
+      <SearchIcon className="size-3.5 shrink-0 text-primary" aria-hidden />
+      <input
+        ref={inputRef}
+        aria-label={label}
+        className="min-w-0 w-full border-0 bg-transparent p-0 text-xs text-slate-900 outline-none placeholder:text-slate-400 dark:text-foreground dark:placeholder:text-muted-foreground"
+        placeholder={placeholder}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onKeyDown={handleKeyDown}
+      />
+      {hasValue ? (
         <button
           type="button"
-          aria-label={`Close ${label.toLowerCase()}`}
-          title={`Close ${label.toLowerCase()}`}
-          className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          onClick={handleClose}
+          aria-label={`Clear ${label.toLowerCase()}`}
+          title="Clear"
+          className="inline-flex size-4 shrink-0 items-center justify-center text-slate-400 transition-colors hover:text-primary"
+          onClick={() => {
+            onChange("")
+            inputRef.current?.focus()
+          }}
         >
-          <XIcon className="size-3.5" />
+          <XIcon className="size-3" />
         </button>
-      </div>
-    </div>
+      ) : null}
+    </label>
   )
 }
