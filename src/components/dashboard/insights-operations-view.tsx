@@ -35,7 +35,7 @@ import {
   getSystemHealth,
   getSystemHealthLive,
   getSystemHealthReady,
-  listAllCurrentCompanyUsers,
+  listCurrentCompanyUsers,
   listSecurityEvents,
   runHrAttendanceSetupWizard,
   type AdminRecord,
@@ -47,6 +47,13 @@ import { useForbiddenRouteGuard, useLeaveIfForbidden } from "@/hooks/use-forbidd
 import { readStoredSessionTokens } from "@/lib/session-client"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 import { describeSecurityEvent } from "@/lib/security-event-plain"
+import {
+  isEmployeeReady,
+  parseReadinessChecks,
+  readinessCheckItems,
+  readinessIssueText,
+  readinessPersonName,
+} from "@/lib/employee-readiness-plain"
 
 import {
   Dialog,
@@ -61,28 +68,6 @@ export type InsightsOpsTab = "hr" | "management" | "manager" | "sales-field" | "
 
 function readStoredToken() {
   return readStoredSessionTokens().accessToken.trim()
-}
-
-function yesNoLabel(value: string) {
-  const normalized = value.trim().toLowerCase()
-  if (!normalized || normalized === "—" || normalized === "-" || normalized === "pending" || normalized === "false" || normalized === "0" || normalized === "no" || normalized === "missing") {
-    return "Not yet"
-  }
-  if (["true", "1", "yes", "ready", "ok", "assigned", "linked"].includes(normalized)) {
-    return "Yes"
-  }
-  return value
-}
-
-function readyLabel(value: string) {
-  const normalized = value.trim().toLowerCase()
-  if (!normalized || ["pending", "false", "0", "no", "—", "-"].includes(normalized)) {
-    return "Not ready"
-  }
-  if (["ready", "true", "1", "yes", "ok"].includes(normalized)) {
-    return "Ready"
-  }
-  return value
 }
 
 function friendlyStatus(value: string) {
@@ -148,6 +133,7 @@ export function InsightsOperationsView({
   const [search, setSearch] = React.useState("")
   const [detail, setDetail] = React.useState<AdminRecord | null>(null)
   const [eventDetail, setEventDetail] = React.useState<AdminRecord | null>(null)
+  const [readinessDetail, setReadinessDetail] = React.useState<AdminRecord | null>(null)
   const [dateFrom, setDateFrom] = React.useState("")
   const [dateTo, setDateTo] = React.useState("")
   const [policyName, setPolicyName] = React.useState("Default attendance policy")
@@ -190,7 +176,9 @@ export function InsightsOperationsView({
         getSystemHealthLive(token).then(setLive).catch(() => setLive(null)),
         getSystemHealthReady(token).then(setReady).catch(() => setReady(null)),
         listSecurityEvents(token, { page: 1, limit: 20 }).then(setEvents).catch(() => setEvents([])),
-        listAllCurrentCompanyUsers(token).then(setCompanyUsers).catch(() => setCompanyUsers([])),
+        listCurrentCompanyUsers(token, { page: 1, limit: 100 })
+          .then((result) => setCompanyUsers(result.rows))
+          .catch(() => setCompanyUsers([])),
         getHrAttendanceSetupStatus(token).then(setSetup).catch(() => setSetup(null)),
       )
     }
@@ -220,20 +208,26 @@ export function InsightsOperationsView({
     const byUserId = new Map<number, string>()
     companyUsers.forEach((row) => {
       const nestedUser = row.user && typeof row.user === "object" ? (row.user as AdminRecord) : null
+      const first =
+        readString(row, ["first_name", "firstName"]) ||
+        (nestedUser ? readString(nestedUser, ["first_name", "firstName"]) : "")
+      const last =
+        readString(row, ["last_name", "lastName"]) ||
+        (nestedUser ? readString(nestedUser, ["last_name", "lastName"]) : "")
       const label =
-        employeeLabel(nestedUser) !== "—"
-          ? employeeLabel(nestedUser)
-          : employeeLabel(row)
-      if (!label || label === "—") {
+        [first, last].filter(Boolean).join(" ").trim() ||
+        readString(row, ["email", "full_name", "fullName"]) ||
+        (nestedUser ? readString(nestedUser, ["email", "full_name", "fullName"]) : "")
+      if (!label) {
         return
       }
-      const companyUserId = readNumber(row, ["id", "company_user_id", "companyUserId"])
+      const companyUserId = readNumber(row, ["id", "company_user_id", "companyUserId", "membership_id", "membershipId"])
       if (companyUserId !== null) {
         byCompanyUserId.set(companyUserId, label)
       }
       const userId =
-        readNumber(row, ["user_id", "userId"]) ??
-        (nestedUser ? readNumber(nestedUser, ["id", "user_id"]) : null)
+        readNumber(row, ["user_id", "userId", "platform_user_id", "platformUserId"]) ??
+        (nestedUser ? readNumber(nestedUser, ["id", "user_id", "userId"]) : null)
       if (userId !== null) {
         byUserId.set(userId, label)
       }
@@ -302,21 +296,28 @@ export function InsightsOperationsView({
   }
 
   const employeeColumns = React.useMemo<Column<AdminRecord>[]>(() => [
-    { key: "employee", label: "Employee", render: (row) => employeeLabel(row) },
+    { key: "employee", label: "Employee", render: (row) => readinessPersonName(row) },
     {
       key: "shift",
       label: "Has a shift",
-      render: (row) => yesNoLabel(readString(row, ["shiftReady", "shift_ready", "hasShift", "has_shift"], "")),
+      render: (row) => (parseReadinessChecks(row).hasShift ? "Yes" : "Not yet"),
     },
     {
-      key: "device",
-      label: "Has a clock-in device",
-      render: (row) => yesNoLabel(readString(row, ["deviceReady", "device_ready", "hasDevice", "has_device"], "")),
+      key: "clockin",
+      label: "How they clock in",
+      render: (row) => {
+        const checks = parseReadinessChecks(row)
+        const methods = [
+          checks.hasFingerprint ? "Fingerprint" : null,
+          checks.hasCardOrPin ? "Card or PIN" : null,
+        ].filter(Boolean)
+        return methods.length > 0 ? methods.join(", ") : "Not set up"
+      },
     },
     {
       key: "status",
       label: "Can clock in",
-      render: (row) => readyLabel(readString(row, ["status", "readiness", "ready"], "PENDING")),
+      render: (row) => (isEmployeeReady(row) ? "Ready" : "Not ready"),
     },
   ], [])
 
@@ -505,7 +506,7 @@ export function InsightsOperationsView({
           <SearchToggleField value={search} onChange={setSearch} placeholder="Search people or activity" />
           <div className="space-y-1">
             <p className="text-sm text-muted-foreground">
-              These people still need a shift or a clock-in device before they can punch in.
+              Who can clock in, and what they still need.
             </p>
             <div className="overflow-hidden rounded-xl border border-border bg-card">
               <ResizableTable
@@ -516,7 +517,7 @@ export function InsightsOperationsView({
                 itemsPerPage={20}
                 showExport={false}
                 storageKey="insights-readiness-employees"
-                onRowSelect={(_, row) => row && setDetail(row)}
+                onRowSelect={(_, row) => row && setReadinessDetail(row)}
               />
             </div>
           </div>
@@ -541,6 +542,42 @@ export function InsightsOperationsView({
       )}
 
       <RecordDetailsDialog open={Boolean(detail)} onOpenChange={(open) => !open && setDetail(null)} title={optionLabel(detail) || "Details"} row={detail} />
+
+      <Dialog open={Boolean(readinessDetail)} onOpenChange={(open) => !open && setReadinessDetail(null)}>
+        <DialogPopup from="bottom" className="sm:max-w-md">
+          {readinessDetail ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>{readinessPersonName(readinessDetail)}</DialogTitle>
+                <DialogDescription>
+                  {isEmployeeReady(readinessDetail)
+                    ? "Ready to clock in."
+                    : readinessIssueText(readinessDetail) || "Not ready to clock in yet."}
+                </DialogDescription>
+              </DialogHeader>
+              <ul className="space-y-1.5 text-sm">
+                {readinessCheckItems(readinessDetail).map((item) => (
+                  <li key={item.key} className="flex items-center justify-between gap-3 rounded-md border border-border/60 px-2.5 py-1.5">
+                    <span>{item.label}</span>
+                    <span className={item.done ? "font-medium text-emerald-700" : "font-medium text-amber-700"}>
+                      {item.done ? "Done" : "Missing"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <DialogFooter>
+                <button
+                  type="button"
+                  className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+                  onClick={() => setReadinessDetail(null)}
+                >
+                  Close
+                </button>
+              </DialogFooter>
+            </>
+          ) : null}
+        </DialogPopup>
+      </Dialog>
 
       <Dialog open={Boolean(eventDetail)} onOpenChange={(open) => !open && setEventDetail(null)}>
         <DialogPopup from="bottom" className="sm:max-w-md">
