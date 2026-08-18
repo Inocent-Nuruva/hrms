@@ -4,10 +4,8 @@ import * as React from "react"
 import { usePathname, useRouter } from "next/navigation"
 
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
-import {
- findFirstAccessibleSectionUrl,
- type DashboardSectionTabGroup,
-} from "@/lib/dashboard-sections"
+import { canSeeDashboardPage } from "@/lib/forbidden-routes"
+import type { DashboardSectionTabGroup } from "@/lib/dashboard-sections"
 
 type DashboardSectionRootRedirectProps = {
  groups: DashboardSectionTabGroup[]
@@ -27,10 +25,13 @@ export function DashboardSectionRootRedirect({
  return null
  }
 
- return (
-   findFirstAccessibleSectionUrl(groups, actor.permissionLabels, actor.accessMode) ??
-   fallbackHref
- )
+ for (const group of groups) {
+   const item = group.items.find((entry) =>
+     canSeeDashboardPage(entry.url, actor.permissionLabels, actor.accessMode),
+   )
+   if (item) return item.url
+ }
+ return fallbackHref
  }, [actor.accessMode, actor.permissionLabels, actor.ready, fallbackHref, groups])
 
  React.useEffect(() => {

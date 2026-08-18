@@ -16,6 +16,7 @@ import {
   confirmPlatformRoute,
   firstVisibleSiblingOrHome,
   FORBIDDEN_ROUTES_EVENT,
+  hideStructureNavIfEmpty,
   isConfirmedPlatformRoute,
   isRememberedForbiddenRoute,
   rememberForbiddenRoute,
@@ -49,6 +50,7 @@ export function useForbiddenRouteGuard(allowed: boolean) {
   React.useEffect(() => {
     if (!actor.ready || allowed) return
     if (pathname) rememberForbiddenRoute(pathname)
+    hideStructureNavIfEmpty(actor.permissionLabels, actor.accessMode)
     router.replace(
       firstVisibleSiblingOrHome(pathname ?? "", actor.permissionLabels, actor.accessMode),
     )
@@ -64,6 +66,7 @@ export function useLeaveIfForbidden() {
     (error: unknown) => {
       if (!isPermissionError(error)) return false
       if (pathname) rememberForbiddenRoute(pathname)
+      hideStructureNavIfEmpty(actor.permissionLabels, actor.accessMode)
       router.replace(
         firstVisibleSiblingOrHome(pathname ?? "", actor.permissionLabels, actor.accessMode),
       )

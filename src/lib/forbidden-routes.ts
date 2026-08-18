@@ -179,6 +179,31 @@ export function firstVisibleSiblingOrHome(
   return "/dashboard"
 }
 
+const STRUCTURE_CHILD_ROUTES = [
+  "/dashboard/structure/cost-centers",
+  "/dashboard/structure/grades",
+  "/dashboard/structure/numbering",
+]
+
+function canSeeStructureSection(
+  permissionLabels: string[],
+  accessMode?: DashboardAccessMode,
+) {
+  return STRUCTURE_CHILD_ROUTES.some(
+    (child) =>
+      !isRememberedForbiddenRoute(child) &&
+      canAccessDashboardRoute(child, permissionLabels, accessMode),
+  )
+}
+
+export function hideStructureNavIfEmpty(
+  permissionLabels: string[],
+  accessMode?: DashboardAccessMode,
+) {
+  if (canSeeStructureSection(permissionLabels, accessMode)) return
+  rememberForbiddenRoute("/dashboard/structure")
+}
+
 export function canSeeDashboardPage(
   url: string,
   permissionLabels: string[],
@@ -191,6 +216,10 @@ export function canSeeDashboardPage(
   // the platform tenant registry. Do not paint Companies until confirmed.
   if (isPlatformScopedDashboardRoute(url) && !isConfirmedPlatformRoute(url)) {
     return false
+  }
+  const path = url.split("?")[0] ?? url
+  if (path === "/dashboard/structure") {
+    return canSeeStructureSection(permissionLabels, accessMode)
   }
   return canAccessDashboardRoute(url, permissionLabels, accessMode)
 }

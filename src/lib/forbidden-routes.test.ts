@@ -76,6 +76,20 @@ describe("forbidden route memory", () => {
     ).toBe(true)
   })
 
+  it("hides the Structure nav item when no child page is usable", () => {
+    stubSession()
+    expect(
+      canSeeDashboardPage(
+        "/dashboard/structure",
+        ["cost_centers:read", "employee_grades:read"],
+        "admin",
+      ),
+    ).toBe(true)
+    rememberForbiddenRoute("/dashboard/structure/cost-centers")
+    rememberForbiddenRoute("/dashboard/structure/grades")
+    expect(canSeeDashboardPage("/dashboard/structure", ["cost_centers:read"], "admin")).toBe(false)
+  })
+
   it("keeps Companies hidden after a platform-scope 403", () => {
     stubSession()
     confirmPlatformRoute("/dashboard/companies")
