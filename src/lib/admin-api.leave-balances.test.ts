@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { listAllLeaveBalances } from "./admin-api"
+import { adjustLeaveBalance, listAllLeaveBalances } from "./admin-api"
 
 function jsonResponse(payload: unknown) {
   return new Response(JSON.stringify(payload), {
@@ -45,5 +45,34 @@ describe("listAllLeaveBalances", () => {
     expect(String(fetchMock.mock.calls[1]?.[0])).toContain("page=2")
     expect(result.rows).toHaveLength(120)
     expect(result.total).toBe(120)
+  })
+
+  it("sends only the adjust DTO fields the API accepts", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: { ok: true } }))
+    vi.stubGlobal("fetch", fetchMock)
+
+    await adjustLeaveBalance("token", {
+      employee_id: 9,
+      leave_type_id: 4,
+      fiscal_year: "2026",
+      mode: "SET",
+      amount: 3,
+      reason: "Correction after review",
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8888/api/leave/balances/adjust",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({
+          employee_id: 9,
+          leave_type_id: 4,
+          fiscal_year: "2026",
+          mode: "SET",
+          amount: 3,
+          reason: "Correction after review",
+        }),
+      }),
+    )
   })
 })

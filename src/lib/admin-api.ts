@@ -7983,11 +7983,30 @@ export async function cancelLeaveRequest(
   });
 }
 
-export async function adjustLeaveBalance(token: string, data: AdminRecord) {
+export type LeaveBalanceAdjustMode = "ADD" | "DEDUCT" | "SET";
+
+export async function adjustLeaveBalance(
+  token: string,
+  data: {
+    employee_id: number;
+    leave_type_id: number;
+    fiscal_year: string;
+    mode: LeaveBalanceAdjustMode;
+    amount: number;
+    reason: string;
+  },
+) {
   return adminRequest<unknown>("/api/leave/balances/adjust", {
     method: "PATCH",
     token,
-    body: data,
+    body: {
+      employee_id: data.employee_id,
+      leave_type_id: data.leave_type_id,
+      fiscal_year: data.fiscal_year,
+      mode: data.mode,
+      amount: data.amount,
+      reason: data.reason,
+    },
   });
 }
 

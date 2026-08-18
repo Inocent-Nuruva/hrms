@@ -22,6 +22,7 @@ import { SearchToggleField } from "@/components/common/search-toggle-field"
 import {
   addLeaveRequestDocument,
   adjustLeaveBalance,
+  type LeaveBalanceAdjustMode,
   cancelLeaveRequest,
   carryForwardLeaveBalances,
   createLeaveHoliday,
@@ -438,7 +439,20 @@ function leaveTypeIdFromRow(row: AdminRecord) {
   return null
 }
 
+function emptyBalanceForm() {
+  return {
+    employee_id: "",
+    leave_type_id: "",
+    fiscal_year: String(new Date().getFullYear()),
+    mode: "SET" as LeaveBalanceAdjustMode,
+    amount: "0",
+    remaining: "0",
+    reason: "",
+  }
+}
+
 function formFromBalanceRow(row: AdminRecord) {
+  const remaining = readBalanceDays(row, ["remaining_days", "remaining", "remainingDays"])
   return {
     employee_id: String(readBalanceEmployeeId(row) ?? readNumber(row, ["employee_id", "employeeId"]) ?? ""),
     leave_type_id: String(leaveTypeIdFromRow(row) ?? ""),
@@ -446,11 +460,10 @@ function formFromBalanceRow(row: AdminRecord) {
       readString(row, ["fiscal_year", "fiscalYear"]) === "-"
         ? String(new Date().getFullYear())
         : readString(row, ["fiscal_year", "fiscalYear"]),
-    allocated_days: String(readNumber(row, ["allocated_days", "allocated"]) ?? 0),
-    carried_forward_days: String(
-      readNumber(row, ["carried_forward_days", "carried_forward", "carriedForwardDays", "carriedForward"]) ?? 0
-    ),
-    expired_days: String(readNumber(row, ["expired_days", "expired", "expiredDays"]) ?? 0),
+    mode: "SET" as LeaveBalanceAdjustMode,
+    amount: String(remaining),
+    remaining: String(remaining),
+    reason: "",
   }
 }
 
@@ -1147,14 +1160,7 @@ export function LeaveManagementView({
     submit: "true",
   })
 
-  const [balanceForm, setBalanceForm] = React.useState({
-    employee_id: "",
-    leave_type_id: "",
-    fiscal_year: String(new Date().getFullYear()),
-    allocated_days: "0",
-    carried_forward_days: "0",
-    expired_days: "0",
-  })
+  const [balanceForm, setBalanceForm] = React.useState(emptyBalanceForm)
 
   const [holidayForm, setHolidayForm] = React.useState({
     name: "",
@@ -1815,14 +1821,7 @@ export function LeaveManagementView({
   )
 
   const resetBalanceForm = React.useCallback(() => {
-    setBalanceForm({
-      employee_id: "",
-      leave_type_id: "",
-      fiscal_year: String(new Date().getFullYear()),
-      allocated_days: "0",
-      carried_forward_days: "0",
-      expired_days: "0",
-    })
+    setBalanceForm(emptyBalanceForm())
   }, [])
 
   const optionLabel = (rows: AdminRecord[], id: number | null, nameKeys: string[] = ["name", "title"]) => {
@@ -2200,16 +2199,42 @@ export function LeaveManagementView({
       return
     }
 
+    const employeeId = Number(balanceForm.employee_id)
+    const leaveTypeId = Number(balanceForm.leave_type_id)
+    const amount = Number(balanceForm.amount)
+    const fiscalYear = balanceForm.fiscal_year.trim()
+    const reason = balanceForm.reason.trim()
+    if (!Number.isFinite(employeeId) || employeeId <= 0) {
+      showErrorAlert("Please select an employee.")
+      return
+    }
+    if (!Number.isFinite(leaveTypeId) || leaveTypeId <= 0) {
+      showErrorAlert("Please select a leave type.")
+      return
+    }
+    if (!/^\d{4}$/.test(fiscalYear)) {
+      showErrorAlert("Enter a valid four-digit fiscal year.")
+      return
+    }
+    if (!Number.isFinite(amount) || amount < 0) {
+      showErrorAlert("Enter a valid amount of 0 or more.")
+      return
+    }
+    if (!reason) {
+      showErrorAlert("A reason is required.")
+      return
+    }
+
     setSaving(true)
     setError(null)
     try {
       await adjustLeaveBalance(token, {
-        employee_id: Number(balanceForm.employee_id),
-        leave_type_id: Number(balanceForm.leave_type_id),
-        fiscal_year: balanceForm.fiscal_year,
-        allocated_days: Number(balanceForm.allocated_days),
-        carried_forward_days: Number(balanceForm.carried_forward_days),
-        expired_days: Number(balanceForm.expired_days),
+        employee_id: employeeId,
+        leave_type_id: leaveTypeId,
+        fiscal_year: fiscalYear,
+        mode: balanceForm.mode,
+        amount,
+        reason,
       })
       showSuccessAlert("Leave balance updated.")
       finishBalanceEditor()
@@ -2256,9 +2281,8 @@ export function LeaveManagementView({
     setBalanceForm((prev) => ({
       ...prev,
       ...next,
-      allocated_days: "0",
-      carried_forward_days: "0",
-      expired_days: "0",
+      amount: "0",
+      remaining: "0",
     }))
   }
 
@@ -4314,20 +4338,45 @@ export function LeaveManagementView({
                 />
               </label>
             )}
-            <div className="grid gap-3 sm:grid-cols-3">
+            <p className="text-xs text-slate-500">
+              Current remaining:{" "}
+              <span className="font-medium text-slate-900">{formatBalanceDays(Number(balanceForm.remaining) || 0)}</span>
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
               <label className="space-y-1">
-                <span className="text-xs text-slate-500">Allocated</span>
-                <input type="number" min={0} className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm" value={balanceForm.allocated_days} onChange={(event) => setBalanceForm((prev) => ({ ...prev, allocated_days: event.target.value }))} />
+                <span className="text-xs text-slate-500">Mode</span>
+                <select
+                  className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                  value={balanceForm.mode}
+                  onChange={(event) =>
+                    setBalanceForm((prev) => ({ ...prev, mode: event.target.value as LeaveBalanceAdjustMode }))
+                  }
+                >
+                  <option value="SET">Set remaining to</option>
+                  <option value="ADD">Add days</option>
+                  <option value="DEDUCT">Deduct days</option>
+                </select>
               </label>
               <label className="space-y-1">
-                <span className="text-xs text-slate-500">Carried forward</span>
-                <input type="number" min={0} className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm" value={balanceForm.carried_forward_days} onChange={(event) => setBalanceForm((prev) => ({ ...prev, carried_forward_days: event.target.value }))} />
-              </label>
-              <label className="space-y-1">
-                <span className="text-xs text-slate-500">Expired</span>
-                <input type="number" min={0} className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm" value={balanceForm.expired_days} onChange={(event) => setBalanceForm((prev) => ({ ...prev, expired_days: event.target.value }))} />
+                <span className="text-xs text-slate-500">Amount</span>
+                <input
+                  type="number"
+                  min={0}
+                  className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                  value={balanceForm.amount}
+                  onChange={(event) => setBalanceForm((prev) => ({ ...prev, amount: event.target.value }))}
+                />
               </label>
             </div>
+            <label className="space-y-1">
+              <span className="text-xs text-slate-500">Reason</span>
+              <Textarea
+                className="min-h-20 rounded-md border border-slate-300 px-3 py-2 text-sm"
+                placeholder="Why is this balance being changed?"
+                value={balanceForm.reason}
+                onChange={(event) => setBalanceForm((prev) => ({ ...prev, reason: event.target.value }))}
+              />
+            </label>
           </div>
           <DialogFooter>
             <button type="button" className="rounded-md border border-slate-300 px-4 py-2 text-sm" onClick={() => finishBalanceEditor()}>
