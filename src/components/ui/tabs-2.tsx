@@ -29,7 +29,7 @@ function isActivePath(currentPath: string, url: string) {
 
 const tabTriggerClass = (active: boolean) =>
   cn(
-    "relative inline-flex min-w-0 shrink-0 items-center gap-1 px-1.5 py-1.5 text-left text-xs font-medium outline-none transition-colors",
+    "relative inline-flex min-w-0 shrink-0 items-center gap-0.5 px-1 py-1.5 text-left text-xs font-medium outline-none transition-colors",
     active
       ? "text-[var(--primary)]"
       : "text-muted-foreground hover:text-foreground dark:text-slate-100 dark:hover:text-white"
@@ -67,8 +67,9 @@ export function Tabs2({ groups, currentPath, className }: Tabs2Props) {
 
   return (
     <div className={cn("flex flex-col gap-1.5", className)}>
-      {/* Desktop: grouped dropdowns + direct links */}
-      <div className="hidden flex-wrap items-end gap-x-1 gap-y-0.5 border-b border-border/80 md:flex">
+      {/* Desktop: one compact row — grouped dropdowns + direct links */}
+      <div className="tab-rail-scroll hidden md:block">
+        <div className="inline-flex min-w-full items-center gap-0.5 border-b border-border/80">
         {groups.map((group) => {
           // Prefer the path-matched child; when this group is inactive fall back to first item
           // only for the secondary preview — never replace the group title itself.
@@ -114,7 +115,7 @@ export function Tabs2({ groups, currentPath, className }: Tabs2Props) {
                 {showChildPreview ? (
                   <span
                     className={cn(
-                      "hidden max-w-40 truncate text-[11px] font-normal whitespace-nowrap sm:inline",
+                      "hidden max-w-28 truncate text-[11px] font-normal whitespace-nowrap lg:inline",
                       isActiveGroup
                         ? "text-[var(--primary)]/80"
                         : "text-muted-foreground/80 dark:text-slate-300"
@@ -154,6 +155,7 @@ export function Tabs2({ groups, currentPath, className }: Tabs2Props) {
             </DropdownMenu>
           )
         })}
+        </div>
       </div>
 
       {/* Mobile: swipeable flat tab rail — blue underline only, no scrollbar / no select */}
