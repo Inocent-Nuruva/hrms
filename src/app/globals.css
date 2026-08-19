@@ -166,6 +166,13 @@ a:hover {
   text-decoration: underline;
 }
 
+a.dashboard-metric-card,
+a.dashboard-metric-card:hover,
+a.dashboard-metric-card:focus,
+a.dashboard-metric-card:focus-visible {
+  text-decoration: none !important;
+}
+
 .dashboard-table-shell {
   border: 1px solid color-mix(in srgb, var(--section-tab-rail-border) 88%, white 12%) !important;
   background: color-mix(in srgb, var(--background) 82%, var(--section-tab-rail-bg) 18%) !important;

@@ -676,12 +676,12 @@ function MetricCard({
   const Icon = metric.icon
   const orbDelay = index * 0.12
   const cardClassName = cn(
-    "group relative isolate block h-full min-w-0 overflow-hidden border border-primary/20 bg-card dark:bg-[#181818]",
+    "dashboard-metric-card group relative isolate block h-full min-w-0 overflow-hidden border border-primary/20 bg-card dark:bg-[#181818]",
     "shadow-[0_1px_0_rgb(var(--primary-rgb)_/_0.12)_inset,0_12px_28px_-20px_rgb(var(--primary-rgb)_/_0.4)] dark:shadow-none",
     "transition-shadow duration-300",
-    "rounded-[1.15rem] p-2 sm:rounded-[1.25rem] sm:p-2.5 lg:p-3",
+    "rounded-xl p-2 sm:p-2.5 lg:p-3",
     metric.href
-      ? "cursor-pointer no-underline hover:no-underline outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+      ? "cursor-pointer !no-underline hover:!no-underline outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
       : null,
   )
 
@@ -937,6 +937,18 @@ export default function HrAnalyticsDashboard({
       actor.permissionLabels,
       actor.accessMode
     )
+  const canOpenAttendance =
+    actor.ready &&
+    (canAccessDashboardRoute(
+      "/dashboard/attendance/daily-summaries",
+      actor.permissionLabels,
+      actor.accessMode
+    ) ||
+      canAccessDashboardRoute(
+        "/dashboard/attendance",
+        actor.permissionLabels,
+        actor.accessMode
+      ))
 
   React.useEffect(() => {
     employeesRef.current = employees
@@ -1276,6 +1288,15 @@ export default function HrAnalyticsDashboard({
       sub: attendanceRate != null ? "Last period" : "No summary data",
       icon: ClockIcon,
       ready: sliceReady.attendance,
+      href: canOpenAttendance
+        ? canAccessDashboardRoute(
+            "/dashboard/attendance/daily-summaries",
+            actor.permissionLabels,
+            actor.accessMode
+          )
+          ? "/dashboard/attendance/daily-summaries"
+          : "/dashboard/attendance"
+        : undefined,
     },
     {
       label: "New hires",
