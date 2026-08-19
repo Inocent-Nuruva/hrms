@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  buildDashboardActorSnapshotFromSources,
   canAccessDashboardRoute,
+  hasAdminDashboardAccess,
   hasPerformanceAccess,
   hasProbationAccess,
 } from "./dashboard-permissions"
@@ -54,10 +56,15 @@ describe("performance and probation route access", () => {
     ).toBe(false)
   })
 
-  it("shows performance and probation whenever the actor has the permission", () => {
+  it("sends the employee shell away from HR performance even with performance:read", () => {
     expect(
       canAccessDashboardRoute("/dashboard/performance/overview", ["performance:read"], "employee"),
-    ).toBe(true)
+    ).toBe(false)
+    expect(hasAdminDashboardAccess(["performance:read"])).toBe(false)
+    expect(hasAdminDashboardAccess(["view_performance"])).toBe(false)
+    expect(
+      buildDashboardActorSnapshotFromSources({ permissions: ["performance:read"] }).accessMode,
+    ).toBe("employee")
     expect(
       canAccessDashboardRoute("/dashboard/probation/cases", ["probation:read"], "employee"),
     ).toBe(true)

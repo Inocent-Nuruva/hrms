@@ -44,6 +44,7 @@ describe("tightened dashboard permissions", () => {
     expect(hasAdminDashboardAccess(["leave_requests:read"])).toBe(false)
     expect(hasAdminDashboardAccess(["leave_balances:read"])).toBe(false)
     expect(hasAdminDashboardAccess(["attendance_summaries:read"])).toBe(false)
+    expect(hasAdminDashboardAccess(["performance:read"])).toBe(false)
     expect(hasAdminDashboardAccess(["leave_types:read"])).toBe(true)
     expect(buildDashboardActorSnapshotFromSources({ permissions: ["branches:read"] }).accessMode).toBe(
       "admin",

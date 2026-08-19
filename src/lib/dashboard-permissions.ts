@@ -618,7 +618,8 @@ const ADMIN_DASHBOARD_LANDING_ROUTES = [
   "/dashboard/leave-management/types",
   "/dashboard/leave-management/policies",
   "/dashboard/leave-management/workflows",
-  "/dashboard/performance/overview",
+  // Do not use /dashboard/performance/overview here. Employees may have
+  // performance:read for self-service and must keep the My * shell.
   "/dashboard/probation/overview",
   "/dashboard/field/overview",
   "/dashboard/finance/overview",
@@ -1536,6 +1537,28 @@ export function hasPerformanceAccess(permissionLabels: string[]) {
   ])
 }
 
+/** HR performance admin grants — not the generic performance:read employees may hold. */
+const PERFORMANCE_ADMIN_SHELL_PERMISSION: PermissionRequirement = {
+  permissions: [
+    "performance:create",
+    "performance:update",
+    "manage_performance",
+    "performance_years:read",
+    "performance_periods:read",
+    "performance_kpis:read",
+    "performance_templates:read",
+    "performance_plans:read",
+    "performance_reviews:read",
+    "performance_improvement_plans:read",
+    "performance_appeals:read",
+  ],
+  mode: "any",
+}
+
+function hasHrPerformanceAdminAccess(permissionLabels: string[]) {
+  return hasPermission(permissionLabels, PERFORMANCE_ADMIN_SHELL_PERMISSION)
+}
+
 export function hasProbationAccess(permissionLabels: string[]) {
   return hasPrefixedAccess(permissionLabels, PROBATION_ROUTE_PERMISSION, [
     "probation",
@@ -1697,6 +1720,13 @@ export function canAccessDashboardRoute(
   }
 
   if (
+    accessMode === "employee" &&
+    (path === "/dashboard/performance" || path.startsWith("/dashboard/performance/"))
+  ) {
+    return false
+  }
+
+  if (
     path === "/dashboard/operations/scheduled-reporting" ||
     path.startsWith("/dashboard/operations/scheduled-reporting/")
   ) {
@@ -1781,7 +1811,7 @@ export function hasAdminDashboardAccess(permissionLabels: string[]) {
   }
   if (
     hasPayrollAccess(permissionLabels) ||
-    hasPerformanceAccess(permissionLabels) ||
+    hasHrPerformanceAdminAccess(permissionLabels) ||
     hasProbationAccess(permissionLabels) ||
     hasFieldAccess(permissionLabels) ||
     hasFinanceAccess(permissionLabels) ||
