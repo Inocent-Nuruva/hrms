@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { CheckIcon, ChevronDownIcon, SearchIcon } from "lucide-react"
+import { CheckIcon, ChevronDownIcon, Loader2Icon, SearchIcon } from "lucide-react"
 
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
@@ -77,6 +77,7 @@ export function PermissionPicker({
   onQueryChange,
   className,
   compact = false,
+  loading = false,
 }: {
   options: PermissionOption[]
   selectedNames: string[]
@@ -84,6 +85,7 @@ export function PermissionPicker({
   onQueryChange?: (query: string) => void
   className?: string
   compact?: boolean
+  loading?: boolean
 }) {
   const [query, setQuery] = React.useState("")
   const [openGroups, setOpenGroups] = React.useState<Record<string, boolean>>({})
@@ -149,10 +151,16 @@ export function PermissionPicker({
         <div className="flex flex-wrap items-center justify-between gap-2">
           {compact ? (
             <p className="text-xs tabular-nums text-slate-500">
-              <span className="font-medium text-slate-900">{selectedNames.length}</span>
-              {" / "}
-              {options.length}
-              {selectedPct > 0 ? ` · ${selectedPct}%` : ""}
+              {loading && options.length === 0 ? (
+                "Loading…"
+              ) : (
+                <>
+                  <span className="font-medium text-slate-900">{selectedNames.length}</span>
+                  {" / "}
+                  {options.length}
+                  {selectedPct > 0 ? ` · ${selectedPct}%` : ""}
+                </>
+              )}
             </p>
           ) : (
             <div className="flex items-center gap-2">
@@ -219,7 +227,12 @@ export function PermissionPicker({
           compact ? "min-h-40 max-h-64" : "flex-1",
         )}
       >
-        {grouped.length === 0 ? (
+        {loading && options.length === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-2 py-10">
+            <Loader2Icon className="size-5 animate-spin text-primary" />
+            <p className="text-xs text-slate-500">Loading permissions…</p>
+          </div>
+        ) : grouped.length === 0 ? (
           <p className="px-2 py-10 text-center text-sm text-muted-foreground">
             No permissions match your search.
           </p>

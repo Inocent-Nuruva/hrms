@@ -1032,6 +1032,7 @@ export function DataTable({
   const [, setInitialEditingRolePermissionNames] = React.useState<string[]>([])
   const [accessControlSearch, setAccessControlSearch] = React.useState("")
   const [pickerPermissions, setPickerPermissions] = React.useState<AdminRecord[]>([])
+  const [pickerPermissionsLoading, setPickerPermissionsLoading] = React.useState(false)
   const [detailSheetTab, setDetailSheetTab] = React.useState<DetailSheetTab>("general")
   const [memberCompanyUsers, setMemberCompanyUsers] = React.useState<AdminRecord[]>([])
   const [assignedMemberIds, setAssignedMemberIds] = React.useState<Set<string>>(() => new Set())
@@ -1712,6 +1713,7 @@ export function DataTable({
       return
     }
     let cancelled = false
+    setPickerPermissionsLoading(true)
     void listResource("permissions", token, { pageAll: true, pageSize: 100 })
       .then((rows) => {
         if (!cancelled) {
@@ -1721,6 +1723,11 @@ export function DataTable({
       .catch(() => {
         if (!cancelled) {
           setPickerPermissions([])
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setPickerPermissionsLoading(false)
         }
       })
     return () => {
@@ -2240,6 +2247,7 @@ export function DataTable({
                   <div className="rounded-md border border-slate-200 p-2 dark:border-border">
                     <PermissionPicker
                       compact
+                      loading={pickerPermissionsLoading}
                       options={permissionOptions}
                       selectedNames={rolePermissionNames}
                       onChange={setRolePermissionNames}
@@ -3505,6 +3513,7 @@ export function DataTable({
                   <SectionLoader label="Loading role permissions…" />
                 ) : canManageAssignments ? (
                   <PermissionPicker
+                    loading={pickerPermissionsLoading}
                     options={permissionOptions}
                     selectedNames={displayedRolePermissionNames}
                     onChange={(next) => {
