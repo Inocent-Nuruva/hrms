@@ -1759,14 +1759,13 @@ function ProfileSectionsTabs({
 
   return (
     <div className="space-y-3">
-      {/* Mirrors the compact Employees top tabs while keeping this rail horizontally scrollable. */}
       <div className="flex min-w-0 items-center gap-1.5">
         <button
           type="button"
           aria-label="Scroll profile sections left"
           disabled={!tabScrollState.canScrollLeft}
           onClick={() => scrollTabs("left")}
-          className="inline-flex size-6 shrink-0 items-center justify-center rounded-md border border-primary/25 bg-primary/10 text-primary shadow-sm transition hover:border-primary/45 hover:bg-primary hover:text-primary-foreground disabled:pointer-events-none disabled:border-border/60 disabled:bg-muted/30 disabled:text-muted-foreground disabled:opacity-45"
+          className="inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-primary/20 bg-white text-primary shadow-sm transition hover:bg-primary/10 disabled:pointer-events-none disabled:opacity-40"
         >
           <ChevronLeftIcon className="size-3.5" />
         </button>
@@ -1776,7 +1775,7 @@ function ProfileSectionsTabs({
           role="tablist"
           aria-label="Employee profile sections"
         >
-          <div className="inline-flex min-w-full items-center gap-5 border-b border-border/80 sm:gap-6">
+          <div className="inline-flex min-w-full items-center gap-2">
             {sections.map((section) => {
               const isActive = section.title === active?.title
               const needsAttention = requestedRouteKey === section.routeKey
@@ -1790,22 +1789,18 @@ function ProfileSectionsTabs({
                   aria-selected={isActive}
                   onClick={() => setActiveTitle(section.title)}
                   className={cn(
-                    "-mb-px inline-flex h-8 shrink-0 items-center border-b-2 px-0 text-xs font-medium whitespace-nowrap transition-colors duration-200",
+                    "relative isolate inline-flex h-8 shrink-0 items-center overflow-hidden rounded-full border px-3 text-xs font-semibold whitespace-nowrap transition",
                     isActive
-                      ? "border-[var(--primary)] text-[var(--primary)]"
-                      : "border-transparent text-muted-foreground hover:text-foreground",
-                    needsAttention && !isActive ? "text-amber-700 dark:text-amber-300" : null
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-primary/15 bg-white text-primary hover:border-primary/30 hover:bg-primary/8",
+                    needsAttention && !isActive ? "ring-2 ring-primary/25" : null
                   )}
                 >
                   {section.tabLabel}
                   <span
                     className={cn(
-                      "ml-1 text-[11px] tabular-nums",
-                      section.count === 0
-                        ? "text-rose-600 dark:text-rose-400"
-                        : isActive
-                          ? "text-[var(--primary)]"
-                          : "text-muted-foreground"
+                      "ml-1.5 tabular-nums",
+                      isActive ? "text-primary-foreground/80" : "text-primary/70"
                     )}
                   >
                     {section.count}
@@ -1820,7 +1815,7 @@ function ProfileSectionsTabs({
           aria-label="Scroll profile sections right"
           disabled={!tabScrollState.canScrollRight}
           onClick={() => scrollTabs("right")}
-          className="inline-flex size-6 shrink-0 items-center justify-center rounded-md border border-primary/25 bg-primary/10 text-primary shadow-sm transition hover:border-primary/45 hover:bg-primary hover:text-primary-foreground disabled:pointer-events-none disabled:border-border/60 disabled:bg-muted/30 disabled:text-muted-foreground disabled:opacity-45"
+          className="inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-primary/20 bg-white text-primary shadow-sm transition hover:bg-primary/10 disabled:pointer-events-none disabled:opacity-40"
         >
           <ChevronRightIcon className="size-3.5" />
         </button>
@@ -1946,28 +1941,32 @@ function Section({
         tabIndex={-1}
         aria-label={`${title} section`}
         className={cn(
-          "scroll-mt-24 rounded-xl px-3 py-3 outline-none transition-all duration-500 lg:px-4",
-          isHighlighted && "ring-2 ring-amber-400 ring-offset-2 ring-offset-background bg-amber-50/80 shadow-sm"
+          "relative isolate scroll-mt-24 overflow-hidden rounded-[1.75rem] border border-primary/20 bg-white px-4 py-4 outline-none lg:px-5",
+          "shadow-[0_1px_0_rgba(255,255,255,0.8)_inset,0_16px_36px_-22px_rgb(var(--primary-rgb)_/_0.4)]",
+          isHighlighted && "ring-2 ring-primary/30"
         )}
       >
-        <div className="mb-2 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className="text-base font-semibold">{title}</span>
-            <span
-              className={cn(
-                "inline-flex min-w-5 items-center justify-center rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums",
-                items.length === 0
-                  ? "bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300"
-                  : "bg-primary/10 text-primary"
-              )}
-            >
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 bg-primary opacity-[0.22]"
+          style={{ clipPath: "circle(12% at 98% -2%)" }}
+        />
+        <div className="relative z-10 mb-3 flex items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                Profile section
+              </p>
+              <p className="text-sm font-semibold text-foreground">{title}</p>
+            </div>
+            <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold tabular-nums text-primary">
               {items.length}
             </span>
             {items.length === 0 ? (
-              <span className="text-xs font-medium text-rose-700 dark:text-rose-300">Not provided</span>
+              <span className="text-xs font-medium text-primary/70">Not provided</span>
             ) : null}
             {isHighlighted ? (
-              <span className="rounded-full bg-amber-200 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-900">
+              <span className="rounded-full bg-primary/12 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-primary">
                 Needs attention
               </span>
             ) : null}
@@ -1975,7 +1974,7 @@ function Section({
           {supportsAdd ? (
             <button
               type="button"
-              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+              className="inline-flex items-center gap-1 rounded-full border border-primary/15 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary transition hover:bg-primary/15"
               onClick={() => setAddingRecord(true)}
             >
               <PlusIcon className="size-3.5" /> Add
@@ -1983,14 +1982,19 @@ function Section({
           ) : null}
         </div>
         {mutationError && !addingRecord && !deletingRecord && !editingRecord ? (
-          <p className="mb-2 text-sm text-rose-600">{mutationError}</p>
+          <p className="relative z-10 mb-2 text-sm text-rose-600">{mutationError}</p>
         ) : null}
         {items.length === 0 ? (
-          <p className="py-2 text-sm text-muted-foreground">No data available.</p>
+          <p className="relative z-10 rounded-2xl border border-dashed border-primary/20 bg-primary/4 px-4 py-6 text-center text-sm text-muted-foreground">
+            No data available.
+          </p>
         ) : (
-          <div className="space-y-3">
+          <div className="relative z-10 grid gap-2">
             {items.map((item, index) => (
-              <div key={`${title}-${index}`} className="border-b border-border pb-3 last:border-b-0 last:pb-0">
+              <div
+                key={`${title}-${index}`}
+                className="rounded-2xl border border-primary/12 bg-white px-3 py-3"
+              >
                 <div className="mb-2 flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="break-words text-sm font-semibold text-foreground">{recordPreview(item)}</p>

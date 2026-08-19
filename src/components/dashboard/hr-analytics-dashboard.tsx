@@ -583,6 +583,8 @@ interface Metric {
   sub?: string
   icon: React.ComponentType<{ className?: string }>
   progress?: number | null
+  href?: string
+  compact?: boolean
 }
 
 type PagedRowsResult = {
@@ -716,28 +718,33 @@ function MetricCard({
 }) {
   const Icon = metric.icon
   const orbDelay = index * 0.12
+  const compact = Boolean(metric.compact)
+  const cardClassName = cn(
+    "group relative isolate block h-full min-w-0 overflow-hidden border border-primary/20 bg-white",
+    "shadow-[0_1px_0_rgba(255,255,255,0.8)_inset,0_16px_36px_-22px_rgb(var(--primary-rgb)_/_0.45)]",
+    "transition-shadow duration-300 hover:border-primary/35",
+    compact ? "rounded-[1.35rem] p-3" : "rounded-[1.75rem] p-4",
+    metric.href ? "outline-none focus-visible:ring-2 focus-visible:ring-primary/40" : null,
+  )
 
-  return (
-    <motion.article
-      variants={variants}
-      whileHover={hover}
-      whileTap={reduce ? undefined : { scale: 0.985 }}
-      className={cn(
-        "group relative isolate min-w-0 overflow-hidden rounded-[1.75rem] border border-primary/20 bg-white p-4",
-        "shadow-[0_1px_0_rgba(255,255,255,0.8)_inset,0_16px_36px_-22px_rgb(var(--primary-rgb)_/_0.45)]",
-        "transition-shadow duration-300 hover:border-primary/35",
-      )}
-    >
+  const cardBody = (
+    <>
       <motion.div
         aria-hidden
         className="pointer-events-none absolute inset-0 bg-primary"
         initial={reduce ? false : { clipPath: "circle(0% at 92% -6%)", opacity: 0 }}
-        animate={{ clipPath: "circle(48% at 92% -6%)", opacity: 0.38 }}
+        animate={{
+          clipPath: compact ? "circle(32% at 94% -8%)" : "circle(48% at 92% -6%)",
+          opacity: 0.38,
+        }}
         transition={{ duration: 0.95, delay: orbDelay, ease: [0.16, 1, 0.3, 1] }}
       />
       <motion.div
         aria-hidden
-        className="pointer-events-none absolute -right-4 -top-4 h-28 w-28 rounded-full bg-primary/50 blur-2xl"
+        className={cn(
+          "pointer-events-none absolute rounded-full bg-primary/50 blur-2xl",
+          compact ? "-right-5 -top-5 h-16 w-16" : "-right-4 -top-4 h-28 w-28",
+        )}
         style={{ clipPath: "circle(50% at 50% 50%)" }}
         animate={
           reduce
@@ -757,21 +764,24 @@ function MetricCard({
 
       <div className="relative z-10 flex items-start justify-between gap-3">
         <motion.span
-          className="inline-flex size-10 items-center justify-center rounded-full border border-primary/15 bg-primary/12 text-primary shadow-sm"
+          className={cn(
+            "inline-flex items-center justify-center rounded-full border border-primary/15 bg-primary/12 text-primary shadow-sm",
+            compact ? "size-8" : "size-10",
+          )}
           initial={reduce ? false : { scale: 0.7, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ type: "spring", stiffness: 380, damping: 18, delay: 0.12 + orbDelay }}
         >
-          <Icon className="size-4" />
+          <Icon className={compact ? "size-3.5" : "size-4"} />
         </motion.span>
-        {metric.ready && typeof metric.progress === "number" ? (
+        {!compact && metric.ready && typeof metric.progress === "number" ? (
           <div className="shrink-0 text-primary">
             <MetricProgressRing value={metric.progress} reduce={reduce} />
           </div>
         ) : null}
       </div>
 
-      <div className="relative z-10 mt-5">
+      <div className={cn("relative z-10", compact ? "mt-3" : "mt-5")}>
         <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
           {metric.label}
         </div>
@@ -779,7 +789,12 @@ function MetricCard({
           <MetricValueSkeleton />
         ) : (
           <>
-            <div className="mt-1 text-[1.85rem] font-semibold leading-none tracking-tight tabular-nums text-primary">
+            <div
+              className={cn(
+                "mt-1 font-semibold leading-none tracking-tight tabular-nums text-primary",
+                compact ? "text-[1.35rem]" : "text-[1.85rem]",
+              )}
+            >
               <AnimatedMetricValue value={metric.value} />
             </div>
             {metric.sub ? (
@@ -790,7 +805,24 @@ function MetricCard({
           </>
         )}
       </div>
-    </motion.article>
+    </>
+  )
+
+  return (
+    <motion.div
+      variants={variants}
+      whileHover={hover}
+      whileTap={reduce ? undefined : { scale: 0.985 }}
+      className="min-w-0"
+    >
+      {metric.href ? (
+        <Link href={metric.href} className={cardClassName} aria-label={metric.label}>
+          {cardBody}
+        </Link>
+      ) : (
+        <article className={cardClassName}>{cardBody}</article>
+      )}
+    </motion.div>
   )
 }
 
@@ -967,6 +999,20 @@ export default function HrAnalyticsDashboard({
     actor.ready &&
     canAccessDashboardRoute(
       "/dashboard/employees/profile",
+      actor.permissionLabels,
+      actor.accessMode
+    )
+  const canOpenOnboarding =
+    actor.ready &&
+    canAccessDashboardRoute(
+      "/dashboard/employees/onboarding",
+      actor.permissionLabels,
+      actor.accessMode
+    )
+  const canOpenOffboarding =
+    actor.ready &&
+    canAccessDashboardRoute(
+      "/dashboard/employees/offboarding",
       actor.permissionLabels,
       actor.accessMode
     )
@@ -1315,6 +1361,8 @@ export default function HrAnalyticsDashboard({
       sub: fromDate && toDate ? `${formatDateShort(fromDate)} - ${formatDateShort(toDate)}` : "Selected range",
       icon: UserCheckIcon,
       ready: sliceReady.employees,
+      compact: true,
+      href: canOpenEmployeeDirectory ? "/dashboard/employees/all" : undefined,
     },
     {
       label: "Onboarding",
@@ -1322,6 +1370,8 @@ export default function HrAnalyticsDashboard({
       sub: "open requests",
       icon: UserPlusIcon,
       ready: sliceReady.onboarding,
+      compact: true,
+      href: canOpenOnboarding ? "/dashboard/employees/onboarding" : undefined,
     },
     {
       label: "Offboarding",
@@ -1329,6 +1379,8 @@ export default function HrAnalyticsDashboard({
       sub: "open requests",
       icon: UserMinusIcon,
       ready: sliceReady.offboarding,
+      compact: true,
+      href: canOpenOffboarding ? "/dashboard/employees/offboarding" : undefined,
     },
   ]
 
@@ -1448,7 +1500,7 @@ export default function HrAnalyticsDashboard({
         variants={motionPreset.item}
       >
         <motion.div
-          className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-7"
+          className="grid items-stretch gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-[repeat(4,minmax(0,1.15fr))_repeat(3,minmax(0,0.82fr))]"
           aria-busy={loading}
           aria-live="polite"
           variants={motionPreset.metrics}
