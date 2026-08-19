@@ -277,6 +277,20 @@ function optionLabel(row: AdminRecord) {
   )
 }
 
+function groupReportIssues(result: AdminRecord | null) {
+  const issues = asRecordArray(result?.issues)
+  const issueCount = readNumber(result, ["issue_count", "issueCount"]) ?? issues.length
+  const groups = new Map<string, number>()
+  for (const issue of issues) {
+    const code = readString(issue, ["code", "type"], "UNKNOWN")
+    groups.set(code, (groups.get(code) ?? 0) + 1)
+  }
+  return {
+    issueCount,
+    groups: Array.from(groups.entries()).sort((first, second) => second[1] - first[1]),
+  }
+}
+
 function rowId(row: AdminRecord | null | undefined) {
   const id = readNumber(row, ["id", "runId", "run_id", "profileId", "profile_id"])
   return id !== null ? String(id) : ""
@@ -912,6 +926,7 @@ export function PayrollOperationsView() {
   const [settlementRequestId, setSettlementRequestId] = React.useState("")
   const [reportBusy, setReportBusy] = React.useState("")
   const [reportResult, setReportResult] = React.useState<AdminRecord | null>(null)
+  const [reportKind, setReportKind] = React.useState<"reconciliation" | "variance" | "settlement" | "">("")
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [search, setSearch] = React.useState("")
@@ -1815,6 +1830,7 @@ export function PayrollOperationsView() {
     setReportBusy("reconciliation")
     try {
       const result = await runPayrollReconciliation(token)
+      setReportKind("reconciliation")
       setReportResult((result as AdminRecord | null) ?? { status: "queued" })
       toast.success("Payroll reconciliation started.")
     } catch (errorObject) {
@@ -1833,6 +1849,7 @@ export function PayrollOperationsView() {
     setReportBusy("variance")
     try {
       const result = await runPayrollRunVariance(token, varianceRunId, comparisonRunId)
+      setReportKind("variance")
       setReportResult((result as AdminRecord | null) ?? { status: "queued" })
       toast.success("Variance report started.")
     } catch (errorObject) {
@@ -1851,6 +1868,7 @@ export function PayrollOperationsView() {
     setReportBusy("settlement")
     try {
       const result = await calculatePayrollFinalSettlement(token, settlementRequestId)
+      setReportKind("settlement")
       setReportResult((result as AdminRecord | null) ?? { status: "queued" })
       toast.success("Final settlement calculated.")
     } catch (errorObject) {
@@ -2970,83 +2988,36 @@ export function PayrollOperationsView() {
           />
 
           <div className="overflow-hidden rounded-xl border border-border bg-card">
-            <div className="flex flex-wrap items-end justify-between gap-2 border-b border-border px-4 py-3">
-              <div>
-                <h2 className="text-sm font-semibold text-foreground">Configuration</h2>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  These records live under Payroll → Configuration. Open a group to edit it.
-                </p>
-              </div>
-              <button
-                type="button"
-                className="inline-flex h-8 items-center justify-center rounded-md border border-slate-300 bg-white px-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-border dark:bg-background dark:text-foreground"
-                onClick={() => setTab("configuration")}
-              >
-                Open configuration
-              </button>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5">
+            <div className="grid grid-cols-2 xl:grid-cols-5">
               {(
                 [
-                  { id: "components" as const, label: "Components", rows: components },
-                  { id: "calendars" as const, label: "Calendars", rows: calendars },
-                  { id: "structures" as const, label: "Structures", rows: structures },
-                  { id: "schemes" as const, label: "Schemes", rows: schemes },
-                  { id: "mappings" as const, label: "Mappings", rows: mappings },
+                  { id: "components" as const, label: "Components", value: components.length },
+                  { id: "calendars" as const, label: "Calendars", value: calendars.length },
+                  { id: "structures" as const, label: "Structures", value: structures.length },
+                  { id: "schemes" as const, label: "Schemes", value: schemes.length },
+                  { id: "mappings" as const, label: "Mappings", value: mappings.length },
                 ]
               ).map((item, index) => (
-                <div
+                <button
                   key={item.id}
+                  type="button"
+                  onClick={() => {
+                    setConfigTab(item.id)
+                    setTab("configuration")
+                  }}
                   className={cn(
-                    "flex min-w-0 flex-col border-border px-4 py-3.5",
+                    "border-border px-4 py-3.5 text-left transition hover:bg-muted/40",
                     index > 0 && "border-t",
                     "xl:border-t-0",
-                    index % 2 === 1 && "sm:border-l",
+                    index % 2 === 1 && "border-l",
                     index > 0 && "xl:border-l",
                   )}
                 >
-                  <button
-                    type="button"
-                    className="flex items-baseline justify-between gap-2 text-left"
-                    onClick={() => {
-                      setConfigTab(item.id)
-                      setTab("configuration")
-                    }}
-                  >
-                    <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      {item.label}
-                    </span>
-                    <span className="text-sm font-semibold tabular-nums text-foreground">{item.rows.length}</span>
-                  </button>
-                  <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto">
-                    {item.rows.length === 0 ? (
-                      <li className="text-xs text-muted-foreground">None yet</li>
-                    ) : (
-                      item.rows.map((row, rowIndex) => {
-                        const code = readString(row, ["code", "account_code", "accountCode", "gl_code", "glCode"])
-                        const name = optionLabel(row)
-                        return (
-                          <li key={`${item.id}-${rowId(row) || rowIndex}`}>
-                            <button
-                              type="button"
-                              className="block w-full truncate text-left text-xs text-foreground hover:text-primary"
-                              title={code && code !== name ? `${name} (${code})` : name}
-                              onClick={() => {
-                                setConfigTab(item.id)
-                                setTab("configuration")
-                              }}
-                            >
-                              {name}
-                              {code && code !== name ? (
-                                <span className="text-muted-foreground"> · {code}</span>
-                              ) : null}
-                            </button>
-                          </li>
-                        )
-                      })
-                    )}
-                  </ul>
-                </div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    {item.label}
+                  </p>
+                  <p className="mt-1 text-xl font-semibold tabular-nums tracking-tight text-foreground">{item.value}</p>
+                </button>
               ))}
             </div>
 
@@ -3100,53 +3071,130 @@ export function PayrollOperationsView() {
           </div>
         </div>
       ) : tab === "reports" ? (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <div className="space-y-3 rounded-xl border border-border bg-card p-4">
-            <h2 className="text-sm font-semibold">Reconciliation</h2>
-            <p className="text-sm text-muted-foreground">Runs /api/payroll/reports/reconciliation/run.</p>
-            <button type="button" className={primaryButtonClass} disabled={reportBusy === "reconciliation"} onClick={() => void onRunReconciliation()}>
-              {reportBusy === "reconciliation" ? <Loader2Icon className="h-3.5 w-3.5 animate-spin" /> : null}
-              Run reconciliation
-            </button>
-          </div>
-          <div className="space-y-3 rounded-xl border border-border bg-card p-4">
-            <h2 className="text-sm font-semibold">Run variance</h2>
-            <p className="text-sm text-muted-foreground">Compare two payroll runs.</p>
-            <select className={inputClass} value={varianceRunId} onChange={(event) => setVarianceRunId(event.target.value)}>
-              <option value="">Primary run</option>
-              {recentRuns.map((row) => (
-                <option key={rowId(row)} value={rowId(row)}>{readPeriodLabel(row) !== "-" ? readPeriodLabel(row) : `Run #${rowId(row)}`}</option>
-              ))}
-            </select>
-            <select className={inputClass} value={comparisonRunId} onChange={(event) => setComparisonRunId(event.target.value)}>
-              <option value="">Comparison run</option>
-              {recentRuns.map((row) => (
-                <option key={`cmp-${rowId(row)}`} value={rowId(row)}>{readPeriodLabel(row) !== "-" ? readPeriodLabel(row) : `Run #${rowId(row)}`}</option>
-              ))}
-            </select>
-            <button type="button" className={primaryButtonClass} disabled={reportBusy === "variance"} onClick={() => void onRunVariance()}>
-              {reportBusy === "variance" ? <Loader2Icon className="h-3.5 w-3.5 animate-spin" /> : null}
-              Run variance
-            </button>
-          </div>
-          <div className="space-y-3 rounded-xl border border-border bg-card p-4">
-            <h2 className="text-sm font-semibold">Final settlement</h2>
-            <p className="text-sm text-muted-foreground">Calculate settlement for one offboarding request.</p>
-            <select className={inputClass} value={settlementRequestId} onChange={(event) => setSettlementRequestId(event.target.value)}>
-              <option value="">Offboarding request</option>
-              {offboardingRequests.map((row) => (
-                <option key={rowId(row)} value={rowId(row)}>#{rowId(row)} {readString(row, ["employeeName", "employee_name", "status"], "")}</option>
-              ))}
-            </select>
-            <button type="button" className={primaryButtonClass} disabled={reportBusy === "settlement"} onClick={() => void onCalculateSettlement()}>
-              {reportBusy === "settlement" ? <Loader2Icon className="h-3.5 w-3.5 animate-spin" /> : null}
-              Calculate
-            </button>
+        <div className="space-y-4">
+          <div className="overflow-hidden rounded-xl border border-border bg-card">
+            <div className="grid gap-0 lg:grid-cols-3">
+              <div className="space-y-3 border-border p-4 lg:border-r">
+                <div>
+                  <h2 className="text-sm font-semibold">Reconciliation</h2>
+                  <p className="mt-1 text-xs text-muted-foreground">Check profiles, mappings, and run readiness.</p>
+                </div>
+                <button type="button" className={primaryButtonClass} disabled={reportBusy === "reconciliation"} onClick={() => void onRunReconciliation()}>
+                  {reportBusy === "reconciliation" ? <Loader2Icon className="h-3.5 w-3.5 animate-spin" /> : null}
+                  Run
+                </button>
+              </div>
+              <div className="space-y-3 border-t border-border p-4 lg:border-l-0 lg:border-r lg:border-t-0">
+                <div>
+                  <h2 className="text-sm font-semibold">Run variance</h2>
+                  <p className="mt-1 text-xs text-muted-foreground">Compare two payroll runs.</p>
+                </div>
+                <select className={inputClass} value={varianceRunId} onChange={(event) => setVarianceRunId(event.target.value)}>
+                  <option value="">Primary run</option>
+                  {recentRuns.map((row) => (
+                    <option key={rowId(row)} value={rowId(row)}>{readPeriodLabel(row) !== "-" ? readPeriodLabel(row) : `Run #${rowId(row)}`}</option>
+                  ))}
+                </select>
+                <select className={inputClass} value={comparisonRunId} onChange={(event) => setComparisonRunId(event.target.value)}>
+                  <option value="">Comparison run</option>
+                  {recentRuns.map((row) => (
+                    <option key={`cmp-${rowId(row)}`} value={rowId(row)}>{readPeriodLabel(row) !== "-" ? readPeriodLabel(row) : `Run #${rowId(row)}`}</option>
+                  ))}
+                </select>
+                <button type="button" className={primaryButtonClass} disabled={reportBusy === "variance"} onClick={() => void onRunVariance()}>
+                  {reportBusy === "variance" ? <Loader2Icon className="h-3.5 w-3.5 animate-spin" /> : null}
+                  Compare
+                </button>
+              </div>
+              <div className="space-y-3 border-t border-border p-4 lg:border-t-0">
+                <div>
+                  <h2 className="text-sm font-semibold">Final settlement</h2>
+                  <p className="mt-1 text-xs text-muted-foreground">Calculate one offboarding request.</p>
+                </div>
+                <select className={inputClass} value={settlementRequestId} onChange={(event) => setSettlementRequestId(event.target.value)}>
+                  <option value="">Offboarding request</option>
+                  {offboardingRequests.map((row) => (
+                    <option key={rowId(row)} value={rowId(row)}>#{rowId(row)} {readString(row, ["employeeName", "employee_name", "status"], "")}</option>
+                  ))}
+                </select>
+                <button type="button" className={primaryButtonClass} disabled={reportBusy === "settlement"} onClick={() => void onCalculateSettlement()}>
+                  {reportBusy === "settlement" ? <Loader2Icon className="h-3.5 w-3.5 animate-spin" /> : null}
+                  Calculate
+                </button>
+              </div>
+            </div>
           </div>
           {reportResult ? (
-            <div className="rounded-xl border border-border bg-card p-4 lg:col-span-2">
-              <h2 className="text-sm font-semibold">Last report response</h2>
-              <pre className="mt-2 overflow-auto text-xs">{JSON.stringify(reportResult, null, 2)}</pre>
+            <div className="rounded-xl border border-border bg-card p-4">
+              <div className="flex flex-wrap items-end justify-between gap-2">
+                <div>
+                  <h2 className="text-sm font-semibold">
+                    {reportKind === "variance"
+                      ? "Variance summary"
+                      : reportKind === "settlement"
+                        ? "Settlement summary"
+                        : "Reconciliation summary"}
+                  </h2>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Grouped totals only — the API issue list is too large to print here.
+                  </p>
+                </div>
+                {groupReportIssues(reportResult).groups.some(([code]) => code === "EMPLOYEE_PAYROLL_PROFILE_MISSING") ? (
+                  <button
+                    type="button"
+                    className="inline-flex h-8 items-center justify-center rounded-md border border-slate-300 bg-white px-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-border dark:bg-background dark:text-foreground"
+                    onClick={() => setTab("profiles")}
+                  >
+                    Open profiles
+                  </button>
+                ) : null}
+              </div>
+              {(() => {
+                const summary = groupReportIssues(reportResult)
+                const net = readNumber(reportResult, ["net", "net_amount", "netAmount", "net_pay", "netPay"])
+                const gross = readNumber(reportResult, ["gross", "gross_amount", "grossAmount"])
+                const status = readString(reportResult, ["status"], "")
+                return (
+                  <div className="mt-4 space-y-4">
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Issues</p>
+                        <p className="mt-1 text-2xl font-semibold tabular-nums">{summary.issueCount}</p>
+                      </div>
+                      {gross !== null ? (
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Gross</p>
+                          <p className="mt-1 text-2xl font-semibold tabular-nums">{formatCurrencyAmount(gross)}</p>
+                        </div>
+                      ) : null}
+                      {net !== null ? (
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Net</p>
+                          <p className="mt-1 text-2xl font-semibold tabular-nums">{formatCurrencyAmount(net)}</p>
+                        </div>
+                      ) : null}
+                      {status ? (
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Status</p>
+                          <p className="mt-1 text-sm font-medium">{prettify(status)}</p>
+                        </div>
+                      ) : null}
+                    </div>
+                    {summary.groups.length > 0 ? (
+                      <div className="space-y-2">
+                        {summary.groups.map(([code, count]) => (
+                          <div key={code} className="flex items-center justify-between gap-3 text-sm">
+                            <span className="text-foreground">{prettify(code)}</span>
+                            <span className="font-semibold tabular-nums text-foreground">{count}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : summary.issueCount === 0 ? (
+                      <p className="text-sm text-muted-foreground">No issues returned.</p>
+                    ) : null}
+                  </div>
+                )
+              })()}
             </div>
           ) : null}
         </div>
