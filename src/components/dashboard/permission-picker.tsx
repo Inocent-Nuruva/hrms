@@ -4,7 +4,6 @@ import * as React from "react"
 import { CheckIcon, ChevronDownIcon, Loader2Icon, SearchIcon } from "lucide-react"
 
 import { Input } from "@/components/ui/input"
-import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
 import type { AdminRecord } from "@/lib/admin-api"
 
@@ -223,7 +222,7 @@ export function PermissionPicker({
       {/* Single scroll region — no nested group scrollbars */}
       <div
         className={cn(
-          "min-h-0 space-y-2 overflow-y-auto overscroll-contain pr-0.5",
+          "min-h-0 space-y-1 overflow-y-auto overscroll-contain pr-0.5",
           compact ? "min-h-40 max-h-64" : "flex-1",
         )}
       >
@@ -242,123 +241,84 @@ export function PermissionPicker({
               selectedSet.has(option.name)
             ).length
             const allSelected = selectedInGroup === groupOptions.length && groupOptions.length > 0
-            const partial = selectedInGroup > 0 && !allSelected
             const isOpen = openGroups[group] ?? (compact || selectedInGroup > 0)
 
             return (
               <section
                 key={group}
                 className={cn(
-                  "overflow-hidden rounded-xl border bg-card shadow-xs transition-colors",
-                  selectedInGroup > 0 ? "border-primary/25" : "border-border/70"
+                  "overflow-hidden rounded-md border bg-card",
+                  selectedInGroup > 0 ? "border-primary/30" : "border-slate-200 dark:border-border"
                 )}
               >
-                <div className="flex items-stretch gap-0 border-b border-border/50 bg-muted/20">
+                <div className="flex items-center gap-1 border-b border-slate-100 bg-slate-50/80 dark:border-border dark:bg-muted/20">
                   <button
                     type="button"
-                    className="flex min-w-0 flex-1 items-center gap-2.5 px-3 py-2.5 text-left"
+                    className="flex min-w-0 flex-1 items-center gap-1.5 px-2 py-1.5 text-left"
                     onClick={() =>
                       setOpenGroups((prev) => ({ ...prev, [group]: !isOpen }))
                     }
                   >
                     <ChevronDownIcon
                       className={cn(
-                        "size-4 shrink-0 text-muted-foreground transition-transform",
+                        "size-3.5 shrink-0 text-slate-400 transition-transform",
                         !isOpen && "-rotate-90"
                       )}
                     />
-                    <span className="min-w-0 flex-1">
-                      {/* Primary color only on permission group titles */}
-                      <span className="block truncate text-sm font-semibold text-primary">
-                        {group}
-                      </span>
-                      <span className="mt-0.5 flex items-center gap-2 text-[11px] text-muted-foreground">
-                        <span className="tabular-nums">
-                          {selectedInGroup}/{groupOptions.length} selected
-                        </span>
-                        <span
-                          className="h-1.5 max-w-[6rem] flex-1 overflow-hidden rounded-full bg-muted"
-                          aria-hidden
-                        >
-                          <span
-                            className={cn(
-                              "block h-full rounded-full transition-all",
-                              allSelected
-                                ? "bg-primary"
-                                : partial
-                                  ? "bg-primary/60"
-                                  : "bg-transparent"
-                            )}
-                            style={{
-                              width: `${
-                                groupOptions.length
-                                  ? (selectedInGroup / groupOptions.length) * 100
-                                  : 0
-                              }%`,
-                            }}
-                          />
-                        </span>
-                      </span>
+                    <span className="min-w-0 flex-1 truncate text-xs font-semibold text-primary">
+                      {group}
+                    </span>
+                    <span className="shrink-0 text-[10px] tabular-nums text-slate-500">
+                      {selectedInGroup}/{groupOptions.length}
                     </span>
                   </button>
                   <button
                     type="button"
                     className={cn(
-                      "shrink-0 border-l border-border/50 px-3 text-[11px] font-semibold transition-colors",
-                      allSelected
-                        ? "bg-primary/10 text-primary hover:bg-primary/15"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      "shrink-0 px-2 py-1.5 text-[10px] font-medium",
+                      allSelected ? "text-primary" : "text-slate-500 hover:text-slate-800"
                     )}
                     onClick={() => toggleGroup(groupOptions, !allSelected)}
                   >
-                    {allSelected ? "Clear group" : "Select group"}
+                    {allSelected ? "Clear" : "All"}
                   </button>
                 </div>
 
                 {isOpen ? (
-                  <ul className="grid grid-cols-1 gap-px bg-border/40 sm:grid-cols-2">
+                  <ul>
                     {groupOptions.map((option) => {
                       const checked = selectedSet.has(option.name)
                       return (
-                        <li
-                          key={option.name}
-                          className={cn(
-                            "bg-card transition-colors",
-                            checked ? "bg-primary/[0.04]" : "hover:bg-muted/40"
-                          )}
-                        >
-                          <label className="flex cursor-pointer items-start gap-2.5 px-3 py-2.5">
-                            <span className="min-w-0 flex-1">
-                              <span className="flex items-start gap-1.5">
-                                {checked ? (
-                                  <CheckIcon
-                                    className="mt-0.5 size-3.5 shrink-0 text-primary"
-                                    strokeWidth={2.5}
-                                  />
-                                ) : (
-                                  <span className="mt-0.5 size-3.5 shrink-0" />
-                                )}
-                                <span className="min-w-0">
-                                  <span className="block text-xs font-medium leading-snug text-foreground">
-                                    {option.label}
-                                  </span>
-                                  <span className="mt-0.5 block truncate font-mono text-[10px] leading-snug text-muted-foreground">
-                                    {option.name}
-                                  </span>
-                                  {option.description ? (
-                                    <span className="mt-0.5 line-clamp-2 block text-[10px] leading-snug text-muted-foreground/90">
-                                      {option.description}
-                                    </span>
-                                  ) : null}
-                                </span>
-                              </span>
+                        <li key={option.name}>
+                          <label
+                            className={cn(
+                              "flex cursor-pointer items-center gap-2 px-2 py-1",
+                              checked ? "bg-primary/[0.06]" : "hover:bg-slate-50 dark:hover:bg-muted/40"
+                            )}
+                            title={option.description || option.name}
+                          >
+                            <span
+                              className={cn(
+                                "inline-flex size-3.5 shrink-0 items-center justify-center rounded-[3px] border",
+                                checked
+                                  ? "border-primary bg-primary text-white"
+                                  : "border-slate-300 bg-white dark:border-border dark:bg-background"
+                              )}
+                            >
+                              {checked ? <CheckIcon className="size-2.5" strokeWidth={3} /> : null}
                             </span>
-                            <Switch
-                              size="sm"
-                              className="mt-0.5 shrink-0"
+                            <span className="min-w-0 flex-1 truncate text-xs text-slate-900 dark:text-foreground">
+                              {option.label}
+                            </span>
+                            <span className="hidden max-w-[9rem] shrink-0 truncate font-mono text-[10px] text-slate-400 sm:block">
+                              {option.name}
+                            </span>
+                            <input
+                              type="checkbox"
+                              className="sr-only"
                               checked={checked}
-                              onCheckedChange={() => toggle(option.name)}
-                              aria-label={`${checked ? "Disable" : "Enable"} ${option.label}`}
+                              onChange={() => toggle(option.name)}
+                              aria-label={option.label}
                             />
                           </label>
                         </li>
