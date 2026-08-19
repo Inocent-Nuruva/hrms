@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { localSupportAnswer, SUPPORT_KNOWLEDGE } from "@/lib/support-knowledge"
+import { findSupportPages, localSupportAnswer, SUPPORT_KNOWLEDGE } from "@/lib/support-knowledge"
 
 export const dynamic = "force-dynamic"
 
@@ -53,14 +53,17 @@ export async function POST(request: Request) {
     .filter((entry): entry is ChatMessage => Boolean(entry))
     .slice(-12)
 
-  const question = [...history].reverse().find((entry) => entry.role === "user")?.content ?? ""
+  const userTurns = history.filter((entry) => entry.role === "user")
+  const question = userTurns.at(-1)?.content ?? ""
+  const previousQuestion = userTurns.at(-2)?.content ?? ""
   if (!question) {
     return NextResponse.json({ error: "Send a question." }, { status: 400 })
   }
 
+  const local = localSupportAnswer(question, previousQuestion)
   const apiKey = process.env.XAI_API_KEY?.trim()
   if (!apiKey) {
-    return NextResponse.json({ reply: localSupportAnswer(question), source: "guide" })
+    return NextResponse.json({ ...local, source: "guide" })
   }
 
   try {
@@ -81,11 +84,18 @@ export async function POST(request: Request) {
     })
     const payload = (await response.json()) as unknown
     if (!response.ok) {
-      return NextResponse.json({ reply: localSupportAnswer(question), source: "guide" })
+      return NextResponse.json({ ...local, source: "guide" })
     }
-    const reply = readText(payload) || localSupportAnswer(question)
-    return NextResponse.json({ reply, source: "assistant" })
+    const reply = readText(payload)
+    if (!reply) {
+      return NextResponse.json({ ...local, source: "guide" })
+    }
+    const links = findSupportPages(`${previousQuestion} ${question} ${reply}`, 4).map((page) => ({
+      title: page.title,
+      url: page.url,
+    }))
+    return NextResponse.json({ reply, links, source: "assistant" })
   } catch {
-    return NextResponse.json({ reply: localSupportAnswer(question), source: "guide" })
+    return NextResponse.json({ ...local, source: "guide" })
   }
 }

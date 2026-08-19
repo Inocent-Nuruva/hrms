@@ -1,15 +1,34 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
 import { HeadphonesIcon, Loader2Icon, SendIcon, XIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
+type SupportLink = { title: string; url: string }
+
 type ChatMessage = {
   role: "user" | "assistant"
   content: string
+  links?: SupportLink[]
+}
+
+function renderMessageBody(content: string) {
+  const parts = content.split(/(\[[^\]]+\]\([^)]+\))/g)
+  return parts.map((part, index) => {
+    const match = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/)
+    if (!match) return <React.Fragment key={index}>{part}</React.Fragment>
+    const [, label, href] = match
+    if (!href.startsWith("/")) return <React.Fragment key={index}>{label}</React.Fragment>
+    return (
+      <Link key={index} href={href} className="font-medium text-primary underline underline-offset-2">
+        {label}
+      </Link>
+    )
+  })
 }
 
 export function SupportChatWidget() {
@@ -43,11 +62,14 @@ export function SupportChatWidget() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: nextMessages }),
       })
-      const payload = (await response.json()) as { reply?: string; error?: string }
+      const payload = (await response.json()) as { reply?: string; links?: SupportLink[]; error?: string }
       if (!response.ok || !payload.reply) {
         throw new Error(payload.error || "Could not get an answer.")
       }
-      setMessages((current) => [...current, { role: "assistant", content: payload.reply as string }])
+      setMessages((current) => [
+        ...current,
+        { role: "assistant", content: payload.reply as string, links: payload.links ?? [] },
+      ])
     } catch (errorObject) {
       const message = errorObject instanceof Error ? errorObject.message : "Could not get an answer."
       setMessages((current) => [
@@ -113,7 +135,20 @@ export function SupportChatWidget() {
                     : "bg-muted/60 text-foreground",
                 )}
               >
-                {message.content}
+                <div className="whitespace-pre-wrap">{renderMessageBody(message.content)}</div>
+                {message.links && message.links.length > 0 ? (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {message.links.map((link) => (
+                      <Link
+                        key={link.url}
+                        href={link.url}
+                        className="inline-flex rounded-full border border-border bg-background px-2.5 py-1 text-xs font-medium text-primary hover:bg-muted"
+                      >
+                        {link.title}
+                      </Link>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             ))}
             {busy ? (
