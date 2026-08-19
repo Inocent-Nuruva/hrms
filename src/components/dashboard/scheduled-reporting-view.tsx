@@ -42,7 +42,11 @@ import {
   type AdminRecord,
 } from "@/lib/admin-api"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
-import { canPerformPermission } from "@/lib/dashboard-permissions"
+import {
+  ATTENDANCE_REPORTS_ROUTE_PERMISSION,
+  SCHEDULED_REPORTING_ROUTE_PERMISSION,
+  canPerformPermission,
+} from "@/lib/dashboard-permissions"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import { cn } from "@/lib/utils"
 import {
@@ -358,6 +362,108 @@ function asRecordArray(value: unknown): AdminRecord[] {
   )
 }
 
+function asRelatedRecord(value: unknown): AdminRecord | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null
+  return value as AdminRecord
+}
+
+function readRelatedId(
+  row: AdminRecord | null | undefined,
+  idKeys: string[],
+  relationKeys: string[],
+): number | null {
+  const direct = readNumber(row, idKeys)
+  if (direct !== null) return direct
+  for (const key of relationKeys) {
+    const related = asRelatedRecord(row?.[key])
+    const id = readNumber(related, ["id"])
+    if (id !== null) return id
+  }
+  return null
+}
+
+function readRelatedLabel(
+  row: AdminRecord | null | undefined,
+  idKeys: string[],
+  relationKeys: string[],
+  nameById: Map<number, string>,
+): string {
+  for (const key of relationKeys) {
+    const related = asRelatedRecord(row?.[key])
+    if (!related) continue
+    const label = optionLabel(related)
+    if (label && label !== "—") return label
+  }
+  const id = readRelatedId(row, idKeys, relationKeys)
+  if (id !== null) return nameById.get(id) ?? `#${id}`
+  return "—"
+}
+
+function hasOwnReportingKey(row: AdminRecord | null | undefined, keys: string[]): boolean {
+  if (!row) return false
+  return keys.some((key) => Object.prototype.hasOwnProperty.call(row, key))
+}
+
+function formatActiveLabel(row: AdminRecord | null | undefined): string {
+  if (hasOwnReportingKey(row, ["isActive", "is_active"])) {
+    return readBool(row, ["isActive", "is_active"]) ? "Active" : "Inactive"
+  }
+  const status = readString(row, ["status"]).toUpperCase()
+  if (status === "ACTIVE" || status === "INACTIVE") return prettify(status)
+  return "—"
+}
+
+function formatAttachLabel(row: AdminRecord | null | undefined): string {
+  if (!hasOwnReportingKey(row, ["attachReport", "attach_report"])) return "—"
+  return readBool(row, ["attachReport", "attach_report"]) ? "Yes" : "No"
+}
+
+function reportingDetailIsUsable(detail: AdminRecord | null | undefined): boolean {
+  if (!detail) return false
+  return (
+    readRelatedId(
+      detail,
+      ["reportDefinitionId", "report_definition_id"],
+      ["reportDefinition", "report_definition"],
+    ) !== null ||
+    readRelatedId(
+      detail,
+      ["smtpConfigurationId", "smtp_configuration_id"],
+      ["smtpConfiguration", "smtp_configuration"],
+    ) !== null ||
+    readRelatedId(detail, ["templateId", "template_id"], ["template"]) !== null ||
+    Boolean(
+      readString(detail, [
+        "outputFormat",
+        "output_format",
+        "dateRangeStrategy",
+        "date_range_strategy",
+        "host",
+        "scheduleType",
+        "schedule_type",
+      ]),
+    ) ||
+    hasOwnReportingKey(detail, [
+      "isActive",
+      "is_active",
+      "attachReport",
+      "attach_report",
+      "outputFormat",
+      "output_format",
+      "dateRangeStrategy",
+      "date_range_strategy",
+      "scheduleType",
+      "schedule_type",
+      "host",
+    ])
+  )
+}
+
+function mergeReportingDetail(row: AdminRecord, detail: AdminRecord | null): AdminRecord {
+  if (!detail || !reportingDetailIsUsable(detail)) return row
+  return { ...row, ...detail }
+}
+
 function readTemplateRecipients(row: AdminRecord | null | undefined): TemplateRecipientForm[] {
   return asRecordArray(row?.recipients).map((recipient) => ({
     channel: enumValue(
@@ -523,16 +629,27 @@ const textareaClass =
 
 export function ScheduledReportingView() {
   const actor = useDashboardActor()
-  const canMutateReports = canPerformPermission(actor.permissionLabels, {
-    permissions: [
-      "scheduled_reporting:create",
-      "scheduled_reporting:update",
-      "report_schedules:create",
-      "report_templates:create",
-      "manage_scheduled_reports",
-    ],
-    mode: "any",
-  })
+  const canAccessScheduledReporting =
+    !actor.ready ||
+    actor.isAdmin ||
+    canPerformPermission(actor.permissionLabels, SCHEDULED_REPORTING_ROUTE_PERMISSION) ||
+    canPerformPermission(actor.permissionLabels, ATTENDANCE_REPORTS_ROUTE_PERMISSION)
+  const canMutateReports =
+    canAccessScheduledReporting ||
+    canPerformPermission(actor.permissionLabels, {
+      permissions: [
+        "scheduled_reporting:create",
+        "scheduled_reporting:update",
+        "scheduled_reporting:delete",
+        "report_schedules:create",
+        "report_templates:create",
+        "smtp_configurations:create",
+        "smtp_configurations:update",
+        "smtp_configurations:delete",
+        "manage_scheduled_reports",
+      ],
+      mode: "any",
+    })
   const [tab, setTab] = React.useState<ReportingTab>("templates")
   const [rows, setRows] = React.useState<AdminRecord[]>([])
   const [definitions, setDefinitions] = React.useState<AdminRecord[]>([])
@@ -825,8 +942,20 @@ export function ScheduledReportingView() {
     setTestingDraftSmtp(false)
     if (tab === "templates") {
       setTemplateForm({
-        reportDefinitionId: String(readNumber(row, ["reportDefinitionId", "report_definition_id"]) ?? ""),
-        smtpConfigurationId: String(readNumber(row, ["smtpConfigurationId", "smtp_configuration_id"]) ?? ""),
+        reportDefinitionId: String(
+          readRelatedId(
+            row,
+            ["reportDefinitionId", "report_definition_id"],
+            ["reportDefinition", "report_definition"],
+          ) ?? "",
+        ),
+        smtpConfigurationId: String(
+          readRelatedId(
+            row,
+            ["smtpConfigurationId", "smtp_configuration_id"],
+            ["smtpConfiguration", "smtp_configuration"],
+          ) ?? "",
+        ),
         name: readString(row, ["name"]),
         description: readString(row, ["description"]),
         outputFormat: enumValue(readString(row, ["outputFormat", "output_format"], "PDF"), OUTPUT_FORMATS, "PDF"),
@@ -844,7 +973,7 @@ export function ScheduledReportingView() {
         ? weekdays.map(String).join(",")
         : readString(row, ["weekdays"], "MONDAY")
       setScheduleForm({
-        templateId: String(readNumber(row, ["templateId", "template_id"]) ?? ""),
+        templateId: String(readRelatedId(row, ["templateId", "template_id"], ["template"]) ?? ""),
         name: readString(row, ["name"]),
         scheduleType: enumValue(readString(row, ["scheduleType", "schedule_type"], "DAILY"), SCHEDULE_TYPES, "DAILY"),
         executionTime: readString(row, ["executionTime", "execution_time"], "08:00"),
@@ -1114,7 +1243,7 @@ export function ScheduledReportingView() {
     setExecutionLoading(true)
     try {
       const detail = await getScheduledReportExecution(token, id)
-      setExecutionDetail(detail ?? row)
+      setExecutionDetail(mergeReportingDetail(row, detail))
     } catch (errorObject) {
       toast.error(errorObject instanceof Error ? errorObject.message : "Failed to load execution.")
     } finally {
@@ -1139,17 +1268,17 @@ export function ScheduledReportingView() {
       try {
         if (tab === "templates") {
           const detail = await getScheduledReportTemplate(token, id)
-          fillEditFromRow((detail as AdminRecord | null) ?? row)
+          fillEditFromRow(mergeReportingDetail(row, detail as AdminRecord | null))
           return
         }
         if (tab === "schedules") {
           const detail = await getScheduledReportSchedule(token, id)
-          fillEditFromRow((detail as AdminRecord | null) ?? row)
+          fillEditFromRow(mergeReportingDetail(row, detail as AdminRecord | null))
           return
         }
         if (tab === "smtp") {
           const detail = await getScheduledReportSmtpConfiguration(token, id)
-          fillEditFromRow((detail as AdminRecord | null) ?? row)
+          fillEditFromRow(mergeReportingDetail(row, detail as AdminRecord | null))
           return
         }
       } catch (errorObject) {
@@ -1175,13 +1304,13 @@ export function ScheduledReportingView() {
       try {
         if (tab === "templates") {
           const detail = await getScheduledReportTemplate(token, id)
-          setDetailRecord(detail ?? row)
+          setDetailRecord(mergeReportingDetail(row, detail))
         } else if (tab === "schedules") {
           const detail = await getScheduledReportSchedule(token, id)
-          setDetailRecord(detail ?? row)
+          setDetailRecord(mergeReportingDetail(row, detail))
         } else if (tab === "smtp") {
           const detail = await getScheduledReportSmtpConfiguration(token, id)
-          setDetailRecord(detail ?? row)
+          setDetailRecord(mergeReportingDetail(row, detail))
         }
       } catch (errorObject) {
         toast.error(errorObject instanceof Error ? errorObject.message : "Failed to load details.")
@@ -1255,7 +1384,7 @@ export function ScheduledReportingView() {
         setExecutionLoading(true)
         try {
           const detail = await getScheduledReportExecution(token, id)
-          setExecutionDetail(detail ?? execution ?? row)
+          setExecutionDetail(mergeReportingDetail(row, detail ?? execution))
         } finally {
           setExecutionLoading(false)
         }
@@ -1467,14 +1596,16 @@ export function ScheduledReportingView() {
           key: "reportDefinitionId",
           label: "Report",
           defaultWidth: 140,
-          render: (row) => {
-            const id = readNumber(row, ["reportDefinitionId", "report_definition_id"])
-            return (
-              <span className="text-xs text-muted-foreground">
-                {id !== null ? definitionNameById.get(id) ?? `#${id}` : "—"}
-              </span>
-            )
-          },
+          render: (row) => (
+            <span className="text-xs text-muted-foreground">
+              {readRelatedLabel(
+                row,
+                ["reportDefinitionId", "report_definition_id"],
+                ["reportDefinition", "report_definition"],
+                definitionNameById,
+              )}
+            </span>
+          ),
         },
         {
           key: "outputFormat",
@@ -1558,14 +1689,11 @@ export function ScheduledReportingView() {
           key: "templateId",
           label: "Template",
           defaultWidth: 140,
-          render: (row) => {
-            const id = readNumber(row, ["templateId", "template_id"])
-            return (
-              <span className="text-xs text-muted-foreground">
-                {id !== null ? templateNameById.get(id) ?? `#${id}` : "—"}
-              </span>
-            )
-          },
+          render: (row) => (
+            <span className="text-xs text-muted-foreground">
+              {readRelatedLabel(row, ["templateId", "template_id"], ["template"], templateNameById)}
+            </span>
+          ),
         },
         {
           key: "scheduleType",
@@ -1646,10 +1774,15 @@ export function ScheduledReportingView() {
           label: "Template",
           defaultWidth: 140,
           render: (row) => {
-            const id = readNumber(row, ["templateId", "template_id"])
+            const label = readRelatedLabel(
+              row,
+              ["templateId", "template_id"],
+              ["template"],
+              templateNameById,
+            )
             return (
               <span className="text-xs">
-                {id !== null ? templateNameById.get(id) ?? `#${id}` : readString(row, ["template_name", "name"], "—")}
+                {label !== "—" ? label : readString(row, ["template_name", "name"], "—")}
               </span>
             )
           },
@@ -1779,10 +1912,10 @@ export function ScheduledReportingView() {
       {
         key: "actions",
         label: "Actions",
-        defaultWidth: 132,
+        defaultWidth: 220,
         sortable: false,
         render: (row) => (
-          <div className="flex justify-end gap-1" onClick={(event) => event.stopPropagation()}>
+          <div className="flex flex-wrap justify-end gap-1" onClick={(event) => event.stopPropagation()}>
             <button
               type="button"
               className="rounded-md px-2 py-1 text-[11px] font-medium text-primary hover:bg-primary/10"
@@ -1791,10 +1924,8 @@ export function ScheduledReportingView() {
               View
             </button>
             <button
-              className="admin-table-icon-button"
               type="button"
-              aria-label="Test SMTP"
-              title="Test"
+              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-foreground hover:bg-muted"
               onClick={() => openSmtpTest(row)}
               disabled={testingSmtpId === getRowId(row)}
             >
@@ -1803,21 +1934,26 @@ export function ScheduledReportingView() {
               ) : (
                 <SendIcon className="h-3.5 w-3.5" />
               )}
-            </button>
-            <button className="admin-table-icon-button" type="button" aria-label="Edit" onClick={() => void openEditRecord(row)}>
-              <PencilIcon className="h-3.5 w-3.5" />
+              Test
             </button>
             <button
-              className="admin-table-icon-button"
-              data-variant="danger"
               type="button"
-              aria-label="Delete"
+              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-foreground hover:bg-muted"
+              onClick={() => void openEditRecord(row)}
+            >
+              <PencilIcon className="h-3.5 w-3.5" />
+              Edit
+            </button>
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-rose-700 hover:bg-rose-50 dark:text-rose-300 dark:hover:bg-rose-950/40"
               onClick={() => {
                 setDeletingId(getRowId(row))
                 setDeleteOpen(true)
               }}
             >
               <Trash2Icon className="h-3.5 w-3.5" />
+              Delete
             </button>
           </div>
         ),
@@ -1852,7 +1988,11 @@ export function ScheduledReportingView() {
             ? "Executions"
             : "SMTP configurations"
 
-  const canCreate = canMutateReports && tab !== "definitions" && tab !== "executions"
+  const canManageSmtp = tab === "smtp" || canMutateReports
+  const canCreate =
+    (tab === "smtp" ? canManageSmtp : canMutateReports) &&
+    tab !== "definitions" &&
+    tab !== "executions"
 
   const renderTemplateFields = (form: ReturnType<typeof emptyTemplateForm>, setForm: typeof setTemplateForm) => (
     <div className="grid gap-3 md:grid-cols-2">
@@ -2683,7 +2823,7 @@ export function ScheduledReportingView() {
                 onClick={openCreate}
               >
                 <PlusIcon className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Create</span>
+                <span className="hidden sm:inline">{tab === "smtp" ? "Add SMTP" : "Create"}</span>
               </button>
             ) : null}
             <button
@@ -2711,6 +2851,23 @@ export function ScheduledReportingView() {
           void openConfigDetail(row)
         }}
       />
+
+      {tab === "smtp" && !loading && rows.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-border bg-muted/20 px-4 py-6 text-center">
+          <p className="text-sm font-medium text-foreground">No SMTP configurations yet</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Add a mail server so scheduled reports can be delivered to recipients.
+          </p>
+          <button
+            type="button"
+            className="mt-3 inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-semibold !text-white transition hover:brightness-95"
+            onClick={openCreate}
+          >
+            <PlusIcon className="size-3.5" />
+            Add SMTP configuration
+          </button>
+        </div>
+      ) : null}
 
       {/* Create / Edit dialogs */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
@@ -2968,7 +3125,15 @@ export function ScheduledReportingView() {
             </SheetDescription>
             <SheetTitle className="text-base font-semibold">
               {detailRecord
-                ? readString(detailRecord, ["name"], tab === "smtp" ? "SMTP configuration" : "Scheduled reporting record")
+                ? readString(
+                    detailRecord,
+                    ["name"],
+                    tab === "templates"
+                      ? "Template"
+                      : tab === "schedules"
+                        ? "Schedule"
+                        : "SMTP configuration",
+                  )
                 : tab === "templates"
                   ? "Template"
                   : tab === "schedules"
@@ -3007,6 +3172,20 @@ export function ScheduledReportingView() {
                     <PencilIcon className="size-3.5" />
                     Edit
                   </button>
+                  {tab === "smtp" ? (
+                    <button
+                      type="button"
+                      className="inline-flex h-8 items-center gap-1 rounded-lg border border-rose-200 px-2.5 text-xs font-medium text-rose-700 dark:border-rose-900/50 dark:text-rose-300"
+                      onClick={() => {
+                        setDeletingId(getRowId(detailRecord))
+                        setDetailSheetOpen(false)
+                        setDeleteOpen(true)
+                      }}
+                    >
+                      <Trash2Icon className="size-3.5" />
+                      Delete
+                    </button>
+                  ) : null}
                 </div>
 
                 {tab === "templates" ? (
@@ -3015,22 +3194,26 @@ export function ScheduledReportingView() {
                       {[
                         [
                           "Report",
-                          (() => {
-                            const id = readNumber(detailRecord, ["reportDefinitionId", "report_definition_id"])
-                            return id !== null ? definitionNameById.get(id) ?? `#${id}` : "—"
-                          })(),
+                          readRelatedLabel(
+                            detailRecord,
+                            ["reportDefinitionId", "report_definition_id"],
+                            ["reportDefinition", "report_definition"],
+                            definitionNameById,
+                          ),
                         ],
                         [
                           "SMTP",
-                          (() => {
-                            const id = readNumber(detailRecord, ["smtpConfigurationId", "smtp_configuration_id"])
-                            return id !== null ? smtpNameById.get(id) ?? `#${id}` : "—"
-                          })(),
+                          readRelatedLabel(
+                            detailRecord,
+                            ["smtpConfigurationId", "smtp_configuration_id"],
+                            ["smtpConfiguration", "smtp_configuration"],
+                            smtpNameById,
+                          ),
                         ],
                         ["Format", readString(detailRecord, ["outputFormat", "output_format"], "—")],
                         ["Date range", prettify(readString(detailRecord, ["dateRangeStrategy", "date_range_strategy"], "—"))],
-                        ["Attach report", readBool(detailRecord, ["attachReport", "attach_report"]) ? "Yes" : "No"],
-                        ["Status", readBool(detailRecord, ["isActive", "is_active"]) ? "Active" : "Inactive"],
+                        ["Attach report", formatAttachLabel(detailRecord)],
+                        ["Status", formatActiveLabel(detailRecord)],
                         ["Created", formatDateTime(detailRecord.createdAt ?? detailRecord.created_at)],
                         ["Updated", formatDateTime(detailRecord.updatedAt ?? detailRecord.updated_at)],
                       ].map(([label, value]) => (
@@ -3115,10 +3298,12 @@ export function ScheduledReportingView() {
                       {[
                         [
                           "Template",
-                          (() => {
-                            const id = readNumber(detailRecord, ["templateId", "template_id"])
-                            return id !== null ? templateNameById.get(id) ?? `#${id}` : "—"
-                          })(),
+                          readRelatedLabel(
+                            detailRecord,
+                            ["templateId", "template_id"],
+                            ["template"],
+                            templateNameById,
+                          ),
                         ],
                         ["Type", prettify(readString(detailRecord, ["scheduleType", "schedule_type"], "—"))],
                         ["Execution time", readString(detailRecord, ["executionTime", "execution_time"], "—")],
@@ -3128,7 +3313,7 @@ export function ScheduledReportingView() {
                           "Max retries",
                           String(readNumber(detailRecord, ["maxRetryAttempts", "max_retry_attempts"]) ?? "—"),
                         ],
-                        ["Status", readBool(detailRecord, ["isActive", "is_active"]) ? "Active" : "Inactive"],
+                        ["Status", formatActiveLabel(detailRecord)],
                         ["Created", formatDateTime(detailRecord.createdAt ?? detailRecord.created_at)],
                       ].map(([label, value]) => (
                         <div key={label} className="rounded-md border border-border bg-muted/20 px-2.5 py-1.5">
@@ -3172,7 +3357,7 @@ export function ScheduledReportingView() {
                         ["Username", readString(detailRecord, ["username"], "—")],
                         ["Timeout", `${readString(detailRecord, ["connectionTimeoutMs", "connection_timeout_ms"], "—")} ms`],
                         ["Default", readBool(detailRecord, ["isDefault", "is_default"]) ? "Yes" : "No"],
-                        ["Status", readBool(detailRecord, ["isActive", "is_active"]) ? "Active" : "Inactive"],
+                        ["Status", formatActiveLabel(detailRecord)],
                       ].map(([label, value]) => (
                         <div key={label} className="rounded-md border border-border bg-muted/20 px-2.5 py-1.5">
                           <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">

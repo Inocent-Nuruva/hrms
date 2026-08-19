@@ -167,6 +167,76 @@ describe("scheduled reporting admin API helpers", () => {
     expect(smtp).toEqual(expect.objectContaining({ id: 5, name: "Primary SMTP" }))
   })
 
+  it("keeps template detail fields when the entity includes nested company relations", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        id: 7,
+        name: "Morning Attendance Report",
+        reportDefinitionId: 3,
+        smtpConfigurationId: 5,
+        outputFormat: "XLSX",
+        dateRangeStrategy: "CURRENT_DAY",
+        attachReport: true,
+        isActive: true,
+        createdAt: "2026-08-01T06:00:00.000Z",
+        updatedAt: "2026-08-13T06:00:00.000Z",
+        dateRangeConfig: {},
+        reportFilters: {},
+        company: { id: 1, name: "Acme Corp" },
+        reportDefinition: { id: 3, name: "Morning Attendance Report" },
+        smtpConfiguration: { id: 5, name: "Primary SMTP", host: "smtp.example.com" },
+        createdByCompanyUser: { id: 11, email: "hr@example.com" },
+      })
+    )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const template = await getScheduledReportTemplate("token", 7)
+
+    expect(template).toEqual(
+      expect.objectContaining({
+        id: 7,
+        name: "Morning Attendance Report",
+        reportDefinitionId: 3,
+        smtpConfigurationId: 5,
+        outputFormat: "XLSX",
+        dateRangeStrategy: "CURRENT_DAY",
+        attachReport: true,
+        isActive: true,
+      })
+    )
+  })
+
+  it("unwraps a nested data envelope without peeling company or dateRangeConfig", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        data: {
+          id: 8,
+          name: "End of Day Attendance Report",
+          reportDefinitionId: 4,
+          smtpConfigurationId: 5,
+          outputFormat: "XLSX",
+          dateRangeStrategy: "CURRENT_DAY",
+          attachReport: true,
+          isActive: true,
+          dateRangeConfig: { timezone: "Africa/Dar_es_Salaam" },
+          company: { id: 1, name: "Acme Corp" },
+        },
+      })
+    )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const template = await getScheduledReportTemplate("token", 8)
+
+    expect(template).toEqual(
+      expect.objectContaining({
+        id: 8,
+        name: "End of Day Attendance Report",
+        outputFormat: "XLSX",
+        isActive: true,
+      })
+    )
+  })
+
   it("retries an execution and returns the normalized execution record", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse({

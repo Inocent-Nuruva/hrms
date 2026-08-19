@@ -12354,6 +12354,130 @@ function buildScheduledReportingQuery(
   return query ? `?${query}` : "";
 }
 
+/**
+ * Scheduled-reporting entities embed company / definition / SMTP / user relations.
+ * Generic normalizeSingle() prefers the first nested object (data/result/item/user/company),
+ * so a bare ReportTemplate payload would be reduced to `company` or `dateRangeConfig`
+ * and the template detail sheet would render empty defaults.
+ */
+const SCHEDULED_REPORTING_IDENTITY_KEYS = [
+  "reportDefinitionId",
+  "report_definition_id",
+  "smtpConfigurationId",
+  "smtp_configuration_id",
+  "outputFormat",
+  "output_format",
+  "dateRangeStrategy",
+  "date_range_strategy",
+  "filenamePattern",
+  "filename_pattern",
+  "emailSubjectTemplate",
+  "email_subject_template",
+  "emailBodyTemplate",
+  "email_body_template",
+  "attachReport",
+  "attach_report",
+  "scheduleType",
+  "schedule_type",
+  "executionTime",
+  "execution_time",
+  "misfireHandling",
+  "misfire_handling",
+  "senderEmail",
+  "sender_email",
+  "securityType",
+  "security_type",
+  "emailDeliveryStatus",
+  "email_delivery_status",
+] as const;
+
+function looksLikeScheduledReportingRecord(
+  record: AdminRecord | null,
+): boolean {
+  if (!record) {
+    return false;
+  }
+  if (SCHEDULED_REPORTING_IDENTITY_KEYS.some((key) => key in record)) {
+    return true;
+  }
+  if ("host" in record && "port" in record) {
+    return true;
+  }
+  return Boolean(
+    asRecord(record.reportDefinition) ||
+      asRecord(record.report_definition) ||
+      asRecord(record.smtpConfiguration) ||
+      asRecord(record.smtp_configuration),
+  );
+}
+
+function unwrapScheduledReportingCandidate(
+  payload: unknown,
+): AdminRecord | null {
+  const root = asRecord(payload);
+  if (!root) {
+    const list = asArray(payload);
+    return list?.[0] ?? null;
+  }
+
+  if (looksLikeScheduledReportingRecord(root)) {
+    return root;
+  }
+
+  const wrappers = [
+    asRecord(root.data),
+    asRecord(root.result),
+    asRecord(root.item),
+    asRecord(root.payload),
+    asRecord(root.response),
+    asRecord(root.template),
+    asRecord(root.reportTemplate),
+    asRecord(root.report_template),
+    asRecord(root.schedule),
+    asRecord(root.reportSchedule),
+    asRecord(root.report_schedule),
+    asRecord(root.smtpConfiguration),
+    asRecord(root.smtp_configuration),
+    asRecord(root.execution),
+    asRecord(root.reportExecution),
+    asRecord(root.report_execution),
+  ];
+
+  for (const wrapper of wrappers) {
+    if (!wrapper) continue;
+    if (looksLikeScheduledReportingRecord(wrapper)) {
+      return wrapper;
+    }
+
+    const nested =
+      asRecord(wrapper.data) ??
+      asRecord(wrapper.result) ??
+      asRecord(wrapper.item) ??
+      asRecord(wrapper.template) ??
+      asRecord(wrapper.schedule) ??
+      asRecord(wrapper.execution);
+    if (looksLikeScheduledReportingRecord(nested)) {
+      return nested;
+    }
+  }
+
+  for (const nested of getNestedRecords(root)) {
+    if (looksLikeScheduledReportingRecord(nested)) {
+      return nested;
+    }
+  }
+
+  return null;
+}
+
+function normalizeScheduledReportingRecord(
+  payload: unknown,
+): AdminRecord | null {
+  return (
+    unwrapScheduledReportingCandidate(payload) ?? normalizeSingle(payload)
+  );
+}
+
 async function listScheduledReportingCollection(
   path: string,
   token: string,
@@ -12407,7 +12531,7 @@ export async function getScheduledReportTemplate(
       token,
     },
   );
-  return normalizeSingle(payload);
+  return normalizeScheduledReportingRecord(payload);
 }
 
 export async function createScheduledReportTemplate(
@@ -12464,7 +12588,7 @@ export async function getScheduledReportSchedule(
       token,
     },
   );
-  return normalizeSingle(payload);
+  return normalizeScheduledReportingRecord(payload);
 }
 
 export async function createScheduledReportSchedule(
@@ -12521,7 +12645,7 @@ export async function getScheduledReportExecution(
       token,
     },
   );
-  return normalizeSingle(payload);
+  return normalizeScheduledReportingRecord(payload);
 }
 
 export async function retryScheduledReportExecution(
@@ -12535,7 +12659,7 @@ export async function retryScheduledReportExecution(
       token,
     },
   );
-  return normalizeSingle(payload) ?? asRecord(payload);
+  return normalizeScheduledReportingRecord(payload) ?? asRecord(payload);
 }
 
 export async function downloadScheduledReportExecution(
@@ -12606,7 +12730,7 @@ export async function runScheduledReportTemplate(
       body: data,
     },
   );
-  return normalizeSingle(payload) ?? asRecord(payload);
+  return normalizeScheduledReportingRecord(payload) ?? asRecord(payload);
 }
 
 export async function listScheduledReportSmtpConfigurations(
@@ -12628,7 +12752,7 @@ export async function getScheduledReportSmtpConfiguration(
     `/api/scheduled-reporting/smtp-configurations/${id}`,
     { token },
   );
-  return normalizeSingle(payload);
+  return normalizeScheduledReportingRecord(payload);
 }
 
 export async function createScheduledReportSmtpConfiguration(
