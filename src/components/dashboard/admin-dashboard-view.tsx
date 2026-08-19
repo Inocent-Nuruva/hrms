@@ -7,6 +7,7 @@ import { usePathname, useRouter } from "next/navigation"
 import { AppSidebar } from "@/components/app-sidebar"
 import { DashboardSectionTabs } from "@/components/dashboard/dashboard-section-tabs"
 import { SiteHeader } from "@/components/site-header"
+import { SupportChatWidget } from "@/components/support-chat-widget"
 import { accessControlSectionTabGroups } from "@/lib/dashboard-sections"
 import { resolveHomeDashboardKind } from "@/lib/dashboard-home"
 import dynamic from "next/dynamic"
@@ -1129,6 +1130,7 @@ export default function AdminDashboardView({
           </div>
         </div>
       </SidebarInset>
+      <SupportChatWidget />
     </SidebarProvider>
   )
 }
