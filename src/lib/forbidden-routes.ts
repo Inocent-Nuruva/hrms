@@ -16,6 +16,15 @@ const DO_NOT_REMEMBER = new Set([
   "/dashboard/sms/overview",
   "/dashboard/sms/registry",
   "/dashboard/sms/logs",
+  // Self-service performance is always allowed. A 403 from
+  // /api/performance/me/* must not hide My performance or bounce to /dashboard.
+  "/dashboard/me/performance",
+  "/dashboard/me/performance/overview",
+  "/dashboard/me/performance/assignments",
+  "/dashboard/me/performance/reviews",
+  "/dashboard/me/performance/achievements",
+  "/dashboard/me/performance/improvement",
+  "/dashboard/me/performance/team",
 ])
 
 /**
@@ -168,6 +177,10 @@ export function clearDashboardRouteMemory() {
 
 export function isRememberedForbiddenRoute(url: string) {
   const path = normalizePath(url)
+  const currentPrefix = tabPrefix(url)
+  if (DO_NOT_REMEMBER.has(path) || DO_NOT_REMEMBER.has(currentPrefix)) {
+    return false
+  }
   return readPrefixes().some((prefix) => {
     if (path === prefix) return true
     // Hide detail pages under a remembered tab, not sibling tabs in the same section.

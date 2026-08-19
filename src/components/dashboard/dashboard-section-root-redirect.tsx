@@ -10,11 +10,13 @@ import type { DashboardSectionTabGroup } from "@/lib/dashboard-sections"
 type DashboardSectionRootRedirectProps = {
  groups: DashboardSectionTabGroup[]
  fallbackHref?: string
+ employeeFallbackHref?: string
 }
 
 export function DashboardSectionRootRedirect({
  groups,
  fallbackHref = "/dashboard",
+ employeeFallbackHref,
 }: DashboardSectionRootRedirectProps) {
  const actor = useDashboardActor()
  const pathname = usePathname()
@@ -31,8 +33,18 @@ export function DashboardSectionRootRedirect({
    )
    if (item) return item.url
  }
+ if (actor.accessMode === "employee" && employeeFallbackHref) {
+   return employeeFallbackHref
+ }
  return fallbackHref
- }, [actor.accessMode, actor.permissionLabels, actor.ready, fallbackHref, groups])
+ }, [
+   actor.accessMode,
+   actor.permissionLabels,
+   actor.ready,
+   employeeFallbackHref,
+   fallbackHref,
+   groups,
+ ])
 
  React.useEffect(() => {
  if (!targetHref || pathname === targetHref) {

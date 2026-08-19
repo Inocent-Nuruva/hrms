@@ -265,10 +265,13 @@ export function PerformanceManagementView({
     mode: "any",
   })
 
+  const fallbackHref =
+    actor.accessMode === "employee" ? "/dashboard/me/performance/overview" : "/dashboard"
+
   React.useEffect(() => {
     if (!actor.ready || canAccess) return
-    router.replace("/dashboard")
-  }, [actor.ready, canAccess, router])
+    router.replace(fallbackHref)
+  }, [actor.ready, canAccess, fallbackHref, router])
 
   const [setupTab, setSetupTab] = React.useState<SetupTab>("years")
   const [dashboard, setDashboard] = React.useState<AdminRecord | null>(null)
@@ -337,7 +340,7 @@ export function PerformanceManagementView({
         (result) => result.status === "rejected" && isPermissionError(result.reason),
       )
       if (permissionFailure && permissionFailure.status === "rejected") {
-        router.replace("/dashboard")
+        router.replace(fallbackHref)
         return
       }
       const firstError = results.find((result) => result.status === "rejected")
@@ -346,14 +349,14 @@ export function PerformanceManagementView({
       }
     } catch (errorObject) {
       if (isPermissionError(errorObject)) {
-        router.replace("/dashboard")
+        router.replace(fallbackHref)
         return
       }
       setError(errorObject instanceof Error ? errorObject.message : "Could not load performance data.")
     } finally {
       setLoading(false)
     }
-  }, [activeTab, router])
+  }, [activeTab, fallbackHref, router])
 
   React.useEffect(() => {
     if (!canAccess) return

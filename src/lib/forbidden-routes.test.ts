@@ -88,6 +88,14 @@ describe("forbidden route memory", () => {
     ).toBe("/dashboard/structure/cost-centers")
   })
 
+  it("does not hide My performance after an API permission error", () => {
+    stubSession()
+    rememberForbiddenRoute("/dashboard/me/performance")
+    rememberForbiddenRoute("/dashboard/me/performance/overview")
+    expect(isRememberedForbiddenRoute("/dashboard/me/performance/overview")).toBe(false)
+    expect(canSeeDashboardPage("/dashboard/me/performance/overview", [], "employee")).toBe(true)
+  })
+
   it("does not hide Reports after an analytics permission error", () => {
     stubSession()
     rememberForbiddenRoute("/dashboard/operations/reports")

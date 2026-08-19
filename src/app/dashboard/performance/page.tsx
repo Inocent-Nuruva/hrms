@@ -6,6 +6,7 @@ export default function PerformanceIndexPage() {
     <DashboardSectionRootRedirect
       groups={performanceSectionTabGroups}
       fallbackHref="/dashboard"
+      employeeFallbackHref="/dashboard/me/performance/overview"
     />
   )
 }

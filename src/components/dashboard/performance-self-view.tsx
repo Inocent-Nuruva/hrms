@@ -28,7 +28,7 @@ import {
   statusChartItems,
   textareaClass,
 } from "@/components/dashboard/talent-visuals"
-import { useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
+import { forgetForbiddenRoute } from "@/lib/forbidden-routes"
 import {
   Dialog,
   DialogDescription,
@@ -75,7 +75,6 @@ export function PerformanceSelfView({
 }: {
   activeTab: PerformanceSelfTab
 }) {
-  const leaveIfForbidden = useLeaveIfForbidden()
   const [summary, setSummary] = React.useState<AdminRecord | null>(null)
   const [managerSummary, setManagerSummary] = React.useState<AdminRecord | null>(null)
   const [assignments, setAssignments] = React.useState<AdminRecord[]>([])
@@ -136,16 +135,24 @@ export function PerformanceSelfView({
       const results = await Promise.allSettled(tasks)
       const firstError = results.find((result) => result.status === "rejected")
       if (firstError && firstError.status === "rejected" && activeTab !== "team") {
-        if (leaveIfForbidden(firstError.reason)) return
         setError(firstError.reason instanceof Error ? firstError.reason.message : "Could not load your performance.")
       }
     } catch (errorObject) {
-      if (leaveIfForbidden(errorObject)) return
       setError(errorObject instanceof Error ? errorObject.message : "Could not load your performance.")
     } finally {
       setLoading(false)
     }
-  }, [activeTab, leaveIfForbidden])
+  }, [activeTab])
+
+  React.useEffect(() => {
+    forgetForbiddenRoute("/dashboard/me/performance")
+    forgetForbiddenRoute("/dashboard/me/performance/overview")
+    forgetForbiddenRoute("/dashboard/me/performance/assignments")
+    forgetForbiddenRoute("/dashboard/me/performance/reviews")
+    forgetForbiddenRoute("/dashboard/me/performance/achievements")
+    forgetForbiddenRoute("/dashboard/me/performance/improvement")
+    forgetForbiddenRoute("/dashboard/me/performance/team")
+  }, [])
 
   React.useEffect(() => {
     void load()
