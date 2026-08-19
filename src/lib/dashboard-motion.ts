@@ -55,6 +55,44 @@ export const pageEnter: Variants = {
   show: { opacity: 1, y: 0, transition: dashboardEase },
 }
 
+export const metricStagger: Variants = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: { staggerChildren: 0.07, delayChildren: 0.08 },
+  },
+}
+
+export const metricCardEnter: Variants = {
+  hidden: {
+    opacity: 0,
+    y: 28,
+    scale: 0.94,
+    filter: "blur(8px)",
+  },
+  show: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    filter: "blur(0px)",
+    transition: {
+      type: "spring",
+      stiffness: 280,
+      damping: 24,
+      mass: 0.78,
+    },
+  },
+}
+
+export const clipCircleReveal: Variants = {
+  hidden: { clipPath: "circle(0% at 78% 18%)", opacity: 0 },
+  show: {
+    clipPath: "circle(58% at 88% -4%)",
+    opacity: 1,
+    transition: { duration: 0.9, ease: [0.16, 1, 0.3, 1] },
+  },
+}
+
 export const reducedMotionVariants: Variants = {
   hidden: { opacity: 1 },
   show: { opacity: 1 },
@@ -69,7 +107,12 @@ export function useDashboardMotion() {
     item: reduce ? reducedMotionVariants : fadeUp,
     rise: reduce ? reducedMotionVariants : riseSoft,
     page: reduce ? reducedMotionVariants : pageEnter,
-    hover: reduce ? undefined : { y: -2, transition: { duration: 0.18 } },
+    metrics: reduce ? reducedMotionVariants : metricStagger,
+    metricCard: reduce ? reducedMotionVariants : metricCardEnter,
+    clipReveal: reduce ? reducedMotionVariants : clipCircleReveal,
+    hover: reduce
+      ? undefined
+      : { y: -6, scale: 1.018, transition: { type: "spring", stiffness: 420, damping: 28 } },
     tap: reduce ? undefined : { scale: 0.985 },
   }
 }

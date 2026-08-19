@@ -580,7 +580,7 @@ interface Metric {
   value: string | number
   sub?: string
   icon: React.ComponentType<{ className?: string }>
-  tone?: "slate" | "blue" | "emerald" | "amber" | "rose"
+  progress?: number | null
 }
 
 type PagedRowsResult = {
@@ -602,12 +602,12 @@ function AnimatedMetricValue({ value }: { value: string | number }) {
   React.useEffect(() => {
     if (typeof value === "number" && Number.isFinite(value)) {
       let frame = 0
-      const duration = 320
+      const duration = 860
       const startedAt = performance.now()
 
       const tick = (now: number) => {
         const progress = Math.min((now - startedAt) / duration, 1)
-        const eased = 1 - Math.pow(1 - progress, 3)
+        const eased = 1 - Math.pow(1 - progress, 4)
         setDisplayValue(String(Math.round(value * eased)))
         if (progress < 1) {
           frame = window.requestAnimationFrame(tick)
@@ -626,12 +626,12 @@ function AnimatedMetricValue({ value }: { value: string | number }) {
       }
 
       let frame = 0
-      const duration = 320
+      const duration = 860
       const startedAt = performance.now()
 
       const tick = (now: number) => {
         const progress = Math.min((now - startedAt) / duration, 1)
-        const eased = 1 - Math.pow(1 - progress, 3)
+        const eased = 1 - Math.pow(1 - progress, 4)
         setDisplayValue(`${Math.round(numeric * eased)}%`)
         if (progress < 1) {
           frame = window.requestAnimationFrame(tick)
@@ -650,10 +650,145 @@ function AnimatedMetricValue({ value }: { value: string | number }) {
 
 function MetricValueSkeleton() {
   return (
-    <div className="mt-0.5 space-y-1.5" aria-hidden="true">
-      <Skeleton className="h-8 w-16 rounded-md" />
-      <Skeleton className="h-3 w-24 rounded-md" />
+    <div className="mt-3 space-y-2" aria-hidden="true">
+      <Skeleton className="h-9 w-20 rounded-xl" />
+      <Skeleton className="h-3 w-28 rounded-md" />
     </div>
+  )
+}
+
+function MetricProgressRing({
+  value,
+  reduce,
+}: {
+  value: number
+  reduce: boolean
+}) {
+  const radius = 18
+  const circumference = 2 * Math.PI * radius
+  const clamped = Math.max(0, Math.min(100, value))
+  return (
+    <svg className="h-12 w-12 -rotate-90" viewBox="0 0 44 44" aria-hidden="true">
+      <circle
+        cx="22"
+        cy="22"
+        r={radius}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="3.25"
+        className="opacity-15"
+      />
+      <motion.circle
+        cx="22"
+        cy="22"
+        r={radius}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="3.25"
+        strokeLinecap="round"
+        strokeDasharray={circumference}
+        initial={{ strokeDashoffset: circumference }}
+        animate={{ strokeDashoffset: circumference * (1 - clamped / 100) }}
+        transition={
+          reduce
+            ? { duration: 0 }
+            : { duration: 1.15, ease: [0.16, 1, 0.3, 1], delay: 0.28 }
+        }
+      />
+    </svg>
+  )
+}
+
+function MetricCard({
+  metric,
+  index,
+  reduce,
+  variants,
+  hover,
+}: {
+  metric: Metric & { ready: boolean }
+  index: number
+  reduce: boolean
+  variants: ReturnType<typeof useDashboardMotion>["metricCard"]
+  hover: ReturnType<typeof useDashboardMotion>["hover"]
+}) {
+  const Icon = metric.icon
+  const orbDelay = index * 0.12
+
+  return (
+    <motion.article
+      variants={variants}
+      whileHover={hover}
+      whileTap={reduce ? undefined : { scale: 0.985 }}
+      className={cn(
+        "group relative isolate min-w-0 overflow-hidden rounded-[1.75rem] border border-primary/20 bg-white p-4",
+        "shadow-[0_1px_0_rgba(255,255,255,0.8)_inset,0_16px_36px_-22px_rgb(var(--primary-rgb)_/_0.45)]",
+        "transition-shadow duration-300 hover:border-primary/35",
+      )}
+    >
+      <motion.div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-primary"
+        initial={reduce ? false : { clipPath: "circle(0% at 92% -6%)", opacity: 0 }}
+        animate={{ clipPath: "circle(48% at 92% -6%)", opacity: 0.38 }}
+        transition={{ duration: 0.95, delay: orbDelay, ease: [0.16, 1, 0.3, 1] }}
+      />
+      <motion.div
+        aria-hidden
+        className="pointer-events-none absolute -right-4 -top-4 h-28 w-28 rounded-full bg-primary/50 blur-2xl"
+        style={{ clipPath: "circle(50% at 50% 50%)" }}
+        animate={
+          reduce
+            ? undefined
+            : { y: [0, -8, 0], x: [0, 6, 0], scale: [1, 1.08, 1], opacity: [0.45, 0.7, 0.45] }
+        }
+        transition={{ duration: 7.2, repeat: Infinity, ease: "easeInOut", delay: orbDelay }}
+      />
+      <motion.div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-500 group-hover:opacity-100"
+        style={{
+          background:
+            "linear-gradient(115deg, transparent 32%, rgb(var(--primary-rgb) / 0.22) 48%, transparent 64%)",
+        }}
+      />
+
+      <div className="relative z-10 flex items-start justify-between gap-3">
+        <motion.span
+          className="inline-flex size-10 items-center justify-center rounded-full border border-primary/15 bg-primary/12 text-primary shadow-sm"
+          initial={reduce ? false : { scale: 0.7, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ type: "spring", stiffness: 380, damping: 18, delay: 0.12 + orbDelay }}
+        >
+          <Icon className="size-4" />
+        </motion.span>
+        {metric.ready && typeof metric.progress === "number" ? (
+          <div className="shrink-0 text-primary">
+            <MetricProgressRing value={metric.progress} reduce={reduce} />
+          </div>
+        ) : null}
+      </div>
+
+      <div className="relative z-10 mt-5">
+        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+          {metric.label}
+        </div>
+        {!metric.ready ? (
+          <MetricValueSkeleton />
+        ) : (
+          <>
+            <div className="mt-1 text-[1.85rem] font-semibold leading-none tracking-tight tabular-nums text-primary">
+              <AnimatedMetricValue value={metric.value} />
+            </div>
+            {metric.sub ? (
+              <div className="mt-1.5 truncate text-[11px] leading-4 text-muted-foreground">
+                {metric.sub}
+              </div>
+            ) : null}
+          </>
+        )}
+      </div>
+    </motion.article>
   )
 }
 
@@ -1105,15 +1240,14 @@ export default function HrAnalyticsDashboard({
       value: totalHeadcount,
       sub: `${activeCount} active • ${activePct}%`,
       icon: UsersIcon,
-      tone: "blue",
       ready: sliceReady.employees,
+      progress: activePct,
     },
     {
       label: "Departments",
       value: departments.length || departmentHeadcounts.length || "-",
       sub: "Active structures",
       icon: Building2Icon,
-      tone: "slate",
       ready: sliceReady.departments,
     },
     {
@@ -1121,7 +1255,6 @@ export default function HrAnalyticsDashboard({
       value: pendingLeaves,
       sub: "Awaiting action",
       icon: CalendarIcon,
-      tone: "amber",
       ready: sliceReady.leave,
     },
     {
@@ -1129,15 +1262,14 @@ export default function HrAnalyticsDashboard({
       value: attendanceRate != null ? `${attendanceRate}%` : "—",
       sub: attendanceRate != null ? "Last period" : "No summary data",
       icon: ClockIcon,
-      tone: "emerald",
       ready: sliceReady.attendance,
+      progress: attendanceRate,
     },
     {
       label: "New hires",
       value: hiresInRange,
       sub: fromDate && toDate ? `${formatDateShort(fromDate)} - ${formatDateShort(toDate)}` : "Selected range",
       icon: UserCheckIcon,
-      tone: "blue",
       ready: sliceReady.employees,
     },
     {
@@ -1145,7 +1277,6 @@ export default function HrAnalyticsDashboard({
       value: pendingOnboarding,
       sub: "open requests",
       icon: UserPlusIcon,
-      tone: "emerald",
       ready: sliceReady.onboarding,
     },
     {
@@ -1153,7 +1284,6 @@ export default function HrAnalyticsDashboard({
       value: pendingOffboarding,
       sub: "open requests",
       icon: UserMinusIcon,
-      tone: "rose",
       ready: sliceReady.offboarding,
     },
   ]
@@ -1269,40 +1399,27 @@ export default function HrAnalyticsDashboard({
       </motion.div>
 
       <div className="px-3 md:px-4 lg:px-6">
-      <motion.section className="border-b border-border pt-3 pb-3 md:pt-4" variants={motionPreset.item}>
-        <div className="flex flex-col gap-3">
-          <motion.div
-            className="grid gap-x-4 gap-y-2 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-7"
-            aria-busy={loading}
-            aria-live="polite"
-            variants={motionPreset.fast}
-          >
-            {metrics.map((m, idx) => (
-              <motion.div
-                key={m.label}
-                variants={motionPreset.item}
-                whileHover={motionPreset.hover}
-                className="min-w-0 border-b border-border pb-2 last:border-b-0 sm:last:border-b xl:border-b-0"
-              >
-                <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                  {m.label}
-                </div>
-                {!m.ready ? (
-                  <MetricValueSkeleton />
-                ) : (
-                  <>
-                    <div className="mt-0.5 text-2xl font-semibold tabular-nums text-primary sm:text-[1.75rem]">
-                      <AnimatedMetricValue value={m.value} />
-                    </div>
-                    {m.sub ? (
-                      <div className="truncate text-[11px] leading-4 text-muted-foreground">{m.sub}</div>
-                    ) : null}
-                  </>
-                )}
-              </motion.div>
-            ))}
-          </motion.div>
-        </div>
+      <motion.section
+        className="relative border-b border-border/70 pt-5 pb-6 md:pt-6 md:pb-7"
+        variants={motionPreset.item}
+      >
+        <motion.div
+          className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-7"
+          aria-busy={loading}
+          aria-live="polite"
+          variants={motionPreset.metrics}
+        >
+          {metrics.map((m, idx) => (
+            <MetricCard
+              key={m.label}
+              metric={m}
+              index={idx}
+              reduce={motionPreset.reduce}
+              variants={motionPreset.metricCard}
+              hover={motionPreset.hover}
+            />
+          ))}
+        </motion.div>
       </motion.section>
 
       {error ? (
