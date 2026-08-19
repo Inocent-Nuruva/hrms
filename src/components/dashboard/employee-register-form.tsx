@@ -5,6 +5,8 @@ import { toast } from "sonner"
 import { showSuccessAlert } from "@/lib/success-alert"
 import { env } from "@/lib/env"
 import ReactFlagsSelect from "react-flags-select"
+import { countries as countryCodes } from "country-flag-icons"
+import * as FlagIcons from "country-flag-icons/react/3x2"
 import {
   BadgeCheckIcon,
   CalendarDaysIcon,
@@ -1278,6 +1280,21 @@ function countryNameFromIso(isoCode: string) {
   } catch {
     return isoCode.toUpperCase()
   }
+}
+
+const NATIONALITY_OPTIONS = (countryCodes as string[])
+  .map((code) => ({
+    code,
+    name: countryNameFromIso(code),
+  }))
+  .sort((left, right) => left.name.localeCompare(right.name))
+
+function NationalityFlag({ code }: { code: string }) {
+  const Flag = (
+    FlagIcons as Record<string, React.ComponentType<{ title?: string; className?: string }>>
+  )[code]
+  if (!Flag) return null
+  return <Flag title={code} className="h-3.5 w-5 shrink-0 rounded-[2px] border border-border" />
 }
 
 function AnimatedField({
@@ -3638,27 +3655,37 @@ export function EmployeeRegisterForm() {
                         </Select>
                       </Field>
 
-                      <Field
-                        label="Nationality"
-                        htmlFor="nationality"
-                        delayMs={360}
-                        hint={form.nationality ? countryNameFromIso(form.nationality) : undefined}
-                        reserveHintSpace
-                        className="relative z-40 focus-within:z-[140]"
-                      >
-                        <div className="register-nationality relative z-[70] rounded-md border border-input px-2 py-2">
-                          <ReactFlagsSelect
-                            selected={form.nationality || ""}
-                            onSelect={(value) => updateField("nationality", value ?? "")}
-                            searchable
-                            searchPlaceholder="Search country"
-                            placeholder="Select nationality"
-                            alignOptionsToRight={false}
-                            className="w-full"
-                            selectButtonClassName="w-full"
-                            customLabels={{}}
-                          />
-                        </div>
+                      <Field label="Nationality" htmlFor="nationality" delayMs={360}>
+                        <Select
+                          value={form.nationality || ""}
+                          onValueChange={(value) => updateField("nationality", value ?? "")}
+                        >
+                          <SelectTrigger id="nationality" className="w-full">
+                            <SelectValue placeholder="Select nationality">
+                              {form.nationality ? (
+                                <span className="flex min-w-0 items-center gap-2">
+                                  <NationalityFlag code={form.nationality} />
+                                  <span className="truncate">{countryNameFromIso(form.nationality)}</span>
+                                </span>
+                              ) : undefined}
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent className="max-h-64" align="start">
+                            {NATIONALITY_OPTIONS.map((option) => (
+                              <SelectItem
+                                key={option.code}
+                                value={option.code}
+                                data-search-text={`${option.name} ${option.code}`}
+                                className="py-1.5"
+                              >
+                                <span className="flex min-w-0 items-center gap-2">
+                                  <NationalityFlag code={option.code} />
+                                  <span className="truncate">{option.name}</span>
+                                </span>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </Field>
 
                       <AnimatedField delayMs={440}>

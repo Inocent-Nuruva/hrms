@@ -1317,49 +1317,7 @@ table.min-w-full > tbody > tr > td {
   white-space: nowrap;
 }
 
-/* employee register nationality selector alignment + stacking */
-.register-nationality [class*="ReactFlagsSelect-module_flagsSelect"] {
-  position: relative;
-  width: 100%;
-  isolation: isolate;
-  z-index: 20;
-}
 
-.register-nationality button[class*="ReactFlagsSelect-module_selectBtn"] {
-  width: 100%;
-  background: var(--card) !important;
-  color: var(--card-foreground) !important;
-  border-color: var(--input) !important;
-}
-
-.register-nationality ul[class*="ReactFlagsSelect-module_selectOptions"] {
-  position: absolute;
-  z-index: 9999;
-  left: 0;
-  right: 0;
-  top: calc(100% + 0.25rem);
-  width: 100%;
-  max-height: min(18rem, 46vh);
-  overflow-y: auto;
-  background: var(--popover) !important;
-  color: var(--popover-foreground) !important;
-  border-color: var(--border) !important;
-}
-
-.register-nationality ul[class*="ReactFlagsSelect-module_selectOptions"] > div[class*="ReactFlagsSelect-module_filterBox"] {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background: var(--popover) !important;
-}
-
-.register-nationality ul[class*="ReactFlagsSelect-module_selectOptions"] li {
-  color: var(--popover-foreground) !important;
-}
-
-.register-nationality ul[class*="ReactFlagsSelect-module_selectOptions"] li:hover {
-  background: var(--muted) !important;
-}
 
 @media (prefers-reduced-motion: no-preference) {
   ::view-transition-image-pair(root) {
