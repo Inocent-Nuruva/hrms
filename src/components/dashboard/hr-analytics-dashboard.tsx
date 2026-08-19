@@ -582,7 +582,6 @@ interface Metric {
   value: string | number
   sub?: string
   icon: React.ComponentType<{ className?: string }>
-  progress?: number | null
   href?: string
   compact?: boolean
 }
@@ -661,48 +660,6 @@ function MetricValueSkeleton() {
   )
 }
 
-function MetricProgressRing({
-  value,
-  reduce,
-}: {
-  value: number
-  reduce: boolean
-}) {
-  const radius = 18
-  const circumference = 2 * Math.PI * radius
-  const clamped = Math.max(0, Math.min(100, value))
-  return (
-    <svg className="h-12 w-12 -rotate-90" viewBox="0 0 44 44" aria-hidden="true">
-      <circle
-        cx="22"
-        cy="22"
-        r={radius}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="3.25"
-        className="opacity-15"
-      />
-      <motion.circle
-        cx="22"
-        cy="22"
-        r={radius}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="3.25"
-        strokeLinecap="round"
-        strokeDasharray={circumference}
-        initial={{ strokeDashoffset: circumference }}
-        animate={{ strokeDashoffset: circumference * (1 - clamped / 100) }}
-        transition={
-          reduce
-            ? { duration: 0 }
-            : { duration: 1.15, ease: [0.16, 1, 0.3, 1], delay: 0.28 }
-        }
-      />
-    </svg>
-  )
-}
-
 function MetricCard({
   metric,
   index,
@@ -721,9 +678,11 @@ function MetricCard({
   const cardClassName = cn(
     "group relative isolate block h-full min-w-0 overflow-hidden border border-primary/20 bg-card dark:bg-[#181818]",
     "shadow-[0_1px_0_rgb(var(--primary-rgb)_/_0.12)_inset,0_12px_28px_-20px_rgb(var(--primary-rgb)_/_0.4)] dark:shadow-none",
-    "transition-shadow duration-300 hover:border-primary/35",
+    "transition-shadow duration-300",
     "rounded-[1.15rem] p-2 sm:rounded-[1.25rem] sm:p-2.5 lg:p-3",
-    metric.href ? "outline-none focus-visible:ring-2 focus-visible:ring-primary/40" : null,
+    metric.href
+      ? "cursor-pointer no-underline hover:no-underline outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+      : null,
   )
 
   const cardBody = (
@@ -750,15 +709,6 @@ function MetricCard({
         }
         transition={{ duration: 7.2, repeat: Infinity, ease: "easeInOut", delay: orbDelay }}
       />
-      <motion.div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-500 group-hover:opacity-100"
-        style={{
-          background:
-            "linear-gradient(115deg, transparent 32%, rgb(var(--primary-rgb) / 0.22) 48%, transparent 64%)",
-        }}
-      />
-
       <div className="relative z-10 flex items-start justify-between gap-3">
         <motion.span
           className={cn(
@@ -770,11 +720,6 @@ function MetricCard({
         >
           <Icon className="size-3 sm:size-3.5" />
         </motion.span>
-        {metric.ready && typeof metric.progress === "number" ? (
-          <div className="hidden shrink-0 text-primary xl:block">
-            <MetricProgressRing value={metric.progress} reduce={reduce} />
-          </div>
-        ) : null}
       </div>
 
       <div className="relative z-10 mt-2 min-w-0 sm:mt-2.5">
@@ -1307,7 +1252,6 @@ export default function HrAnalyticsDashboard({
       sub: `${activeCount} active • ${activePct}%`,
       icon: UsersIcon,
       ready: sliceReady.employees,
-      progress: activePct,
       href: canOpenEmployeeDirectory ? "/dashboard/employees/all" : undefined,
     },
     {
@@ -1332,7 +1276,6 @@ export default function HrAnalyticsDashboard({
       sub: attendanceRate != null ? "Last period" : "No summary data",
       icon: ClockIcon,
       ready: sliceReady.attendance,
-      progress: attendanceRate,
     },
     {
       label: "New hires",
