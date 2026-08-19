@@ -2970,36 +2970,83 @@ export function PayrollOperationsView() {
           />
 
           <div className="overflow-hidden rounded-xl border border-border bg-card">
-            <div className="grid grid-cols-2 xl:grid-cols-5">
+            <div className="flex flex-wrap items-end justify-between gap-2 border-b border-border px-4 py-3">
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">Configuration</h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  These records live under Payroll → Configuration. Open a group to edit it.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="inline-flex h-8 items-center justify-center rounded-md border border-slate-300 bg-white px-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-border dark:bg-background dark:text-foreground"
+                onClick={() => setTab("configuration")}
+              >
+                Open configuration
+              </button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5">
               {(
                 [
-                  { id: "components" as const, label: "Components", value: components.length },
-                  { id: "calendars" as const, label: "Calendars", value: calendars.length },
-                  { id: "structures" as const, label: "Structures", value: structures.length },
-                  { id: "schemes" as const, label: "Schemes", value: schemes.length },
-                  { id: "mappings" as const, label: "Mappings", value: mappings.length },
+                  { id: "components" as const, label: "Components", rows: components },
+                  { id: "calendars" as const, label: "Calendars", rows: calendars },
+                  { id: "structures" as const, label: "Structures", rows: structures },
+                  { id: "schemes" as const, label: "Schemes", rows: schemes },
+                  { id: "mappings" as const, label: "Mappings", rows: mappings },
                 ]
               ).map((item, index) => (
-                <button
+                <div
                   key={item.id}
-                  type="button"
-                  onClick={() => {
-                    setTab("configuration")
-                    setConfigTab(item.id)
-                  }}
                   className={cn(
-                    "border-border px-4 py-3.5 text-left transition hover:bg-muted/40",
+                    "flex min-w-0 flex-col border-border px-4 py-3.5",
                     index > 0 && "border-t",
                     "xl:border-t-0",
-                    index % 2 === 1 && "border-l",
+                    index % 2 === 1 && "sm:border-l",
                     index > 0 && "xl:border-l",
                   )}
                 >
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                    {item.label}
-                  </p>
-                  <p className="mt-1 text-xl font-semibold tabular-nums tracking-tight text-foreground">{item.value}</p>
-                </button>
+                  <button
+                    type="button"
+                    className="flex items-baseline justify-between gap-2 text-left"
+                    onClick={() => {
+                      setConfigTab(item.id)
+                      setTab("configuration")
+                    }}
+                  >
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      {item.label}
+                    </span>
+                    <span className="text-sm font-semibold tabular-nums text-foreground">{item.rows.length}</span>
+                  </button>
+                  <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto">
+                    {item.rows.length === 0 ? (
+                      <li className="text-xs text-muted-foreground">None yet</li>
+                    ) : (
+                      item.rows.map((row, rowIndex) => {
+                        const code = readString(row, ["code", "account_code", "accountCode", "gl_code", "glCode"])
+                        const name = optionLabel(row)
+                        return (
+                          <li key={`${item.id}-${rowId(row) || rowIndex}`}>
+                            <button
+                              type="button"
+                              className="block w-full truncate text-left text-xs text-foreground hover:text-primary"
+                              title={code && code !== name ? `${name} (${code})` : name}
+                              onClick={() => {
+                                setConfigTab(item.id)
+                                setTab("configuration")
+                              }}
+                            >
+                              {name}
+                              {code && code !== name ? (
+                                <span className="text-muted-foreground"> · {code}</span>
+                              ) : null}
+                            </button>
+                          </li>
+                        )
+                      })
+                    )}
+                  </ul>
+                </div>
               ))}
             </div>
 
