@@ -112,7 +112,7 @@ export function useDashboardMotion() {
     clipReveal: reduce ? reducedMotionVariants : clipCircleReveal,
     hover: reduce
       ? undefined
-      : { y: -2, scale: 1.01, transition: { type: "spring", stiffness: 420, damping: 28 } },
+      : { y: -2, scale: 1.01, transition: { type: "spring" as const, stiffness: 420, damping: 28 } },
     tap: reduce ? undefined : { scale: 0.985 },
   }
 }

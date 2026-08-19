@@ -281,10 +281,11 @@ function optionLabel(row: AdminRecord) {
 function readDimensionEntries(row: AdminRecord): Array<{ label: string; value: string }> {
   let raw: unknown = row.dimensions ?? row.dimensions_json ?? row.dimensionsJson
   if (typeof raw === "string" && raw.trim()) {
+    const rawText = raw.trim()
     try {
-      raw = JSON.parse(raw)
+      raw = JSON.parse(rawText)
     } catch {
-      return [{ label: "Notes", value: raw.trim() }]
+      return [{ label: "Notes", value: rawText }]
     }
   }
   const record = asRecord(raw)
