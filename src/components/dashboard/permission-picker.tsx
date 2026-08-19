@@ -76,12 +76,14 @@ export function PermissionPicker({
   onChange,
   onQueryChange,
   className,
+  compact = false,
 }: {
   options: PermissionOption[]
   selectedNames: string[]
   onChange: (next: string[]) => void
   onQueryChange?: (query: string) => void
   className?: string
+  compact?: boolean
 }) {
   const [query, setQuery] = React.useState("")
   const [openGroups, setOpenGroups] = React.useState<Record<string, boolean>>({})
@@ -137,11 +139,22 @@ export function PermissionPicker({
     options.length > 0 ? Math.round((selectedNames.length / options.length) * 100) : 0
 
   return (
-    <div className={cn("flex min-h-0 flex-1 flex-col gap-3", className)}>
-      {/* Sticky toolbar */}
-      <div className="shrink-0 space-y-2.5 rounded-xl border border-border/70 bg-muted/20 p-3">
+    <div className={cn("flex min-h-0 flex-1 flex-col gap-2", className)}>
+      <div
+        className={cn(
+          "shrink-0 space-y-2",
+          compact ? "" : "rounded-xl border border-border/70 bg-muted/20 p-3 space-y-2.5",
+        )}
+      >
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
+          {compact ? (
+            <p className="text-xs tabular-nums text-slate-500">
+              <span className="font-medium text-slate-900">{selectedNames.length}</span>
+              {" / "}
+              {options.length}
+              {selectedPct > 0 ? ` · ${selectedPct}%` : ""}
+            </p>
+          ) : (
             <div className="flex items-center gap-2">
               <div
                 className="relative size-9 shrink-0 rounded-full"
@@ -165,18 +178,18 @@ export function PermissionPicker({
                 <p className="text-[11px] text-muted-foreground">permissions selected</p>
               </div>
             </div>
-          </div>
+          )}
           <div className="flex shrink-0 gap-1.5">
             <button
               type="button"
-              className="rounded-md border border-border bg-background px-2.5 py-1 text-[11px] font-medium text-foreground shadow-xs transition-colors hover:bg-muted"
+              className="rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:border-border dark:bg-background dark:text-foreground dark:hover:bg-muted"
               onClick={() => onChange(options.map((option) => option.name))}
             >
               Select all
             </button>
             <button
               type="button"
-              className="rounded-md border border-border bg-background px-2.5 py-1 text-[11px] font-medium text-muted-foreground shadow-xs transition-colors hover:bg-muted hover:text-foreground"
+              className="rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] font-medium text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700 dark:border-border dark:bg-background dark:text-muted-foreground dark:hover:bg-muted"
               onClick={() => onChange([])}
             >
               Clear
@@ -185,7 +198,7 @@ export function PermissionPicker({
         </div>
 
         <div className="relative">
-          <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-primary" />
           <Input
             value={query}
             onChange={(event) => {
@@ -193,14 +206,19 @@ export function PermissionPicker({
               setQuery(next)
               onQueryChange?.(next)
             }}
-            placeholder="Search by name, key, or module…"
-            className="h-9 border-border/80 bg-background pl-8 text-sm"
+            placeholder="Search permissions…"
+            className="h-8 border-slate-300 bg-white pl-8 text-xs dark:border-border dark:bg-background"
           />
         </div>
       </div>
 
       {/* Single scroll region — no nested group scrollbars */}
-      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain pr-0.5">
+      <div
+        className={cn(
+          "min-h-0 space-y-2 overflow-y-auto overscroll-contain pr-0.5",
+          compact ? "max-h-64" : "flex-1",
+        )}
+      >
         {grouped.length === 0 ? (
           <p className="px-2 py-10 text-center text-sm text-muted-foreground">
             No permissions match your search.

@@ -215,6 +215,14 @@ const EMPTY_ENTITY_FORM: BasicEntityForm = {
   description: "",
 }
 
+function slugifyRoleKey(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+}
+
 const EMPTY_COMPANY_FORM: CompanyForm = {
   company_name: "",
   company_slug: "",
@@ -1009,6 +1017,8 @@ export function DataTable({
 
   const [roleForm, setRoleForm] = React.useState<BasicEntityForm>(EMPTY_ENTITY_FORM)
   const [rolePermissionNames, setRolePermissionNames] = React.useState<string[]>([])
+  const [createAccessOpen, setCreateAccessOpen] = React.useState(false)
+  const [roleKeyTouched, setRoleKeyTouched] = React.useState(false)
   const [companyForm, setCompanyForm] = React.useState<CompanyForm>(EMPTY_COMPANY_FORM)
   const [editingEntity, setEditingEntity] = React.useState<{
     resource: EntityResource
@@ -1261,6 +1271,8 @@ export function DataTable({
         })
         setRoleForm(EMPTY_ENTITY_FORM)
         setRolePermissionNames([])
+        setRoleKeyTouched(false)
+        setCreateAccessOpen(false)
       }
 
       if (activeResource === "permissions") {
@@ -1274,6 +1286,8 @@ export function DataTable({
           description: roleForm.description.trim(),
         })
         setRoleForm(EMPTY_ENTITY_FORM)
+        setRoleKeyTouched(false)
+        setCreateAccessOpen(false)
       }
 
       if (activeResource === "companies") {
@@ -2129,83 +2143,128 @@ export function DataTable({
     }
   }
 
+  const isCreatingRole = activeResource === "roles"
   const accessControlCreateDrawer =
     canCreateResource && isAccessControlResource ? (
-      <Drawer>
-        <DrawerTrigger asChild>
-          <button
-            type="button"
-            className="inline-flex h-8 items-center justify-center gap-1 rounded-lg bg-primary px-2.5 text-xs font-semibold !text-white transition hover:brightness-95"
+      <>
+        <button
+          type="button"
+          className="inline-flex h-8 items-center justify-center gap-1 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white transition hover:brightness-95"
+          onClick={() => setCreateAccessOpen(true)}
+        >
+          <PlusIcon className="h-3.5 w-3.5" />
+          <span className="hidden sm:inline">
+            {isCreatingRole ? "Create role" : "Create permission"}
+          </span>
+        </button>
+        <Dialog
+          open={createAccessOpen}
+          onOpenChange={(open) => {
+            setCreateAccessOpen(open)
+            if (!open) {
+              setRoleForm(EMPTY_ENTITY_FORM)
+              setRolePermissionNames([])
+              setRoleKeyTouched(false)
+            }
+          }}
+        >
+          <DialogPopup
+            from="right"
+            className="flex max-h-[min(92dvh,42rem)] w-[calc(100%-1rem)] max-w-lg flex-col gap-0 overflow-hidden p-0 sm:max-w-xl"
           >
-            <PlusIcon className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">
-              {activeResource === "roles" ? "Create role" : "Create permission"}
-            </span>
-          </button>
-        </DrawerTrigger>
-        <DrawerContent>
-          <DrawerHeader>
-            <DrawerTitle>
-              Create {activeResource === "roles" ? "Role" : "Permission"}
-            </DrawerTitle>
-            <DrawerDescription>
-              {activeResource === "roles"
-                ? "Create a company role. You can assign permissions after creation."
-                : "Create a permission in the catalog."}
-            </DrawerDescription>
-          </DrawerHeader>
-          <div className="grid gap-3 px-4 pb-2">
-            <div className="space-y-1.5">
-              <Label>Name (key)</Label>
-              <Input
-                value={roleForm.name}
-                onChange={(event) =>
-                  setRoleForm((prev) => ({ ...prev, name: event.target.value }))
-                }
-                placeholder={activeResource === "roles" ? "hr_manager" : "employees:read"}
-                className="font-mono text-sm"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Display name</Label>
-              <Input
-                value={roleForm.display_name}
-                onChange={(event) =>
-                  setRoleForm((prev) => ({ ...prev, display_name: event.target.value }))
-                }
-                placeholder={activeResource === "roles" ? "HR Manager" : "Read employees"}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Description</Label>
-              <Input
-                value={roleForm.description}
-                onChange={(event) =>
-                  setRoleForm((prev) => ({ ...prev, description: event.target.value }))
-                }
-                placeholder="Optional description"
-              />
-            </div>
-            {activeResource === "roles" ? (
-              <div className="max-h-64 overflow-y-auto rounded-lg border border-border/60 p-2">
-                <PermissionPicker
-                  options={permissionOptions}
-                  selectedNames={rolePermissionNames}
-                  onChange={setRolePermissionNames}
+            <DialogHeader className="shrink-0 space-y-1 border-b border-slate-200 px-4 py-3 pr-10 text-left dark:border-border">
+              <DialogTitle className="text-base">
+                {isCreatingRole ? "Create role" : "Create permission"}
+              </DialogTitle>
+              <DialogDescription className="text-xs">
+                {isCreatingRole
+                  ? "Give it a name, then pick what this role can do."
+                  : "Add a permission key and a short label."}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <Label htmlFor="create-role-display" className="text-xs">
+                    Display name
+                  </Label>
+                  <Input
+                    id="create-role-display"
+                    value={roleForm.display_name}
+                    onChange={(event) => {
+                      const displayName = event.target.value
+                      setRoleForm((prev) => ({
+                        ...prev,
+                        display_name: displayName,
+                        name:
+                          isCreatingRole && !roleKeyTouched
+                            ? slugifyRoleKey(displayName)
+                            : prev.name,
+                      }))
+                    }}
+                    placeholder={isCreatingRole ? "HR Manager" : "Read employees"}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="create-role-key" className="text-xs">
+                    {isCreatingRole ? "Key" : "Name (key)"}
+                  </Label>
+                  <Input
+                    id="create-role-key"
+                    value={roleForm.name}
+                    onChange={(event) => {
+                      setRoleKeyTouched(true)
+                      setRoleForm((prev) => ({ ...prev, name: event.target.value }))
+                    }}
+                    placeholder={isCreatingRole ? "hr_manager" : "employees:read"}
+                    className="font-mono text-xs"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="create-role-description" className="text-xs">
+                  Description
+                  <span className="ml-1 font-normal text-slate-400">optional</span>
+                </Label>
+                <Input
+                  id="create-role-description"
+                  value={roleForm.description}
+                  onChange={(event) =>
+                    setRoleForm((prev) => ({ ...prev, description: event.target.value }))
+                  }
+                  placeholder="What this is for"
                 />
               </div>
-            ) : null}
-          </div>
-          <DrawerFooter>
-            <Button onClick={() => void handleCreate()} disabled={loading}>
-              Create
-            </Button>
-            <DrawerClose asChild>
-              <Button variant="outline">Cancel</Button>
-            </DrawerClose>
-          </DrawerFooter>
-        </DrawerContent>
-      </Drawer>
+              {isCreatingRole ? (
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Permissions</Label>
+                  <div className="rounded-md border border-slate-200 p-2 dark:border-border">
+                    <PermissionPicker
+                      compact
+                      options={permissionOptions}
+                      selectedNames={rolePermissionNames}
+                      onChange={setRolePermissionNames}
+                    />
+                  </div>
+                </div>
+              ) : null}
+            </div>
+            <DialogFooter className="mt-0 shrink-0 flex-row justify-end gap-2 border-t border-slate-200 px-4 py-3 dark:border-border">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={loading}
+                onClick={() => setCreateAccessOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="button" disabled={loading} onClick={() => void handleCreate()}>
+                {loading ? "Creating…" : isCreatingRole ? "Create role" : "Create permission"}
+              </Button>
+            </DialogFooter>
+          </DialogPopup>
+        </Dialog>
+      </>
     ) : null
 
   return (
