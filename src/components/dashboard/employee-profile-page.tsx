@@ -69,6 +69,8 @@ import {
 } from "@/lib/admin-api"
 import { cn } from "@/lib/utils"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
+import { motion } from "framer-motion"
+import { useDashboardMotion } from "@/lib/dashboard-motion"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 const EMPLOYEE_STATUS_REFRESH_KEY = "hrms.employees.status.updatedAt"
@@ -357,36 +359,59 @@ function formatLabelValue(value: string) {
 
 function statusTone(status: string) {
   const normalized = status.trim().toLowerCase()
-  if (["active", "confirmed", "employed", "onboarding"].includes(normalized)) {
-    return "text-emerald-600 dark:text-emerald-400"
+  if (["terminated", "exited", "inactive"].includes(normalized)) {
+    return "text-primary/55"
   }
   if (["pending", "probation", "suspended"].includes(normalized)) {
-    return "text-amber-600 dark:text-amber-400"
+    return "text-primary"
   }
-  if (["terminated", "exited", "inactive"].includes(normalized)) {
-    return "text-rose-600 dark:text-rose-400"
-  }
-  return "text-foreground"
+  return "text-primary"
 }
 
 function SummaryField({
   label,
   value,
   children,
+  index = 0,
+  reduce,
 }: {
   label: string
   value?: string
   children?: React.ReactNode
+  index?: number
+  reduce: boolean
 }) {
   return (
-    <div className="flex min-w-0 flex-col gap-1 py-1">
-      <dt className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+    <motion.div
+      variants={
+        reduce
+          ? { hidden: { opacity: 1 }, show: { opacity: 1 } }
+          : {
+              hidden: { opacity: 0, y: 16, scale: 0.96 },
+              show: {
+                opacity: 1,
+                y: 0,
+                scale: 1,
+                transition: { type: "spring", stiffness: 320, damping: 26, delay: index * 0.035 },
+              },
+            }
+      }
+      className="relative isolate min-w-0 overflow-hidden rounded-[1.25rem] border border-primary/20 bg-white px-3 py-3 shadow-[0_1px_0_rgba(255,255,255,0.8)_inset,0_12px_28px_-20px_rgb(var(--primary-rgb)_/_0.4)]"
+    >
+      <motion.div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-primary"
+        initial={reduce ? false : { clipPath: "circle(0% at 96% -4%)", opacity: 0 }}
+        animate={{ clipPath: "circle(28% at 96% -4%)", opacity: 0.38 }}
+        transition={{ duration: 0.8, delay: 0.05 + index * 0.03, ease: [0.16, 1, 0.3, 1] }}
+      />
+      <dt className="relative z-10 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
         {label}
       </dt>
-      <dd className="truncate text-sm font-medium text-foreground">
+      <dd className="relative z-10 mt-1.5 truncate text-sm font-semibold text-primary">
         {children ?? value ?? "-"}
       </dd>
-    </div>
+    </motion.div>
   )
 }
 
@@ -4255,6 +4280,7 @@ export function EmployeeProfilePage({
   requestedMissingItem?: string | null
 }) {
   const router = useRouter()
+  const motionPreset = useDashboardMotion()
   const [employee, setEmployee] = React.useState<AdminRecord | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
@@ -4758,28 +4784,47 @@ export function EmployeeProfilePage({
               : employeeDisplayName(asRecord(employee.manager) ?? {})
 
           return (
-            <dl className="grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-3 lg:grid-cols-5">
-              <SummaryField label="Employee No" value={employeeNo} />
-              <SummaryField label="Status">
-                <span className={cn("text-sm font-medium", statusTone(statusRaw))}>
+            <motion.dl
+              className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5"
+              variants={motionPreset.metrics}
+              initial="hidden"
+              animate="show"
+            >
+              <SummaryField label="Employee No" value={employeeNo} index={0} reduce={motionPreset.reduce} />
+              <SummaryField label="Status" index={1} reduce={motionPreset.reduce}>
+                <span className={cn("text-sm font-semibold", statusTone(statusRaw))}>
                   {formatLabelValue(statusRaw)}
                 </span>
               </SummaryField>
-              <SummaryField label="Employment Type" value={employmentType} />
+              <SummaryField
+                label="Employment Type"
+                value={employmentType}
+                index={2}
+                reduce={motionPreset.reduce}
+              />
               <SummaryField
                 label="Hire Date"
                 value={formatProfileDate(employee.hire_date ?? employee.hireDate)}
+                index={3}
+                reduce={motionPreset.reduce}
               />
-              <SummaryField label="Branch" value={branch} />
-              <SummaryField label="Department" value={department} />
-              <SummaryField label="Position" value={position} />
-              <SummaryField label="Manager" value={manager} />
+              <SummaryField label="Branch" value={branch} index={4} reduce={motionPreset.reduce} />
+              <SummaryField label="Department" value={department} index={5} reduce={motionPreset.reduce} />
+              <SummaryField label="Position" value={position} index={6} reduce={motionPreset.reduce} />
+              <SummaryField label="Manager" value={manager} index={7} reduce={motionPreset.reduce} />
               <SummaryField
                 label="Last Updated"
                 value={formatDateTime(employee.updated_at ?? employee.updatedAt)}
+                index={8}
+                reduce={motionPreset.reduce}
               />
-              <SummaryField label="Employee Id" value={String(employee.id ?? "-")} />
-            </dl>
+              <SummaryField
+                label="Employee Id"
+                value={String(employee.id ?? "-")}
+                index={9}
+                reduce={motionPreset.reduce}
+              />
+            </motion.dl>
           )
         })()}
       </div>
