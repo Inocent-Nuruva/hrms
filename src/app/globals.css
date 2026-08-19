@@ -1319,23 +1319,39 @@ table.min-w-full > tbody > tr > td {
 
 
 
+html {
+  view-transition-name: root;
+}
+
+::view-transition {
+  pointer-events: none;
+}
+
+@keyframes theme-circle-wipe {
+  from {
+    clip-path: circle(0px at var(--theme-transition-x) var(--theme-transition-y));
+  }
+  to {
+    clip-path: circle(var(--theme-transition-radius) at var(--theme-transition-x) var(--theme-transition-y));
+  }
+}
+
 @media (prefers-reduced-motion: no-preference) {
   ::view-transition-image-pair(root) {
     isolation: auto;
   }
 
-  ::view-transition-old(root),
-  ::view-transition-new(root) {
+  ::view-transition-old(root) {
     animation: none;
     mix-blend-mode: normal;
+    z-index: 1;
     display: block;
   }
 
-  ::view-transition-old(root) {
-    z-index: 1;
-  }
-
   ::view-transition-new(root) {
-    z-index: 9999;
+    animation: theme-circle-wipe 0.65s cubic-bezier(0.22, 1, 0.36, 1) both;
+    mix-blend-mode: normal;
+    z-index: 2147483646;
+    display: block;
   }
 }

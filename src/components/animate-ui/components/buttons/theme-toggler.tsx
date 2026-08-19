@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { flushSync } from "react-dom"
 import { MonitorCogIcon, MoonIcon, SunIcon } from "lucide-react"
 import { useTheme } from "@/components/theme-provider"
 
@@ -18,12 +19,8 @@ export interface ThemeTogglerButtonProps {
   className?: string
 }
 
-type ViewTransitionApi = {
-  ready: Promise<void>
-}
-
 type DocumentWithViewTransition = Document & {
-  startViewTransition?: (update: () => void | Promise<void>) => ViewTransitionApi
+  startViewTransition?: (update: () => void | Promise<void>) => unknown
 }
 
 function normalizeModes(modes?: ThemeMode[]) {
@@ -73,7 +70,11 @@ export function ThemeTogglerButton({
     const step = direction === "left" ? -1 : 1
     const nextIndex = (at + step + safeModes.length) % safeModes.length
     const nextTheme = safeModes[nextIndex] ?? safeModes[0]
-    const applyTheme = () => setTheme(nextTheme)
+    const applyTheme = () => {
+      flushSync(() => {
+        setTheme(nextTheme)
+      })
+    }
 
     if (!mounted || typeof window === "undefined") {
       applyTheme()
@@ -81,15 +82,6 @@ export function ThemeTogglerButton({
     }
 
     const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    const doc = document as DocumentWithViewTransition
-
-    if (!doc.startViewTransition || prefersReducedMotion) {
-      applyTheme()
-      return
-    }
-
-    const fallbackX = window.innerWidth / 2
-    const fallbackY = window.innerHeight / 2
     const trigger =
       event.currentTarget instanceof HTMLElement
         ? event.currentTarget
@@ -97,8 +89,8 @@ export function ThemeTogglerButton({
           ? document.activeElement
           : null
     const rect = trigger?.getBoundingClientRect()
-    const x = rect ? rect.left + rect.width / 2 : fallbackX
-    const y = rect ? rect.top + rect.height / 2 : fallbackY
+    const x = rect ? rect.left + rect.width / 2 : window.innerWidth / 2
+    const y = rect ? rect.top + rect.height / 2 : window.innerHeight / 2
     const endRadius = Math.hypot(
       Math.max(x, window.innerWidth - x),
       Math.max(y, window.innerHeight - y)
@@ -109,27 +101,58 @@ export function ThemeTogglerButton({
     root.style.setProperty("--theme-transition-y", `${y}px`)
     root.style.setProperty("--theme-transition-radius", `${endRadius}px`)
 
-    const transition = doc.startViewTransition(() => {
-      applyTheme()
-    })
+    const doc = document as DocumentWithViewTransition
 
-    transition.ready
-      .then(() => {
-        root.animate(
-          {
-            clipPath: [
-              `circle(0px at ${x}px ${y}px)`,
-              `circle(${endRadius}px at ${x}px ${y}px)`,
-            ],
-          },
-          {
-            duration: 650,
-            easing: "cubic-bezier(0.22, 1, 0.36, 1)",
-            pseudoElement: "::view-transition-new(root)",
-          } as KeyframeAnimationOptions
-        )
-      })
-      .catch(() => undefined)
+    if (prefersReducedMotion) {
+      applyTheme()
+      return
+    }
+
+    if (doc.startViewTransition) {
+      try {
+        doc.startViewTransition(() => {
+          applyTheme()
+        })
+        return
+      } catch {
+        // Fall through to the overlay wipe.
+      }
+    }
+
+    const nextResolved =
+      nextTheme === "system"
+        ? window.matchMedia("(prefers-color-scheme: dark)").matches
+          ? "dark"
+          : "light"
+        : nextTheme
+    const overlay = document.createElement("div")
+    overlay.setAttribute("aria-hidden", "true")
+    overlay.style.cssText = [
+      "position:fixed",
+      "inset:0",
+      "z-index:2147483646",
+      "pointer-events:none",
+      `background:${nextResolved === "dark" ? "#181818" : "#ffffff"}`,
+      `clip-path:circle(0px at ${x}px ${y}px)`,
+    ].join(";")
+    document.body.appendChild(overlay)
+    const animation = overlay.animate(
+      [
+        { clipPath: `circle(0px at ${x}px ${y}px)` },
+        { clipPath: `circle(${endRadius}px at ${x}px ${y}px)` },
+      ],
+      {
+        duration: 650,
+        easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+        fill: "forwards",
+      }
+    )
+    window.setTimeout(() => {
+      applyTheme()
+    }, 160)
+    void animation.finished.finally(() => {
+      overlay.remove()
+    })
   }
 
   const title = `Theme: ${currentMode ?? "light"}`
