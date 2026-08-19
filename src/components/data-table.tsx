@@ -92,7 +92,10 @@ import {
 } from "@/lib/admin-api"
 import {
   PermissionPicker,
+  canonicalizePermissionNames,
+  isPermissionSelected,
   permissionGroupFromName,
+  permissionTokenFromAssignment,
   toPermissionOptions,
   type PermissionOption,
 } from "@/components/dashboard/permission-picker"
@@ -724,7 +727,7 @@ function MicrosoftPermissionList({
   const grouped = React.useMemo(() => {
     const map = new Map<string, PermissionOption[]>()
     for (const option of options) {
-      if (!selectedSet.has(option.name)) continue
+      if (!isPermissionSelected(option, selectedSet)) continue
       const list = map.get(option.group) ?? []
       list.push(option)
       map.set(option.group, list)
@@ -838,23 +841,7 @@ function rolePermissionNamesFromRecord(row: AdminRecord): string[] {
     }
 
     const names = source
-      .map((entry) => {
-        if (typeof entry === "string" || typeof entry === "number") {
-          return asPermissionName(entry)
-        }
-        if (typeof entry === "object" && entry !== null) {
-          const permissionRecord = entry as AdminRecord
-          const nested = asRecordValue(permissionRecord.permission)
-          return (
-            asPermissionName(permissionRecord.name) ??
-            asPermissionName(permissionRecord.display_name) ??
-            asPermissionName(nested?.name) ??
-            asPermissionName(nested?.display_name) ??
-            asPermissionName(permissionRecord.id)
-          )
-        }
-        return null
-      })
+      .map((entry) => permissionTokenFromAssignment(entry))
       .filter((value): value is string => Boolean(value))
 
     if (names.length > 0) {
@@ -1060,6 +1047,8 @@ export function DataTable({
     displayName: string
   } | null>(null)
   const [peopleDialogOpen, setPeopleDialogOpen] = React.useState(false)
+  const rolePermissionsDraftDirtyRef = React.useRef(false)
+  const permissionOptionsRef = React.useRef<PermissionOption[]>([])
 
   const columns = React.useMemo(() => {
     const baseColumns = getVisibleColumns(rows)
@@ -1085,6 +1074,16 @@ export function DataTable({
     () => toPermissionOptions(pickerPermissions.length > 0 ? pickerPermissions : permissions),
     [permissions, pickerPermissions]
   )
+  permissionOptionsRef.current = permissionOptions
+
+  React.useEffect(() => {
+    if (permissionOptions.length === 0) return
+    const remap = (current: string[]) =>
+      canonicalizePermissionNames(current, permissionOptions)
+    setEditingRolePermissionNames(remap)
+    setInitialEditingRolePermissionNames(remap)
+    setRolePermissionNamesFromApi((current) => (current ? remap(current) : current))
+  }, [permissionOptions])
   const filteredAccessControlRows = React.useMemo(() => {
     const query = accessControlSearch.trim().toLowerCase()
     if (!query) return rows
@@ -1144,7 +1143,10 @@ export function DataTable({
       )
       const nextEntityForm = toEntityForm(row)
       const nextRolePermissions =
-        activeResource === "roles" ? rolePermissionNamesFromRecord(row) : []
+        activeResource === "roles"
+          ? canonicalizePermissionNames(rolePermissionNamesFromRecord(row), permissionOptions)
+          : []
+      rolePermissionsDraftDirtyRef.current = false
       setEditingEntity({
         resource: activeResource,
         id: rowId,
@@ -1154,8 +1156,9 @@ export function DataTable({
       setInitialEditingEntityForm(nextEntityForm)
       setEditingRolePermissionNames(nextRolePermissions)
       setInitialEditingRolePermissionNames(nextRolePermissions)
+      setRolePermissionNamesFromApi(null)
     },
-    [activeResource]
+    [activeResource, permissionOptions]
   )
 
   const permissionIdsFromSelection = React.useCallback(
@@ -1211,7 +1214,7 @@ export function DataTable({
     if (!editingEntity || editingEntity.resource !== "roles") {
       return false
     }
-    const current = new Set(rolePermissionNamesFromApi ?? editingRolePermissionNames)
+    const current = new Set(editingRolePermissionNames)
     const initial = new Set(initialEditingRolePermissionNames)
     if (current.size !== initial.size) return true
     for (const name of current) {
@@ -1700,6 +1703,7 @@ export function DataTable({
 
   React.useEffect(() => {
     if (!editingEntity) {
+      rolePermissionsDraftDirtyRef.current = false
       setDetailSheetTab("general")
       setMemberCompanyUsers([])
       setAssignedMemberIds(new Set())
@@ -1714,6 +1718,7 @@ export function DataTable({
       setPeopleDialogOpen(false)
       return
     }
+    rolePermissionsDraftDirtyRef.current = false
     // Roles open on Assigned so the people summary from GET /roles/{id}/users is visible first.
     setDetailSheetTab("assigned")
     setMemberSearch("")
@@ -1832,7 +1837,7 @@ export function DataTable({
           ])
           if (cancelled) return
 
-          const permissionNames = (() => {
+          const permissionNames = canonicalizePermissionNames((() => {
             if (rolePermissions.length > 0) {
               return rolePermissionNamesFromRecord({ permissions: rolePermissions })
             }
@@ -1840,11 +1845,13 @@ export function DataTable({
               return rolePermissionNamesFromRecord(roleDetail)
             }
             return [] as string[]
-          })()
+          })(), permissionOptionsRef.current)
 
-          setRolePermissionNamesFromApi(permissionNames)
-          setEditingRolePermissionNames(permissionNames)
           setInitialEditingRolePermissionNames(permissionNames)
+          if (!rolePermissionsDraftDirtyRef.current) {
+            setRolePermissionNamesFromApi(permissionNames)
+            setEditingRolePermissionNames(permissionNames)
+          }
 
           if (roleDetail) {
             const nextForm = toEntityForm(roleDetail)
@@ -1901,7 +1908,7 @@ export function DataTable({
       cancelled = true
       controller.abort()
     }
-  }, [editingEntity, token, membersRefreshKey])
+  }, [editingEntity?.id, editingEntity?.resource, token, membersRefreshKey])
 
   const assignedMembers = React.useMemo((): AssignedMemberUser[] => {
     const query = memberSearch.trim().toLowerCase()
@@ -1997,7 +2004,7 @@ export function DataTable({
     })
   }, [assignPickerQuery, availableMembers])
 
-  const displayedRolePermissionNames = rolePermissionNamesFromApi ?? editingRolePermissionNames
+  const displayedRolePermissionNames = editingRolePermissionNames
 
   const handleAssignMember = async () => {
     if (!token || !editingEntity) return
@@ -2116,8 +2123,10 @@ export function DataTable({
     if (!editingEntity || editingEntity.resource !== "roles") {
       return
     }
-    setEditingRolePermissionNames(nextNames)
-    setRolePermissionNamesFromApi(nextNames)
+    rolePermissionsDraftDirtyRef.current = true
+    const canonical = canonicalizePermissionNames(nextNames, permissionOptions)
+    setEditingRolePermissionNames(canonical)
+    setRolePermissionNamesFromApi(canonical)
   }
 
   const handleSaveRolePermissions = async () => {
@@ -2137,7 +2146,9 @@ export function DataTable({
     }
 
     const resolvePermissionId = (name: string) => {
-      const option = permissionOptions.find((entry) => entry.name === name)
+      const option = permissionOptions.find(
+        (entry) => entry.name === name || entry.id === name || entry.label === name
+      )
       if (!option?.id) {
         throw new Error(`Unknown permission: ${name}`)
       }

@@ -6,69 +6,23 @@ import { CheckIcon, ChevronDownIcon, InfoIcon, Loader2Icon, SearchIcon } from "l
 import { Input } from "@/components/ui/input"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
-import type { AdminRecord } from "@/lib/admin-api"
+import {
+  isPermissionSelected,
+  permissionAliases,
+  togglePermissionSelection,
+  type PermissionOption,
+} from "@/components/dashboard/permission-selection"
 
-export type PermissionOption = {
-  id: string
-  name: string
-  label: string
-  description?: string
-  group: string
-}
-
-function prettifyGroup(value: string) {
-  return value
-    .replace(/[_-]+/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase())
-    .trim()
-}
-
-export function permissionGroupFromName(name: string) {
-  const normalized = name.trim()
-  if (!normalized) return "General"
-  if (normalized.includes(":")) {
-    return prettifyGroup(normalized.split(":")[0] ?? "general")
-  }
-  if (normalized.includes(".")) {
-    return prettifyGroup(normalized.split(".")[0] ?? "general")
-  }
-  return "General"
-}
-
-function readPermissionString(permission: AdminRecord, keys: string[]): string {
-  for (const key of keys) {
-    const value = permission[key]
-    if (typeof value === "string" && value.trim()) {
-      return value.trim()
-    }
-  }
-  return ""
-}
-
-export function toPermissionOptions(permissions: AdminRecord[]): PermissionOption[] {
-  const options: PermissionOption[] = []
-  for (const permission of permissions) {
-    const idRaw = permission.id
-    const id =
-      typeof idRaw === "number" || typeof idRaw === "string" ? String(idRaw) : ""
-    const name =
-      readPermissionString(permission, ["name", "key", "code", "display_name", "displayName"])
-    if (!id || !name) continue
-    const label =
-      readPermissionString(permission, ["display_name", "displayName", "name"]) || name
-    const description = readPermissionString(permission, ["description"])
-    options.push({
-      id,
-      name,
-      label,
-      description: description || undefined,
-      group: permissionGroupFromName(name),
-    })
-  }
-  return options.sort(
-    (a, b) => a.group.localeCompare(b.group) || a.label.localeCompare(b.label)
-  )
-}
+export type { PermissionOption } from "@/components/dashboard/permission-selection"
+export {
+  canonicalizePermissionNames,
+  isPermissionSelected,
+  permissionAliases,
+  permissionGroupFromName,
+  permissionTokenFromAssignment,
+  toPermissionOptions,
+  togglePermissionSelection,
+} from "@/components/dashboard/permission-selection"
 
 export function PermissionPicker({
   options,
@@ -119,22 +73,21 @@ export function PermissionPicker({
     setOpenGroups((prev) => ({ ...prev, ...next }))
   }, [grouped, query])
 
-  const toggle = (name: string) => {
-    if (selectedSet.has(name)) {
-      onChange(selectedNames.filter((entry) => entry !== name))
-      return
-    }
-    onChange([...selectedNames, name])
+  const toggle = (option: PermissionOption) => {
+    onChange(togglePermissionSelection(option, selectedNames))
   }
 
   const toggleGroup = (groupOptions: PermissionOption[], selectAll: boolean) => {
+    const aliases = new Set(groupOptions.flatMap((option) => permissionAliases(option)))
     const names = groupOptions.map((option) => option.name)
     if (selectAll) {
-      onChange(Array.from(new Set([...selectedNames, ...names])))
+      onChange(Array.from(new Set([
+        ...selectedNames.filter((name) => !aliases.has(name)),
+        ...names,
+      ])))
       return
     }
-    const remove = new Set(names)
-    onChange(selectedNames.filter((name) => !remove.has(name)))
+    onChange(selectedNames.filter((name) => !aliases.has(name)))
   }
 
   const selectedPct =
@@ -239,7 +192,7 @@ export function PermissionPicker({
         ) : (
           grouped.map(([group, groupOptions]) => {
             const selectedInGroup = groupOptions.filter((option) =>
-              selectedSet.has(option.name)
+              isPermissionSelected(option, selectedSet)
             ).length
             const allSelected = selectedInGroup === groupOptions.length && groupOptions.length > 0
             const isOpen = openGroups[group] ?? (compact || selectedInGroup > 0)
@@ -288,14 +241,19 @@ export function PermissionPicker({
                 {isOpen ? (
                   <ul>
                     {groupOptions.map((option) => {
-                      const checked = selectedSet.has(option.name)
+                      const checked = isPermissionSelected(option, selectedSet)
                       return (
-                        <li key={option.name}>
-                          <label
+                        <li key={option.name} className="flex items-center gap-1 pr-1">
+                          <button
+                            type="button"
+                            role="checkbox"
+                            aria-checked={checked}
+                            aria-label={option.label}
                             className={cn(
-                              "flex cursor-pointer items-center gap-2 px-2 py-1",
+                              "flex min-w-0 flex-1 cursor-pointer items-center gap-2 px-2 py-1 text-left",
                               checked ? "bg-primary/[0.06]" : "hover:bg-slate-50 dark:hover:bg-muted/40"
                             )}
+                            onClick={() => toggle(option)}
                           >
                             <span
                               className={cn(
@@ -313,40 +271,29 @@ export function PermissionPicker({
                             <span className="hidden max-w-[9rem] shrink-0 truncate font-mono text-[10px] text-slate-400 sm:block">
                               {option.name}
                             </span>
-                            {option.description ? (
-                              <Tooltip>
-                                <TooltipTrigger
-                                  render={
-                                    <button
-                                      type="button"
-                                      className="inline-flex size-4 shrink-0 items-center justify-center rounded-full text-slate-400 hover:text-primary"
-                                      aria-label={`What ${option.label} does`}
-                                      onClick={(event) => {
-                                        event.preventDefault()
-                                        event.stopPropagation()
-                                      }}
-                                    />
-                                  }
-                                >
-                                  <InfoIcon className="size-3" />
-                                </TooltipTrigger>
-                                <TooltipContent
-                                  side="top"
-                                  align="end"
-                                  className="max-w-64 text-left text-xs leading-relaxed"
-                                >
-                                  {option.description}
-                                </TooltipContent>
-                              </Tooltip>
-                            ) : null}
-                            <input
-                              type="checkbox"
-                              className="sr-only"
-                              checked={checked}
-                              onChange={() => toggle(option.name)}
-                              aria-label={option.label}
-                            />
-                          </label>
+                          </button>
+                          {option.description ? (
+                            <Tooltip>
+                              <TooltipTrigger
+                                render={
+                                  <button
+                                    type="button"
+                                    className="inline-flex size-4 shrink-0 items-center justify-center rounded-full text-slate-400 hover:text-primary"
+                                    aria-label={`What ${option.label} does`}
+                                  />
+                                }
+                              >
+                                <InfoIcon className="size-3" />
+                              </TooltipTrigger>
+                              <TooltipContent
+                                side="top"
+                                align="end"
+                                className="max-w-64 text-left text-xs leading-relaxed"
+                              >
+                                {option.description}
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : null}
                         </li>
                       )
                     })}
