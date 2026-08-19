@@ -96,6 +96,54 @@ describe("authService foundation helpers", () => {
     expect(codes).toEqual(["ABC1-DEF2-GHI3", "JKL4-MNO5-PQR6"])
   })
 
+  it("posts logout with the session bearer token even when refresh is blank", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response("", { status: 200 }))
+    vi.stubGlobal("fetch", fetchMock)
+
+    await authService.logout({ accessToken: "session-bearer", refreshToken: "" })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8888/api/auth/logout",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          Authorization: "Bearer session-bearer",
+        }),
+        body: JSON.stringify({}),
+      }),
+    )
+  })
+
+  it("includes refresh_token on logout only when one is stored", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response("", { status: 200 }))
+    vi.stubGlobal("fetch", fetchMock)
+
+    await authService.logout({
+      accessToken: "session-bearer",
+      refreshToken: "refresh-token",
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8888/api/auth/logout",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          Authorization: "Bearer session-bearer",
+        }),
+        body: JSON.stringify({ refresh_token: "refresh-token" }),
+      }),
+    )
+  })
+
+  it("does not call logout when there is no session bearer", async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal("fetch", fetchMock)
+
+    await authService.logout({ accessToken: "", refreshToken: "" })
+
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
   it("posts logout-all with the current bearer token", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response("", { status: 200 }))
     vi.stubGlobal("fetch", fetchMock)

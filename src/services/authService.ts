@@ -796,15 +796,19 @@ export const authService = {
     return user;
   },
 
-  logout(tokens?: AuthTokens) {
-    if (!tokens?.accessToken || !tokens.refreshToken) {
-      return Promise.resolve();
+  async logout(tokens?: Partial<AuthTokens> | null) {
+    const accessToken = tokens?.accessToken?.trim() ?? "";
+    const refreshToken = tokens?.refreshToken?.trim() ?? "";
+    if (!accessToken) {
+      return;
     }
 
-    return apiRequest<void>("/api/auth/logout", {
+    // Session is identified by the Bearer access token. Include refresh_token
+    // only when we still have one — a blank refresh must not skip logout.
+    await apiRequest<void>("/api/auth/logout", {
       method: "POST",
-      token: tokens.accessToken,
-      body: { refresh_token: tokens.refreshToken },
+      token: accessToken,
+      body: refreshToken ? { refresh_token: refreshToken } : {},
     }).catch(() => undefined);
   },
 };

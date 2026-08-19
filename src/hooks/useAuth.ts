@@ -5,6 +5,7 @@ import { AUTH_STORAGE_KEYS } from "@/utils/constants";
 import {
   clearStoredSession,
   persistSessionTokens,
+  readStoredSessionTokens,
 } from "@/lib/session-client";
 import { publishDashboardActorSnapshotFromSources } from "@/lib/dashboard-permissions";
 import type {
@@ -114,8 +115,15 @@ export function useAuth() {
   };
 
   const logout = async () => {
-    await authService.logout(storedTokens ?? undefined);
-    clearSession();
+    try {
+      const session = readStoredSessionTokens();
+      await authService.logout({
+        accessToken: storedTokens?.accessToken || session.accessToken,
+        refreshToken: storedTokens?.refreshToken || session.refreshToken,
+      });
+    } finally {
+      clearSession();
+    }
   };
 
   const logoutAll = async () => {
