@@ -403,6 +403,28 @@ function statusTone(label: string) {
   return "border-border bg-muted/40 text-muted-foreground"
 }
 
+function issueGroupTone(code: string) {
+  const normalized = code.toUpperCase()
+  if (normalized.includes("PROFILE")) {
+    return "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-300 dark:hover:bg-amber-950/60"
+  }
+  if (normalized.includes("COMPENSATION") || normalized.includes("SALARY")) {
+    return "border-rose-200 bg-rose-50 text-rose-800 hover:bg-rose-100 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300 dark:hover:bg-rose-950/60"
+  }
+  if (normalized.includes("BANK")) {
+    return "border-sky-200 bg-sky-50 text-sky-800 hover:bg-sky-100 dark:border-sky-900/50 dark:bg-sky-950/40 dark:text-sky-300 dark:hover:bg-sky-950/60"
+  }
+  return "border-violet-200 bg-violet-50 text-violet-800 hover:bg-violet-100 dark:border-violet-900/50 dark:bg-violet-950/40 dark:text-violet-300 dark:hover:bg-violet-950/60"
+}
+
+function issueGroupDot(code: string) {
+  const normalized = code.toUpperCase()
+  if (normalized.includes("PROFILE")) return "bg-amber-500"
+  if (normalized.includes("COMPENSATION") || normalized.includes("SALARY")) return "bg-rose-500"
+  if (normalized.includes("BANK")) return "bg-sky-500"
+  return "bg-violet-500"
+}
+
 function readPeriodLabel(row: AdminRecord | null | undefined) {
   if (!row) return "—"
   return (
@@ -3314,19 +3336,25 @@ export function PayrollOperationsView() {
                       ) : null}
                     </div>
                     {summary.groups.length > 0 ? (
-                      <div className="space-y-1">
+                      <div className="space-y-2">
                         {summary.groups.map((group) => (
                           <button
                             key={group.code}
                             type="button"
-                            className="flex w-full items-center justify-between gap-3 rounded-lg px-1 py-2 text-left text-sm transition hover:bg-muted/40"
+                            className={cn(
+                              "flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition",
+                              issueGroupTone(group.code),
+                            )}
                             onClick={() => {
                               setIssueDialogCode(group.code)
                               setIssueSearch("")
                             }}
                           >
-                            <span className="text-foreground">{prettify(group.code)}</span>
-                            <span className="font-semibold tabular-nums text-foreground">{group.count}</span>
+                            <span className="flex min-w-0 items-center gap-2">
+                              <span className={cn("size-2 shrink-0 rounded-full", issueGroupDot(group.code))} />
+                              <span className="truncate font-medium">{prettify(group.code)}</span>
+                            </span>
+                            <span className="font-semibold tabular-nums">{group.count}</span>
                           </button>
                         ))}
                       </div>
@@ -3459,7 +3487,12 @@ export function PayrollOperationsView() {
       >
         <DialogPopup className="flex max-h-[90vh] w-[min(720px,96vw)] flex-col overflow-hidden sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{openIssueGroup ? prettify(openIssueGroup.code) : "Issues"}</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              {openIssueGroup ? (
+                <span className={cn("size-2.5 rounded-full", issueGroupDot(openIssueGroup.code))} />
+              ) : null}
+              {openIssueGroup ? prettify(openIssueGroup.code) : "Issues"}
+            </DialogTitle>
             <DialogDescription>
               {openIssueGroup ? `${openIssueGroup.count} ${openIssueGroup.count === 1 ? "record" : "records"}` : ""}
             </DialogDescription>
