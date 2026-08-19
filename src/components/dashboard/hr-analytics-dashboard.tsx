@@ -821,41 +821,19 @@ function MetricCard({
 function DashboardSurface({
   children,
   className,
-  delay = 0,
-  reduce,
 }: {
   children: React.ReactNode
   className?: string
-  delay?: number
-  reduce: boolean
 }) {
   return (
     <div
       className={cn(
-        "group relative isolate overflow-hidden rounded-[1.75rem] border border-primary/20 bg-white p-4 sm:p-5",
+        "rounded-[1.75rem] border border-primary/20 bg-white p-4 sm:p-5",
         "shadow-[0_1px_0_rgba(255,255,255,0.8)_inset,0_16px_36px_-22px_rgb(var(--primary-rgb)_/_0.45)]",
         className,
       )}
     >
-      <motion.div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 bg-primary"
-        initial={reduce ? false : { clipPath: "circle(0% at 98% -2%)", opacity: 0 }}
-        animate={{ clipPath: "circle(12% at 98% -2%)", opacity: 0.38 }}
-        transition={{ duration: 0.95, delay, ease: [0.16, 1, 0.3, 1] }}
-      />
-      <motion.div
-        aria-hidden
-        className="pointer-events-none absolute -right-5 -top-5 h-10 w-10 rounded-full bg-primary/50 blur-xl"
-        style={{ clipPath: "circle(50% at 50% 50%)" }}
-        animate={
-          reduce
-            ? undefined
-            : { y: [0, -8, 0], x: [0, 6, 0], scale: [1, 1.08, 1], opacity: [0.45, 0.7, 0.45] }
-        }
-        transition={{ duration: 7.2, repeat: Infinity, ease: "easeInOut", delay }}
-      />
-      <div className="relative z-10">{children}</div>
+      {children}
     </div>
   )
 }
@@ -1522,7 +1500,7 @@ export default function HrAnalyticsDashboard({
 
       <div className="mt-5 grid grid-cols-1 gap-x-4 gap-y-4 lg:grid-cols-12 lg:items-start">
         <motion.section className="self-start lg:col-span-6" variants={motionPreset.item}>
-          <DashboardSurface reduce={motionPreset.reduce}>
+          <DashboardSurface>
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
@@ -1617,7 +1595,7 @@ export default function HrAnalyticsDashboard({
         </motion.section>
 
         <motion.section className="self-start lg:col-span-6" variants={motionPreset.item}>
-          <DashboardSurface reduce={motionPreset.reduce} delay={0.08}>
+          <DashboardSurface>
             <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
               Employment status
             </div>
@@ -1731,7 +1709,7 @@ export default function HrAnalyticsDashboard({
         </motion.section>
 
         <motion.section className="lg:col-span-12" variants={motionPreset.item}>
-          <DashboardSurface reduce={motionPreset.reduce} delay={0.12}>
+          <DashboardSurface>
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
@@ -1819,7 +1797,7 @@ export default function HrAnalyticsDashboard({
         </motion.section>
 
         <motion.section className="self-start lg:col-span-12" variants={motionPreset.item}>
-          <DashboardSurface reduce={motionPreset.reduce} delay={0.16}>
+          <DashboardSurface>
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
