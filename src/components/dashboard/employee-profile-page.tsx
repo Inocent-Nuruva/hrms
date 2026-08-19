@@ -396,7 +396,7 @@ function SummaryField({
               },
             }
       }
-      className="relative isolate min-w-0 overflow-hidden rounded-[1.25rem] border border-primary/20 bg-card px-3 py-3 shadow-[0_1px_0_rgb(var(--primary-rgb)_/_0.12)_inset,0_12px_28px_-20px_rgb(var(--primary-rgb)_/_0.4)]"
+      className="relative isolate min-w-0 overflow-hidden rounded-[1.25rem] border border-primary/20 bg-card px-3 py-3 shadow-[0_1px_0_rgb(var(--primary-rgb)_/_0.12)_inset,0_12px_28px_-20px_rgb(var(--primary-rgb)_/_0.4)] dark:bg-black dark:shadow-none"
     >
       <motion.div
         aria-hidden
@@ -1768,7 +1768,7 @@ function ProfileSectionsTabs({
   }, [updateTabScrollState])
 
   return (
-    <div className="relative isolate overflow-hidden rounded-[1.75rem] border border-primary/20 bg-card p-4 shadow-[0_1px_0_rgb(var(--primary-rgb)_/_0.12)_inset,0_16px_36px_-22px_rgb(var(--primary-rgb)_/_0.4)] sm:p-5">
+    <div className="relative isolate overflow-hidden rounded-[1.75rem] border border-primary/20 bg-card p-4 shadow-[0_1px_0_rgb(var(--primary-rgb)_/_0.12)_inset,0_16px_36px_-22px_rgb(var(--primary-rgb)_/_0.4)] dark:bg-black dark:shadow-none sm:p-5">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 bg-primary opacity-[0.22]"
@@ -1781,7 +1781,7 @@ function ProfileSectionsTabs({
             aria-label="Scroll profile sections left"
             disabled={!tabScrollState.canScrollLeft}
             onClick={() => scrollTabs("left")}
-            className="inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-primary/20 bg-card text-primary shadow-sm transition hover:bg-primary/10 disabled:pointer-events-none disabled:opacity-40"
+            className="inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-primary/20 bg-card text-primary shadow-sm transition hover:bg-primary/10 disabled:pointer-events-none disabled:opacity-40 dark:bg-black dark:shadow-none"
           >
             <ChevronLeftIcon className="size-3.5" />
           </button>
@@ -1808,7 +1808,7 @@ function ProfileSectionsTabs({
                       "relative isolate inline-flex h-8 shrink-0 items-center overflow-hidden rounded-full border px-3 text-xs font-semibold whitespace-nowrap transition",
                       isActive
                         ? "border-primary bg-primary text-primary-foreground"
-                        : "border-primary/15 bg-card text-primary hover:border-primary/30 hover:bg-primary/8",
+                        : "border-primary/15 bg-card text-primary hover:border-primary/30 hover:bg-primary/8 dark:bg-black",
                       needsAttention && !isActive ? "ring-2 ring-primary/25" : null
                     )}
                   >
@@ -1831,7 +1831,7 @@ function ProfileSectionsTabs({
             aria-label="Scroll profile sections right"
             disabled={!tabScrollState.canScrollRight}
             onClick={() => scrollTabs("right")}
-            className="inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-primary/20 bg-card text-primary shadow-sm transition hover:bg-primary/10 disabled:pointer-events-none disabled:opacity-40"
+            className="inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-primary/20 bg-card text-primary shadow-sm transition hover:bg-primary/10 disabled:pointer-events-none disabled:opacity-40 dark:bg-black dark:shadow-none"
           >
             <ChevronRightIcon className="size-3.5" />
           </button>
@@ -2014,7 +2014,7 @@ function Section({
             {items.map((item, index) => (
               <div
                 key={`${title}-${index}`}
-                className="rounded-2xl border border-primary/12 bg-card px-3 py-3"
+                className="rounded-2xl border border-primary/12 bg-card px-3 py-3 dark:bg-black dark:shadow-none"
               >
                 <div className="mb-2 flex items-start justify-between gap-3">
                   <div className="min-w-0">

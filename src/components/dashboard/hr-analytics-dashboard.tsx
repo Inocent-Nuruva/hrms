@@ -719,8 +719,8 @@ function MetricCard({
   const Icon = metric.icon
   const orbDelay = index * 0.12
   const cardClassName = cn(
-    "group relative isolate block h-full min-w-0 overflow-hidden border border-primary/20 bg-card",
-    "shadow-[0_1px_0_rgb(var(--primary-rgb)_/_0.12)_inset,0_12px_28px_-20px_rgb(var(--primary-rgb)_/_0.4)]",
+    "group relative isolate block h-full min-w-0 overflow-hidden border border-primary/20 bg-card dark:bg-black",
+    "shadow-[0_1px_0_rgb(var(--primary-rgb)_/_0.12)_inset,0_12px_28px_-20px_rgb(var(--primary-rgb)_/_0.4)] dark:shadow-none",
     "transition-shadow duration-300 hover:border-primary/35",
     "rounded-[1.15rem] p-2 sm:rounded-[1.25rem] sm:p-2.5 lg:p-3",
     metric.href ? "outline-none focus-visible:ring-2 focus-visible:ring-primary/40" : null,
@@ -762,7 +762,7 @@ function MetricCard({
       <div className="relative z-10 flex items-start justify-between gap-3">
         <motion.span
           className={cn(
-            "inline-flex size-6 items-center justify-center rounded-full border border-primary/15 bg-primary/12 text-primary shadow-sm sm:size-7 lg:size-8",
+            "inline-flex size-6 items-center justify-center rounded-full border border-primary/15 bg-primary/12 text-primary shadow-sm dark:shadow-none sm:size-7 lg:size-8",
           )}
           initial={reduce ? false : { scale: 0.7, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
@@ -827,8 +827,8 @@ function DashboardSurface({
   return (
     <div
       className={cn(
-        "rounded-[1.75rem] border border-primary/20 bg-card p-4 sm:p-5",
-        "shadow-[0_1px_0_rgb(var(--primary-rgb)_/_0.12)_inset,0_16px_36px_-22px_rgb(var(--primary-rgb)_/_0.45)]",
+        "rounded-[1.75rem] border border-primary/20 bg-card p-4 sm:p-5 dark:bg-black",
+        "shadow-[0_1px_0_rgb(var(--primary-rgb)_/_0.12)_inset,0_16px_36px_-22px_rgb(var(--primary-rgb)_/_0.45)] dark:shadow-none",
         className,
       )}
     >
@@ -1690,7 +1690,7 @@ export default function HrAnalyticsDashboard({
                         {chartRows.map((row, index) => (
                           <motion.div
                             key={row.status}
-                            className="rounded-2xl border border-primary/12 bg-card px-3 py-2.5"
+                            className="rounded-2xl border border-primary/12 bg-card px-3 py-2.5 dark:bg-black dark:shadow-none"
                             initial={motionPreset.reduce ? false : { opacity: 0, x: 10 }}
                             animate={{ opacity: 1, x: 0 }}
                             transition={{ duration: 0.3, delay: 0.08 + index * 0.05 }}
@@ -1773,7 +1773,7 @@ export default function HrAnalyticsDashboard({
                     const row = (
                       <motion.div
                         className={cn(
-                          "flex items-center gap-3 rounded-2xl border border-primary/12 bg-card px-3 py-2.5",
+                          "flex items-center gap-3 rounded-2xl border border-primary/12 bg-card px-3 py-2.5 dark:bg-black dark:shadow-none",
                           canOpenEmployeeLink ? "transition hover:border-primary/30 hover:bg-primary/5" : null,
                         )}
                         initial={motionPreset.reduce ? false : { opacity: 0, y: 8 }}
@@ -1863,7 +1863,7 @@ export default function HrAnalyticsDashboard({
                       {chartData.map((row, index) => (
                         <motion.div
                           key={row.name}
-                          className="rounded-2xl border border-primary/12 bg-card px-3 py-2.5"
+                          className="rounded-2xl border border-primary/12 bg-card px-3 py-2.5 dark:bg-black dark:shadow-none"
                           initial={motionPreset.reduce ? false : { opacity: 0, y: 8 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ duration: 0.28, delay: index * 0.035 }}
