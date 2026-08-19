@@ -277,6 +277,30 @@ function optionLabel(row: AdminRecord) {
   )
 }
 
+function readDimensionEntries(row: AdminRecord): Array<{ label: string; value: string }> {
+  let raw: unknown = row.dimensions ?? row.dimensions_json ?? row.dimensionsJson
+  if (typeof raw === "string" && raw.trim()) {
+    try {
+      raw = JSON.parse(raw)
+    } catch {
+      return [{ label: "Notes", value: raw.trim() }]
+    }
+  }
+  const record = asRecord(raw)
+  if (!record) return []
+  return Object.entries(record)
+    .map(([key, value]) => ({
+      label: prettify(key),
+      value:
+        typeof value === "boolean"
+          ? value
+            ? "Yes"
+            : "No"
+          : formatAdminValue(value),
+    }))
+    .filter((entry) => entry.value && entry.value !== "-")
+}
+
 function groupReportIssues(result: AdminRecord | null) {
   const issues = asRecordArray(result?.issues)
   const issueCount = readNumber(result, ["issue_count", "issueCount"]) ?? issues.length
@@ -864,6 +888,8 @@ function PayrollDetailsContent({
     )
   }
 
+  const dimensions = readDimensionEntries(row)
+
   return (
     <div className="max-h-[65vh] space-y-4 overflow-auto pr-1">
       <div className="rounded-xl border border-border bg-card p-4">
@@ -879,14 +905,13 @@ function PayrollDetailsContent({
         <PayrollDetailField label="Updated" value={updatedAt} />
       </div>
 
-      <div className="rounded-xl border border-border bg-card p-4">
-        <h3 className="text-sm font-semibold text-foreground">Dimensions</h3>
-        <p className="mt-2 text-sm text-foreground">
-          {typeof row.dimensions === "object" && row.dimensions !== null
-            ? JSON.stringify(row.dimensions)
-            : readString(row, ["dimensions_json", "dimensionsJson"], "No dimension mapping provided.")}
-        </p>
-      </div>
+      {dimensions.length > 0 ? (
+        <div className="grid gap-3 md:grid-cols-2">
+          {dimensions.map((entry) => (
+            <PayrollDetailField key={entry.label} label={entry.label} value={entry.value} />
+          ))}
+        </div>
+      ) : null}
     </div>
   )
 }
