@@ -730,24 +730,23 @@ function MetricCard({
     <>
       <motion.div
         aria-hidden
-        className="pointer-events-none absolute inset-0 bg-primary"
+        className="pointer-events-none absolute inset-0"
+        style={{ backgroundColor: "var(--primary)" }}
         initial={reduce ? false : { clipPath: "circle(0% at 92% -6%)", opacity: 0 }}
         animate={{
           clipPath: "circle(34% at 94% -8%)",
-          opacity: 0.38,
+          opacity: 1,
         }}
         transition={{ duration: 0.95, delay: orbDelay, ease: [0.16, 1, 0.3, 1] }}
       />
       <motion.div
         aria-hidden
-        className={cn(
-          "pointer-events-none absolute -right-5 -top-5 h-12 w-12 rounded-full bg-primary/50 blur-xl sm:h-16 sm:w-16",
-        )}
-        style={{ clipPath: "circle(50% at 50% 50%)" }}
+        className="pointer-events-none absolute -right-5 -top-5 h-12 w-12 rounded-full blur-xl sm:h-16 sm:w-16"
+        style={{ clipPath: "circle(50% at 50% 50%)", backgroundColor: "var(--primary)" }}
         animate={
           reduce
             ? undefined
-            : { y: [0, -8, 0], x: [0, 6, 0], scale: [1, 1.08, 1], opacity: [0.45, 0.7, 0.45] }
+            : { y: [0, -8, 0], x: [0, 6, 0], scale: [1, 1.08, 1], opacity: [0.55, 0.85, 0.55] }
         }
         transition={{ duration: 7.2, repeat: Infinity, ease: "easeInOut", delay: orbDelay }}
       />
@@ -1441,6 +1440,19 @@ export default function HrAnalyticsDashboard({
                 className="h-9 text-xs"
               />
             </div>
+            {fromDate !== formatInputDate(shiftDays(new Date(), -30)) ||
+            toDate !== formatInputDate(new Date()) ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setFromDate(formatInputDate(shiftDays(new Date(), -30)))
+                  setToDate(formatInputDate(new Date()))
+                }}
+                className="inline-flex h-9 items-center rounded-md border border-white/30 bg-white/10 px-3 text-xs font-medium text-white transition hover:bg-white/20"
+              >
+                Reset
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() => void fetchAll()}
@@ -1599,7 +1611,6 @@ export default function HrAnalyticsDashboard({
             <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
               Employment status
             </div>
-            <div className="mt-1 text-sm font-semibold text-foreground">Workforce mix</div>
 
             <div className="mt-4">
               {!workforceReady ? (
