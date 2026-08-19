@@ -393,12 +393,7 @@ export function MovementOperationsView({ activeTab }: { activeTab: MovementOpsTa
           </div>
           <div className="rounded-xl border border-border bg-card p-4">
             <div className="flex flex-wrap items-end justify-between gap-2">
-              <div>
-                <h2 className="text-sm font-semibold">Movement cycle</h2>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Where cases sit from draft through applied.
-                </p>
-              </div>
+              <h2 className="text-sm font-semibold">Movement cycle</h2>
               <p className="text-xs text-muted-foreground">{rows.length} total</p>
             </div>
             <ol className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-start">
