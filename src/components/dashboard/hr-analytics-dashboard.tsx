@@ -812,13 +812,13 @@ function DashboardSurface({
       <motion.div
         aria-hidden
         className="pointer-events-none absolute inset-0 bg-primary"
-        initial={reduce ? false : { clipPath: "circle(0% at 96% -4%)", opacity: 0 }}
-        animate={{ clipPath: "circle(22% at 96% -4%)", opacity: 0.38 }}
+        initial={reduce ? false : { clipPath: "circle(0% at 98% -2%)", opacity: 0 }}
+        animate={{ clipPath: "circle(12% at 98% -2%)", opacity: 0.38 }}
         transition={{ duration: 0.95, delay, ease: [0.16, 1, 0.3, 1] }}
       />
       <motion.div
         aria-hidden
-        className="pointer-events-none absolute -right-6 -top-6 h-16 w-16 rounded-full bg-primary/50 blur-2xl"
+        className="pointer-events-none absolute -right-5 -top-5 h-10 w-10 rounded-full bg-primary/50 blur-xl"
         style={{ clipPath: "circle(50% at 50% 50%)" }}
         animate={
           reduce
