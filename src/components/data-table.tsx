@@ -80,6 +80,7 @@ import {
   isSelectableDefaultAvatar,
   listAllCurrentCompanyUsers,
   listDefaultAvatars,
+  listResource,
   listResourcePage,
   listRolePermissions,
   readDefaultAvatarId,
@@ -1031,8 +1032,6 @@ export function DataTable({
   const [, setInitialEditingRolePermissionNames] = React.useState<string[]>([])
   const [accessControlSearch, setAccessControlSearch] = React.useState("")
   const [pickerPermissions, setPickerPermissions] = React.useState<AdminRecord[]>([])
-  const [pickerSearch, setPickerSearch] = React.useState("")
-  const debouncedPickerSearch = useDebouncedValue(pickerSearch, 400)
   const [detailSheetTab, setDetailSheetTab] = React.useState<DetailSheetTab>("general")
   const [memberCompanyUsers, setMemberCompanyUsers] = React.useState<AdminRecord[]>([])
   const [assignedMemberIds, setAssignedMemberIds] = React.useState<Set<string>>(() => new Set())
@@ -1705,18 +1704,18 @@ export function DataTable({
   }, [editingEntity?.id, editingEntity?.resource])
 
   React.useEffect(() => {
-    if (!token || editingEntity?.resource !== "roles") {
+    const needsCatalog =
+      Boolean(token) &&
+      (editingEntity?.resource === "roles" ||
+        (createAccessOpen && activeResource === "roles"))
+    if (!needsCatalog) {
       return
     }
     let cancelled = false
-    void listResourcePage("permissions", token, {
-      page: 1,
-      limit: 50,
-      search: debouncedPickerSearch,
-    })
-      .then((result) => {
+    void listResource("permissions", token, { pageAll: true, pageSize: 100 })
+      .then((rows) => {
         if (!cancelled) {
-          setPickerPermissions(result.rows)
+          setPickerPermissions(rows)
         }
       })
       .catch(() => {
@@ -1727,7 +1726,7 @@ export function DataTable({
     return () => {
       cancelled = true
     }
-  }, [debouncedPickerSearch, editingEntity?.id, editingEntity?.resource, token])
+  }, [activeResource, createAccessOpen, editingEntity?.resource, token])
 
   React.useEffect(() => {
     if (!editingEntity) return
@@ -3508,7 +3507,6 @@ export function DataTable({
                   <PermissionPicker
                     options={permissionOptions}
                     selectedNames={displayedRolePermissionNames}
-                    onQueryChange={setPickerSearch}
                     onChange={(next) => {
                       void handleRolePermissionsChange(next)
                     }}

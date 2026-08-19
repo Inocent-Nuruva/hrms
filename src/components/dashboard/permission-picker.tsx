@@ -216,7 +216,7 @@ export function PermissionPicker({
       <div
         className={cn(
           "min-h-0 space-y-2 overflow-y-auto overscroll-contain pr-0.5",
-          compact ? "max-h-64" : "flex-1",
+          compact ? "min-h-40 max-h-64" : "flex-1",
         )}
       >
         {grouped.length === 0 ? (
@@ -230,7 +230,7 @@ export function PermissionPicker({
             ).length
             const allSelected = selectedInGroup === groupOptions.length && groupOptions.length > 0
             const partial = selectedInGroup > 0 && !allSelected
-            const isOpen = openGroups[group] ?? selectedInGroup > 0
+            const isOpen = openGroups[group] ?? (compact || selectedInGroup > 0)
 
             return (
               <section
