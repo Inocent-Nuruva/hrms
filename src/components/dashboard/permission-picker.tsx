@@ -1,9 +1,10 @@
 "use client"
 
 import * as React from "react"
-import { CheckIcon, ChevronDownIcon, Loader2Icon, SearchIcon } from "lucide-react"
+import { CheckIcon, ChevronDownIcon, InfoIcon, Loader2Icon, SearchIcon } from "lucide-react"
 
 import { Input } from "@/components/ui/input"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import type { AdminRecord } from "@/lib/admin-api"
 
@@ -295,7 +296,6 @@ export function PermissionPicker({
                               "flex cursor-pointer items-center gap-2 px-2 py-1",
                               checked ? "bg-primary/[0.06]" : "hover:bg-slate-50 dark:hover:bg-muted/40"
                             )}
-                            title={option.description || option.name}
                           >
                             <span
                               className={cn(
@@ -313,6 +313,32 @@ export function PermissionPicker({
                             <span className="hidden max-w-[9rem] shrink-0 truncate font-mono text-[10px] text-slate-400 sm:block">
                               {option.name}
                             </span>
+                            {option.description ? (
+                              <Tooltip>
+                                <TooltipTrigger
+                                  render={
+                                    <button
+                                      type="button"
+                                      className="inline-flex size-4 shrink-0 items-center justify-center rounded-full text-slate-400 hover:text-primary"
+                                      aria-label={`What ${option.label} does`}
+                                      onClick={(event) => {
+                                        event.preventDefault()
+                                        event.stopPropagation()
+                                      }}
+                                    />
+                                  }
+                                >
+                                  <InfoIcon className="size-3" />
+                                </TooltipTrigger>
+                                <TooltipContent
+                                  side="top"
+                                  align="end"
+                                  className="max-w-64 text-left text-xs leading-relaxed"
+                                >
+                                  {option.description}
+                                </TooltipContent>
+                              </Tooltip>
+                            ) : null}
                             <input
                               type="checkbox"
                               className="sr-only"
