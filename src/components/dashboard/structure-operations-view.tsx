@@ -80,7 +80,7 @@ export function StructureOperationsView({ activeTab }: { activeTab: StructureOps
           title="Employee numbering"
           description="Set the prefix, digit width, and next ID assigned when someone joins."
         />
-        <EmployeeSetupView mode="numbering" />
+        <EmployeeSetupView />
       </section>
     )
   }
