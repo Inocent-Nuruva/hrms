@@ -15,16 +15,10 @@ import {
   UserMinusIcon,
 } from "lucide-react"
 import {
-  Bar,
-  BarChart,
-  CartesianGrid,
   Cell,
   Pie,
   PieChart,
   ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
 } from "recharts"
 
 import {
@@ -1781,119 +1775,84 @@ export default function HrAnalyticsDashboard({
         </motion.section>
 
         <motion.section className="self-start lg:col-span-12" variants={motionPreset.item}>
-          <div className="flex items-center justify-between border-b border-border pb-2">
-            <div className="text-sm font-semibold text-foreground">Employees by department</div>
-            {departmentSectionReady && resolvedDepartmentHeadcounts.length > 0 ? (
-              <div className="text-xs tabular-nums text-muted-foreground">
-                {resolvedDepartmentHeadcounts.length} departments
+          <DashboardSurface reduce={motionPreset.reduce} delay={0.16}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                  Employees by department
+                </div>
+                <div className="mt-1 text-sm font-semibold text-foreground">
+                  {departmentSectionReady && resolvedDepartmentHeadcounts.length > 0
+                    ? `${resolvedDepartmentHeadcounts.length} departments`
+                    : "Workforce by structure"}
+                </div>
               </div>
-            ) : null}
-          </div>
-          <div className="pt-3">
-            {!departmentSectionReady ? (
-              <SectionSkeleton rows={6} />
-            ) : resolvedDepartmentHeadcounts.length === 0 ? (
-              <div className="py-5 text-center text-sm text-muted-foreground">No departments found.</div>
-            ) : (
-              (() => {
-                // Highest first — horizontal bars scale cleanly for many departments.
-                const chartData = [...resolvedDepartmentHeadcounts]
-                  .sort((a, b) => b[1] - a[1])
-                  .map(([name, count]) => ({
-                    name,
-                    count: Number(count) || 0,
-                  }))
-                const rowHeight = 34
-                const chartHeight = Math.max(220, chartData.length * rowHeight + 24)
-                // Solid fills only — color-mix()/CSS vars can fail as SVG fills in some browsers.
-                const primaryFill = "var(--primary)"
-                const mutedFill = "var(--primary)"
+              <span className="inline-flex size-9 items-center justify-center rounded-full border border-primary/15 bg-primary/10 text-primary">
+                <Building2Icon className="size-4" />
+              </span>
+            </div>
 
-                return (
-                  <div className="w-full" style={{ height: chartHeight }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart
-                        data={chartData}
-                        layout="vertical"
-                        margin={{ top: 4, right: 36, left: 4, bottom: 4 }}
-                        barCategoryGap={10}
-                      >
-                        <CartesianGrid
-                          horizontal={false}
-                          stroke="currentColor"
-                          className="text-border"
-                          strokeDasharray="3 3"
-                          opacity={0.35}
-                        />
-                        <XAxis
-                          type="number"
-                          allowDecimals={false}
-                          domain={[0, "dataMax"]}
-                          tickLine={false}
-                          axisLine={false}
-                          tick={{ fill: "currentColor", fontSize: 11 }}
-                          className="text-muted-foreground"
-                        />
-                        <YAxis
-                          type="category"
-                          dataKey="name"
-                          width={156}
-                          tickLine={false}
-                          axisLine={false}
-                          tick={{ fill: "currentColor", fontSize: 12 }}
-                          className="text-foreground"
-                        />
-                        <Tooltip
-                          cursor={{ fill: "currentColor", opacity: 0.06 }}
-                          contentStyle={{
-                            borderRadius: 8,
-                            border: "1px solid var(--border)",
-                            background: "var(--card)",
-                            color: "var(--card-foreground)",
-                            fontSize: 12,
-                            boxShadow: "0 8px 24px rgba(15,23,42,0.08)",
-                          }}
-                          formatter={(value) => [
-                            typeof value === "number" ? value : Number(value ?? 0),
-                            "Employees",
-                          ]}
-                          labelFormatter={(label) => String(label)}
-                        />
-                        <Bar
-                          dataKey="count"
-                          radius={[0, 6, 6, 0]}
-                          maxBarSize={18}
-                          isAnimationActive
-                          fill={primaryFill}
-                          label={{
-                            position: "right",
-                            fill: "currentColor",
-                            fontSize: 11,
-                            fontWeight: 600,
-                            className: "text-primary",
-                          }}
+            <div className="mt-4">
+              {!departmentSectionReady ? (
+                <SectionSkeleton rows={6} />
+              ) : resolvedDepartmentHeadcounts.length === 0 ? (
+                <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-primary/20 bg-primary/4 px-4 py-8 text-center">
+                  <span className="inline-flex size-11 items-center justify-center rounded-full border border-primary/15 bg-primary/10 text-primary">
+                    <Building2Icon className="size-4" />
+                  </span>
+                  <p className="mt-3 text-sm font-semibold text-foreground">No departments found</p>
+                </div>
+              ) : (
+                (() => {
+                  const chartData = [...resolvedDepartmentHeadcounts]
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([name, count]) => ({
+                      name,
+                      count: Number(count) || 0,
+                      pct:
+                        maxDeptCount > 0
+                          ? Math.round((Number(count) / maxDeptCount) * 100)
+                          : 0,
+                    }))
+
+                  return (
+                    <div className="grid gap-2">
+                      {chartData.map((row, index) => (
+                        <motion.div
+                          key={row.name}
+                          className="rounded-2xl border border-primary/12 bg-white px-3 py-2.5"
+                          initial={motionPreset.reduce ? false : { opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.28, delay: index * 0.035 }}
                         >
-                          {chartData.map((row) => (
-                            <Cell
-                              key={row.name}
-                              fill={
-                                row.count === maxDeptCount && row.count > 0
-                                  ? primaryFill
-                                  : mutedFill
-                              }
-                              fillOpacity={
-                                row.count === maxDeptCount && row.count > 0 ? 1 : 0.55
-                              }
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="min-w-0 truncate text-sm font-medium text-foreground">
+                              {row.name}
+                            </div>
+                            <div className="shrink-0 text-sm font-semibold tabular-nums text-primary">
+                              {row.count}
+                            </div>
+                          </div>
+                          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-primary/10">
+                            <motion.div
+                              className="h-full rounded-full bg-primary"
+                              initial={motionPreset.reduce ? false : { width: 0 }}
+                              animate={{ width: `${row.pct}%` }}
+                              transition={{
+                                duration: 0.8,
+                                ease: [0.16, 1, 0.3, 1],
+                                delay: 0.12 + index * 0.035,
+                              }}
                             />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                )
-              })()
-            )}
-          </div>
+                          </div>
+                        </motion.div>
+                      ))}
+                    </div>
+                  )
+                })()
+              )}
+            </div>
+          </DashboardSurface>
         </motion.section>
       </div>
       </div>
