@@ -175,6 +175,65 @@ function buildNotificationPreferenceKey(
   return `${notificationType}:${channel}`
 }
 
+function wait(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms))
+}
+
+function readErrorStatus(errorObject: unknown) {
+  if (!errorObject || typeof errorObject !== "object") return null
+  const status = Number((errorObject as { status?: unknown }).status)
+  return Number.isFinite(status) ? status : null
+}
+
+async function setNotificationPreferenceWithRetry(
+  token: string,
+  notificationType: NotificationPreferenceType,
+  channel: NotificationChannel,
+  nextEnabled: boolean,
+) {
+  let lastError: unknown
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    try {
+      return await setMyNotificationPreference(token, {
+        notification_type: notificationType,
+        channel,
+        is_enabled: nextEnabled,
+      })
+    } catch (errorObject) {
+      lastError = errorObject
+      const status = readErrorStatus(errorObject)
+      if (status !== 429 || attempt === 3) throw errorObject
+      await wait(400 * 2 ** attempt)
+    }
+  }
+  throw lastError
+}
+
+async function runPreferenceUpdates<T>(
+  items: T[],
+  worker: (item: T) => Promise<void>,
+  concurrency = 2,
+) {
+  const results: PromiseSettledResult<void>[] = new Array(items.length)
+  let cursor = 0
+
+  async function next() {
+    while (cursor < items.length) {
+      const index = cursor
+      cursor += 1
+      try {
+        await worker(items[index])
+        results[index] = { status: "fulfilled", value: undefined }
+      } catch (reason) {
+        results[index] = { status: "rejected", reason }
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => next()))
+  return results
+}
+
 function readNotificationPreferenceType(
   preference: NotificationPreference | null | undefined
 ): NotificationPreferenceType | null {
@@ -719,17 +778,17 @@ function AccountSettingsPanelContent({
     setNotificationPreferenceBusyKey(busyKey)
     setNotificationPreferencesError(null)
     try {
-      const results = await Promise.allSettled(
-        types.flatMap((notificationType) =>
-          NOTIFICATION_PREFERENCE_CHANNELS.map((channel) =>
-            setMyNotificationPreference(accessToken, {
-              notification_type: notificationType,
-              channel,
-              is_enabled: nextEnabled,
-            }),
-          ),
-        ),
+      const jobs = types.flatMap((notificationType) =>
+        NOTIFICATION_PREFERENCE_CHANNELS.map((channel) => ({ notificationType, channel })),
       )
+      const results = await runPreferenceUpdates(jobs, async (job) => {
+        await setNotificationPreferenceWithRetry(
+          accessToken,
+          job.notificationType,
+          job.channel,
+          nextEnabled,
+        )
+      })
       await loadNotificationPreferences()
       const failed = results.filter((result) => result.status === "rejected").length
       if (failed > 0) {
@@ -1336,7 +1395,7 @@ function AccountSettingsPanelContent({
               disabled={notificationPreferencesLoading || Boolean(notificationPreferenceBusyKey) || !token}
             >
               {notificationPreferenceBusyKey === "ALL" ? <Loader2 className="size-4 animate-spin" /> : null}
-              Turn all on
+              {notificationPreferenceBusyKey === "ALL" ? "Saving…" : "Turn all on"}
             </Button>
             <Button
               type="button"
@@ -1345,7 +1404,7 @@ function AccountSettingsPanelContent({
               disabled={notificationPreferencesLoading || Boolean(notificationPreferenceBusyKey) || !token}
             >
               {notificationPreferenceBusyKey === "ALL" ? <Loader2 className="size-4 animate-spin" /> : null}
-              Turn all off
+              {notificationPreferenceBusyKey === "ALL" ? "Saving…" : "Turn all off"}
             </Button>
             <Button
               type="button"
