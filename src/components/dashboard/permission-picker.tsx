@@ -200,7 +200,7 @@ export function PermissionPicker({
               className="rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] font-medium text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700 dark:border-border dark:bg-background dark:text-muted-foreground dark:hover:bg-muted"
               onClick={() => onChange([])}
             >
-              Clear
+              Deselect all
             </button>
           </div>
         </div>
@@ -281,7 +281,7 @@ export function PermissionPicker({
                     )}
                     onClick={() => toggleGroup(groupOptions, !allSelected)}
                   >
-                    {allSelected ? "Clear" : "All"}
+                    {allSelected ? "Deselect" : "All"}
                   </button>
                 </div>
 

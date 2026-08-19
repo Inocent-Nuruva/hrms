@@ -1029,7 +1029,11 @@ export function DataTable({
   const [editingEntityForm, setEditingEntityForm] = React.useState<BasicEntityForm>(EMPTY_ENTITY_FORM)
   const [initialEditingEntityForm, setInitialEditingEntityForm] = React.useState<BasicEntityForm>(EMPTY_ENTITY_FORM)
   const [editingRolePermissionNames, setEditingRolePermissionNames] = React.useState<string[]>([])
-  const [, setInitialEditingRolePermissionNames] = React.useState<string[]>([])
+  const [initialEditingRolePermissionNames, setInitialEditingRolePermissionNames] = React.useState<string[]>([])
+  const [permissionSaveProgress, setPermissionSaveProgress] = React.useState<{
+    done: number
+    total: number
+  } | null>(null)
   const [accessControlSearch, setAccessControlSearch] = React.useState("")
   const [pickerPermissions, setPickerPermissions] = React.useState<AdminRecord[]>([])
   const [pickerPermissionsLoading, setPickerPermissionsLoading] = React.useState(false)
@@ -1188,7 +1192,6 @@ export function DataTable({
       return false
     }
 
-    // Permission assignments are applied live for roles; only field edits need Save.
     return (
       editingEntityForm.name !== initialEditingEntityForm.name ||
       editingEntityForm.display_name !== initialEditingEntityForm.display_name ||
@@ -1202,6 +1205,24 @@ export function DataTable({
     initialEditingEntityForm.description,
     initialEditingEntityForm.display_name,
     initialEditingEntityForm.name,
+  ])
+
+  const isRolePermissionsDirty = React.useMemo(() => {
+    if (!editingEntity || editingEntity.resource !== "roles") {
+      return false
+    }
+    const current = new Set(rolePermissionNamesFromApi ?? editingRolePermissionNames)
+    const initial = new Set(initialEditingRolePermissionNames)
+    if (current.size !== initial.size) return true
+    for (const name of current) {
+      if (!initial.has(name)) return true
+    }
+    return false
+  }, [
+    editingEntity,
+    editingRolePermissionNames,
+    initialEditingRolePermissionNames,
+    rolePermissionNamesFromApi,
   ])
 
   React.useEffect(() => {
@@ -2091,61 +2112,116 @@ export function DataTable({
     }
   }
 
-  const handleRolePermissionsChange = async (nextNames: string[]) => {
+  const handleRolePermissionsChange = (nextNames: string[]) => {
+    if (!editingEntity || editingEntity.resource !== "roles") {
+      return
+    }
+    setEditingRolePermissionNames(nextNames)
+    setRolePermissionNamesFromApi(nextNames)
+  }
+
+  const handleSaveRolePermissions = async () => {
     if (!token || !editingEntity || editingEntity.resource !== "roles") {
       return
     }
 
-    const previous = new Set(displayedRolePermissionNames)
-    const next = new Set(nextNames)
-    const toAdd = nextNames.filter((name) => !previous.has(name))
-    const toRemove = displayedRolePermissionNames.filter((name) => !next.has(name))
+    const previous = [...initialEditingRolePermissionNames]
+    const nextNames = [...displayedRolePermissionNames]
+    const previousSet = new Set(previous)
+    const nextSet = new Set(nextNames)
+    const toAdd = nextNames.filter((name) => !previousSet.has(name))
+    const toRemove = previous.filter((name) => !nextSet.has(name))
 
     if (toAdd.length === 0 && toRemove.length === 0) {
       return
     }
 
-    // Optimistic UI update
-    setEditingRolePermissionNames(nextNames)
-    setRolePermissionNamesFromApi(nextNames)
-    setMembersBusy(true)
+    const resolvePermissionId = (name: string) => {
+      const option = permissionOptions.find((entry) => entry.name === name)
+      if (!option?.id) {
+        throw new Error(`Unknown permission: ${name}`)
+      }
+      return option.id
+    }
 
-    try {
-      for (const name of toAdd) {
-        const option = permissionOptions.find((entry) => entry.name === name)
-        const permissionId = option?.id
-        if (!permissionId) {
-          throw new Error(`Unknown permission: ${name}`)
+    const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms))
+    const runWithRetry = async (fn: () => Promise<unknown>) => {
+      let delay = 500
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        try {
+          return await fn()
+        } catch (errorObject) {
+          const status = (errorObject as { status?: number }).status
+          if (status !== 429 || attempt === 4) {
+            throw errorObject
+          }
+          await sleep(delay)
+          delay = Math.min(delay * 2, 4000)
         }
-        await assignPermissionToRole(token, editingEntity.id, permissionId)
       }
-      for (const name of toRemove) {
-        const option = permissionOptions.find((entry) => entry.name === name)
-        const permissionId = option?.id
-        if (!permissionId) {
-          throw new Error(`Unknown permission: ${name}`)
-        }
-        await revokePermissionFromRole(token, editingEntity.id, permissionId)
-      }
-      setInitialEditingRolePermissionNames(nextNames)
-      if (toAdd.length > 0 || toRemove.length > 0) {
-        showSuccessAlert(
-          toAdd.length > 0 && toRemove.length === 0
-            ? "Permission assigned to role."
-            : toRemove.length > 0 && toAdd.length === 0
-              ? "Permission removed from role."
-              : "Role permissions updated."
+    }
+
+    const tasks: Array<() => Promise<void>> = [
+      ...toAdd.map((name) => async () => {
+        await runWithRetry(() =>
+          assignPermissionToRole(token, editingEntity.id, resolvePermissionId(name)),
         )
-      }
+      }),
+      ...toRemove.map((name) => async () => {
+        await runWithRetry(() =>
+          revokePermissionFromRole(token, editingEntity.id, resolvePermissionId(name)),
+        )
+      }),
+    ]
+
+    setMembersBusy(true)
+    setPermissionSaveProgress({ done: 0, total: tasks.length })
+    let done = 0
+    try {
+      let cursor = 0
+      const concurrency = 2
+      await Promise.all(
+        Array.from({ length: Math.min(concurrency, tasks.length) }, async () => {
+          while (cursor < tasks.length) {
+            const current = cursor
+            cursor += 1
+            await tasks[current]()
+            done += 1
+            setPermissionSaveProgress({ done, total: tasks.length })
+          }
+        }),
+      )
+      setInitialEditingRolePermissionNames(nextNames)
+      showSuccessAlert(
+        toAdd.length > 0 && toRemove.length === 0
+          ? toAdd.length === 1
+            ? "Permission assigned to role."
+            : `${toAdd.length} permissions assigned to role.`
+          : toRemove.length > 0 && toAdd.length === 0
+            ? toRemove.length === 1
+              ? "Permission removed from role."
+              : `${toRemove.length} permissions removed from role.`
+            : "Role permissions updated.",
+      )
     } catch (errorObject) {
-      // Revert on failure
-      setEditingRolePermissionNames(Array.from(previous))
-      setRolePermissionNamesFromApi(Array.from(previous))
+      try {
+        const rolePermissions = await listRolePermissions(token, editingEntity.id)
+        const permissionNames = rolePermissionNamesFromRecord({
+          permissions: rolePermissions,
+        })
+        setEditingRolePermissionNames(permissionNames)
+        setRolePermissionNamesFromApi(permissionNames)
+        setInitialEditingRolePermissionNames(permissionNames)
+      } catch {
+        setEditingRolePermissionNames(previous)
+        setRolePermissionNamesFromApi(previous)
+      }
       const message =
         errorObject instanceof Error ? errorObject.message : "Failed to update role permissions."
       showErrorAlert(message)
     } finally {
       setMembersBusy(false)
+      setPermissionSaveProgress(null)
     }
   }
 
@@ -3516,9 +3592,7 @@ export function DataTable({
                     loading={pickerPermissionsLoading}
                     options={permissionOptions}
                     selectedNames={displayedRolePermissionNames}
-                    onChange={(next) => {
-                      void handleRolePermissionsChange(next)
-                    }}
+                    onChange={handleRolePermissionsChange}
                     className={cn(
                       "min-h-0 flex-1",
                       membersBusy ? "pointer-events-none opacity-70" : ""
@@ -3547,6 +3621,20 @@ export function DataTable({
                 Save changes
               </Button>
             ) : null}
+            {canUpdateResource &&
+            detailSheetTab === "permissions" &&
+            editingEntity?.resource === "roles" &&
+            isRolePermissionsDirty ? (
+              <Button
+                type="button"
+                disabled={loading || membersBusy}
+                onClick={() => void handleSaveRolePermissions()}
+              >
+                {membersBusy && permissionSaveProgress
+                  ? `Saving ${permissionSaveProgress.done}/${permissionSaveProgress.total}…`
+                  : "Save permissions"}
+              </Button>
+            ) : null}
             <Button
               type="button"
               variant="outline"
@@ -3556,6 +3644,7 @@ export function DataTable({
                 setEditingRolePermissionNames([])
                 setInitialEditingRolePermissionNames([])
                 setRolePermissionNamesFromApi(null)
+                setPermissionSaveProgress(null)
               }}
             >
               Close
