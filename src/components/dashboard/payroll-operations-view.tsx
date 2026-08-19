@@ -304,15 +304,44 @@ function readDimensionEntries(row: AdminRecord): Array<{ label: string; value: s
 function groupReportIssues(result: AdminRecord | null) {
   const issues = asRecordArray(result?.issues)
   const issueCount = readNumber(result, ["issue_count", "issueCount"]) ?? issues.length
-  const groups = new Map<string, number>()
+  const groups = new Map<string, AdminRecord[]>()
   for (const issue of issues) {
     const code = readString(issue, ["code", "type"], "UNKNOWN")
-    groups.set(code, (groups.get(code) ?? 0) + 1)
+    const current = groups.get(code) ?? []
+    current.push(issue)
+    groups.set(code, current)
   }
   return {
     issueCount,
-    groups: Array.from(groups.entries()).sort((first, second) => second[1] - first[1]),
+    groups: Array.from(groups.entries())
+      .map(([code, rows]) => ({ code, rows, count: rows.length }))
+      .sort((first, second) => second.count - first.count),
   }
+}
+
+function issueSubject(issue: AdminRecord) {
+  const employeeId = readNumber(issue, ["employee_id", "employeeId"])
+  if (employeeId !== null) return `Employee ${employeeId}`
+  const runId = readNumber(issue, ["run_id", "runId"])
+  if (runId !== null) return `Run ${runId}`
+  const message = readString(issue, ["message", "detail", "description"])
+  if (message) return message
+  return "Issue"
+}
+
+function issueDetailLines(issue: AdminRecord) {
+  return Object.entries(issue)
+    .filter(([key, value]) => !["code", "type"].includes(key) && value !== null && value !== undefined && value !== "")
+    .map(([key, value]) => ({
+      label: prettify(key),
+      value:
+        typeof value === "boolean"
+          ? value
+            ? "Yes"
+            : "No"
+          : formatAdminValue(value),
+    }))
+    .filter((entry) => entry.value && entry.value !== "-")
 }
 
 function rowId(row: AdminRecord | null | undefined) {
@@ -952,6 +981,8 @@ export function PayrollOperationsView() {
   const [reportBusy, setReportBusy] = React.useState("")
   const [reportResult, setReportResult] = React.useState<AdminRecord | null>(null)
   const [reportKind, setReportKind] = React.useState<"reconciliation" | "variance" | "settlement" | "">("")
+  const [issueDialogCode, setIssueDialogCode] = React.useState("")
+  const [issueSearch, setIssueSearch] = React.useState("")
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [search, setSearch] = React.useState("")
@@ -1868,7 +1899,6 @@ export function PayrollOperationsView() {
   async function onRunVariance() {
     const token = readStoredToken()
     if (!token || !varianceRunId || !comparisonRunId) {
-      toast.error("Choose both payroll runs.")
       return
     }
     setReportBusy("variance")
@@ -1887,7 +1917,6 @@ export function PayrollOperationsView() {
   async function onCalculateSettlement() {
     const token = readStoredToken()
     if (!token || !settlementRequestId) {
-      toast.error("Choose an offboarding request.")
       return
     }
     setReportBusy("settlement")
@@ -2923,6 +2952,23 @@ export function PayrollOperationsView() {
     return { activeRuns, openInputs, enabledProfiles, totalPeriods }
   }, [dashboard, periods.length, recentRuns])
 
+  const openIssueGroup = React.useMemo(() => {
+    if (!issueDialogCode || !reportResult) return null
+    return groupReportIssues(reportResult).groups.find((group) => group.code === issueDialogCode) ?? null
+  }, [issueDialogCode, reportResult])
+
+  const visibleIssueRows = React.useMemo(() => {
+    if (!openIssueGroup) return []
+    const query = issueSearch.trim().toLowerCase()
+    if (!query) return openIssueGroup.rows
+    return openIssueGroup.rows.filter((issue) =>
+      [issueSubject(issue), ...issueDetailLines(issue).map((line) => `${line.label} ${line.value}`)]
+        .join(" ")
+        .toLowerCase()
+        .includes(query),
+    )
+  }, [issueSearch, openIssueGroup])
+
   if (!actor.ready) {
     return (
       <div className="flex items-center gap-2 py-10 text-sm text-muted-foreground">
@@ -3126,7 +3172,12 @@ export function PayrollOperationsView() {
                     <option key={`cmp-${rowId(row)}`} value={rowId(row)}>{readPeriodLabel(row) !== "-" ? readPeriodLabel(row) : `Run #${rowId(row)}`}</option>
                   ))}
                 </select>
-                <button type="button" className={primaryButtonClass} disabled={reportBusy === "variance"} onClick={() => void onRunVariance()}>
+                <button
+                  type="button"
+                  className={primaryButtonClass}
+                  disabled={reportBusy === "variance" || !varianceRunId || !comparisonRunId}
+                  onClick={() => void onRunVariance()}
+                >
                   {reportBusy === "variance" ? <Loader2Icon className="h-3.5 w-3.5 animate-spin" /> : null}
                   Compare
                 </button>
@@ -3142,7 +3193,12 @@ export function PayrollOperationsView() {
                     <option key={rowId(row)} value={rowId(row)}>#{rowId(row)} {readString(row, ["employeeName", "employee_name", "status"], "")}</option>
                   ))}
                 </select>
-                <button type="button" className={primaryButtonClass} disabled={reportBusy === "settlement"} onClick={() => void onCalculateSettlement()}>
+                <button
+                  type="button"
+                  className={primaryButtonClass}
+                  disabled={reportBusy === "settlement" || !settlementRequestId}
+                  onClick={() => void onCalculateSettlement()}
+                >
                   {reportBusy === "settlement" ? <Loader2Icon className="h-3.5 w-3.5 animate-spin" /> : null}
                   Calculate
                 </button>
@@ -3151,29 +3207,13 @@ export function PayrollOperationsView() {
           </div>
           {reportResult ? (
             <div className="rounded-xl border border-border bg-card p-4">
-              <div className="flex flex-wrap items-end justify-between gap-2">
-                <div>
-                  <h2 className="text-sm font-semibold">
-                    {reportKind === "variance"
-                      ? "Variance summary"
-                      : reportKind === "settlement"
-                        ? "Settlement summary"
-                        : "Reconciliation summary"}
-                  </h2>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Grouped totals only — the API issue list is too large to print here.
-                  </p>
-                </div>
-                {groupReportIssues(reportResult).groups.some(([code]) => code === "EMPLOYEE_PAYROLL_PROFILE_MISSING") ? (
-                  <button
-                    type="button"
-                    className="inline-flex h-8 items-center justify-center rounded-md border border-slate-300 bg-white px-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-border dark:bg-background dark:text-foreground"
-                    onClick={() => setTab("profiles")}
-                  >
-                    Open profiles
-                  </button>
-                ) : null}
-              </div>
+              <h2 className="text-sm font-semibold">
+                {reportKind === "variance"
+                  ? "Variance summary"
+                  : reportKind === "settlement"
+                    ? "Settlement summary"
+                    : "Reconciliation summary"}
+              </h2>
               {(() => {
                 const summary = groupReportIssues(reportResult)
                 const net = readNumber(reportResult, ["net", "net_amount", "netAmount", "net_pay", "netPay"])
@@ -3206,12 +3246,20 @@ export function PayrollOperationsView() {
                       ) : null}
                     </div>
                     {summary.groups.length > 0 ? (
-                      <div className="space-y-2">
-                        {summary.groups.map(([code, count]) => (
-                          <div key={code} className="flex items-center justify-between gap-3 text-sm">
-                            <span className="text-foreground">{prettify(code)}</span>
-                            <span className="font-semibold tabular-nums text-foreground">{count}</span>
-                          </div>
+                      <div className="space-y-1">
+                        {summary.groups.map((group) => (
+                          <button
+                            key={group.code}
+                            type="button"
+                            className="flex w-full items-center justify-between gap-3 rounded-lg px-1 py-2 text-left text-sm transition hover:bg-muted/40"
+                            onClick={() => {
+                              setIssueDialogCode(group.code)
+                              setIssueSearch("")
+                            }}
+                          >
+                            <span className="text-foreground">{prettify(group.code)}</span>
+                            <span className="font-semibold tabular-nums text-foreground">{group.count}</span>
+                          </button>
                         ))}
                       </div>
                     ) : summary.issueCount === 0 ? (
@@ -3331,6 +3379,83 @@ export function PayrollOperationsView() {
           }}
         />
       )}
+
+      <Dialog
+        open={Boolean(openIssueGroup)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setIssueDialogCode("")
+            setIssueSearch("")
+          }
+        }}
+      >
+        <DialogPopup className="flex max-h-[90vh] w-[min(720px,96vw)] flex-col overflow-hidden sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{openIssueGroup ? prettify(openIssueGroup.code) : "Issues"}</DialogTitle>
+            <DialogDescription>
+              {openIssueGroup ? `${openIssueGroup.count} ${openIssueGroup.count === 1 ? "record" : "records"}` : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 space-y-3 overflow-hidden">
+            <input
+              className={inputClass}
+              value={issueSearch}
+              onChange={(event) => setIssueSearch(event.target.value)}
+              placeholder="Search these issues"
+            />
+            <div className="max-h-[55vh] space-y-2 overflow-y-auto pr-1">
+              {visibleIssueRows.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No matching records.</p>
+              ) : (
+                visibleIssueRows.map((issue, index) => {
+                  const lines = issueDetailLines(issue)
+                  return (
+                    <div
+                      key={`${issueSubject(issue)}-${index}`}
+                      className="rounded-lg border border-border px-3 py-2.5"
+                    >
+                      <p className="text-sm font-medium text-foreground">{issueSubject(issue)}</p>
+                      {lines.length > 0 ? (
+                        <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                          {lines.map((line) => (
+                            <span key={`${line.label}-${line.value}`}>
+                              {line.label}: {line.value}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            {openIssueGroup?.code === "EMPLOYEE_PAYROLL_PROFILE_MISSING" ? (
+              <button
+                type="button"
+                className={secondaryButtonClass}
+                onClick={() => {
+                  setIssueDialogCode("")
+                  setTab("profiles")
+                }}
+              >
+                Open profiles
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className={primaryButtonClass}
+              onClick={() => {
+                setIssueDialogCode("")
+                setIssueSearch("")
+              }}
+            >
+              Close
+            </button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
 
       <RecordDetailsDialog
         open={detailOpen}
