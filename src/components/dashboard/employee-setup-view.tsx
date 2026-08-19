@@ -199,10 +199,7 @@ export function EmployeeSetupView({ mode = "full" }: { mode?: "full" | "numberin
     setNumberingError(null)
     setGradesError(null)
     try {
-      const [numberingRecord, gradeRows] = await Promise.all([
-        getEmployeeNumbering(accessToken),
-        listEmployeeGrades(accessToken),
-      ])
+      const numberingRecord = await getEmployeeNumbering(accessToken)
       const normalizedNumbering = numberingRecord ?? {}
 
       setNumbering(numberingRecord)
@@ -211,15 +208,21 @@ export function EmployeeSetupView({ mode = "full" }: { mode?: "full" | "numberin
         padding: String(readNumber(normalizedNumbering, ["padding"]) ?? 5),
         next_number: String(readNumber(normalizedNumbering, ["next_number", "nextNumber"]) ?? 1),
       })
-      setGrades(
-        [...gradeRows].sort((first, second) => {
-          const levelCompare = (readNumber(first, ["level"]) ?? 9999) - (readNumber(second, ["level"]) ?? 9999)
-          if (levelCompare !== 0) {
-            return levelCompare
-          }
-          return readString(first, ["name"]).localeCompare(readString(second, ["name"]))
-        })
-      )
+
+      if (mode === "numbering") {
+        setGrades([])
+      } else {
+        const gradeRows = await listEmployeeGrades(accessToken)
+        setGrades(
+          [...gradeRows].sort((first, second) => {
+            const levelCompare = (readNumber(first, ["level"]) ?? 9999) - (readNumber(second, ["level"]) ?? 9999)
+            if (levelCompare !== 0) {
+              return levelCompare
+            }
+            return readString(first, ["name"]).localeCompare(readString(second, ["name"]))
+          })
+        )
+      }
     } catch (errorObject) {
       if (leaveIfForbidden(errorObject)) {
         return
@@ -232,7 +235,7 @@ export function EmployeeSetupView({ mode = "full" }: { mode?: "full" | "numberin
     } finally {
       setLoading(false)
     }
-  }, [leaveIfForbidden])
+  }, [leaveIfForbidden, mode])
 
   React.useEffect(() => {
     void loadData()
@@ -408,86 +411,128 @@ export function EmployeeSetupView({ mode = "full" }: { mode?: "full" | "numberin
     () => sampleEmployeeNumber(numberingForm.prefix, numberingForm.padding, numberingForm.next_number),
     [numberingForm.next_number, numberingForm.padding, numberingForm.prefix]
   )
+  const previewPrefix = numberingForm.prefix.trim()
+  const previewDigits =
+    numberingPreview === "-" ? [] : numberingPreview.slice(previewPrefix.length).split("")
+
+  const numberingEditor = (
+    <div className="overflow-hidden rounded-xl border border-border bg-card">
+      <div className="grid lg:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]">
+        <div className="relative overflow-hidden px-5 py-5 sm:px-6">
+          <div
+            aria-hidden
+            className="pointer-events-none absolute -right-10 -top-12 size-40 rounded-full bg-primary/10"
+          />
+          <div className="relative">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                  Next employee number
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">Updates as you type. Saved only when you confirm.</p>
+              </div>
+              <Button type="button" size="sm" variant="outline" onClick={() => void loadData()} disabled={loading}>
+                {loading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+              </Button>
+            </div>
+            <div className="mt-5 flex flex-wrap items-end gap-2.5">
+              {previewPrefix ? (
+                <span className="pb-1.5 text-2xl font-semibold tracking-[0.22em] text-primary">
+                  {previewPrefix}
+                </span>
+              ) : null}
+              {previewDigits.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {previewDigits.map((digit, index) => (
+                    <span
+                      key={`${digit}-${index}`}
+                      className="flex h-12 w-9 items-center justify-center rounded-lg border border-border bg-background font-mono text-xl font-semibold tabular-nums shadow-sm"
+                    >
+                      {digit}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <span className="rounded-lg border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">
+                  Enter a valid padding and next number
+                </span>
+              )}
+            </div>
+            <div className="mt-5 flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
+              <p>
+                Last saved{" "}
+                <span className="font-medium text-foreground">
+                  {numbering ? formatDateTime(numbering.updated_at ?? numbering.updatedAt) : "—"}
+                </span>
+              </p>
+              <p>
+                Stored next{" "}
+                <span className="font-medium text-foreground">
+                  {numbering ? (readNumber(numbering, ["next_number", "nextNumber"]) ?? "—") : "—"}
+                </span>
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="grid content-start gap-3 border-t border-border bg-muted/20 p-5 lg:border-l lg:border-t-0">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-1.5">
+              <Label htmlFor="employee-number-prefix">Prefix</Label>
+              <Input
+                id="employee-number-prefix"
+                value={numberingForm.prefix}
+                onChange={(event) =>
+                  setNumberingForm((current) => ({ ...current, prefix: event.target.value.toUpperCase() }))
+                }
+                placeholder="EMP"
+                className="font-mono uppercase"
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="employee-number-padding">Digits</Label>
+              <Input
+                id="employee-number-padding"
+                inputMode="numeric"
+                value={numberingForm.padding}
+                onChange={(event) =>
+                  setNumberingForm((current) => ({ ...current, padding: event.target.value }))
+                }
+                placeholder="5"
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="employee-number-next">Next</Label>
+              <Input
+                id="employee-number-next"
+                inputMode="numeric"
+                value={numberingForm.next_number}
+                onChange={(event) =>
+                  setNumberingForm((current) => ({ ...current, next_number: event.target.value }))
+                }
+                placeholder="1"
+              />
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Prefix can be blank, or 2–20 letters and digits. Digit width is 3–12.
+          </p>
+          {numberingMessage ? <p className="text-sm text-emerald-600">{numberingMessage}</p> : null}
+          {numberingError ? <p className="text-sm text-rose-600">{numberingError}</p> : null}
+          <div className="flex justify-end">
+            <Button type="button" onClick={() => void saveNumbering()} disabled={numberingSaving || loading}>
+              {numberingSaving ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Save className="mr-2 size-4" />}
+              Save numbering
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 
   return (
     <>
       <div className={mode === "numbering" ? "grid gap-4" : "grid gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]"}>
-        <Card className="min-w-0">
-          <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
-            <div className="space-y-1">
-              <CardTitle>Employee Numbering</CardTitle>
-              <CardDescription>
-                Configure the prefix, numeric padding, and next generated employee number.
-              </CardDescription>
-            </div>
-            <Button type="button" size="sm" variant="outline" onClick={() => void loadData()} disabled={loading}>
-              {loading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
-            </Button>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="grid gap-1.5">
-                <Label htmlFor="employee-number-prefix">Prefix</Label>
-                <Input
-                  id="employee-number-prefix"
-                  value={numberingForm.prefix}
-                  onChange={(event) =>
-                    setNumberingForm((current) => ({ ...current, prefix: event.target.value.toUpperCase() }))
-                  }
-                  placeholder="EMP"
-                />
-                <p className="text-xs text-muted-foreground">Blank is allowed, otherwise use 2-20 uppercase letters or digits.</p>
-              </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor="employee-number-padding">Padding</Label>
-                <Input
-                  id="employee-number-padding"
-                  inputMode="numeric"
-                  value={numberingForm.padding}
-                  onChange={(event) =>
-                    setNumberingForm((current) => ({ ...current, padding: event.target.value }))
-                  }
-                  placeholder="5"
-                />
-              </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor="employee-number-next">Next Number</Label>
-                <Input
-                  id="employee-number-next"
-                  inputMode="numeric"
-                  value={numberingForm.next_number}
-                  onChange={(event) =>
-                    setNumberingForm((current) => ({ ...current, next_number: event.target.value }))
-                  }
-                  placeholder="1"
-                />
-              </div>
-              <div className="grid gap-1.5">
-                <Label>Preview</Label>
-                <div className="rounded-md border border-dashed border-border px-3 py-2 text-sm font-medium text-foreground">
-                  {numberingPreview}
-                </div>
-              </div>
-            </div>
-
-            {numbering ? (
-              <div className="grid gap-2 rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground sm:grid-cols-2">
-                <p>Last Updated: <span className="font-medium text-foreground">{formatDateTime(numbering.updated_at ?? numbering.updatedAt)}</span></p>
-                <p>Current Stored Next No: <span className="font-medium text-foreground">{readNumber(numbering, ["next_number", "nextNumber"]) ?? "-"}</span></p>
-              </div>
-            ) : null}
-
-            {numberingMessage ? <p className="text-sm text-emerald-600">{numberingMessage}</p> : null}
-            {numberingError ? <p className="text-sm text-rose-600">{numberingError}</p> : null}
-
-            <div className="flex flex-wrap items-center gap-2">
-              <Button type="button" onClick={() => void saveNumbering()} disabled={numberingSaving || loading}>
-                {numberingSaving ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Save className="mr-2 size-4" />}
-                Save Numbering
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+        {numberingEditor}
 
         {mode === "full" ? (
         <Card className="min-w-0">

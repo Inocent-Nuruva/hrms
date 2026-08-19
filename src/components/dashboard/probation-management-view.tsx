@@ -8,13 +8,10 @@ import { toast } from "sonner"
 import { SearchToggleField } from "@/components/common/search-toggle-field"
 import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared"
 import {
-  CycleRail,
   DetailField,
   HeroBand,
-  MetricTile,
   ScoreRing,
   StatusChip,
-  StatusStack,
   TalentDoodleSprites,
   TimelineRail,
   actionButtonClass,
@@ -32,9 +29,9 @@ import {
   readString,
   rowId,
   secondaryButtonClass,
-  statusChartItems,
   textareaClass,
 } from "@/components/dashboard/talent-visuals"
+import { cn } from "@/lib/utils"
 import {
   Dialog,
   DialogDescription,
@@ -224,6 +221,14 @@ export function ProbationManagementView({
     "average_score",
     "averageScore",
   ])
+  const cycleCounts = React.useMemo(
+    () =>
+      CASE_CYCLE.map((status) => ({
+        status,
+        count: cases.filter((row) => readString(row, ["status"]).toUpperCase() === status).length,
+      })),
+    [cases],
+  )
 
   async function openCase(row: AdminRecord) {
     const token = readStoredToken()
@@ -463,26 +468,81 @@ export function ProbationManagementView({
             <div className="rounded-xl border border-border bg-card p-4">
               <ScoreRing value={confirmationRate} label="Confirmation rate" />
             </div>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <MetricTile label="Open cases" value={openCount} hint="Still in the cycle" />
-              <MetricTile label="Due this week" value={dueSoon} hint="Need a review now" />
-              <MetricTile label="Policies" value={policies.length} hint="Active confirmation rules" />
-              <MetricTile label="Team queue" value={teamCases.length} hint="Waiting on managers" />
+            <div className="rounded-xl border border-border bg-card">
+              <div className="grid sm:grid-cols-2 xl:grid-cols-4">
+                {[
+                  { label: "Open cases", value: openCount, hint: "Still in the cycle" },
+                  { label: "Due this week", value: dueSoon, hint: "Need a review now" },
+                  { label: "Policies", value: policies.length, hint: "Active confirmation rules" },
+                  { label: "Team queue", value: teamCases.length, hint: "Waiting on managers" },
+                ].map((item, index) => (
+                  <div
+                    key={item.label}
+                    className={cn(
+                      "border-border px-5 py-4",
+                      index > 0 && "border-t",
+                      "sm:border-t-0",
+                      index >= 2 && "sm:border-t",
+                      index % 2 === 1 && "sm:border-l",
+                      "xl:border-t-0",
+                      index > 0 && "xl:border-l",
+                    )}
+                  >
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      {item.label}
+                    </p>
+                    <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">{item.value}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{item.hint}</p>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
-          <div className="grid gap-4 xl:grid-cols-2">
-            <div className="rounded-xl border border-border bg-card p-4">
-              <h2 className="text-sm font-semibold">Case mix</h2>
-              <div className="mt-4">
-                <StatusStack items={statusChartItems(cases)} />
+          <div className="rounded-xl border border-border bg-card p-4">
+            <div className="flex flex-wrap items-end justify-between gap-2">
+              <div>
+                <h2 className="text-sm font-semibold">Confirmation cycle</h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Where cases sit from open through confirmation.
+                </p>
               </div>
+              <p className="text-xs text-muted-foreground">{cases.length} total</p>
             </div>
-            <div className="rounded-xl border border-border bg-card p-4">
-              <h2 className="text-sm font-semibold">Confirmation cycle</h2>
-              <div className="mt-4">
-                <CycleRail steps={CASE_CYCLE} current={readString(cases[0], ["status"], "OPEN")} />
-              </div>
-            </div>
+            <ol className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-start">
+              {cycleCounts.map((step, index) => {
+                const last = index === cycleCounts.length - 1
+                return (
+                  <li key={step.status} className="relative flex items-start sm:min-w-0 sm:flex-1 sm:flex-col">
+                    {last ? null : (
+                      <span
+                        className="absolute left-[17px] top-9 h-[calc(100%+0.75rem)] w-px bg-border sm:hidden"
+                        aria-hidden
+                      />
+                    )}
+                    <div className="flex items-center sm:w-full">
+                      <span
+                        className={cn(
+                          "relative z-10 flex size-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold tabular-nums",
+                          step.count > 0
+                            ? last
+                              ? "bg-emerald-600 text-white"
+                              : "bg-primary text-white"
+                            : "bg-muted text-muted-foreground",
+                        )}
+                      >
+                        {step.count}
+                      </span>
+                      {last ? null : (
+                        <span className="mx-3 hidden h-px flex-1 bg-border sm:block" aria-hidden />
+                      )}
+                    </div>
+                    <div className="ml-3 min-w-0 pt-1.5 sm:ml-0 sm:pt-2">
+                      <p className="text-sm font-medium text-foreground">{prettify(step.status)}</p>
+                    </div>
+                  </li>
+                )
+              })}
+            </ol>
           </div>
         </>
       ) : (

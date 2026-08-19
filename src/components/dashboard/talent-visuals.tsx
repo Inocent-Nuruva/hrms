@@ -493,6 +493,49 @@ export function MetricTile({
   )
 }
 
+export function StatStrip({
+  items,
+}: {
+  items: Array<{ label: string; value: React.ReactNode; hint?: string }>
+}) {
+  const columns = items.length === 3 ? 3 : 4
+  return (
+    <div className="rounded-xl border border-border bg-card">
+      <div
+        className={cn(
+          "grid",
+          columns === 3 ? "sm:grid-cols-3" : "sm:grid-cols-2 xl:grid-cols-4",
+        )}
+      >
+        {items.map((item, index) => (
+          <div
+            key={item.label}
+            className={cn(
+              "border-border px-5 py-4",
+              columns === 3
+                ? index > 0 && "border-t sm:border-t-0 sm:border-l"
+                : [
+                    index > 0 && "border-t",
+                    "sm:border-t-0",
+                    index >= 2 && "sm:border-t",
+                    index % 2 === 1 && "sm:border-l",
+                    "xl:border-t-0",
+                    index > 0 && "xl:border-l",
+                  ],
+            )}
+          >
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              {item.label}
+            </p>
+            <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">{item.value}</p>
+            {item.hint ? <p className="mt-1 text-xs text-muted-foreground">{item.hint}</p> : null}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function DetailField({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="rounded-xl border border-border bg-card px-3 py-2.5">

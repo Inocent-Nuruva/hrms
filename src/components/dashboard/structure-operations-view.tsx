@@ -8,7 +8,7 @@ import { SearchToggleField } from "@/components/common/search-toggle-field"
 import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared"
 import {
   HeroBand,
-  MetricTile,
+  StatStrip,
   StatusChip,
   TalentDoodleSprites,
   actionButtonClass,
@@ -72,7 +72,17 @@ export function StructureOperationsView({ activeTab }: { activeTab: StructureOps
 
   if (activeTab === "numbering") {
     if (!canAccess) return null
-    return <EmployeeSetupView mode="numbering" />
+    return (
+      <section className="space-y-4">
+        <TalentDoodleSprites />
+        <HeroBand
+          eyebrow="Structure"
+          title="Employee numbering"
+          description="Set the prefix, digit width, and next ID assigned when someone joins."
+        />
+        <EmployeeSetupView mode="numbering" />
+      </section>
+    )
   }
 
   const [rows, setRows] = React.useState<AdminRecord[]>([])
@@ -291,26 +301,32 @@ export function StructureOperationsView({ activeTab }: { activeTab: StructureOps
           </div>
         }
       />
-      <div className="grid gap-3 sm:grid-cols-3">
-        <MetricTile label={activeTab === "grades" ? "Grades" : "Cost centers"} value={rows.length} />
-        <MetricTile
-          label="In use"
-          value={rows.filter((row) => !["inactive", "disabled"].includes(readString(row, ["status"]).toLowerCase())).length}
-        />
-        <MetricTile
-          label={activeTab === "grades" ? "With a rank" : "Linked to a team"}
-          value={
-            rows.filter((row) =>
+      <StatStrip
+        items={[
+          {
+            label: activeTab === "grades" ? "Grades" : "Cost centers",
+            value: rows.length,
+            hint: activeTab === "grades" ? "Pay bands on file" : "Spend codes on file",
+          },
+          {
+            label: "In use",
+            value: rows.filter((row) => !["inactive", "disabled"].includes(readString(row, ["status"]).toLowerCase())).length,
+            hint: activeTab === "grades" ? "Ready to assign" : "Open for posting",
+          },
+          {
+            label: activeTab === "grades" ? "With a rank" : "Linked to a team",
+            value: rows.filter((row) =>
               readString(
                 row,
                 activeTab === "grades"
                   ? ["level"]
                   : ["departmentId", "department_id", "branchId", "branch_id"],
               ),
-            ).length
-          }
-        />
-      </div>
+            ).length,
+            hint: activeTab === "grades" ? "Have a seniority level" : "Tied to a branch or department",
+          },
+        ]}
+      />
       <SearchToggleField value={search} onChange={setSearch} placeholder="Search" />
       {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div> : null}
       <div className="overflow-hidden rounded-xl border border-border bg-card">

@@ -8,9 +8,7 @@ import { SearchToggleField } from "@/components/common/search-toggle-field"
 import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared"
 import {
   HeroBand,
-  MetricTile,
   StatusChip,
-  StatusStack,
   TalentDoodleSprites,
   actionButtonClass,
   employeeLabel,
@@ -22,9 +20,9 @@ import {
   readString,
   rowId,
   secondaryButtonClass,
-  statusChartItems,
   textareaClass,
 } from "@/components/dashboard/talent-visuals"
+import { cn } from "@/lib/utils"
 import {
   Dialog,
   DialogDescription,
@@ -250,6 +248,15 @@ export function MovementOperationsView({ activeTab }: { activeTab: MovementOpsTa
   const awaiting = rows.filter((row) => ["SUBMITTED", "PENDING_APPROVAL"].includes(statusOf(row))).length
   const approved = rows.filter((row) => statusOf(row) === "APPROVED").length
   const applied = rows.filter((row) => statusOf(row) === "APPLIED").length
+  const cycleCounts = [
+    {
+      status: "DRAFT",
+      count: rows.filter((row) => ["DRAFT", "RETURNED_FOR_CORRECTION"].includes(statusOf(row))).length,
+    },
+    { status: "AWAITING_DECISION", count: awaiting },
+    { status: "APPROVED", count: approved },
+    { status: "APPLIED", count: applied },
+  ]
 
   const columns = React.useMemo<Column<AdminRecord>[]>(() => [
     {
@@ -346,7 +353,7 @@ export function MovementOperationsView({ activeTab }: { activeTab: MovementOpsTa
           <HeroBand
             eyebrow="Movements"
             title="Employee movement operations"
-            description="Transfers, promotions, and other assignment changes — shown only if you have the grant."
+            description="Transfers, promotions, and other assignment changes."
             actions={
               <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
                 {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
@@ -355,15 +362,80 @@ export function MovementOperationsView({ activeTab }: { activeTab: MovementOpsTa
             }
           />
           {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div> : null}
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <MetricTile label="Cases" value={rows.length} />
-            <MetricTile label="Awaiting decision" value={awaiting} />
-            <MetricTile label="Approved" value={approved} />
-            <MetricTile label="Applied" value={applied} />
+          <div className="rounded-xl border border-border bg-card">
+            <div className="grid sm:grid-cols-2 xl:grid-cols-4">
+              {[
+                { label: "Cases", value: rows.length, hint: "All movement records" },
+                { label: "Awaiting decision", value: awaiting, hint: "Submitted or pending approval" },
+                { label: "Approved", value: approved, hint: "Ready to apply" },
+                { label: "Applied", value: applied, hint: "Changes already in effect" },
+              ].map((item, index) => (
+                <div
+                  key={item.label}
+                  className={cn(
+                    "border-border px-5 py-4",
+                    index > 0 && "border-t",
+                    "sm:border-t-0",
+                    index >= 2 && "sm:border-t",
+                    index % 2 === 1 && "sm:border-l",
+                    "xl:border-t-0",
+                    index > 0 && "xl:border-l",
+                  )}
+                >
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    {item.label}
+                  </p>
+                  <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">{item.value}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{item.hint}</p>
+                </div>
+              ))}
+            </div>
           </div>
           <div className="rounded-xl border border-border bg-card p-4">
-            <h2 className="text-sm font-semibold">Status mix</h2>
-            <div className="mt-4"><StatusStack items={statusChartItems(rows)} /></div>
+            <div className="flex flex-wrap items-end justify-between gap-2">
+              <div>
+                <h2 className="text-sm font-semibold">Movement cycle</h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Where cases sit from draft through applied.
+                </p>
+              </div>
+              <p className="text-xs text-muted-foreground">{rows.length} total</p>
+            </div>
+            <ol className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-start">
+              {cycleCounts.map((step, index) => {
+                const last = index === cycleCounts.length - 1
+                return (
+                  <li key={step.status} className="relative flex items-start sm:min-w-0 sm:flex-1 sm:flex-col">
+                    {last ? null : (
+                      <span
+                        className="absolute left-[17px] top-9 h-[calc(100%+0.75rem)] w-px bg-border sm:hidden"
+                        aria-hidden
+                      />
+                    )}
+                    <div className="flex items-center sm:w-full">
+                      <span
+                        className={cn(
+                          "relative z-10 flex size-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold tabular-nums",
+                          step.count > 0
+                            ? last
+                              ? "bg-emerald-600 text-white"
+                              : "bg-primary text-white"
+                            : "bg-muted text-muted-foreground",
+                        )}
+                      >
+                        {step.count}
+                      </span>
+                      {last ? null : (
+                        <span className="mx-3 hidden h-px flex-1 bg-border sm:block" aria-hidden />
+                      )}
+                    </div>
+                    <div className="ml-3 min-w-0 pt-1.5 sm:ml-0 sm:pt-2">
+                      <p className="text-sm font-medium text-foreground">{prettify(step.status)}</p>
+                    </div>
+                  </li>
+                )
+              })}
+            </ol>
           </div>
         </>
       ) : (
