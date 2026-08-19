@@ -4,10 +4,9 @@ import * as React from "react"
 
 import { EmployeeImportView } from "@/components/dashboard/employee-import-view"
 import { EmployeeRegisterForm } from "@/components/dashboard/employee-register-form"
-import { EmployeeSetupView } from "@/components/dashboard/employee-setup-view"
 import { cn } from "@/lib/utils"
 
-type RegistrationTab = "manual" | "import" | "setup"
+type RegistrationTab = "manual" | "import"
 
 export function EmployeeRegistrationView() {
   const [activeTab, setActiveTab] = React.useState<RegistrationTab>("manual")
@@ -19,7 +18,6 @@ export function EmployeeRegistrationView() {
           {([
             { id: "manual", label: "Manual Registration" },
             { id: "import", label: "Bulk Import" },
-            { id: "setup", label: "Setup" },
           ] as const).map((tab) => {
             const isActive = activeTab === tab.id
 
@@ -43,13 +41,7 @@ export function EmployeeRegistrationView() {
       </div>
 
       <div className="min-w-0">
-        {activeTab === "manual" ? (
-          <EmployeeRegisterForm />
-        ) : activeTab === "import" ? (
-          <EmployeeImportView />
-        ) : (
-          <EmployeeSetupView />
-        )}
+        {activeTab === "manual" ? <EmployeeRegisterForm /> : <EmployeeImportView />}
       </div>
     </div>
   )
