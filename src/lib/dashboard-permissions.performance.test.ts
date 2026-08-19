@@ -56,13 +56,16 @@ describe("performance and probation route access", () => {
     ).toBe(false)
   })
 
-  it("keeps My performance open for employees and blocks the HR module", () => {
+  it("keeps My performance when a helper is also granted HR performance", () => {
+    expect(
+      canAccessDashboardRoute("/dashboard/me/performance/overview", ["performance:read"], "employee"),
+    ).toBe(true)
+    expect(
+      canAccessDashboardRoute("/dashboard/me/performance/overview", ["performance:read"], "admin"),
+    ).toBe(true)
     expect(
       canAccessDashboardRoute("/dashboard/performance/overview", ["performance:read"], "employee"),
-    ).toBe(false)
-    expect(canAccessDashboardRoute("/dashboard/me/performance/overview", ["performance:read"], "employee")).toBe(
-      true,
-    )
+    ).toBe(true)
     expect(hasAdminDashboardAccess(["performance:read"])).toBe(false)
     expect(hasAdminDashboardAccess(["view_performance"])).toBe(false)
     expect(

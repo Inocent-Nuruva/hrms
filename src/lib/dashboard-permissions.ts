@@ -1720,13 +1720,6 @@ export function canAccessDashboardRoute(
   }
 
   if (
-    accessMode === "employee" &&
-    (path === "/dashboard/performance" || path.startsWith("/dashboard/performance/"))
-  ) {
-    return false
-  }
-
-  if (
     path === "/dashboard/operations/scheduled-reporting" ||
     path.startsWith("/dashboard/operations/scheduled-reporting/")
   ) {

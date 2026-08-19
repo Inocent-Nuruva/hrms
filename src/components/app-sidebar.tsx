@@ -33,6 +33,7 @@ import type { AdminResourceKey } from "@/lib/admin-api"
 import {
   normalizePermissionLabels,
 } from "@/lib/dashboard-permissions"
+import { mergeUniqueNavItems } from "@/lib/dashboard-nav"
 import { canSeeDashboardPage } from "@/lib/forbidden-routes"
 import {
   useForbiddenPrefixes,
@@ -403,8 +404,7 @@ const adminSearchIndex = [
   },
 ]
 
-const employeeData: SidebarData = {
-  navMain: [
+const selfServiceNavMain: SidebarNavItem[] = [
     {
       title: "My Attendance",
       icon: IAttendance,
@@ -509,78 +509,6 @@ const employeeData: SidebarData = {
       ],
     },
     {
-      title: "Field",
-      url: "/dashboard/field",
-      matchUrls: [
-        "/dashboard/field",
-        "/dashboard/field/overview",
-        "/dashboard/field/visits",
-        "/dashboard/field/map",
-        "/dashboard/field/parties",
-        "/dashboard/field/setup",
-      ],
-      icon: IField,
-    },
-    {
-      title: "Finance",
-      url: "/dashboard/finance",
-      matchUrls: [
-        "/dashboard/finance",
-        "/dashboard/finance/overview",
-        "/dashboard/finance/products",
-        "/dashboard/finance/applications",
-        "/dashboard/finance/accounts",
-      ],
-      icon: IUsers,
-    },
-    {
-      title: "Activities",
-      url: "/dashboard/activities",
-      matchUrls: [
-        "/dashboard/activities",
-        "/dashboard/activities/overview",
-        "/dashboard/activities/reports",
-        "/dashboard/activities/reviews",
-        "/dashboard/activities/exceptions",
-        "/dashboard/activities/setup",
-      ],
-      icon: IActivities,
-    },
-    {
-      title: "Movements",
-      url: "/dashboard/movements",
-      matchUrls: [
-        "/dashboard/movements",
-        "/dashboard/movements/overview",
-        "/dashboard/movements/cases",
-        "/dashboard/movements/operations",
-      ],
-      icon: IMovements,
-    },
-    {
-      title: "SMS",
-      url: "/dashboard/sms",
-      matchUrls: [
-        "/dashboard/sms",
-        "/dashboard/sms/overview",
-        "/dashboard/sms/registry",
-        "/dashboard/sms/logs",
-        "/dashboard/sms/platform",
-      ],
-      icon: ISms,
-    },
-    {
-      title: "Structure",
-      url: "/dashboard/structure",
-      matchUrls: [
-        "/dashboard/structure",
-        "/dashboard/structure/cost-centers",
-        "/dashboard/structure/grades",
-        "/dashboard/structure/numbering",
-      ],
-      icon: IStructure,
-    },
-    {
       title: "My Leave",
       icon: ILeave,
       url: "/dashboard/me/leave/requests",
@@ -592,30 +520,19 @@ const employeeData: SidebarData = {
       ],
     },
     {
-      title: "Onboarding",
+      title: "My Onboarding",
       icon: IUsers,
       url: "/dashboard/me/onboarding",
     },
     {
-      title: "Offboarding",
+      title: "My Offboarding",
       icon: IOffboarding,
-      // Self-service path — does not mount the HR Employees section tabs.
       url: "/dashboard/me/offboarding",
     },
-    {
-      title: "Insights",
-      url: "/dashboard/insights",
-      matchUrls: [
-        "/dashboard/insights",
-        "/dashboard/insights/hr",
-        "/dashboard/insights/management",
-        "/dashboard/insights/manager",
-        "/dashboard/insights/sales-field",
-        "/dashboard/insights/readiness",
-      ],
-      icon: IInsights,
-    },
-  ],
+]
+
+const employeeData: SidebarData = {
+  navMain: selfServiceNavMain,
   navSecondary: [
     {
       title: "Get Help",
@@ -800,37 +717,45 @@ export function AppSidebar({
   const permissionsResolved = navReady && identityReady
 
   const navData = React.useMemo(() => {
-    const source = resolvedAccessMode === "employee" ? employeeData : adminData
+    const secondary =
+      resolvedAccessMode === "employee" ? employeeData.navSecondary : adminData.navSecondary
     // Do not paint the full admin/employee catalog first and then hide items.
     // SSR and the first client frame both render an empty rail; after identity
     // is known we show only the routes this person may open.
     if (!permissionsResolved) {
       return {
-        ...source,
         navMain: [] as SidebarNavItem[],
+        navSecondary: secondary,
       }
     }
     void forbiddenVersion
+    // Helper employees keep My * links even when an HR grant flips them
+    // into the admin catalog. Granted admin routes are appended after.
+    const selfService = filterNavByPermissions(
+      selfServiceNavMain,
+      normalizedPermissions,
+      resolvedAccessMode,
+    )
+    const adminItems = filterNavByPermissions(
+      adminData.navMain,
+      normalizedPermissions,
+      resolvedAccessMode,
+    )
     return {
-      ...source,
-      navMain: filterNavByPermissions(
-        source.navMain,
-        normalizedPermissions,
-        resolvedAccessMode
-      ),
+      navMain: mergeUniqueNavItems(selfService, adminItems),
+      navSecondary: secondary,
     }
   }, [forbiddenVersion, normalizedPermissions, permissionsResolved, resolvedAccessMode])
 
   const searchIndex = React.useMemo(() => {
-    const source = resolvedAccessMode === "employee" ? employeeSearchIndex : adminSearchIndex
     if (!permissionsResolved) {
       return [] as SearchItem[]
     }
     void forbiddenVersion
     return filterAdminSearchByPermissions(
-      source,
+      mergeUniqueNavItems(employeeSearchIndex, adminSearchIndex),
       normalizedPermissions,
-      resolvedAccessMode
+      resolvedAccessMode,
     )
   }, [forbiddenVersion, normalizedPermissions, permissionsResolved, resolvedAccessMode])
 
