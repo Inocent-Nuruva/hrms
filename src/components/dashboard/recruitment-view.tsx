@@ -5,15 +5,14 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
 import { EmployeeInviteView } from "@/components/dashboard/employee-invite-view"
 import { EmployeeRegistrationView } from "@/components/dashboard/employee-registration-view"
-import { EmployeeSetupView } from "@/components/dashboard/employee-setup-view"
 import { cn } from "@/lib/utils"
 
-type RecruitmentTab = "invite" | "registration" | "numbering"
+type RecruitmentTab = "invite" | "registration"
 
 const DEFAULT_TAB: RecruitmentTab = "invite"
 
 function resolveRecruitmentTab(value: string | null): RecruitmentTab {
-  if (value === "registration" || value === "numbering") return value
+  if (value === "registration") return value
   return DEFAULT_TAB
 }
 
@@ -46,7 +45,6 @@ export function RecruitmentView() {
           {([
             { id: "invite", label: "Invite" },
             { id: "registration", label: "Registration" },
-            { id: "numbering", label: "Numbering" },
           ] as const).map((tab) => {
             const isActive = activeTab === tab.id
 
@@ -71,8 +69,6 @@ export function RecruitmentView() {
 
       {activeTab === "invite" ? (
         <EmployeeInviteView />
-      ) : activeTab === "numbering" ? (
-        <EmployeeSetupView mode="numbering" />
       ) : (
         <div className="min-w-0">
           <EmployeeRegistrationView />
