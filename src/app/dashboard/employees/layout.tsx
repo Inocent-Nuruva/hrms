@@ -5,6 +5,8 @@ import { usePathname, useRouter } from "next/navigation"
 
 import { DashboardSectionTabs } from "@/components/dashboard/dashboard-section-tabs"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
+import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
+import { selfServiceHomeFor } from "@/lib/dashboard-nav"
 import { employeeSectionTabGroups } from "@/lib/dashboard-sections"
 
 export default function EmployeesLayout({
@@ -15,12 +17,14 @@ export default function EmployeesLayout({
   const actor = useDashboardActor()
   const pathname = usePathname()
   const router = useRouter()
+  const path = pathname ?? ""
+  const helperAccess =
+    actor.ready &&
+    canAccessDashboardRoute(path, actor.permissionLabels, actor.accessMode)
 
-  // Self-service shell users who still land on the HR Employees section
-  // (e.g. old offboarding bookmarks) should leave this layout immediately.
   React.useEffect(() => {
     if (!actor.ready || actor.accessMode !== "employee") return
-    // Self-service offboarding lives under /dashboard/me/offboarding.
+    if (helperAccess) return
     if (pathname?.startsWith("/dashboard/employees/offboarding")) {
       router.replace("/dashboard/me/offboarding")
       return
@@ -29,15 +33,16 @@ export default function EmployeesLayout({
       router.replace("/dashboard/me/onboarding")
       return
     }
-    // Any other employees/* route is admin/HR only for the employee shell.
     if (pathname?.startsWith("/dashboard/employees")) {
-      router.replace("/dashboard")
+      router.replace(selfServiceHomeFor(pathname) ?? "/dashboard")
     }
-  }, [actor.accessMode, actor.ready, pathname, router])
+  }, [actor.accessMode, actor.ready, helperAccess, pathname, router])
 
-  // Do not paint the HR Employees shell as a fallback while identity is
-  // unknown — employees would see it first, then watch it disappear.
-  if (!actor.ready || actor.accessMode === "employee") {
+  if (!actor.ready) {
+    return null
+  }
+
+  if (actor.accessMode === "employee" && !helperAccess) {
     return null
   }
 

@@ -77,6 +77,7 @@ import { authService } from "@/services/authService"
 import { asRecord, isLikelyRefreshToken, readString } from "@/utils/token-utils"
 import { env } from "@/lib/env"
 import { AUTH_STORAGE_KEYS, ROUTES } from "@/utils/constants"
+import { isSelfServiceDashboardRoute } from "@/lib/dashboard-nav"
 import {
   firstVisibleSiblingOrHome,
   rememberForbiddenRoute,
@@ -1029,6 +1030,10 @@ export default function AdminDashboardView({
     }
 
     if (currentPath === "/dashboard") {
+      return
+    }
+
+    if (isSelfServiceDashboardRoute(currentPath)) {
       return
     }
 

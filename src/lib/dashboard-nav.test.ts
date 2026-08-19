@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { mergeUniqueNavItems } from "./dashboard-nav"
+import { mergeUniqueNavItems, selfServiceHomeFor } from "./dashboard-nav"
 import { canSeeDashboardPage } from "./forbidden-routes"
 
 describe("mixed employee helper navigation", () => {
@@ -28,5 +28,15 @@ describe("mixed employee helper navigation", () => {
       "My Probation",
       "Performance",
     ])
+  })
+
+  it("maps HR modules back to the matching My page instead of the dashboard", () => {
+    expect(selfServiceHomeFor("/dashboard/probation/cases")).toBe("/dashboard/me/probation")
+    expect(selfServiceHomeFor("/dashboard/leave-management/requests")).toBe(
+      "/dashboard/me/leave/requests",
+    )
+    expect(selfServiceHomeFor("/dashboard/operations/payroll")).toBe("/dashboard/me/payroll")
+    expect(selfServiceHomeFor("/dashboard/field/visits")).toBe("/dashboard/me/field/visits")
+    expect(selfServiceHomeFor("/dashboard/attendance/policies")).toBe("/dashboard/attendance/today")
   })
 })

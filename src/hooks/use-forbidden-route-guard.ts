@@ -8,9 +8,11 @@ import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { probePlatformCompaniesList } from "@/lib/admin-api"
 import {
   COMPANY_MANAGEMENT_ROUTE_PERMISSION,
+  canAccessDashboardRoute,
   hasPermission,
   type DashboardAccessMode,
 } from "@/lib/dashboard-permissions"
+import { isSelfServiceDashboardRoute } from "@/lib/dashboard-nav"
 import {
   canSeeDashboardPage,
   confirmPlatformRoute,
@@ -50,6 +52,7 @@ export function useForbiddenRouteGuard(allowed: boolean) {
 
   React.useEffect(() => {
     if (!actor.ready || allowed) return
+    if (pathname && isSelfServiceDashboardRoute(pathname)) return
     if (pathname) rememberForbiddenRoute(pathname)
     hideStructureNavIfEmpty(actor.permissionLabels, actor.accessMode)
     hideSmsNavIfEmpty(actor.permissionLabels, actor.accessMode)
@@ -67,6 +70,13 @@ export function useLeaveIfForbidden() {
   return React.useCallback(
     (error: unknown) => {
       if (!isPermissionError(error)) return false
+      if (pathname && isSelfServiceDashboardRoute(pathname)) return false
+      if (
+        pathname &&
+        canAccessDashboardRoute(pathname, actor.permissionLabels, actor.accessMode)
+      ) {
+        return false
+      }
       if (pathname) rememberForbiddenRoute(pathname)
       hideStructureNavIfEmpty(actor.permissionLabels, actor.accessMode)
       hideSmsNavIfEmpty(actor.permissionLabels, actor.accessMode)

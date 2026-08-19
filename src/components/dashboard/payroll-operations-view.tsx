@@ -1016,9 +1016,11 @@ export function PayrollOperationsView() {
       return
     }
     if (!canAccessPayroll) {
-      router.replace("/dashboard")
+      router.replace(
+        actor.accessMode === "employee" ? "/dashboard/me/payroll" : "/dashboard",
+      )
     }
-  }, [actor.ready, canAccessPayroll, router])
+  }, [actor.accessMode, actor.ready, canAccessPayroll, router])
 
   const [tab, setTab] = React.useState<PayrollTab>("overview")
   const [configTab, setConfigTab] = React.useState<PayrollConfigTab>("components")

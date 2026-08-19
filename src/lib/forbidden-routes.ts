@@ -1,5 +1,6 @@
 import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
 import type { DashboardAccessMode } from "@/lib/dashboard-permissions"
+import { isSelfServiceDashboardRoute, selfServiceHomeFor } from "@/lib/dashboard-nav"
 import { allDashboardSectionTabGroups } from "@/lib/dashboard-sections"
 
 export const FORBIDDEN_ROUTES_EVENT = "hrms:forbidden-routes-changed"
@@ -16,16 +17,16 @@ const DO_NOT_REMEMBER = new Set([
   "/dashboard/sms/overview",
   "/dashboard/sms/registry",
   "/dashboard/sms/logs",
-  // Self-service performance is always allowed. A 403 from
-  // /api/performance/me/* must not hide My performance or bounce to /dashboard.
-  "/dashboard/me/performance",
-  "/dashboard/me/performance/overview",
-  "/dashboard/me/performance/assignments",
-  "/dashboard/me/performance/reviews",
-  "/dashboard/me/performance/achievements",
-  "/dashboard/me/performance/improvement",
-  "/dashboard/me/performance/team",
 ])
+
+function shouldRememberForbiddenRoute(url: string) {
+  const path = normalizePath(url)
+  const prefix = tabPrefix(url)
+  if (DO_NOT_REMEMBER.has(path) || DO_NOT_REMEMBER.has(prefix)) {
+    return false
+  }
+  return !isSelfServiceDashboardRoute(url)
+}
 
 /**
  * JWT `companies:read` is also issued to company-scoped System Administrators.
@@ -145,7 +146,7 @@ export function confirmPlatformRoute(url: string) {
 
 export function rememberForbiddenRoute(url: string) {
   const prefix = tabPrefix(url)
-  if (DO_NOT_REMEMBER.has(prefix)) return
+  if (!shouldRememberForbiddenRoute(url)) return
   const confirmed = readConfirmedPrefixes().filter((entry) => entry !== prefix)
   if (confirmed.length !== readConfirmedPrefixes().length) {
     if (typeof window !== "undefined") {
@@ -178,6 +179,9 @@ export function clearDashboardRouteMemory() {
 export function isRememberedForbiddenRoute(url: string) {
   const path = normalizePath(url)
   const currentPrefix = tabPrefix(url)
+  if (!shouldRememberForbiddenRoute(url)) {
+    return false
+  }
   if (DO_NOT_REMEMBER.has(path) || DO_NOT_REMEMBER.has(currentPrefix)) {
     return false
   }
@@ -212,7 +216,7 @@ export function firstVisibleSiblingOrHome(
     )
     if (visible) return visible.url
   }
-  return "/dashboard"
+  return selfServiceHomeFor(path) ?? "/dashboard"
 }
 
 const STRUCTURE_CHILD_ROUTES = [

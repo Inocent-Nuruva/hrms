@@ -130,10 +130,13 @@ export function ProbationManagementView({
     mode: "any",
   })
 
+  const fallbackHref =
+    actor.accessMode === "employee" ? "/dashboard/me/probation" : "/dashboard"
+
   React.useEffect(() => {
     if (!actor.ready || canAccess) return
-    router.replace("/dashboard")
-  }, [actor.ready, canAccess, router])
+    router.replace(fallbackHref)
+  }, [actor.ready, canAccess, fallbackHref, router])
 
   const [dashboard, setDashboard] = React.useState<AdminRecord | null>(null)
   const [policies, setPolicies] = React.useState<AdminRecord[]>([])
@@ -179,24 +182,18 @@ export function ProbationManagementView({
       const permissionFailure = results.find(
         (result) => result.status === "rejected" && isPermissionError(result.reason),
       )
-      if (permissionFailure) {
-        router.replace("/dashboard")
-        return
-      }
-      const firstError = results.find((result) => result.status === "rejected")
-      if (firstError && firstError.status === "rejected") {
-        setError(firstError.reason instanceof Error ? firstError.reason.message : "Could not load probation data.")
+      const failed = permissionFailure ?? results.find((result) => result.status === "rejected")
+      if (failed && failed.status === "rejected") {
+        setError(
+          failed.reason instanceof Error ? failed.reason.message : "Could not load probation data.",
+        )
       }
     } catch (errorObject) {
-      if (isPermissionError(errorObject)) {
-        router.replace("/dashboard")
-        return
-      }
       setError(errorObject instanceof Error ? errorObject.message : "Could not load probation data.")
     } finally {
       setLoading(false)
     }
-  }, [activeTab, router, statusFilter])
+  }, [activeTab, statusFilter])
 
   React.useEffect(() => {
     if (!canAccess) return

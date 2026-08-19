@@ -4,6 +4,7 @@ import * as React from "react"
 import { usePathname, useRouter } from "next/navigation"
 
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
+import { selfServiceHomeFor } from "@/lib/dashboard-nav"
 import { canSeeDashboardPage } from "@/lib/forbidden-routes"
 import type { DashboardSectionTabGroup } from "@/lib/dashboard-sections"
 
@@ -33,8 +34,8 @@ export function DashboardSectionRootRedirect({
    )
    if (item) return item.url
  }
- if (actor.accessMode === "employee" && employeeFallbackHref) {
-   return employeeFallbackHref
+ if (actor.accessMode === "employee") {
+   return employeeFallbackHref ?? selfServiceHomeFor(pathname ?? "") ?? fallbackHref
  }
  return fallbackHref
  }, [
@@ -44,6 +45,7 @@ export function DashboardSectionRootRedirect({
    employeeFallbackHref,
    fallbackHref,
    groups,
+   pathname,
  ])
 
  React.useEffect(() => {
