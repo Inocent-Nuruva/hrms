@@ -69,7 +69,7 @@ import {
 } from "@/lib/admin-api"
 import { cn } from "@/lib/utils"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
-import { motion } from "framer-motion"
+import { AnimatePresence, motion } from "framer-motion"
 import { useDashboardMotion } from "@/lib/dashboard-motion"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
@@ -1694,6 +1694,9 @@ function ProfileSectionsTabs({
   }, [requestedTitle])
 
   const active = sections.find((section) => section.title === activeTitle) ?? sections[0]
+  const activeIndex = Math.max(0, sections.findIndex((section) => section.title === active?.title))
+  const [slideDirection, setSlideDirection] = React.useState(1)
+  const motionPreset = useDashboardMotion()
   const tabsScrollRef = React.useRef<HTMLDivElement | null>(null)
   const [tabScrollState, setTabScrollState] = React.useState({
     canScrollLeft: false,
@@ -1743,6 +1746,13 @@ function ProfileSectionsTabs({
     }
   }, [sections.length, updateTabScrollState])
 
+  const selectSection = React.useCallback((title: string) => {
+    const nextIndex = sections.findIndex((section) => section.title === title)
+    if (nextIndex < 0 || title === activeTitle) return
+    setSlideDirection(nextIndex > activeIndex ? 1 : -1)
+    setActiveTitle(title)
+  }, [activeIndex, activeTitle, sections])
+
   const scrollTabs = React.useCallback((direction: "left" | "right") => {
     const element = tabsScrollRef.current
     if (!element) {
@@ -1758,106 +1768,130 @@ function ProfileSectionsTabs({
   }, [updateTabScrollState])
 
   return (
-    <div className="space-y-3">
-      <div className="flex min-w-0 items-center gap-1.5">
-        <button
-          type="button"
-          aria-label="Scroll profile sections left"
-          disabled={!tabScrollState.canScrollLeft}
-          onClick={() => scrollTabs("left")}
-          className="inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-primary/20 bg-white text-primary shadow-sm transition hover:bg-primary/10 disabled:pointer-events-none disabled:opacity-40"
-        >
-          <ChevronLeftIcon className="size-3.5" />
-        </button>
-        <div
-          ref={tabsScrollRef}
-          className="min-w-0 flex-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-          role="tablist"
-          aria-label="Employee profile sections"
-        >
-          <div className="inline-flex min-w-full items-center gap-2">
-            {sections.map((section) => {
-              const isActive = section.title === active?.title
-              const needsAttention = requestedRouteKey === section.routeKey
-              return (
-                <button
-                  key={section.routeKey}
-                  type="button"
-                  role="tab"
-                  title={`${section.title} (${section.count})`}
-                  aria-label={`${section.title}, ${section.count} items`}
-                  aria-selected={isActive}
-                  onClick={() => setActiveTitle(section.title)}
-                  className={cn(
-                    "relative isolate inline-flex h-8 shrink-0 items-center overflow-hidden rounded-full border px-3 text-xs font-semibold whitespace-nowrap transition",
-                    isActive
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-primary/15 bg-white text-primary hover:border-primary/30 hover:bg-primary/8",
-                    needsAttention && !isActive ? "ring-2 ring-primary/25" : null
-                  )}
-                >
-                  {section.tabLabel}
-                  <span
+    <div className="relative isolate overflow-hidden rounded-[1.75rem] border border-primary/20 bg-white p-4 shadow-[0_1px_0_rgba(255,255,255,0.8)_inset,0_16px_36px_-22px_rgb(var(--primary-rgb)_/_0.4)] sm:p-5">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-primary opacity-[0.22]"
+        style={{ clipPath: "circle(12% at 98% -2%)" }}
+      />
+      <div className="relative z-10 space-y-4">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <button
+            type="button"
+            aria-label="Scroll profile sections left"
+            disabled={!tabScrollState.canScrollLeft}
+            onClick={() => scrollTabs("left")}
+            className="inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-primary/20 bg-white text-primary shadow-sm transition hover:bg-primary/10 disabled:pointer-events-none disabled:opacity-40"
+          >
+            <ChevronLeftIcon className="size-3.5" />
+          </button>
+          <div
+            ref={tabsScrollRef}
+            className="min-w-0 flex-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            role="tablist"
+            aria-label="Employee profile sections"
+          >
+            <div className="inline-flex items-center gap-2">
+              {sections.map((section) => {
+                const isActive = section.title === active?.title
+                const needsAttention = requestedRouteKey === section.routeKey
+                return (
+                  <button
+                    key={section.routeKey}
+                    type="button"
+                    role="tab"
+                    title={`${section.title} (${section.count})`}
+                    aria-label={`${section.title}, ${section.count} items`}
+                    aria-selected={isActive}
+                    onClick={() => selectSection(section.title)}
                     className={cn(
-                      "ml-1.5 tabular-nums",
-                      isActive ? "text-primary-foreground/80" : "text-primary/70"
+                      "relative isolate inline-flex h-8 shrink-0 items-center overflow-hidden rounded-full border px-3 text-xs font-semibold whitespace-nowrap transition",
+                      isActive
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-primary/15 bg-white text-primary hover:border-primary/30 hover:bg-primary/8",
+                      needsAttention && !isActive ? "ring-2 ring-primary/25" : null
                     )}
                   >
-                    {section.count}
-                  </span>
-                </button>
-              )
-            })}
+                    {section.tabLabel}
+                    <span
+                      className={cn(
+                        "ml-1.5 tabular-nums",
+                        isActive ? "text-primary-foreground/80" : "text-primary/70"
+                      )}
+                    >
+                      {section.count}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
           </div>
+          <button
+            type="button"
+            aria-label="Scroll profile sections right"
+            disabled={!tabScrollState.canScrollRight}
+            onClick={() => scrollTabs("right")}
+            className="inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-primary/20 bg-white text-primary shadow-sm transition hover:bg-primary/10 disabled:pointer-events-none disabled:opacity-40"
+          >
+            <ChevronRightIcon className="size-3.5" />
+          </button>
         </div>
-        <button
-          type="button"
-          aria-label="Scroll profile sections right"
-          disabled={!tabScrollState.canScrollRight}
-          onClick={() => scrollTabs("right")}
-          className="inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-primary/20 bg-white text-primary shadow-sm transition hover:bg-primary/10 disabled:pointer-events-none disabled:opacity-40"
-        >
-          <ChevronRightIcon className="size-3.5" />
-        </button>
-      </div>
 
-      {active ? (
-        active.title === "Departments" ? (
-          <DepartmentAssignmentsSection
-            key={active.routeKey}
-            items={active.items}
-            employee={employee}
-            employeeId={employeeId}
-            onMutated={onMutated}
-            requestedRouteKey={requestedRouteKey}
-          />
-        ) : active.title === "Positions" ? (
-          <PositionAssignmentsSection
-            key={active.routeKey}
-            items={active.items}
-            employeeId={employeeId}
-            onMutated={onMutated}
-            requestedRouteKey={requestedRouteKey}
-          />
-        ) : active.title === "Movements" ? (
-          <EmployeeMovementsSection
-            key={active.routeKey}
-            items={active.items}
-            employeeId={employeeId}
-            onMutated={onMutated}
-            requestedRouteKey={requestedRouteKey}
-          />
-        ) : (
-          <Section
-            key={active.routeKey}
-            title={active.title}
-            items={active.items}
-            employeeId={employeeId}
-            onMutated={onMutated}
-            requestedRouteKey={requestedRouteKey}
-          />
-        )
-      ) : null}
+        <div className="relative overflow-hidden">
+          <AnimatePresence mode="wait" custom={slideDirection} initial={false}>
+            {active ? (
+              <motion.div
+                key={active.routeKey}
+                custom={slideDirection}
+                initial={
+                  motionPreset.reduce
+                    ? { opacity: 1, x: 0 }
+                    : { opacity: 0, x: slideDirection * 48 }
+                }
+                animate={{ opacity: 1, x: 0 }}
+                exit={
+                  motionPreset.reduce
+                    ? { opacity: 1, x: 0 }
+                    : { opacity: 0, x: slideDirection * -48 }
+                }
+                transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+              >
+                {active.title === "Departments" ? (
+                  <DepartmentAssignmentsSection
+                    items={active.items}
+                    employee={employee}
+                    employeeId={employeeId}
+                    onMutated={onMutated}
+                    requestedRouteKey={requestedRouteKey}
+                  />
+                ) : active.title === "Positions" ? (
+                  <PositionAssignmentsSection
+                    items={active.items}
+                    employeeId={employeeId}
+                    onMutated={onMutated}
+                    requestedRouteKey={requestedRouteKey}
+                  />
+                ) : active.title === "Movements" ? (
+                  <EmployeeMovementsSection
+                    items={active.items}
+                    employeeId={employeeId}
+                    onMutated={onMutated}
+                    requestedRouteKey={requestedRouteKey}
+                  />
+                ) : (
+                  <Section
+                    title={active.title}
+                    items={active.items}
+                    employeeId={employeeId}
+                    onMutated={onMutated}
+                    requestedRouteKey={requestedRouteKey}
+                  />
+                )}
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
+        </div>
+      </div>
     </div>
   )
 }
@@ -1941,27 +1975,13 @@ function Section({
         tabIndex={-1}
         aria-label={`${title} section`}
         className={cn(
-          "relative isolate scroll-mt-24 overflow-hidden rounded-[1.75rem] border border-primary/20 bg-white px-4 py-4 outline-none lg:px-5",
-          "shadow-[0_1px_0_rgba(255,255,255,0.8)_inset,0_16px_36px_-22px_rgb(var(--primary-rgb)_/_0.4)]",
-          isHighlighted && "ring-2 ring-primary/30"
+          "scroll-mt-24 outline-none",
+          isHighlighted && "rounded-2xl ring-2 ring-primary/30"
         )}
       >
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 bg-primary opacity-[0.22]"
-          style={{ clipPath: "circle(12% at 98% -2%)" }}
-        />
-        <div className="relative z-10 mb-3 flex items-center justify-between gap-3">
+        {supportsAdd || items.length === 0 || isHighlighted ? (
+        <div className="mb-3 flex items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                Profile section
-              </p>
-              <p className="text-sm font-semibold text-foreground">{title}</p>
-            </div>
-            <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold tabular-nums text-primary">
-              {items.length}
-            </span>
             {items.length === 0 ? (
               <span className="text-xs font-medium text-primary/70">Not provided</span>
             ) : null}
@@ -1981,15 +2001,16 @@ function Section({
             </button>
           ) : null}
         </div>
+        ) : null}
         {mutationError && !addingRecord && !deletingRecord && !editingRecord ? (
-          <p className="relative z-10 mb-2 text-sm text-rose-600">{mutationError}</p>
+          <p className="mb-2 text-sm text-rose-600">{mutationError}</p>
         ) : null}
         {items.length === 0 ? (
-          <p className="relative z-10 rounded-2xl border border-dashed border-primary/20 bg-primary/4 px-4 py-6 text-center text-sm text-muted-foreground">
+          <p className="rounded-2xl border border-dashed border-primary/20 bg-primary/4 px-4 py-6 text-center text-sm text-muted-foreground">
             No data available.
           </p>
         ) : (
-          <div className="relative z-10 grid gap-2">
+          <div className="grid gap-2">
             {items.map((item, index) => (
               <div
                 key={`${title}-${index}`}

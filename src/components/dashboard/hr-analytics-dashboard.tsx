@@ -654,9 +654,9 @@ function AnimatedMetricValue({ value }: { value: string | number }) {
 
 function MetricValueSkeleton() {
   return (
-    <div className="mt-3 space-y-2" aria-hidden="true">
-      <Skeleton className="h-9 w-20 rounded-xl" />
-      <Skeleton className="h-3 w-28 rounded-md" />
+    <div className="mt-1.5 space-y-1.5" aria-hidden="true">
+      <Skeleton className="h-6 w-12 rounded-md sm:h-7 sm:w-14" />
+      <Skeleton className="hidden h-2.5 w-16 rounded-md sm:block" />
     </div>
   )
 }
@@ -718,12 +718,11 @@ function MetricCard({
 }) {
   const Icon = metric.icon
   const orbDelay = index * 0.12
-  const compact = Boolean(metric.compact)
   const cardClassName = cn(
     "group relative isolate block h-full min-w-0 overflow-hidden border border-primary/20 bg-white",
-    "shadow-[0_1px_0_rgba(255,255,255,0.8)_inset,0_16px_36px_-22px_rgb(var(--primary-rgb)_/_0.45)]",
+    "shadow-[0_1px_0_rgba(255,255,255,0.8)_inset,0_12px_28px_-20px_rgb(var(--primary-rgb)_/_0.4)]",
     "transition-shadow duration-300 hover:border-primary/35",
-    compact ? "rounded-[1.35rem] p-3" : "rounded-[1.75rem] p-4",
+    "rounded-[1.15rem] p-2 sm:rounded-[1.25rem] sm:p-2.5 lg:p-3",
     metric.href ? "outline-none focus-visible:ring-2 focus-visible:ring-primary/40" : null,
   )
 
@@ -734,7 +733,7 @@ function MetricCard({
         className="pointer-events-none absolute inset-0 bg-primary"
         initial={reduce ? false : { clipPath: "circle(0% at 92% -6%)", opacity: 0 }}
         animate={{
-          clipPath: compact ? "circle(32% at 94% -8%)" : "circle(48% at 92% -6%)",
+          clipPath: "circle(34% at 94% -8%)",
           opacity: 0.38,
         }}
         transition={{ duration: 0.95, delay: orbDelay, ease: [0.16, 1, 0.3, 1] }}
@@ -742,8 +741,7 @@ function MetricCard({
       <motion.div
         aria-hidden
         className={cn(
-          "pointer-events-none absolute rounded-full bg-primary/50 blur-2xl",
-          compact ? "-right-5 -top-5 h-16 w-16" : "-right-4 -top-4 h-28 w-28",
+          "pointer-events-none absolute -right-5 -top-5 h-12 w-12 rounded-full bg-primary/50 blur-xl sm:h-16 sm:w-16",
         )}
         style={{ clipPath: "circle(50% at 50% 50%)" }}
         animate={
@@ -765,40 +763,34 @@ function MetricCard({
       <div className="relative z-10 flex items-start justify-between gap-3">
         <motion.span
           className={cn(
-            "inline-flex items-center justify-center rounded-full border border-primary/15 bg-primary/12 text-primary shadow-sm",
-            compact ? "size-8" : "size-10",
+            "inline-flex size-6 items-center justify-center rounded-full border border-primary/15 bg-primary/12 text-primary shadow-sm sm:size-7 lg:size-8",
           )}
           initial={reduce ? false : { scale: 0.7, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ type: "spring", stiffness: 380, damping: 18, delay: 0.12 + orbDelay }}
         >
-          <Icon className={compact ? "size-3.5" : "size-4"} />
+          <Icon className="size-3 sm:size-3.5" />
         </motion.span>
-        {!compact && metric.ready && typeof metric.progress === "number" ? (
-          <div className="shrink-0 text-primary">
+        {metric.ready && typeof metric.progress === "number" ? (
+          <div className="hidden shrink-0 text-primary xl:block">
             <MetricProgressRing value={metric.progress} reduce={reduce} />
           </div>
         ) : null}
       </div>
 
-      <div className={cn("relative z-10", compact ? "mt-3" : "mt-5")}>
-        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+      <div className="relative z-10 mt-2 min-w-0 sm:mt-2.5">
+        <div className="truncate text-[8px] font-semibold uppercase tracking-[0.12em] text-muted-foreground sm:text-[9px] lg:text-[10px] lg:tracking-[0.16em]">
           {metric.label}
         </div>
         {!metric.ready ? (
           <MetricValueSkeleton />
         ) : (
           <>
-            <div
-              className={cn(
-                "mt-1 font-semibold leading-none tracking-tight tabular-nums text-primary",
-                compact ? "text-[1.35rem]" : "text-[1.85rem]",
-              )}
-            >
+            <div className="mt-0.5 font-semibold leading-none tracking-tight tabular-nums text-primary text-[clamp(0.95rem,1.8vw,1.35rem)]">
               <AnimatedMetricValue value={metric.value} />
             </div>
             {metric.sub ? (
-              <div className="mt-1.5 truncate text-[11px] leading-4 text-muted-foreground">
+              <div className="mt-1 hidden truncate text-[10px] leading-4 text-muted-foreground sm:block">
                 {metric.sub}
               </div>
             ) : null}
@@ -1500,7 +1492,7 @@ export default function HrAnalyticsDashboard({
         variants={motionPreset.item}
       >
         <motion.div
-          className="grid items-stretch gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-[repeat(4,minmax(0,1.15fr))_repeat(3,minmax(0,0.82fr))]"
+          className="grid grid-cols-7 items-stretch gap-1.5 sm:gap-2 lg:gap-2.5"
           aria-busy={loading}
           aria-live="polite"
           variants={motionPreset.metrics}
