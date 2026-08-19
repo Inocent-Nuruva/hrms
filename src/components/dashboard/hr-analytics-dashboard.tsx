@@ -52,16 +52,17 @@ import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import { motion } from "framer-motion"
 import { useDashboardMotion } from "@/lib/dashboard-motion"
 
-const EMPLOYMENT_STATUS_COLORS: Record<string, string> = {
-  active: "var(--primary)",
-  onboarding: "#0ea5e9",
-  suspended: "#f59e0b",
-  terminated: "#f43f5e",
-  exited: "#94a3b8",
+const EMPLOYMENT_STATUS_OPACITY: Record<string, number> = {
+  active: 1,
+  onboarding: 0.72,
+  suspended: 0.5,
+  terminated: 0.34,
+  exited: 0.2,
 }
 
 function employmentStatusColor(status: string) {
-  return EMPLOYMENT_STATUS_COLORS[status.trim().toLowerCase()] ?? "#a1a1aa"
+  const opacity = EMPLOYMENT_STATUS_OPACITY[status.trim().toLowerCase()] ?? 0.42
+  return `rgb(var(--primary-rgb) / ${opacity})`
 }
 
 /** Short client cache so revisiting / refresh feels instant. */
@@ -559,16 +560,13 @@ function getLeaveDates(row: AdminRecord): string {
 
 function leaveStatusTone(status: string) {
   const s = status.toLowerCase()
-  if (["approved", "completed"].includes(s)) {
-    return "text-emerald-700 dark:text-emerald-400"
-  }
   if (["rejected", "cancelled", "canceled"].includes(s)) {
-    return "text-rose-700 dark:text-rose-400"
+    return "text-primary/55"
   }
   if (s.includes("pending") || s.includes("review") || s.includes("submitted")) {
-    return "text-amber-700 dark:text-amber-400"
+    return "text-primary"
   }
-  return "text-slate-600 dark:text-slate-300"
+  return "text-primary/80"
 }
 
 function getAttendanceStatus(row: AdminRecord): string {
@@ -789,6 +787,48 @@ function MetricCard({
         )}
       </div>
     </motion.article>
+  )
+}
+
+function DashboardSurface({
+  children,
+  className,
+  delay = 0,
+  reduce,
+}: {
+  children: React.ReactNode
+  className?: string
+  delay?: number
+  reduce: boolean
+}) {
+  return (
+    <div
+      className={cn(
+        "group relative isolate overflow-hidden rounded-[1.75rem] border border-primary/20 bg-white p-4 sm:p-5",
+        "shadow-[0_1px_0_rgba(255,255,255,0.8)_inset,0_16px_36px_-22px_rgb(var(--primary-rgb)_/_0.45)]",
+        className,
+      )}
+    >
+      <motion.div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-primary"
+        initial={reduce ? false : { clipPath: "circle(0% at 92% -6%)", opacity: 0 }}
+        animate={{ clipPath: "circle(42% at 94% -8%)", opacity: 0.38 }}
+        transition={{ duration: 0.95, delay, ease: [0.16, 1, 0.3, 1] }}
+      />
+      <motion.div
+        aria-hidden
+        className="pointer-events-none absolute -right-4 -top-4 h-28 w-28 rounded-full bg-primary/50 blur-2xl"
+        style={{ clipPath: "circle(50% at 50% 50%)" }}
+        animate={
+          reduce
+            ? undefined
+            : { y: [0, -8, 0], x: [0, 6, 0], scale: [1, 1.08, 1], opacity: [0.45, 0.7, 0.45] }
+        }
+        transition={{ duration: 7.2, repeat: Infinity, ease: "easeInOut", delay }}
+      />
+      <div className="relative z-10">{children}</div>
+    </div>
   )
 }
 
@@ -1432,186 +1472,214 @@ export default function HrAnalyticsDashboard({
         </motion.div>
       ) : null}
 
-      <div className="mt-5 grid grid-cols-1 gap-x-6 gap-y-6 lg:grid-cols-12 lg:items-start">
+      <div className="mt-5 grid grid-cols-1 gap-x-4 gap-y-4 lg:grid-cols-12 lg:items-start">
         <motion.section className="self-start lg:col-span-6" variants={motionPreset.item}>
-          <div className="flex items-center justify-between border-b border-border pb-2">
-            <div>
-              <div className="text-sm font-semibold text-foreground">Leave requests</div>
-              <div className="text-[11px] text-muted-foreground">
-                {fromDate && toDate
-                  ? `${formatDateShort(fromDate)} – ${formatDateShort(toDate)}`
-                  : "Latest activity"}
+          <DashboardSurface reduce={motionPreset.reduce}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                  Leave requests
+                </div>
+                <div className="mt-1 text-sm font-semibold text-foreground">
+                  {fromDate && toDate
+                    ? `${formatDateShort(fromDate)} – ${formatDateShort(toDate)}`
+                    : "Latest activity"}
+                </div>
               </div>
+              {canOpenLeaveRequests ? (
+                <Link
+                  href="/dashboard/leave-management/requests"
+                  className="inline-flex h-8 items-center rounded-full border border-primary/15 bg-primary/10 px-3 text-[11px] font-semibold text-primary transition hover:bg-primary/15"
+                >
+                  View all
+                </Link>
+              ) : null}
             </div>
-            {canOpenLeaveRequests ? (
-              <Link
-                href="/dashboard/leave-management/requests"
-                className="text-[11px] font-medium text-primary hover:underline"
-              >
-                View all
-              </Link>
-            ) : null}
-          </div>
 
-          <div className="pt-3">
-            {!leaveSectionReady ? (
-              <SectionSkeleton rows={4} />
-            ) : recentLeaves.length > 0 ? (
-              <div className="overflow-hidden rounded-md border border-border">
-                <table className="w-full text-xs">
-                  <thead className="bg-muted/50 text-muted-foreground">
-                    <tr>
-                      <th className="px-2.5 py-1.5 text-left font-medium">Employee</th>
-                      <th className="px-2.5 py-1.5 text-left font-medium">Type</th>
-                      <th className="px-2.5 py-1.5 text-left font-medium">Dates</th>
-                      <th className="px-2.5 py-1.5 text-left font-medium">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border text-foreground">
-                    {recentLeaves.map((lr, i) => {
-                      const href = leaveDetailHref(lr)
-                      const empNo = getLeaveEmployeeNo(lr)
-                      const canOpenLeaveLink = canOpenLeaveRequests && Boolean(href)
-                      return (
-                        <motion.tr
-                          key={getLeaveId(lr) ?? i}
-                          className="transition hover:bg-muted/40"
-                          initial={motionPreset.reduce ? false : { opacity: 0, x: -8 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ duration: 0.28, delay: i * 0.04 }}
-                        >
-                          <td className="px-2.5 py-1.5 font-medium">
-                            {canOpenLeaveLink ? (
-                              <Link href={href} className="hover:text-primary hover:underline">
-                                {getLeaveEmployeeName(lr)}
-                              </Link>
-                            ) : (
-                              getLeaveEmployeeName(lr)
-                            )}
-                            {empNo ? (
-                              <div className="font-mono text-[10px] text-muted-foreground">{empNo}</div>
-                            ) : null}
-                          </td>
-                          <td className="px-2.5 py-1.5">{getLeaveType(lr)}</td>
-                          <td className="px-2.5 py-1.5 text-muted-foreground">{getLeaveDates(lr)}</td>
-                          <td className="px-2.5 py-1.5">
-                            <span
-                              className={cn(
-                                "text-[10px] font-semibold uppercase tracking-wide",
-                                leaveStatusTone(getLeaveStatus(lr))
+            <div className="mt-4">
+              {!leaveSectionReady ? (
+                <SectionSkeleton rows={4} />
+              ) : recentLeaves.length > 0 ? (
+                <div className="overflow-hidden rounded-2xl border border-primary/10">
+                  <table className="w-full text-xs">
+                    <thead className="bg-primary/5 text-muted-foreground">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-medium">Employee</th>
+                        <th className="px-3 py-2 text-left font-medium">Type</th>
+                        <th className="px-3 py-2 text-left font-medium">Dates</th>
+                        <th className="px-3 py-2 text-left font-medium">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-primary/10 text-foreground">
+                      {recentLeaves.map((lr, i) => {
+                        const href = leaveDetailHref(lr)
+                        const empNo = getLeaveEmployeeNo(lr)
+                        const canOpenLeaveLink = canOpenLeaveRequests && Boolean(href)
+                        return (
+                          <motion.tr
+                            key={getLeaveId(lr) ?? i}
+                            className="transition hover:bg-primary/5"
+                            initial={motionPreset.reduce ? false : { opacity: 0, x: -8 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ duration: 0.28, delay: i * 0.04 }}
+                          >
+                            <td className="px-3 py-2.5 font-medium">
+                              {canOpenLeaveLink ? (
+                                <Link href={href} className="hover:text-primary hover:underline">
+                                  {getLeaveEmployeeName(lr)}
+                                </Link>
+                              ) : (
+                                getLeaveEmployeeName(lr)
                               )}
-                            >
-                              {getLeaveStatus(lr)}
-                            </span>
-                          </td>
-                        </motion.tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="py-2 text-sm text-muted-foreground">No leave requests to display.</div>
-            )}
-          </div>
+                              {empNo ? (
+                                <div className="font-mono text-[10px] text-muted-foreground">{empNo}</div>
+                              ) : null}
+                            </td>
+                            <td className="px-3 py-2.5">{getLeaveType(lr)}</td>
+                            <td className="px-3 py-2.5 text-muted-foreground">{getLeaveDates(lr)}</td>
+                            <td className="px-3 py-2.5">
+                              <span
+                                className={cn(
+                                  "inline-flex rounded-full bg-primary/8 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                                  leaveStatusTone(getLeaveStatus(lr))
+                                )}
+                              >
+                                {getLeaveStatus(lr)}
+                              </span>
+                            </td>
+                          </motion.tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-primary/20 bg-primary/4 px-4 py-8 text-center">
+                  <span className="inline-flex size-11 items-center justify-center rounded-full border border-primary/15 bg-primary/10 text-primary">
+                    <CalendarIcon className="size-4" />
+                  </span>
+                  <p className="mt-3 text-sm font-semibold text-foreground">No leave requests to display</p>
+                  <p className="mt-1 max-w-[16rem] text-[11px] leading-4 text-muted-foreground">
+                    Nothing is waiting in this date range.
+                  </p>
+                </div>
+              )}
+            </div>
+          </DashboardSurface>
         </motion.section>
 
         <motion.section className="self-start lg:col-span-6" variants={motionPreset.item}>
-          <div className="border-b border-border pb-2">
-            <div className="text-sm font-semibold text-foreground">Employment status</div>
-          </div>
+          <DashboardSurface reduce={motionPreset.reduce} delay={0.08}>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+              Employment status
+            </div>
+            <div className="mt-1 text-sm font-semibold text-foreground">Workforce mix</div>
 
-          <div className="pt-3">
-            {!workforceReady ? (
-              <SectionSkeleton rows={3} />
-            ) : Object.keys(resolvedStatusCounts).length === 0 ? (
-              <div className="py-5 text-center text-sm text-muted-foreground">
-                No employee records yet.
-              </div>
-            ) : (
-              (() => {
-                const chartRows = statusOrder
-                  .filter((s) => resolvedStatusCounts[s] != null)
-                  .concat(
-                    Object.keys(resolvedStatusCounts).filter((s) => !statusOrder.includes(s)),
-                  )
-                  .map((status) => {
-                    const count = resolvedStatusCounts[status] || 0
-                    const pct =
-                      totalHeadcount > 0 ? Math.round((count / totalHeadcount) * 100) : 0
-                    return {
-                      status,
-                      label: formatStatusLabel(status),
-                      count,
-                      pct,
-                      color: employmentStatusColor(status),
-                    }
-                  })
-                  .filter((row) => row.count > 0)
+            <div className="mt-4">
+              {!workforceReady ? (
+                <SectionSkeleton rows={3} />
+              ) : Object.keys(resolvedStatusCounts).length === 0 ? (
+                <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-primary/20 bg-primary/4 px-4 py-8 text-center">
+                  <span className="inline-flex size-11 items-center justify-center rounded-full border border-primary/15 bg-primary/10 text-primary">
+                    <UsersIcon className="size-4" />
+                  </span>
+                  <p className="mt-3 text-sm font-semibold text-foreground">No employee records yet</p>
+                </div>
+              ) : (
+                (() => {
+                  const chartRows = statusOrder
+                    .filter((s) => resolvedStatusCounts[s] != null)
+                    .concat(
+                      Object.keys(resolvedStatusCounts).filter((s) => !statusOrder.includes(s)),
+                    )
+                    .map((status) => {
+                      const count = resolvedStatusCounts[status] || 0
+                      const pct =
+                        totalHeadcount > 0 ? Math.round((count / totalHeadcount) * 100) : 0
+                      return {
+                        status,
+                        label: formatStatusLabel(status),
+                        count,
+                        pct,
+                        color: employmentStatusColor(status),
+                      }
+                    })
+                    .filter((row) => row.count > 0)
 
-                return (
-                  <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-center sm:gap-6">
-                    <div className="relative h-[168px] w-[168px] shrink-0">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie
-                            data={chartRows}
-                            dataKey="count"
-                            nameKey="label"
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={52}
-                            outerRadius={78}
-                            paddingAngle={chartRows.length > 1 ? 2 : 0}
-                            stroke="none"
-                            isAnimationActive
-                          >
-                            {chartRows.map((row) => (
-                              <Cell key={row.status} fill={row.color} />
-                            ))}
-                          </Pie>
-                        </PieChart>
-                      </ResponsiveContainer>
-                      <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-                        <div className="text-2xl font-semibold tabular-nums leading-none text-primary">
-                          {totalHeadcount}
-                        </div>
-                        <div className="mt-1 text-[10px] uppercase tracking-wide text-muted-foreground">
-                          total
+                  return (
+                    <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-center sm:gap-6">
+                      <div className="relative h-[168px] w-[168px] shrink-0">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie
+                              data={chartRows}
+                              dataKey="count"
+                              nameKey="label"
+                              cx="50%"
+                              cy="50%"
+                              innerRadius={52}
+                              outerRadius={78}
+                              paddingAngle={chartRows.length > 1 ? 2 : 0}
+                              stroke="none"
+                              isAnimationActive
+                            >
+                              {chartRows.map((row) => (
+                                <Cell key={row.status} fill={row.color} />
+                              ))}
+                            </Pie>
+                          </PieChart>
+                        </ResponsiveContainer>
+                        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                          <div className="text-2xl font-semibold tabular-nums leading-none text-primary">
+                            {totalHeadcount}
+                          </div>
+                          <div className="mt-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+                            total
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    <div className="w-full min-w-0 flex-1 space-y-2">
-                      {chartRows.map((row, index) => (
-                        <motion.div
-                          key={row.status}
-                          className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2"
-                          initial={motionPreset.reduce ? false : { opacity: 0, x: 10 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ duration: 0.3, delay: 0.08 + index * 0.05 }}
-                        >
-                          <div className="flex min-w-0 items-center gap-2">
-                            <span
-                              className="h-2.5 w-2.5 shrink-0 rounded-full"
-                              style={{ backgroundColor: row.color }}
-                            />
-                            <span className="truncate text-sm font-medium text-foreground">
-                              {row.label}
-                            </span>
-                          </div>
-                          <div className="shrink-0 text-right tabular-nums">
-                            <div className="text-sm font-semibold text-primary">{row.count}</div>
-                            <div className="text-[11px] text-muted-foreground">{row.pct}%</div>
-                          </div>
-                        </motion.div>
-                      ))}
+                      <div className="w-full min-w-0 flex-1 space-y-2">
+                        {chartRows.map((row, index) => (
+                          <motion.div
+                            key={row.status}
+                            className="rounded-2xl border border-primary/12 bg-white px-3 py-2.5"
+                            initial={motionPreset.reduce ? false : { opacity: 0, x: 10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ duration: 0.3, delay: 0.08 + index * 0.05 }}
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="flex min-w-0 items-center gap-2">
+                                <span
+                                  className="h-2.5 w-2.5 shrink-0 rounded-full"
+                                  style={{ backgroundColor: row.color }}
+                                />
+                                <span className="truncate text-sm font-medium text-foreground">
+                                  {row.label}
+                                </span>
+                              </div>
+                              <div className="shrink-0 text-right tabular-nums">
+                                <div className="text-sm font-semibold text-primary">{row.count}</div>
+                                <div className="text-[11px] text-muted-foreground">{row.pct}%</div>
+                              </div>
+                            </div>
+                            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-primary/10">
+                              <motion.div
+                                className="h-full rounded-full bg-primary"
+                                initial={motionPreset.reduce ? false : { width: 0 }}
+                                animate={{ width: `${row.pct}%` }}
+                                transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1], delay: 0.16 + index * 0.05 }}
+                              />
+                            </div>
+                          </motion.div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )
-              })()
-            )}
-          </div>
+                  )
+                })()
+              )}
+            </div>
+          </DashboardSurface>
         </motion.section>
 
         <motion.section className="lg:col-span-12" variants={motionPreset.item}>
