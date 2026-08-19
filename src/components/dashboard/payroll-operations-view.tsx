@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 
 import { SearchToggleField } from "@/components/common/search-toggle-field"
+import { StatStrip } from "@/components/dashboard/talent-visuals"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { canAccessDashboardRoute, canPerformPermission } from "@/lib/dashboard-permissions"
 import {
@@ -522,24 +523,6 @@ function FormSection({
     <div className="space-y-3">
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</p>
       <div className="grid gap-3 md:grid-cols-2">{children}</div>
-    </div>
-  )
-}
-
-function SummaryCard({
-  label,
-  value,
-  help,
-}: {
-  label: string
-  value: string
-  help: string
-}) {
-  return (
-    <div className="rounded-lg border border-border/60 bg-background px-3 py-3">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className="mt-1 text-lg font-semibold text-foreground">{value}</p>
-      <p className="mt-1 text-xs text-muted-foreground">{help}</p>
     </div>
   )
 }
@@ -2977,35 +2960,54 @@ export function PayrollOperationsView() {
 
       {tab === "overview" ? (
         <div className="space-y-4">
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <SummaryCard
-              label="Active runs"
-              value={String(overviewStats.activeRuns)}
-              help="Processing or waiting for approval."
-            />
-            <SummaryCard
-              label="Open inputs"
-              value={String(overviewStats.openInputs)}
-              help="Not yet approved."
-            />
-            <SummaryCard
-              label="Enabled profiles"
-              value={String(overviewStats.enabledProfiles)}
-              help="Employees included in payroll."
-            />
-            <SummaryCard
-              label="Periods"
-              value={String(overviewStats.totalPeriods)}
-              help="Generated pay periods."
-            />
-          </div>
+          <StatStrip
+            items={[
+              { label: "Active runs", value: overviewStats.activeRuns, hint: "Processing or waiting for approval" },
+              { label: "Open inputs", value: overviewStats.openInputs, hint: "Not yet approved" },
+              { label: "Enabled profiles", value: overviewStats.enabledProfiles, hint: "Employees included in payroll" },
+              { label: "Periods", value: overviewStats.totalPeriods, hint: "Generated pay periods" },
+            ]}
+          />
 
-          <div className="grid gap-4 lg:grid-cols-[1.5fr_1fr]">
-            <div className="rounded-xl border border-border/70 bg-card p-4">
-              <div className="flex items-center justify-between gap-2">
+          <div className="overflow-hidden rounded-xl border border-border bg-card">
+            <div className="grid grid-cols-2 xl:grid-cols-5">
+              {(
+                [
+                  { id: "components" as const, label: "Components", value: components.length },
+                  { id: "calendars" as const, label: "Calendars", value: calendars.length },
+                  { id: "structures" as const, label: "Structures", value: structures.length },
+                  { id: "schemes" as const, label: "Schemes", value: schemes.length },
+                  { id: "mappings" as const, label: "Mappings", value: mappings.length },
+                ]
+              ).map((item, index) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => {
+                    setTab("configuration")
+                    setConfigTab(item.id)
+                  }}
+                  className={cn(
+                    "border-border px-4 py-3.5 text-left transition hover:bg-muted/40",
+                    index > 0 && "border-t",
+                    "xl:border-t-0",
+                    index % 2 === 1 && "border-l",
+                    index > 0 && "xl:border-l",
+                  )}
+                >
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    {item.label}
+                  </p>
+                  <p className="mt-1 text-xl font-semibold tabular-nums tracking-tight text-foreground">{item.value}</p>
+                </button>
+              ))}
+            </div>
+
+            <div className="border-t border-border p-4">
+              <div className="flex items-end justify-between gap-2">
                 <div>
-                  <h2 className="text-base font-semibold text-foreground">Recent runs</h2>
-                  <p className="text-sm text-muted-foreground">Latest payroll cycles.</p>
+                  <h2 className="text-sm font-semibold text-foreground">Recent runs</h2>
+                  <p className="mt-1 text-xs text-muted-foreground">Latest payroll cycles.</p>
                 </div>
                 <button
                   type="button"
@@ -3015,7 +3017,7 @@ export function PayrollOperationsView() {
                   View all
                 </button>
               </div>
-              <div className="mt-4 space-y-3">
+              <div className="mt-4 space-y-2">
                 {recentRuns.length === 0 ? (
                   <p className="text-sm text-muted-foreground">No recent runs returned yet.</p>
                 ) : (
@@ -3025,14 +3027,14 @@ export function PayrollOperationsView() {
                       <button
                         key={`recent-run-${rowId(row) || index}`}
                         type="button"
-                        className="flex w-full items-start justify-between gap-3 rounded-lg border border-border/80 px-3 py-2 text-left transition hover:bg-muted/30"
+                        className="flex w-full items-center justify-between gap-3 rounded-lg px-1 py-2 text-left transition hover:bg-muted/30"
                         onClick={() => {
                           setTab("runs")
                           void openDetail(row)
                         }}
                       >
-                        <div className="space-y-1">
-                          <p className="font-medium text-foreground">
+                        <div className="min-w-0 space-y-0.5">
+                          <p className="truncate font-medium text-foreground">
                             {readString(row, ["run_no", "runNo", "name"], `Run #${readNumber(row, ["id"]) ?? "—"}`)}
                           </p>
                           <p className="text-xs text-muted-foreground">
@@ -3046,33 +3048,6 @@ export function PayrollOperationsView() {
                     )
                   })
                 )}
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-border/70 bg-card p-4">
-              <h2 className="text-base font-semibold text-foreground">Setup</h2>
-              <p className="text-sm text-muted-foreground">Components, calendars, and mappings.</p>
-              <div className="mt-4 space-y-3 text-sm">
-                <div className="flex items-center justify-between rounded-lg border border-border/70 px-3 py-2">
-                  <span>Components</span>
-                  <span className="font-medium">{components.length}</span>
-                </div>
-                <div className="flex items-center justify-between rounded-lg border border-border/70 px-3 py-2">
-                  <span>Calendars</span>
-                  <span className="font-medium">{calendars.length}</span>
-                </div>
-                <div className="flex items-center justify-between rounded-lg border border-border/70 px-3 py-2">
-                  <span>Structures</span>
-                  <span className="font-medium">{structures.length}</span>
-                </div>
-                <div className="flex items-center justify-between rounded-lg border border-border/70 px-3 py-2">
-                  <span>Schemes</span>
-                  <span className="font-medium">{schemes.length}</span>
-                </div>
-                <div className="flex items-center justify-between rounded-lg border border-border/70 px-3 py-2">
-                  <span>Accounting mappings</span>
-                  <span className="font-medium">{mappings.length}</span>
-                </div>
               </div>
             </div>
           </div>
