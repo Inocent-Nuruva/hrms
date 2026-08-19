@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   Copy,
   ImageIcon,
+  InfoIcon,
   KeyRound,
   LogOut,
   Loader2,
@@ -40,6 +41,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 interface AccountSettingsPanelProps {
   token: string
@@ -113,8 +120,6 @@ const NOTIFICATION_PREFERENCE_GROUPS: Array<{
   },
 ]
 
-const ALL_NOTIFICATION_TYPES = NOTIFICATION_PREFERENCE_GROUPS.flatMap((group) => group.types)
-
 function securityTabFromQuery(value: string | null): SecurityTab {
   const normalized = (value ?? "").trim().toLowerCase()
   if (normalized === "two-factor" || normalized === "2fa" || normalized === "mfa") return "two-factor"
@@ -173,65 +178,6 @@ function buildNotificationPreferenceKey(
   channel: NotificationChannel
 ) {
   return `${notificationType}:${channel}`
-}
-
-function wait(ms: number) {
-  return new Promise((resolve) => window.setTimeout(resolve, ms))
-}
-
-function readErrorStatus(errorObject: unknown) {
-  if (!errorObject || typeof errorObject !== "object") return null
-  const status = Number((errorObject as { status?: unknown }).status)
-  return Number.isFinite(status) ? status : null
-}
-
-async function setNotificationPreferenceWithRetry(
-  token: string,
-  notificationType: NotificationPreferenceType,
-  channel: NotificationChannel,
-  nextEnabled: boolean,
-) {
-  let lastError: unknown
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    try {
-      return await setMyNotificationPreference(token, {
-        notification_type: notificationType,
-        channel,
-        is_enabled: nextEnabled,
-      })
-    } catch (errorObject) {
-      lastError = errorObject
-      const status = readErrorStatus(errorObject)
-      if (status !== 429 || attempt === 3) throw errorObject
-      await wait(400 * 2 ** attempt)
-    }
-  }
-  throw lastError
-}
-
-async function runPreferenceUpdates<T>(
-  items: T[],
-  worker: (item: T) => Promise<void>,
-  concurrency = 2,
-) {
-  const results: PromiseSettledResult<void>[] = new Array(items.length)
-  let cursor = 0
-
-  async function next() {
-    while (cursor < items.length) {
-      const index = cursor
-      cursor += 1
-      try {
-        await worker(items[index])
-        results[index] = { status: "fulfilled", value: undefined }
-      } catch (reason) {
-        results[index] = { status: "rejected", reason }
-      }
-    }
-  }
-
-  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => next()))
-  return results
 }
 
 function readNotificationPreferenceType(
@@ -757,50 +703,6 @@ function AccountSettingsPanelContent({
         errorObject instanceof Error
           ? errorObject.message
           : "Could not update the notification preference."
-      setNotificationPreferencesError(message)
-      toast.error(message)
-    } finally {
-      setNotificationPreferenceBusyKey(null)
-    }
-  }
-
-  const handleToggleManyNotificationPreferences = async (
-    types: NotificationPreferenceType[],
-    nextEnabled: boolean,
-    busyKey: string,
-  ) => {
-    const accessToken = resolveFreshAccessToken(token)
-    if (!accessToken) {
-      toast.error("Your session expired. Please sign in again.")
-      return
-    }
-
-    setNotificationPreferenceBusyKey(busyKey)
-    setNotificationPreferencesError(null)
-    try {
-      const jobs = types.flatMap((notificationType) =>
-        NOTIFICATION_PREFERENCE_CHANNELS.map((channel) => ({ notificationType, channel })),
-      )
-      const results = await runPreferenceUpdates(jobs, async (job) => {
-        await setNotificationPreferenceWithRetry(
-          accessToken,
-          job.notificationType,
-          job.channel,
-          nextEnabled,
-        )
-      })
-      await loadNotificationPreferences()
-      const failed = results.filter((result) => result.status === "rejected").length
-      if (failed > 0) {
-        toast.error(`${failed} channel${failed === 1 ? "" : "s"} could not be updated.`)
-        return
-      }
-      toast.success(nextEnabled ? "All selected alerts are on." : "All selected alerts are off.")
-    } catch (errorObject) {
-      const message =
-        errorObject instanceof Error
-          ? errorObject.message
-          : "Could not update the notification preferences."
       setNotificationPreferencesError(message)
       toast.error(message)
     } finally {
@@ -1377,45 +1279,38 @@ function AccountSettingsPanelContent({
       </Card>
 
       <Card>
-        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="space-y-1">
+        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-1.5">
             <CardTitle>Notification Preferences</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Choose which channels should alert you for leave, onboarding, offboarding, attendance, and system events.
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Rows marked as default still follow the backend default until you change them here.
-            </p>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger
+                  type="button"
+                  className="inline-flex size-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  aria-label="About notification preferences"
+                >
+                  <InfoIcon className="size-4" />
+                </TooltipTrigger>
+                <TooltipContent side="bottom" align="start" className="max-w-xs space-y-2 text-left">
+                  <p>
+                    Choose which channels should alert you for leave, onboarding, offboarding, attendance, and system events.
+                  </p>
+                  <p>
+                    Rows marked as default still follow the usual company setting until you change them here.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void handleToggleManyNotificationPreferences(ALL_NOTIFICATION_TYPES, true, "ALL")}
-              disabled={notificationPreferencesLoading || Boolean(notificationPreferenceBusyKey) || !token}
-            >
-              {notificationPreferenceBusyKey === "ALL" ? <Loader2 className="size-4 animate-spin" /> : null}
-              {notificationPreferenceBusyKey === "ALL" ? "Saving…" : "Turn all on"}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void handleToggleManyNotificationPreferences(ALL_NOTIFICATION_TYPES, false, "ALL")}
-              disabled={notificationPreferencesLoading || Boolean(notificationPreferenceBusyKey) || !token}
-            >
-              {notificationPreferenceBusyKey === "ALL" ? <Loader2 className="size-4 animate-spin" /> : null}
-              {notificationPreferenceBusyKey === "ALL" ? "Saving…" : "Turn all off"}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void loadNotificationPreferences()}
-              disabled={notificationPreferencesLoading || !token}
-            >
-              {notificationPreferencesLoading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
-              Refresh
-            </Button>
-          </div>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void loadNotificationPreferences()}
+            disabled={notificationPreferencesLoading || !token}
+          >
+            {notificationPreferencesLoading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+            Refresh
+          </Button>
         </CardHeader>
         <CardContent className="space-y-4">
           {notificationPreferencesError ? (
@@ -1433,33 +1328,11 @@ function AccountSettingsPanelContent({
             <div className="space-y-4">
               {NOTIFICATION_PREFERENCE_GROUPS.map((group) => (
                 <div key={group.title} className="space-y-2">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center justify-between gap-2">
                     <h3 className="text-sm font-semibold text-foreground">{group.title}</h3>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] text-muted-foreground">
-                        {group.types.length} type{group.types.length === 1 ? "" : "s"}
-                      </span>
-                      <button
-                        type="button"
-                        className="text-[11px] font-medium text-primary hover:underline disabled:opacity-50"
-                        disabled={Boolean(notificationPreferenceBusyKey) || !token}
-                        onClick={() =>
-                          void handleToggleManyNotificationPreferences(group.types, true, `GROUP:${group.title}`)
-                        }
-                      >
-                        All on
-                      </button>
-                      <button
-                        type="button"
-                        className="text-[11px] font-medium text-primary hover:underline disabled:opacity-50"
-                        disabled={Boolean(notificationPreferenceBusyKey) || !token}
-                        onClick={() =>
-                          void handleToggleManyNotificationPreferences(group.types, false, `GROUP:${group.title}`)
-                        }
-                      >
-                        All off
-                      </button>
-                    </div>
+                    <span className="text-[11px] text-muted-foreground">
+                      {group.types.length} type{group.types.length === 1 ? "" : "s"}
+                    </span>
                   </div>
                   <div className="overflow-x-auto rounded-lg border">
                     <table className="min-w-full border-collapse text-sm">
@@ -1494,7 +1367,7 @@ function AccountSettingsPanelContent({
                             {NOTIFICATION_PREFERENCE_CHANNELS.map((channel) => {
                               const key = buildNotificationPreferenceKey(notificationType, channel)
                               const preference = notificationPreferencesByKey.get(key) ?? null
-                              const busy = Boolean(notificationPreferenceBusyKey)
+                              const busy = notificationPreferenceBusyKey === key
                               const hasExplicitPreference = Boolean(preference)
                               return (
                                 <td key={channel} className="px-3 py-3 text-center align-middle">
