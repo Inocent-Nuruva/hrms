@@ -1,14 +1,14 @@
 "use client"
 
 import * as React from "react"
-import { Loader2Icon, RefreshCwIcon } from "lucide-react"
+import { InfoIcon, Loader2Icon, RefreshCwIcon } from "lucide-react"
+import { motion } from "framer-motion"
 import { toast } from "sonner"
 
 import { SearchToggleField } from "@/components/common/search-toggle-field"
 import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared"
 import {
   HeroBand,
-  MetricTile,
   StatusChip,
   TalentDoodleSprites,
   actionButtonClass,
@@ -43,9 +43,53 @@ import {
   type AdminRecord,
 } from "@/lib/admin-api"
 import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
+import { useDashboardMotion } from "@/lib/dashboard-motion"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useForbiddenRouteGuard, useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
 import { readStoredSessionTokens } from "@/lib/session-client"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
+
+function TipIcon({
+  text,
+  variant = "default",
+}: {
+  text: string
+  variant?: "default" | "onPrimary"
+}) {
+  const motionPreset = useDashboardMotion()
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <button
+            type="button"
+            className={
+              variant === "onPrimary"
+                ? "inline-flex h-6 w-6 items-center justify-center rounded-full text-white/80 hover:text-white"
+                : "inline-flex h-6 w-6 items-center justify-center rounded-full text-slate-500 hover:text-primary"
+            }
+            aria-label="More information"
+          />
+        }
+      >
+        <motion.span
+          className="inline-flex"
+          animate={
+            motionPreset.reduce
+              ? undefined
+              : { scale: [1, 1.15, 1], opacity: [0.65, 1, 0.65] }
+          }
+          transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
+        >
+          <InfoIcon className="h-3.5 w-3.5" />
+        </motion.span>
+      </TooltipTrigger>
+      <TooltipContent side="top" align="start" className="max-w-72 text-left leading-relaxed">
+        {text}
+      </TooltipContent>
+    </Tooltip>
+  )
+}
 
 function readStoredToken() {
   return readStoredSessionTokens().accessToken.trim()
@@ -231,8 +275,15 @@ export function HrProfileChangeRequestsView() {
       <TalentDoodleSprites />
       <HeroBand
         eyebrow="Employees"
-        title="Profile change requests"
-        description="Review employee requests to change name, phone, address, or emergency contact. This is separate from older profile-update approvals."
+        title={
+          <>
+            Requests
+            <TipIcon
+              variant="onPrimary"
+              text="Review employee requests to change name, phone, address, or emergency contact. This is separate from older profile-update approvals."
+            />
+          </>
+        }
         actions={
           <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
             {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
@@ -240,10 +291,26 @@ export function HrProfileChangeRequestsView() {
           </button>
         }
       />
-      <div className="grid gap-3 sm:grid-cols-3">
-        <MetricTile label="Requests" value={rows.length} />
-        <MetricTile label="Open" value={rows.filter((row) => !["APPROVED", "REJECTED", "CANCELLED"].includes(readString(row, ["status"]).toUpperCase())).length} />
-        <MetricTile label="Approved" value={rows.filter((row) => readString(row, ["status"]).toUpperCase() === "APPROVED").length} />
+      <div className="flex flex-wrap items-end gap-6">
+        {[
+          { label: "Requests", value: rows.length },
+          {
+            label: "Open",
+            value: rows.filter(
+              (row) =>
+                !["APPROVED", "REJECTED", "CANCELLED"].includes(readString(row, ["status"]).toUpperCase()),
+            ).length,
+          },
+          {
+            label: "Approved",
+            value: rows.filter((row) => readString(row, ["status"]).toUpperCase() === "APPROVED").length,
+          },
+        ].map((item) => (
+          <div key={item.label}>
+            <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">{item.label}</p>
+            <p className="text-lg font-semibold tabular-nums leading-none text-primary">{item.value}</p>
+          </div>
+        ))}
       </div>
       <SearchToggleField value={search} onChange={setSearch} placeholder="Search" />
       {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div> : null}
