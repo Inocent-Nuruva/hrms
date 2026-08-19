@@ -281,6 +281,16 @@ function getEmployeeName(row: AdminRecord): string {
   return parts.length ? parts.join(" ") : "-"
 }
 
+function getEmployeeInitials(name: string): string {
+  const parts = name
+    .split(/\s+/)
+    .map((part) => part.trim())
+    .filter((part) => part && part !== "-")
+  if (parts.length === 0) return "?"
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return `${parts[0][0] ?? ""}${parts[parts.length - 1][0] ?? ""}`.toUpperCase()
+}
+
 function getEmployeeNo(row: AdminRecord): string {
   return readString(row, ["employee_no", "employeeNo", "user_no", "employee_number", "code"]) || "-"
 }
@@ -1683,90 +1693,91 @@ export default function HrAnalyticsDashboard({
         </motion.section>
 
         <motion.section className="lg:col-span-12" variants={motionPreset.item}>
-          <div className="flex items-center justify-between border-b border-border pb-2">
-            <div>
-              <div className="text-sm font-semibold text-foreground">Recent people</div>
-              <div className="text-[11px] text-muted-foreground">
-                {canOpenEmployeeProfiles
-                  ? "Newest records · click a row to open profile"
-                  : "Newest employee records"}
+          <DashboardSurface reduce={motionPreset.reduce} delay={0.12}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                  Recent people
+                </div>
+                <div className="mt-1 text-sm font-semibold text-foreground">
+                  {canOpenEmployeeProfiles
+                    ? "Newest records · click a row to open profile"
+                    : "Newest employee records"}
+                </div>
               </div>
+              {canOpenEmployeeDirectory ? (
+                <Link
+                  href="/dashboard/employees/all"
+                  className="inline-flex h-8 items-center rounded-full border border-primary/15 bg-primary/10 px-3 text-[11px] font-semibold text-primary transition hover:bg-primary/15"
+                >
+                  View all
+                </Link>
+              ) : null}
             </div>
-            {canOpenEmployeeDirectory ? (
-              <Link
-                href="/dashboard/employees/all"
-                className="text-[11px] font-medium text-primary hover:underline"
-              >
-                View all
-              </Link>
-            ) : null}
-          </div>
-          <div className="pt-3">
-            {!workforceReady ? (
-              <SectionSkeleton rows={5} />
-            ) : recentEmployees.length === 0 ? (
-              <div className="py-4 text-sm text-muted-foreground">No employee records loaded.</div>
-            ) : (
-              <div className="overflow-x-auto rounded-md border border-border">
-                <table className="min-w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border bg-muted/40 text-left text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                      <th className="px-2.5 py-2">Employee No</th>
-                      <th className="px-2.5 py-2">Name</th>
-                      <th className="px-2.5 py-2">Status</th>
-                      <th className="px-2.5 py-2">Department</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border text-foreground">
-                    {recentEmployees.map((emp, idx) => {
-                      const href = employeeProfileHref(emp)
-                      const canOpenEmployeeLink = canOpenEmployeeProfiles && Boolean(href)
+
+            <div className="mt-4">
+              {!workforceReady ? (
+                <SectionSkeleton rows={5} />
+              ) : recentEmployees.length === 0 ? (
+                <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-primary/20 bg-primary/4 px-4 py-8 text-center">
+                  <span className="inline-flex size-11 items-center justify-center rounded-full border border-primary/15 bg-primary/10 text-primary">
+                    <UsersIcon className="size-4" />
+                  </span>
+                  <p className="mt-3 text-sm font-semibold text-foreground">No employee records loaded</p>
+                </div>
+              ) : (
+                <div className="grid gap-2">
+                  {recentEmployees.map((emp, idx) => {
+                    const href = employeeProfileHref(emp)
+                    const canOpenEmployeeLink = canOpenEmployeeProfiles && Boolean(href)
+                    const name = getEmployeeName(emp)
+                    const status = formatStatusLabel(getEmploymentStatus(emp))
+                    const department = getDepartmentNameFromEmployee(emp) || "—"
+                    const row = (
+                      <motion.div
+                        className={cn(
+                          "flex items-center gap-3 rounded-2xl border border-primary/12 bg-white px-3 py-2.5",
+                          canOpenEmployeeLink ? "transition hover:border-primary/30 hover:bg-primary/5" : null,
+                        )}
+                        initial={motionPreset.reduce ? false : { opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.28, delay: idx * 0.045 }}
+                      >
+                        <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-primary/15 bg-primary/10 text-[11px] font-semibold tracking-wide text-primary">
+                          {getEmployeeInitials(name)}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-semibold text-foreground">{name}</div>
+                          <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                            <span className="font-mono">{getEmployeeNo(emp)}</span>
+                            <span className="px-1.5 text-primary/40">·</span>
+                            <span>{department}</span>
+                          </div>
+                        </div>
+                        <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+                          {status}
+                        </span>
+                      </motion.div>
+                    )
+
+                    if (canOpenEmployeeLink && href) {
                       return (
-                        <motion.tr
-                          key={idx}
-                          className={cn(
-                            "transition",
-                            canOpenEmployeeLink ? "cursor-pointer hover:bg-muted/40" : null
-                          )}
-                          initial={motionPreset.reduce ? false : { opacity: 0, y: 6 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ duration: 0.26, delay: idx * 0.045 }}
-                          onClick={() => {
-                            if (canOpenEmployeeLink && href) router.push(href)
-                          }}
+                        <Link
+                          key={getEmployeeNo(emp) || href || idx}
+                          href={href}
+                          className="block outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-2xl"
                         >
-                          <td className="px-2.5 py-2 font-mono text-xs text-muted-foreground">
-                            {getEmployeeNo(emp)}
-                          </td>
-                          <td className="px-2.5 py-2 font-medium">
-                            {canOpenEmployeeLink && href ? (
-                              <Link
-                                href={href}
-                                className="hover:text-primary hover:underline"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                {getEmployeeName(emp)}
-                              </Link>
-                            ) : (
-                              getEmployeeName(emp)
-                            )}
-                          </td>
-                          <td className="px-2.5 py-2">
-                            <span className="text-xs font-medium capitalize text-primary">
-                              {getEmploymentStatus(emp)}
-                            </span>
-                          </td>
-                          <td className="px-2.5 py-2 text-muted-foreground">
-                            {getDepartmentNameFromEmployee(emp) || "—"}
-                          </td>
-                        </motion.tr>
+                          {row}
+                        </Link>
                       )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+                    }
+
+                    return <div key={getEmployeeNo(emp) || idx}>{row}</div>
+                  })}
+                </div>
+              )}
+            </div>
+          </DashboardSurface>
         </motion.section>
 
         <motion.section className="self-start lg:col-span-12" variants={motionPreset.item}>
