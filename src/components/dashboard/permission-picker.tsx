@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import {
+  filterPermissionOptions,
   isPermissionSelected,
   permissionAliases,
   togglePermissionSelection,
@@ -16,6 +17,7 @@ import {
 export type { PermissionOption } from "@/components/dashboard/permission-selection"
 export {
   canonicalizePermissionNames,
+  filterPermissionOptions,
   isPermissionSelected,
   permissionAliases,
   permissionGroupFromName,
@@ -42,18 +44,14 @@ export function PermissionPicker({
   loading?: boolean
 }) {
   const [query, setQuery] = React.useState("")
+  const [enabledOnly, setEnabledOnly] = React.useState(false)
   const [openGroups, setOpenGroups] = React.useState<Record<string, boolean>>({})
   const selectedSet = React.useMemo(() => new Set(selectedNames), [selectedNames])
 
-  const filtered = React.useMemo(() => {
-    const q = query.trim().toLowerCase()
-    if (!q) return options
-    return options.filter((option) => {
-      const haystack =
-        `${option.name} ${option.label} ${option.description ?? ""} ${option.group}`.toLowerCase()
-      return haystack.includes(q)
-    })
-  }, [options, query])
+  const filtered = React.useMemo(
+    () => filterPermissionOptions(options, selectedSet, query, enabledOnly),
+    [enabledOnly, options, query, selectedSet],
+  )
 
   const grouped = React.useMemo(() => {
     const map = new Map<string, PermissionOption[]>()
@@ -65,13 +63,13 @@ export function PermissionPicker({
     return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b))
   }, [filtered])
 
-  // Auto-expand groups that match the search query.
+  // Auto-expand groups that match the search query or the enabled-only filter.
   React.useEffect(() => {
-    if (!query.trim()) return
+    if (!query.trim() && !enabledOnly) return
     const next: Record<string, boolean> = {}
     for (const [group] of grouped) next[group] = true
     setOpenGroups((prev) => ({ ...prev, ...next }))
-  }, [grouped, query])
+  }, [enabledOnly, grouped, query])
 
   const toggle = (option: PermissionOption) => {
     onChange(togglePermissionSelection(option, selectedNames))
@@ -140,7 +138,20 @@ export function PermissionPicker({
               </div>
             </div>
           )}
-          <div className="flex shrink-0 gap-1.5">
+          <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
+            <button
+              type="button"
+              aria-pressed={enabledOnly}
+              className={cn(
+                "rounded-md border px-2 py-1 text-[11px] font-medium transition-colors",
+                enabledOnly
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50 dark:border-border dark:bg-background dark:text-muted-foreground dark:hover:bg-muted",
+              )}
+              onClick={() => setEnabledOnly((current) => !current)}
+            >
+              Enabled only
+            </button>
             <button
               type="button"
               className="rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:border-border dark:bg-background dark:text-foreground dark:hover:bg-muted"
@@ -187,7 +198,9 @@ export function PermissionPicker({
           </div>
         ) : grouped.length === 0 ? (
           <p className="px-2 py-10 text-center text-sm text-muted-foreground">
-            No permissions match your search.
+            {enabledOnly && !query.trim()
+              ? "No enabled permissions yet."
+              : "No permissions match your search."}
           </p>
         ) : (
           grouped.map(([group, groupOptions]) => {

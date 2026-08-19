@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   canonicalizePermissionNames,
+  filterPermissionOptions,
   isPermissionSelected,
   permissionTokenFromAssignment,
   togglePermissionSelection,
@@ -52,5 +53,16 @@ describe("permission picker selection", () => {
         [employeesRead, employeesWrite],
       ),
     ).toEqual(["employees:read", "employees:write", "unknown.perm"])
+  })
+
+  it("can list only enabled permissions", () => {
+    expect(
+      filterPermissionOptions(
+        [employeesRead, employeesWrite],
+        ["employees:read"],
+        "",
+        true,
+      ).map((option) => option.name),
+    ).toEqual(["employees:read"])
   })
 })

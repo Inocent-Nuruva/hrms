@@ -144,6 +144,25 @@ export function togglePermissionSelection(
   return [...withoutAliases, option.name]
 }
 
+export function filterPermissionOptions(
+  options: PermissionOption[],
+  selectedNames: Iterable<string>,
+  query: string,
+  enabledOnly: boolean,
+): PermissionOption[] {
+  const selectedSet = selectedNames instanceof Set ? selectedNames : new Set(selectedNames)
+  const q = query.trim().toLowerCase()
+  return options.filter((option) => {
+    if (enabledOnly && !isPermissionSelected(option, selectedSet)) {
+      return false
+    }
+    if (!q) return true
+    const haystack =
+      `${option.name} ${option.label} ${option.description ?? ""} ${option.group}`.toLowerCase()
+    return haystack.includes(q)
+  })
+}
+
 export function canonicalizePermissionNames(
   names: string[],
   options: PermissionOption[],

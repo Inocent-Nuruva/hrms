@@ -16,6 +16,7 @@ import {
   asRecord,
   asRecordArray,
   formatDate,
+  heroActionButtonClass,
   inputClass,
   optionLabel,
   prettify,
@@ -23,9 +24,9 @@ import {
   readNumber,
   readString,
   rowId,
-  secondaryButtonClass,
   textareaClass,
 } from "@/components/dashboard/talent-visuals"
+import { probationCriteriaFromCase, resolveMyProbationCase } from "@/components/dashboard/probation-case"
 import {
   getMyProbation,
   submitMyProbationSelfAssessment,
@@ -61,17 +62,10 @@ export function ProbationSelfView() {
     const timeout = window.setTimeout(() => controller.abort(), 12000)
     try {
       const payload = await getMyProbation(token, controller.signal)
-      const caseRecord =
-        asRecord(payload?.case) ??
-        asRecord(payload?.probation) ??
-        asRecordArray(payload?.cases)[0] ??
-        payload
+      const caseRecord = resolveMyProbationCase(payload)
       setRecord(caseRecord)
-      const criteria = asRecordArray(
-        asRecord(caseRecord.policy)?.criteria ?? caseRecord.criteria,
-      )
       setRatings(
-        criteria.map((item) => ({
+        probationCriteriaFromCase(caseRecord).map((item) => ({
           code: readString(item, ["code", "criterion_code", "criterionCode"]),
           name: readString(item, ["name", "title"], readString(item, ["code"])),
           rating: "",
@@ -79,7 +73,7 @@ export function ProbationSelfView() {
         })),
       )
       setObjectives(
-        asRecordArray(caseRecord.objectives).map((item) => ({
+        asRecordArray(caseRecord?.objectives).map((item) => ({
           id: rowId(item),
           title: readString(item, ["title", "name"], `Objective #${rowId(item)}`),
           percent: readString(item, ["employeeCompletionPercent", "employee_completion_percent"], ""),
@@ -168,7 +162,7 @@ export function ProbationSelfView() {
             : "If HR opens a probation case for you, it will appear here with the review timeline."
         }
         actions={
-          <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
+          <button type="button" className={heroActionButtonClass} onClick={() => void load()} disabled={loading}>
             {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
             Refresh
           </button>
@@ -186,11 +180,7 @@ export function ProbationSelfView() {
           <Loader2Icon className="size-4 animate-spin" />
           Loading your probation record...
         </div>
-      ) : !record ? (
-        <div className="rounded-xl border border-dashed border-border bg-card px-4 py-10 text-center text-sm text-muted-foreground">
-          There is no probation case assigned to you right now.
-        </div>
-      ) : (
+      ) : record ? (
         <>
           <div className="grid gap-4 xl:grid-cols-[220px_minmax(0,1fr)]">
             <div className="rounded-xl border border-border bg-card p-4">
@@ -208,7 +198,11 @@ export function ProbationSelfView() {
               />
               <MetricTile
                 label="Policy"
-                value={optionLabel(asRecord(record.policy)) === "—" ? readString(record, ["policy_name", "policyName"], "—") : optionLabel(asRecord(record.policy))}
+                value={
+                  optionLabel(asRecord(record.policy)) === "—"
+                    ? readString(record, ["policy_name", "policyName"], "—")
+                    : optionLabel(asRecord(record.policy))
+                }
               />
               <MetricTile
                 label="Decision"
@@ -342,6 +336,10 @@ export function ProbationSelfView() {
             </div>
           </div>
         </>
+      ) : error ? null : (
+        <div className="rounded-xl border border-dashed border-border bg-card px-4 py-10 text-center text-sm text-muted-foreground">
+          There is no probation case assigned to you right now.
+        </div>
       )}
     </section>
   )

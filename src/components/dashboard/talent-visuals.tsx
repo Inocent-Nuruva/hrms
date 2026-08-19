@@ -18,6 +18,8 @@ export const primaryButtonClass =
   "inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-semibold !text-white transition hover:brightness-95 disabled:opacity-60"
 export const secondaryButtonClass =
   "inline-flex h-9 items-center rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-60 dark:border-border dark:bg-background dark:text-foreground dark:hover:bg-muted"
+export const heroActionButtonClass =
+  "inline-flex h-9 items-center gap-1.5 rounded-md bg-white px-3 text-sm font-semibold text-slate-900 shadow-sm transition hover:bg-white/90 disabled:opacity-60"
 
 export function readString(row: AdminRecord | null | undefined, keys: string[], fallback = "") {
   if (!row) return fallback
@@ -285,7 +287,7 @@ export function HeroBand({
         </div>
         {actions ? (
           <motion.div
-            className="relative z-10 flex flex-wrap gap-2"
+            className="relative z-10 flex flex-wrap gap-2 [&_button.bg-white]:!text-slate-900"
             initial={motionPreset.reduce ? false : { opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.32, delay: 0.16 }}
