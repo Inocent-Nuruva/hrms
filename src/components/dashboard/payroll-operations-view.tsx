@@ -37,6 +37,7 @@ import {
   getPayrollDashboard,
   getPayrollRun,
   getPayrollSalaryStructure,
+  listAllEmployees,
   listEmployeePayrollProfiles,
   listOffboardingRequests,
   listPayrollAccountingMappings,
@@ -319,9 +320,29 @@ function groupReportIssues(result: AdminRecord | null) {
   }
 }
 
-function issueSubject(issue: AdminRecord) {
+type EmployeeNameLookup = Map<number, { name: string; number: string }>
+
+function nameFromEmployeeRow(row: AdminRecord) {
+  const first = readString(row, ["first_name", "firstName"])
+  const last = readString(row, ["last_name", "lastName"])
+  const combined = [first, last].filter(Boolean).join(" ")
+  return (
+    readString(row, ["full_name", "fullName", "employee_name", "employeeName", "display_name", "displayName", "name"]) ||
+    combined
+  )
+}
+
+function employeeNumberFromRow(row: AdminRecord) {
+  return readString(row, ["employee_no", "employeeNo", "employee_number", "staff_no", "staffNo"])
+}
+
+function issueSubject(issue: AdminRecord, names?: EmployeeNameLookup) {
   const employeeId = readNumber(issue, ["employee_id", "employeeId"])
-  if (employeeId !== null) return `Employee ${employeeId}`
+  if (employeeId !== null) {
+    const known = names?.get(employeeId)
+    if (known?.name) return known.name
+    return `Employee ${employeeId}`
+  }
   const runId = readNumber(issue, ["run_id", "runId"])
   if (runId !== null) return `Run ${runId}`
   const message = readString(issue, ["message", "detail", "description"])
@@ -329,9 +350,14 @@ function issueSubject(issue: AdminRecord) {
   return "Issue"
 }
 
-function issueDetailLines(issue: AdminRecord) {
-  return Object.entries(issue)
-    .filter(([key, value]) => !["code", "type"].includes(key) && value !== null && value !== undefined && value !== "")
+function issueDetailLines(issue: AdminRecord, names?: EmployeeNameLookup) {
+  const employeeId = readNumber(issue, ["employee_id", "employeeId"])
+  const known = employeeId !== null ? names?.get(employeeId) : undefined
+  const lines = Object.entries(issue)
+    .filter(([key, value]) => {
+      if (["code", "type", "employee_id", "employeeId"].includes(key)) return false
+      return value !== null && value !== undefined && value !== ""
+    })
     .map(([key, value]) => ({
       label: prettify(key),
       value:
@@ -342,6 +368,14 @@ function issueDetailLines(issue: AdminRecord) {
           : formatAdminValue(value),
     }))
     .filter((entry) => entry.value && entry.value !== "-")
+
+  if (known?.number) {
+    lines.unshift({ label: "Employee no", value: known.number })
+  } else if (employeeId !== null && !known?.name) {
+    lines.unshift({ label: "Employee no", value: String(employeeId) })
+  }
+
+  return lines
 }
 
 function rowId(row: AdminRecord | null | undefined) {
@@ -983,6 +1017,7 @@ export function PayrollOperationsView() {
   const [reportKind, setReportKind] = React.useState<"reconciliation" | "variance" | "settlement" | "">("")
   const [issueDialogCode, setIssueDialogCode] = React.useState("")
   const [issueSearch, setIssueSearch] = React.useState("")
+  const [employeeNames, setEmployeeNames] = React.useState<EmployeeNameLookup>(new Map())
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [search, setSearch] = React.useState("")
@@ -2962,12 +2997,45 @@ export function PayrollOperationsView() {
     const query = issueSearch.trim().toLowerCase()
     if (!query) return openIssueGroup.rows
     return openIssueGroup.rows.filter((issue) =>
-      [issueSubject(issue), ...issueDetailLines(issue).map((line) => `${line.label} ${line.value}`)]
+      [
+        issueSubject(issue, employeeNames),
+        ...issueDetailLines(issue, employeeNames).map((line) => `${line.label} ${line.value}`),
+      ]
         .join(" ")
         .toLowerCase()
         .includes(query),
     )
-  }, [issueSearch, openIssueGroup])
+  }, [employeeNames, issueSearch, openIssueGroup])
+
+  React.useEffect(() => {
+    if (!reportResult) return
+    const issues = asRecordArray(reportResult.issues)
+    const needsNames = issues.some((issue) => readNumber(issue, ["employee_id", "employeeId"]) !== null)
+    if (!needsNames) return
+    const token = readStoredToken()
+    if (!token) return
+    let cancelled = false
+    void listAllEmployees(token, {}, { pageSize: 100, maxPages: 20 })
+      .then((rows) => {
+        if (cancelled) return
+        const next: EmployeeNameLookup = new Map()
+        for (const row of rows) {
+          const id = readNumber(row, ["id", "employee_id", "employeeId"])
+          if (id === null) continue
+          next.set(id, {
+            name: nameFromEmployeeRow(row),
+            number: employeeNumberFromRow(row),
+          })
+        }
+        setEmployeeNames(next)
+      })
+      .catch(() => {
+        if (!cancelled) setEmployeeNames(new Map())
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [reportResult])
 
   if (!actor.ready) {
     return (
@@ -3408,13 +3476,13 @@ export function PayrollOperationsView() {
                 <p className="text-sm text-muted-foreground">No matching records.</p>
               ) : (
                 visibleIssueRows.map((issue, index) => {
-                  const lines = issueDetailLines(issue)
+                  const lines = issueDetailLines(issue, employeeNames)
                   return (
                     <div
-                      key={`${issueSubject(issue)}-${index}`}
+                      key={`${issueSubject(issue, employeeNames)}-${index}`}
                       className="rounded-lg border border-border px-3 py-2.5"
                     >
-                      <p className="text-sm font-medium text-foreground">{issueSubject(issue)}</p>
+                      <p className="text-sm font-medium text-foreground">{issueSubject(issue, employeeNames)}</p>
                       {lines.length > 0 ? (
                         <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                           {lines.map((line) => (
