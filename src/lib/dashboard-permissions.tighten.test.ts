@@ -41,12 +41,27 @@ describe("tightened dashboard permissions", () => {
     expect(hasAdminDashboardAccess(["leave_types:read"])).toBe(true)
     expect(hasAdminDashboardAccess(["self_service_requests:approve"])).toBe(true)
     expect(hasAdminDashboardAccess(["employees:read"])).toBe(false)
+    expect(hasAdminDashboardAccess(["leave_requests:read"])).toBe(false)
+    expect(hasAdminDashboardAccess(["leave_balances:read"])).toBe(false)
+    expect(hasAdminDashboardAccess(["attendance_summaries:read"])).toBe(false)
+    expect(hasAdminDashboardAccess(["leave_types:read"])).toBe(true)
     expect(buildDashboardActorSnapshotFromSources({ permissions: ["branches:read"] }).accessMode).toBe(
       "admin",
     )
     expect(buildDashboardActorSnapshotFromSources({ permissions: ["employees:read"] }).accessMode).toBe(
       "employee",
     )
+    expect(
+      buildDashboardActorSnapshotFromSources({
+        permissions: ["leave_requests:read", "leave_balances:read"],
+      }).accessMode,
+    ).toBe("employee")
+    expect(
+      buildDashboardActorSnapshotFromSources({
+        permissions: ["employees:read"],
+        roles: [{ name: "HR_MANAGER" }],
+      }).accessMode,
+    ).toBe("admin")
   })
 
   it("lets an employee-shell approver open HR approval routes only", () => {

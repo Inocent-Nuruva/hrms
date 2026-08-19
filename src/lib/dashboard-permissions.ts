@@ -607,13 +607,17 @@ const ADMIN_DASHBOARD_LANDING_ROUTES = [
   "/dashboard/employees/offboarding",
   "/dashboard/employees/profile-update-approvals",
   "/dashboard/employees/profile-change-requests",
-  "/dashboard/attendance/daily-summaries",
   "/dashboard/attendance/policies",
   "/dashboard/attendance/shifts",
   "/dashboard/attendance/correction-requests",
   "/dashboard/access-control",
   "/dashboard/positions",
-  "/dashboard/leave-management",
+  // Do not use /dashboard/leave-management or daily-summaries here.
+  // Employees routinely have leave_requests:read / leave_balances:read /
+  // attendance_summaries:read for self-service and must keep the My * shell.
+  "/dashboard/leave-management/types",
+  "/dashboard/leave-management/policies",
+  "/dashboard/leave-management/workflows",
   "/dashboard/performance/overview",
   "/dashboard/probation/overview",
   "/dashboard/field/overview",
@@ -718,7 +722,32 @@ const EMPLOYEE_IDENTITY_HINTS = new Set([
   "self_service",
   "self-service",
   "ess",
+  "company user",
+  "company_user",
 ])
+
+function roleNameImpliesAdminShell(value: string) {
+  const name = normalizeIdentityHint(value)
+  if (!name || EMPLOYEE_IDENTITY_HINTS.has(name)) {
+    return false
+  }
+  if (name.includes("employee") && !name.includes("admin") && !name.includes("hr")) {
+    return false
+  }
+  if (ADMIN_IDENTITY_HINTS.has(name)) {
+    return true
+  }
+  return (
+    name.includes("human resource") ||
+    name.startsWith("hr ") ||
+    name.endsWith(" hr") ||
+    name.includes("administrator") ||
+    name.includes("admin") ||
+    name.includes("director") ||
+    name.includes("management") ||
+    name.includes("super admin")
+  )
+}
 
 const ATTENDANCE_ROUTE_PERMISSIONS: PermissionRequirement = {
   permissions: [
@@ -1788,9 +1817,11 @@ function resolveDashboardActorIdentity(...sources: unknown[]): DashboardActorIde
     EMPLOYEE_IDENTITY_HINTS.has(hint)
   )
   const hasPermissionBasedAdminAccess = hasAdminDashboardAccess(permissionLabels)
-  const accessMode: DashboardAccessMode = hasPermissionBasedAdminAccess
-    ? "admin"
-    : (explicitAccessMode ?? "employee")
+  const hasAdminRole = roleNames.some(roleNameImpliesAdminShell)
+  const accessMode: DashboardAccessMode =
+    hasPermissionBasedAdminAccess || hasExplicitAdminIdentity || hasAdminRole
+      ? "admin"
+      : (explicitAccessMode ?? "employee")
 
   return {
     permissionLabels,
