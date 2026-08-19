@@ -1667,6 +1667,19 @@ export function canAccessDashboardRoute(
     return hasPayrollAccess(permissionLabels)
   }
 
+  if (
+    path === "/dashboard/operations/scheduled-reporting" ||
+    path.startsWith("/dashboard/operations/scheduled-reporting/")
+  ) {
+    if (accessMode === "employee") {
+      return false
+    }
+    return (
+      hasPermission(permissionLabels, SCHEDULED_REPORTING_ROUTE_PERMISSION) ||
+      hasPermission(permissionLabels, ATTENDANCE_REPORTS_ROUTE_PERMISSION)
+    )
+  }
+
   if (path === "/dashboard/sms/platform" || path.startsWith("/dashboard/sms/platform/")) {
     return hasSmsPlatformAccess(permissionLabels)
   }
