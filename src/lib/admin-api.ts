@@ -93,6 +93,26 @@ const EMPLOYEE_SORT_FIELDS = new Set([
   "employee_no",
 ]);
 
+function normalizeSortBy(
+  sortBy?: string,
+  allowedFields?: ReadonlySet<string>,
+): string | null {
+  const trimmed = sortBy?.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  if (trimmed.toLowerCase() === "sortvalue") {
+    return null;
+  }
+
+  if (allowedFields && !allowedFields.has(trimmed)) {
+    return null;
+  }
+
+  return trimmed;
+}
+
 export interface DepartmentsQueryParams extends UsersQueryParams {
   status?: string;
   branch_id?: number;
@@ -1343,10 +1363,11 @@ function buildUsersQuery(params: UsersQueryParams) {
   if (typeof params.limit === "number" && params.limit > 0) {
     searchParams.set("limit", String(params.limit));
   }
-  if (params.sortBy && params.sortBy.trim()) {
-    searchParams.set("sortBy", params.sortBy.trim());
+  const sortBy = normalizeSortBy(params.sortBy);
+  if (sortBy) {
+    searchParams.set("sortBy", sortBy);
   }
-  if (params.sortOrder === "ASC" || params.sortOrder === "DESC") {
+  if (sortBy && (params.sortOrder === "ASC" || params.sortOrder === "DESC")) {
     searchParams.set("sortOrder", params.sortOrder);
   }
   if (params.search && params.search.trim()) {
@@ -1579,11 +1600,11 @@ function buildEmployeesQuery(params: EmployeesQueryParams) {
   if (typeof params.limit === "number" && params.limit > 0) {
     searchParams.set("limit", String(params.limit));
   }
-  const sortBy = params.sortBy?.trim();
-  if (sortBy && EMPLOYEE_SORT_FIELDS.has(sortBy)) {
+  const sortBy = normalizeSortBy(params.sortBy, EMPLOYEE_SORT_FIELDS);
+  if (sortBy) {
     searchParams.set("sortBy", sortBy);
   }
-  if (sortBy && EMPLOYEE_SORT_FIELDS.has(sortBy) && (params.sortOrder === "ASC" || params.sortOrder === "DESC")) {
+  if (sortBy && (params.sortOrder === "ASC" || params.sortOrder === "DESC")) {
     searchParams.set("sortOrder", params.sortOrder);
   }
   if (params.search && params.search.trim()) {
@@ -2020,10 +2041,11 @@ function buildMyAttendancePunchesQuery(params: MyAttendancePunchesQueryParams) {
   if (typeof params.limit === "number" && params.limit > 0) {
     searchParams.set("limit", String(params.limit));
   }
-  if (params.sortBy && params.sortBy.trim()) {
-    searchParams.set("sortBy", params.sortBy.trim());
+  const sortBy = normalizeSortBy(params.sortBy);
+  if (sortBy) {
+    searchParams.set("sortBy", sortBy);
   }
-  if (params.sortOrder === "ASC" || params.sortOrder === "DESC") {
+  if (sortBy && (params.sortOrder === "ASC" || params.sortOrder === "DESC")) {
     searchParams.set("sortOrder", params.sortOrder);
   }
   if (params.search && params.search.trim()) {
@@ -2059,10 +2081,11 @@ function buildMyAttendanceHistoryQuery(params: MyAttendanceHistoryQueryParams) {
   if (typeof params.limit === "number" && params.limit > 0) {
     searchParams.set("limit", String(params.limit));
   }
-  if (params.sortBy && params.sortBy.trim()) {
-    searchParams.set("sortBy", params.sortBy.trim());
+  const sortBy = normalizeSortBy(params.sortBy);
+  if (sortBy) {
+    searchParams.set("sortBy", sortBy);
   }
-  if (params.sortOrder === "ASC" || params.sortOrder === "DESC") {
+  if (sortBy && (params.sortOrder === "ASC" || params.sortOrder === "DESC")) {
     searchParams.set("sortOrder", params.sortOrder);
   }
   if (params.search && params.search.trim()) {
@@ -2119,10 +2142,11 @@ function buildSelfServiceRequestQuery(params: SelfServiceRequestQueryParams) {
   if (typeof params.limit === "number" && params.limit > 0) {
     searchParams.set("limit", String(params.limit));
   }
-  if (params.sortBy && params.sortBy.trim()) {
-    searchParams.set("sortBy", params.sortBy.trim());
+  const sortBy = normalizeSortBy(params.sortBy);
+  if (sortBy) {
+    searchParams.set("sortBy", sortBy);
   }
-  if (params.sortOrder === "ASC" || params.sortOrder === "DESC") {
+  if (sortBy && (params.sortOrder === "ASC" || params.sortOrder === "DESC")) {
     searchParams.set("sortOrder", params.sortOrder);
   }
   if (params.search && params.search.trim()) {
@@ -13805,8 +13829,13 @@ export async function submitMyProbationSelfAssessment(
 
 function buildRecordQuery(params: Record<string, string | number | boolean | undefined>) {
   const search = new URLSearchParams();
+  const sortBy = normalizeSortBy(
+    typeof params.sortBy === "string" ? params.sortBy : undefined,
+  );
   for (const [key, value] of Object.entries(params)) {
     if (value === undefined || value === "") continue;
+    if (key === "sortBy" && !sortBy) continue;
+    if (key === "sortOrder" && !sortBy) continue;
     search.set(key, String(value));
   }
   const query = search.toString();
