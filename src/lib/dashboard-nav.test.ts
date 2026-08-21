@@ -4,11 +4,11 @@ import { mergeUniqueNavItems, selfServiceHomeFor } from "./dashboard-nav"
 import { canSeeDashboardPage } from "./forbidden-routes"
 
 describe("mixed employee helper navigation", () => {
-  it("keeps self-service links when a helper also has an HR grant", () => {
+  it("keeps self-service links out of admin-shell navigation even when the route stays accessible", () => {
     const permissions = ["performance:read", "performance_reviews:read"]
-    expect(canSeeDashboardPage("/dashboard/me/performance/overview", permissions, "admin")).toBe(true)
-    expect(canSeeDashboardPage("/dashboard/me/probation", permissions, "admin")).toBe(true)
-    expect(canSeeDashboardPage("/dashboard/me/leave/requests", permissions, "admin")).toBe(true)
+    expect(canSeeDashboardPage("/dashboard/me/performance/overview", permissions, "admin")).toBe(false)
+    expect(canSeeDashboardPage("/dashboard/me/probation", permissions, "admin")).toBe(false)
+    expect(canSeeDashboardPage("/dashboard/me/leave/requests", permissions, "admin")).toBe(false)
     expect(canSeeDashboardPage("/dashboard/performance/overview", permissions, "admin")).toBe(true)
   })
 

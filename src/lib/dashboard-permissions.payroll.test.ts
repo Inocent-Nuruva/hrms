@@ -42,10 +42,10 @@ describe("payroll route access", () => {
     ).toBe(true)
   })
 
-  it("blocks the employee self-service shell from operations payroll", () => {
+  it("lets employee-shell users open operations payroll when they have payroll access", () => {
     expect(
       canAccessDashboardRoute("/dashboard/operations/payroll", ["payroll:read"], "employee"),
-    ).toBe(false)
+    ).toBe(true)
   })
 
   it("leaves personal payroll available without payroll admin permissions", () => {

@@ -35,6 +35,16 @@ export function isSelfServiceDashboardRoute(url: string) {
   return PERSONAL_ATTENDANCE_ROUTES.has(path)
 }
 
+export function canShowDashboardRouteInNavigation(
+  url: string,
+  accessMode?: "admin" | "employee",
+) {
+  if (!isSelfServiceDashboardRoute(url)) {
+    return true
+  }
+  return accessMode !== "admin"
+}
+
 export function selfServiceHomeFor(url: string): string | null {
   const path = normalizeDashboardPath(url)
   if (path.startsWith("/dashboard/me/performance") || path.startsWith("/dashboard/performance")) {

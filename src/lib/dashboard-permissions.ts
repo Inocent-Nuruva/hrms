@@ -637,41 +637,15 @@ const ADMIN_DASHBOARD_LANDING_ROUTES = [
   "/dashboard/permissions",
 ]
 
-/** HR employee routes an employee-shell actor may still open if they have the grant. */
-const EMPLOYEE_SHELL_HR_OVERRIDE_PREFIXES = [
-  "/dashboard/employees/registration",
-  "/dashboard/employees/onboarding",
-  "/dashboard/employees/offboarding",
-  "/dashboard/employees/profile-update-approvals",
-  "/dashboard/employees/profile-change-requests",
-] as const
+const DASHBOARD_ROUTE_SHELLS: Record<string, DashboardAccessMode> = {
+  // This is the admin-shell overview surface, not a generic feature route.
+  "/dashboard/company-overview": "admin",
+}
 
-/**
- * HR/admin employee-directory routes. Blocked for accessMode === "employee"
- * even when the JWT includes a broad `employees:read` grant for self-service.
- */
-const ADMIN_ONLY_EMPLOYEE_DIRECTORY_PREFIXES = [
-  "/dashboard/employees/all",
-  "/dashboard/employees/registration",
-  "/dashboard/employees/onboarding",
-  "/dashboard/employees/profile-update-approvals",
-  "/dashboard/employees/profile-change-requests",
-  "/dashboard/employees/profile",
-] as const
-
-const ADMIN_ONLY_FOUNDATION_PREFIXES = [
-  "/dashboard/companies",
-  "/dashboard/branches",
-  "/dashboard/departments",
-  "/dashboard/positions",
-  "/dashboard/access-control",
-  "/dashboard/roles",
-  "/dashboard/permissions",
-] as const
-
-/** Permissions that unlock the company employee directory (not basic self-service read). */
-const EMPLOYEE_DIRECTORY_MANAGE_PERMISSIONS: PermissionRequirement = {
+/** Permissions that unlock the company employee directory and employee profiles. */
+const EMPLOYEE_DIRECTORY_ROUTE_PERMISSION: PermissionRequirement = {
   permissions: [
+    "employees:read",
     "employees:create",
     "employees:update",
     "employees:delete",
@@ -682,24 +656,17 @@ const EMPLOYEE_DIRECTORY_MANAGE_PERMISSIONS: PermissionRequirement = {
   mode: "any",
 }
 
-export function isAdminOnlyEmployeeDirectoryRoute(url: string) {
-  const path = url.split("?")[0] ?? url
-  return ADMIN_ONLY_EMPLOYEE_DIRECTORY_PREFIXES.some(
-    (prefix) => path === prefix || path.startsWith(`${prefix}/`)
-  )
-}
-
-/** Entire HR Employees section — not for self-service employee shell. */
-export function isHrEmployeesSectionRoute(url: string) {
-  const path = url.split("?")[0] ?? url
-  return path === "/dashboard/employees" || path.startsWith("/dashboard/employees/")
-}
-
-export function isAdminOnlyFoundationRoute(url: string) {
-  const path = url.split("?")[0] ?? url
-  return ADMIN_ONLY_FOUNDATION_PREFIXES.some(
-    (prefix) => path === prefix || path.startsWith(`${prefix}/`)
-  )
+/** Permissions that unlock employee administration workflows beyond directory read. */
+const EMPLOYEE_DIRECTORY_MANAGE_PERMISSIONS: PermissionRequirement = {
+  permissions: [
+    "employees:create",
+    "employees:update",
+    "employees:delete",
+    "company_users:create",
+    "users:create",
+    "create_company_user",
+  ],
+  mode: "any",
 }
 
 const ADMIN_IDENTITY_HINTS = new Set([
@@ -827,8 +794,8 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/attendance/attendance-history": null,
   "/dashboard/attendance/schedule-preview": null,
   "/dashboard/attendance/corrections": null,
-  // Section root + directory: employees:read is enough in the admin shell.
-  // The employee shell is hard-blocked in canAccessDashboardRoute.
+  // Route permissions stay permission-first regardless of shell unless an
+  // explicit shell requirement is defined separately.
   "/dashboard/employees": {
     permissions: [
       "employees:read",
@@ -846,21 +813,7 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
     ],
     mode: "any",
   },
-  // Directory: employees:read alone is intentionally NOT enough for the employee
-  // shell (see canAccessDashboardRoute accessMode gate). Admin shell still uses this
-  // requirement; manage permissions keep pure self-service tokens out of the directory.
-  "/dashboard/employees/all": {
-    permissions: [
-      "employees:read",
-      "employees:create",
-      "employees:update",
-      "employees:delete",
-      "company_users:create",
-      "users:create",
-      "create_company_user",
-    ],
-    mode: "any",
-  },
+  "/dashboard/employees/all": EMPLOYEE_DIRECTORY_ROUTE_PERMISSION,
   "/dashboard/employees/registration": {
     permissions: [
       "employees:create",
@@ -879,8 +832,8 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
     mode: "any",
   },
   // Other employees' profiles — not self profile under /dashboard/me/profile.
-  "/dashboard/employees/profile": EMPLOYEE_DIRECTORY_MANAGE_PERMISSIONS,
-  "/dashboard/employees/profile/": EMPLOYEE_DIRECTORY_MANAGE_PERMISSIONS,
+  "/dashboard/employees/profile": EMPLOYEE_DIRECTORY_ROUTE_PERMISSION,
+  "/dashboard/employees/profile/": EMPLOYEE_DIRECTORY_ROUTE_PERMISSION,
   "/dashboard/employees/profile-update-approvals": "self_service_requests:approve",
   "/dashboard/employees/profile-change-requests": "self_service_requests:approve",
   "/dashboard/attendance": ATTENDANCE_ROUTE_PERMISSIONS,
@@ -955,8 +908,7 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   },
   "/dashboard/leave-management/policies": "leave_policies:read",
   "/dashboard/leave-management/workflows": "leave_workflows:read",
-  // Company HR analytics overview — not the employee self-service home.
-  // Employee shell uses /dashboard without this gate (see canAccessDashboardRoute).
+  // Any shell restriction is handled separately so this remains the permission source of truth.
   "/dashboard/company-overview": COMPANY_DASHBOARD_PERMISSION,
   "/dashboard/operations/promotion": MOVEMENT_ROUTE_PERMISSION,
   "/dashboard/operations/recruitment": EMPLOYEE_DIRECTORY_MANAGE_PERMISSIONS,
@@ -1665,11 +1617,17 @@ export function hasMovementsAccess(permissionLabels: string[]) {
   ])
 }
 
-function isEmployeeShellHrOverride(url: string) {
-  const path = url.split("?")[0] ?? url
-  return EMPLOYEE_SHELL_HR_OVERRIDE_PREFIXES.some(
-    (prefix) => path === prefix || path.startsWith(`${prefix}/`)
-  )
+function resolveDashboardRouteShellRequirement(url: string) {
+  const exactMatch = DASHBOARD_ROUTE_SHELLS[url]
+  if (exactMatch !== undefined) {
+    return exactMatch
+  }
+
+  const matchedEntry = Object.entries(DASHBOARD_ROUTE_SHELLS)
+    .sort(([left], [right]) => right.length - left.length)
+    .find(([route]) => route !== "/dashboard" && (url === route || url.startsWith(`${route}/`)))
+
+  return matchedEntry?.[1]
 }
 
 export function hasSmsPlatformAccess(permissionLabels: string[]) {
@@ -1690,43 +1648,9 @@ export function canAccessDashboardRoute(
     return true
   }
 
-  if (accessMode === "employee" && isAdminOnlyFoundationRoute(url)) {
+  const requiredShell = resolveDashboardRouteShellRequirement(path)
+  if (requiredShell && accessMode && accessMode !== requiredShell) {
     return false
-  }
-
-  // Self-service shell: employees:read must not open the HR directory.
-  // Approvers / registrars / onboarding owners can still open their grant.
-  if (accessMode === "employee" && isHrEmployeesSectionRoute(url)) {
-    if (!isEmployeeShellHrOverride(url)) {
-      return false
-    }
-    return hasPermission(permissionLabels, resolveRequiredPermissions(path))
-  }
-
-  // Company overview analytics is never open to the employee self-service shell,
-  // and in the admin shell requires the company-dashboard permission set.
-  if (path === "/dashboard/company-overview") {
-    if (accessMode === "employee") {
-      return false
-    }
-    return canViewCompanyDashboard(permissionLabels)
-  }
-
-  if (path === "/dashboard/operations/payroll" || path.startsWith("/dashboard/operations/payroll/")) {
-    if (accessMode === "employee") {
-      return false
-    }
-    return hasPayrollAccess(permissionLabels)
-  }
-
-  if (
-    path === "/dashboard/operations/scheduled-reporting" ||
-    path.startsWith("/dashboard/operations/scheduled-reporting/")
-  ) {
-    if (accessMode === "employee") {
-      return false
-    }
-    return hasPermission(permissionLabels, SCHEDULED_REPORTING_ROUTE_PERMISSION)
   }
 
   if (path === "/dashboard/sms/platform" || path.startsWith("/dashboard/sms/platform/")) {
@@ -1735,46 +1659,6 @@ export function canAccessDashboardRoute(
 
   if (path === "/dashboard/sms" || path.startsWith("/dashboard/sms/")) {
     return hasSmsAccess(permissionLabels)
-  }
-
-  // Admin / HR shell: allow directory (and section root) with employees:read.
-  if (accessMode === "admin" && isAdminOnlyEmployeeDirectoryRoute(url)) {
-    return hasPermission(permissionLabels, {
-      permissions: [
-        "employees:read",
-        "employees:create",
-        "employees:update",
-        "employees:delete",
-        "company_users:create",
-        "users:create",
-        "create_company_user",
-        "self_service_requests:approve",
-        "onboarding_requests:read",
-        "onboarding_workflows:read",
-      ],
-      mode: "any",
-    })
-  }
-
-  // Section root under admin: same bar as directory so the sidebar item works.
-  if (accessMode === "admin" && path === "/dashboard/employees") {
-    return hasPermission(permissionLabels, {
-      permissions: [
-        "employees:read",
-        "employees:create",
-        "employees:update",
-        "employees:delete",
-        "company_users:create",
-        "users:create",
-        "create_company_user",
-        "self_service_requests:approve",
-        "onboarding_requests:read",
-        "onboarding_workflows:read",
-        "offboarding_requests:read",
-        "offboarding_workflows:read",
-      ],
-      mode: "any",
-    })
   }
 
   const requirement = resolveRequiredPermissions(path)
@@ -1839,9 +1723,13 @@ function resolveDashboardActorIdentity(...sources: unknown[]): DashboardActorIde
   const hasPermissionBasedAdminAccess = hasAdminDashboardAccess(permissionLabels)
   const hasAdminRole = roleNames.some(roleNameImpliesAdminShell)
   const accessMode: DashboardAccessMode =
-    hasPermissionBasedAdminAccess || hasExplicitAdminIdentity || hasAdminRole
+    explicitAccessMode === "admin" || hasExplicitAdminIdentity || hasAdminRole
       ? "admin"
-      : (explicitAccessMode ?? "employee")
+      : explicitAccessMode === "employee" || hasExplicitEmployeeIdentity
+        ? "employee"
+        : hasPermissionBasedAdminAccess
+          ? "admin"
+          : "employee"
 
   return {
     permissionLabels,

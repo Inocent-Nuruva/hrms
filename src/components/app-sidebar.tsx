@@ -729,8 +729,6 @@ export function AppSidebar({
       }
     }
     void forbiddenVersion
-    // Helper employees keep My * links even when an HR grant flips them
-    // into the admin catalog. Granted admin routes are appended after.
     const selfService = filterNavByPermissions(
       selfServiceNavMain,
       normalizedPermissions,
@@ -741,8 +739,22 @@ export function AppSidebar({
       normalizedPermissions,
       resolvedAccessMode,
     )
+    if (resolvedAccessMode === "employee") {
+      return {
+        navMain: adminItems.length > 0
+          ? [
+              ...selfService,
+              {
+                title: "Additional Access",
+                items: adminItems,
+              },
+            ]
+          : selfService,
+        navSecondary: secondary,
+      }
+    }
     return {
-      navMain: mergeUniqueNavItems(selfService, adminItems),
+      navMain: adminItems,
       navSecondary: secondary,
     }
   }, [forbiddenVersion, normalizedPermissions, permissionsResolved, resolvedAccessMode])

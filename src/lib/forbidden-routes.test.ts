@@ -105,6 +105,18 @@ describe("forbidden route memory", () => {
     )
   })
 
+  it("keeps self-service routes directly accessible but out of admin navigation", () => {
+    expect(canAccessDashboardRoute("/dashboard/me/performance/overview", [], "admin")).toBe(true)
+    expect(canSeeDashboardPage("/dashboard/me/performance/overview", [], "admin")).toBe(false)
+    expect(canSeeDashboardPage("/dashboard/attendance/today", [], "admin")).toBe(false)
+  })
+
+  it("shows permission-granted HR routes in employee navigation", () => {
+    expect(canAccessDashboardRoute("/dashboard/employees/all", ["employees:read"], "employee")).toBe(true)
+    expect(canSeeDashboardPage("/dashboard/employees/all", ["employees:read"], "employee")).toBe(true)
+    expect(canSeeDashboardPage("/dashboard/companies", ["employees:read"], "employee")).toBe(false)
+  })
+
   it("redirects restricted self-service manager routes to a safe fallback", () => {
     expect(firstVisibleSiblingOrHome("/dashboard/me/team/overview", [], "employee")).toBe(
       "/dashboard/me/profile",

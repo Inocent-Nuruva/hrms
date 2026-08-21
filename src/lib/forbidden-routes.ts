@@ -1,6 +1,10 @@
 import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
 import type { DashboardAccessMode } from "@/lib/dashboard-permissions"
-import { isSelfServiceDashboardRoute, selfServiceHomeFor } from "@/lib/dashboard-nav"
+import {
+  canShowDashboardRouteInNavigation,
+  isSelfServiceDashboardRoute,
+  selfServiceHomeFor,
+} from "@/lib/dashboard-nav"
 import { allDashboardSectionTabGroups } from "@/lib/dashboard-sections"
 
 export const FORBIDDEN_ROUTES_EVENT = "hrms:forbidden-routes-changed"
@@ -275,6 +279,9 @@ export function canSeeDashboardPage(
   permissionLabels: string[],
   accessMode?: DashboardAccessMode,
 ) {
+  if (!canShowDashboardRouteInNavigation(url, accessMode)) {
+    return false
+  }
   if (isRememberedForbiddenRoute(url)) {
     return false
   }

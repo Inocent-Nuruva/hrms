@@ -36,7 +36,7 @@ describe("tightened dashboard permissions", () => {
     ).toEqual(["employees:read"])
   })
 
-  it("flips the admin shell from specialist grants, not only company-dashboard", () => {
+  it("keeps explicit employee identity on the employee shell even with extra grants", () => {
     expect(hasAdminDashboardAccess(["branches:read"])).toBe(true)
     expect(hasAdminDashboardAccess(["leave_types:read"])).toBe(true)
     expect(hasAdminDashboardAccess(["self_service_requests:approve"])).toBe(true)
@@ -46,12 +46,21 @@ describe("tightened dashboard permissions", () => {
     expect(hasAdminDashboardAccess(["attendance_summaries:read"])).toBe(false)
     expect(hasAdminDashboardAccess(["performance:read"])).toBe(false)
     expect(hasAdminDashboardAccess(["leave_types:read"])).toBe(true)
-    expect(buildDashboardActorSnapshotFromSources({ permissions: ["branches:read"] }).accessMode).toBe(
-      "admin",
-    )
     expect(buildDashboardActorSnapshotFromSources({ permissions: ["employees:read"] }).accessMode).toBe(
       "employee",
     )
+    expect(
+      buildDashboardActorSnapshotFromSources({
+        dashboard_type: "employee",
+        permissions: ["branches:read"],
+      }).accessMode,
+    ).toBe("employee")
+    expect(
+      buildDashboardActorSnapshotFromSources({
+        role: "employee",
+        permissions: ["leave_types:read"],
+      }).accessMode,
+    ).toBe("employee")
     expect(
       buildDashboardActorSnapshotFromSources({
         permissions: ["leave_requests:read", "leave_balances:read"],
@@ -65,7 +74,7 @@ describe("tightened dashboard permissions", () => {
     ).toBe("admin")
   })
 
-  it("lets an employee-shell approver open HR approval routes only", () => {
+  it("lets an employee-shell actor open granted HR routes without flipping shells", () => {
     expect(
       canAccessDashboardRoute(
         "/dashboard/employees/profile-update-approvals",
@@ -75,9 +84,12 @@ describe("tightened dashboard permissions", () => {
     ).toBe(true)
     expect(
       canAccessDashboardRoute("/dashboard/employees/all", ["employees:read"], "employee"),
-    ).toBe(false)
+    ).toBe(true)
     expect(
       canAccessDashboardRoute("/dashboard/employees/all", ["employees:read"], "admin"),
+    ).toBe(true)
+    expect(
+      canAccessDashboardRoute("/dashboard/employees/profile/EMP-001", ["employees:read"], "employee"),
     ).toBe(true)
   })
 
@@ -120,12 +132,21 @@ describe("tightened dashboard permissions", () => {
     ).toBe(true)
   })
 
-  it("prefers grants over a stale employee dashboard_type", () => {
+  it("keeps company overview as an intentional admin-shell-only route", () => {
+    expect(
+      canAccessDashboardRoute("/dashboard/company-overview", ["view_company_dashboard"], "employee"),
+    ).toBe(false)
+    expect(
+      canAccessDashboardRoute("/dashboard/company-overview", ["view_company_dashboard"], "admin"),
+    ).toBe(true)
+  })
+
+  it("keeps explicit employee dashboard_type ahead of permission-based shell fallback", () => {
     expect(
       buildDashboardActorSnapshotFromSources({
         dashboard_type: "employee",
         permissions: ["branches:read"],
       }).accessMode,
-    ).toBe("admin")
+    ).toBe("employee")
   })
 })
