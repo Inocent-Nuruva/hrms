@@ -1726,10 +1726,7 @@ export function canAccessDashboardRoute(
     if (accessMode === "employee") {
       return false
     }
-    return (
-      hasPermission(permissionLabels, SCHEDULED_REPORTING_ROUTE_PERMISSION) ||
-      hasPermission(permissionLabels, ATTENDANCE_REPORTS_ROUTE_PERMISSION)
-    )
+    return hasPermission(permissionLabels, SCHEDULED_REPORTING_ROUTE_PERMISSION)
   }
 
   if (path === "/dashboard/sms/platform" || path.startsWith("/dashboard/sms/platform/")) {

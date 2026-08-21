@@ -29,6 +29,8 @@ import {
   textareaClass,
 } from "@/components/dashboard/talent-visuals"
 import { forgetForbiddenRoute } from "@/lib/forbidden-routes"
+import { useDashboardActor } from "@/hooks/use-dashboard-actor"
+import { useForbiddenRouteGuard } from "@/hooks/use-forbidden-route-guard"
 import {
   Dialog,
   DialogDescription,
@@ -53,6 +55,7 @@ import {
   validateManagerAchievement,
   type AdminRecord,
 } from "@/lib/admin-api"
+import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
 import { readStoredSessionTokens } from "@/lib/session-client"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 
@@ -75,6 +78,13 @@ export function PerformanceSelfView({
 }: {
   activeTab: PerformanceSelfTab
 }) {
+  const actor = useDashboardActor()
+  const canAccess = canAccessDashboardRoute(
+    `/dashboard/me/performance/${activeTab}`,
+    actor.permissionLabels,
+    actor.accessMode,
+  )
+  useForbiddenRouteGuard(canAccess)
   const [summary, setSummary] = React.useState<AdminRecord | null>(null)
   const [managerSummary, setManagerSummary] = React.useState<AdminRecord | null>(null)
   const [assignments, setAssignments] = React.useState<AdminRecord[]>([])

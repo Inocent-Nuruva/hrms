@@ -103,6 +103,23 @@ describe("tightened dashboard permissions", () => {
     ).toBe(true)
   })
 
+  it("does not let attendance report access open scheduled reporting", () => {
+    expect(
+      canAccessDashboardRoute(
+        "/dashboard/operations/scheduled-reporting",
+        ["attendance_summaries:read", "attendance_reports:read"],
+        "admin",
+      ),
+    ).toBe(false)
+    expect(
+      canAccessDashboardRoute(
+        "/dashboard/operations/scheduled-reporting",
+        ["scheduled_reporting:read"],
+        "admin",
+      ),
+    ).toBe(true)
+  })
+
   it("prefers grants over a stale employee dashboard_type", () => {
     expect(
       buildDashboardActorSnapshotFromSources({

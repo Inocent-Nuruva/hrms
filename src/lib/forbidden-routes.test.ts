@@ -105,6 +105,15 @@ describe("forbidden route memory", () => {
     )
   })
 
+  it("redirects restricted self-service manager routes to a safe fallback", () => {
+    expect(firstVisibleSiblingOrHome("/dashboard/me/team/overview", [], "employee")).toBe(
+      "/dashboard/me/profile",
+    )
+    expect(firstVisibleSiblingOrHome("/dashboard/me/performance/team", [], "employee")).toBe(
+      "/dashboard/me/performance/overview",
+    )
+  })
+
   it("does not hide Reports after an analytics permission error", () => {
     stubSession()
     rememberForbiddenRoute("/dashboard/operations/reports")

@@ -43,7 +43,6 @@ import {
 } from "@/lib/admin-api"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import {
-  ATTENDANCE_REPORTS_ROUTE_PERMISSION,
   SCHEDULED_REPORTING_ROUTE_PERMISSION,
   canPerformPermission,
 } from "@/lib/dashboard-permissions"
@@ -632,8 +631,7 @@ export function ScheduledReportingView() {
   const canAccessScheduledReporting =
     !actor.ready ||
     actor.isAdmin ||
-    canPerformPermission(actor.permissionLabels, SCHEDULED_REPORTING_ROUTE_PERMISSION) ||
-    canPerformPermission(actor.permissionLabels, ATTENDANCE_REPORTS_ROUTE_PERMISSION)
+    canPerformPermission(actor.permissionLabels, SCHEDULED_REPORTING_ROUTE_PERMISSION)
   const canMutateReports =
     canAccessScheduledReporting ||
     canPerformPermission(actor.permissionLabels, {

@@ -38,7 +38,7 @@ import {
   type AdminRecord,
 } from "@/lib/admin-api"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
-import { hasAnalyticsAccess } from "@/lib/dashboard-permissions"
+import { canAccessDashboardRoute, hasAnalyticsAccess } from "@/lib/dashboard-permissions"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { isPermissionError } from "@/components/dashboard/talent-visuals"
 import { cn } from "@/lib/utils"
@@ -1065,6 +1065,11 @@ function readSummaryNumber(row: AdminRecord | null | undefined, keys: string[]) 
 export function AttendanceReportView() {
   const router = useRouter()
   const actor = useDashboardActor()
+  const canAccessScheduledReporting = canAccessDashboardRoute(
+    "/dashboard/operations/scheduled-reporting",
+    actor.permissionLabels,
+    actor.accessMode,
+  )
   const [activeReport, setActiveReport] = React.useState<ReportId | null>(null)
   const [catalogAllowed, setCatalogAllowed] = React.useState(true)
   const [token, setToken] = React.useState("")
@@ -1542,7 +1547,9 @@ export function AttendanceReportView() {
         <p className="max-w-2xl text-sm text-muted-foreground">
           {canBuildCustomReport
             ? "Download a ready-made attendance file, or build a custom report from a dataset."
-            : "Download a filtered attendance file, or set up email delivery."}
+            : canAccessScheduledReporting
+              ? "Download a filtered attendance file, or set up email delivery."
+              : "Download a filtered attendance file by people, branch, and dates."}
         </p>
       </motion.header>
 
@@ -1570,24 +1577,26 @@ export function AttendanceReportView() {
             </span>
             <DownloadIcon className="size-4 shrink-0 text-muted-foreground" />
           </motion.button>
-          <motion.button
-            type="button"
-            className="flex w-full items-center gap-4 px-5 py-4 text-left transition-colors hover:bg-muted/50"
-            whileHover={{ x: 2 }}
-            whileTap={{ scale: 0.995 }}
-            onClick={() => router.push("/dashboard/operations/scheduled-reporting")}
-          >
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted text-foreground">
-              <MailIcon className="size-5" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-sm font-medium text-foreground">Email reports on a schedule</span>
-              <span className="mt-0.5 block text-sm text-muted-foreground">
-                Templates, SMTP, and delivery history.
+          {canAccessScheduledReporting ? (
+            <motion.button
+              type="button"
+              className="flex w-full items-center gap-4 px-5 py-4 text-left transition-colors hover:bg-muted/50"
+              whileHover={{ x: 2 }}
+              whileTap={{ scale: 0.995 }}
+              onClick={() => router.push("/dashboard/operations/scheduled-reporting")}
+            >
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted text-foreground">
+                <MailIcon className="size-5" />
               </span>
-            </span>
-            <CalendarClockIcon className="size-4 shrink-0 text-muted-foreground" />
-          </motion.button>
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-medium text-foreground">Email reports on a schedule</span>
+                <span className="mt-0.5 block text-sm text-muted-foreground">
+                  Templates, SMTP, and delivery history.
+                </span>
+              </span>
+              <CalendarClockIcon className="size-4 shrink-0 text-muted-foreground" />
+            </motion.button>
+          ) : null}
         </div>
       </motion.section>
 

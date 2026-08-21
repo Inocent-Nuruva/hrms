@@ -28,7 +28,12 @@ import {
   listManagerTeamAttendance,
   type AdminRecord,
 } from "@/lib/admin-api"
-import { useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
+import { useDashboardActor } from "@/hooks/use-dashboard-actor"
+import {
+  useForbiddenRouteGuard,
+  useLeaveIfForbidden,
+} from "@/hooks/use-forbidden-route-guard"
+import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
 import { readStoredSessionTokens } from "@/lib/session-client"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 
@@ -39,7 +44,14 @@ function readStoredToken() {
 }
 
 export function ManagerSelfView({ activeTab }: { activeTab: ManagerSelfTab }) {
+  const actor = useDashboardActor()
   const leaveIfForbidden = useLeaveIfForbidden()
+  const canAccess = canAccessDashboardRoute(
+    `/dashboard/me/team/${activeTab}`,
+    actor.permissionLabels,
+    actor.accessMode,
+  )
+  useForbiddenRouteGuard(canAccess)
   const [dashboard, setDashboard] = React.useState<AdminRecord | null>(null)
   const [members, setMembers] = React.useState<AdminRecord[]>([])
   const [attendance, setAttendance] = React.useState<AdminRecord[]>([])
