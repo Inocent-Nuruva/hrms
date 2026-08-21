@@ -83,6 +83,16 @@ export interface EmployeesQueryParams extends UsersQueryParams {
   position_id?: number;
 }
 
+const EMPLOYEE_SORT_FIELDS = new Set([
+  "created_at",
+  "first_name",
+  "last_name",
+  "email",
+  "status",
+  "employment_status",
+  "employee_no",
+]);
+
 export interface DepartmentsQueryParams extends UsersQueryParams {
   status?: string;
   branch_id?: number;
@@ -1569,10 +1579,11 @@ function buildEmployeesQuery(params: EmployeesQueryParams) {
   if (typeof params.limit === "number" && params.limit > 0) {
     searchParams.set("limit", String(params.limit));
   }
-  if (params.sortBy && params.sortBy.trim()) {
-    searchParams.set("sortBy", params.sortBy.trim());
+  const sortBy = params.sortBy?.trim();
+  if (sortBy && EMPLOYEE_SORT_FIELDS.has(sortBy)) {
+    searchParams.set("sortBy", sortBy);
   }
-  if (params.sortOrder === "ASC" || params.sortOrder === "DESC") {
+  if (sortBy && EMPLOYEE_SORT_FIELDS.has(sortBy) && (params.sortOrder === "ASC" || params.sortOrder === "DESC")) {
     searchParams.set("sortOrder", params.sortOrder);
   }
   if (params.search && params.search.trim()) {
