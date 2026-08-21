@@ -71,4 +71,24 @@ describe("resolveHomeDashboardKind", () => {
       }),
     ).toBe("employee")
   })
+
+  it("does not let permission grants replace the employee home dashboard", () => {
+    expect(
+      resolveHomeDashboardKind({
+        accessMode: "employee",
+        permissionLabels: ["view_company_dashboard", "view_manager_dashboard", "sales_field:read"],
+        roleNames: ["COMPANY_USER"],
+      }),
+    ).toBe("employee")
+  })
+
+  it("still lets role-derived manager identities keep their role home", () => {
+    expect(
+      resolveHomeDashboardKind({
+        accessMode: "employee",
+        permissionLabels: ["view_manager_dashboard"],
+        roleNames: ["MANAGER"],
+      }),
+    ).toBe("manager")
+  })
 })

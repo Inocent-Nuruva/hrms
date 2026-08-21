@@ -137,9 +137,10 @@ export function resolveHomeDashboardKind(input: {
   const fromRole = kindFromRoles(input.roleNames ?? [])
   if (fromRole) return fromRole
 
+  if (input.accessMode === "employee") return "employee"
+
   const fromGrant = kindFromSpecificPermissions(input.permissionLabels)
   if (fromGrant) return fromGrant
 
-  if (input.accessMode === "admin") return "company"
-  return "employee"
+  return "company"
 }
