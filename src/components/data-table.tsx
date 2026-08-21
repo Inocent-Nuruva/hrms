@@ -1049,6 +1049,7 @@ export function DataTable({
   const [peopleDialogOpen, setPeopleDialogOpen] = React.useState(false)
   const rolePermissionsDraftDirtyRef = React.useRef(false)
   const permissionOptionsRef = React.useRef<PermissionOption[]>([])
+  const permissionMutationNextAllowedAtRef = React.useRef(0)
 
   const columns = React.useMemo(() => {
     const baseColumns = getVisibleColumns(rows)
@@ -2159,9 +2160,17 @@ export function DataTable({
     }
 
     const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms))
-    const runWithRetry = async (fn: () => Promise<unknown>) => {
-      let delay = 500
+    const waitForPermissionWindow = async (gapMs: number) => {
+      const waitMs = Math.max(0, permissionMutationNextAllowedAtRef.current - Date.now())
+      if (waitMs > 0) {
+        await sleep(waitMs)
+      }
+      permissionMutationNextAllowedAtRef.current = Date.now() + gapMs
+    }
+    const runWithRetry = async (fn: () => Promise<unknown>, gapMs: number) => {
+      let retryDelay = Math.max(gapMs * 2, 1_500)
       for (let attempt = 0; attempt < 5; attempt += 1) {
+        await waitForPermissionWindow(gapMs)
         try {
           return await fn()
         } catch (errorObject) {
@@ -2169,33 +2178,41 @@ export function DataTable({
           if (status !== 429 || attempt === 4) {
             throw errorObject
           }
-          await sleep(delay)
-          delay = Math.min(delay * 2, 4000)
+          permissionMutationNextAllowedAtRef.current = Date.now() + retryDelay
+          await sleep(retryDelay)
+          retryDelay = Math.min(Math.max(retryDelay * 2, 2_500), 10_000)
         }
       }
     }
 
-    const tasks: Array<() => Promise<void>> = [
-      ...toAdd.map((name) => async () => {
-        await runWithRetry(() =>
-          assignPermissionToRole(token, editingEntity.id, resolvePermissionId(name)),
-        )
-      }),
-      ...toRemove.map((name) => async () => {
-        await runWithRetry(() =>
-          revokePermissionFromRole(token, editingEntity.id, resolvePermissionId(name)),
-        )
-      }),
+    const removeOnly = toRemove.length > 0 && toAdd.length === 0
+    const addGapMs = removeOnly ? 0 : 450
+    const removeGapMs = removeOnly ? 900 : 650
+
+    const tasks: Array<{ run: () => Promise<void>; isRemoval: boolean }> = [
+      ...toAdd.map((name) => ({
+        isRemoval: false,
+        run: async () => {
+          await runWithRetry(
+            () => assignPermissionToRole(token, editingEntity.id, resolvePermissionId(name)),
+            addGapMs,
+          )
+        },
+      })),
+      ...toRemove.map((name) => ({
+        isRemoval: true,
+        run: async () => {
+          await runWithRetry(
+            () => revokePermissionFromRole(token, editingEntity.id, resolvePermissionId(name)),
+            removeGapMs,
+          )
+        },
+      })),
     ]
 
-    const batchSize =
-      toRemove.length > 0 && toAdd.length === 0
-        ? 4
-        : 6
+    const batchSize = removeOnly ? 2 : 4
     const pauseBetweenBatchesMs =
-      toRemove.length > 0 && toAdd.length === 0
-        ? 350
-        : 200
+      removeOnly ? 1_250 : 500
 
     setMembersBusy(true)
     setPermissionSaveProgress({ done: 0, total: tasks.length })
@@ -2204,7 +2221,7 @@ export function DataTable({
       for (let start = 0; start < tasks.length; start += batchSize) {
         const batch = tasks.slice(start, start + batchSize)
         for (const task of batch) {
-          await task()
+          await task.run()
           done += 1
           setPermissionSaveProgress({ done, total: tasks.length })
         }
