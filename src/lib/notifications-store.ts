@@ -394,7 +394,14 @@ export function playNotificationSound() {
  * Building `new URL("/notifications", apiBase)` as a bare connect URL is fine
  * only when we also keep path: "/socket.io" and allow polling fallback.
  */
-function resolveNotificationsSocketOrigin() {
+export function resolveNotificationsSocketOrigin() {
+  if (typeof window !== "undefined") {
+    const protocol = window.location.protocol.toLowerCase()
+    if (protocol === "http:" || protocol === "https:") {
+      return window.location.origin
+    }
+  }
+
   const candidates = [
     process.env.NEXT_PUBLIC_BACKEND_URL?.trim(),
     process.env.NEXT_PUBLIC_API_BASE_URL?.trim(),
@@ -420,7 +427,7 @@ function resolveNotificationsSocketOrigin() {
   return null
 }
 
-function resolveNotificationsSocketUrl() {
+export function resolveNotificationsSocketUrl() {
   const origin = resolveNotificationsSocketOrigin()
   return origin ? `${origin}/notifications` : null
 }
