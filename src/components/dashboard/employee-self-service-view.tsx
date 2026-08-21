@@ -29,6 +29,7 @@ import { Textarea } from "@/components/ui/textarea"
 import {
   acknowledgeMyMovement,
   cancelMyProfileUpdateRequest,
+  getEmployeeDashboard,
   getMyAttendanceAssignments,
   getMyAttendanceOverview,
   getMyAttendanceToday,
@@ -4357,9 +4358,10 @@ export function EmployeeSelfServiceProfileView() {
 
     let cancelled = false
     const todayIso = localDateIso()
+    const dashboardOverviewRequest = getEmployeeDashboard(token).catch(() => getMyDashboard(token))
 
     void Promise.allSettled([
-      getMyDashboard(token),
+      dashboardOverviewRequest,
       getMyStatus(token),
       getMyAttendanceOverview(token, { page: 1, limit: 20, sortBy: "created_at", sortOrder: "DESC" }),
       // Same endpoints the employee dashboard uses for check-in / check-out times.

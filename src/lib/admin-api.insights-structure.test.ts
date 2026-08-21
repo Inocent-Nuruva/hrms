@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
   calculatePayrollFinalSettlement,
+  getEmployeeDashboard,
   getHrAttendanceSchedulePreview,
   getHrDashboard,
   getHrLaunchReadiness,
@@ -29,12 +30,14 @@ describe("insights, readiness, and payroll report API helpers", () => {
   it("loads HR dashboards, health, launch readiness, and security events", async () => {
     const fetchMock = vi
       .fn()
+      .mockResolvedValueOnce(jsonResponse({ data: { welcome: "employee" } }))
       .mockResolvedValueOnce(jsonResponse({ data: { headcount: 120 } }))
       .mockResolvedValueOnce(jsonResponse({ status: "ok" }))
       .mockResolvedValueOnce(jsonResponse({ data: { blockers: [] } }))
       .mockResolvedValueOnce(jsonResponse({ data: { items: [{ id: 7, event_type: "LOGIN" }] } }))
     vi.stubGlobal("fetch", fetchMock)
 
+    const employeeDashboard = await getEmployeeDashboard("token")
     const dashboard = await getHrDashboard("token", "hr", { date_from: "2026-08-01" })
     const health = await getSystemHealth("token")
     const readiness = await getHrLaunchReadiness("token")
@@ -42,24 +45,30 @@ describe("insights, readiness, and payroll report API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:8888/api/dashboards/hr?date_from=2026-08-01",
+      "http://localhost:8888/api/dashboards/employee",
       expect.objectContaining({ method: "GET" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:8888/api/health",
+      "http://localhost:8888/api/dashboards/hr?date_from=2026-08-01",
       expect.objectContaining({ method: "GET" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
-      "http://localhost:8888/api/hr/launch-readiness",
+      "http://localhost:8888/api/health",
       expect.objectContaining({ method: "GET" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       4,
+      "http://localhost:8888/api/hr/launch-readiness",
+      expect.objectContaining({ method: "GET" }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      5,
       "http://localhost:8888/api/security-events?page=1&limit=20&outcome=SUCCESS",
       expect.objectContaining({ method: "GET" }),
     )
+    expect(employeeDashboard).toEqual(expect.objectContaining({ welcome: "employee" }))
     expect(dashboard).toEqual(expect.objectContaining({ headcount: 120 }))
     expect(health).toEqual(expect.objectContaining({ status: "ok" }))
     expect(readiness).toEqual(expect.objectContaining({ blockers: [] }))

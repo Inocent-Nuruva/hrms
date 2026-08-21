@@ -12,7 +12,7 @@ import {
   prettify,
   secondaryButtonClass,
 } from "@/components/dashboard/talent-visuals"
-import { getHrDashboard, type AdminRecord } from "@/lib/admin-api"
+import { getEmployeeDashboard, type AdminRecord } from "@/lib/admin-api"
 import { useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
 import { readStoredSessionTokens } from "@/lib/session-client"
 
@@ -50,7 +50,7 @@ export function InsightsSelfView() {
     setLoading(true)
     setError(null)
     try {
-      setDashboard(await getHrDashboard(token, "employee"))
+      setDashboard(await getEmployeeDashboard(token))
     } catch (errorObject) {
       if (leaveIfForbidden(errorObject)) {
         setLoading(false)

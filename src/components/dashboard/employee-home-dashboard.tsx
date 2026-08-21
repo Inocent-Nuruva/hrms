@@ -52,6 +52,7 @@ import {
   DialogTitle,
 } from "@/components/animate-ui/components/base/dialog"
 import {
+  getEmployeeDashboard,
   getMyDashboard,
   getMyAttendanceToday,
   listMyPayslips,
@@ -567,6 +568,16 @@ function isEmployeeDashboardData(value: unknown): value is EmployeeDashboardData
   const user = asRecord(record?.user)
   const employee = asRecord(record?.employee)
   return Boolean(user && employee)
+}
+
+async function loadEmployeeDashboardOverview(token: string) {
+  const dedicatedDashboard = await getEmployeeDashboard(token).catch(() => null)
+  if (isEmployeeDashboardData(dedicatedDashboard)) {
+    return dedicatedDashboard
+  }
+
+  const fallbackDashboard = await getMyDashboard(token).catch(() => dedicatedDashboard)
+  return fallbackDashboard
 }
 
 function isAdminIdentity() {
@@ -2449,7 +2460,7 @@ export function EmployeeHomeDashboard() {
       try {
         const todayIso = localDateIso()
         const [dash, attToday, punchesResult, leaves, types, payrollRows] = await Promise.all([
-          getMyDashboard(accessToken),
+          loadEmployeeDashboardOverview(accessToken),
           getMyAttendanceToday(accessToken).catch(() => null),
           // Match Android: load recent punches, then filter to today client-side.
           // dateFrom/dateTo are still sent as a server hint when supported.
@@ -2823,7 +2834,7 @@ export function EmployeeHomeDashboard() {
 
       // Background refresh to pull authoritative arrays from server (non-blocking)
       if (remainingAfter > 0) {
-        getMyDashboard(accessToken).then((fresh) => {
+        loadEmployeeDashboardOverview(accessToken).then((fresh) => {
           if (isEmployeeDashboardData(fresh)) {
             setDashboardData(fresh)
           }

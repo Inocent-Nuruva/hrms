@@ -10584,6 +10584,10 @@ export async function getMyDashboard(token: string) {
   return asRecord(payload) ?? normalizeSingle(payload);
 }
 
+export async function getEmployeeDashboard(token: string) {
+  return getHrDashboard(token, "employee");
+}
+
 export async function getMyAttendanceAssignments(token: string) {
   const payload = await adminRequest<unknown>(
     "/api/me/attendance/assignments",
