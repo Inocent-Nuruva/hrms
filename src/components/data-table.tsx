@@ -1074,7 +1074,10 @@ export function DataTable({
     () => toPermissionOptions(pickerPermissions.length > 0 ? pickerPermissions : permissions),
     [permissions, pickerPermissions]
   )
-  permissionOptionsRef.current = permissionOptions
+
+  React.useEffect(() => {
+    permissionOptionsRef.current = permissionOptions
+  }, [permissionOptions])
 
   React.useEffect(() => {
     if (permissionOptions.length === 0) return
@@ -2185,23 +2188,30 @@ export function DataTable({
       }),
     ]
 
+    const batchSize =
+      toRemove.length > 0 && toAdd.length === 0
+        ? 4
+        : 6
+    const pauseBetweenBatchesMs =
+      toRemove.length > 0 && toAdd.length === 0
+        ? 350
+        : 200
+
     setMembersBusy(true)
     setPermissionSaveProgress({ done: 0, total: tasks.length })
     let done = 0
     try {
-      let cursor = 0
-      const concurrency = 2
-      await Promise.all(
-        Array.from({ length: Math.min(concurrency, tasks.length) }, async () => {
-          while (cursor < tasks.length) {
-            const current = cursor
-            cursor += 1
-            await tasks[current]()
-            done += 1
-            setPermissionSaveProgress({ done, total: tasks.length })
-          }
-        }),
-      )
+      for (let start = 0; start < tasks.length; start += batchSize) {
+        const batch = tasks.slice(start, start + batchSize)
+        for (const task of batch) {
+          await task()
+          done += 1
+          setPermissionSaveProgress({ done, total: tasks.length })
+        }
+        if (start + batchSize < tasks.length) {
+          await sleep(pauseBetweenBatchesMs)
+        }
+      }
       setInitialEditingRolePermissionNames(nextNames)
       showSuccessAlert(
         toAdd.length > 0 && toRemove.length === 0
