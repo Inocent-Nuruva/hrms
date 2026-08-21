@@ -68,8 +68,25 @@ describe("tightened dashboard permissions", () => {
     ).toBe("employee")
     expect(
       buildDashboardActorSnapshotFromSources({
+        permissions: ["branches:read"],
+      }).accessMode,
+    ).toBe("employee")
+    expect(
+      buildDashboardActorSnapshotFromSources({
         permissions: ["employees:read"],
         roles: [{ name: "HR_MANAGER" }],
+      }).accessMode,
+    ).toBe("admin")
+    expect(
+      buildDashboardActorSnapshotFromSources({
+        dashboard_type: "admin",
+        permissions: [],
+      }).accessMode,
+    ).toBe("admin")
+    expect(
+      buildDashboardActorSnapshotFromSources({
+        roles: [{ name: "ADMIN" }],
+        permissions: [],
       }).accessMode,
     ).toBe("admin")
   })
@@ -90,6 +107,9 @@ describe("tightened dashboard permissions", () => {
     ).toBe(true)
     expect(
       canAccessDashboardRoute("/dashboard/employees/profile/EMP-001", ["employees:read"], "employee"),
+    ).toBe(true)
+    expect(
+      canAccessDashboardRoute("/dashboard/branches", ["branches:read"], "employee"),
     ).toBe(true)
   })
 

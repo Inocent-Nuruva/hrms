@@ -126,6 +126,15 @@ describe("forbidden route memory", () => {
     )
   })
 
+  it("keeps admin-shell fallbacks out of personal self-service routes", () => {
+    expect(firstVisibleSiblingOrHome("/dashboard/operations/payroll", [], "admin")).toBe(
+      "/dashboard",
+    )
+    expect(firstVisibleSiblingOrHome("/dashboard/probation/team", [], "admin")).toBe(
+      "/dashboard",
+    )
+  })
+
   it("does not hide Reports after an analytics permission error", () => {
     stubSession()
     rememberForbiddenRoute("/dashboard/operations/reports")

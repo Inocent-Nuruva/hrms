@@ -1727,9 +1727,7 @@ function resolveDashboardActorIdentity(...sources: unknown[]): DashboardActorIde
       ? "admin"
       : explicitAccessMode === "employee" || hasExplicitEmployeeIdentity
         ? "employee"
-        : hasPermissionBasedAdminAccess
-          ? "admin"
-          : "employee"
+        : "employee"
 
   return {
     permissionLabels,

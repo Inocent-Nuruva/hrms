@@ -220,7 +220,10 @@ export function firstVisibleSiblingOrHome(
     )
     if (visible) return visible.url
   }
-  return selfServiceHomeFor(path) ?? "/dashboard"
+  if (accessMode === "employee") {
+    return selfServiceHomeFor(path) ?? "/dashboard"
+  }
+  return "/dashboard"
 }
 
 const STRUCTURE_CHILD_ROUTES = [
