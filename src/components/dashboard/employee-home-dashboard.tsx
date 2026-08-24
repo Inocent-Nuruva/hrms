@@ -79,6 +79,7 @@ import {
   redirectToLogin,
 } from "@/lib/session-client"
 import { cn } from "@/lib/utils"
+import { pageBleedClass, heroPanelClass } from "@/components/dashboard/talent-visuals"
 import { ROUTES } from "@/utils/constants"
 import { asRecord, readString } from "@/utils/token-utils"
 
@@ -764,6 +765,23 @@ function dashboardPathFromApiLink(value: unknown, fallback: string) {
   if (trimmed.startsWith("/dashboard/")) return trimmed
   if (trimmed.startsWith("/me/")) return `/dashboard${trimmed}`
   if (trimmed.startsWith("/")) return `/dashboard${trimmed}`
+  return fallback
+}
+
+function resolvePersonalAttendanceHref(value: unknown, fallback: string) {
+  const path = dashboardPathFromApiLink(value, fallback)
+  if (
+    path === "/dashboard/attendance/today" ||
+    path === "/dashboard/attendance/punch-action" ||
+    path === "/dashboard/attendance/attendance-history" ||
+    path === "/dashboard/attendance/schedule-preview" ||
+    path === "/dashboard/attendance/corrections"
+  ) {
+    return path
+  }
+  if (path.includes("history")) return "/dashboard/attendance/attendance-history"
+  if (path.includes("schedule")) return "/dashboard/attendance/schedule-preview"
+  if (path.includes("correction")) return "/dashboard/attendance/corrections"
   return fallback
 }
 
@@ -2054,9 +2072,18 @@ export function EmployeeDashboardView({
   const profileHref = dashboardPathFromApiLink(linksRecord?.profile, "/dashboard/me/profile")
   const leaveBalancesHref = dashboardPathFromApiLink(linksRecord?.leave_balances, "/dashboard/me/leave/balances")
   const leaveRequestHref = dashboardPathFromApiLink(linksRecord?.leave_requests, "/dashboard/me/leave/requests")
-  const attendanceHref = dashboardPathFromApiLink(linksRecord?.attendance_today, "/dashboard/me/attendance/today")
-  const attendanceHistoryHref = dashboardPathFromApiLink(linksRecord?.attendance_history, "/dashboard/me/attendance/history")
-  const attendanceScheduleHref = dashboardPathFromApiLink(linksRecord?.attendance_schedule, "/dashboard/me/attendance/schedule")
+  const attendanceHref = resolvePersonalAttendanceHref(
+    linksRecord?.attendance_today,
+    "/dashboard/attendance/today",
+  )
+  const attendanceHistoryHref = resolvePersonalAttendanceHref(
+    linksRecord?.attendance_history,
+    "/dashboard/attendance/attendance-history",
+  )
+  const attendanceScheduleHref = resolvePersonalAttendanceHref(
+    linksRecord?.attendance_schedule,
+    "/dashboard/attendance/schedule-preview",
+  )
   const payrollHref = "/dashboard/me/finance/payroll"
 
   const employeeProfilePhotoUrl =
@@ -2373,7 +2400,7 @@ export function EmployeeDashboardView({
       {/* Hero — primary card with labeled identity */}
       <motion.div
         variants={dashboardItem}
-        className="relative overflow-hidden rounded-2xl p-4 text-white md:p-5"
+        className={cn(heroPanelClass, pageBleedClass)}
         style={{ backgroundColor: "var(--primary)" }}
       >
         <div className="relative z-10 space-y-4">
@@ -2438,7 +2465,7 @@ export function EmployeeDashboardView({
 
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
             {[
-              { href: attendanceHref, title: "Attendance", icon: <ClockIcon /> },
+              { href: attendanceHref, title: "My attendance", icon: <ClockIcon /> },
               { href: leaveRequestHref, title: "Request leave", icon: <CalendarClockIcon /> },
               { href: payrollHref, title: "My payroll", icon: <Landmark /> },
               { href: "/dashboard/me/performance/overview", title: "My performance", icon: <Target /> },

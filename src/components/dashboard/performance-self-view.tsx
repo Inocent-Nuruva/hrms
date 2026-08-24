@@ -9,6 +9,8 @@ import {
   MetricTile,
   StatusChip,
   TalentDoodleSprites,
+  heroPanelClass,
+  pageBleedClass,
   actionButtonClass,
   asRecord,
   asRecordArray,
@@ -116,8 +118,9 @@ function PerformancePrimaryCard({
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-2xl p-4 md:p-5",
-        isPrimary ? "text-white" : "border border-border bg-card text-foreground"
+        isPrimary
+          ? cn(heroPanelClass, pageBleedClass, "text-white")
+          : "relative overflow-hidden rounded-none border border-border bg-card p-4 text-foreground md:p-5",
       )}
       style={isPrimary ? { backgroundColor: "var(--primary)" } : undefined}
     >

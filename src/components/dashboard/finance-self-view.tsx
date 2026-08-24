@@ -5,6 +5,7 @@ import { Loader2Icon, PlusIcon, RefreshCwIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import {
+  CompactStatStrip,
   HeroBand,
   StatusChip,
   TalentDoodleSprites,
@@ -184,8 +185,8 @@ export function FinanceSelfView() {
           </button>
         }
       />
-      <div className="grid grid-cols-3 gap-4">
-        {[
+      <CompactStatStrip
+        items={[
           { label: "Applications", value: String(applications.length) },
           { label: "Products", value: String(products.length) },
           {
@@ -199,17 +200,8 @@ export function FinanceSelfView() {
               ).length,
             ),
           },
-        ].map((field) => (
-          <div key={field.label} className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              {field.label}
-            </p>
-            <p className="mt-1 truncate text-2xl font-semibold tracking-tight text-foreground">
-              {field.value}
-            </p>
-          </div>
-        ))}
-      </div>
+        ]}
+      />
       <div className="flex justify-end">
         <button type="button" className={primaryButtonClass} onClick={() => { setForm({}); setCreateOpen(true) }}>
           <PlusIcon className="size-4" /> New application

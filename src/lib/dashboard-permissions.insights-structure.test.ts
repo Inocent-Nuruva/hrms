@@ -100,7 +100,7 @@ describe("structure and insights route access", () => {
     expect(hasAnalyticsAccess(["analytics:read"])).toBe(true)
   })
 
-  it("leaves personal insights available without operations permissions", () => {
+  it("leaves leftover personal insights links available so they can redirect home", () => {
     expect(canAccessDashboardRoute("/dashboard/me/insights", [], "employee")).toBe(true)
     expect(canAccessDashboardRoute("/dashboard/me/onboarding", [], "employee")).toBe(true)
   })

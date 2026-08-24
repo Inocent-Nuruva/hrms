@@ -20,6 +20,12 @@ export const secondaryButtonClass =
   "inline-flex h-9 items-center rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-60 dark:border-border dark:bg-background dark:text-foreground dark:hover:bg-muted"
 export const heroActionButtonClass =
   "inline-flex h-9 items-center gap-1.5 rounded-md bg-white px-3 text-sm font-semibold text-slate-900 shadow-sm transition hover:bg-white/90 disabled:opacity-60"
+export const heroGhostButtonClass =
+  "inline-flex h-9 items-center gap-1.5 rounded-md border border-white/30 bg-white/10 px-3 text-sm font-medium text-white no-underline transition hover:bg-white/20 hover:text-white hover:no-underline disabled:opacity-60"
+export const pageBleedClass =
+  "-mx-3 w-[calc(100%+1.5rem)] sm:-mx-4 sm:w-[calc(100%+2rem)]"
+export const heroPanelClass =
+  "relative min-w-0 overflow-hidden rounded-none px-5 py-5 text-white sm:px-6"
 
 export function readString(row: AdminRecord | null | undefined, keys: string[], fallback = "") {
   if (!row) return fallback
@@ -239,7 +245,7 @@ export function HeroBand({
   const motionPreset = useDashboardMotion()
   return (
     <motion.div
-      className="relative overflow-hidden rounded-2xl px-5 py-5 text-white sm:px-6"
+      className={cn(heroPanelClass, pageBleedClass)}
       style={{ backgroundColor: "var(--primary)" }}
       variants={motionPreset.rise}
       initial="hidden"
@@ -271,8 +277,8 @@ export function HeroBand({
           <TalentDoodle />
         </div>
       </div>
-      <div className="relative z-10 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div className="max-w-2xl space-y-1.5">
+      <div className="relative z-10 flex w-full min-w-0 flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="min-w-0 flex-1 space-y-1.5">
           <motion.p
             className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/70"
             initial={motionPreset.reduce ? false : { opacity: 0, x: -10 }}
@@ -424,7 +430,11 @@ export function CycleRail({
   )
   return (
     <motion.ol
-      className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4"
+      className={cn(
+        "grid overflow-hidden rounded-none border-y border-border bg-card sm:border-x",
+        pageBleedClass,
+      )}
+      style={{ gridTemplateColumns: `repeat(${Math.max(steps.length, 1)}, minmax(0, 1fr))` }}
       variants={motionPreset.fast}
       initial="hidden"
       animate="show"
@@ -437,18 +447,19 @@ export function CycleRail({
             key={step}
             variants={motionPreset.item}
             className={cn(
-              "rounded-xl border px-3 py-2.5",
+              "min-w-0 px-3 py-2.5",
+              index > 0 && "border-l border-border",
               active
-                ? "border-primary/40 bg-primary/10"
+                ? "bg-primary/10"
                 : done
-                  ? "border-emerald-200 bg-emerald-50 dark:border-emerald-900/40 dark:bg-emerald-950/30"
-                  : "border-border bg-card",
+                  ? "bg-emerald-50 dark:bg-emerald-950/30"
+                  : "bg-card",
             )}
           >
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <p className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
               Step {index + 1}
             </p>
-            <p className="mt-1 text-sm font-medium text-foreground">{prettify(step)}</p>
+            <p className="mt-0.5 truncate text-xs font-semibold text-foreground">{prettify(step)}</p>
           </motion.li>
         )
       })}
@@ -507,6 +518,27 @@ export function MetricTile({
       <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">{value}</p>
       {hint ? <p className="mt-1 text-xs text-muted-foreground">{hint}</p> : null}
     </motion.div>
+  )
+}
+
+export function CompactStatStrip({
+  items,
+}: {
+  items: Array<{ label: string; value: React.ReactNode }>
+}) {
+  return (
+    <div className={cn("overflow-hidden rounded-none border-y border-border bg-card sm:border-x", pageBleedClass)}>
+      <div className="grid grid-cols-3 divide-x divide-border">
+        {items.map((field) => (
+          <div key={field.label} className="min-w-0 px-3 py-2.5">
+            <p className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
+              {field.label}
+            </p>
+            <p className="truncate text-xs font-semibold text-foreground">{field.value}</p>
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }
 

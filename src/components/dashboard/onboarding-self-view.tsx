@@ -6,10 +6,12 @@ import { CheckIcon, Loader2Icon, PaperclipIcon, RefreshCwIcon } from "lucide-rea
 import { toast } from "sonner"
 
 import {
+  CompactStatStrip,
   CycleRail,
   HeroBand,
   StatusChip,
   TalentDoodleSprites,
+  actionButtonClass,
   asRecord,
   asRecordArray,
   formatDate,
@@ -18,7 +20,6 @@ import {
   readNumber,
   readString,
   rowId,
-  secondaryButtonClass,
   textareaClass,
 } from "@/components/dashboard/talent-visuals"
 import {
@@ -67,6 +68,7 @@ export function OnboardingSelfView() {
   const [tasks, setTasks] = React.useState<AdminRecord[]>([])
   const [documents, setDocuments] = React.useState<AdminRecord[]>([])
   const [loading, setLoading] = React.useState(true)
+  const [mounted, setMounted] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [busy, setBusy] = React.useState("")
   const [ackNote, setAckNote] = React.useState("I have read and accept the onboarding terms.")
@@ -121,6 +123,7 @@ export function OnboardingSelfView() {
   }, [leaveIfForbidden, selectedId])
 
   React.useEffect(() => {
+    setMounted(true)
     void load()
     // First load only; later refresh is explicit.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -207,8 +210,10 @@ export function OnboardingSelfView() {
     }
   }
 
+  const doneCount = tasks.filter((task) => /complete|done|verified/i.test(readString(task, ["status"]))).length
+
   return (
-    <section className="space-y-6">
+    <section className="w-full min-w-0 space-y-4">
       <TalentDoodleSprites />
       <HeroBand
         eyebrow="My onboarding"
@@ -219,19 +224,26 @@ export function OnboardingSelfView() {
             : "When HR starts your onboarding, the checklist and documents will show up here."
         }
         actions={
-          <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
-            {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+          <button
+            type="button"
+            className="inline-flex h-9 items-center gap-1.5 rounded-md border border-white/30 bg-white/10 px-3 text-sm font-medium text-white transition hover:bg-white/20 hover:text-white disabled:opacity-60"
+            onClick={() => void load()}
+            disabled={mounted ? loading : undefined}
+          >
+            {mounted && loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
             Refresh
           </button>
         }
       />
 
       {error ? (
-        <p className="text-sm text-rose-600">{error}</p>
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-300">
+          {error}
+        </div>
       ) : null}
 
       {requests.length > 1 ? (
-        <div className="flex flex-wrap gap-1 border-b border-border/80 pb-px">
+        <div className="flex w-full min-w-0 flex-wrap gap-1 border-b border-border/80 pb-px">
           {requests.map((row) => {
             const id = rowId(row)
             const active = id === rowId(selected)
@@ -255,58 +267,44 @@ export function OnboardingSelfView() {
       ) : null}
 
       <AnimatePresence mode="wait">
-        <motion.div key={rowId(selected) || "empty"} className="space-y-6" {...motionProps} transition={{ duration: 0.22 }}>
-          {!selected && !loading ? (
-            <p className="text-sm text-muted-foreground">
-              No onboarding request is assigned to you yet. If you just joined, give HR a moment — or refresh.
-            </p>
-          ) : null}
-
+        <motion.div key={rowId(selected) || "empty"} className="w-full min-w-0 space-y-4" {...motionProps} transition={{ duration: 0.22 }}>
           {selected ? (
             <>
-              <div className="flex flex-wrap items-end justify-between gap-3">
-                <div className="space-y-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <StatusChip value={statusOf(selected)} />
-                    <span className="text-xs text-muted-foreground">
-                      Started {formatDate(selected.started_at ?? selected.startedAt ?? selected.created_at ?? selected.createdAt)}
-                    </span>
-                  </div>
-                  {percent !== null ? (
-                    <div className="flex items-center gap-3 pt-2">
-                      <div className="h-1.5 w-40 overflow-hidden rounded-full bg-muted">
-                        <motion.div
-                          className="h-full bg-primary"
-                          initial={reduceMotion ? false : { width: 0 }}
-                          animate={{ width: `${Math.max(0, Math.min(100, percent))}%` }}
-                          transition={{ duration: 0.45 }}
-                        />
-                      </div>
-                      <span className="text-xs font-medium tabular-nums text-muted-foreground">{Math.round(percent)}%</span>
-                    </div>
-                  ) : null}
-                </div>
-              </div>
+              <CompactStatStrip
+                items={[
+                  { label: "Status", value: loading ? "…" : prettify(statusOf(selected)) },
+                  { label: "Tasks done", value: loading ? "…" : `${doneCount}/${tasks.length}` },
+                  {
+                    label: "Progress",
+                    value: loading ? "…" : percent !== null ? `${Math.round(percent)}%` : "—",
+                  },
+                ]}
+              />
 
               <CycleRail steps={STEPS} current={statusOf(selected)} />
 
-              <div className="grid gap-8 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
-                <div className="min-w-0 space-y-3">
-                  <div className="flex items-baseline justify-between gap-3">
-                    <h2 className="text-sm font-semibold">Your tasks</h2>
+              <div className="w-full overflow-hidden rounded-xl border border-border bg-card">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-foreground">Your tasks</p>
                     <p className="text-xs text-muted-foreground">
-                      {tasks.filter((task) => /complete|done/i.test(readString(task, ["status"]))).length}/{tasks.length} done
+                      Started {formatDate(selected.started_at ?? selected.startedAt ?? selected.created_at ?? selected.createdAt)}
                     </p>
                   </div>
-                  {tasks.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No tasks have been assigned to you on this request.</p>
-                  ) : (
-                    <ul className="divide-y divide-border/80">
-                      {tasks.map((task) => {
-                        const id = rowId(task)
-                        const done = /complete|done|verified/i.test(readString(task, ["status"]))
-                        return (
-                          <li key={id || readString(task, ["title", "name"])} className="flex items-center gap-3 py-3">
+                  <StatusChip value={statusOf(selected)} />
+                </div>
+                {tasks.length === 0 ? (
+                  <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+                    No tasks have been assigned to you on this request.
+                  </div>
+                ) : (
+                  <ul className="divide-y divide-border/70">
+                    {tasks.map((task) => {
+                      const id = rowId(task)
+                      const done = /complete|done|verified/i.test(readString(task, ["status"]))
+                      return (
+                        <li key={id || readString(task, ["title", "name"])} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                          <div className="flex min-w-0 items-center gap-3">
                             <span
                               className={cn(
                                 "flex size-6 shrink-0 items-center justify-center rounded-full border",
@@ -317,8 +315,8 @@ export function OnboardingSelfView() {
                             >
                               {done ? <CheckIcon className="size-3.5" /> : <span className="size-1.5 rounded-full bg-muted-foreground/50" />}
                             </span>
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-medium">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium text-foreground">
                                 {readString(task, ["title", "name", "task_name"], `Task #${id}`)}
                               </p>
                               <p className="text-xs text-muted-foreground">
@@ -328,65 +326,67 @@ export function OnboardingSelfView() {
                                   : ""}
                               </p>
                             </div>
-                            {!done ? (
-                              <button
-                                type="button"
-                                className={secondaryButtonClass}
-                                disabled={busy === `task-${id}`}
-                                onClick={() => void completeTask(task)}
-                              >
-                                {busy === `task-${id}` ? <Loader2Icon className="size-3.5 animate-spin" /> : "Done"}
-                              </button>
-                            ) : null}
-                          </li>
-                        )
-                      })}
-                    </ul>
-                  )}
-                </div>
-
-                <div className="min-w-0 space-y-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <h2 className="text-sm font-semibold">Documents</h2>
-                    <button
-                      type="button"
-                      className={secondaryButtonClass}
-                      disabled={busy === "upload"}
-                      onClick={() => fileRef.current?.click()}
-                    >
-                      {busy === "upload" ? <Loader2Icon className="size-3.5 animate-spin" /> : <PaperclipIcon className="size-3.5" />}
-                      Attach
-                    </button>
-                    <input
-                      ref={fileRef}
-                      type="file"
-                      className="hidden"
-                      onChange={(event) => {
-                        const file = event.target.files?.[0]
-                        event.target.value = ""
-                        if (file) void uploadDocument(file)
-                      }}
-                    />
-                  </div>
-                  {documents.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No files on this request yet.</p>
-                  ) : (
-                    <ul className="divide-y divide-border/80">
-                      {documents.map((doc) => (
-                        <li key={rowId(doc) || readString(doc, ["name", "file_name"])} className="flex items-center justify-between gap-3 py-2.5">
-                          <span className="truncate text-sm">
-                            {readString(doc, ["name", "file_name", "original_name", "document_type"], "Document")}
-                          </span>
-                          <StatusChip value={readString(doc, ["status", "verification_status"], "UPLOADED")} />
+                          </div>
+                          {!done ? (
+                            <button
+                              type="button"
+                              className={actionButtonClass}
+                              disabled={busy === `task-${id}`}
+                              onClick={() => void completeTask(task)}
+                            >
+                              {busy === `task-${id}` ? <Loader2Icon className="size-3.5 animate-spin" /> : "Done"}
+                            </button>
+                          ) : null}
                         </li>
-                      ))}
-                    </ul>
-                  )}
+                      )
+                    })}
+                  </ul>
+                )}
+              </div>
+
+              <div className="w-full overflow-hidden rounded-xl border border-border bg-card">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
+                  <p className="text-sm font-semibold text-foreground">Documents</p>
+                  <button
+                    type="button"
+                    className={actionButtonClass}
+                    disabled={busy === "upload"}
+                    onClick={() => fileRef.current?.click()}
+                  >
+                    {busy === "upload" ? <Loader2Icon className="size-3.5 animate-spin" /> : <PaperclipIcon className="size-3.5" />}
+                    Attach
+                  </button>
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    className="hidden"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0]
+                      event.target.value = ""
+                      if (file) void uploadDocument(file)
+                    }}
+                  />
                 </div>
+                {documents.length === 0 ? (
+                  <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+                    No files on this request yet.
+                  </div>
+                ) : (
+                  <ul className="divide-y divide-border/70">
+                    {documents.map((doc) => (
+                      <li key={rowId(doc) || readString(doc, ["name", "file_name"])} className="flex items-center justify-between gap-3 px-4 py-3">
+                        <span className="truncate text-sm font-medium text-foreground">
+                          {readString(doc, ["name", "file_name", "original_name", "document_type"], "Document")}
+                        </span>
+                        <StatusChip value={readString(doc, ["status", "verification_status"], "UPLOADED")} />
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
 
               {needsAck(selected) ? (
-                <div className="space-y-3 border-t border-border/80 pt-4">
+                <div className="w-full space-y-3 overflow-hidden rounded-xl border border-border bg-card px-4 py-4">
                   <h2 className="text-sm font-semibold">Acknowledge</h2>
                   <textarea
                     className={textareaClass}
@@ -406,7 +406,16 @@ export function OnboardingSelfView() {
                 </div>
               ) : null}
             </>
-          ) : null}
+          ) : loading ? (
+            <div className="flex w-full items-center justify-center gap-2 overflow-hidden rounded-xl border border-border bg-card px-4 py-10 text-sm text-muted-foreground">
+              <Loader2Icon className="size-4 animate-spin" />
+              Loading your onboarding...
+            </div>
+          ) : (
+            <div className="w-full overflow-hidden rounded-xl border border-border bg-card px-4 py-10 text-center text-sm text-muted-foreground">
+              No onboarding request is assigned to you yet. If you just joined, give HR a moment — or refresh.
+            </div>
+          )}
         </motion.div>
       </AnimatePresence>
     </section>

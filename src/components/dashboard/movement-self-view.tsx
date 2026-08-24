@@ -4,21 +4,18 @@ import * as React from "react"
 import { Loader2Icon, RefreshCwIcon } from "lucide-react"
 import { toast } from "sonner"
 
-import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared"
 import {
+  CompactStatStrip,
   HeroBand,
-  MetricTile,
   StatusChip,
   TalentDoodleSprites,
   actionButtonClass,
   asRecordArray,
   formatDate,
-  optionLabel,
   prettify,
   readBoolean,
   readString,
   rowId,
-  secondaryButtonClass,
 } from "@/components/dashboard/talent-visuals"
 import {
   acknowledgeMyMovement,
@@ -28,7 +25,6 @@ import {
 } from "@/lib/admin-api"
 import { useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
 import { readStoredSessionTokens } from "@/lib/session-client"
-import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 
 function readStoredToken() {
   return readStoredSessionTokens().accessToken.trim()
@@ -40,11 +36,18 @@ function needsAcknowledgement(row: AdminRecord) {
   return required && !acknowledged
 }
 
+function acknowledgementLabel(row: AdminRecord) {
+  if (needsAcknowledgement(row)) return "Needed"
+  if (readString(row, ["employeeAcknowledgedAt", "employee_acknowledged_at"])) return "Acknowledged"
+  return "Not required"
+}
+
 export function MovementSelfView() {
   const leaveIfForbidden = useLeaveIfForbidden()
   const [rows, setRows] = React.useState<AdminRecord[]>([])
   const [detail, setDetail] = React.useState<AdminRecord | null>(null)
   const [loading, setLoading] = React.useState(true)
+  const [mounted, setMounted] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [busyId, setBusyId] = React.useState("")
 
@@ -72,6 +75,7 @@ export function MovementSelfView() {
   }, [leaveIfForbidden])
 
   React.useEffect(() => {
+    setMounted(true)
     void load()
   }, [load])
 
@@ -88,59 +92,25 @@ export function MovementSelfView() {
     }
   }
 
+  async function acknowledge(row: AdminRecord) {
+    const token = readStoredToken()
+    const id = rowId(row)
+    if (!token || !id) return
+    setBusyId(id)
+    try {
+      await acknowledgeMyMovement(token, id)
+      toast.success("Acknowledged.")
+      await load()
+    } catch (errorObject) {
+      toast.error(errorObject instanceof Error ? errorObject.message : "Could not acknowledge.")
+    } finally {
+      setBusyId("")
+    }
+  }
+
   const awaiting = rows.filter((row) => needsAcknowledgement(row)).length
   const applied = rows.filter((row) => readString(row, ["status"]).toUpperCase() === "APPLIED").length
-  const changes = asRecordArray(detail?.changes)
-
-  const columns = React.useMemo<Column<AdminRecord>[]>(() => [
-    {
-      key: "movement",
-      label: "Movement",
-      render: (row) => (
-        <div className="space-y-0.5">
-          <p className="font-medium">{readString(row, ["title", "movementNo", "movement_no"], `Movement #${rowId(row)}`)}</p>
-          <p className="text-xs text-muted-foreground">{prettify(readString(row, ["movementType", "movement_type"], ""))}</p>
-        </div>
-      ),
-    },
-    { key: "status", label: "Status", render: (row) => <StatusChip value={readString(row, ["status"], "DRAFT")} /> },
-    { key: "effective", label: "Effective", render: (row) => formatDate(row.effectiveDate ?? row.effective_date) },
-    {
-      key: "ack",
-      label: "Acknowledgement",
-      render: (row) => needsAcknowledgement(row) ? <StatusChip value="NEEDED" /> : <StatusChip value={readString(row, ["employeeAcknowledgedAt", "employee_acknowledged_at"]) ? "ACKNOWLEDGED" : "NOT REQUIRED"} />,
-    },
-    {
-      key: "actions",
-      label: "Actions",
-      render: (row) => {
-        const id = rowId(row)
-        if (!needsAcknowledgement(row)) return null
-        return (
-          <button
-            type="button"
-            className={actionButtonClass}
-            disabled={busyId === id}
-            onClick={(event) => {
-              event.stopPropagation()
-              const token = readStoredToken()
-              if (!token || !id) return
-              setBusyId(id)
-              void acknowledgeMyMovement(token, id)
-                .then(() => {
-                  toast.success("Acknowledged.")
-                  return load()
-                })
-                .catch((errorObject) => toast.error(errorObject instanceof Error ? errorObject.message : "Could not acknowledge."))
-                .finally(() => setBusyId(""))
-            }}
-          >
-            Acknowledge
-          </button>
-        )
-      },
-    },
-  ], [busyId, load])
+  const selectedChanges = asRecordArray(detail?.changes)
 
   return (
     <section className="space-y-4">
@@ -150,46 +120,103 @@ export function MovementSelfView() {
         title="Assignment changes"
         description="Review transfers and promotions recorded for your profile, then acknowledge the ones that need it."
         actions={
-          <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
-            {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+          <button
+            type="button"
+            className="inline-flex h-9 items-center gap-1.5 rounded-md border border-white/30 bg-white/10 px-3 text-sm font-medium text-white transition hover:bg-white/20 hover:text-white disabled:opacity-60"
+            onClick={() => void load()}
+            disabled={mounted ? loading : undefined}
+          >
+            {mounted && loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
             Refresh
           </button>
         }
       />
-      {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div> : null}
-      <div className="grid gap-3 sm:grid-cols-3">
-        <MetricTile label="Movements" value={rows.length} />
-        <MetricTile label="Need acknowledgement" value={awaiting} />
-        <MetricTile label="Applied" value={applied} />
-      </div>
-      <div className="overflow-hidden rounded-xl border border-border bg-card">
-        <ResizableTable
-          title="My movements"
-          data={rows}
-          columns={columns}
-          loading={loading}
-          itemsPerPage={20}
-          showExport={false}
-          storageKey="me-movements"
-          onRowSelect={(_, row) => row && void openDetail(row)}
-        />
-      </div>
-      {detail && changes.length > 0 ? (
-        <div className="rounded-xl border border-border bg-card p-4">
-          <h2 className="text-sm font-semibold">Proposed changes</h2>
-          <ul className="mt-3 grid gap-2">
-            {changes.map((change) => (
-              <li key={rowId(change) || readString(change, ["field"])} className="rounded-lg bg-muted/40 px-3 py-2 text-sm">
-                <span className="font-medium">{prettify(readString(change, ["field"], "Change"))}</span>
-                <span className="ml-2 text-muted-foreground">
-                  {readString(change, ["oldValue", "old_value"], "—")} → {readString(change, ["newValue", "new_value"], "—")}
-                </span>
-              </li>
-            ))}
-          </ul>
+      {error ? (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-300">
+          {error}
         </div>
       ) : null}
-      <RecordDetailsDialog open={Boolean(detail)} onOpenChange={(open) => !open && setDetail(null)} title={optionLabel(detail)} row={detail} />
+      <CompactStatStrip
+        items={[
+          { label: "Movements", value: loading ? "…" : String(rows.length) },
+          { label: "Need acknowledgement", value: loading ? "…" : String(awaiting) },
+          { label: "Applied", value: loading ? "…" : String(applied) },
+        ]}
+      />
+      <div className="overflow-hidden rounded-xl border border-border bg-card">
+        {loading && rows.length === 0 ? (
+          <div className="flex items-center justify-center gap-2 px-3 py-10 text-sm text-muted-foreground">
+            <Loader2Icon className="size-4 animate-spin" />
+            Loading your movements...
+          </div>
+        ) : rows.length === 0 ? (
+          <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+            No assignment changes have been recorded for you yet.
+          </div>
+        ) : (
+          <div className="divide-y divide-border/70">
+            {rows.map((row) => {
+              const id = rowId(row)
+              const isSelected = Boolean(id && rowId(detail) === id)
+              const typeLabel = prettify(readString(row, ["movementType", "movement_type"], ""))
+              const effective = formatDate(row.effectiveDate ?? row.effective_date)
+              const changes = isSelected ? selectedChanges : []
+              return (
+                <div key={id || readString(row, ["title", "movementNo", "movement_no"])}>
+                  <div className="flex flex-col gap-3 px-4 py-4 lg:flex-row lg:items-start lg:justify-between">
+                    <button
+                      type="button"
+                      className="min-w-0 space-y-1 text-left"
+                      onClick={() => void openDetail(row)}
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-semibold text-foreground">
+                          {readString(row, ["title", "movementNo", "movement_no"], `Movement #${id}`)}
+                        </p>
+                        <StatusChip value={readString(row, ["status"], "DRAFT")} />
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        {[typeLabel, effective !== "—" ? `Effective ${effective}` : "", acknowledgementLabel(row)]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </p>
+                    </button>
+                    {needsAcknowledgement(row) ? (
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          className={actionButtonClass}
+                          disabled={busyId === id}
+                          onClick={() => void acknowledge(row)}
+                        >
+                          {busyId === id ? <Loader2Icon className="size-4 animate-spin" /> : "Acknowledge"}
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                  {changes.length > 0 ? (
+                    <ul className="divide-y divide-border/70 border-t border-border/70">
+                      {changes.map((change) => (
+                        <li
+                          key={rowId(change) || readString(change, ["field"])}
+                          className="flex flex-wrap items-center justify-between gap-2 px-4 py-3"
+                        >
+                          <p className="text-sm font-medium text-foreground">
+                            {prettify(readString(change, ["field"], "Change"))}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            {readString(change, ["oldValue", "old_value"], "—")} → {readString(change, ["newValue", "new_value"], "—")}
+                          </p>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
     </section>
   )
 }

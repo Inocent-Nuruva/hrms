@@ -25,7 +25,7 @@ import { Sparkles } from "@/components/animate-ui/icons/sparkles"
 import { LumaSpin } from "@/components/ui/luma-spin"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Textarea } from "@/components/ui/textarea"
-import { HeroBand } from "@/components/dashboard/talent-visuals"
+import { CompactStatStrip, HeroBand, TalentDoodleSprites, heroPanelClass, pageBleedClass } from "@/components/dashboard/talent-visuals"
 
 import {
   acknowledgeMyMovement,
@@ -3500,7 +3500,7 @@ function ProfileSummaryTab({
   return (
     <div className="space-y-4 animate-in fade-in-0 slide-in-from-bottom-1 duration-300">
       <div
-        className="relative overflow-hidden rounded-2xl p-4 text-white md:p-5"
+        className={cn(heroPanelClass, pageBleedClass)}
         style={{ backgroundColor: "var(--primary)" }}
       >
         <div className="relative z-10 space-y-4">
@@ -4836,7 +4836,7 @@ export function EmployeePromotionView() {
     : []
 
   return (
-    <section className="space-y-4 px-4 py-2 lg:px-6">
+    <section className="w-full min-w-0 space-y-4">
       <DoodleSprites />
       {loading ? (
         <div className="flex flex-col items-center justify-center py-10">
@@ -5237,22 +5237,13 @@ export function EmployeePayrollView() {
         }
       />
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
-      <div className="grid grid-cols-3 gap-4">
-        {[
+      <CompactStatStrip
+        items={[
           { label: "Payslips", value: String(payslipSummary.total) },
           { label: "Latest gross", value: payslipSummary.latestGross },
           { label: "Latest net", value: payslipSummary.latestNet },
-        ].map((field) => (
-          <div key={field.label} className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              {field.label}
-            </p>
-            <p className="mt-1 truncate text-2xl font-semibold tracking-tight text-foreground">
-              {field.value}
-            </p>
-          </div>
-        ))}
-      </div>
+        ]}
+      />
       {payslipsError ? (
         <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-300">
           {payslipsError}
@@ -5473,6 +5464,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
     [searchParams]
   )
   const [loading, setLoading] = React.useState(false)
+  const [mounted, setMounted] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [leaveTypesError, setLeaveTypesError] = React.useState<string | null>(null)
   const [balancesError, setBalancesError] = React.useState<string | null>(null)
@@ -5684,6 +5676,10 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
         return SELF_SERVICE_UNAVAILABLE_MESSAGE
       }
 
+      if (/\/api\//.test(message)) {
+        return fallbackMessage
+      }
+
       return message
     },
     []
@@ -5790,6 +5786,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
   }, [activeTab, employeeId, readEndpointError, token])
 
   React.useEffect(() => {
+    setMounted(true)
     void loadData()
   }, [loadData])
 
@@ -6395,7 +6392,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
     const fiscalYear = leaveBalancesFull?.current_fiscal_year || "2026"
     const showBalancesError = balancesError && balancesError !== SELF_SERVICE_UNAVAILABLE_MESSAGE
     tabContent = (
-      <section className="space-y-4 px-4 py-2 lg:px-6">
+      <section className="w-full min-w-0 space-y-4">
         <div className="space-y-1">
           <h2 className="text-2xl font-semibold tracking-tight text-foreground">Leave Balances</h2>
           <p className="text-sm text-muted-foreground">Fiscal Year: {fiscalYear}</p>
@@ -6463,61 +6460,97 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
 
   if (activeTab === "holidays") {
     const showHolidaysError = holidaysError && holidaysError !== SELF_SERVICE_UNAVAILABLE_MESSAGE
+    const todayStamp = new Date().toISOString().slice(0, 10)
+    const thisYear = String(new Date().getFullYear())
     const sortedHolidays = [...holidays].sort((left, right) => {
       const leftDate = readString(left, ["holiday_date", "from_date", "start_date", "date"], "")
       const rightDate = readString(right, ["holiday_date", "from_date", "start_date", "date"], "")
       return leftDate.localeCompare(rightDate)
     })
+    const holidayDateOf = (row: AdminRecord) =>
+      readString(row, ["holiday_date", "from_date", "start_date", "date"], "")
+    const thisYearCount = sortedHolidays.filter((row) => holidayDateOf(row).startsWith(thisYear)).length
+    const upcomingCount = sortedHolidays.filter((row) => holidayDateOf(row) >= todayStamp).length
     tabContent = (
-      <section className="space-y-4 px-4 py-2 lg:px-6">
-        <div className="space-y-1">
-          <h2 className="text-2xl font-semibold tracking-tight text-foreground">Holiday Calendar</h2>
-          <p className="text-sm text-muted-foreground">Company holidays pulled from the attendance holiday calendar.</p>
-        </div>
-        {loading ? (
-          <div className="flex flex-col items-center justify-center gap-2 py-4">
-            <LumaSpin />
-            <p className="text-sm text-muted-foreground">Loading holidays...</p>
+      <section className="w-full min-w-0 space-y-4">
+        <TalentDoodleSprites />
+        <HeroBand
+          eyebrow="My leave"
+          title="Holiday calendar"
+          description="Company holidays published for your team this year."
+          actions={
+            <button
+              type="button"
+              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-white/30 bg-white/10 px-3 text-sm font-medium text-white transition hover:bg-white/20 hover:text-white disabled:opacity-60"
+              onClick={() => void loadData()}
+              disabled={mounted ? loading : undefined}
+            >
+              {mounted && loading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+              Refresh
+            </button>
+          }
+        />
+        {showHolidaysError ? (
+          <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-300">
+            {holidaysError}
           </div>
         ) : null}
-        {!loading && sortedHolidays.length === 0 ? (
-          <p className="text-sm text-slate-500">No holidays were returned by `/api/attendance/holidays`.</p>
-        ) : null}
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {sortedHolidays.map((row, index) => {
-            const holidayStart =
-              readString(row, ["holiday_date", "from_date", "start_date", "date"], "") || "-"
-            const holidayEnd = readString(row, ["to_date", "end_date"], "")
-            const holidayType = readString(row, ["type", "holiday_type", "category"], "")
-            const holidayBranch = readString(asRecord(row.branch), ["name", "branch_name"], "")
-            const holidayDescription = readString(row, ["description", "notes", "remarks"], "")
-            const dateLabel =
-              holidayEnd && holidayEnd !== holidayStart
-                ? `${formatDate(holidayStart)} - ${formatDate(holidayEnd)}`
-                : formatDate(holidayStart)
-
-            return (
-              <div key={String(row.id ?? index)} className="relative overflow-hidden rounded-2xl p-4 text-white" style={{ backgroundColor: 'var(--primary)' }}>
-                <Doodle name="doodle-circles" />
-                <div className="relative z-10">
-                  <div className="flex items-start justify-between gap-3">
-                    <p className="font-medium">{readString(row, ["name", "title"], "Holiday")}</p>
-                    {holidayType ? (
-                      <span className="rounded-full bg-white/20 px-2.5 py-1 text-[11px] font-medium uppercase tracking-wide text-white/90">
-                        {holidayType}
-                      </span>
-                    ) : null}
-                  </div>
-                  <p className="mt-2 text-white/80">{dateLabel}</p>
-                  {holidayBranch ? <p className="mt-1 text-xs text-white/60">Branch: {holidayBranch}</p> : null}
-                  {holidayDescription ? <p className="mt-2 text-xs text-white/60">{holidayDescription}</p> : null}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-        {showHolidaysError ? <p className="text-sm text-slate-500">{holidaysError}</p> : null}
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
+        <CompactStatStrip
+          items={[
+            { label: "This year", value: loading ? "…" : String(thisYearCount) },
+            { label: "Upcoming", value: loading ? "…" : String(upcomingCount) },
+            { label: "Holidays", value: loading ? "…" : String(sortedHolidays.length) },
+          ]}
+        />
+        <div className="w-full overflow-hidden rounded-xl border border-border bg-card">
+          {loading && sortedHolidays.length === 0 ? (
+            <div className="flex items-center justify-center gap-2 px-4 py-10 text-sm text-muted-foreground">
+              <Loader2 className="size-4 animate-spin" />
+              Loading holidays...
+            </div>
+          ) : sortedHolidays.length === 0 ? (
+            <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+              No company holidays have been published yet.
+            </div>
+          ) : (
+            <div className="divide-y divide-border/70">
+              {sortedHolidays.map((row, index) => {
+                const holidayStart =
+                  readString(row, ["holiday_date", "from_date", "start_date", "date"], "") || "-"
+                const holidayEnd = readString(row, ["to_date", "end_date"], "")
+                const holidayType = readString(row, ["type", "holiday_type", "category"], "")
+                const holidayBranch = readString(asRecord(row.branch), ["name", "branch_name"], "")
+                const holidayDescription = readString(row, ["description", "notes", "remarks"], "")
+                const dateLabel =
+                  holidayEnd && holidayEnd !== holidayStart && holidayEnd !== "-"
+                    ? `${formatDate(holidayStart)} – ${formatDate(holidayEnd)}`
+                    : formatDate(holidayStart)
+
+                return (
+                  <div
+                    key={String(row.id ?? index)}
+                    className="flex flex-col gap-1 px-4 py-4 sm:flex-row sm:items-start sm:justify-between"
+                  >
+                    <div className="min-w-0 space-y-1">
+                      <p className="text-sm font-semibold text-foreground">
+                        {readString(row, ["name", "title"], "Holiday")}
+                      </p>
+                      <p className="text-sm text-muted-foreground">{dateLabel}</p>
+                      {[holidayType, holidayBranch, holidayDescription].filter((value) => value && value !== "-").length > 0 ? (
+                        <p className="text-xs text-muted-foreground">
+                          {[holidayType, holidayBranch, holidayDescription]
+                            .filter((value) => value && value !== "-")
+                            .join(" · ")}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
       </section>
     )
   }
@@ -6525,7 +6558,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
   if (activeTab === "policies") {
     const showPoliciesError = policiesError && policiesError !== SELF_SERVICE_UNAVAILABLE_MESSAGE
     tabContent = (
-      <section className="space-y-4 px-4 py-2 lg:px-6">
+      <section className="w-full min-w-0 space-y-4">
         <h2 className="text-2xl font-semibold tracking-tight text-foreground">Leave Policies</h2>
         {loading ? (
           <div className="flex flex-col items-center justify-center gap-2 py-4">

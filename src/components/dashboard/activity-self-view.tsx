@@ -5,6 +5,7 @@ import { Loader2Icon, PlusIcon, RefreshCwIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import {
+  CompactStatStrip,
   HeroBand,
   StatusChip,
   TalentDoodleSprites,
@@ -225,25 +226,13 @@ export function ActivitySelfView({ activeTab }: { activeTab: ActivitySelfTab }) 
           {error}
         </div>
       ) : null}
-      <div className="grid grid-cols-3 gap-4">
-        {[
+      <CompactStatStrip
+        items={[
           { label: "Reports", value: loading ? "…" : String(reports.length) },
-          {
-            label: "Today",
-            value: loading ? "…" : todayStatus,
-          },
+          { label: "Today", value: loading ? "…" : todayStatus },
           { label: "Entries today", value: loading ? "…" : String(reportEntries(today).length) },
-        ].map((field) => (
-          <div key={field.label} className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              {field.label}
-            </p>
-            <p className="mt-1 truncate text-2xl font-semibold tracking-tight text-foreground">
-              {field.value}
-            </p>
-          </div>
-        ))}
-      </div>
+        ]}
+      />
       <div className="flex justify-end">
         <button
           type="button"

@@ -7,17 +7,18 @@ import { CheckIcon, Loader2Icon, RefreshCwIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import {
+  CompactStatStrip,
   CycleRail,
   HeroBand,
   StatusChip,
   TalentDoodleSprites,
-  asRecordArray,
+  actionButtonClass,
   formatDate,
+  heroGhostButtonClass,
+  pageBleedClass,
   prettify,
-  primaryButtonClass,
   readString,
   rowId,
-  secondaryButtonClass,
 } from "@/components/dashboard/talent-visuals"
 import {
   completeOffboardingClearance,
@@ -54,6 +55,7 @@ export function OffboardingSelfView() {
   const [tasks, setTasks] = React.useState<AdminRecord[]>([])
   const [clearances, setClearances] = React.useState<AdminRecord[]>([])
   const [loading, setLoading] = React.useState(true)
+  const [mounted, setMounted] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [busy, setBusy] = React.useState("")
 
@@ -96,6 +98,7 @@ export function OffboardingSelfView() {
   }, [leaveIfForbidden, selectedId])
 
   React.useEffect(() => {
+    setMounted(true)
     void load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -147,8 +150,11 @@ export function OffboardingSelfView() {
     }
   }
 
+  const doneTasks = requestTasks.filter(isDone).length
+  const doneClearances = requestClearances.filter(isDone).length
+
   return (
-    <section className="space-y-6">
+    <section className="w-full min-w-0 space-y-4">
       <TalentDoodleSprites />
       <HeroBand
         eyebrow="My offboarding"
@@ -160,21 +166,30 @@ export function OffboardingSelfView() {
         }
         actions={
           <div className="flex flex-wrap gap-2">
-            <Link href="/dashboard/me/requests/resignation" className={primaryButtonClass}>
+            <Link href="/dashboard/me/requests/resignation" className={heroGhostButtonClass}>
               Resignation
             </Link>
-            <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
-              {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+            <button
+              type="button"
+              className={heroGhostButtonClass}
+              onClick={() => void load()}
+              disabled={mounted ? loading : undefined}
+            >
+              {mounted && loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
               Refresh
             </button>
           </div>
         }
       />
 
-      {error ? <p className="text-sm text-rose-600">{error}</p> : null}
+      {error ? (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-300">
+          {error}
+        </div>
+      ) : null}
 
       {requests.length > 1 ? (
-        <div className="flex flex-wrap gap-1 border-b border-border/80 pb-px">
+        <div className="flex w-full min-w-0 flex-wrap gap-1 border-b border-border/80 pb-px">
           {requests.map((row) => {
             const id = rowId(row)
             const active = id === rowId(selected)
@@ -196,44 +211,46 @@ export function OffboardingSelfView() {
       ) : null}
 
       <AnimatePresence mode="wait">
-        <motion.div key={rowId(selected) || "empty"} className="space-y-6" {...motionProps} transition={{ duration: 0.22 }}>
-          {!selected && !loading ? (
-            <p className="text-sm text-muted-foreground">
-              You do not have an active offboarding request. Use Resignation if you want to start an exit.
-            </p>
-          ) : null}
-
+        <motion.div key={rowId(selected) || "empty"} className="w-full min-w-0 space-y-4" {...motionProps} transition={{ duration: 0.22 }}>
           {selected ? (
             <>
-              <div className="flex flex-wrap items-center gap-2">
-                <StatusChip value={statusOf(selected)} />
-                <span className="text-xs text-muted-foreground">
-                  Last working day {formatDate(selected.last_working_date ?? selected.lastWorkingDate ?? selected.exit_date ?? selected.exitDate)}
-                </span>
-              </div>
-
+              <CompactStatStrip
+                items={[
+                  { label: "Status", value: loading ? "…" : prettify(statusOf(selected)) },
+                  { label: "Tasks", value: loading ? "…" : `${doneTasks}/${requestTasks.length}` },
+                  { label: "Clearances", value: loading ? "…" : `${doneClearances}/${requestClearances.length}` },
+                ]}
+              />
               <CycleRail steps={STEPS} current={statusOf(selected)} />
-
-              <div className="grid gap-8 lg:grid-cols-2">
-                <ItemList
-                  title="Assigned tasks"
-                  empty="No exit tasks are assigned to you."
-                  rows={requestTasks}
-                  busy={busy}
-                  prefix="task"
-                  onComplete={completeTask}
-                />
-                <ItemList
-                  title="Clearances"
-                  empty="No clearances are waiting on you."
-                  rows={requestClearances}
-                  busy={busy}
-                  prefix="clearance"
-                  onComplete={completeClearance}
-                />
-              </div>
+              <ItemList
+                title="Assigned tasks"
+                empty="No exit tasks are assigned to you."
+                rows={requestTasks}
+                busy={busy}
+                prefix="task"
+                onComplete={completeTask}
+                subtitle={`Last working day ${formatDate(selected.last_working_date ?? selected.lastWorkingDate ?? selected.exit_date ?? selected.exitDate)}`}
+                status={statusOf(selected)}
+              />
+              <ItemList
+                title="Clearances"
+                empty="No clearances are waiting on you."
+                rows={requestClearances}
+                busy={busy}
+                prefix="clearance"
+                onComplete={completeClearance}
+              />
             </>
-          ) : null}
+          ) : loading ? (
+            <div className={cn("flex items-center justify-center gap-2 border-y border-border bg-card px-4 py-10 text-sm text-muted-foreground sm:border-x", pageBleedClass)}>
+              <Loader2Icon className="size-4 animate-spin" />
+              Loading your offboarding...
+            </div>
+          ) : (
+            <div className={cn("px-4 py-10 text-center text-sm text-muted-foreground border-y border-border bg-card sm:border-x", pageBleedClass)}>
+              You do not have an active offboarding request. Use Resignation if you want to start an exit.
+            </div>
+          )}
         </motion.div>
       </AnimatePresence>
     </section>
@@ -247,6 +264,8 @@ function ItemList({
   busy,
   prefix,
   onComplete,
+  subtitle,
+  status,
 }: {
   title: string
   empty: string
@@ -254,44 +273,53 @@ function ItemList({
   busy: string
   prefix: string
   onComplete: (row: AdminRecord) => void
+  subtitle?: string
+  status?: string
 }) {
   return (
-    <div className="min-w-0 space-y-3">
-      <div className="flex items-baseline justify-between gap-3">
-        <h2 className="text-sm font-semibold">{title}</h2>
-        <p className="text-xs text-muted-foreground">
-          {rows.filter(isDone).length}/{rows.length}
-        </p>
+    <div className={cn("overflow-hidden border-y border-border bg-card sm:border-x", pageBleedClass)}>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-foreground">{title}</p>
+          {subtitle ? <p className="text-xs text-muted-foreground">{subtitle}</p> : null}
+        </div>
+        {status ? <StatusChip value={status} /> : (
+          <p className="text-xs text-muted-foreground">
+            {rows.filter(isDone).length}/{rows.length}
+          </p>
+        )}
       </div>
       {rows.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{empty}</p>
+        <div className="px-4 py-10 text-center text-sm text-muted-foreground">{empty}</div>
       ) : (
-        <ul className="divide-y divide-border/80">
+        <ul className="divide-y divide-border/70">
           {rows.map((row) => {
             const id = rowId(row)
             const done = isDone(row)
             return (
-              <li key={id || readString(row, ["title", "name"])} className="flex items-center gap-3 py-3">
-                <span
-                  className={cn(
-                    "flex size-6 shrink-0 items-center justify-center rounded-full border",
-                    done
-                      ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-600"
-                      : "border-border text-muted-foreground",
-                  )}
-                >
-                  {done ? <CheckIcon className="size-3.5" /> : <span className="size-1.5 rounded-full bg-muted-foreground/50" />}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">
-                    {readString(row, ["title", "name", "department_name", "owner_name"], `${title} #${id}`)}
-                  </p>
-                  <p className="text-xs text-muted-foreground">{prettify(readString(row, ["status"], "pending"))}</p>
+              <li key={id || readString(row, ["title", "name"])} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <span
+                    className={cn(
+                      "flex size-6 shrink-0 items-center justify-center rounded-full border",
+                      done
+                        ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-600"
+                        : "border-border text-muted-foreground",
+                    )}
+                  >
+                    {done ? <CheckIcon className="size-3.5" /> : <span className="size-1.5 rounded-full bg-muted-foreground/50" />}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-foreground">
+                      {readString(row, ["title", "name", "department_name", "owner_name"], `${title} #${id}`)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">{prettify(readString(row, ["status"], "pending"))}</p>
+                  </div>
                 </div>
                 {!done ? (
                   <button
                     type="button"
-                    className={secondaryButtonClass}
+                    className={actionButtonClass}
                     disabled={busy === `${prefix}-${id}`}
                     onClick={() => onComplete(row)}
                   >

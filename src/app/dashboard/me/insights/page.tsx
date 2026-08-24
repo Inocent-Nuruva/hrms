@@ -1,5 +1,5 @@
-import { InsightsSelfView } from "@/components/dashboard/insights-self-view"
+import { redirect } from "next/navigation"
 
 export default function DashboardMyInsightsPage() {
-  return <InsightsSelfView />
+  redirect("/dashboard")
 }

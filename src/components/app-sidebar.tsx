@@ -492,11 +492,6 @@ const selfServiceNavMain: SidebarNavItem[] = [
       ],
     },
     {
-      title: "My Insights",
-      icon: IInsights,
-      url: "/dashboard/me/insights",
-    },
-    {
       title: "My Requests",
       icon: ILeave,
       url: "/dashboard/me/requests/actions",
@@ -574,7 +569,6 @@ const employeeSearchIndex = [
   { title: "My Activities", url: "/dashboard/me/activities/today", section: "Activities", keywords: ["activity", "daily", "report"] },
   { title: "My Movements", url: "/dashboard/me/movements", section: "Movements", keywords: ["movement", "transfer", "acknowledge"] },
   { title: "My Team", url: "/dashboard/me/team/overview", section: "Team", keywords: ["team", "manager", "direct reports", "action items"] },
-  { title: "My Insights", url: "/dashboard/me/insights", section: "Insights", keywords: ["dashboard", "overview"] },
   { title: "My Requests", url: "/dashboard/me/requests/actions", section: "Requests", keywords: ["request", "document", "resignation", "profile change"] },
   { title: "Structure", url: "/dashboard/structure/cost-centers", section: "Structure", keywords: ["cost center", "grade"] },
   { title: "Insights", url: "/dashboard/insights/hr", section: "Insights", keywords: ["dashboard", "hr"] },

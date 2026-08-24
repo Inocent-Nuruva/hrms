@@ -5,14 +5,16 @@ import { Loader2Icon, PlusIcon, RefreshCwIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import {
+  CompactStatStrip,
   HeroBand,
-  MetricTile,
   StatusChip,
   TalentDoodleSprites,
   actionButtonClass,
   formatDate,
+  heroGhostButtonClass,
   inputClass,
   optionLabel,
+  pageBleedClass,
   prettify,
   primaryButtonClass,
   readString,
@@ -51,6 +53,7 @@ import {
 } from "@/lib/admin-api"
 import { useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
 import { readStoredSessionTokens } from "@/lib/session-client"
+import { cn } from "@/lib/utils"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 
 export type RequestsSelfTab = "actions" | "timeline" | "documents" | "profile-changes" | "resignation"
@@ -189,6 +192,7 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
   const [documents, setDocuments] = React.useState<AdminRecord[]>([])
   const [changes, setChanges] = React.useState<AdminRecord[]>([])
   const [loading, setLoading] = React.useState(true)
+  const [mounted, setMounted] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [detail, setDetail] = React.useState<AdminRecord | null>(null)
   const [createOpen, setCreateOpen] = React.useState(false)
@@ -265,6 +269,7 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
   }, [activeTab, leaveIfForbidden])
 
   React.useEffect(() => {
+    setMounted(true)
     void load()
   }, [load])
 
@@ -579,8 +584,39 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
     return !status || ["OPEN", "PENDING", "TODO", "ACTION_REQUIRED"].includes(status)
   }).length
 
+  const summaryItems =
+    activeTab === "actions"
+      ? [
+          { label: "Waiting on you", value: loading ? "…" : String(pendingActions) },
+          { label: "All items", value: loading ? "…" : String(actions.length) },
+          { label: "Done", value: loading ? "…" : String(Math.max(actions.length - pendingActions, 0)) },
+        ]
+      : activeTab === "timeline"
+        ? [
+            { label: "Requests sent", value: loading ? "…" : String(timeline.length) },
+            { label: "Open", value: loading ? "…" : "—" },
+            { label: "Updated", value: loading ? "…" : "—" },
+          ]
+        : activeTab === "documents"
+          ? [
+              { label: "Files uploaded", value: loading ? "…" : String(documents.length) },
+              { label: "Ready", value: loading ? "…" : String(documents.length) },
+              { label: "Pending", value: "—" },
+            ]
+          : activeTab === "profile-changes"
+            ? [
+                { label: "Change requests", value: loading ? "…" : String(changes.length) },
+                { label: "Waiting", value: loading ? "…" : "—" },
+                { label: "Reviewed", value: "—" },
+              ]
+            : [
+                { label: "Notice", value: "HR review" },
+                { label: "Ends employment", value: "After offboarding" },
+                { label: "Start here", value: "Send to HR" },
+              ]
+
   return (
-    <section className="space-y-4">
+    <section className="w-full min-w-0 space-y-4">
       <TalentDoodleSprites />
       <HeroBand
         eyebrow="My requests"
@@ -588,17 +624,22 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
         description={copy.description}
         actions={
           <div className="flex flex-wrap gap-2">
-            <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
-              {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+            <button
+              type="button"
+              className={heroGhostButtonClass}
+              onClick={() => void load()}
+              disabled={mounted ? loading : undefined}
+            >
+              {mounted && loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
               Refresh
             </button>
             {activeTab === "documents" ? (
-              <button type="button" className={primaryButtonClass} onClick={() => openCreate("document")}>
+              <button type="button" className={heroGhostButtonClass} onClick={() => openCreate("document")}>
                 <PlusIcon className="size-4" /> Upload a file
               </button>
             ) : null}
             {activeTab === "profile-changes" ? (
-              <button type="button" className={primaryButtonClass} onClick={() => openCreate("change")}>
+              <button type="button" className={heroGhostButtonClass} onClick={() => openCreate("change")}>
                 <PlusIcon className="size-4" /> Ask HR to update
               </button>
             ) : null}
@@ -606,27 +647,15 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
         }
       />
       {error ? (
-        <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div>
-      ) : null}
-
-      {activeTab === "actions" ? (
-        <div className="grid gap-3 sm:grid-cols-2">
-          <MetricTile label="Waiting on you" value={loading ? "…" : pendingActions} hint="Open items that need a reply." />
-          <MetricTile label="All items" value={loading ? "…" : actions.length} />
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-300">
+          {error}
         </div>
       ) : null}
-      {activeTab === "timeline" ? (
-        <MetricTile label="Requests sent" value={loading ? "…" : timeline.length} hint="Everything you have submitted." />
-      ) : null}
-      {activeTab === "documents" ? (
-        <MetricTile label="Files uploaded" value={loading ? "…" : documents.length} />
-      ) : null}
-      {activeTab === "profile-changes" ? (
-        <MetricTile label="Change requests" value={loading ? "…" : changes.length} hint="HR reviews these before they apply." />
-      ) : null}
+
+      <CompactStatStrip items={summaryItems} />
 
       {activeTab === "resignation" ? (
-        <div className="max-w-xl space-y-4 rounded-2xl border border-border bg-card p-5">
+        <div className={cn("space-y-4 border-y border-border bg-card px-4 py-5 sm:border-x sm:px-5", pageBleedClass)}>
           <div>
             <h2 className="text-base font-semibold tracking-tight">Send a resignation</h2>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -674,7 +703,7 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
           </button>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-border bg-card">
+        <div className={cn("overflow-hidden border-y border-border bg-card sm:border-x", pageBleedClass)}>
           {!loading && rows.length === 0 ? (
             <p className="border-b border-border px-4 py-3 text-sm text-muted-foreground">{copy.empty}</p>
           ) : null}

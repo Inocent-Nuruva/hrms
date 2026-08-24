@@ -65,8 +65,8 @@ export function selfServiceHomeFor(url: string): string | null {
   if (path.startsWith("/dashboard/me/movements") || path.startsWith("/dashboard/movements")) {
     return "/dashboard/me/movements"
   }
-  if (path.startsWith("/dashboard/me/insights") || path.startsWith("/dashboard/insights")) {
-    return "/dashboard/me/insights"
+  if (path.startsWith("/dashboard/me/insights")) {
+    return "/dashboard"
   }
   if (path.startsWith("/dashboard/me/leave") || path.startsWith("/dashboard/leave-management")) {
     return "/dashboard/me/leave/requests"
