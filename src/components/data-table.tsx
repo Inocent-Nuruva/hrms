@@ -1,11 +1,11 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { motion, useReducedMotion } from "framer-motion"
-import { toast } from "sonner"
-import { showErrorAlert } from "@/lib/error-alert"
-import { showSuccessAlert } from "@/lib/success-alert"
-import { cn } from "@/lib/utils"
+import * as React from "react";
+import { motion, useReducedMotion } from "framer-motion";
+import { toast } from "sonner";
+import { showErrorAlert } from "@/lib/error-alert";
+import { showSuccessAlert } from "@/lib/success-alert";
+import { cn } from "@/lib/utils";
 
 import {
   AlertDialog,
@@ -15,9 +15,9 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+} from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogClose,
@@ -26,7 +26,7 @@ import {
   DialogHeader,
   DialogPopup,
   DialogTitle,
-} from "@/components/animate-ui/components/base/dialog"
+} from "@/components/animate-ui/components/base/dialog";
 import {
   Drawer,
   DrawerClose,
@@ -36,24 +36,24 @@ import {
   DrawerHeader,
   DrawerTitle,
   DrawerTrigger,
-} from "@/components/ui/drawer"
+} from "@/components/ui/drawer";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
-import { SearchToggleField } from "@/components/common/search-toggle-field"
+} from "@/components/ui/select";
+import { SearchToggleField } from "@/components/common/search-toggle-field";
 import {
   Table,
   TableBody,
@@ -61,9 +61,14 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table"
-import { ResizableTable, type Column } from "@/components/ui/resizable-table"
-import type { AdminRecord, AdminResourceKey, SortOrder, UsersQueryParams } from "@/lib/admin-api"
+} from "@/components/ui/table";
+import { ResizableTable, type Column } from "@/components/ui/resizable-table";
+import type {
+  AdminRecord,
+  AdminResourceKey,
+  SortOrder,
+  UsersQueryParams,
+} from "@/lib/admin-api";
 import {
   RESOURCE_LABELS,
   assignPermissionToCurrentCompanyUser,
@@ -89,7 +94,7 @@ import {
   revokePermissionFromCurrentCompanyUser,
   revokePermissionFromRole,
   revokeUserFromRole,
-} from "@/lib/admin-api"
+} from "@/lib/admin-api";
 import {
   PermissionPicker,
   canonicalizePermissionNames,
@@ -98,7 +103,7 @@ import {
   permissionTokenFromAssignment,
   toPermissionOptions,
   type PermissionOption,
-} from "@/components/dashboard/permission-picker"
+} from "@/components/dashboard/permission-picker";
 import {
   CheckIcon,
   CopyIcon,
@@ -115,91 +120,101 @@ import {
   UsersIcon,
   UserPlusIcon,
   UserMinusIcon,
-} from "lucide-react"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { useDebouncedValue } from "@/hooks/use-debounced-value"
+} from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 
 interface DataTableProps {
-  token: string
-  activeResource: AdminResourceKey
-  rows: AdminRecord[]
-  roles: AdminRecord[]
-  permissions: AdminRecord[]
+  token: string;
+  activeResource: AdminResourceKey;
+  rows: AdminRecord[];
+  roles: AdminRecord[];
+  permissions: AdminRecord[];
   /** Current actor permission names from JWT/session (e.g. roles:create). */
-  actorPermissions?: string[]
-  usersQuery: Required<UsersQueryParams>
-  usersTotal: number | null
-  usersTotalPages: number | null
-  onUsersQueryChange: (query: Partial<Required<UsersQueryParams>>) => void
-  catalogQuery?: { page: number; limit: number; search: string }
-  catalogTotal?: number | null
-  catalogTotalPages?: number | null
-  onCatalogQueryChange?: (query: Partial<{ page: number; limit: number; search: string }>) => void
-  loading: boolean
-  error: string | null
-  onCreate: (resource: AdminResourceKey, payload: AdminRecord) => Promise<void>
+  actorPermissions?: string[];
+  usersQuery: Required<UsersQueryParams>;
+  usersTotal: number | null;
+  usersTotalPages: number | null;
+  onUsersQueryChange: (query: Partial<Required<UsersQueryParams>>) => void;
+  catalogQuery?: { page: number; limit: number; search: string };
+  catalogTotal?: number | null;
+  catalogTotalPages?: number | null;
+  onCatalogQueryChange?: (
+    query: Partial<{ page: number; limit: number; search: string }>,
+  ) => void;
+  loading: boolean;
+  error: string | null;
+  onCreate: (resource: AdminResourceKey, payload: AdminRecord) => Promise<void>;
   onPatch: (
     resource: Exclude<AdminResourceKey, "companies">,
     id: string | number,
-    payload: AdminRecord
-  ) => Promise<void>
+    payload: AdminRecord,
+  ) => Promise<void>;
   onDelete: (
     resource: Exclude<AdminResourceKey, "companies">,
-    id: string | number
-  ) => Promise<void>
-  onUpdateUser: (id: string | number, payload: AdminRecord) => Promise<void>
-  onSetUserPassword: (id: string | number, newPassword: string) => Promise<void>
+    id: string | number,
+  ) => Promise<void>;
+  onUpdateUser: (id: string | number, payload: AdminRecord) => Promise<void>;
+  onSetUserPassword: (
+    id: string | number,
+    newPassword: string,
+  ) => Promise<void>;
   onSyncUserRoles: (
     userId: string | number,
     addRoleIds: (string | number)[],
-    removeRoleIds: (string | number)[]
-  ) => Promise<void>
+    removeRoleIds: (string | number)[],
+  ) => Promise<void>;
   /** Reload list after side-effect mutations (e.g. admin 2FA toggle). */
-  onRefresh?: () => Promise<void>
+  onRefresh?: () => Promise<void>;
 }
 
-function hasActorPermission(actorPermissions: string[] | undefined, required: string) {
-  const normalized = (actorPermissions ?? []).map((entry) => entry.trim().toLowerCase())
-  if (normalized.length === 0) return false
-  const need = required.toLowerCase().replace(/\./g, ":")
-  return normalized.some((entry) => entry.replace(/\./g, ":") === need)
+function hasActorPermission(
+  actorPermissions: string[] | undefined,
+  required: string,
+) {
+  const normalized = (actorPermissions ?? []).map((entry) =>
+    entry.trim().toLowerCase(),
+  );
+  if (normalized.length === 0) return false;
+  const need = required.toLowerCase().replace(/\./g, ":");
+  return normalized.some((entry) => entry.replace(/\./g, ":") === need);
 }
 
 function resourceActionPermission(
   resource: AdminResourceKey,
-  action: "create" | "update" | "delete" | "read"
+  action: "create" | "update" | "delete" | "read",
 ) {
-  return `${resource}:${action}`
+  return `${resource}:${action}`;
 }
 
-type EditableResource = Exclude<AdminResourceKey, "companies">
-type EntityResource = Exclude<AdminResourceKey, "users" | "companies">
+type EditableResource = Exclude<AdminResourceKey, "companies">;
+type EntityResource = Exclude<AdminResourceKey, "users" | "companies">;
 
 interface UserFormState {
-  first_name: string
-  last_name: string
-  phone: string
-  email: string
-  password: string
-  user_no: string
-  status: string
-  roleIds: string[]
+  first_name: string;
+  last_name: string;
+  phone: string;
+  email: string;
+  password: string;
+  user_no: string;
+  status: string;
+  roleIds: string[];
 }
 
 interface BasicEntityForm {
-  name: string
-  display_name: string
-  description: string
+  name: string;
+  display_name: string;
+  description: string;
 }
 
 interface CompanyForm {
-  company_name: string
-  company_slug: string
-  admin_first_name: string
-  admin_last_name: string
-  admin_email: string
-  admin_phone: string
-  admin_password: string
+  company_name: string;
+  company_slug: string;
+  admin_first_name: string;
+  admin_last_name: string;
+  admin_email: string;
+  admin_phone: string;
+  admin_password: string;
 }
 
 const EMPTY_USER_FORM: UserFormState = {
@@ -211,20 +226,20 @@ const EMPTY_USER_FORM: UserFormState = {
   user_no: "",
   status: "active",
   roleIds: [],
-}
+};
 
 const EMPTY_ENTITY_FORM: BasicEntityForm = {
   name: "",
   display_name: "",
   description: "",
-}
+};
 
 function slugifyRoleKey(value: string) {
   return value
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "")
+    .replace(/^_+|_+$/g, "");
 }
 
 const EMPTY_COMPANY_FORM: CompanyForm = {
@@ -235,57 +250,76 @@ const EMPTY_COMPANY_FORM: CompanyForm = {
   admin_email: "",
   admin_phone: "",
   admin_password: "",
-}
+};
 
-function isEditableResource(resource: AdminResourceKey): resource is EditableResource {
-  return resource !== "companies"
+function isEditableResource(
+  resource: AdminResourceKey,
+): resource is EditableResource {
+  return resource !== "companies";
 }
 
 function getRowId(row: AdminRecord, fallbackIndex: number): string | number {
-  const candidates = [row.id, row.user_id, row.user_no, row.name, row.email]
+  const candidates = [row.id, row.user_id, row.user_no, row.name, row.email];
   const identified = candidates.find(
-    (value) => typeof value === "string" || typeof value === "number"
-  )
-  return identified ?? fallbackIndex
+    (value) => typeof value === "string" || typeof value === "number",
+  );
+  return identified ?? fallbackIndex;
 }
 
 function stringifyValue(value: unknown): string {
   if (value === null || value === undefined) {
-    return "-"
+    return "-";
   }
-  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-    return String(value)
+  if (
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
+    return String(value);
   }
   if (Array.isArray(value)) {
     if (value.length === 0) {
-      return "-"
+      return "-";
     }
-    const first = value[0]
+    const first = value[0];
     if (typeof first === "string" || typeof first === "number") {
-      return value.slice(0, 2).map((item) => String(item)).join(", ") + (value.length > 2 ? "..." : "")
+      return (
+        value
+          .slice(0, 2)
+          .map((item) => String(item))
+          .join(", ") + (value.length > 2 ? "..." : "")
+      );
     }
-    return `${value.length} item(s)`
+    return `${value.length} item(s)`;
   }
   if (typeof value === "object") {
-    const record = value as Record<string, unknown>
-    const preferredKeys = ["name", "display_name", "title", "slug", "email", "code", "id"]
+    const record = value as Record<string, unknown>;
+    const preferredKeys = [
+      "name",
+      "display_name",
+      "title",
+      "slug",
+      "email",
+      "code",
+      "id",
+    ];
     for (const key of preferredKeys) {
-      const candidate = record[key]
+      const candidate = record[key];
       if (typeof candidate === "string" && candidate.trim()) {
-        return candidate
+        return candidate;
       }
       if (typeof candidate === "number" || typeof candidate === "boolean") {
-        return String(candidate)
+        return String(candidate);
       }
     }
-    return "Object"
+    return "Object";
   }
-  return String(value)
+  return String(value);
 }
 
 function getVisibleColumns(rows: AdminRecord[]) {
   if (rows.length === 0) {
-    return ["id", "name", "email"]
+    return ["id", "name", "email"];
   }
 
   const preferredOrder = [
@@ -303,12 +337,12 @@ function getVisibleColumns(rows: AdminRecord[]) {
     "status",
     "two_factor_enabled",
     "created_at",
-  ]
+  ];
 
-  const rowKeys = new Set<string>()
+  const rowKeys = new Set<string>();
   rows.forEach((row) => {
-    Object.keys(row).forEach((key) => rowKeys.add(key))
-  })
+    Object.keys(row).forEach((key) => rowKeys.add(key));
+  });
 
   // Always surface a normalized 2FA column for users when any 2FA-like flag exists
   // (or after listUsers normalization which always sets two_factor_enabled).
@@ -320,29 +354,32 @@ function getVisibleColumns(rows: AdminRecord[]) {
     "is_2fa_enabled",
     "mfa_enabled",
     "totp_enabled",
-  ]
+  ];
   const hasTwoFactorSignal =
     twoFactorAliases.some((key) => rowKeys.has(key)) ||
-    rows.some((row) => readTwoFactorEnabled(row) || "two_factor_enabled" in row)
+    rows.some(
+      (row) => readTwoFactorEnabled(row) || "two_factor_enabled" in row,
+    );
 
-  const ordered = preferredOrder.filter((key) => rowKeys.has(key) || (key === "two_factor_enabled" && hasTwoFactorSignal))
+  const ordered = preferredOrder.filter(
+    (key) =>
+      rowKeys.has(key) || (key === "two_factor_enabled" && hasTwoFactorSignal),
+  );
   const remaining = Array.from(rowKeys)
     .filter(
-      (key) =>
-        !ordered.includes(key) &&
-        !twoFactorAliases.includes(key) // collapse aliases into two_factor_enabled
+      (key) => !ordered.includes(key) && !twoFactorAliases.includes(key), // collapse aliases into two_factor_enabled
     )
-    .sort((a, b) => a.localeCompare(b))
-  const columns = [...ordered, ...remaining]
+    .sort((a, b) => a.localeCompare(b));
+  const columns = [...ordered, ...remaining];
   if (hasTwoFactorSignal && !columns.includes("two_factor_enabled")) {
-    columns.splice(Math.min(columns.length, 7), 0, "two_factor_enabled")
+    columns.splice(Math.min(columns.length, 7), 0, "two_factor_enabled");
   }
-  return columns.slice(0, 8)
+  return columns.slice(0, 8);
 }
 
 function formatTwoFactorCell(row: AdminRecord): React.ReactNode {
-  const enabled = readTwoFactorEnabled(row)
-  const forced = readForceTwoFactor(row)
+  const enabled = readTwoFactorEnabled(row);
+  const forced = readForceTwoFactor(row);
   return (
     <div className="flex flex-wrap items-center gap-1">
       <Badge
@@ -351,7 +388,7 @@ function formatTwoFactorCell(row: AdminRecord): React.ReactNode {
           "text-[10px] font-semibold",
           enabled
             ? "bg-emerald-600/90 text-white hover:bg-emerald-600/90"
-            : "bg-muted text-muted-foreground"
+            : "bg-muted text-muted-foreground",
         )}
       >
         {enabled ? "On" : "Off"}
@@ -362,7 +399,7 @@ function formatTwoFactorCell(row: AdminRecord): React.ReactNode {
         </Badge>
       ) : null}
     </div>
-  )
+  );
 }
 
 function prettifyKey(key: string) {
@@ -372,62 +409,70 @@ function prettifyKey(key: string) {
     key === "twoFactorEnabled" ||
     key === "isTwoFactorEnabled"
   ) {
-    return "2FA"
+    return "2FA";
   }
-  return key
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase())
+  return key.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function asRoleId(value: unknown): string | null {
   if (typeof value === "number" && Number.isFinite(value)) {
-    return String(value)
+    return String(value);
   }
   if (typeof value === "string" && value.trim()) {
-    return value.trim()
+    return value.trim();
   }
-  return null
+  return null;
 }
 
 function rolePayloadId(value: string): string | number {
-  const parsed = Number(value)
+  const parsed = Number(value);
   if (Number.isFinite(parsed) && String(parsed) === value) {
-    return parsed
+    return parsed;
   }
-  return value
+  return value;
 }
 
 function readRecordString(record: AdminRecord, keys: string[]): string {
   for (const key of keys) {
-    const value = record[key]
+    const value = record[key];
     if (typeof value === "string" && value.trim()) {
-      return value.trim()
+      return value.trim();
     }
   }
-  return ""
+  return "";
 }
 
 function roleLabel(role: AdminRecord) {
   return (
-    readRecordString(role, ["display_name", "displayName", "name", "title", "code", "key"]) ||
-    "Unnamed role"
-  )
+    readRecordString(role, [
+      "display_name",
+      "displayName",
+      "name",
+      "title",
+      "code",
+      "key",
+    ]) || "Unnamed role"
+  );
 }
 
 /** Flatten useful text from a role/permission row for client-side search. */
 function accessControlSearchHaystack(row: AdminRecord): string {
-  const parts: string[] = []
+  const parts: string[] = [];
   const push = (value: unknown) => {
-    if (value === null || value === undefined) return
-    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-      const text = String(value).trim()
-      if (text) parts.push(text)
+    if (value === null || value === undefined) return;
+    if (
+      typeof value === "string" ||
+      typeof value === "number" ||
+      typeof value === "boolean"
+    ) {
+      const text = String(value).trim();
+      if (text) parts.push(text);
     }
-  }
+  };
 
-  push(roleLabel(row))
-  push(permissionLabel(row))
-  push(permissionKey(row))
+  push(roleLabel(row));
+  push(permissionLabel(row));
+  push(permissionKey(row));
   for (const key of [
     "name",
     "display_name",
@@ -439,36 +484,36 @@ function accessControlSearchHaystack(row: AdminRecord): string {
     "slug",
     "id",
   ]) {
-    push(row[key])
+    push(row[key]);
   }
 
   // Nested labels (e.g. company, role group)
   for (const nestKey of ["company", "group", "meta"]) {
-    const nested = asRecordValue(row[nestKey])
-    if (!nested) continue
+    const nested = asRecordValue(row[nestKey]);
+    if (!nested) continue;
     for (const key of ["name", "display_name", "displayName", "title"]) {
-      push(nested[key])
+      push(nested[key]);
     }
   }
 
-  return parts.join(" ").toLowerCase()
+  return parts.join(" ").toLowerCase();
 }
 
 function asPermissionName(value: unknown): string | null {
   if (typeof value === "string" && value.trim()) {
-    return value.trim()
+    return value.trim();
   }
   if (typeof value === "number" && Number.isFinite(value)) {
-    return String(value)
+    return String(value);
   }
-  return null
+  return null;
 }
 
 function permissionLabel(permission: AdminRecord) {
   return (
     readRecordString(permission, ["display_name", "displayName", "name"]) ||
     "Unnamed permission"
-  )
+  );
 }
 
 function permissionKey(permission: AdminRecord) {
@@ -479,31 +524,37 @@ function permissionKey(permission: AdminRecord) {
     asPermissionName(permission.display_name) ??
     asPermissionName(permission.displayName) ??
     ""
-  )
+  );
 }
 
 function isSystemGenerated(record: AdminRecord) {
-  const value = record.is_system_generated ?? record.isSystemGenerated
-  return value === true
+  const value = record.is_system_generated ?? record.isSystemGenerated;
+  return value === true;
 }
 
 function asRecordValue(value: unknown): AdminRecord | null {
-  return typeof value === "object" && value !== null ? (value as AdminRecord) : null
+  return typeof value === "object" && value !== null
+    ? (value as AdminRecord)
+    : null;
 }
 
 function companyUserMembershipId(record: AdminRecord): string | null {
-  const id = record.id
-  if (typeof id === "number" && Number.isFinite(id)) return String(id)
-  if (typeof id === "string" && id.trim()) return id.trim()
-  return null
+  const id = record.id;
+  if (typeof id === "number" && Number.isFinite(id)) return String(id);
+  if (typeof id === "string" && id.trim()) return id.trim();
+  return null;
 }
 
 function readFiniteId(value: unknown): string | null {
-  if (typeof value === "number" && Number.isFinite(value)) return String(value)
-  if (typeof value === "string" && value.trim() && !Number.isNaN(Number(value.trim()))) {
-    return value.trim()
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  if (
+    typeof value === "string" &&
+    value.trim() &&
+    !Number.isNaN(Number(value.trim()))
+  ) {
+    return value.trim();
   }
-  return null
+  return null;
 }
 
 function companyUserLinkedUserId(record: AdminRecord): string | null {
@@ -516,20 +567,20 @@ function companyUserLinkedUserId(record: AdminRecord): string | null {
     "auth_user_id",
     "authUserId",
   ]) {
-    const id = readFiniteId(record[key])
-    if (id) return id
+    const id = readFiniteId(record[key]);
+    if (id) return id;
   }
 
   for (const nestKey of ["user", "account", "profile", "person"]) {
-    const nested = asRecordValue(record[nestKey])
-    if (!nested) continue
+    const nested = asRecordValue(record[nestKey]);
+    if (!nested) continue;
     for (const key of ["id", "user_id", "userId"]) {
-      const id = readFiniteId(nested[key])
-      if (id) return id
+      const id = readFiniteId(nested[key]);
+      if (id) return id;
     }
   }
 
-  return null
+  return null;
 }
 
 /**
@@ -538,136 +589,154 @@ function companyUserLinkedUserId(record: AdminRecord): string | null {
  * as user_id, so fall back to membership id when no linked user id is present.
  */
 function resolveRoleAssignUserId(record: AdminRecord): string | null {
-  return companyUserLinkedUserId(record) ?? companyUserMembershipId(record)
+  return companyUserLinkedUserId(record) ?? companyUserMembershipId(record);
 }
 
 function companyUserDisplayName(record: AdminRecord): string {
-  const nested = asRecordValue(record.user)
+  const nested = asRecordValue(record.user);
   const first =
     readRecordString(record, ["first_name", "firstName"]) ||
-    (nested ? readRecordString(nested, ["first_name", "firstName"]) : "")
+    (nested ? readRecordString(nested, ["first_name", "firstName"]) : "");
   const last =
     readRecordString(record, ["last_name", "lastName"]) ||
-    (nested ? readRecordString(nested, ["last_name", "lastName"]) : "")
-  const full = `${first} ${last}`.trim()
-  if (full) return full
+    (nested ? readRecordString(nested, ["last_name", "lastName"]) : "");
+  const full = `${first} ${last}`.trim();
+  if (full) return full;
   const email =
-    readRecordString(record, ["email"]) || (nested ? readRecordString(nested, ["email"]) : "")
-  if (email) return email
+    readRecordString(record, ["email"]) ||
+    (nested ? readRecordString(nested, ["email"]) : "");
+  if (email) return email;
   const userNo =
     readRecordString(record, ["user_no", "userNo"]) ||
-    (nested ? readRecordString(nested, ["user_no", "userNo"]) : "")
-  return userNo || `User ${companyUserMembershipId(record) ?? "?"}`
+    (nested ? readRecordString(nested, ["user_no", "userNo"]) : "");
+  return userNo || `User ${companyUserMembershipId(record) ?? "?"}`;
 }
 
 function companyUserEmail(record: AdminRecord): string {
-  const nested = asRecordValue(record.user)
+  const nested = asRecordValue(record.user);
   return (
     readRecordString(record, ["email"]) ||
     (nested ? readRecordString(nested, ["email"]) : "") ||
     "—"
-  )
+  );
 }
 
 function companyUserStatus(record: AdminRecord): string {
-  const nested = asRecordValue(record.user)
+  const nested = asRecordValue(record.user);
   return (
     readRecordString(record, ["status"]) ||
     (nested ? readRecordString(nested, ["status"]) : "") ||
     "—"
-  )
+  );
 }
 
-function idsMatchPermission(candidate: unknown, permissionId: string | number): boolean {
-  const target = String(permissionId)
-  if (candidate === null || candidate === undefined) return false
+function idsMatchPermission(
+  candidate: unknown,
+  permissionId: string | number,
+): boolean {
+  const target = String(permissionId);
+  if (candidate === null || candidate === undefined) return false;
   if (typeof candidate === "string" || typeof candidate === "number") {
-    return String(candidate) === target
+    return String(candidate) === target;
   }
   if (typeof candidate === "object") {
-    const rec = candidate as AdminRecord
-    const id = rec.id ?? rec.permission_id ?? rec.permissionId
-    if (id !== undefined && String(id) === target) return true
-    const name = rec.name
+    const rec = candidate as AdminRecord;
+    const id = rec.id ?? rec.permission_id ?? rec.permissionId;
+    if (id !== undefined && String(id) === target) return true;
+    const name = rec.name;
     // name match is not used for id-based assignment; only id
-    void name
+    void name;
   }
-  return false
+  return false;
 }
 
-function companyUserHasPermission(record: AdminRecord, permissionId: string | number): boolean {
+function companyUserHasPermission(
+  record: AdminRecord,
+  permissionId: string | number,
+): boolean {
   const assignmentKeys = [
     "permission_assignments",
     "permissionAssignments",
     "direct_permissions",
     "directPermissions",
-  ]
+  ];
   for (const key of assignmentKeys) {
-    const list = record[key]
-    if (!Array.isArray(list)) continue
+    const list = record[key];
+    if (!Array.isArray(list)) continue;
     for (const entry of list) {
-      if (idsMatchPermission(entry, permissionId)) return true
-      const rec = asRecordValue(entry)
-      if (!rec) continue
-      if (idsMatchPermission(rec.permission_id ?? rec.permissionId, permissionId)) return true
-      const nestedPermission = asRecordValue(rec.permission)
-      if (nestedPermission && idsMatchPermission(nestedPermission.id, permissionId)) return true
+      if (idsMatchPermission(entry, permissionId)) return true;
+      const rec = asRecordValue(entry);
+      if (!rec) continue;
+      if (
+        idsMatchPermission(rec.permission_id ?? rec.permissionId, permissionId)
+      )
+        return true;
+      const nestedPermission = asRecordValue(rec.permission);
+      if (
+        nestedPermission &&
+        idsMatchPermission(nestedPermission.id, permissionId)
+      )
+        return true;
     }
   }
 
-  const nestedUser = asRecordValue(record.user)
-  const permissionLists = [record.permissions, nestedUser?.permissions]
+  const nestedUser = asRecordValue(record.user);
+  const permissionLists = [record.permissions, nestedUser?.permissions];
   for (const list of permissionLists) {
-    if (!Array.isArray(list)) continue
+    if (!Array.isArray(list)) continue;
     for (const entry of list) {
-      if (idsMatchPermission(entry, permissionId)) return true
+      if (idsMatchPermission(entry, permissionId)) return true;
     }
   }
-  return false
+  return false;
 }
 
-function companyUserHasRole(record: AdminRecord, roleId: string | number): boolean {
-  const target = String(roleId)
-  const assignmentKeys = ["role_assignments", "roleAssignments", "roles"]
+function companyUserHasRole(
+  record: AdminRecord,
+  roleId: string | number,
+): boolean {
+  const target = String(roleId);
+  const assignmentKeys = ["role_assignments", "roleAssignments", "roles"];
   for (const key of assignmentKeys) {
-    const list = record[key]
-    if (!Array.isArray(list)) continue
+    const list = record[key];
+    if (!Array.isArray(list)) continue;
     for (const entry of list) {
       if (typeof entry === "string" || typeof entry === "number") {
-        if (String(entry) === target) return true
-        continue
+        if (String(entry) === target) return true;
+        continue;
       }
-      const rec = asRecordValue(entry)
-      if (!rec) continue
-      if (String(rec.role_id ?? rec.roleId ?? rec.id ?? "") === target) return true
-      const nestedRole = asRecordValue(rec.role)
-      if (nestedRole && String(nestedRole.id ?? "") === target) return true
+      const rec = asRecordValue(entry);
+      if (!rec) continue;
+      if (String(rec.role_id ?? rec.roleId ?? rec.id ?? "") === target)
+        return true;
+      const nestedRole = asRecordValue(rec.role);
+      if (nestedRole && String(nestedRole.id ?? "") === target) return true;
     }
   }
-  const nestedUser = asRecordValue(record.user)
+  const nestedUser = asRecordValue(record.user);
   if (Array.isArray(nestedUser?.roles)) {
     for (const entry of nestedUser.roles) {
       if (typeof entry === "string" || typeof entry === "number") {
-        if (String(entry) === target) return true
-        continue
+        if (String(entry) === target) return true;
+        continue;
       }
-      const rec = asRecordValue(entry)
-      if (rec && String(rec.id ?? "") === target) return true
+      const rec = asRecordValue(entry);
+      if (rec && String(rec.id ?? "") === target) return true;
     }
   }
-  return false
+  return false;
 }
 
 type AssignedMemberUser = {
-  membershipId: string
-  userId: string | null
-  name: string
-  email: string
-  status: string
-  source: AdminRecord
-}
+  membershipId: string;
+  userId: string | null;
+  name: string;
+  email: string;
+  status: string;
+  source: AdminRecord;
+};
 
-type DetailSheetTab = "general" | "assigned" | "permissions"
+type DetailSheetTab = "general" | "assigned" | "permissions";
 
 function SectionLoader({ label }: { label: string }) {
   return (
@@ -675,7 +744,7 @@ function SectionLoader({ label }: { label: string }) {
       <Loader2Icon className="size-6 animate-spin text-primary" />
       <p className="text-xs text-muted-foreground">{label}</p>
     </div>
-  )
+  );
 }
 
 function DetailTabs({
@@ -683,14 +752,14 @@ function DetailTabs({
   value,
   onChange,
 }: {
-  tabs: { id: DetailSheetTab; label: string }[]
-  value: DetailSheetTab
-  onChange: (next: DetailSheetTab) => void
+  tabs: { id: DetailSheetTab; label: string }[];
+  value: DetailSheetTab;
+  onChange: (next: DetailSheetTab) => void;
 }) {
   return (
     <div className="flex gap-5 border-b border-border/70 px-1">
       {tabs.map((tab) => {
-        const active = value === tab.id
+        const active = value === tab.id;
         return (
           <button
             key={tab.id}
@@ -700,7 +769,7 @@ function DetailTabs({
               "relative -mb-px pb-2.5 text-sm transition-colors",
               active
                 ? "font-semibold text-foreground"
-                : "font-medium text-muted-foreground hover:text-foreground"
+                : "font-medium text-muted-foreground hover:text-foreground",
             )}
           >
             {tab.label}
@@ -708,10 +777,10 @@ function DetailTabs({
               <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-primary" />
             ) : null}
           </button>
-        )
+        );
       })}
     </div>
-  )
+  );
 }
 
 function MicrosoftPermissionList({
@@ -719,33 +788,40 @@ function MicrosoftPermissionList({
   selectedNames,
   emptyLabel = "No permissions included in this role.",
 }: {
-  options: PermissionOption[]
-  selectedNames: string[]
-  emptyLabel?: string
+  options: PermissionOption[];
+  selectedNames: string[];
+  emptyLabel?: string;
 }) {
-  const selectedSet = React.useMemo(() => new Set(selectedNames), [selectedNames])
+  const selectedSet = React.useMemo(
+    () => new Set(selectedNames),
+    [selectedNames],
+  );
   const grouped = React.useMemo(() => {
-    const map = new Map<string, PermissionOption[]>()
+    const map = new Map<string, PermissionOption[]>();
     for (const option of options) {
-      if (!isPermissionSelected(option, selectedSet)) continue
-      const list = map.get(option.group) ?? []
-      list.push(option)
-      map.set(option.group, list)
+      if (!isPermissionSelected(option, selectedSet)) continue;
+      const list = map.get(option.group) ?? [];
+      list.push(option);
+      map.set(option.group, list);
     }
-    return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b))
-  }, [options, selectedSet])
+    return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
+  }, [options, selectedSet]);
 
   if (grouped.length === 0) {
     return (
-      <p className="py-8 text-center text-sm text-muted-foreground">{emptyLabel}</p>
-    )
+      <p className="py-8 text-center text-sm text-muted-foreground">
+        {emptyLabel}
+      </p>
+    );
   }
 
   return (
     <div className="space-y-3">
       <p className="text-xs text-muted-foreground">
-        <span className="font-semibold text-foreground">{selectedNames.length}</span> permissions
-        included in this role
+        <span className="font-semibold text-foreground">
+          {selectedNames.length}
+        </span>{" "}
+        permissions included in this role
       </p>
       {grouped.map(([group, items]) => (
         <section
@@ -761,10 +837,18 @@ function MicrosoftPermissionList({
           </div>
           <ul className="grid grid-cols-1 gap-px bg-border/40 sm:grid-cols-2">
             {items.map((item) => (
-              <li key={item.name} className="flex items-start gap-2 bg-card px-3 py-2.5">
-                <CheckIcon className="mt-0.5 size-3.5 shrink-0 text-primary" strokeWidth={2.5} />
+              <li
+                key={item.name}
+                className="flex items-start gap-2 bg-card px-3 py-2.5"
+              >
+                <CheckIcon
+                  className="mt-0.5 size-3.5 shrink-0 text-primary"
+                  strokeWidth={2.5}
+                />
                 <div className="min-w-0">
-                  <p className="text-xs font-medium leading-snug text-foreground">{item.label}</p>
+                  <p className="text-xs font-medium leading-snug text-foreground">
+                    {item.label}
+                  </p>
                   <p className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground">
                     {item.name}
                   </p>
@@ -780,25 +864,25 @@ function MicrosoftPermissionList({
         </section>
       ))}
     </div>
-  )
+  );
 }
 
 function permissionScope(name: string) {
-  return permissionGroupFromName(name)
+  return permissionGroupFromName(name);
 }
 
 type AccessControlTableRow = AdminRecord & {
-  __id: string
-  display: string
-  key: string
-  module: string
-  description: string
-  type: string
-  permissions_count?: number
+  __id: string;
+  display: string;
+  key: string;
+  module: string;
+  description: string;
+  type: string;
+  permissions_count?: number;
   /** Users assigned to this role when the list payload includes a count. */
-  users_count?: number
-  __source: AdminRecord
-}
+  users_count?: number;
+  __source: AdminRecord;
+};
 
 function readEmbeddedRoleUserCount(row: AdminRecord): number | null {
   for (const key of [
@@ -813,75 +897,84 @@ function readEmbeddedRoleUserCount(row: AdminRecord): number | null {
     "total_users",
     "totalUsers",
   ]) {
-    const value = row[key]
+    const value = row[key];
     if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
-      return Math.floor(value)
+      return Math.floor(value);
     }
     if (typeof value === "string" && value.trim()) {
-      const parsed = Number(value)
+      const parsed = Number(value);
       if (Number.isFinite(parsed) && parsed >= 0) {
-        return Math.floor(parsed)
+        return Math.floor(parsed);
       }
     }
   }
   for (const key of ["users", "members", "assigned_users", "assignedUsers"]) {
-    const value = row[key]
+    const value = row[key];
     if (Array.isArray(value)) {
-      return value.length
+      return value.length;
     }
   }
-  return null
+  return null;
 }
 
 function rolePermissionNamesFromRecord(row: AdminRecord): string[] {
-  const candidates = [row.permissions, row.permission_assignments, row.role_permissions]
+  const candidates = [
+    row.permissions,
+    row.permission_assignments,
+    row.role_permissions,
+  ];
   for (const source of candidates) {
     if (!Array.isArray(source)) {
-      continue
+      continue;
     }
 
     const names = source
       .map((entry) => permissionTokenFromAssignment(entry))
-      .filter((value): value is string => Boolean(value))
+      .filter((value): value is string => Boolean(value));
 
     if (names.length > 0) {
-      return Array.from(new Set(names))
+      return Array.from(new Set(names));
     }
   }
-  return []
+  return [];
 }
 
 function roleUserIdFromRecord(row: AdminRecord): string | null {
-  const direct = row.user_id ?? row.userId
-  if (typeof direct === "number" && Number.isFinite(direct)) return String(direct)
-  if (typeof direct === "string" && direct.trim()) return direct.trim()
+  const direct = row.user_id ?? row.userId;
+  if (typeof direct === "number" && Number.isFinite(direct))
+    return String(direct);
+  if (typeof direct === "string" && direct.trim()) return direct.trim();
   for (const key of ["user", "company_user", "companyUser", "member"]) {
-    const nested = asRecordValue(row[key])
-    if (!nested) continue
-    const nestedId = nested.id ?? nested.user_id ?? nested.userId
-    if (typeof nestedId === "number" && Number.isFinite(nestedId)) return String(nestedId)
-    if (typeof nestedId === "string" && nestedId.trim()) return nestedId.trim()
+    const nested = asRecordValue(row[key]);
+    if (!nested) continue;
+    const nestedId = nested.id ?? nested.user_id ?? nested.userId;
+    if (typeof nestedId === "number" && Number.isFinite(nestedId))
+      return String(nestedId);
+    if (typeof nestedId === "string" && nestedId.trim()) return nestedId.trim();
   }
   // Last resort: only treat bare id as user id when no nested user object exists.
-  const id = row.id
-  if (typeof id === "number" && Number.isFinite(id)) return String(id)
-  if (typeof id === "string" && id.trim()) return id.trim()
-  return null
+  const id = row.id;
+  if (typeof id === "number" && Number.isFinite(id)) return String(id);
+  if (typeof id === "string" && id.trim()) return id.trim();
+  return null;
 }
 
-function mapRoleApiUserToMember(row: AdminRecord, index: number): AssignedMemberUser {
+function mapRoleApiUserToMember(
+  row: AdminRecord,
+  index: number,
+): AssignedMemberUser {
   const nestedUser =
     asRecordValue(row.user) ??
     asRecordValue(row.company_user) ??
     asRecordValue(row.companyUser) ??
-    asRecordValue(row.member)
-  const displaySource = nestedUser ?? row
-  const userId = roleUserIdFromRecord(row)
+    asRecordValue(row.member);
+  const displaySource = nestedUser ?? row;
+  const userId = roleUserIdFromRecord(row);
   const membershipId =
     companyUserMembershipId(row) ??
     companyUserMembershipId(displaySource) ??
     userId ??
-    `role-user-${index}`
+    `role-user-${index}`;
 
   return {
     membershipId,
@@ -890,26 +983,26 @@ function mapRoleApiUserToMember(row: AdminRecord, index: number): AssignedMember
     email: companyUserEmail(displaySource),
     status: companyUserStatus(displaySource),
     source: row,
-  }
+  };
 }
 
 function userRoleIds(row: AdminRecord): string[] {
-  const roles = row.roles
+  const roles = row.roles;
   if (!Array.isArray(roles)) {
-    return []
+    return [];
   }
 
   return roles
     .map((role) => {
       if (typeof role === "string" || typeof role === "number") {
-        return asRoleId(role)
+        return asRoleId(role);
       }
       if (typeof role === "object" && role !== null) {
-        return asRoleId((role as AdminRecord).id)
+        return asRoleId((role as AdminRecord).id);
       }
-      return null
+      return null;
     })
-    .filter((value): value is string => Boolean(value))
+    .filter((value): value is string => Boolean(value));
 }
 
 function toUserForm(row: AdminRecord): UserFormState {
@@ -920,9 +1013,12 @@ function toUserForm(row: AdminRecord): UserFormState {
     email: typeof row.email === "string" ? row.email : "",
     password: "",
     user_no: typeof row.user_no === "string" ? row.user_no : "",
-    status: typeof row.status === "string" && row.status.trim() ? row.status : "active",
+    status:
+      typeof row.status === "string" && row.status.trim()
+        ? row.status
+        : "active",
     roleIds: userRoleIds(row),
-  }
+  };
 }
 
 function toEntityForm(row: AdminRecord): BasicEntityForm {
@@ -930,7 +1026,7 @@ function toEntityForm(row: AdminRecord): BasicEntityForm {
     name: readRecordString(row, ["name"]),
     display_name: readRecordString(row, ["display_name", "displayName"]),
     description: readRecordString(row, ["description"]),
-  }
+  };
 }
 
 /** Match ResizableTable row population animation (per-row delay, valid HTML). */
@@ -939,7 +1035,7 @@ const adminTableRowHidden = {
   y: 12,
   scale: 0.985,
   filter: "blur(3px)",
-}
+};
 
 const adminTableRowVisible = (index: number) => ({
   opacity: 1,
@@ -953,7 +1049,7 @@ const adminTableRowVisible = (index: number) => ({
     mass: 0.65,
     delay: 0.05 + index * 0.03,
   },
-})
+});
 
 export function DataTable({
   token,
@@ -980,128 +1076,166 @@ export function DataTable({
   onSyncUserRoles,
   onRefresh,
 }: DataTableProps) {
-  const shouldReduceMotion = useReducedMotion()
-  const shouldAnimateRows = !shouldReduceMotion
-  const [searchInput, setSearchInput] = React.useState(usersQuery.search)
-  const [createUserForm, setCreateUserForm] = React.useState<UserFormState>(EMPTY_USER_FORM)
-  const [editingUser, setEditingUser] = React.useState<{ id: string | number; label: string } | null>(null)
-  const [editUserForm, setEditUserForm] = React.useState<UserFormState>(EMPTY_USER_FORM)
-  const [targetPasswordUser, setTargetPasswordUser] = React.useState<{ id: string | number; label: string } | null>(null)
-  const [targetPassword, setTargetPassword] = React.useState("")
+  const shouldReduceMotion = useReducedMotion();
+  const shouldAnimateRows = !shouldReduceMotion;
+  const [searchInput, setSearchInput] = React.useState(usersQuery.search);
+  const [createUserForm, setCreateUserForm] =
+    React.useState<UserFormState>(EMPTY_USER_FORM);
+  const [editingUser, setEditingUser] = React.useState<{
+    id: string | number;
+    label: string;
+  } | null>(null);
+  const [editUserForm, setEditUserForm] =
+    React.useState<UserFormState>(EMPTY_USER_FORM);
+  const [targetPasswordUser, setTargetPasswordUser] = React.useState<{
+    id: string | number;
+    label: string;
+  } | null>(null);
+  const [targetPassword, setTargetPassword] = React.useState("");
   const [twoFactorUser, setTwoFactorUser] = React.useState<{
-    id: string | number
-    label: string
-    mode: "enable" | "disable" | "force" | "unforce"
-  } | null>(null)
-  const [twoFactorReason, setTwoFactorReason] = React.useState("")
-  const [twoFactorBusy, setTwoFactorBusy] = React.useState(false)
-  const [avatarUser, setAvatarUser] = React.useState<{ id: string | number; label: string } | null>(
-    null
-  )
-  const [defaultAvatars, setDefaultAvatars] = React.useState<AdminRecord[]>([])
-  const [avatarsLoading, setAvatarsLoading] = React.useState(false)
-  const [selectedAvatarId, setSelectedAvatarId] = React.useState<number | null>(null)
-  const [avatarBusy, setAvatarBusy] = React.useState(false)
+    id: string | number;
+    label: string;
+    mode: "enable" | "disable" | "force" | "unforce";
+  } | null>(null);
+  const [twoFactorReason, setTwoFactorReason] = React.useState("");
+  const [twoFactorBusy, setTwoFactorBusy] = React.useState(false);
+  const [avatarUser, setAvatarUser] = React.useState<{
+    id: string | number;
+    label: string;
+  } | null>(null);
+  const [defaultAvatars, setDefaultAvatars] = React.useState<AdminRecord[]>([]);
+  const [avatarsLoading, setAvatarsLoading] = React.useState(false);
+  const [selectedAvatarId, setSelectedAvatarId] = React.useState<number | null>(
+    null,
+  );
+  const [avatarBusy, setAvatarBusy] = React.useState(false);
 
-  const [roleForm, setRoleForm] = React.useState<BasicEntityForm>(EMPTY_ENTITY_FORM)
-  const [rolePermissionNames, setRolePermissionNames] = React.useState<string[]>([])
-  const [createAccessOpen, setCreateAccessOpen] = React.useState(false)
-  const [roleKeyTouched, setRoleKeyTouched] = React.useState(false)
-  const [companyForm, setCompanyForm] = React.useState<CompanyForm>(EMPTY_COMPANY_FORM)
+  const [roleForm, setRoleForm] =
+    React.useState<BasicEntityForm>(EMPTY_ENTITY_FORM);
+  const [rolePermissionNames, setRolePermissionNames] = React.useState<
+    string[]
+  >([]);
+  const [createAccessOpen, setCreateAccessOpen] = React.useState(false);
+  const [roleKeyTouched, setRoleKeyTouched] = React.useState(false);
+  const [companyForm, setCompanyForm] =
+    React.useState<CompanyForm>(EMPTY_COMPANY_FORM);
   const [editingEntity, setEditingEntity] = React.useState<{
-    resource: EntityResource
-    id: string | number
-    label: string
-  } | null>(null)
-  const [editingEntityForm, setEditingEntityForm] = React.useState<BasicEntityForm>(EMPTY_ENTITY_FORM)
-  const [initialEditingEntityForm, setInitialEditingEntityForm] = React.useState<BasicEntityForm>(EMPTY_ENTITY_FORM)
-  const [editingRolePermissionNames, setEditingRolePermissionNames] = React.useState<string[]>([])
-  const [initialEditingRolePermissionNames, setInitialEditingRolePermissionNames] = React.useState<string[]>([])
+    resource: EntityResource;
+    id: string | number;
+    label: string;
+  } | null>(null);
+  const [editingEntityForm, setEditingEntityForm] =
+    React.useState<BasicEntityForm>(EMPTY_ENTITY_FORM);
+  const [initialEditingEntityForm, setInitialEditingEntityForm] =
+    React.useState<BasicEntityForm>(EMPTY_ENTITY_FORM);
+  const [editingRolePermissionNames, setEditingRolePermissionNames] =
+    React.useState<string[]>([]);
+  const [
+    initialEditingRolePermissionNames,
+    setInitialEditingRolePermissionNames,
+  ] = React.useState<string[]>([]);
   const [permissionSaveProgress, setPermissionSaveProgress] = React.useState<{
-    done: number
-    total: number
-  } | null>(null)
-  const [accessControlSearch, setAccessControlSearch] = React.useState("")
-  const [pickerPermissions, setPickerPermissions] = React.useState<AdminRecord[]>([])
-  const [pickerPermissionsLoading, setPickerPermissionsLoading] = React.useState(false)
-  const [detailSheetTab, setDetailSheetTab] = React.useState<DetailSheetTab>("general")
-  const [memberCompanyUsers, setMemberCompanyUsers] = React.useState<AdminRecord[]>([])
-  const [assignedMemberIds, setAssignedMemberIds] = React.useState<Set<string>>(() => new Set())
+    done: number;
+    total: number;
+  } | null>(null);
+  const [accessControlSearch, setAccessControlSearch] = React.useState("");
+  const [pickerPermissions, setPickerPermissions] = React.useState<
+    AdminRecord[]
+  >([]);
+  const [pickerPermissionsLoading, setPickerPermissionsLoading] =
+    React.useState(false);
+  const [detailSheetTab, setDetailSheetTab] =
+    React.useState<DetailSheetTab>("general");
+  const [memberCompanyUsers, setMemberCompanyUsers] = React.useState<
+    AdminRecord[]
+  >([]);
+  const [assignedMemberIds, setAssignedMemberIds] = React.useState<Set<string>>(
+    () => new Set(),
+  );
   /** Users from GET /api/roles/{roleId}/users — source of truth for role Assigned tab. */
-  const [roleAssignedUsers, setRoleAssignedUsers] = React.useState<AssignedMemberUser[]>([])
-  const [membersLoading, setMembersLoading] = React.useState(false)
-  const [membersError, setMembersError] = React.useState<string | null>(null)
-  const [membersBusy, setMembersBusy] = React.useState(false)
-  const [memberSearch, setMemberSearch] = React.useState("")
-  const [memberToAdd, setMemberToAdd] = React.useState<string>("")
+  const [roleAssignedUsers, setRoleAssignedUsers] = React.useState<
+    AssignedMemberUser[]
+  >([]);
+  const [membersLoading, setMembersLoading] = React.useState(false);
+  const [membersError, setMembersError] = React.useState<string | null>(null);
+  const [membersBusy, setMembersBusy] = React.useState(false);
+  const [memberSearch, setMemberSearch] = React.useState("");
+  const [memberToAdd, setMemberToAdd] = React.useState<string>("");
   /** Filters the assign-user picker list (not the assigned people list). */
-  const [assignPickerQuery, setAssignPickerQuery] = React.useState("")
-  const [membersRefreshKey, setMembersRefreshKey] = React.useState(0)
-  const [rolePermissionNamesFromApi, setRolePermissionNamesFromApi] = React.useState<string[] | null>(
-    null
-  )
-  const [rolePermissionsLoading, setRolePermissionsLoading] = React.useState(false)
+  const [assignPickerQuery, setAssignPickerQuery] = React.useState("");
+  const [membersRefreshKey, setMembersRefreshKey] = React.useState(0);
+  const [rolePermissionNamesFromApi, setRolePermissionNamesFromApi] =
+    React.useState<string[] | null>(null);
+  const [rolePermissionsLoading, setRolePermissionsLoading] =
+    React.useState(false);
   const [revokeConfirm, setRevokeConfirm] = React.useState<{
-    membershipId: string
-    userId: string | null
-    displayName: string
-  } | null>(null)
-  const [peopleDialogOpen, setPeopleDialogOpen] = React.useState(false)
-  const rolePermissionsDraftDirtyRef = React.useRef(false)
-  const permissionOptionsRef = React.useRef<PermissionOption[]>([])
-  const permissionMutationNextAllowedAtRef = React.useRef(0)
+    membershipId: string;
+    userId: string | null;
+    displayName: string;
+  } | null>(null);
+  const [peopleDialogOpen, setPeopleDialogOpen] = React.useState(false);
+  const rolePermissionsDraftDirtyRef = React.useRef(false);
+  const permissionOptionsRef = React.useRef<PermissionOption[]>([]);
+  const permissionMutationNextAllowedAtRef = React.useRef(0);
 
   const columns = React.useMemo(() => {
-    const baseColumns = getVisibleColumns(rows)
+    const baseColumns = getVisibleColumns(rows);
     if (activeResource === "roles") {
       return baseColumns.filter(
-        (column) => column !== "company_id" && column !== "companyId"
-      )
+        (column) => column !== "company_id" && column !== "companyId",
+      );
     }
-    return baseColumns
-  }, [activeResource, rows])
+    return baseColumns;
+  }, [activeResource, rows]);
   const roleOptions = React.useMemo(() => {
     return roles
       .map((role) => {
-        const id = asRoleId(role.id)
+        const id = asRoleId(role.id);
         if (!id) {
-          return null
+          return null;
         }
-        return { id, label: roleLabel(role) }
+        return { id, label: roleLabel(role) };
       })
-      .filter((item): item is { id: string; label: string } => Boolean(item))
-  }, [roles])
+      .filter((item): item is { id: string; label: string } => Boolean(item));
+  }, [roles]);
   const permissionOptions = React.useMemo(
-    () => toPermissionOptions(pickerPermissions.length > 0 ? pickerPermissions : permissions),
-    [permissions, pickerPermissions]
-  )
+    () =>
+      toPermissionOptions(
+        pickerPermissions.length > 0 ? pickerPermissions : permissions,
+      ),
+    [permissions, pickerPermissions],
+  );
 
   React.useEffect(() => {
-    permissionOptionsRef.current = permissionOptions
-  }, [permissionOptions])
+    permissionOptionsRef.current = permissionOptions;
+  }, [permissionOptions]);
 
   React.useEffect(() => {
-    if (permissionOptions.length === 0) return
+    if (permissionOptions.length === 0) return;
     const remap = (current: string[]) =>
-      canonicalizePermissionNames(current, permissionOptions)
-    setEditingRolePermissionNames(remap)
-    setInitialEditingRolePermissionNames(remap)
-    setRolePermissionNamesFromApi((current) => (current ? remap(current) : current))
-  }, [permissionOptions])
+      canonicalizePermissionNames(current, permissionOptions);
+    setEditingRolePermissionNames(remap);
+    setInitialEditingRolePermissionNames(remap);
+    setRolePermissionNamesFromApi((current) =>
+      current ? remap(current) : current,
+    );
+  }, [permissionOptions]);
   const filteredAccessControlRows = React.useMemo(() => {
-    const query = accessControlSearch.trim().toLowerCase()
-    if (!query) return rows
-    return rows.filter((row) => accessControlSearchHaystack(row).includes(query))
-  }, [accessControlSearch, rows])
+    const query = accessControlSearch.trim().toLowerCase();
+    if (!query) return rows;
+    return rows.filter((row) =>
+      accessControlSearchHaystack(row).includes(query),
+    );
+  }, [accessControlSearch, rows]);
 
   const accessControlTableRows = React.useMemo((): AccessControlTableRow[] => {
     if (activeResource !== "roles" && activeResource !== "permissions") {
-      return []
+      return [];
     }
     const mapped = filteredAccessControlRows.map((row, index) => {
-      const id = String(getRowId(row, index + 1))
+      const id = String(getRowId(row, index + 1));
       if (activeResource === "permissions") {
-        const key = permissionKey(row)
+        const key = permissionKey(row);
         return {
           ...row,
           __id: id,
@@ -1111,9 +1245,9 @@ export function DataTable({
           description: readRecordString(row, ["description"]) || "—",
           type: isSystemGenerated(row) ? "System" : "Custom",
           __source: row,
-        }
+        };
       }
-      const embeddedUsers = readEmbeddedRoleUserCount(row)
+      const embeddedUsers = readEmbeddedRoleUserCount(row);
       return {
         ...row,
         __id: id,
@@ -1125,85 +1259,91 @@ export function DataTable({
         permissions_count: rolePermissionNamesFromRecord(row).length,
         users_count: embeddedUsers ?? undefined,
         __source: row,
-      }
-    })
+      };
+    });
     // Stable alphabetical order so system roles (e.g. "Company User") are easy to find.
     return mapped.sort((a, b) =>
       String(a.display).localeCompare(String(b.display), undefined, {
         sensitivity: "base",
         numeric: true,
-      })
-    )
-  }, [activeResource, filteredAccessControlRows])
+      }),
+    );
+  }, [activeResource, filteredAccessControlRows]);
 
   const openAccessControlRow = React.useCallback(
     (row: AdminRecord) => {
       if (activeResource !== "roles" && activeResource !== "permissions") {
-        return
+        return;
       }
-      const rowId = getRowId(row, 0)
+      const rowId = getRowId(row, 0);
       const rowLabel = stringifyValue(
-        row.name ?? row.display_name ?? row.displayName ?? row.email ?? rowId
-      )
-      const nextEntityForm = toEntityForm(row)
+        row.name ?? row.display_name ?? row.displayName ?? row.email ?? rowId,
+      );
+      const nextEntityForm = toEntityForm(row);
       const nextRolePermissions =
         activeResource === "roles"
-          ? canonicalizePermissionNames(rolePermissionNamesFromRecord(row), permissionOptions)
-          : []
-      rolePermissionsDraftDirtyRef.current = false
+          ? canonicalizePermissionNames(
+              rolePermissionNamesFromRecord(row),
+              permissionOptions,
+            )
+          : [];
+      rolePermissionsDraftDirtyRef.current = false;
       setEditingEntity({
         resource: activeResource,
         id: rowId,
         label: rowLabel,
-      })
-      setEditingEntityForm(nextEntityForm)
-      setInitialEditingEntityForm(nextEntityForm)
-      setEditingRolePermissionNames(nextRolePermissions)
-      setInitialEditingRolePermissionNames(nextRolePermissions)
-      setRolePermissionNamesFromApi(null)
+      });
+      setEditingEntityForm(nextEntityForm);
+      setInitialEditingEntityForm(nextEntityForm);
+      setEditingRolePermissionNames(nextRolePermissions);
+      setInitialEditingRolePermissionNames(nextRolePermissions);
+      setRolePermissionNamesFromApi(null);
     },
-    [activeResource, permissionOptions]
-  )
+    [activeResource, permissionOptions],
+  );
 
   const permissionIdsFromSelection = React.useCallback(
     (selection: string[]) => {
       const resolved = selection
         .map((value) => {
-          const byName = permissionOptions.find((permission) => permission.name === value)
+          const byName = permissionOptions.find(
+            (permission) => permission.name === value,
+          );
           if (byName) {
-            return rolePayloadId(byName.id)
+            return rolePayloadId(byName.id);
           }
-          return rolePayloadId(value)
+          return rolePayloadId(value);
         })
-        .filter((value) => value !== "")
-      return Array.from(new Set(resolved))
+        .filter((value) => value !== "");
+      return Array.from(new Set(resolved));
     },
-    [permissionOptions]
-  )
+    [permissionOptions],
+  );
 
   const canCreateResource = hasActorPermission(
     actorPermissions,
-    resourceActionPermission(activeResource, "create")
-  )
+    resourceActionPermission(activeResource, "create"),
+  );
   const canUpdateResource = hasActorPermission(
     actorPermissions,
-    resourceActionPermission(activeResource, "update")
-  )
+    resourceActionPermission(activeResource, "update"),
+  );
   const canDeleteResource = hasActorPermission(
     actorPermissions,
-    resourceActionPermission(activeResource, "delete")
-  )
+    resourceActionPermission(activeResource, "delete"),
+  );
 
   const isEditingEntityDirty = React.useMemo(() => {
     if (!editingEntity) {
-      return false
+      return false;
     }
 
     return (
       editingEntityForm.name !== initialEditingEntityForm.name ||
-      editingEntityForm.display_name !== initialEditingEntityForm.display_name ||
+      editingEntityForm.display_name !==
+        initialEditingEntityForm.display_name ||
       editingEntityForm.description !== initialEditingEntityForm.description
-    )
+    );
   }, [
     editingEntity,
     editingEntityForm.description,
@@ -1212,61 +1352,64 @@ export function DataTable({
     initialEditingEntityForm.description,
     initialEditingEntityForm.display_name,
     initialEditingEntityForm.name,
-  ])
+  ]);
 
   const isRolePermissionsDirty = React.useMemo(() => {
     if (!editingEntity || editingEntity.resource !== "roles") {
-      return false
+      return false;
     }
-    const current = new Set(editingRolePermissionNames)
-    const initial = new Set(initialEditingRolePermissionNames)
-    if (current.size !== initial.size) return true
+    const current = new Set(editingRolePermissionNames);
+    const initial = new Set(initialEditingRolePermissionNames);
+    if (current.size !== initial.size) return true;
     for (const name of current) {
-      if (!initial.has(name)) return true
+      if (!initial.has(name)) return true;
     }
-    return false
+    return false;
   }, [
     editingEntity,
     editingRolePermissionNames,
     initialEditingRolePermissionNames,
     rolePermissionNamesFromApi,
-  ])
+  ]);
 
   React.useEffect(() => {
-    setSearchInput(usersQuery.search)
-  }, [usersQuery.search])
+    setSearchInput(usersQuery.search);
+  }, [usersQuery.search]);
 
   const toggleRoleId = (
     roleIds: string[],
     roleId: string,
-    onChange: (next: string[]) => void
+    onChange: (next: string[]) => void,
   ) => {
     if (roleIds.includes(roleId)) {
-      onChange(roleIds.filter((id) => id !== roleId))
-      return
+      onChange(roleIds.filter((id) => id !== roleId));
+      return;
     }
-    onChange([...roleIds, roleId])
-  }
+    onChange([...roleIds, roleId]);
+  };
 
   const handleCreate = async () => {
     if (!token) {
-      toast.error("Your session expired. Please sign in again.")
-      return
+      toast.error("Your session expired. Please sign in again.");
+      return;
     }
 
     try {
       if (activeResource === "users") {
-        if (!createUserForm.first_name.trim() || !createUserForm.last_name.trim()) {
-          toast.error("First name and last name are required.")
-          return
+        if (
+          !createUserForm.first_name.trim() ||
+          !createUserForm.last_name.trim()
+        ) {
+          toast.error("First name and last name are required.");
+          return;
         }
         if (!createUserForm.email.trim()) {
-          toast.error("Email is required.")
-          return
+          toast.error("Email is required.");
+          return;
         }
         if (!createUserForm.password.trim()) {
-          toast.error("Password is required.")
-          return
+          toast.error("Password is required.");
+          return;
         }
 
         await onCreate("users", {
@@ -1277,51 +1420,56 @@ export function DataTable({
           password: createUserForm.password,
           user_no: createUserForm.user_no.trim(),
           status: createUserForm.status,
-          roles: createUserForm.roleIds.map((id) => ({ id: rolePayloadId(id) })),
-        })
-        setCreateUserForm(EMPTY_USER_FORM)
+          roles: createUserForm.roleIds.map((id) => ({
+            id: rolePayloadId(id),
+          })),
+        });
+        setCreateUserForm(EMPTY_USER_FORM);
       }
 
       if (activeResource === "roles") {
         if (!roleForm.name.trim()) {
-          toast.error("Role name is required.")
-          return
+          toast.error("Role name is required.");
+          return;
         }
         if (!roleForm.display_name.trim()) {
-          toast.error("Display name is required.")
-          return
+          toast.error("Display name is required.");
+          return;
         }
         await onCreate("roles", {
           name: roleForm.name.trim(),
           display_name: roleForm.display_name.trim(),
           description: roleForm.description.trim(),
           permission_ids: permissionIdsFromSelection(rolePermissionNames),
-        })
-        setRoleForm(EMPTY_ENTITY_FORM)
-        setRolePermissionNames([])
-        setRoleKeyTouched(false)
-        setCreateAccessOpen(false)
+        });
+        setRoleForm(EMPTY_ENTITY_FORM);
+        setRolePermissionNames([]);
+        setRoleKeyTouched(false);
+        setCreateAccessOpen(false);
       }
 
       if (activeResource === "permissions") {
         if (!roleForm.name.trim() || !roleForm.display_name.trim()) {
-          toast.error("Permission key and display name are required.")
-          return
+          toast.error("Permission key and display name are required.");
+          return;
         }
         await onCreate("permissions", {
           name: roleForm.name.trim(),
           display_name: roleForm.display_name.trim(),
           description: roleForm.description.trim(),
-        })
-        setRoleForm(EMPTY_ENTITY_FORM)
-        setRoleKeyTouched(false)
-        setCreateAccessOpen(false)
+        });
+        setRoleForm(EMPTY_ENTITY_FORM);
+        setRoleKeyTouched(false);
+        setCreateAccessOpen(false);
       }
 
       if (activeResource === "companies") {
-        if (!companyForm.company_name.trim() || !companyForm.company_slug.trim()) {
-          toast.error("Company name and slug are required.")
-          return
+        if (
+          !companyForm.company_name.trim() ||
+          !companyForm.company_slug.trim()
+        ) {
+          toast.error("Company name and slug are required.");
+          return;
         }
         await onCreate("companies", {
           company_name: companyForm.company_name.trim(),
@@ -1331,20 +1479,21 @@ export function DataTable({
           admin_email: companyForm.admin_email.trim().toLowerCase(),
           admin_phone: companyForm.admin_phone.trim(),
           admin_password: companyForm.admin_password,
-        })
-        setCompanyForm(EMPTY_COMPANY_FORM)
+        });
+        setCompanyForm(EMPTY_COMPANY_FORM);
       }
 
-      showSuccessAlert(`${RESOURCE_LABELS[activeResource]} created.`)
+      showSuccessAlert(`${RESOURCE_LABELS[activeResource]} created.`);
     } catch (errorObject) {
-      const message = errorObject instanceof Error ? errorObject.message : "Create failed."
-      toast.error(message)
+      const message =
+        errorObject instanceof Error ? errorObject.message : "Create failed.";
+      toast.error(message);
     }
-  }
+  };
 
   const handleSaveUserEdit = async () => {
     if (!token || !editingUser) {
-      return
+      return;
     }
 
     try {
@@ -1355,29 +1504,38 @@ export function DataTable({
         email: editUserForm.email.trim().toLowerCase(),
         user_no: editUserForm.user_no.trim(),
         status: editUserForm.status,
-      })
+      });
 
-      const existingRow = rows.find((row, index) => getRowId(row, index + 1) === editingUser.id)
-      const previousRoleIds = new Set(existingRow ? userRoleIds(existingRow) : [])
-      const nextRoleIds = new Set(editUserForm.roleIds)
-      const addRoleIds = Array.from(nextRoleIds).filter((id) => !previousRoleIds.has(id)).map(rolePayloadId)
-      const removeRoleIds = Array.from(previousRoleIds).filter((id) => !nextRoleIds.has(id)).map(rolePayloadId)
+      const existingRow = rows.find(
+        (row, index) => getRowId(row, index + 1) === editingUser.id,
+      );
+      const previousRoleIds = new Set(
+        existingRow ? userRoleIds(existingRow) : [],
+      );
+      const nextRoleIds = new Set(editUserForm.roleIds);
+      const addRoleIds = Array.from(nextRoleIds)
+        .filter((id) => !previousRoleIds.has(id))
+        .map(rolePayloadId);
+      const removeRoleIds = Array.from(previousRoleIds)
+        .filter((id) => !nextRoleIds.has(id))
+        .map(rolePayloadId);
 
       if (addRoleIds.length > 0 || removeRoleIds.length > 0) {
-        await onSyncUserRoles(editingUser.id, addRoleIds, removeRoleIds)
+        await onSyncUserRoles(editingUser.id, addRoleIds, removeRoleIds);
       }
 
-      setEditingUser(null)
-      showSuccessAlert("User updated.")
+      setEditingUser(null);
+      showSuccessAlert("User updated.");
     } catch (errorObject) {
-      const message = errorObject instanceof Error ? errorObject.message : "Update failed."
-      toast.error(message)
+      const message =
+        errorObject instanceof Error ? errorObject.message : "Update failed.";
+      toast.error(message);
     }
-  }
+  };
 
   const handleSaveEntityEdit = async () => {
     if (!token || !editingEntity) {
-      return
+      return;
     }
 
     try {
@@ -1388,117 +1546,186 @@ export function DataTable({
         name: editingEntityForm.name.trim(),
         display_name: editingEntityForm.display_name.trim(),
         description: editingEntityForm.description.trim(),
-      })
-      setEditingEntity(null)
-      setInitialEditingEntityForm(EMPTY_ENTITY_FORM)
-      setEditingRolePermissionNames([])
-      setInitialEditingRolePermissionNames([])
-      setRolePermissionNamesFromApi(null)
-      showSuccessAlert(`${RESOURCE_LABELS[editingEntity.resource]} updated.`)
+      });
+      setEditingEntity(null);
+      setInitialEditingEntityForm(EMPTY_ENTITY_FORM);
+      setEditingRolePermissionNames([]);
+      setInitialEditingRolePermissionNames([]);
+      setRolePermissionNamesFromApi(null);
+      showSuccessAlert(`${RESOURCE_LABELS[editingEntity.resource]} updated.`);
     } catch (errorObject) {
-      const message = errorObject instanceof Error ? errorObject.message : "Update failed."
-      toast.error(message)
+      const message =
+        errorObject instanceof Error ? errorObject.message : "Update failed.";
+      toast.error(message);
     }
-  }
+  };
 
   const handleDelete = React.useCallback(
     async (rowId: string | number) => {
       if (!token) {
-        toast.error("Your session expired. Please sign in again.")
-        return
+        toast.error("Your session expired. Please sign in again.");
+        return;
       }
       if (!isEditableResource(activeResource)) {
-        return
+        return;
       }
 
       try {
-        await onDelete(activeResource, rowId)
-        showSuccessAlert(`${RESOURCE_LABELS[activeResource]} deleted.`)
+        await onDelete(activeResource, rowId);
+        showSuccessAlert(`${RESOURCE_LABELS[activeResource]} deleted.`);
       } catch (errorObject) {
-        const message = errorObject instanceof Error ? errorObject.message : "Delete failed."
-        toast.error(message)
+        const message =
+          errorObject instanceof Error ? errorObject.message : "Delete failed.";
+        toast.error(message);
       }
     },
-    [token, activeResource, onDelete]
-  )
+    [token, activeResource, onDelete],
+  );
 
-  const accessControlColumns = React.useMemo((): Column<AccessControlTableRow>[] => {
-    const actionsColumn: Column<AccessControlTableRow> = {
-      key: "actions",
-      label: "Actions",
-      defaultWidth: canDeleteResource ? 96 : 72,
-      sortable: false,
-      render: (row) => (
-        <div
-          className="flex items-center gap-1"
-          onClick={(event) => event.stopPropagation()}
-          onKeyDown={(event) => event.stopPropagation()}
-        >
-          <button
-            type="button"
-            className="inline-flex size-8 items-center justify-center rounded-md border border-border bg-background text-foreground transition-colors hover:bg-muted"
-            title="Open details"
-            aria-label="Open details"
-            onClick={() => openAccessControlRow(row.__source)}
+  const accessControlColumns =
+    React.useMemo((): Column<AccessControlTableRow>[] => {
+      const actionsColumn: Column<AccessControlTableRow> = {
+        key: "actions",
+        label: "Actions",
+        defaultWidth: canDeleteResource ? 96 : 72,
+        sortable: false,
+        render: (row) => (
+          <div
+            className="flex items-center gap-1"
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => event.stopPropagation()}
           >
-            <PencilIcon className="size-3.5" />
-          </button>
-          <button
-            type="button"
-            className="inline-flex size-8 items-center justify-center rounded-md border border-border bg-background text-foreground transition-colors hover:bg-muted"
-            title="Copy details"
-            aria-label="Copy details"
-            onClick={() => {
-              void navigator.clipboard
-                .writeText(JSON.stringify(row.__source, null, 2))
-                .then(() => showSuccessAlert("Record details copied."))
-                .catch(() => showErrorAlert("Clipboard access was denied."))
-            }}
-          >
-            <CopyIcon className="size-3.5" />
-          </button>
-          {isEditableResource(activeResource) && canDeleteResource ? (
             <button
               type="button"
-              className="inline-flex size-8 items-center justify-center rounded-md border border-rose-200 bg-background text-rose-600 transition-colors hover:bg-rose-50"
-              title="Delete"
-              aria-label="Delete"
-              onClick={() => void handleDelete(row.__id)}
+              className="inline-flex size-8 items-center justify-center rounded-md border border-border bg-background text-foreground transition-colors hover:bg-muted"
+              title="Open details"
+              aria-label="Open details"
+              onClick={() => openAccessControlRow(row.__source)}
             >
-              <Trash2Icon className="size-3.5" />
+              <PencilIcon className="size-3.5" />
             </button>
-          ) : null}
-        </div>
-      ),
-    }
+            <button
+              type="button"
+              className="inline-flex size-8 items-center justify-center rounded-md border border-border bg-background text-foreground transition-colors hover:bg-muted"
+              title="Copy details"
+              aria-label="Copy details"
+              onClick={() => {
+                void navigator.clipboard
+                  .writeText(JSON.stringify(row.__source, null, 2))
+                  .then(() => showSuccessAlert("Record details copied."))
+                  .catch(() => showErrorAlert("Clipboard access was denied."));
+              }}
+            >
+              <CopyIcon className="size-3.5" />
+            </button>
+            {isEditableResource(activeResource) && canDeleteResource ? (
+              <button
+                type="button"
+                className="inline-flex size-8 items-center justify-center rounded-md border border-rose-200 bg-background text-rose-600 transition-colors hover:bg-rose-50"
+                title="Delete"
+                aria-label="Delete"
+                onClick={() => void handleDelete(row.__id)}
+              >
+                <Trash2Icon className="size-3.5" />
+              </button>
+            ) : null}
+          </div>
+        ),
+      };
 
-    if (activeResource === "permissions") {
+      if (activeResource === "permissions") {
+        return [
+          {
+            key: "display",
+            label: "Permission",
+            defaultWidth: 200,
+            sortable: true,
+            render: (row) => (
+              <span className="font-medium text-slate-900 dark:text-slate-100">
+                {row.display}
+              </span>
+            ),
+          },
+          {
+            key: "module",
+            label: "Module",
+            defaultWidth: 140,
+            sortable: true,
+            render: (row) => (
+              <span className="text-sm text-slate-700 dark:text-slate-300">
+                {row.module}
+              </span>
+            ),
+          },
+          {
+            key: "description",
+            label: "Description",
+            defaultWidth: 260,
+            sortable: true,
+            render: (row) => (
+              <span className="line-clamp-2 text-xs text-slate-600 dark:text-slate-400">
+                {row.description}
+              </span>
+            ),
+          },
+          {
+            key: "type",
+            label: "Type",
+            defaultWidth: 100,
+            sortable: true,
+            render: (row) => (
+              <span className="text-sm text-slate-700 dark:text-slate-300">
+                {row.type}
+              </span>
+            ),
+          },
+          actionsColumn,
+        ];
+      }
+
       return [
         {
           key: "display",
-          label: "Permission",
+          label: "Role",
           defaultWidth: 200,
           sortable: true,
           render: (row) => (
-            <span className="font-medium text-slate-900 dark:text-slate-100">{row.display}</span>
+            <span className="font-medium text-slate-900 dark:text-slate-100">
+              {row.display}
+            </span>
           ),
         },
         {
-          key: "module",
-          label: "Module",
-          defaultWidth: 140,
+          key: "users_count",
+          label: "Users",
+          defaultWidth: 90,
           sortable: true,
           render: (row) => (
-            <span className="text-sm text-slate-700 dark:text-slate-300">{row.module}</span>
+            <span className="text-sm tabular-nums text-slate-700 dark:text-slate-300">
+              {row.users_count ?? "—"}
+            </span>
+          ),
+        },
+        {
+          key: "permissions_count",
+          label: "Permissions",
+          defaultWidth: 110,
+          sortable: true,
+          render: (row) => (
+            <span className="text-sm tabular-nums text-slate-700 dark:text-slate-300">
+              {row.permissions_count ?? 0}
+            </span>
           ),
         },
         {
           key: "description",
           label: "Description",
-          defaultWidth: 260,
+          defaultWidth: 240,
           sortable: true,
           render: (row) => (
-            <span className="line-clamp-2 text-xs text-slate-600 dark:text-slate-400">{row.description}</span>
+            <span className="line-clamp-2 text-xs text-slate-600 dark:text-slate-400">
+              {row.description}
+            </span>
           ),
         },
         {
@@ -1507,195 +1734,157 @@ export function DataTable({
           defaultWidth: 100,
           sortable: true,
           render: (row) => (
-            <span className="text-sm text-slate-700 dark:text-slate-300">{row.type}</span>
+            <span className="text-sm text-slate-700 dark:text-slate-300">
+              {row.type}
+            </span>
           ),
         },
         actionsColumn,
-      ]
-    }
-
-    return [
-      {
-        key: "display",
-        label: "Role",
-        defaultWidth: 200,
-        sortable: true,
-        render: (row) => (
-          <span className="font-medium text-slate-900 dark:text-slate-100">{row.display}</span>
-        ),
-      },
-      {
-        key: "users_count",
-        label: "Users",
-        defaultWidth: 90,
-        sortable: true,
-        render: (row) => (
-          <span className="text-sm tabular-nums text-slate-700 dark:text-slate-300">
-            {row.users_count ?? "—"}
-          </span>
-        ),
-      },
-      {
-        key: "permissions_count",
-        label: "Permissions",
-        defaultWidth: 110,
-        sortable: true,
-        render: (row) => (
-          <span className="text-sm tabular-nums text-slate-700 dark:text-slate-300">
-            {row.permissions_count ?? 0}
-          </span>
-        ),
-      },
-      {
-        key: "description",
-        label: "Description",
-        defaultWidth: 240,
-        sortable: true,
-        render: (row) => (
-          <span className="line-clamp-2 text-xs text-slate-600 dark:text-slate-400">{row.description}</span>
-        ),
-      },
-      {
-        key: "type",
-        label: "Type",
-        defaultWidth: 100,
-        sortable: true,
-        render: (row) => (
-          <span className="text-sm text-slate-700 dark:text-slate-300">{row.type}</span>
-        ),
-      },
-      actionsColumn,
-    ]
-  }, [activeResource, canDeleteResource, openAccessControlRow, handleDelete])
+      ];
+    }, [activeResource, canDeleteResource, openAccessControlRow, handleDelete]);
 
   const handleSetPassword = async () => {
     if (!token || !targetPasswordUser) {
-      return
+      return;
     }
     if (!targetPassword.trim()) {
-      toast.error("New password is required.")
-      return
+      toast.error("New password is required.");
+      return;
     }
 
     try {
-      await onSetUserPassword(targetPasswordUser.id, targetPassword)
-      setTargetPassword("")
-      setTargetPasswordUser(null)
-      showSuccessAlert("Password updated.")
+      await onSetUserPassword(targetPasswordUser.id, targetPassword);
+      setTargetPassword("");
+      setTargetPasswordUser(null);
+      showSuccessAlert("Password updated.");
     } catch (errorObject) {
-      const message = errorObject instanceof Error ? errorObject.message : "Password update failed."
-      toast.error(message)
+      const message =
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Password update failed.";
+      toast.error(message);
     }
-  }
+  };
 
   React.useEffect(() => {
-    if (!avatarUser || !token) return
-    let cancelled = false
-    setAvatarsLoading(true)
+    if (!avatarUser || !token) return;
+    let cancelled = false;
+    setAvatarsLoading(true);
     void listDefaultAvatars(token, { status: "active" })
       .then((rows) => {
         if (!cancelled) {
-          setDefaultAvatars(rows.filter((row) => isSelectableDefaultAvatar(row)))
+          setDefaultAvatars(
+            rows.filter((row) => isSelectableDefaultAvatar(row)),
+          );
         }
       })
       .catch((errorObject) => {
         if (!cancelled) {
-          setDefaultAvatars([])
+          setDefaultAvatars([]);
           const message =
-            errorObject instanceof Error ? errorObject.message : "Failed to load avatars."
-          toast.error(message)
+            errorObject instanceof Error
+              ? errorObject.message
+              : "Failed to load avatars.";
+          toast.error(message);
         }
       })
       .finally(() => {
-        if (!cancelled) setAvatarsLoading(false)
-      })
+        if (!cancelled) setAvatarsLoading(false);
+      });
     return () => {
-      cancelled = true
-    }
-  }, [avatarUser, token])
+      cancelled = true;
+    };
+  }, [avatarUser, token]);
 
   const handleAdminTwoFactor = async () => {
-    if (!token || !twoFactorUser) return
-    setTwoFactorBusy(true)
+    if (!token || !twoFactorUser) return;
+    setTwoFactorBusy(true);
     try {
       if (twoFactorUser.mode === "enable") {
-        await enableUserTwoFactor(token, twoFactorUser.id)
+        await enableUserTwoFactor(token, twoFactorUser.id);
         showSuccessAlert(
-          "2FA required for this user. They complete setup during their next login."
-        )
+          "2FA required for this user. They complete setup during their next login.",
+        );
       } else if (twoFactorUser.mode === "force") {
-        await setUserForceTwoFactor(token, twoFactorUser.id, true)
+        await setUserForceTwoFactor(token, twoFactorUser.id, true);
         showSuccessAlert(
-          "Two-factor is now mandatory for this user until they complete setup."
-        )
+          "Two-factor is now mandatory for this user until they complete setup.",
+        );
       } else if (twoFactorUser.mode === "unforce") {
-        await setUserForceTwoFactor(token, twoFactorUser.id, false)
-        showSuccessAlert("Two-factor is no longer mandatory for this user.")
+        await setUserForceTwoFactor(token, twoFactorUser.id, false);
+        showSuccessAlert("Two-factor is no longer mandatory for this user.");
       } else {
-        await disableUserTwoFactor(token, twoFactorUser.id, twoFactorReason)
-        showSuccessAlert("2FA has been disabled for this user.")
+        await disableUserTwoFactor(token, twoFactorUser.id, twoFactorReason);
+        showSuccessAlert("2FA has been disabled for this user.");
       }
-      setTwoFactorUser(null)
-      setTwoFactorReason("")
+      setTwoFactorUser(null);
+      setTwoFactorReason("");
       if (onRefresh) {
-        await onRefresh()
+        await onRefresh();
       }
     } catch (errorObject) {
       const message =
-        errorObject instanceof Error ? errorObject.message : "Failed to update 2FA."
-      toast.error(message)
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to update 2FA.";
+      toast.error(message);
     } finally {
-      setTwoFactorBusy(false)
+      setTwoFactorBusy(false);
     }
-  }
+  };
 
   const handleAssignAvatar = async () => {
-    if (!token || !avatarUser || selectedAvatarId == null) return
-    setAvatarBusy(true)
+    if (!token || !avatarUser || selectedAvatarId == null) return;
+    setAvatarBusy(true);
     try {
-      await assignUserAvatar(token, avatarUser.id, selectedAvatarId)
-      showSuccessAlert("Avatar assigned successfully.")
-      setAvatarUser(null)
-      setSelectedAvatarId(null)
+      await assignUserAvatar(token, avatarUser.id, selectedAvatarId);
+      showSuccessAlert("Avatar assigned successfully.");
+      setAvatarUser(null);
+      setSelectedAvatarId(null);
     } catch (errorObject) {
       const message =
-        errorObject instanceof Error ? errorObject.message : "Failed to assign avatar."
-      toast.error(message)
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to assign avatar.";
+      toast.error(message);
     } finally {
-      setAvatarBusy(false)
+      setAvatarBusy(false);
     }
-  }
+  };
 
-  const sortOrder = usersQuery.sortOrder as SortOrder
-  const canPrevPage = usersQuery.page > 1
+  const sortOrder = usersQuery.sortOrder as SortOrder;
+  const canPrevPage = usersQuery.page > 1;
   const canNextPage = usersTotalPages
     ? usersQuery.page < usersTotalPages
-    : rows.length >= usersQuery.limit
+    : rows.length >= usersQuery.limit;
   const isAccessControlResource =
-    activeResource === "roles" || activeResource === "permissions"
+    activeResource === "roles" || activeResource === "permissions";
 
   React.useEffect(() => {
-    setAccessControlSearch(catalogQuery.search)
-  }, [activeResource, catalogQuery.search])
+    setAccessControlSearch(catalogQuery.search);
+  }, [activeResource, catalogQuery.search]);
 
-  const debouncedAccessControlSearch = useDebouncedValue(accessControlSearch, 400)
+  const debouncedAccessControlSearch = useDebouncedValue(
+    accessControlSearch,
+    400,
+  );
   React.useEffect(() => {
     if (activeResource !== "roles" && activeResource !== "permissions") {
-      return
+      return;
     }
     if (!onCatalogQueryChange) {
-      return
+      return;
     }
     if (debouncedAccessControlSearch === catalogQuery.search) {
-      return
+      return;
     }
-    onCatalogQueryChange({ search: debouncedAccessControlSearch, page: 1 })
+    onCatalogQueryChange({ search: debouncedAccessControlSearch, page: 1 });
   }, [
     activeResource,
     catalogQuery.search,
     debouncedAccessControlSearch,
     onCatalogQueryChange,
-  ])
+  ]);
 
   const canManageAssignments =
     hasActorPermission(actorPermissions, "users:update") ||
@@ -1703,239 +1892,262 @@ export function DataTable({
     hasActorPermission(actorPermissions, "manage_company_users") ||
     hasActorPermission(actorPermissions, "permissions:update") ||
     hasActorPermission(actorPermissions, "roles:update") ||
-    hasActorPermission(actorPermissions, "users:assign-role")
+    hasActorPermission(actorPermissions, "users:assign-role");
 
   React.useEffect(() => {
     if (!editingEntity) {
-      rolePermissionsDraftDirtyRef.current = false
-      setDetailSheetTab("general")
-      setMemberCompanyUsers([])
-      setAssignedMemberIds(new Set())
-      setRoleAssignedUsers([])
-      setMembersError(null)
-      setMembersLoading(false)
-      setMemberSearch("")
-      setMemberToAdd("")
-      setRolePermissionNamesFromApi(null)
-      setRolePermissionsLoading(false)
-      setRevokeConfirm(null)
-      setPeopleDialogOpen(false)
-      return
+      rolePermissionsDraftDirtyRef.current = false;
+      setDetailSheetTab("general");
+      setMemberCompanyUsers([]);
+      setAssignedMemberIds(new Set());
+      setRoleAssignedUsers([]);
+      setMembersError(null);
+      setMembersLoading(false);
+      setMemberSearch("");
+      setMemberToAdd("");
+      setRolePermissionNamesFromApi(null);
+      setRolePermissionsLoading(false);
+      setRevokeConfirm(null);
+      setPeopleDialogOpen(false);
+      return;
     }
-    rolePermissionsDraftDirtyRef.current = false
+    rolePermissionsDraftDirtyRef.current = false;
     // Roles open on Assigned so the people summary from GET /roles/{id}/users is visible first.
-    setDetailSheetTab("assigned")
-    setMemberSearch("")
-    setMemberToAdd("")
-    setAssignPickerQuery("")
-    setRoleAssignedUsers([])
-    setPeopleDialogOpen(false)
+    setDetailSheetTab("assigned");
+    setMemberSearch("");
+    setMemberToAdd("");
+    setAssignPickerQuery("");
+    setRoleAssignedUsers([]);
+    setPeopleDialogOpen(false);
     // Intentionally keyed on id/resource (not the whole editingEntity object) so that
     // in-place label updates don't reset the detail sheet's tab/search/picker state.
-  }, [editingEntity?.id, editingEntity?.resource])
+  }, [editingEntity?.id, editingEntity?.resource]);
 
   React.useEffect(() => {
     const needsCatalog =
       Boolean(token) &&
       (editingEntity?.resource === "roles" ||
-        (createAccessOpen && activeResource === "roles"))
+        (createAccessOpen && activeResource === "roles"));
     if (!needsCatalog) {
-      return
+      return;
     }
-    let cancelled = false
-    setPickerPermissionsLoading(true)
+    let cancelled = false;
+    setPickerPermissionsLoading(true);
     void listResource("permissions", token, { pageAll: true, pageSize: 100 })
       .then((rows) => {
         if (!cancelled) {
-          setPickerPermissions(rows)
+          setPickerPermissions(rows);
         }
       })
       .catch(() => {
         if (!cancelled) {
-          setPickerPermissions([])
+          setPickerPermissions([]);
         }
       })
       .finally(() => {
         if (!cancelled) {
-          setPickerPermissionsLoading(false)
+          setPickerPermissionsLoading(false);
         }
-      })
+      });
     return () => {
-      cancelled = true
-    }
-  }, [activeResource, createAccessOpen, editingEntity?.resource, token])
+      cancelled = true;
+    };
+  }, [activeResource, createAccessOpen, editingEntity?.resource, token]);
 
   React.useEffect(() => {
-    if (!editingEntity) return
-    if (editingEntity.resource !== "permissions" && editingEntity.resource !== "roles") return
+    if (!editingEntity) return;
+    if (
+      editingEntity.resource !== "permissions" &&
+      editingEntity.resource !== "roles"
+    )
+      return;
     if (!token) {
-      setMembersError("Sign in to load assigned users.")
-      return
+      setMembersError("Sign in to load assigned users.");
+      return;
     }
 
-    const controller = new AbortController()
-    let cancelled = false
+    const controller = new AbortController();
+    let cancelled = false;
 
     const loadMembers = async () => {
-      setMembersLoading(true)
-      setMembersError(null)
+      setMembersLoading(true);
+      setMembersError(null);
       try {
         const companyUsers = await listAllCurrentCompanyUsers(token, {
           signal: controller.signal,
-        })
-        if (cancelled) return
-        setMemberCompanyUsers(companyUsers)
+        });
+        if (cancelled) return;
+        setMemberCompanyUsers(companyUsers);
 
-        const assigned = new Set<string>()
-        const entityId = editingEntity.id
+        const assigned = new Set<string>();
+        const entityId = editingEntity.id;
 
         if (editingEntity.resource === "permissions") {
           for (const companyUser of companyUsers) {
-            const membershipId = companyUserMembershipId(companyUser)
-            if (membershipId && companyUserHasPermission(companyUser, entityId)) {
-              assigned.add(membershipId)
+            const membershipId = companyUserMembershipId(companyUser);
+            if (
+              membershipId &&
+              companyUserHasPermission(companyUser, entityId)
+            ) {
+              assigned.add(membershipId);
             }
           }
-          const permissionDetail = await getPermissionById(entityId, token).catch(() => null)
-          if (cancelled) return
+          const permissionDetail = await getPermissionById(
+            entityId,
+            token,
+          ).catch(() => null);
+          if (cancelled) return;
           if (permissionDetail && Array.isArray(permissionDetail.users)) {
-            const linkedUserIds = new Set<string>()
+            const linkedUserIds = new Set<string>();
             for (const entry of permissionDetail.users) {
               if (typeof entry === "number" || typeof entry === "string") {
-                linkedUserIds.add(String(entry))
-                continue
+                linkedUserIds.add(String(entry));
+                continue;
               }
-              const rec = asRecordValue(entry)
+              const rec = asRecordValue(entry);
               if (rec?.id !== undefined && rec.id !== null) {
-                linkedUserIds.add(String(rec.id))
+                linkedUserIds.add(String(rec.id));
               }
             }
             for (const companyUser of companyUsers) {
-              const membershipId = companyUserMembershipId(companyUser)
-              const linkedUserId = companyUserLinkedUserId(companyUser)
-              if (membershipId && linkedUserId && linkedUserIds.has(linkedUserId)) {
-                assigned.add(membershipId)
+              const membershipId = companyUserMembershipId(companyUser);
+              const linkedUserId = companyUserLinkedUserId(companyUser);
+              if (
+                membershipId &&
+                linkedUserId &&
+                linkedUserIds.has(linkedUserId)
+              ) {
+                assigned.add(membershipId);
               }
             }
           }
         } else {
           // Roles: GET /api/roles/{id}, /permissions, /users
-          let roleUsersResult: { rows: AdminRecord[] }
+          let roleUsersResult: { rows: AdminRecord[] };
           try {
             roleUsersResult = await listRoleUsers(token, entityId, {
               page: 1,
               limit: 100,
               sortBy: "created_at",
               sortOrder: "DESC",
-            })
+            });
           } catch (roleUsersError) {
             // Don't swallow silently — surface API failures for the Assigned list.
             throw roleUsersError instanceof Error
               ? roleUsersError
-              : new Error("Failed to load users assigned to this role.")
+              : new Error("Failed to load users assigned to this role.");
           }
 
           const [roleDetail, rolePermissions] = await Promise.all([
             getRoleById(entityId, token).catch(() => null),
-            listRolePermissions(token, entityId).catch(() => [] as AdminRecord[]),
-          ])
-          if (cancelled) return
+            listRolePermissions(token, entityId).catch(
+              () => [] as AdminRecord[],
+            ),
+          ]);
+          if (cancelled) return;
 
-          const permissionNames = canonicalizePermissionNames((() => {
-            if (rolePermissions.length > 0) {
-              return rolePermissionNamesFromRecord({ permissions: rolePermissions })
-            }
-            if (roleDetail) {
-              return rolePermissionNamesFromRecord(roleDetail)
-            }
-            return [] as string[]
-          })(), permissionOptionsRef.current)
+          const permissionNames = canonicalizePermissionNames(
+            (() => {
+              if (rolePermissions.length > 0) {
+                return rolePermissionNamesFromRecord({
+                  permissions: rolePermissions,
+                });
+              }
+              if (roleDetail) {
+                return rolePermissionNamesFromRecord(roleDetail);
+              }
+              return [] as string[];
+            })(),
+            permissionOptionsRef.current,
+          );
 
-          setInitialEditingRolePermissionNames(permissionNames)
+          setInitialEditingRolePermissionNames(permissionNames);
           if (!rolePermissionsDraftDirtyRef.current) {
-            setRolePermissionNamesFromApi(permissionNames)
-            setEditingRolePermissionNames(permissionNames)
+            setRolePermissionNamesFromApi(permissionNames);
+            setEditingRolePermissionNames(permissionNames);
           }
 
           if (roleDetail) {
-            const nextForm = toEntityForm(roleDetail)
-            setEditingEntityForm(nextForm)
-            setInitialEditingEntityForm(nextForm)
+            const nextForm = toEntityForm(roleDetail);
+            setEditingEntityForm(nextForm);
+            setInitialEditingEntityForm(nextForm);
           }
 
           // Primary list: render GET /api/roles/{roleId}/users rows directly.
           const fromApi = roleUsersResult.rows.map((row, index) =>
-            mapRoleApiUserToMember(row, index)
-          )
-          setRoleAssignedUsers(fromApi)
+            mapRoleApiUserToMember(row, index),
+          );
+          setRoleAssignedUsers(fromApi);
 
           const linkedUserIds = new Set(
-            fromApi.map((entry) => entry.userId).filter((id): id is string => Boolean(id))
-          )
+            fromApi
+              .map((entry) => entry.userId)
+              .filter((id): id is string => Boolean(id)),
+          );
 
           for (const companyUser of companyUsers) {
-            const membershipId = companyUserMembershipId(companyUser)
-            const linkedUserId = companyUserLinkedUserId(companyUser)
+            const membershipId = companyUserMembershipId(companyUser);
+            const linkedUserId = companyUserLinkedUserId(companyUser);
             if (
               membershipId &&
               ((linkedUserId && linkedUserIds.has(linkedUserId)) ||
                 companyUserHasRole(companyUser, entityId))
             ) {
-              assigned.add(membershipId)
+              assigned.add(membershipId);
             }
           }
         }
 
-        setAssignedMemberIds(assigned)
+        setAssignedMemberIds(assigned);
       } catch (errorObject) {
-        if (cancelled || controller.signal.aborted) return
+        if (cancelled || controller.signal.aborted) return;
         const message =
           errorObject instanceof Error
             ? errorObject.message
-            : "Failed to load assignment details."
-        setMembersError(message)
-        setMemberCompanyUsers([])
-        setAssignedMemberIds(new Set())
+            : "Failed to load assignment details.";
+        setMembersError(message);
+        setMemberCompanyUsers([]);
+        setAssignedMemberIds(new Set());
       } finally {
         if (!cancelled) {
-          setMembersLoading(false)
-          setRolePermissionsLoading(false)
+          setMembersLoading(false);
+          setRolePermissionsLoading(false);
         }
       }
-    }
+    };
 
     if (editingEntity.resource === "roles") {
-      setRolePermissionsLoading(true)
+      setRolePermissionsLoading(true);
     }
-    void loadMembers()
+    void loadMembers();
     return () => {
-      cancelled = true
-      controller.abort()
-    }
-  }, [editingEntity?.id, editingEntity?.resource, token, membersRefreshKey])
+      cancelled = true;
+      controller.abort();
+    };
+  }, [editingEntity?.id, editingEntity?.resource, token, membersRefreshKey]);
 
   const assignedMembers = React.useMemo((): AssignedMemberUser[] => {
-    const query = memberSearch.trim().toLowerCase()
+    const query = memberSearch.trim().toLowerCase();
 
     // Roles: show people returned by GET /api/roles/{roleId}/users.
     if (editingEntity?.resource === "roles") {
       return roleAssignedUsers
         .filter((row) => {
-          if (!query) return true
+          if (!query) return true;
           return `${row.name} ${row.email} ${row.status} ${row.userId ?? ""}`
             .toLowerCase()
-            .includes(query)
+            .includes(query);
         })
-        .sort((a, b) => a.name.localeCompare(b.name))
+        .sort((a, b) => a.name.localeCompare(b.name));
     }
 
     return memberCompanyUsers
       .filter((row) => {
-        const membershipId = companyUserMembershipId(row)
-        return membershipId ? assignedMemberIds.has(membershipId) : false
+        const membershipId = companyUserMembershipId(row);
+        return membershipId ? assignedMemberIds.has(membershipId) : false;
       })
       .map((row) => {
-        const membershipId = companyUserMembershipId(row) ?? ""
+        const membershipId = companyUserMembershipId(row) ?? "";
         return {
           membershipId,
           userId: companyUserLinkedUserId(row),
@@ -1943,293 +2155,342 @@ export function DataTable({
           email: companyUserEmail(row),
           status: companyUserStatus(row),
           source: row,
-        }
+        };
       })
       .filter((row) => {
-        if (!query) return true
-        return `${row.name} ${row.email} ${row.status}`.toLowerCase().includes(query)
+        if (!query) return true;
+        return `${row.name} ${row.email} ${row.status}`
+          .toLowerCase()
+          .includes(query);
       })
-      .sort((a, b) => a.name.localeCompare(b.name))
+      .sort((a, b) => a.name.localeCompare(b.name));
   }, [
     assignedMemberIds,
     editingEntity?.resource,
     memberCompanyUsers,
     memberSearch,
     roleAssignedUsers,
-  ])
+  ]);
 
   const availableMembers = React.useMemo(() => {
     const assignedUserIds = new Set(
       roleAssignedUsers
         .flatMap((entry) => [entry.userId, entry.membershipId])
-        .filter((id): id is string => Boolean(id))
-    )
+        .filter((id): id is string => Boolean(id)),
+    );
     return memberCompanyUsers
       .filter((row) => {
-        const membershipId = companyUserMembershipId(row)
-        if (!membershipId) return false
+        const membershipId = companyUserMembershipId(row);
+        if (!membershipId) return false;
         if (editingEntity?.resource === "roles") {
-          const assignUserId = resolveRoleAssignUserId(row)
-          if (assignUserId && assignedUserIds.has(assignUserId)) return false
-          if (assignedMemberIds.has(membershipId)) return false
-          return true
+          const assignUserId = resolveRoleAssignUserId(row);
+          if (assignUserId && assignedUserIds.has(assignUserId)) return false;
+          if (assignedMemberIds.has(membershipId)) return false;
+          return true;
         }
-        return !assignedMemberIds.has(membershipId)
+        return !assignedMemberIds.has(membershipId);
       })
       .map((row) => {
-        const membershipId = companyUserMembershipId(row) ?? ""
-        const name = companyUserDisplayName(row)
-        const email = companyUserEmail(row)
-        const userId = resolveRoleAssignUserId(row)
+        const membershipId = companyUserMembershipId(row) ?? "";
+        const name = companyUserDisplayName(row);
+        const email = companyUserEmail(row);
+        const userId = resolveRoleAssignUserId(row);
         return {
           membershipId,
           userId,
           name,
           email,
           label: email && email !== "—" ? `${name} · ${email}` : name,
-        }
+        };
       })
-      .sort((a, b) => a.label.localeCompare(b.label))
-  }, [assignedMemberIds, editingEntity?.resource, memberCompanyUsers, roleAssignedUsers])
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [
+    assignedMemberIds,
+    editingEntity?.resource,
+    memberCompanyUsers,
+    roleAssignedUsers,
+  ]);
 
   const selectedMemberToAdd = React.useMemo(
-    () => availableMembers.find((entry) => entry.membershipId === memberToAdd) ?? null,
-    [availableMembers, memberToAdd]
-  )
+    () =>
+      availableMembers.find((entry) => entry.membershipId === memberToAdd) ??
+      null,
+    [availableMembers, memberToAdd],
+  );
 
   const filteredAssignableMembers = React.useMemo(() => {
-    const query = assignPickerQuery.trim().toLowerCase()
-    if (!query) return availableMembers
-    const tokens = query.split(/\s+/).filter(Boolean)
+    const query = assignPickerQuery.trim().toLowerCase();
+    if (!query) return availableMembers;
+    const tokens = query.split(/\s+/).filter(Boolean);
     return availableMembers.filter((user) => {
       const haystack =
-        `${user.name} ${user.email} ${user.label} ${user.userId ?? ""} ${user.membershipId}`.toLowerCase()
-      return tokens.every((token) => haystack.includes(token))
-    })
-  }, [assignPickerQuery, availableMembers])
+        `${user.name} ${user.email} ${user.label} ${user.userId ?? ""} ${user.membershipId}`.toLowerCase();
+      return tokens.every((token) => haystack.includes(token));
+    });
+  }, [assignPickerQuery, availableMembers]);
 
-  const displayedRolePermissionNames = editingRolePermissionNames
+  const displayedRolePermissionNames = editingRolePermissionNames;
 
   const handleAssignMember = async () => {
-    if (!token || !editingEntity) return
-    if (editingEntity.resource !== "permissions" && editingEntity.resource !== "roles") return
+    if (!token || !editingEntity) return;
+    if (
+      editingEntity.resource !== "permissions" &&
+      editingEntity.resource !== "roles"
+    )
+      return;
     if (!memberToAdd) {
       toast.error(
         editingEntity.resource === "roles"
           ? "Select a user to assign this role."
-          : "Select a user to assign this permission."
-      )
-      return
+          : "Select a user to assign this permission.",
+      );
+      return;
     }
-    const membershipId = String(memberToAdd)
-    const selected = availableMembers.find((entry) => entry.membershipId === membershipId)
-    setMembersBusy(true)
+    const membershipId = String(memberToAdd);
+    const selected = availableMembers.find(
+      (entry) => entry.membershipId === membershipId,
+    );
+    setMembersBusy(true);
     try {
       if (editingEntity.resource === "permissions") {
-        await assignPermissionToCurrentCompanyUser(token, membershipId, editingEntity.id)
-        showSuccessAlert("Permission assigned to user.")
+        await assignPermissionToCurrentCompanyUser(
+          token,
+          membershipId,
+          editingEntity.id,
+        );
+        showSuccessAlert("Permission assigned to user.");
         setAssignedMemberIds((prev) => {
-          const next = new Set(prev)
-          next.add(membershipId)
-          return next
-        })
+          const next = new Set(prev);
+          next.add(membershipId);
+          return next;
+        });
       } else {
         // POST /api/roles/{roleId}/users  body: { user_id }
         const companyUser = memberCompanyUsers.find(
-          (row) => companyUserMembershipId(row) === membershipId
-        )
+          (row) => companyUserMembershipId(row) === membershipId,
+        );
         const userId =
           selected?.userId ??
           (companyUser ? resolveRoleAssignUserId(companyUser) : null) ??
-          membershipId
+          membershipId;
         if (!userId) {
           throw new Error(
-            "Could not resolve user_id for the selected person. Check that the company user has a linked account."
-          )
+            "Could not resolve user_id for the selected person. Check that the company user has a linked account.",
+          );
         }
-        await assignUserToRole(token, editingEntity.id, userId)
+        await assignUserToRole(token, editingEntity.id, userId);
         showSuccessAlert(
           selected?.name
             ? `Assigned ${selected.name} to this role.`
-            : "Role assigned to user."
-        )
+            : "Role assigned to user.",
+        );
         // Reload from GET /api/roles/{roleId}/users so the list stays accurate.
-        setMembersRefreshKey((key) => key + 1)
+        setMembersRefreshKey((key) => key + 1);
       }
-      setMemberToAdd("")
+      setMemberToAdd("");
     } catch (errorObject) {
       const message =
-        errorObject instanceof Error ? errorObject.message : "Failed to assign to user."
-      showErrorAlert(message)
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to assign to user.";
+      showErrorAlert(message);
     } finally {
-      setMembersBusy(false)
+      setMembersBusy(false);
     }
-  }
+  };
 
   const requestRevokeMember = (
     membershipId: string,
     userId?: string | null,
-    displayName?: string
+    displayName?: string,
   ) => {
-    if (!token || !editingEntity) return
-    if (editingEntity.resource !== "permissions" && editingEntity.resource !== "roles") return
+    if (!token || !editingEntity) return;
+    if (
+      editingEntity.resource !== "permissions" &&
+      editingEntity.resource !== "roles"
+    )
+      return;
     setRevokeConfirm({
       membershipId,
       userId: userId ?? null,
       displayName: displayName?.trim() || "this person",
-    })
-  }
+    });
+  };
 
   const handleConfirmRevokeMember = async () => {
-    if (!token || !editingEntity || !revokeConfirm) return
-    if (editingEntity.resource !== "permissions" && editingEntity.resource !== "roles") return
+    if (!token || !editingEntity || !revokeConfirm) return;
+    if (
+      editingEntity.resource !== "permissions" &&
+      editingEntity.resource !== "roles"
+    )
+      return;
 
-    const { membershipId, userId, displayName: personLabel } = revokeConfirm
-    setMembersBusy(true)
+    const { membershipId, userId, displayName: personLabel } = revokeConfirm;
+    setMembersBusy(true);
     try {
       if (editingEntity.resource === "permissions") {
-        await revokePermissionFromCurrentCompanyUser(token, membershipId, editingEntity.id)
-        showSuccessAlert("Permission removed from user.")
+        await revokePermissionFromCurrentCompanyUser(
+          token,
+          membershipId,
+          editingEntity.id,
+        );
+        showSuccessAlert("Permission removed from user.");
         setAssignedMemberIds((prev) => {
-          const next = new Set(prev)
-          next.delete(String(membershipId))
-          return next
-        })
+          const next = new Set(prev);
+          next.delete(String(membershipId));
+          return next;
+        });
       } else {
         // DELETE /api/roles/{roleId}/users/{userId}
-        let resolvedUserId = userId
+        let resolvedUserId = userId;
         if (!resolvedUserId) {
           const companyUser = memberCompanyUsers.find(
-            (row) => companyUserMembershipId(row) === membershipId
-          )
+            (row) => companyUserMembershipId(row) === membershipId,
+          );
           resolvedUserId = companyUser
             ? resolveRoleAssignUserId(companyUser)
-            : membershipId
+            : membershipId;
         }
         if (!resolvedUserId) {
-          throw new Error("Could not resolve user_id for this assignment.")
+          throw new Error("Could not resolve user_id for this assignment.");
         }
-        await revokeUserFromRole(token, editingEntity.id, resolvedUserId)
-        showSuccessAlert(`Removed ${personLabel} from this role.`)
-        setMembersRefreshKey((key) => key + 1)
+        await revokeUserFromRole(token, editingEntity.id, resolvedUserId);
+        showSuccessAlert(`Removed ${personLabel} from this role.`);
+        setMembersRefreshKey((key) => key + 1);
       }
-      setRevokeConfirm(null)
+      setRevokeConfirm(null);
     } catch (errorObject) {
       const message =
-        errorObject instanceof Error ? errorObject.message : "Failed to remove assignment."
-      showErrorAlert(message)
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to remove assignment.";
+      showErrorAlert(message);
     } finally {
-      setMembersBusy(false)
+      setMembersBusy(false);
     }
-  }
+  };
 
   const handleRolePermissionsChange = (nextNames: string[]) => {
     if (!editingEntity || editingEntity.resource !== "roles") {
-      return
+      return;
     }
-    rolePermissionsDraftDirtyRef.current = true
-    const canonical = canonicalizePermissionNames(nextNames, permissionOptions)
-    setEditingRolePermissionNames(canonical)
-    setRolePermissionNamesFromApi(canonical)
-  }
+    rolePermissionsDraftDirtyRef.current = true;
+    const canonical = canonicalizePermissionNames(nextNames, permissionOptions);
+    setEditingRolePermissionNames(canonical);
+    setRolePermissionNamesFromApi(canonical);
+  };
 
   const handleSaveRolePermissions = async () => {
     if (!token || !editingEntity || editingEntity.resource !== "roles") {
-      return
+      return;
     }
 
-    const previous = [...initialEditingRolePermissionNames]
-    const nextNames = [...displayedRolePermissionNames]
-    const previousSet = new Set(previous)
-    const nextSet = new Set(nextNames)
-    const toAdd = nextNames.filter((name) => !previousSet.has(name))
-    const toRemove = previous.filter((name) => !nextSet.has(name))
+    const previous = [...initialEditingRolePermissionNames];
+    const nextNames = [...displayedRolePermissionNames];
+    const previousSet = new Set(previous);
+    const nextSet = new Set(nextNames);
+    const toAdd = nextNames.filter((name) => !previousSet.has(name));
+    const toRemove = previous.filter((name) => !nextSet.has(name));
 
     if (toAdd.length === 0 && toRemove.length === 0) {
-      return
+      return;
     }
 
     const resolvePermissionId = (name: string) => {
       const option = permissionOptions.find(
-        (entry) => entry.name === name || entry.id === name || entry.label === name
-      )
+        (entry) =>
+          entry.name === name || entry.id === name || entry.label === name,
+      );
       if (!option?.id) {
-        throw new Error(`Unknown permission: ${name}`)
+        throw new Error(`Unknown permission: ${name}`);
       }
-      return option.id
-    }
+      return option.id;
+    };
 
-    const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms))
+    const sleep = (ms: number) =>
+      new Promise((resolve) => window.setTimeout(resolve, ms));
     const waitForPermissionWindow = async (gapMs: number) => {
-      const waitMs = Math.max(0, permissionMutationNextAllowedAtRef.current - Date.now())
+      const waitMs = Math.max(
+        0,
+        permissionMutationNextAllowedAtRef.current - Date.now(),
+      );
       if (waitMs > 0) {
-        await sleep(waitMs)
+        await sleep(waitMs);
       }
-      permissionMutationNextAllowedAtRef.current = Date.now() + gapMs
-    }
+      permissionMutationNextAllowedAtRef.current = Date.now() + gapMs;
+    };
     const runWithRetry = async (fn: () => Promise<unknown>, gapMs: number) => {
-      let retryDelay = Math.max(gapMs * 2, 1_500)
+      let retryDelay = Math.max(gapMs * 2, 1_500);
       for (let attempt = 0; attempt < 5; attempt += 1) {
-        await waitForPermissionWindow(gapMs)
+        await waitForPermissionWindow(gapMs);
         try {
-          return await fn()
+          return await fn();
         } catch (errorObject) {
-          const status = (errorObject as { status?: number }).status
+          const status = (errorObject as { status?: number }).status;
           if (status !== 429 || attempt === 4) {
-            throw errorObject
+            throw errorObject;
           }
-          permissionMutationNextAllowedAtRef.current = Date.now() + retryDelay
-          await sleep(retryDelay)
-          retryDelay = Math.min(Math.max(retryDelay * 2, 2_500), 10_000)
+          permissionMutationNextAllowedAtRef.current = Date.now() + retryDelay;
+          await sleep(retryDelay);
+          retryDelay = Math.min(Math.max(retryDelay * 2, 2_500), 10_000);
         }
       }
-    }
+    };
 
-    const removeOnly = toRemove.length > 0 && toAdd.length === 0
-    const addGapMs = removeOnly ? 0 : 450
-    const removeGapMs = removeOnly ? 900 : 650
+    const removeOnly = toRemove.length > 0 && toAdd.length === 0;
+    const addGapMs = removeOnly ? 0 : 450;
+    const removeGapMs = removeOnly ? 900 : 650;
 
     const tasks: Array<{ run: () => Promise<void>; isRemoval: boolean }> = [
       ...toAdd.map((name) => ({
         isRemoval: false,
         run: async () => {
           await runWithRetry(
-            () => assignPermissionToRole(token, editingEntity.id, resolvePermissionId(name)),
+            () =>
+              assignPermissionToRole(
+                token,
+                editingEntity.id,
+                resolvePermissionId(name),
+              ),
             addGapMs,
-          )
+          );
         },
       })),
       ...toRemove.map((name) => ({
         isRemoval: true,
         run: async () => {
           await runWithRetry(
-            () => revokePermissionFromRole(token, editingEntity.id, resolvePermissionId(name)),
+            () =>
+              revokePermissionFromRole(
+                token,
+                editingEntity.id,
+                resolvePermissionId(name),
+              ),
             removeGapMs,
-          )
+          );
         },
       })),
-    ]
+    ];
 
-    const batchSize = removeOnly ? 2 : 4
-    const pauseBetweenBatchesMs =
-      removeOnly ? 1_250 : 500
+    const batchSize = removeOnly ? 2 : 4;
+    const pauseBetweenBatchesMs = removeOnly ? 1_250 : 500;
 
-    setMembersBusy(true)
-    setPermissionSaveProgress({ done: 0, total: tasks.length })
-    let done = 0
+    setMembersBusy(true);
+    setPermissionSaveProgress({ done: 0, total: tasks.length });
+    let done = 0;
     try {
       for (let start = 0; start < tasks.length; start += batchSize) {
-        const batch = tasks.slice(start, start + batchSize)
+        const batch = tasks.slice(start, start + batchSize);
         for (const task of batch) {
-          await task.run()
-          done += 1
-          setPermissionSaveProgress({ done, total: tasks.length })
+          await task.run();
+          done += 1;
+          setPermissionSaveProgress({ done, total: tasks.length });
         }
         if (start + batchSize < tasks.length) {
-          await sleep(pauseBetweenBatchesMs)
+          await sleep(pauseBetweenBatchesMs);
         }
       }
-      setInitialEditingRolePermissionNames(nextNames)
+      setInitialEditingRolePermissionNames(nextNames);
       showSuccessAlert(
         toAdd.length > 0 && toRemove.length === 0
           ? toAdd.length === 1
@@ -2240,30 +2501,35 @@ export function DataTable({
               ? "Permission removed from role."
               : `${toRemove.length} permissions removed from role.`
             : "Role permissions updated.",
-      )
+      );
     } catch (errorObject) {
       try {
-        const rolePermissions = await listRolePermissions(token, editingEntity.id)
+        const rolePermissions = await listRolePermissions(
+          token,
+          editingEntity.id,
+        );
         const permissionNames = rolePermissionNamesFromRecord({
           permissions: rolePermissions,
-        })
-        setEditingRolePermissionNames(permissionNames)
-        setRolePermissionNamesFromApi(permissionNames)
-        setInitialEditingRolePermissionNames(permissionNames)
+        });
+        setEditingRolePermissionNames(permissionNames);
+        setRolePermissionNamesFromApi(permissionNames);
+        setInitialEditingRolePermissionNames(permissionNames);
       } catch {
-        setEditingRolePermissionNames(previous)
-        setRolePermissionNamesFromApi(previous)
+        setEditingRolePermissionNames(previous);
+        setRolePermissionNamesFromApi(previous);
       }
       const message =
-        errorObject instanceof Error ? errorObject.message : "Failed to update role permissions."
-      showErrorAlert(message)
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to update role permissions.";
+      showErrorAlert(message);
     } finally {
-      setMembersBusy(false)
-      setPermissionSaveProgress(null)
+      setMembersBusy(false);
+      setPermissionSaveProgress(null);
     }
-  }
+  };
 
-  const isCreatingRole = activeResource === "roles"
+  const isCreatingRole = activeResource === "roles";
   const accessControlCreateDrawer =
     canCreateResource && isAccessControlResource ? (
       <>
@@ -2280,11 +2546,11 @@ export function DataTable({
         <Dialog
           open={createAccessOpen}
           onOpenChange={(open) => {
-            setCreateAccessOpen(open)
+            setCreateAccessOpen(open);
             if (!open) {
-              setRoleForm(EMPTY_ENTITY_FORM)
-              setRolePermissionNames([])
-              setRoleKeyTouched(false)
+              setRoleForm(EMPTY_ENTITY_FORM);
+              setRolePermissionNames([]);
+              setRoleKeyTouched(false);
             }
           }}
         >
@@ -2312,7 +2578,7 @@ export function DataTable({
                     id="create-role-display"
                     value={roleForm.display_name}
                     onChange={(event) => {
-                      const displayName = event.target.value
+                      const displayName = event.target.value;
                       setRoleForm((prev) => ({
                         ...prev,
                         display_name: displayName,
@@ -2320,9 +2586,11 @@ export function DataTable({
                           isCreatingRole && !roleKeyTouched
                             ? slugifyRoleKey(displayName)
                             : prev.name,
-                      }))
+                      }));
                     }}
-                    placeholder={isCreatingRole ? "HR Manager" : "Read employees"}
+                    placeholder={
+                      isCreatingRole ? "HR Manager" : "Read employees"
+                    }
                   />
                 </div>
                 <div className="space-y-1">
@@ -2333,10 +2601,15 @@ export function DataTable({
                     id="create-role-key"
                     value={roleForm.name}
                     onChange={(event) => {
-                      setRoleKeyTouched(true)
-                      setRoleForm((prev) => ({ ...prev, name: event.target.value }))
+                      setRoleKeyTouched(true);
+                      setRoleForm((prev) => ({
+                        ...prev,
+                        name: event.target.value,
+                      }));
                     }}
-                    placeholder={isCreatingRole ? "hr_manager" : "employees:read"}
+                    placeholder={
+                      isCreatingRole ? "hr_manager" : "employees:read"
+                    }
                     className="font-mono text-xs"
                   />
                 </div>
@@ -2344,13 +2617,18 @@ export function DataTable({
               <div className="space-y-1">
                 <Label htmlFor="create-role-description" className="text-xs">
                   Description
-                  <span className="ml-1 font-normal text-slate-400">optional</span>
+                  <span className="ml-1 font-normal text-slate-400">
+                    optional
+                  </span>
                 </Label>
                 <Input
                   id="create-role-description"
                   value={roleForm.description}
                   onChange={(event) =>
-                    setRoleForm((prev) => ({ ...prev, description: event.target.value }))
+                    setRoleForm((prev) => ({
+                      ...prev,
+                      description: event.target.value,
+                    }))
                   }
                   placeholder="What this is for"
                 />
@@ -2379,223 +2657,284 @@ export function DataTable({
               >
                 Cancel
               </Button>
-              <Button type="button" disabled={loading} onClick={() => void handleCreate()}>
-                {loading ? "Creating…" : isCreatingRole ? "Create role" : "Create permission"}
+              <Button
+                type="button"
+                disabled={loading}
+                onClick={() => void handleCreate()}
+              >
+                {loading
+                  ? "Creating…"
+                  : isCreatingRole
+                    ? "Create role"
+                    : "Create permission"}
               </Button>
             </DialogFooter>
           </DialogPopup>
         </Dialog>
       </>
-    ) : null
+    ) : null;
 
   return (
     <div className="w-full flex-col justify-start gap-4">
       <div className="flex flex-col gap-2 px-3 lg:px-4">
         {!isAccessControlResource ? (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div />
-          {canCreateResource ? (
-            <Drawer>
-              <DrawerTrigger asChild>
-                <Button variant="outline" size="sm">
-                  <PlusIcon data-icon="inline-start" />
-                  <span>
-                    Create {RESOURCE_LABELS[activeResource].slice(0, -1).toLowerCase()}
-                  </span>
-                </Button>
-              </DrawerTrigger>
-              <DrawerContent>
-                <DrawerHeader>
-                  <DrawerTitle>
-                    Create {RESOURCE_LABELS[activeResource].slice(0, -1)}
-                  </DrawerTitle>
-                  <DrawerDescription>Fill in the details and submit.</DrawerDescription>
-                </DrawerHeader>
-                <div className="grid gap-3 px-4 pb-2 md:grid-cols-2">
-                {activeResource === "users" ? (
-                  <>
-                    <div className="space-y-1">
-                      <Label>First Name</Label>
-                      <Input
-                        value={createUserForm.first_name}
-                        onChange={(event) =>
-                          setCreateUserForm((prev) => ({ ...prev, first_name: event.target.value }))
-                        }
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label>Last Name</Label>
-                      <Input
-                        value={createUserForm.last_name}
-                        onChange={(event) =>
-                          setCreateUserForm((prev) => ({ ...prev, last_name: event.target.value }))
-                        }
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label>Email</Label>
-                      <Input
-                        type="email"
-                        value={createUserForm.email}
-                        onChange={(event) =>
-                          setCreateUserForm((prev) => ({ ...prev, email: event.target.value }))
-                        }
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label>Phone</Label>
-                      <Input
-                        value={createUserForm.phone}
-                        onChange={(event) =>
-                          setCreateUserForm((prev) => ({ ...prev, phone: event.target.value }))
-                        }
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label>User Number</Label>
-                      <Input
-                        value={createUserForm.user_no}
-                        onChange={(event) =>
-                          setCreateUserForm((prev) => ({ ...prev, user_no: event.target.value }))
-                        }
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label>Status</Label>
-                      <Select
-                        value={createUserForm.status}
-                        onValueChange={(value) =>
-                          setCreateUserForm((prev) => ({ ...prev, status: value ?? "active" }))
-                        }
-                      >
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Select status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="active">Active</SelectItem>
-                          <SelectItem value="inactive">Inactive</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-1 md:col-span-2">
-                      <Label>Password</Label>
-                      <Input
-                        type="password"
-                        value={createUserForm.password}
-                        onChange={(event) =>
-                          setCreateUserForm((prev) => ({ ...prev, password: event.target.value }))
-                        }
-                      />
-                    </div>
-                    <div className="space-y-2 md:col-span-2">
-                      <Label>Assign Roles</Label>
-                      <div className="flex flex-wrap gap-2">
-                        {roleOptions.map((role) => (
-                          <button
-                            key={role.id}
-                            type="button"
-                            onClick={() =>
-                              toggleRoleId(createUserForm.roleIds, role.id, (next) =>
-                                setCreateUserForm((prev) => ({ ...prev, roleIds: next }))
-                              )
-                            }
-                            className={cn(
-                              "rounded-md border px-2 py-1 text-sm",
-                              createUserForm.roleIds.includes(role.id)
-                                ? "border-primary bg-primary !text-white"
-                                : "border-border bg-background"
-                            )}
-                          >
-                            {role.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </>
-                ) : null}
-
-                {activeResource === "companies" ? (
-                  <>
-                    <div className="space-y-1">
-                      <Label>Company Name</Label>
-                      <Input
-                        value={companyForm.company_name}
-                        onChange={(event) =>
-                          setCompanyForm((prev) => ({ ...prev, company_name: event.target.value }))
-                        }
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label>Company Slug</Label>
-                      <Input
-                        value={companyForm.company_slug}
-                        onChange={(event) =>
-                          setCompanyForm((prev) => ({ ...prev, company_slug: event.target.value }))
-                        }
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label>Admin First Name</Label>
-                      <Input
-                        value={companyForm.admin_first_name}
-                        onChange={(event) =>
-                          setCompanyForm((prev) => ({ ...prev, admin_first_name: event.target.value }))
-                        }
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label>Admin Last Name</Label>
-                      <Input
-                        value={companyForm.admin_last_name}
-                        onChange={(event) =>
-                          setCompanyForm((prev) => ({ ...prev, admin_last_name: event.target.value }))
-                        }
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label>Admin Email</Label>
-                      <Input
-                        type="email"
-                        value={companyForm.admin_email}
-                        onChange={(event) =>
-                          setCompanyForm((prev) => ({ ...prev, admin_email: event.target.value }))
-                        }
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label>Admin Phone</Label>
-                      <Input
-                        value={companyForm.admin_phone}
-                        onChange={(event) =>
-                          setCompanyForm((prev) => ({ ...prev, admin_phone: event.target.value }))
-                        }
-                      />
-                    </div>
-                    <div className="space-y-1 md:col-span-2">
-                      <Label>Admin Password</Label>
-                      <Input
-                        type="password"
-                        value={companyForm.admin_password}
-                        onChange={(event) =>
-                          setCompanyForm((prev) => ({ ...prev, admin_password: event.target.value }))
-                        }
-                      />
-                    </div>
-                  </>
-                ) : null}
-                </div>
-                <DrawerFooter>
-                  <Button onClick={handleCreate} disabled={loading}>
-                    Create Record
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div />
+            {canCreateResource ? (
+              <Drawer>
+                <DrawerTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <PlusIcon data-icon="inline-start" />
+                    <span>
+                      Create{" "}
+                      {RESOURCE_LABELS[activeResource]
+                        .slice(0, -1)
+                        .toLowerCase()}
+                    </span>
                   </Button>
-                  <DrawerClose asChild>
-                    <Button variant="outline">Cancel</Button>
-                  </DrawerClose>
-                </DrawerFooter>
-              </DrawerContent>
-            </Drawer>
-          ) : null}
-        </div>
+                </DrawerTrigger>
+                <DrawerContent>
+                  <DrawerHeader>
+                    <DrawerTitle>
+                      Create {RESOURCE_LABELS[activeResource].slice(0, -1)}
+                    </DrawerTitle>
+                    <DrawerDescription>
+                      Fill in the details and submit.
+                    </DrawerDescription>
+                  </DrawerHeader>
+                  <div className="grid gap-3 px-4 pb-2 md:grid-cols-2">
+                    {activeResource === "users" ? (
+                      <>
+                        <div className="space-y-1">
+                          <Label>First Name</Label>
+                          <Input
+                            value={createUserForm.first_name}
+                            onChange={(event) =>
+                              setCreateUserForm((prev) => ({
+                                ...prev,
+                                first_name: event.target.value,
+                              }))
+                            }
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label>Last Name</Label>
+                          <Input
+                            value={createUserForm.last_name}
+                            onChange={(event) =>
+                              setCreateUserForm((prev) => ({
+                                ...prev,
+                                last_name: event.target.value,
+                              }))
+                            }
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label>Email</Label>
+                          <Input
+                            type="email"
+                            value={createUserForm.email}
+                            onChange={(event) =>
+                              setCreateUserForm((prev) => ({
+                                ...prev,
+                                email: event.target.value,
+                              }))
+                            }
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label>Phone</Label>
+                          <Input
+                            value={createUserForm.phone}
+                            onChange={(event) =>
+                              setCreateUserForm((prev) => ({
+                                ...prev,
+                                phone: event.target.value,
+                              }))
+                            }
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label>User Number</Label>
+                          <Input
+                            value={createUserForm.user_no}
+                            onChange={(event) =>
+                              setCreateUserForm((prev) => ({
+                                ...prev,
+                                user_no: event.target.value,
+                              }))
+                            }
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label>Status</Label>
+                          <Select
+                            value={createUserForm.status}
+                            onValueChange={(value) =>
+                              setCreateUserForm((prev) => ({
+                                ...prev,
+                                status: value ?? "active",
+                              }))
+                            }
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Select status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="active">Active</SelectItem>
+                              <SelectItem value="inactive">Inactive</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1 md:col-span-2">
+                          <Label>Password</Label>
+                          <Input
+                            type="password"
+                            value={createUserForm.password}
+                            onChange={(event) =>
+                              setCreateUserForm((prev) => ({
+                                ...prev,
+                                password: event.target.value,
+                              }))
+                            }
+                          />
+                        </div>
+                        <div className="space-y-2 md:col-span-2">
+                          <Label>Assign Roles</Label>
+                          <div className="flex flex-wrap gap-2">
+                            {roleOptions.map((role) => (
+                              <button
+                                key={role.id}
+                                type="button"
+                                onClick={() =>
+                                  toggleRoleId(
+                                    createUserForm.roleIds,
+                                    role.id,
+                                    (next) =>
+                                      setCreateUserForm((prev) => ({
+                                        ...prev,
+                                        roleIds: next,
+                                      })),
+                                  )
+                                }
+                                className={cn(
+                                  "rounded-md border px-2 py-1 text-sm",
+                                  createUserForm.roleIds.includes(role.id)
+                                    ? "border-primary bg-primary !text-white"
+                                    : "border-border bg-background",
+                                )}
+                              >
+                                {role.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </>
+                    ) : null}
+
+                    {activeResource === "companies" ? (
+                      <>
+                        <div className="space-y-1">
+                          <Label>Company Name</Label>
+                          <Input
+                            value={companyForm.company_name}
+                            onChange={(event) =>
+                              setCompanyForm((prev) => ({
+                                ...prev,
+                                company_name: event.target.value,
+                              }))
+                            }
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label>Company Slug</Label>
+                          <Input
+                            value={companyForm.company_slug}
+                            onChange={(event) =>
+                              setCompanyForm((prev) => ({
+                                ...prev,
+                                company_slug: event.target.value,
+                              }))
+                            }
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label>Admin First Name</Label>
+                          <Input
+                            value={companyForm.admin_first_name}
+                            onChange={(event) =>
+                              setCompanyForm((prev) => ({
+                                ...prev,
+                                admin_first_name: event.target.value,
+                              }))
+                            }
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label>Admin Last Name</Label>
+                          <Input
+                            value={companyForm.admin_last_name}
+                            onChange={(event) =>
+                              setCompanyForm((prev) => ({
+                                ...prev,
+                                admin_last_name: event.target.value,
+                              }))
+                            }
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label>Admin Email</Label>
+                          <Input
+                            type="email"
+                            value={companyForm.admin_email}
+                            onChange={(event) =>
+                              setCompanyForm((prev) => ({
+                                ...prev,
+                                admin_email: event.target.value,
+                              }))
+                            }
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label>Admin Phone</Label>
+                          <Input
+                            value={companyForm.admin_phone}
+                            onChange={(event) =>
+                              setCompanyForm((prev) => ({
+                                ...prev,
+                                admin_phone: event.target.value,
+                              }))
+                            }
+                          />
+                        </div>
+                        <div className="space-y-1 md:col-span-2">
+                          <Label>Admin Password</Label>
+                          <Input
+                            type="password"
+                            value={companyForm.admin_password}
+                            onChange={(event) =>
+                              setCompanyForm((prev) => ({
+                                ...prev,
+                                admin_password: event.target.value,
+                              }))
+                            }
+                          />
+                        </div>
+                      </>
+                    ) : null}
+                  </div>
+                  <DrawerFooter>
+                    <Button onClick={handleCreate} disabled={loading}>
+                      Create Record
+                    </Button>
+                    <DrawerClose asChild>
+                      <Button variant="outline">Cancel</Button>
+                    </DrawerClose>
+                  </DrawerFooter>
+                </DrawerContent>
+              </Drawer>
+            ) : null}
+          </div>
         ) : null}
 
         {!isAccessControlResource && activeResource === "users" ? (
@@ -2608,14 +2947,14 @@ export function DataTable({
                   value={searchInput}
                   placeholder="Search name, email, phone, user number"
                   onChange={(value) => {
-                    setSearchInput(value)
+                    setSearchInput(value);
                     if (!value) {
-                      onUsersQueryChange({ search: "" })
+                      onUsersQueryChange({ search: "" });
                     }
                   }}
                   onKeyDown={(event) => {
                     if (event.key === "Enter") {
-                      onUsersQueryChange({ search: searchInput })
+                      onUsersQueryChange({ search: searchInput });
                     }
                   }}
                 />
@@ -2627,9 +2966,9 @@ export function DataTable({
                     value={usersQuery.sortBy}
                     onValueChange={(value) => {
                       if (!value) {
-                        return
+                        return;
                       }
-                      onUsersQueryChange({ sortBy: value })
+                      onUsersQueryChange({ sortBy: value });
                     }}
                   >
                     <SelectTrigger className="w-full">
@@ -2650,9 +2989,9 @@ export function DataTable({
                     value={sortOrder}
                     onValueChange={(value) => {
                       if (!value) {
-                        return
+                        return;
                       }
-                      onUsersQueryChange({ sortOrder: value as SortOrder })
+                      onUsersQueryChange({ sortOrder: value as SortOrder });
                     }}
                   >
                     <SelectTrigger className="w-full">
@@ -2677,8 +3016,8 @@ export function DataTable({
               <Button
                 variant="ghost"
                 onClick={() => {
-                  setSearchInput("")
-                  onUsersQueryChange({ search: "" })
+                  setSearchInput("");
+                  onUsersQueryChange({ search: "" });
                 }}
                 disabled={loading}
               >
@@ -2690,375 +3029,443 @@ export function DataTable({
       </div>
 
       <div className="relative flex min-w-0 max-w-full flex-col gap-3 overflow-x-hidden overflow-y-auto px-0 sm:px-1 lg:px-2">
-          {isAccessControlResource ? (
-            <div className="space-y-2">
-              {!token ? (
-                <div className="rounded-lg border border-dashed border-slate-300 bg-white/80 p-6 text-sm text-muted-foreground">
-                  Sign in to load data.
-                </div>
-              ) : error ? (
-                <div className="rounded-lg border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700">
-                  {error}
-                </div>
-              ) : (
-                <ResizableTable
-                  key={`access-control-${activeResource}`}
-                  title={RESOURCE_LABELS[activeResource]}
-                  data={accessControlTableRows}
-                  columns={accessControlColumns}
-                  getRowId={(row, index) => row.__id || String(index + 1)}
-                  onRowSelect={(_id, row) => {
-                    if (row?.__source) {
-                      openAccessControlRow(row.__source)
-                    }
-                  }}
-                  loading={loading}
-                  itemsPerPage={
-                    activeResource === "roles"
-                      ? Math.max(filteredAccessControlRows.length, catalogQuery.limit || 20)
-                      : catalogQuery.limit || 20
+        {isAccessControlResource ? (
+          <div className="space-y-2">
+            {!token ? (
+              <div className="rounded-lg border border-dashed border-slate-300 bg-white/80 p-6 text-sm text-muted-foreground">
+                Sign in to load data.
+              </div>
+            ) : error ? (
+              <div className="rounded-lg border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700">
+                {error}
+              </div>
+            ) : (
+              <ResizableTable
+                key={`access-control-${activeResource}`}
+                title={RESOURCE_LABELS[activeResource]}
+                data={accessControlTableRows}
+                columns={accessControlColumns}
+                getRowId={(row, index) => row.__id || String(index + 1)}
+                onRowSelect={(_id, row) => {
+                  if (row?.__source) {
+                    openAccessControlRow(row.__source);
                   }
-                  page={activeResource === "roles" ? 1 : catalogQuery.page}
-                  totalPages={activeResource === "roles" ? 1 : catalogTotalPages}
-                  totalItems={
-                    activeResource === "roles"
-                      ? filteredAccessControlRows.length
-                      : catalogTotal
-                  }
-                  onPageChange={
-                    activeResource === "roles"
-                      ? undefined
-                      : (page) => onCatalogQueryChange?.({ page })
-                  }
-                  showExport={false}
-                  enableColumnVisibility
-                  enableAnimations={false}
-                  storageKey={`access-control-${activeResource}`}
-                  toolbarStart={
-                    <div className="min-w-0 flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <div className="min-w-0 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                        <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                          Access Control
-                        </span>
-                        <h2 className="truncate text-lg font-semibold tracking-tight text-foreground sm:text-xl">
-                          {RESOURCE_LABELS[activeResource]}
-                        </h2>
-                      </div>
-                      <Badge
-                        variant="outline"
-                        className="h-5 border-border bg-muted/40 px-1.5 text-[10px] text-muted-foreground"
-                      >
-                        {filteredAccessControlRows.length}
-                        {catalogTotal != null && catalogTotal !== filteredAccessControlRows.length
-                          ? ` of ${catalogTotal}`
-                          : filteredAccessControlRows.length !== rows.length
-                            ? ` of ${rows.length}`
-                            : ""}
-                      </Badge>
+                }}
+                loading={loading}
+                itemsPerPage={
+                  activeResource === "roles"
+                    ? Math.max(
+                        filteredAccessControlRows.length,
+                        catalogQuery.limit || 20,
+                      )
+                    : catalogQuery.limit || 20
+                }
+                page={activeResource === "roles" ? 1 : catalogQuery.page}
+                totalPages={activeResource === "roles" ? 1 : catalogTotalPages}
+                totalItems={
+                  activeResource === "roles"
+                    ? filteredAccessControlRows.length
+                    : catalogTotal
+                }
+                onPageChange={
+                  activeResource === "roles"
+                    ? undefined
+                    : (page) => onCatalogQueryChange?.({ page })
+                }
+                showExport={false}
+                enableColumnVisibility
+                enableAnimations={false}
+                storageKey={`access-control-${activeResource}`}
+                toolbarStart={
+                  <div className="min-w-0 flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <div className="min-w-0 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                      <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                        Access Control
+                      </span>
+                      <h2 className="truncate text-lg font-semibold tracking-tight text-foreground sm:text-xl">
+                        {RESOURCE_LABELS[activeResource]}
+                      </h2>
                     </div>
-                  }
-                  toolbarActions={
-                    <>
-                      <div className="relative">
-                        <Input
-                          value={accessControlSearch}
-                          onChange={(event) => setAccessControlSearch(event.target.value)}
-                          placeholder={
-                            activeResource === "permissions"
-                              ? "Search permissions…"
-                              : "Search roles…"
-                          }
-                          className="h-8 w-36 pr-12 text-xs sm:w-52"
-                          autoComplete="off"
-                        />
-                        {accessControlSearch.trim() ? (
-                          <button
-                            type="button"
-                            className="absolute top-1/2 right-1.5 -translate-y-1/2 rounded px-1 text-[10px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
-                            onClick={() => setAccessControlSearch("")}
-                          >
-                            Clear
-                          </button>
-                        ) : null}
-                      </div>
-                      {accessControlCreateDrawer}
-                    </>
-                  }
-                />
-              )}
-            </div>
-          ) : null}
+                    <Badge
+                      variant="outline"
+                      className="h-5 border-border bg-muted/40 px-1.5 text-[10px] text-muted-foreground"
+                    >
+                      {filteredAccessControlRows.length}
+                      {catalogTotal != null &&
+                      catalogTotal !== filteredAccessControlRows.length
+                        ? ` of ${catalogTotal}`
+                        : filteredAccessControlRows.length !== rows.length
+                          ? ` of ${rows.length}`
+                          : ""}
+                    </Badge>
+                  </div>
+                }
+                toolbarActions={
+                  <>
+                    <div className="relative">
+                      <Input
+                        value={accessControlSearch}
+                        onChange={(event) =>
+                          setAccessControlSearch(event.target.value)
+                        }
+                        placeholder={
+                          activeResource === "permissions"
+                            ? "Search permissions…"
+                            : "Search roles…"
+                        }
+                        className="h-8 w-36 pr-12 text-xs sm:w-52"
+                        autoComplete="off"
+                      />
+                      {accessControlSearch.trim() ? (
+                        <button
+                          type="button"
+                          className="absolute top-1/2 right-1.5 -translate-y-1/2 rounded px-1 text-[10px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+                          onClick={() => setAccessControlSearch("")}
+                        >
+                          Clear
+                        </button>
+                      ) : null}
+                    </div>
+                    {accessControlCreateDrawer}
+                  </>
+                }
+              />
+            )}
+          </div>
+        ) : null}
 
-          {!isAccessControlResource ? (
-            <>
-              <div className="rounded-lg border-0 bg-transparent shadow-none">
-                <Table>
-                  <TableHeader
-                    className="sticky top-0 z-10"
-                    style={{ backgroundColor: "var(--table-header-accent-bg)" }}
-                  >
-                    <TableRow>
-                      {columns.map((column) => (
-                        <TableHead key={column} style={{ color: "var(--table-header-accent)" }}>
-                          {prettifyKey(column)}
-                        </TableHead>
-                      ))}
-                      <TableHead className="w-16 text-right" style={{ color: "var(--table-header-accent)" }}>
-                        Actions
+        {!isAccessControlResource ? (
+          <>
+            <div className="rounded-lg border-0 bg-transparent shadow-none">
+              <Table>
+                <TableHeader
+                  className="sticky top-0 z-10"
+                  style={{ backgroundColor: "var(--table-header-accent-bg)" }}
+                >
+                  <TableRow>
+                    {columns.map((column) => (
+                      <TableHead
+                        key={column}
+                        style={{ color: "var(--table-header-accent)" }}
+                      >
+                        {prettifyKey(column)}
                       </TableHead>
+                    ))}
+                    <TableHead
+                      className="w-16 text-right"
+                      style={{ color: "var(--table-header-accent)" }}
+                    >
+                      Actions
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {!token ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={columns.length + 1}
+                        className="h-24 text-center text-muted-foreground"
+                      >
+                        Sign in to load data.
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {!token ? (
-                      <TableRow>
-                        <TableCell colSpan={columns.length + 1} className="h-24 text-center text-muted-foreground">
-                          Sign in to load data.
-                        </TableCell>
-                      </TableRow>
-                    ) : loading ? (
-                      <TableRow>
-                        <TableCell colSpan={columns.length + 1} className="h-24 text-center text-muted-foreground">
-                          Loading {RESOURCE_LABELS[activeResource].toLowerCase()}...
-                        </TableCell>
-                      </TableRow>
-                    ) : error ? (
-                      <TableRow>
-                        <TableCell colSpan={columns.length + 1} className="h-24 text-center text-destructive">
-                          {error}
-                        </TableCell>
-                      </TableRow>
-                    ) : rows.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={columns.length + 1} className="h-24 text-center text-muted-foreground">
-                          No records found.
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      rows.map((row, index) => {
-                        const rowId = getRowId(row, index + 1)
-                        const rowLabel = stringifyValue(row.name ?? row.email ?? rowId)
-                        const twoFactorOn = activeResource === "users" ? readTwoFactorEnabled(row) : false
-                        const twoFactorForced =
-                          activeResource === "users" ? readForceTwoFactor(row) : false
+                  ) : loading ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={columns.length + 1}
+                        className="h-24 text-center text-muted-foreground"
+                      >
+                        Loading {RESOURCE_LABELS[activeResource].toLowerCase()}
+                        ...
+                      </TableCell>
+                    </TableRow>
+                  ) : error ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={columns.length + 1}
+                        className="h-24 text-center text-destructive"
+                      >
+                        {error}
+                      </TableCell>
+                    </TableRow>
+                  ) : rows.length === 0 ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={columns.length + 1}
+                        className="h-24 text-center text-muted-foreground"
+                      >
+                        No records found.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    rows.map((row, index) => {
+                      const rowId = getRowId(row, index + 1);
+                      const rowLabel = stringifyValue(
+                        row.name ?? row.email ?? rowId,
+                      );
+                      const twoFactorOn =
+                        activeResource === "users"
+                          ? readTwoFactorEnabled(row)
+                          : false;
+                      const twoFactorForced =
+                        activeResource === "users"
+                          ? readForceTwoFactor(row)
+                          : false;
 
-                        return (
-                          <motion.tr
-                            key={`${activeResource}-${usersQuery.page}-${rowId}`}
-                            data-slot="table-row"
-                            className={cn(
-                              "border-0 transition-colors hover:bg-[color:var(--section-tab-rail-bg)] has-aria-expanded:bg-[color:var(--section-tab-rail-bg)] data-[state=selected]:bg-[color:var(--section-tab-rail-bg)]"
-                            )}
-                            initial={shouldAnimateRows ? adminTableRowHidden : false}
-                            animate={
-                              shouldAnimateRows ? adminTableRowVisible(index) : { opacity: 1 }
-                            }
-                          >
-                            {columns.map((column) => (
-                              <TableCell key={`${rowId}-${column}`}>
-                                {column === "two_factor_enabled" ||
-                                column === "is_two_factor_enabled" ||
-                                column === "twoFactorEnabled" ||
-                                column === "isTwoFactorEnabled" ? (
-                                  formatTwoFactorCell(row)
-                                ) : (
-                                  <span className="block max-w-[24rem] truncate">
-                                    {stringifyValue(row[column])}
-                                  </span>
-                                )}
-                              </TableCell>
-                            ))}
-                            <TableCell className="text-right">
-                              <DropdownMenu>
-                                <DropdownMenuTrigger
-                                  render={<Button variant="ghost" size="icon" className="size-8" />}
+                      return (
+                        <motion.tr
+                          key={`${activeResource}-${usersQuery.page}-${rowId}`}
+                          data-slot="table-row"
+                          className={cn(
+                            "border-0 transition-colors hover:bg-[color:var(--section-tab-rail-bg)] has-aria-expanded:bg-[color:var(--section-tab-rail-bg)] data-[state=selected]:bg-[color:var(--section-tab-rail-bg)]",
+                          )}
+                          initial={
+                            shouldAnimateRows ? adminTableRowHidden : false
+                          }
+                          animate={
+                            shouldAnimateRows
+                              ? adminTableRowVisible(index)
+                              : { opacity: 1 }
+                          }
+                        >
+                          {columns.map((column) => (
+                            <TableCell key={`${rowId}-${column}`}>
+                              {column === "two_factor_enabled" ||
+                              column === "is_two_factor_enabled" ||
+                              column === "twoFactorEnabled" ||
+                              column === "isTwoFactorEnabled" ? (
+                                formatTwoFactorCell(row)
+                              ) : (
+                                <span className="block max-w-[24rem] truncate">
+                                  {stringifyValue(row[column])}
+                                </span>
+                              )}
+                            </TableCell>
+                          ))}
+                          <TableCell className="text-right">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger
+                                render={
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="size-8"
+                                  />
+                                }
+                              >
+                                <EllipsisVerticalIcon />
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-52">
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    void navigator.clipboard
+                                      .writeText(JSON.stringify(row, null, 2))
+                                      .then(() => {
+                                        showSuccessAlert(
+                                          "Record details copied.",
+                                        );
+                                      })
+                                      .catch(() => {
+                                        showErrorAlert(
+                                          "Clipboard access was denied.",
+                                        );
+                                      });
+                                  }}
                                 >
-                                  <EllipsisVerticalIcon />
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-52">
+                                  <CopyIcon />
+                                  Copy Details
+                                </DropdownMenuItem>
+
+                                {activeResource === "users" &&
+                                canUpdateResource ? (
                                   <DropdownMenuItem
                                     onClick={() => {
-                                      void navigator.clipboard
-                                        .writeText(JSON.stringify(row, null, 2))
-                                        .then(() => {
-                                          showSuccessAlert("Record details copied.")
-                                        })
-                                        .catch(() => {
-                                          showErrorAlert("Clipboard access was denied.")
-                                        })
+                                      setEditingUser({
+                                        id: rowId,
+                                        label: rowLabel,
+                                      });
+                                      setEditUserForm(toUserForm(row));
                                     }}
                                   >
-                                    <CopyIcon />
-                                    Copy Details
+                                    <PencilIcon />
+                                    Edit User
                                   </DropdownMenuItem>
+                                ) : null}
 
-                                  {activeResource === "users" ? (
-                                    <DropdownMenuItem
-                                      onClick={() => {
-                                        setEditingUser({ id: rowId, label: rowLabel })
-                                        setEditUserForm(toUserForm(row))
-                                      }}
-                                    >
-                                      <PencilIcon />
-                                      Edit User
-                                    </DropdownMenuItem>
-                                  ) : null}
+                                {activeResource === "users" ? (
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setTargetPasswordUser({
+                                        id: rowId,
+                                        label: rowLabel,
+                                      });
+                                      setTargetPassword("");
+                                    }}
+                                  >
+                                    <KeyRoundIcon />
+                                    Reset Password
+                                  </DropdownMenuItem>
+                                ) : null}
 
-                                  {activeResource === "users" ? (
-                                    <DropdownMenuItem
-                                      onClick={() => {
-                                        setTargetPasswordUser({ id: rowId, label: rowLabel })
-                                        setTargetPassword("")
-                                      }}
-                                    >
-                                      <KeyRoundIcon />
-                                      Set Password
-                                    </DropdownMenuItem>
-                                  ) : null}
+                                {activeResource === "users" ? (
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setAvatarUser({
+                                        id: rowId,
+                                        label: rowLabel,
+                                      });
+                                      setSelectedAvatarId(null);
+                                    }}
+                                  >
+                                    <ImageIcon />
+                                    Assign avatar
+                                  </DropdownMenuItem>
+                                ) : null}
 
-                                  {activeResource === "users" ? (
-                                    <DropdownMenuItem
-                                      onClick={() => {
-                                        setAvatarUser({ id: rowId, label: rowLabel })
-                                        setSelectedAvatarId(null)
-                                      }}
-                                    >
-                                      <ImageIcon />
-                                      Assign avatar
-                                    </DropdownMenuItem>
-                                  ) : null}
+                                {activeResource === "users" && !twoFactorOn ? (
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setTwoFactorUser({
+                                        id: rowId,
+                                        label: rowLabel,
+                                        mode: "enable",
+                                      });
+                                      setTwoFactorReason("");
+                                    }}
+                                  >
+                                    <ShieldCheckIcon />
+                                    Enable 2FA
+                                  </DropdownMenuItem>
+                                ) : null}
 
-                                  {activeResource === "users" && !twoFactorOn ? (
-                                    <DropdownMenuItem
-                                      onClick={() => {
-                                        setTwoFactorUser({
-                                          id: rowId,
-                                          label: rowLabel,
-                                          mode: "enable",
-                                        })
-                                        setTwoFactorReason("")
-                                      }}
-                                    >
-                                      <ShieldCheckIcon />
-                                      Enable 2FA
-                                    </DropdownMenuItem>
-                                  ) : null}
+                                {activeResource === "users" && twoFactorOn ? (
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setTwoFactorUser({
+                                        id: rowId,
+                                        label: rowLabel,
+                                        mode: "disable",
+                                      });
+                                      setTwoFactorReason("");
+                                    }}
+                                  >
+                                    <ShieldOffIcon />
+                                    Disable 2FA
+                                  </DropdownMenuItem>
+                                ) : null}
 
-                                  {activeResource === "users" && twoFactorOn ? (
-                                    <DropdownMenuItem
-                                      onClick={() => {
-                                        setTwoFactorUser({
-                                          id: rowId,
-                                          label: rowLabel,
-                                          mode: "disable",
-                                        })
-                                        setTwoFactorReason("")
-                                      }}
-                                    >
-                                      <ShieldOffIcon />
-                                      Disable 2FA
-                                    </DropdownMenuItem>
-                                  ) : null}
+                                {activeResource === "users" &&
+                                !twoFactorForced ? (
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setTwoFactorUser({
+                                        id: rowId,
+                                        label: rowLabel,
+                                        mode: "force",
+                                      });
+                                      setTwoFactorReason("");
+                                    }}
+                                  >
+                                    <ShieldAlertIcon />
+                                    Require 2FA
+                                  </DropdownMenuItem>
+                                ) : null}
 
-                                  {activeResource === "users" && !twoFactorForced ? (
-                                    <DropdownMenuItem
-                                      onClick={() => {
-                                        setTwoFactorUser({
-                                          id: rowId,
-                                          label: rowLabel,
-                                          mode: "force",
-                                        })
-                                        setTwoFactorReason("")
-                                      }}
-                                    >
-                                      <ShieldAlertIcon />
-                                      Require 2FA
-                                    </DropdownMenuItem>
-                                  ) : null}
+                                {activeResource === "users" &&
+                                twoFactorForced ? (
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setTwoFactorUser({
+                                        id: rowId,
+                                        label: rowLabel,
+                                        mode: "unforce",
+                                      });
+                                      setTwoFactorReason("");
+                                    }}
+                                  >
+                                    <ShieldCheckIcon />
+                                    Make 2FA optional
+                                  </DropdownMenuItem>
+                                ) : null}
 
-                                  {activeResource === "users" && twoFactorForced ? (
-                                    <DropdownMenuItem
-                                      onClick={() => {
-                                        setTwoFactorUser({
-                                          id: rowId,
-                                          label: rowLabel,
-                                          mode: "unforce",
-                                        })
-                                        setTwoFactorReason("")
-                                      }}
-                                    >
-                                      <ShieldCheckIcon />
-                                      Make 2FA optional
-                                    </DropdownMenuItem>
-                                  ) : null}
+                                {isEditableResource(activeResource) &&
+                                (canUpdateResource || canDeleteResource) ? (
+                                  <DropdownMenuSeparator />
+                                ) : null}
+                                {isEditableResource(activeResource) &&
+                                canDeleteResource ? (
+                                  <DropdownMenuItem
+                                    variant="destructive"
+                                    onClick={() => void handleDelete(rowId)}
+                                  >
+                                    <Trash2Icon />
+                                    Delete
+                                  </DropdownMenuItem>
+                                ) : null}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
+                        </motion.tr>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </div>
 
-                                  {isEditableResource(activeResource) &&
-                                  (canUpdateResource || canDeleteResource) ? (
-                                    <DropdownMenuSeparator />
-                                  ) : null}
-                                  {isEditableResource(activeResource) && canDeleteResource ? (
-                                    <DropdownMenuItem
-                                      variant="destructive"
-                                      onClick={() => void handleDelete(rowId)}
-                                    >
-                                      <Trash2Icon />
-                                      Delete
-                                    </DropdownMenuItem>
-                                  ) : null}
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </TableCell>
-                          </motion.tr>
-                        )
-                      })
-                    )}
-                  </TableBody>
-                </Table>
+            <div className="flex items-center justify-between px-1 text-sm text-muted-foreground">
+              <div>
+                {activeResource === "users"
+                  ? `${usersTotal ?? rows.length} users found`
+                  : `${rows.length} ${RESOURCE_LABELS[activeResource].toLowerCase()} loaded`}
               </div>
+              <Badge variant="outline">{activeResource}</Badge>
+            </div>
 
+            {activeResource === "users" ? (
               <div className="flex items-center justify-between px-1 text-sm text-muted-foreground">
                 <div>
-                  {activeResource === "users"
-                    ? `${usersTotal ?? rows.length} users found`
-                    : `${rows.length} ${RESOURCE_LABELS[activeResource].toLowerCase()} loaded`}
+                  Page {usersQuery.page}
+                  {usersTotalPages ? ` of ${usersTotalPages}` : ""}
                 </div>
-                <Badge variant="outline">{activeResource}</Badge>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!canPrevPage || loading}
+                    onClick={() =>
+                      onUsersQueryChange({ page: usersQuery.page - 1 })
+                    }
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!canNextPage || loading}
+                    onClick={() =>
+                      onUsersQueryChange({ page: usersQuery.page + 1 })
+                    }
+                  >
+                    Next
+                  </Button>
+                </div>
               </div>
-
-              {activeResource === "users" ? (
-                <div className="flex items-center justify-between px-1 text-sm text-muted-foreground">
-                  <div>
-                    Page {usersQuery.page}
-                    {usersTotalPages ? ` of ${usersTotalPages}` : ""}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={!canPrevPage || loading}
-                      onClick={() => onUsersQueryChange({ page: usersQuery.page - 1 })}
-                    >
-                      Previous
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={!canNextPage || loading}
-                      onClick={() => onUsersQueryChange({ page: usersQuery.page + 1 })}
-                    >
-                      Next
-                    </Button>
-                  </div>
-                </div>
-              ) : null}
-            </>
-          ) : null}
+            ) : null}
+          </>
+        ) : null}
       </div>
 
-      <Drawer open={Boolean(editingUser)} onOpenChange={(open) => !open && setEditingUser(null)}>
+      <Drawer
+        open={Boolean(editingUser)}
+        onOpenChange={(open) => !open && setEditingUser(null)}
+      >
         <DrawerContent>
           <DrawerHeader>
             <DrawerTitle>Edit {editingUser?.label ?? "user"}</DrawerTitle>
-            <DrawerDescription>Update user details and assigned roles.</DrawerDescription>
+            <DrawerDescription>
+              Update user details and assigned roles.
+            </DrawerDescription>
           </DrawerHeader>
           <div className="grid gap-3 px-4 pb-2 md:grid-cols-2">
             <div className="space-y-1">
@@ -3066,7 +3473,10 @@ export function DataTable({
               <Input
                 value={editUserForm.first_name}
                 onChange={(event) =>
-                  setEditUserForm((prev) => ({ ...prev, first_name: event.target.value }))
+                  setEditUserForm((prev) => ({
+                    ...prev,
+                    first_name: event.target.value,
+                  }))
                 }
               />
             </div>
@@ -3075,7 +3485,10 @@ export function DataTable({
               <Input
                 value={editUserForm.last_name}
                 onChange={(event) =>
-                  setEditUserForm((prev) => ({ ...prev, last_name: event.target.value }))
+                  setEditUserForm((prev) => ({
+                    ...prev,
+                    last_name: event.target.value,
+                  }))
                 }
               />
             </div>
@@ -3085,7 +3498,10 @@ export function DataTable({
                 type="email"
                 value={editUserForm.email}
                 onChange={(event) =>
-                  setEditUserForm((prev) => ({ ...prev, email: event.target.value }))
+                  setEditUserForm((prev) => ({
+                    ...prev,
+                    email: event.target.value,
+                  }))
                 }
               />
             </div>
@@ -3094,7 +3510,10 @@ export function DataTable({
               <Input
                 value={editUserForm.phone}
                 onChange={(event) =>
-                  setEditUserForm((prev) => ({ ...prev, phone: event.target.value }))
+                  setEditUserForm((prev) => ({
+                    ...prev,
+                    phone: event.target.value,
+                  }))
                 }
               />
             </div>
@@ -3103,7 +3522,10 @@ export function DataTable({
               <Input
                 value={editUserForm.user_no}
                 onChange={(event) =>
-                  setEditUserForm((prev) => ({ ...prev, user_no: event.target.value }))
+                  setEditUserForm((prev) => ({
+                    ...prev,
+                    user_no: event.target.value,
+                  }))
                 }
               />
             </div>
@@ -3112,7 +3534,10 @@ export function DataTable({
               <Select
                 value={editUserForm.status}
                 onValueChange={(value) =>
-                  setEditUserForm((prev) => ({ ...prev, status: value ?? "active" }))
+                  setEditUserForm((prev) => ({
+                    ...prev,
+                    status: value ?? "active",
+                  }))
                 }
               >
                 <SelectTrigger className="w-full">
@@ -3133,14 +3558,14 @@ export function DataTable({
                     type="button"
                     onClick={() =>
                       toggleRoleId(editUserForm.roleIds, role.id, (next) =>
-                        setEditUserForm((prev) => ({ ...prev, roleIds: next }))
+                        setEditUserForm((prev) => ({ ...prev, roleIds: next })),
                       )
                     }
                     className={cn(
                       "rounded-md border px-2 py-1 text-sm",
                       editUserForm.roleIds.includes(role.id)
                         ? "border-primary bg-primary !text-white"
-                        : "border-border bg-background"
+                        : "border-border bg-background",
                     )}
                   >
                     {role.label}
@@ -3150,7 +3575,10 @@ export function DataTable({
             </div>
           </div>
           <DrawerFooter>
-            <Button onClick={handleSaveUserEdit} disabled={loading || !editingUser}>
+            <Button
+              onClick={handleSaveUserEdit}
+              disabled={loading || !editingUser}
+            >
               Save Changes
             </Button>
             <DrawerClose asChild>
@@ -3166,20 +3594,31 @@ export function DataTable({
       >
         <DrawerContent>
           <DrawerHeader>
-            <DrawerTitle>Set Password for {targetPasswordUser?.label ?? "user"}</DrawerTitle>
-            <DrawerDescription>Update user password</DrawerDescription>
+            <DrawerTitle>
+              Reset Password for {targetPasswordUser?.label ?? "user"}
+            </DrawerTitle>
+            <DrawerDescription>
+              Set a temporary password. This signs the user out everywhere and
+              they must change it after their next login.
+            </DrawerDescription>
           </DrawerHeader>
           <div className="space-y-1 px-4 pb-2">
-            <Label>New Password</Label>
+            <Label htmlFor="admin-reset-password">Temporary Password</Label>
             <Input
+              id="admin-reset-password"
               type="password"
               value={targetPassword}
               onChange={(event) => setTargetPassword(event.target.value)}
+              minLength={8}
+              autoComplete="new-password"
             />
           </div>
           <DrawerFooter>
-            <Button onClick={handleSetPassword} disabled={loading || !targetPasswordUser}>
-              Update Password
+            <Button
+              onClick={handleSetPassword}
+              disabled={loading || !targetPasswordUser}
+            >
+              Reset Password
             </Button>
             <DrawerClose asChild>
               <Button variant="outline">Cancel</Button>
@@ -3192,8 +3631,8 @@ export function DataTable({
         open={Boolean(twoFactorUser)}
         onOpenChange={(open) => {
           if (!open && !twoFactorBusy) {
-            setTwoFactorUser(null)
-            setTwoFactorReason("")
+            setTwoFactorUser(null);
+            setTwoFactorReason("");
           }
         }}
       >
@@ -3236,15 +3675,17 @@ export function DataTable({
               variant="outline"
               disabled={twoFactorBusy}
               onClick={() => {
-                setTwoFactorUser(null)
-                setTwoFactorReason("")
+                setTwoFactorUser(null);
+                setTwoFactorReason("");
               }}
             >
               Cancel
             </Button>
             <Button
               type="button"
-              variant={twoFactorUser?.mode === "disable" ? "destructive" : "default"}
+              variant={
+                twoFactorUser?.mode === "disable" ? "destructive" : "default"
+              }
               disabled={twoFactorBusy || !twoFactorUser}
               onClick={() => void handleAdminTwoFactor()}
             >
@@ -3266,8 +3707,8 @@ export function DataTable({
         open={Boolean(avatarUser)}
         onOpenChange={(open) => {
           if (!open && !avatarBusy) {
-            setAvatarUser(null)
-            setSelectedAvatarId(null)
+            setAvatarUser(null);
+            setSelectedAvatarId(null);
           }
         }}
       >
@@ -3275,7 +3716,8 @@ export function DataTable({
           <DialogHeader className="mb-0 border-b border-border/70 px-5 pb-3 pt-5">
             <DialogTitle>Assign avatar</DialogTitle>
             <DialogDescription>
-              Choose an active default avatar for {avatarUser?.label ?? "this user"}.
+              Choose an active default avatar for{" "}
+              {avatarUser?.label ?? "this user"}.
             </DialogDescription>
           </DialogHeader>
           <div className="max-h-[min(60vh,24rem)] overflow-y-auto px-5 py-4">
@@ -3283,20 +3725,22 @@ export function DataTable({
               <SectionLoader label="Loading avatars…" />
             ) : defaultAvatars.length === 0 ? (
               <p className="py-8 text-center text-sm text-muted-foreground">
-                No active default avatars found. Add some under Settings → Default Avatars.
+                No active default avatars found. Add some under Settings →
+                Default Avatars.
               </p>
             ) : (
               <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
                 {defaultAvatars.map((avatar, index) => {
-                  const idRaw = readDefaultAvatarId(avatar)
-                  const id = idRaw == null ? NaN : Number(idRaw)
-                  if (!Number.isFinite(id)) return null
-                  const imageUrl = extractDefaultAvatarImageUrl(avatar)
+                  const idRaw = readDefaultAvatarId(avatar);
+                  const id = idRaw == null ? NaN : Number(idRaw);
+                  if (!Number.isFinite(id)) return null;
+                  const imageUrl = extractDefaultAvatarImageUrl(avatar);
                   const name =
-                    (typeof avatar.avatar_name === "string" && avatar.avatar_name) ||
+                    (typeof avatar.avatar_name === "string" &&
+                      avatar.avatar_name) ||
                     (typeof avatar.name === "string" && avatar.name) ||
-                    `Avatar ${id}`
-                  const selected = selectedAvatarId === id
+                    `Avatar ${id}`;
+                  const selected = selectedAvatarId === id;
                   return (
                     <button
                       key={`av-${id}-${index}`}
@@ -3307,11 +3751,13 @@ export function DataTable({
                         "flex flex-col items-center gap-1.5 rounded-lg border p-2 transition-colors",
                         selected
                           ? "border-primary bg-primary/5 ring-2 ring-primary/25"
-                          : "border-border/70 hover:border-primary/40 hover:bg-muted/30"
+                          : "border-border/70 hover:border-primary/40 hover:bg-muted/30",
                       )}
                     >
                       <Avatar className="size-14 ring-1 ring-border" size="lg">
-                        {imageUrl ? <AvatarImage src={imageUrl} alt={name} /> : null}
+                        {imageUrl ? (
+                          <AvatarImage src={imageUrl} alt={name} />
+                        ) : null}
                         <AvatarFallback className="text-[10px]">
                           {name.slice(0, 2).toUpperCase()}
                         </AvatarFallback>
@@ -3320,7 +3766,7 @@ export function DataTable({
                         {name}
                       </span>
                     </button>
-                  )
+                  );
                 })}
               </div>
             )}
@@ -3331,8 +3777,8 @@ export function DataTable({
               variant="outline"
               disabled={avatarBusy}
               onClick={() => {
-                setAvatarUser(null)
-                setSelectedAvatarId(null)
+                setAvatarUser(null);
+                setSelectedAvatarId(null);
               }}
             >
               Cancel
@@ -3352,11 +3798,11 @@ export function DataTable({
         open={Boolean(editingEntity)}
         onOpenChange={(open) => {
           if (!open) {
-            setEditingEntity(null)
-            setInitialEditingEntityForm(EMPTY_ENTITY_FORM)
-            setEditingRolePermissionNames([])
-            setInitialEditingRolePermissionNames([])
-            setRolePermissionNamesFromApi(null)
+            setEditingEntity(null);
+            setInitialEditingEntityForm(EMPTY_ENTITY_FORM);
+            setEditingRolePermissionNames([]);
+            setInitialEditingRolePermissionNames([]);
+            setRolePermissionNamesFromApi(null);
           }
         }}
       >
@@ -3413,7 +3859,9 @@ export function DataTable({
                     </div>
                     <div className="space-y-1.5">
                       <Label htmlFor="entity-name">
-                        {editingEntity?.resource === "roles" ? "Name (key)" : "Name"}
+                        {editingEntity?.resource === "roles"
+                          ? "Name (key)"
+                          : "Name"}
                       </Label>
                       <Input
                         id="entity-name"
@@ -3448,7 +3896,9 @@ export function DataTable({
                         Display name
                       </p>
                       <p className="text-sm font-medium text-foreground">
-                        {editingEntityForm.display_name || editingEntity?.label || "—"}
+                        {editingEntityForm.display_name ||
+                          editingEntity?.label ||
+                          "—"}
                       </p>
                     </div>
                     {editingEntity?.resource === "roles" ? (
@@ -3466,7 +3916,8 @@ export function DataTable({
                         Description
                       </p>
                       <p className="text-sm leading-relaxed text-foreground">
-                        {editingEntityForm.description || "No description provided."}
+                        {editingEntityForm.description ||
+                          "No description provided."}
                       </p>
                     </div>
                   </>
@@ -3509,19 +3960,23 @@ export function DataTable({
                             : assignedMemberIds.size
                         } assigned`}
                   </span>
-                  {canManageAssignments && editingEntity?.resource === "roles" ? (
+                  {canManageAssignments &&
+                  editingEntity?.resource === "roles" ? (
                     <Button
                       type="button"
                       size="sm"
                       className="h-8 shrink-0"
                       disabled={membersLoading || membersBusy}
                       onClick={() => {
-                        setMemberToAdd("")
-                        setAssignPickerQuery("")
-                        setPeopleDialogOpen(true)
+                        setMemberToAdd("");
+                        setAssignPickerQuery("");
+                        setPeopleDialogOpen(true);
                       }}
                     >
-                      <UserPlusIcon className="size-3.5" data-icon="inline-start" />
+                      <UserPlusIcon
+                        className="size-3.5"
+                        data-icon="inline-start"
+                      />
                       Add
                     </Button>
                   ) : null}
@@ -3544,13 +3999,16 @@ export function DataTable({
                       }
                     />
                   ) : membersError ? (
-                    <p className="px-3 py-8 text-center text-sm text-rose-600">{membersError}</p>
+                    <p className="px-3 py-8 text-center text-sm text-rose-600">
+                      {membersError}
+                    </p>
                   ) : assignedMembers.length === 0 ? (
                     <div className="flex flex-col items-center gap-2 px-3 py-8 text-center">
                       <UsersIcon className="size-5 text-muted-foreground/60" />
                       <p className="text-xs text-muted-foreground">
                         {editingEntity?.resource === "roles"
-                          ? roleAssignedUsers.length === 0 && !memberSearch.trim()
+                          ? roleAssignedUsers.length === 0 &&
+                            !memberSearch.trim()
                             ? "No one is assigned this role yet."
                             : "No people match your search."
                           : assignedMemberIds.size === 0
@@ -3568,7 +4026,10 @@ export function DataTable({
                           className="mt-1 h-8"
                           onClick={() => setPeopleDialogOpen(true)}
                         >
-                          <UserPlusIcon className="size-3.5" data-icon="inline-start" />
+                          <UserPlusIcon
+                            className="size-3.5"
+                            data-icon="inline-start"
+                          />
                           Add person
                         </Button>
                       ) : null}
@@ -3606,7 +4067,7 @@ export function DataTable({
                                 requestRevokeMember(
                                   user.membershipId,
                                   user.userId,
-                                  user.name
+                                  user.name,
                                 )
                               }
                             >
@@ -3621,7 +4082,8 @@ export function DataTable({
               </div>
             ) : null}
 
-            {detailSheetTab === "permissions" && editingEntity?.resource === "roles" ? (
+            {detailSheetTab === "permissions" &&
+            editingEntity?.resource === "roles" ? (
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                 {membersLoading || rolePermissionsLoading ? (
                   <SectionLoader label="Loading role permissions…" />
@@ -3633,7 +4095,7 @@ export function DataTable({
                     onChange={handleRolePermissionsChange}
                     className={cn(
                       "min-h-0 flex-1",
-                      membersBusy ? "pointer-events-none opacity-70" : ""
+                      membersBusy ? "pointer-events-none opacity-70" : "",
                     )}
                   />
                 ) : (
@@ -3650,7 +4112,9 @@ export function DataTable({
           </div>
 
           <DialogFooter className="mt-0 shrink-0 border-t border-border/70 px-6 py-3">
-            {canUpdateResource && detailSheetTab === "general" && isEditingEntityDirty ? (
+            {canUpdateResource &&
+            detailSheetTab === "general" &&
+            isEditingEntityDirty ? (
               <Button
                 type="button"
                 disabled={loading || membersBusy}
@@ -3677,12 +4141,12 @@ export function DataTable({
               type="button"
               variant="outline"
               onClick={() => {
-                setEditingEntity(null)
-                setInitialEditingEntityForm(EMPTY_ENTITY_FORM)
-                setEditingRolePermissionNames([])
-                setInitialEditingRolePermissionNames([])
-                setRolePermissionNamesFromApi(null)
-                setPermissionSaveProgress(null)
+                setEditingEntity(null);
+                setInitialEditingEntityForm(EMPTY_ENTITY_FORM);
+                setEditingRolePermissionNames([]);
+                setInitialEditingRolePermissionNames([]);
+                setRolePermissionNamesFromApi(null);
+                setPermissionSaveProgress(null);
               }}
             >
               Close
@@ -3695,7 +4159,7 @@ export function DataTable({
         open={Boolean(revokeConfirm)}
         onOpenChange={(open) => {
           if (!open && !membersBusy) {
-            setRevokeConfirm(null)
+            setRevokeConfirm(null);
           }
         }}
       >
@@ -3722,7 +4186,10 @@ export function DataTable({
             >
               {membersBusy ? (
                 <>
-                  <Loader2Icon className="size-3.5 animate-spin" data-icon="inline-start" />
+                  <Loader2Icon
+                    className="size-3.5 animate-spin"
+                    data-icon="inline-start"
+                  />
                   Removing…
                 </>
               ) : (
@@ -3737,10 +4204,10 @@ export function DataTable({
       <Dialog
         open={peopleDialogOpen && editingEntity?.resource === "roles"}
         onOpenChange={(open) => {
-          setPeopleDialogOpen(open)
+          setPeopleDialogOpen(open);
           if (!open) {
-            setMemberToAdd("")
-            setAssignPickerQuery("")
+            setMemberToAdd("");
+            setAssignPickerQuery("");
           }
         }}
       >
@@ -3767,7 +4234,9 @@ export function DataTable({
                   : "Search people to assign…"
               }
               className="h-8 shrink-0 text-xs"
-              disabled={membersBusy || membersLoading || availableMembers.length === 0}
+              disabled={
+                membersBusy || membersLoading || availableMembers.length === 0
+              }
               autoFocus
             />
             {selectedMemberToAdd ? (
@@ -3794,7 +4263,7 @@ export function DataTable({
               ) : (
                 <ul className="divide-y divide-border/50">
                   {filteredAssignableMembers.map((user) => {
-                    const selected = user.membershipId === memberToAdd
+                    const selected = user.membershipId === memberToAdd;
                     return (
                       <li key={user.membershipId}>
                         <button
@@ -3803,7 +4272,9 @@ export function DataTable({
                           onClick={() => setMemberToAdd(user.membershipId)}
                           className={cn(
                             "flex w-full items-start gap-2 px-2.5 py-2 text-left transition-colors",
-                            selected ? "bg-primary/10 text-foreground" : "hover:bg-muted/50"
+                            selected
+                              ? "bg-primary/10 text-foreground"
+                              : "hover:bg-muted/50",
                           )}
                         >
                           <span
@@ -3811,7 +4282,7 @@ export function DataTable({
                               "mt-0.5 flex size-3.5 shrink-0 items-center justify-center rounded-full border",
                               selected
                                 ? "border-primary bg-primary !text-white"
-                                : "border-border"
+                                : "border-border",
                             )}
                           >
                             {selected ? (
@@ -3830,7 +4301,7 @@ export function DataTable({
                           </span>
                         </button>
                       </li>
-                    )
+                    );
                   })}
                 </ul>
               )}
@@ -3853,7 +4324,10 @@ export function DataTable({
             >
               {membersBusy ? (
                 <>
-                  <Loader2Icon className="size-3.5 animate-spin" data-icon="inline-start" />
+                  <Loader2Icon
+                    className="size-3.5 animate-spin"
+                    data-icon="inline-start"
+                  />
                   Assigning…
                 </>
               ) : (
@@ -3867,5 +4341,5 @@ export function DataTable({
         </DialogPopup>
       </Dialog>
     </div>
-  )
+  );
 }

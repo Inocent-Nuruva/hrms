@@ -276,15 +276,9 @@ export type NotificationPreferenceType =
   | "ATTENDANCE_CORRECTION"
   | "SYSTEM_ALERT";
 export type NotificationDeliveryStatus =
-  | "PENDING"
-  | "DELIVERED"
-  | "FAILED"
-  | "SKIPPED";
+  "PENDING" | "DELIVERED" | "FAILED" | "SKIPPED";
 export type NotificationMailLogStatus =
-  | "PENDING"
-  | "SENT"
-  | "SKIPPED"
-  | "FAILED";
+  "PENDING" | "SENT" | "SKIPPED" | "FAILED";
 
 export type NotificationItem = AdminRecord & {
   id?: number | string;
@@ -1450,7 +1444,10 @@ function buildNotificationDeliveriesQuery(
   if (params.status) {
     searchParams.set("status", params.status);
   }
-  if (typeof params.notification_id === "number" && params.notification_id > 0) {
+  if (
+    typeof params.notification_id === "number" &&
+    params.notification_id > 0
+  ) {
     searchParams.set("notification_id", String(params.notification_id));
   }
   if (
@@ -1475,7 +1472,9 @@ function buildNotificationDeliveriesQuery(
   return query ? `?${query}` : "";
 }
 
-function buildNotificationMailLogsQuery(params: NotificationMailLogQueryParams) {
+function buildNotificationMailLogsQuery(
+  params: NotificationMailLogQueryParams,
+) {
   const searchParams = new URLSearchParams();
   if (typeof params.page === "number" && params.page > 0) {
     searchParams.set("page", String(params.page));
@@ -2558,7 +2557,10 @@ function parseRetryAfterMs(header: string | null): number | null {
   }
   const asDate = Date.parse(trimmed);
   if (Number.isFinite(asDate)) {
-    return Math.min(Math.max(asDate - Date.now(), 0), GET_THROTTLE_RETRY_CAP_MS);
+    return Math.min(
+      Math.max(asDate - Date.now(), 0),
+      GET_THROTTLE_RETRY_CAP_MS,
+    );
   }
   return null;
 }
@@ -2807,7 +2809,9 @@ function roleCatalogHaystack(row: AdminRecord): string {
     row.id,
   ];
   return parts
-    .filter((value) => value !== null && value !== undefined && String(value).trim())
+    .filter(
+      (value) => value !== null && value !== undefined && String(value).trim(),
+    )
     .join(" ")
     .toLowerCase();
 }
@@ -2815,7 +2819,9 @@ function roleCatalogHaystack(row: AdminRecord): string {
 function normalizeRoleCatalog(payload: unknown): AdminRecord[] {
   const record = asRecord(payload);
   const nested = record
-    ? (asRecord(record.data) ?? asRecord(record.result) ?? asRecord(record.payload))
+    ? (asRecord(record.data) ??
+      asRecord(record.result) ??
+      asRecord(record.payload))
     : null;
   for (const candidate of [record, nested]) {
     if (!candidate) continue;
@@ -4004,7 +4010,10 @@ export async function getEmployeeNumbering(token: string) {
   return normalizeSingle(payload);
 }
 
-export async function updateEmployeeNumbering(token: string, data: AdminRecord) {
+export async function updateEmployeeNumbering(
+  token: string,
+  data: AdminRecord,
+) {
   const payload = await adminRequest<unknown>("/api/employee-numbering", {
     method: "PUT",
     token,
@@ -5385,10 +5394,7 @@ export async function syncAccessControlDeviceDoors(
 }
 
 export type AccessDoorLiveCommand =
-  | "open"
-  | "close"
-  | "always-open"
-  | "always-close";
+  "open" | "close" | "always-open" | "always-close";
 
 export async function commandAccessControlDoor(
   token: string,
@@ -5416,10 +5422,13 @@ export async function syncAccessControlDoorToDevice(
   token: string,
   id: string | number,
 ) {
-  return adminRequest<unknown>(`/api/access-control/doors/${id}/sync-to-device`, {
-    method: "POST",
-    token,
-  });
+  return adminRequest<unknown>(
+    `/api/access-control/doors/${id}/sync-to-device`,
+    {
+      method: "POST",
+      token,
+    },
+  );
 }
 
 export async function syncAccessControlDeviceTemplates(
@@ -5438,18 +5447,9 @@ export async function syncAccessControlDeviceTemplates(
 export type AccessScheduleType = "DOOR" | "ATTENDANCE" | "MIXED";
 export type AccessScheduleTemplateStatus = "ACTIVE" | "INACTIVE";
 export type AccessCredentialType =
-  | "CARD"
-  | "FINGERPRINT"
-  | "FACE"
-  | "PASSWORD"
-  | "QR"
-  | "PIN";
+  "CARD" | "FINGERPRINT" | "FACE" | "PASSWORD" | "QR" | "PIN";
 export type AccessCredentialStatus =
-  | "ACTIVE"
-  | "INACTIVE"
-  | "LOST"
-  | "BLOCKED"
-  | "DELETED";
+  "ACTIVE" | "INACTIVE" | "LOST" | "BLOCKED" | "DELETED";
 export type AccessAuditLogStatus = "PENDING" | "SUCCESS" | "FAILED";
 export type HikvisionSyncLogStatus = "SUCCESS" | "FAILED" | "PARTIAL";
 export type HikvisionSyncDirection = "PULL" | "PUSH";
@@ -5993,7 +5993,11 @@ export async function listAccessCredentials(
     { token },
   );
   const rows = normalizeList(payload);
-  const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit);
+  const pagination = extractUsersPagination(
+    payload,
+    fallbackPage,
+    fallbackLimit,
+  );
   return { rows, ...pagination };
 }
 
@@ -6048,7 +6052,11 @@ export async function listEmployeeAccessCredentials(
     { token },
   );
   const rows = normalizeList(payload);
-  const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit);
+  const pagination = extractUsersPagination(
+    payload,
+    fallbackPage,
+    fallbackLimit,
+  );
   return { rows, ...pagination };
 }
 
@@ -6064,7 +6072,11 @@ export async function listAccessAuditLogs(
     { token },
   );
   const rows = normalizeList(payload);
-  const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit);
+  const pagination = extractUsersPagination(
+    payload,
+    fallbackPage,
+    fallbackLimit,
+  );
   return { rows, ...pagination };
 }
 
@@ -6091,7 +6103,11 @@ export async function listAccessDeviceCommandLogs(
     { token },
   );
   const rows = normalizeList(payload);
-  const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit);
+  const pagination = extractUsersPagination(
+    payload,
+    fallbackPage,
+    fallbackLimit,
+  );
   return { rows, ...pagination };
 }
 
@@ -6119,7 +6135,11 @@ export async function listAccessDeviceAuditLogs(
     { token },
   );
   const rows = normalizeList(payload);
-  const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit);
+  const pagination = extractUsersPagination(
+    payload,
+    fallbackPage,
+    fallbackLimit,
+  );
   return { rows, ...pagination };
 }
 
@@ -6136,7 +6156,11 @@ export async function listAccessDeviceScopedCommandLogs(
     { token },
   );
   const rows = normalizeList(payload);
-  const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit);
+  const pagination = extractUsersPagination(
+    payload,
+    fallbackPage,
+    fallbackLimit,
+  );
   return { rows, ...pagination };
 }
 
@@ -6153,7 +6177,11 @@ export async function listAccessEmployeeAuditLogs(
     { token },
   );
   const rows = normalizeList(payload);
-  const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit);
+  const pagination = extractUsersPagination(
+    payload,
+    fallbackPage,
+    fallbackLimit,
+  );
   return { rows, ...pagination };
 }
 
@@ -6169,7 +6197,11 @@ export async function listHikvisionSyncLogs(
     { token },
   );
   const rows = normalizeList(payload);
-  const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit);
+  const pagination = extractUsersPagination(
+    payload,
+    fallbackPage,
+    fallbackLimit,
+  );
   return { rows, ...pagination };
 }
 
@@ -6295,7 +6327,9 @@ export async function listEmployeePositions(
   return { rows, ...pagination };
 }
 
-function buildEmployeeMovementsQuery(params: EmployeeMovementsQueryParams = {}) {
+function buildEmployeeMovementsQuery(
+  params: EmployeeMovementsQueryParams = {},
+) {
   const searchParams = new URLSearchParams();
 
   if (typeof params.page === "number" && params.page > 0) {
@@ -6323,9 +6357,12 @@ export async function listEmployeeMovements(
   params: EmployeeMovementsQueryParams = {},
 ) {
   const query = buildEmployeeMovementsQuery(params);
-  const payload = await adminRequest<unknown>(`/api/employee-movements${query}`, {
-    token,
-  });
+  const payload = await adminRequest<unknown>(
+    `/api/employee-movements${query}`,
+    {
+      token,
+    },
+  );
   return normalizeList(payload);
 }
 
@@ -6411,7 +6448,10 @@ export async function returnEmployeeMovement(
   });
 }
 
-export async function applyEmployeeMovement(token: string, id: string | number) {
+export async function applyEmployeeMovement(
+  token: string,
+  id: string | number,
+) {
   return adminRequest<unknown>(`/api/employee-movements/${id}/apply`, {
     method: "POST",
     token,
@@ -6699,17 +6739,11 @@ export async function removeAccessGroupDevice(
   );
 }
 
-export async function syncAccessGroup(
-  token: string,
-  groupId: string | number,
-) {
-  return adminRequest<unknown>(
-    `/api/access-control/groups/${groupId}/sync`,
-    {
-      method: "POST",
-      token,
-    },
-  );
+export async function syncAccessGroup(token: string, groupId: string | number) {
+  return adminRequest<unknown>(`/api/access-control/groups/${groupId}/sync`, {
+    method: "POST",
+    token,
+  });
 }
 
 export async function assignAccessGroupDoors(
@@ -7540,9 +7574,12 @@ export async function createMyLeaveRequest(token: string, data: AdminRecord) {
 }
 
 export async function listMyNotificationPreferences(token: string) {
-  const payload = await adminRequest<unknown>("/api/me/notifications/preferences", {
-    token,
-  });
+  const payload = await adminRequest<unknown>(
+    "/api/me/notifications/preferences",
+    {
+      token,
+    },
+  );
   return normalizeList(payload) as NotificationPreference[];
 }
 
@@ -7550,11 +7587,14 @@ export async function setMyNotificationPreference(
   token: string,
   data: SetMyNotificationPreferenceInput,
 ) {
-  const payload = await adminRequest<unknown>("/api/me/notifications/preferences", {
-    method: "POST",
-    token,
-    body: data,
-  });
+  const payload = await adminRequest<unknown>(
+    "/api/me/notifications/preferences",
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
+  );
   return (normalizeSingle(payload) as NotificationPreference | null) ?? null;
 }
 
@@ -7638,7 +7678,9 @@ async function downloadAdminBlob(
         payload = { message: text };
       }
     }
-    const error = new Error(extractMessage(payload, response.status)) as Error & {
+    const error = new Error(
+      extractMessage(payload, response.status),
+    ) as Error & {
       status?: number;
     };
     error.status = response.status;
@@ -7646,10 +7688,14 @@ async function downloadAdminBlob(
   }
   const blob = await response.blob();
   const disposition = response.headers.get("content-disposition") ?? "";
-  const filenameMatch = disposition.match(/filename\*?=(?:UTF-8''|"?)([^";]+)/i);
+  const filenameMatch = disposition.match(
+    /filename\*?=(?:UTF-8''|"?)([^";]+)/i,
+  );
   return {
     blob,
-    filename: filenameMatch?.[1] ? decodeURIComponent(filenameMatch[1]) : fallbackName,
+    filename: filenameMatch?.[1]
+      ? decodeURIComponent(filenameMatch[1])
+      : fallbackName,
     contentType: response.headers.get("content-type"),
   };
 }
@@ -7805,7 +7851,9 @@ export async function uploadMyProfileChangePhoto(token: string, file: File) {
   const payload = parseResponseBodyText(text, contentType);
 
   if (!response.ok) {
-    const error = new Error(extractMessage(payload, response.status)) as Error & {
+    const error = new Error(
+      extractMessage(payload, response.status),
+    ) as Error & {
       status?: number;
       payload?: unknown;
     };
@@ -7855,11 +7903,14 @@ export async function approveHrProfileChangeRequest(
   id: string | number,
   data: AdminRecord = {},
 ) {
-  return adminRequest<unknown>(`/api/hr/profile-change-requests/${id}/approve`, {
-    method: "POST",
-    token,
-    body: data,
-  });
+  return adminRequest<unknown>(
+    `/api/hr/profile-change-requests/${id}/approve`,
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
+  );
 }
 
 export async function rejectHrProfileChangeRequest(
@@ -7943,7 +7994,9 @@ export async function downloadMyPayslip(
         payload = { message: text };
       }
     }
-    const error = new Error(extractMessage(payload, response.status)) as Error & {
+    const error = new Error(
+      extractMessage(payload, response.status),
+    ) as Error & {
       status?: number;
       payload?: unknown;
     };
@@ -8126,7 +8179,10 @@ export async function adjustLeaveBalance(
   });
 }
 
-export async function generateLeaveBalances(token: string, data: AdminRecord = {}) {
+export async function generateLeaveBalances(
+  token: string,
+  data: AdminRecord = {},
+) {
   return adminRequest<unknown>("/api/leave/balances/generate", {
     method: "POST",
     token,
@@ -8452,9 +8508,7 @@ export async function downloadLeaveRequestDocument(
     /filename\*=UTF-8''([^;]+)|filename=\"?([^\";]+)\"?/i,
   );
   const rawFilename =
-    filenameMatch?.[1] ??
-    filenameMatch?.[2] ??
-    `leave-document-${documentId}`;
+    filenameMatch?.[1] ?? filenameMatch?.[2] ?? `leave-document-${documentId}`;
   const filename = decodeURIComponent(rawFilename);
 
   return {
@@ -8955,7 +9009,9 @@ export async function listMyOnboardingRequests(
   token: string,
 ): Promise<AdminRecord[]> {
   try {
-    const payload = await adminRequest<unknown>("/api/me/onboarding", { token });
+    const payload = await adminRequest<unknown>("/api/me/onboarding", {
+      token,
+    });
     return normalizeList(payload);
   } catch (error) {
     if (isForbiddenOrMissingError(error)) return [];
@@ -9500,7 +9556,9 @@ export async function listMyOffboardingRequests(
   token: string,
 ): Promise<AdminRecord[]> {
   try {
-    const payload = await adminRequest<unknown>("/api/me/offboarding", { token });
+    const payload = await adminRequest<unknown>("/api/me/offboarding", {
+      token,
+    });
     return normalizeList(payload);
   } catch (error) {
     if (isForbiddenOrMissingError(error)) return [];
@@ -10469,9 +10527,7 @@ export function extractBackupCodes(payload: unknown): string[] {
 
   for (const value of candidates) {
     if (Array.isArray(value)) {
-      return value
-        .map((entry) => String(entry ?? "").trim())
-        .filter(Boolean);
+      return value.map((entry) => String(entry ?? "").trim()).filter(Boolean);
     }
     if (typeof value === "string" && value.trim()) {
       return value
@@ -10491,11 +10547,14 @@ export function extractBackupCodes(payload: unknown): string[] {
 export async function listMyProfileAvatarOptions(
   token: string,
 ): Promise<AdminRecord[]> {
-  const payload = await adminRequest<unknown>("/api/me/profile/avatar-options", {
-    token,
-    cacheTtlMs: 0,
-    dedupe: false,
-  });
+  const payload = await adminRequest<unknown>(
+    "/api/me/profile/avatar-options",
+    {
+      token,
+      cacheTtlMs: 0,
+      dedupe: false,
+    },
+  );
   return normalizeList(payload);
 }
 
@@ -10506,11 +10565,14 @@ export async function listMyProfileAvatarOptions(
 export async function listMyAvailableAvatars(
   token: string,
 ): Promise<AdminRecord[]> {
-  const payload = await adminRequest<unknown>("/api/users/me/available-avatars", {
-    token,
-    cacheTtlMs: 0,
-    dedupe: false,
-  });
+  const payload = await adminRequest<unknown>(
+    "/api/users/me/available-avatars",
+    {
+      token,
+      cacheTtlMs: 0,
+      dedupe: false,
+    },
+  );
   return normalizeList(payload);
 }
 
@@ -10587,7 +10649,9 @@ function asPlainRecord(value: unknown): AdminRecord | null {
 
 function isEmployeeDashboardRecord(value: unknown): value is AdminRecord {
   const record = asPlainRecord(value);
-  return Boolean(record && asPlainRecord(record.user) && asPlainRecord(record.employee));
+  return Boolean(
+    record && asPlainRecord(record.user) && asPlainRecord(record.employee),
+  );
 }
 
 function looksLikeEmployeeDashboardEnvelope(record: AdminRecord) {
@@ -10648,7 +10712,9 @@ export async function getMyDashboard(token: string) {
 }
 
 export async function getEmployeeDashboard(token: string) {
-  const payload = await adminRequest<unknown>("/api/dashboards/employee", { token });
+  const payload = await adminRequest<unknown>("/api/dashboards/employee", {
+    token,
+  });
   return unwrapEmployeeDashboardPayload(payload);
 }
 
@@ -11602,6 +11668,18 @@ export async function updateUserById(
 }
 
 /** PATCH /api/users/{id}/avatar — assign an active default avatar to a user. */
+export async function resetUserPassword(
+  token: string,
+  userId: string | number,
+  newPassword: string,
+) {
+  return adminRequest<unknown>(`/api/users/${userId}/reset-password`, {
+    method: "POST",
+    token,
+    body: { new_password: newPassword },
+  });
+}
+
 export async function assignUserAvatar(
   token: string,
   userId: string | number,
@@ -12508,9 +12586,9 @@ function looksLikeScheduledReportingRecord(
   }
   return Boolean(
     asRecord(record.reportDefinition) ||
-      asRecord(record.report_definition) ||
-      asRecord(record.smtpConfiguration) ||
-      asRecord(record.smtp_configuration),
+    asRecord(record.report_definition) ||
+    asRecord(record.smtpConfiguration) ||
+    asRecord(record.smtp_configuration),
   );
 }
 
@@ -12576,9 +12654,7 @@ function unwrapScheduledReportingCandidate(
 function normalizeScheduledReportingRecord(
   payload: unknown,
 ): AdminRecord | null {
-  return (
-    unwrapScheduledReportingCandidate(payload) ?? normalizeSingle(payload)
-  );
+  return unwrapScheduledReportingCandidate(payload) ?? normalizeSingle(payload);
 }
 
 async function listScheduledReportingCollection(
@@ -12955,7 +13031,10 @@ function buildPayrollQuery(params: PayrollListParams = {}) {
   if (params.search?.trim()) {
     searchParams.set("search", params.search.trim());
   }
-  if (typeof params.employee_id === "number" && Number.isFinite(params.employee_id)) {
+  if (
+    typeof params.employee_id === "number" &&
+    Number.isFinite(params.employee_id)
+  ) {
     searchParams.set("employee_id", String(params.employee_id));
   }
   if (
@@ -12978,18 +13057,28 @@ async function listPayrollCollection(
 ): Promise<PaginatedUsersResult> {
   const fallbackPage = params.page && params.page > 0 ? params.page : 1;
   const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20;
-  const payload = await adminRequest<unknown>(`${path}${buildPayrollQuery(params)}`, {
-    token,
-  });
+  const payload = await adminRequest<unknown>(
+    `${path}${buildPayrollQuery(params)}`,
+    {
+      token,
+    },
+  );
   const rows = normalizeList(payload);
-  const pagination = extractUsersPagination(payload, fallbackPage, fallbackLimit);
+  const pagination = extractUsersPagination(
+    payload,
+    fallbackPage,
+    fallbackLimit,
+  );
   return { rows, ...pagination };
 }
 
 export async function getPayrollDashboard(token: string) {
-  const payload = await adminRequest<unknown>("/api/payroll/reports/dashboard", {
-    token,
-  });
+  const payload = await adminRequest<unknown>(
+    "/api/payroll/reports/dashboard",
+    {
+      token,
+    },
+  );
   return normalizeSingle(payload) ?? asRecord(payload);
 }
 
@@ -13028,20 +13117,14 @@ export async function listPayrollRuns(
   return listPayrollCollection("/api/payroll/runs", token, params);
 }
 
-export async function getPayrollRun(
-  token: string,
-  id: string | number,
-) {
+export async function getPayrollRun(token: string, id: string | number) {
   const payload = await adminRequest<unknown>(`/api/payroll/runs/${id}`, {
     token,
   });
   return normalizeSingle(payload);
 }
 
-export async function createPayrollRun(
-  token: string,
-  data: AdminRecord,
-) {
+export async function createPayrollRun(token: string, data: AdminRecord) {
   return adminRequest<unknown>("/api/payroll/runs", {
     method: "POST",
     token,
@@ -13049,14 +13132,14 @@ export async function createPayrollRun(
   });
 }
 
-export async function processPayrollRun(
-  token: string,
-  id: string | number,
-) {
-  const payload = await adminRequest<unknown>(`/api/payroll/runs/${id}/process`, {
-    method: "POST",
-    token,
-  });
+export async function processPayrollRun(token: string, id: string | number) {
+  const payload = await adminRequest<unknown>(
+    `/api/payroll/runs/${id}/process`,
+    {
+      method: "POST",
+      token,
+    },
+  );
   return normalizeSingle(payload) ?? asRecord(payload);
 }
 
@@ -13065,18 +13148,18 @@ export async function approvePayrollRun(
   id: string | number,
   data: AdminRecord,
 ) {
-  const payload = await adminRequest<unknown>(`/api/payroll/runs/${id}/approve`, {
-    method: "POST",
-    token,
-    body: data,
-  });
+  const payload = await adminRequest<unknown>(
+    `/api/payroll/runs/${id}/approve`,
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
+  );
   return normalizeSingle(payload) ?? asRecord(payload);
 }
 
-export async function lockPayrollRun(
-  token: string,
-  id: string | number,
-) {
+export async function lockPayrollRun(token: string, id: string | number) {
   const payload = await adminRequest<unknown>(`/api/payroll/runs/${id}/lock`, {
     method: "POST",
     token,
@@ -13091,10 +13174,7 @@ export async function listPayrollInputs(
   return listPayrollCollection("/api/payroll/inputs", token, params);
 }
 
-export async function createPayrollInput(
-  token: string,
-  data: AdminRecord,
-) {
+export async function createPayrollInput(token: string, data: AdminRecord) {
   return adminRequest<unknown>("/api/payroll/inputs", {
     method: "POST",
     token,
@@ -13102,14 +13182,14 @@ export async function createPayrollInput(
   });
 }
 
-export async function approvePayrollInput(
-  token: string,
-  id: string | number,
-) {
-  const payload = await adminRequest<unknown>(`/api/payroll/inputs/${id}/approve`, {
-    method: "POST",
-    token,
-  });
+export async function approvePayrollInput(token: string, id: string | number) {
+  const payload = await adminRequest<unknown>(
+    `/api/payroll/inputs/${id}/approve`,
+    {
+      method: "POST",
+      token,
+    },
+  );
   return normalizeSingle(payload) ?? asRecord(payload);
 }
 
@@ -13117,7 +13197,11 @@ export async function listEmployeePayrollProfiles(
   token: string,
   params: PayrollListParams = {},
 ) {
-  return listPayrollCollection("/api/payroll/employees/profiles", token, params);
+  return listPayrollCollection(
+    "/api/payroll/employees/profiles",
+    token,
+    params,
+  );
 }
 
 export async function upsertEmployeePayrollProfile(
@@ -13132,16 +13216,16 @@ export async function upsertEmployeePayrollProfile(
 }
 
 export async function listPayrollPeriods(token: string) {
-  const payload = await adminRequest<unknown>("/api/payroll/configuration/periods", {
-    token,
-  });
+  const payload = await adminRequest<unknown>(
+    "/api/payroll/configuration/periods",
+    {
+      token,
+    },
+  );
   return normalizeList(payload);
 }
 
-export async function generatePayrollPeriod(
-  token: string,
-  data: AdminRecord,
-) {
+export async function generatePayrollPeriod(token: string, data: AdminRecord) {
   return adminRequest<unknown>("/api/payroll/configuration/periods/generate", {
     method: "POST",
     token,
@@ -13150,16 +13234,16 @@ export async function generatePayrollPeriod(
 }
 
 export async function listPayrollComponents(token: string) {
-  const payload = await adminRequest<unknown>("/api/payroll/configuration/components", {
-    token,
-  });
+  const payload = await adminRequest<unknown>(
+    "/api/payroll/configuration/components",
+    {
+      token,
+    },
+  );
   return normalizeList(payload);
 }
 
-export async function createPayrollComponent(
-  token: string,
-  data: AdminRecord,
-) {
+export async function createPayrollComponent(token: string, data: AdminRecord) {
   return adminRequest<unknown>("/api/payroll/configuration/components", {
     method: "POST",
     token,
@@ -13168,16 +13252,16 @@ export async function createPayrollComponent(
 }
 
 export async function listPayrollCalendars(token: string) {
-  const payload = await adminRequest<unknown>("/api/payroll/configuration/calendars", {
-    token,
-  });
+  const payload = await adminRequest<unknown>(
+    "/api/payroll/configuration/calendars",
+    {
+      token,
+    },
+  );
   return normalizeList(payload);
 }
 
-export async function createPayrollCalendar(
-  token: string,
-  data: AdminRecord,
-) {
+export async function createPayrollCalendar(token: string, data: AdminRecord) {
   return adminRequest<unknown>("/api/payroll/configuration/calendars", {
     method: "POST",
     token,
@@ -13265,20 +13349,26 @@ export async function createPayrollAccountingMapping(
   token: string,
   data: AdminRecord,
 ) {
-  return adminRequest<unknown>("/api/payroll/configuration/accounting-mappings", {
-    method: "POST",
-    token,
-    body: data,
-  });
+  return adminRequest<unknown>(
+    "/api/payroll/configuration/accounting-mappings",
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
+  );
 }
 
 export async function listPayrollPayslipsForRun(
   token: string,
   runId: string | number,
 ) {
-  const payload = await adminRequest<unknown>(`/api/payroll/payslips/runs/${runId}`, {
-    token,
-  });
+  const payload = await adminRequest<unknown>(
+    `/api/payroll/payslips/runs/${runId}`,
+    {
+      token,
+    },
+  );
   return normalizeList(payload);
 }
 
@@ -13336,7 +13426,9 @@ export async function downloadPayrollBankingBatch(
         payload = { message: text };
       }
     }
-    const error = new Error(extractMessage(payload, response.status)) as Error & {
+    const error = new Error(
+      extractMessage(payload, response.status),
+    ) as Error & {
       status?: number;
       payload?: unknown;
     };
@@ -13382,16 +13474,22 @@ function buildStatusQuery(status?: string) {
 }
 
 export async function getPerformanceDashboard(token: string) {
-  const payload = await adminRequest<unknown>("/api/performance/dashboard/summary", {
-    token,
-  });
+  const payload = await adminRequest<unknown>(
+    "/api/performance/dashboard/summary",
+    {
+      token,
+    },
+  );
   return normalizeSingle(payload) ?? asRecord(payload);
 }
 
 export async function listPerformanceFinancialYears(token: string) {
-  const payload = await adminRequest<unknown>("/api/performance/financial-years", {
-    token,
-  });
+  const payload = await adminRequest<unknown>(
+    "/api/performance/financial-years",
+    {
+      token,
+    },
+  );
   return normalizeList(payload);
 }
 
@@ -13442,10 +13540,13 @@ export async function createPerformancePeriodAssignments(
   token: string,
   periodId: string | number,
 ) {
-  return adminRequest<unknown>(`/api/performance/periods/${periodId}/assignments`, {
-    method: "POST",
-    token,
-  });
+  return adminRequest<unknown>(
+    `/api/performance/periods/${periodId}/assignments`,
+    {
+      method: "POST",
+      token,
+    },
+  );
 }
 
 export async function syncPerformanceSystemKpis(
@@ -13464,7 +13565,9 @@ export async function syncPerformanceSystemKpis(
 }
 
 export async function listPerformanceKpis(token: string) {
-  const payload = await adminRequest<unknown>("/api/performance/kpis", { token });
+  const payload = await adminRequest<unknown>("/api/performance/kpis", {
+    token,
+  });
   return normalizeList(payload);
 }
 
@@ -13489,9 +13592,12 @@ export async function createPerformanceKpiVersion(
 }
 
 export async function listPerformanceKpiTemplates(token: string) {
-  const payload = await adminRequest<unknown>("/api/performance/kpi-templates", {
-    token,
-  });
+  const payload = await adminRequest<unknown>(
+    "/api/performance/kpi-templates",
+    {
+      token,
+    },
+  );
   return normalizeList(payload);
 }
 
@@ -13513,7 +13619,10 @@ export async function listPerformanceKpiRules(token: string) {
   return normalizeList(payload);
 }
 
-export async function createPerformanceKpiRule(token: string, data: AdminRecord) {
+export async function createPerformanceKpiRule(
+  token: string,
+  data: AdminRecord,
+) {
   return adminRequest<unknown>("/api/performance/kpi-rules", {
     method: "POST",
     token,
@@ -13541,9 +13650,12 @@ export async function createPerformanceCompetencyTemplate(
 }
 
 export async function listPerformanceRatingScales(token: string) {
-  const payload = await adminRequest<unknown>("/api/performance/rating-scales", {
-    token,
-  });
+  const payload = await adminRequest<unknown>(
+    "/api/performance/rating-scales",
+    {
+      token,
+    },
+  );
   return normalizeList(payload);
 }
 
@@ -13629,11 +13741,14 @@ export async function moderatePerformanceReview(
   reviewId: string | number,
   data: AdminRecord,
 ) {
-  return adminRequest<unknown>(`/api/performance/reviews/${reviewId}/moderate`, {
-    method: "POST",
-    token,
-    body: data,
-  });
+  return adminRequest<unknown>(
+    `/api/performance/reviews/${reviewId}/moderate`,
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
+  );
 }
 
 export async function reopenPerformanceReview(
@@ -13674,9 +13789,12 @@ export async function getMyPerformanceSummary(token: string) {
 }
 
 export async function listMyPerformanceAssignments(token: string) {
-  const payload = await adminRequest<unknown>("/api/performance/me/assignments", {
-    token,
-  });
+  const payload = await adminRequest<unknown>(
+    "/api/performance/me/assignments",
+    {
+      token,
+    },
+  );
   return normalizeList(payload);
 }
 
@@ -13723,11 +13841,14 @@ export async function submitMyPerformanceAppeal(
   reviewId: string | number,
   data: AdminRecord,
 ) {
-  return adminRequest<unknown>(`/api/performance/me/reviews/${reviewId}/appeal`, {
-    method: "POST",
-    token,
-    body: data,
-  });
+  return adminRequest<unknown>(
+    `/api/performance/me/reviews/${reviewId}/appeal`,
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
+  );
 }
 
 export async function listMyPerformanceImprovementPlans(token: string) {
@@ -13787,9 +13908,12 @@ export async function submitManagerPerformanceReview(
 }
 
 export async function getProbationDashboard(token: string) {
-  const payload = await adminRequest<unknown>("/api/probation/dashboard/summary", {
-    token,
-  });
+  const payload = await adminRequest<unknown>(
+    "/api/probation/dashboard/summary",
+    {
+      token,
+    },
+  );
   return normalizeSingle(payload) ?? asRecord(payload);
 }
 
@@ -13849,11 +13973,14 @@ export async function submitProbationManagerReview(
   caseId: string | number,
   data: AdminRecord,
 ) {
-  return adminRequest<unknown>(`/api/probation/cases/${caseId}/manager-review`, {
-    method: "POST",
-    token,
-    body: data,
-  });
+  return adminRequest<unknown>(
+    `/api/probation/cases/${caseId}/manager-review`,
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
+  );
 }
 
 export async function submitProbationHrDecision(
@@ -13872,14 +13999,20 @@ export async function generateProbationLetter(
   token: string,
   caseId: string | number,
 ) {
-  return adminRequest<unknown>(`/api/probation/cases/${caseId}/generate-letter`, {
-    method: "POST",
-    token,
-  });
+  return adminRequest<unknown>(
+    `/api/probation/cases/${caseId}/generate-letter`,
+    {
+      method: "POST",
+      token,
+    },
+  );
 }
 
 export async function getMyProbation(token: string, signal?: AbortSignal) {
-  const payload = await adminRequest<unknown>("/api/me/probation", { token, signal });
+  const payload = await adminRequest<unknown>("/api/me/probation", {
+    token,
+    signal,
+  });
   return normalizeSingle(payload) ?? asRecord(payload);
 }
 
@@ -13895,7 +14028,9 @@ export async function submitMyProbationSelfAssessment(
   });
 }
 
-function buildRecordQuery(params: Record<string, string | number | boolean | undefined>) {
+function buildRecordQuery(
+  params: Record<string, string | number | boolean | undefined>,
+) {
   const search = new URLSearchParams();
   const sortBy = normalizeSortBy(
     typeof params.sortBy === "string" ? params.sortBy : undefined,
@@ -13947,14 +14082,19 @@ export async function listHrFieldVisits(
 }
 
 export async function getHrFieldVisitsMap(token: string) {
-  const payload = await adminRequest<unknown>("/api/hr/field-visits/map", { token });
+  const payload = await adminRequest<unknown>("/api/hr/field-visits/map", {
+    token,
+  });
   return normalizeSingle(payload) ?? asRecord(payload);
 }
 
 export async function listHrFieldLocationAccessLogs(token: string) {
-  const payload = await adminRequest<unknown>("/api/hr/field-locations/access-logs", {
-    token,
-  });
+  const payload = await adminRequest<unknown>(
+    "/api/hr/field-locations/access-logs",
+    {
+      token,
+    },
+  );
   return normalizeList(payload);
 }
 
@@ -13981,7 +14121,9 @@ export async function listHrActivityExceptions(
 }
 
 export async function listActivityCategories(token: string) {
-  const payload = await adminRequest<unknown>("/api/activity-categories", { token });
+  const payload = await adminRequest<unknown>("/api/activity-categories", {
+    token,
+  });
   return normalizeList(payload);
 }
 
@@ -14016,7 +14158,9 @@ export async function deactivateActivityCategory(
 }
 
 export async function listActivityPolicies(token: string) {
-  const payload = await adminRequest<unknown>("/api/activity-policies", { token });
+  const payload = await adminRequest<unknown>("/api/activity-policies", {
+    token,
+  });
   return normalizeList(payload);
 }
 
@@ -14041,21 +14185,29 @@ export async function updateActivityPolicy(
 }
 
 export async function getManagerFieldVisitDashboard(token: string) {
-  const payload = await adminRequest<unknown>("/api/manager/field-visits/dashboard", {
-    token,
-  });
+  const payload = await adminRequest<unknown>(
+    "/api/manager/field-visits/dashboard",
+    {
+      token,
+    },
+  );
   return normalizeSingle(payload) ?? asRecord(payload);
 }
 
 export async function listManagerFieldVisits(token: string) {
-  const payload = await adminRequest<unknown>("/api/manager/field-visits", { token });
+  const payload = await adminRequest<unknown>("/api/manager/field-visits", {
+    token,
+  });
   return normalizeList(payload);
 }
 
 export async function getManagerFieldVisit(token: string, id: string | number) {
-  const payload = await adminRequest<unknown>(`/api/manager/field-visits/${id}`, {
-    token,
-  });
+  const payload = await adminRequest<unknown>(
+    `/api/manager/field-visits/${id}`,
+    {
+      token,
+    },
+  );
   return normalizeSingle(payload) ?? asRecord(payload);
 }
 
@@ -14072,9 +14224,12 @@ export async function reviewManagerFieldVisit(
 }
 
 export async function listManagerFieldVisitPlans(token: string) {
-  const payload = await adminRequest<unknown>("/api/manager/field-visits/plans", {
-    token,
-  });
+  const payload = await adminRequest<unknown>(
+    "/api/manager/field-visits/plans",
+    {
+      token,
+    },
+  );
   return normalizeList(payload);
 }
 
@@ -14091,9 +14246,12 @@ export async function reviewManagerFieldVisitPlan(
 }
 
 export async function getManagerFieldVisitMap(token: string) {
-  const payload = await adminRequest<unknown>("/api/manager/field-visits/map/view", {
-    token,
-  });
+  const payload = await adminRequest<unknown>(
+    "/api/manager/field-visits/map/view",
+    {
+      token,
+    },
+  );
   return normalizeSingle(payload) ?? asRecord(payload);
 }
 
@@ -14106,9 +14264,12 @@ export async function getManagerFieldVisitExceptions(token: string) {
 }
 
 export async function listManagerFieldFollowUps(token: string) {
-  const payload = await adminRequest<unknown>("/api/manager/field-visits/follow-ups", {
-    token,
-  });
+  const payload = await adminRequest<unknown>(
+    "/api/manager/field-visits/follow-ups",
+    {
+      token,
+    },
+  );
   return normalizeList(payload);
 }
 
@@ -14124,12 +14285,16 @@ export async function listMyFieldVisits(
 }
 
 export async function getMyFieldVisit(token: string, id: string | number) {
-  const payload = await adminRequest<unknown>(`/api/me/field-visits/${id}`, { token });
+  const payload = await adminRequest<unknown>(`/api/me/field-visits/${id}`, {
+    token,
+  });
   return normalizeSingle(payload) ?? asRecord(payload);
 }
 
 export async function listMyFieldVisitPlans(token: string) {
-  const payload = await adminRequest<unknown>("/api/me/field-visits/plans", { token });
+  const payload = await adminRequest<unknown>("/api/me/field-visits/plans", {
+    token,
+  });
   return normalizeList(payload);
 }
 
@@ -14153,7 +14318,10 @@ export async function submitMyFieldVisitPlan(
   });
 }
 
-export async function createMyUnplannedFieldVisit(token: string, data: AdminRecord) {
+export async function createMyUnplannedFieldVisit(
+  token: string,
+  data: AdminRecord,
+) {
   return adminRequest<unknown>("/api/me/field-visits/unplanned", {
     method: "POST",
     token,
@@ -14308,13 +14476,19 @@ export async function getEmployeeFinanceDashboard(token: string) {
 }
 
 export async function listEmployeeFinanceProducts(token: string) {
-  const payload = await adminRequest<unknown>("/api/employee-finance/products", {
-    token,
-  });
+  const payload = await adminRequest<unknown>(
+    "/api/employee-finance/products",
+    {
+      token,
+    },
+  );
   return normalizeList(payload);
 }
 
-export async function createEmployeeFinanceProduct(token: string, data: AdminRecord) {
+export async function createEmployeeFinanceProduct(
+  token: string,
+  data: AdminRecord,
+) {
   return adminRequest<unknown>("/api/employee-finance/products", {
     method: "POST",
     token,
@@ -14383,11 +14557,14 @@ export async function recommendEmployeeFinanceApplication(
   id: string | number,
   data: AdminRecord = {},
 ) {
-  return adminRequest<unknown>(`/api/manager/finance/applications/${id}/recommend`, {
-    method: "POST",
-    token,
-    body: data,
-  });
+  return adminRequest<unknown>(
+    `/api/manager/finance/applications/${id}/recommend`,
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
+  );
 }
 
 export async function listEmployeeFinanceAccounts(
@@ -14432,7 +14609,10 @@ export async function confirmEmployeeFinanceDisbursement(
   );
 }
 
-export async function createEmployeeFinanceRepayment(token: string, data: AdminRecord) {
+export async function createEmployeeFinanceRepayment(
+  token: string,
+  data: AdminRecord,
+) {
   return adminRequest<unknown>("/api/finance/employee-finance/repayments", {
     method: "POST",
     token,
@@ -14496,7 +14676,10 @@ export async function listMyFinanceApplications(token: string) {
   return normalizeList(payload);
 }
 
-export async function createMyFinanceApplication(token: string, data: AdminRecord) {
+export async function createMyFinanceApplication(
+  token: string,
+  data: AdminRecord,
+) {
   return adminRequest<unknown>("/api/me/finance/applications", {
     method: "POST",
     token,
@@ -14504,14 +14687,20 @@ export async function createMyFinanceApplication(token: string, data: AdminRecor
   });
 }
 
-export async function submitMyFinanceApplication(token: string, id: string | number) {
+export async function submitMyFinanceApplication(
+  token: string,
+  id: string | number,
+) {
   return adminRequest<unknown>(`/api/me/finance/applications/${id}/submit`, {
     method: "POST",
     token,
   });
 }
 
-export async function acceptMyFinanceApplication(token: string, id: string | number) {
+export async function acceptMyFinanceApplication(
+  token: string,
+  id: string | number,
+) {
   return adminRequest<unknown>(`/api/me/finance/applications/${id}/accept`, {
     method: "POST",
     token,
@@ -14578,11 +14767,14 @@ export async function addMyActivityEntry(
   reportId: string | number,
   data: AdminRecord,
 ) {
-  return adminRequest<unknown>(`/api/me/activities/reports/${reportId}/entries`, {
-    method: "POST",
-    token,
-    body: data,
-  });
+  return adminRequest<unknown>(
+    `/api/me/activities/reports/${reportId}/entries`,
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
+  );
 }
 
 export async function updateMyActivityEntry(
@@ -14613,11 +14805,14 @@ export async function addMyActivityEvidence(
   entryId: string | number,
   data: AdminRecord,
 ) {
-  return adminRequest<unknown>(`/api/me/activities/entries/${entryId}/evidence`, {
-    method: "POST",
-    token,
-    body: data,
-  });
+  return adminRequest<unknown>(
+    `/api/me/activities/entries/${entryId}/evidence`,
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
+  );
 }
 
 export async function submitMyActivityReport(
@@ -14791,11 +14986,14 @@ export async function updateSmsRegistryItem(
   code: string,
   data: AdminRecord,
 ) {
-  return adminRequest<unknown>(`/api/sms/registry/${encodeURIComponent(code)}`, {
-    method: "PATCH",
-    token,
-    body: data,
-  });
+  return adminRequest<unknown>(
+    `/api/sms/registry/${encodeURIComponent(code)}`,
+    {
+      method: "PATCH",
+      token,
+      body: data,
+    },
+  );
 }
 
 export async function sendTestSms(token: string, data: AdminRecord) {
@@ -14916,7 +15114,10 @@ function buildAnalyticsQuery(params: AnalyticsQueryParams = {}) {
   if (params.date_to?.trim()) {
     searchParams.set("date_to", params.date_to.trim());
   }
-  if (typeof params.branch_id === "number" && Number.isFinite(params.branch_id)) {
+  if (
+    typeof params.branch_id === "number" &&
+    Number.isFinite(params.branch_id)
+  ) {
     searchParams.set("branch_id", String(params.branch_id));
   }
   if (
@@ -14925,7 +15126,10 @@ function buildAnalyticsQuery(params: AnalyticsQueryParams = {}) {
   ) {
     searchParams.set("department_id", String(params.department_id));
   }
-  if (typeof params.employee_id === "number" && Number.isFinite(params.employee_id)) {
+  if (
+    typeof params.employee_id === "number" &&
+    Number.isFinite(params.employee_id)
+  ) {
     searchParams.set("employee_id", String(params.employee_id));
   }
   if (params.purpose?.trim()) {
@@ -15001,9 +15205,12 @@ export async function getHrLaunchReadinessEmployees(token: string) {
 }
 
 export async function getHrAttendanceSetupStatus(token: string) {
-  const payload = await adminRequest<unknown>("/api/hr/attendance/setup/status", {
-    token,
-  });
+  const payload = await adminRequest<unknown>(
+    "/api/hr/attendance/setup/status",
+    {
+      token,
+    },
+  );
   return normalizeSingle(payload) ?? asRecord(payload);
 }
 
@@ -15072,9 +15279,12 @@ export async function getAnalyticsFreshness(
     dataset_code && dataset_code.trim()
       ? `?dataset_code=${encodeURIComponent(dataset_code.trim())}`
       : "";
-  const payload = await adminRequest<unknown>(`/api/analytics/freshness${query}`, {
-    token,
-  });
+  const payload = await adminRequest<unknown>(
+    `/api/analytics/freshness${query}`,
+    {
+      token,
+    },
+  );
   const list = normalizeList(payload);
   if (list.length > 0) {
     return list;
@@ -15124,10 +15334,13 @@ export async function exportAnalyticsReport(
 }
 
 export async function runAnalyticsReconciliation(token: string) {
-  const payload = await adminRequest<unknown>("/api/analytics/reconciliation/run", {
-    method: "POST",
-    token,
-  });
+  const payload = await adminRequest<unknown>(
+    "/api/analytics/reconciliation/run",
+    {
+      method: "POST",
+      token,
+    },
+  );
   return normalizeSingle(payload) ?? asRecord(payload);
 }
 
@@ -15135,11 +15348,14 @@ export async function runStatutoryReport(
   token: string,
   data: StatutoryReportRunPayload,
 ) {
-  const payload = await adminRequest<unknown>("/api/analytics/statutory-reports/run", {
-    method: "POST",
-    token,
-    body: data,
-  });
+  const payload = await adminRequest<unknown>(
+    "/api/analytics/statutory-reports/run",
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
+  );
   return normalizeSingle(payload) ?? asRecord(payload);
 }
 
@@ -15536,11 +15752,7 @@ export async function fileToBase64UploadDto(
       .match(/^data:([^;]+);/i)?.[1]
       ?.trim()
       .toLowerCase() || "";
-  const mimeType = (
-    file.type ||
-    mimeFromHeader ||
-    "application/octet-stream"
-  )
+  const mimeType = (file.type || mimeFromHeader || "application/octet-stream")
     .trim()
     .toLowerCase();
 
