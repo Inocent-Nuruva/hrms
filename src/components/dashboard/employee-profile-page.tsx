@@ -572,6 +572,14 @@ function relatedDepartmentNames(row: AdminRecord) {
   return names
 }
 
+function relatedBranchId(row: AdminRecord) {
+  return readRelatedId(
+    row,
+    ["branch", "branchDetail", "primary_branch", "primaryBranch"],
+    ["branch_id", "branchId", "primary_branch_id", "primaryBranchId"]
+  )
+}
+
 function normalizeDepartmentScopedPositionOptions(rows: AdminRecord[], departmentId: number) {
   return rows.map((row) => {
     const nestedPosition =
@@ -588,11 +596,31 @@ function normalizeDepartmentScopedPositionOptions(rows: AdminRecord[], departmen
       .filter((value): value is number => value !== null)
 
     const departmentIds = Array.from(new Set([...existingDepartmentIds, departmentId]))
-    return {
-      ...position,
-      department_ids: departmentIds,
-      departmentIds,
+  return {
+    ...position,
+    department_ids: departmentIds,
+    departmentIds,
+  }
+  })
+}
+
+function fallbackDepartmentScopedPositionOptions(
+  rows: AdminRecord[],
+  departmentId: number,
+  branchId: number | null
+) {
+  const byDepartment = rows.filter((row) => relatedDepartmentIds(row).has(departmentId))
+  if (byDepartment.length > 0) {
+    return byDepartment
+  }
+
+  return rows.filter((row) => {
+    const departmentIds = relatedDepartmentIds(row)
+    if (departmentIds.size > 0) {
+      return false
     }
+    const positionBranchId = relatedBranchId(row)
+    return branchId === null || positionBranchId === null || positionBranchId === branchId
   })
 }
 
@@ -3380,6 +3408,12 @@ function EmployeeMovementsSection({
   const [managerOptions, setManagerOptions] = React.useState<AdminRecord[]>([])
   const [gradeOptions, setGradeOptions] = React.useState<AdminRecord[]>([])
   const [costCenterOptions, setCostCenterOptions] = React.useState<AdminRecord[]>([])
+  const [scopedPositionOptions, setScopedPositionOptions] = React.useState<AdminRecord[]>([])
+  const [scopedPositionOptionsLoading, setScopedPositionOptionsLoading] = React.useState(false)
+  const [scopedPositionOptionsLoaded, setScopedPositionOptionsLoaded] = React.useState(false)
+  const [scopedManagerOptions, setScopedManagerOptions] = React.useState<AdminRecord[]>([])
+  const [scopedManagerOptionsLoading, setScopedManagerOptionsLoading] = React.useState(false)
+  const [scopedManagerOptionsLoaded, setScopedManagerOptionsLoaded] = React.useState(false)
   const [optionsLoading, setOptionsLoading] = React.useState(false)
   const [addingRecord, setAddingRecord] = React.useState(false)
   const [viewingRecord, setViewingRecord] = React.useState<AdminRecord | null>(null)
@@ -3494,19 +3528,128 @@ function EmployeeMovementsSection({
     }
   }, [token, viewingRecord])
 
+  React.useEffect(() => {
+    if (!addingRecord || !token || !form.new_department_id) {
+      setScopedPositionOptions([])
+      setScopedPositionOptionsLoaded(false)
+      setScopedPositionOptionsLoading(false)
+      setScopedManagerOptions([])
+      setScopedManagerOptionsLoaded(false)
+      setScopedManagerOptionsLoading(false)
+      return
+    }
+
+    const selectedDepartmentId = Number(form.new_department_id)
+    if (!Number.isFinite(selectedDepartmentId) || selectedDepartmentId <= 0) {
+      setScopedPositionOptions([])
+      setScopedPositionOptionsLoaded(false)
+      setScopedPositionOptionsLoading(false)
+      setScopedManagerOptions([])
+      setScopedManagerOptionsLoaded(false)
+      setScopedManagerOptionsLoading(false)
+      return
+    }
+
+    let cancelled = false
+    setScopedPositionOptionsLoading(true)
+    setScopedPositionOptionsLoaded(false)
+    setScopedManagerOptionsLoading(true)
+    setScopedManagerOptionsLoaded(false)
+
+    void Promise.all([
+      listDepartmentPositions(token, selectedDepartmentId),
+      listEmployees(token, {
+        page: 1,
+        limit: 200,
+        sortBy: "created_at",
+        sortOrder: "DESC",
+        department_id: selectedDepartmentId,
+      }),
+    ])
+      .then(([positions, managers]) => {
+        if (cancelled) {
+          return
+        }
+        setScopedPositionOptions(
+          normalizeDepartmentScopedPositionOptions(positions, selectedDepartmentId)
+        )
+        setScopedPositionOptionsLoaded(true)
+        setScopedManagerOptions(
+          managers.rows.filter((row) => readNumber(row.id) !== employeeId)
+        )
+        setScopedManagerOptionsLoaded(true)
+      })
+      .catch(() => {
+        if (cancelled) {
+          return
+        }
+        setScopedPositionOptions([])
+        setScopedPositionOptionsLoaded(false)
+        setScopedManagerOptions([])
+        setScopedManagerOptionsLoaded(false)
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setScopedPositionOptionsLoading(false)
+          setScopedManagerOptionsLoading(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [addingRecord, employeeId, form.new_department_id, token])
+
+  const selectedBranchId = React.useMemo(() => {
+    const parsed = Number(form.new_branch_id)
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+  }, [form.new_branch_id])
+
+  const filteredDepartmentOptions = React.useMemo(() => {
+    if (selectedBranchId === null) {
+      return departmentOptions
+    }
+    const matching = departmentOptions.filter((row) => relatedBranchId(row) === selectedBranchId)
+    if (matching.length > 0) {
+      return matching
+    }
+    return departmentOptions.filter((row) => relatedBranchId(row) === null)
+  }, [departmentOptions, selectedBranchId])
+
   const selectedDepartmentName = React.useMemo(() => {
-    const selected = departmentOptions.find((row) => String(readNumber(row.id) ?? "") === form.new_department_id)
+    const selected = filteredDepartmentOptions.find(
+      (row) => String(readNumber(row.id) ?? "") === form.new_department_id
+    )
     const label = selected ? recordOptionLabel(selected) : ""
     return label === "-" ? "" : label.trim().toLowerCase()
-  }, [departmentOptions, form.new_department_id])
+  }, [filteredDepartmentOptions, form.new_department_id])
 
-  const departmentPositionOptions = React.useMemo(
-    () =>
-      positionOptions.filter((row) =>
-        Boolean(form.new_department_id) && relatedDepartmentIds(row).has(Number(form.new_department_id))
-      ),
-    [form.new_department_id, positionOptions]
-  )
+  const availablePositionOptions = React.useMemo(() => {
+    if (!form.new_department_id) {
+      return positionOptions
+    }
+
+    const selectedDepartmentId = Number(form.new_department_id)
+    if (!Number.isFinite(selectedDepartmentId) || selectedDepartmentId <= 0) {
+      return positionOptions
+    }
+
+    if (scopedPositionOptionsLoaded) {
+      return scopedPositionOptions
+    }
+
+    return fallbackDepartmentScopedPositionOptions(
+      positionOptions,
+      selectedDepartmentId,
+      selectedBranchId
+    )
+  }, [
+    form.new_department_id,
+    positionOptions,
+    scopedPositionOptions,
+    scopedPositionOptionsLoaded,
+    selectedBranchId,
+  ])
 
   const filteredCostCenterOptions = React.useMemo(() => {
     const selectedDepartmentId = form.new_department_id ? Number(form.new_department_id) : null
@@ -3523,19 +3666,92 @@ function EmployeeMovementsSection({
     })
   }, [costCenterOptions, form.new_department_id])
 
-  const filteredManagerOptions = React.useMemo(() => {
-    return managerOptions
-      .filter((row) => readNumber(row.id) !== employeeId)
-      .filter((row) => {
-        if (!form.new_department_id) {
-          return true
-        }
-        return (
-          relatedDepartmentIds(row).has(Number(form.new_department_id)) ||
-          (selectedDepartmentName !== "" && relatedDepartmentNames(row).has(selectedDepartmentName))
-        )
-      })
-  }, [employeeId, form.new_department_id, managerOptions, selectedDepartmentName])
+  const availableManagerOptions = React.useMemo(() => {
+    const eligible = managerOptions.filter((row) => readNumber(row.id) !== employeeId)
+    if (!form.new_department_id) {
+      return eligible
+    }
+
+    if (scopedManagerOptionsLoaded) {
+      return scopedManagerOptions
+    }
+
+    return eligible.filter((row) => {
+      const selectedDepartmentId = Number(form.new_department_id)
+      if (!Number.isFinite(selectedDepartmentId) || selectedDepartmentId <= 0) {
+        return true
+      }
+      return (
+        relatedDepartmentIds(row).has(selectedDepartmentId) ||
+        (selectedDepartmentName !== "" && relatedDepartmentNames(row).has(selectedDepartmentName))
+      )
+    })
+  }, [
+    employeeId,
+    form.new_department_id,
+    managerOptions,
+    scopedManagerOptions,
+    scopedManagerOptionsLoaded,
+    selectedDepartmentName,
+  ])
+
+  React.useEffect(() => {
+    if (!addingRecord || !form.new_department_id) {
+      return
+    }
+
+    const stillVisible = filteredDepartmentOptions.some(
+      (row) => String(readNumber(row.id) ?? "") === form.new_department_id
+    )
+    if (!stillVisible) {
+      setForm((current) => ({
+        ...current,
+        new_department_id: "",
+        new_position_id: "",
+        new_cost_center_id: "",
+        new_manager_employee_id: "",
+      }))
+    }
+  }, [addingRecord, filteredDepartmentOptions, form.new_department_id])
+
+  React.useEffect(() => {
+    if (!addingRecord || !form.new_position_id) {
+      return
+    }
+
+    const stillVisible = availablePositionOptions.some(
+      (row) => String(readNumber(row.id) ?? "") === form.new_position_id
+    )
+    if (!stillVisible) {
+      setForm((current) => ({ ...current, new_position_id: "" }))
+    }
+  }, [addingRecord, availablePositionOptions, form.new_position_id])
+
+  React.useEffect(() => {
+    if (!addingRecord || !form.new_manager_employee_id) {
+      return
+    }
+
+    const stillVisible = availableManagerOptions.some(
+      (row) => String(readNumber(row.id) ?? "") === form.new_manager_employee_id
+    )
+    if (!stillVisible) {
+      setForm((current) => ({ ...current, new_manager_employee_id: "" }))
+    }
+  }, [addingRecord, availableManagerOptions, form.new_manager_employee_id])
+
+  React.useEffect(() => {
+    if (!addingRecord || !form.new_cost_center_id) {
+      return
+    }
+
+    const stillVisible = filteredCostCenterOptions.some(
+      (row) => String(readNumber(row.id) ?? "") === form.new_cost_center_id
+    )
+    if (!stillVisible) {
+      setForm((current) => ({ ...current, new_cost_center_id: "" }))
+    }
+  }, [addingRecord, filteredCostCenterOptions, form.new_cost_center_id])
 
   const sortedItems = React.useMemo(
     () =>
@@ -3962,7 +4178,16 @@ function EmployeeMovementsSection({
                 </span>
                 <select
                   value={form.new_branch_id}
-                  onChange={(event) => setForm((current) => ({ ...current, new_branch_id: event.target.value }))}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      new_branch_id: event.target.value,
+                      new_department_id: "",
+                      new_position_id: "",
+                      new_cost_center_id: "",
+                      new_manager_employee_id: "",
+                    }))
+                  }
                   className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
                   disabled={optionsLoading}
                 >
@@ -4002,7 +4227,7 @@ function EmployeeMovementsSection({
                   disabled={optionsLoading}
                 >
                   <option value="">{optionsLoading ? "Loading departments..." : "Select department"}</option>
-                  {departmentOptions.map((option) => {
+                  {filteredDepartmentOptions.map((option) => {
                     const optionId = readNumber(option.id)
                     if (optionId === null) {
                       return null
@@ -4026,19 +4251,16 @@ function EmployeeMovementsSection({
                   value={form.new_position_id}
                   onChange={(event) => setForm((current) => ({ ...current, new_position_id: event.target.value }))}
                   className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
-                  disabled={optionsLoading}
+                  disabled={optionsLoading || (Boolean(form.new_department_id) && scopedPositionOptionsLoading)}
                 >
                   <option value="">
-                    {optionsLoading
+                    {optionsLoading || (form.new_department_id && scopedPositionOptionsLoading)
                       ? "Loading positions..."
-                      : form.new_department_id && departmentPositionOptions.length > 0
+                      : form.new_department_id && availablePositionOptions.length > 0
                         ? "Select department position"
                         : "Select position"}
                   </option>
-                  {(form.new_department_id && departmentPositionOptions.length > 0
-                    ? departmentPositionOptions
-                    : positionOptions
-                  ).map((option) => {
+                  {availablePositionOptions.map((option) => {
                     const optionId = readNumber(option.id)
                     if (optionId === null) {
                       return null
@@ -4064,16 +4286,16 @@ function EmployeeMovementsSection({
                     setForm((current) => ({ ...current, new_manager_employee_id: event.target.value }))
                   }
                   className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
-                  disabled={optionsLoading}
+                  disabled={optionsLoading || (Boolean(form.new_department_id) && scopedManagerOptionsLoading)}
                 >
                   <option value="">
-                    {optionsLoading
+                    {optionsLoading || (form.new_department_id && scopedManagerOptionsLoading)
                       ? "Loading managers..."
-                      : form.new_department_id && filteredManagerOptions.length > 0
+                      : form.new_department_id && availableManagerOptions.length > 0
                         ? "Select department manager"
                         : "Select manager"}
                   </option>
-                  {(form.new_department_id ? filteredManagerOptions : managerOptions).map((option) => {
+                  {availableManagerOptions.map((option) => {
                     const optionId = readNumber(option.id)
                     if (optionId === null) {
                       return null
@@ -4318,6 +4540,7 @@ export function EmployeeProfilePage({
   const [email, setEmail] = React.useState("")
   const [profilePassword, setProfilePassword] = React.useState("")
   const [showProfilePassword, setShowProfilePassword] = React.useState(false)
+  const [branchId, setBranchId] = React.useState("")
   const [departmentId, setDepartmentId] = React.useState("")
   const [positionId, setPositionId] = React.useState("")
   const [managerId, setManagerId] = React.useState("")
@@ -4327,6 +4550,7 @@ export function EmployeeProfilePage({
     () => new Date().toISOString().slice(0, 10)
   )
   const [assignmentReason, setAssignmentReason] = React.useState("")
+  const [branchOptions, setBranchOptions] = React.useState<AdminRecord[]>([])
   const [departmentOptions, setDepartmentOptions] = React.useState<AdminRecord[]>([])
   const [positionOptions, setPositionOptions] = React.useState<AdminRecord[]>([])
   const [managerOptions, setManagerOptions] = React.useState<AdminRecord[]>([])
@@ -4357,18 +4581,41 @@ export function EmployeeProfilePage({
     () => (requestedSectionTitle ? sectionTitleToRouteKey(requestedSectionTitle) : null),
     [requestedSectionTitle]
   )
+  const selectedBranchId = React.useMemo(() => {
+    const parsed = Number(branchId)
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+  }, [branchId])
+  const filteredDepartmentOptions = React.useMemo(() => {
+    if (selectedBranchId === null) {
+      return departmentOptions
+    }
+    const matching = departmentOptions.filter((row) => relatedBranchId(row) === selectedBranchId)
+    if (matching.length > 0) {
+      return matching
+    }
+    return departmentOptions.filter((row) => relatedBranchId(row) === null)
+  }, [departmentOptions, selectedBranchId])
   const selectedDepartmentName = React.useMemo(() => {
-    const selected = departmentOptions.find((row) => String(readNumber(row.id) ?? "") === departmentId)
+    const selected = filteredDepartmentOptions.find((row) => String(readNumber(row.id) ?? "") === departmentId)
     const label = selected ? recordOptionLabel(selected) : ""
     return label === "-" ? "" : label.trim().toLowerCase()
-  }, [departmentId, departmentOptions])
-  const departmentPositionOptions = React.useMemo(
-    () =>
-      positionOptions.filter(
-        (row) => Boolean(departmentId) && relatedDepartmentIds(row).has(Number(departmentId))
-      ),
-    [departmentId, positionOptions]
-  )
+  }, [departmentId, filteredDepartmentOptions])
+  const departmentPositionOptions = React.useMemo(() => {
+    if (!departmentId) {
+      return []
+    }
+
+    const selectedDepartmentId = Number(departmentId)
+    if (!Number.isFinite(selectedDepartmentId) || selectedDepartmentId <= 0) {
+      return []
+    }
+
+    return fallbackDepartmentScopedPositionOptions(
+      positionOptions,
+      selectedDepartmentId,
+      selectedBranchId
+    )
+  }, [departmentId, positionOptions, selectedBranchId])
   const filteredCostCenterOptions = React.useMemo(() => {
     const selectedDepartmentId = departmentId ? Number(departmentId) : null
     return costCenterOptions.filter((row) => {
@@ -4398,6 +4645,22 @@ export function EmployeeProfilePage({
   )
 
   React.useEffect(() => {
+    if (!identityDialogOpen || !departmentId) {
+      return
+    }
+
+    const hasSelectedDepartment = filteredDepartmentOptions.some(
+      (row) => String(readNumber(row.id) ?? "") === departmentId
+    )
+    if (!hasSelectedDepartment) {
+      setDepartmentId("")
+      setPositionId("")
+      setManagerId("")
+      setCostCenterId("")
+    }
+  }, [departmentId, filteredDepartmentOptions, identityDialogOpen])
+
+  React.useEffect(() => {
     if (!identityDialogOpen || !positionId) {
       return
     }
@@ -4422,6 +4685,19 @@ export function EmployeeProfilePage({
       setManagerId("")
     }
   }, [filteredManagerOptions, identityDialogOpen, managerId])
+
+  React.useEffect(() => {
+    if (!identityDialogOpen || !costCenterId) {
+      return
+    }
+
+    const hasSelectedCostCenter = filteredCostCenterOptions.some(
+      (row) => String(readNumber(row.id) ?? "") === costCenterId
+    )
+    if (!hasSelectedCostCenter) {
+      setCostCenterId("")
+    }
+  }, [costCenterId, filteredCostCenterOptions, identityDialogOpen])
 
   const fetchEmployee = React.useCallback(async () => {
       const token = readStoredToken()
@@ -4487,14 +4763,15 @@ export function EmployeeProfilePage({
       }
     }, [employeeNo])
 
-  const loadOrganizationOptions = React.useCallback(async (selectedDepartmentId = "") => {
+  const loadOrganizationOptions = React.useCallback(async (_selectedBranchId = "", selectedDepartmentId = "") => {
     const token = readStoredToken()
     if (!token) return
     setOrganizationOptionsLoading(true)
     try {
       const selectedDepartmentNumber = Number(selectedDepartmentId)
       const hasSelectedDepartment = Number.isFinite(selectedDepartmentNumber) && selectedDepartmentNumber > 0
-      const [departments, positions, managers, grades, costCenters] = await Promise.all([
+      const [branches, departments, positions, managers, grades, costCenters] = await Promise.all([
+        listBranches(token, { page: 1, limit: 100 }),
         listDepartments(token, { page: 1, limit: 100 }),
         hasSelectedDepartment
           ? listDepartmentPositions(token, selectedDepartmentId).then((rows) =>
@@ -4513,6 +4790,7 @@ export function EmployeeProfilePage({
         listEmployeeGrades(token),
         listCostCenters(token),
       ])
+      setBranchOptions(branches.rows)
       setDepartmentOptions(departments.rows)
       setPositionOptions(positions)
       setManagerOptions(managers)
@@ -4688,6 +4966,13 @@ export function EmployeeProfilePage({
               className="px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
               onClick={() => {
                 const companyUser = resolveCompanyUserRecord(employee)
+                const currentBranchId = String(
+                  readRelatedId(
+                    employee,
+                    ["primary_branch", "primaryBranch", "branch", "branchDetail"],
+                    ["primary_branch_id", "primaryBranchId", "branch_id", "branchId"]
+                  ) ?? ""
+                )
                 const currentDepartmentId = String(
                   readRelatedId(
                     employee,
@@ -4701,6 +4986,7 @@ export function EmployeeProfilePage({
                 setEmail(readString(companyUser ?? {}, ["email"]) === "-" ? "" : readString(companyUser ?? {}, ["email"]))
                 setProfilePassword("")
                 setShowProfilePassword(false)
+                setBranchId(currentBranchId)
                 setDepartmentId(currentDepartmentId)
                 setPositionId(
                   String(
@@ -4742,7 +5028,7 @@ export function EmployeeProfilePage({
                 setAssignmentReason("")
                 setIdentityError(null)
                 setIdentityDialogOpen(true)
-                void loadOrganizationOptions(currentDepartmentId)
+                void loadOrganizationOptions(currentBranchId, currentDepartmentId)
               }}
             >
               Update Profile
@@ -4992,7 +5278,7 @@ export function EmployeeProfilePage({
           <AlertDialogHeader className="gap-1">
             <AlertDialogTitle>Update Profile</AlertDialogTitle>
             <AlertDialogDescription>
-              Update account details and the employee&apos;s department, position, and manager.
+              Update account details and keep branch, department, position, manager, grade, and cost center in sync.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="grid gap-2.5 sm:grid-cols-2">
@@ -5035,6 +5321,29 @@ export function EmployeeProfilePage({
             </label>
             <div className="grid gap-2.5 sm:col-span-2 sm:grid-cols-2">
               <label className="grid gap-1">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Branch</span>
+                <select
+                  value={branchId}
+                  disabled={organizationOptionsLoading}
+                  onChange={(event) => {
+                    const nextBranchId = event.target.value
+                    setBranchId(nextBranchId)
+                    setDepartmentId("")
+                    setPositionId("")
+                    setManagerId("")
+                    setCostCenterId("")
+                    void loadOrganizationOptions(nextBranchId, "")
+                  }}
+                  className="h-9 min-w-0 rounded-md border border-slate-300 bg-background px-3 text-sm"
+                >
+                  <option value="">No branch</option>
+                  {branchOptions.map((option) => {
+                    const id = readNumber(option.id)
+                    return id === null ? null : <option key={id} value={id}>{recordOptionLabel(option)}</option>
+                  })}
+                </select>
+              </label>
+              <label className="grid gap-1">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Department</span>
                 <select
                   value={departmentId}
@@ -5044,12 +5353,13 @@ export function EmployeeProfilePage({
                      setDepartmentId(nextDepartmentId)
                      setPositionId("")
                      setManagerId("")
-                    void loadOrganizationOptions(nextDepartmentId)
+                     setCostCenterId("")
+                     void loadOrganizationOptions(branchId, nextDepartmentId)
                   }}
                   className="h-9 min-w-0 rounded-md border border-slate-300 bg-background px-3 text-sm"
                 >
                   <option value="">Select department</option>
-                  {departmentOptions.map((option) => {
+                  {filteredDepartmentOptions.map((option) => {
                     const id = readNumber(option.id)
                     return id === null ? null : <option key={id} value={id}>{recordOptionLabel(option)}</option>
                   })}
@@ -5258,11 +5568,7 @@ export function EmployeeProfilePage({
                   await patchEmployeeById(employeeId, token, employeePayload)
                   await patchEmployeeAssignment(token, employeeId, {
                     effective_date: assignmentEffectiveDate.trim(),
-                    branch_id: readRelatedId(
-                      employee,
-                      ["primary_branch", "primaryBranch", "branch", "branchDetail"],
-                      ["primary_branch_id", "primaryBranchId", "branch_id", "branchId"]
-                    ),
+                    branch_id: branchId ? Number(branchId) : null,
                     departments: [
                       {
                         department_id: Number(departmentId),

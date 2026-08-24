@@ -184,6 +184,15 @@ export const financeSectionTabGroups: DashboardSectionTabGroup[] = [
   },
 ]
 
+export const selfFinanceSectionTabGroups: DashboardSectionTabGroup[] = [
+  {
+    items: [
+      { title: "Payroll", url: "/dashboard/me/finance/payroll" },
+      { title: "Loans and advances", url: "/dashboard/me/finance/applications" },
+    ],
+  },
+]
+
 export const activitySectionTabGroups: DashboardSectionTabGroup[] = [
   {
     items: [
@@ -306,6 +315,7 @@ export function allDashboardSectionTabGroups(): DashboardSectionTabGroup[] {
     fieldSectionTabGroups,
     selfFieldSectionTabGroups,
     financeSectionTabGroups,
+    selfFinanceSectionTabGroups,
     activitySectionTabGroups,
     selfActivitySectionTabGroups,
     movementSectionTabGroups,

@@ -1,5 +1,5 @@
-import { EmployeePayrollView } from "@/components/dashboard/employee-self-service-view"
+import { redirect } from "next/navigation"
 
 export default function DashboardMyPayrollPage() {
-  return <EmployeePayrollView />
+  redirect("/dashboard/me/finance/payroll")
 }

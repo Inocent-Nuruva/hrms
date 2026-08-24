@@ -6,7 +6,6 @@ import { toast } from "sonner"
 
 import {
   HeroBand,
-  MetricTile,
   StatusChip,
   TalentDoodleSprites,
   actionButtonClass,
@@ -43,7 +42,6 @@ import {
 } from "@/lib/admin-api"
 import { useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
 import { readStoredSessionTokens } from "@/lib/session-client"
-import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 
 export type ActivitySelfTab = "today" | "reports"
 
@@ -66,6 +64,19 @@ function reportEntries(report: AdminRecord | null) {
   return asRecordArray(report.entries ?? report.items ?? report.activities)
 }
 
+function resolveTodayReport(record: AdminRecord | null) {
+  if (!record) return null
+  const nested = asRecord(record.report) ?? asRecord(record.data) ?? record
+  if (!nested) return null
+  const hasIdentity =
+    Boolean(rowId(nested)) ||
+    Boolean(nested.activityDate) ||
+    Boolean(nested.activity_date) ||
+    Boolean(readString(nested, ["status"])) ||
+    reportEntries(nested).length > 0
+  return hasIdentity ? nested : null
+}
+
 export function ActivitySelfView({ activeTab }: { activeTab: ActivitySelfTab }) {
   const leaveIfForbidden = useLeaveIfForbidden()
   const [today, setToday] = React.useState<AdminRecord | null>(null)
@@ -73,6 +84,7 @@ export function ActivitySelfView({ activeTab }: { activeTab: ActivitySelfTab }) 
   const [categories, setCategories] = React.useState<AdminRecord[]>([])
   const [selected, setSelected] = React.useState<AdminRecord | null>(null)
   const [loading, setLoading] = React.useState(true)
+  const [mounted, setMounted] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [createOpen, setCreateOpen] = React.useState(false)
   const [createMode, setCreateMode] = React.useState<"report" | "entry" | "submit">("report")
@@ -92,7 +104,7 @@ export function ActivitySelfView({ activeTab }: { activeTab: ActivitySelfTab }) 
     setError(null)
     const results = await Promise.allSettled([
       getMyActivitiesToday(token).then((record) => {
-        const report = asRecord(record?.report) ?? record
+        const report = resolveTodayReport(record)
         setToday(report)
         if (activeTab === "today") setSelected(report)
       }),
@@ -111,6 +123,7 @@ export function ActivitySelfView({ activeTab }: { activeTab: ActivitySelfTab }) 
   }, [activeTab, leaveIfForbidden])
 
   React.useEffect(() => {
+    setMounted(true)
     void load()
   }, [load])
 
@@ -172,49 +185,21 @@ export function ActivitySelfView({ activeTab }: { activeTab: ActivitySelfTab }) 
     }
   }
 
+  const listedToday =
+    reports.find((row) => {
+      const date = String(row.activityDate ?? row.activity_date ?? "").slice(0, 10)
+      return date === todayDate()
+    }) ?? today
   const activeReport = activeTab === "today" ? today : selected
   const entries = reportEntries(activeReport)
-
-  const columns = React.useMemo<Column<AdminRecord>[]>(() => [
-    {
-      key: "date",
-      label: "Date",
-      render: (row) => formatDate(row.activityDate ?? row.activity_date),
-    },
-    { key: "status", label: "Status", render: (row) => <StatusChip value={readString(row, ["status"], "DRAFT")} /> },
-    { key: "summary", label: "Summary", render: (row) => readString(row, ["employeeSummary", "employee_summary", "title"], "—") },
-    {
-      key: "actions",
-      label: "Actions",
-      render: (row) => (
-        <div className="flex flex-wrap gap-1">
-          <button type="button" className={actionButtonClass} onClick={() => void openReport(row)}>Open</button>
-          <button
-            type="button"
-            className={actionButtonClass}
-            onClick={() => {
-              setCreateMode("entry")
-              setForm({ id: rowId(row), status: "COMPLETED" })
-              setCreateOpen(true)
-            }}
-          >
-            Add entry
-          </button>
-          <button
-            type="button"
-            className={actionButtonClass}
-            onClick={() => {
-              setCreateMode("submit")
-              setForm({ id: rowId(row), employee_summary: "" })
-              setCreateOpen(true)
-            }}
-          >
-            Submit
-          </button>
-        </div>
-      ),
-    },
-  ], [])
+  const todayDateLabel = (() => {
+    if (!today) return "Today"
+    const dated = formatDate(today.activityDate ?? today.activity_date)
+    return dated === "—" ? "Today" : dated
+  })()
+  const todayStatus = listedToday
+    ? prettify(readString(listedToday, ["status"], "DRAFT"))
+    : "None"
 
   return (
     <section className="space-y-4">
@@ -224,40 +209,75 @@ export function ActivitySelfView({ activeTab }: { activeTab: ActivitySelfTab }) 
         title={activeTab === "today" ? "Today's report" : "My daily reports"}
         description="Log work, add entries, and submit the report your manager reviews."
         actions={
-          <div className="flex flex-wrap gap-2">
-            <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
-              {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
-              Refresh
-            </button>
-            <button
-              type="button"
-              className={primaryButtonClass}
-              onClick={() => {
-                setCreateMode("report")
-                setForm({ activity_date: todayDate() })
-                setCreateOpen(true)
-              }}
-            >
-              <PlusIcon className="size-4" /> New report
-            </button>
-          </div>
+          <button
+            type="button"
+            className="inline-flex h-9 items-center gap-1.5 rounded-md border border-white/30 bg-white/10 px-3 text-sm font-medium text-white transition hover:bg-white/20 hover:text-white disabled:opacity-60"
+            onClick={() => void load()}
+            disabled={mounted ? loading : undefined}
+          >
+            {mounted && loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+            Refresh
+          </button>
         }
       />
-      {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div> : null}
-      <div className="grid gap-3 sm:grid-cols-3">
-        <MetricTile label="Reports" value={reports.length} />
-        <MetricTile label="Today" value={today ? readString(today, ["status"], "OPEN") : "None"} />
-        <MetricTile label="Entries today" value={reportEntries(today).length} />
+      {error ? (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-300">
+          {error}
+        </div>
+      ) : null}
+      <div className="grid grid-cols-3 gap-4">
+        {[
+          { label: "Reports", value: loading ? "…" : String(reports.length) },
+          {
+            label: "Today",
+            value: loading ? "…" : todayStatus,
+          },
+          { label: "Entries today", value: loading ? "…" : String(reportEntries(today).length) },
+        ].map((field) => (
+          <div key={field.label} className="min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              {field.label}
+            </p>
+            <p className="mt-1 truncate text-2xl font-semibold tracking-tight text-foreground">
+              {field.value}
+            </p>
+          </div>
+        ))}
+      </div>
+      <div className="flex justify-end">
+        <button
+          type="button"
+          className={primaryButtonClass}
+          onClick={() => {
+            setCreateMode("report")
+            setForm({ activity_date: todayDate() })
+            setCreateOpen(true)
+          }}
+        >
+          <PlusIcon className="size-4" /> New report
+        </button>
       </div>
 
       {activeTab === "today" ? (
-        <div className="space-y-3 rounded-xl border border-border bg-card p-4">
-          {today ? (
+        <div className="overflow-hidden rounded-xl border border-border bg-card">
+          {loading && !today ? (
+            <div className="flex items-center justify-center gap-2 px-3 py-10 text-sm text-muted-foreground">
+              <Loader2Icon className="size-4 animate-spin" />
+              Loading today's report...
+            </div>
+          ) : today ? (
             <>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <p className="text-sm font-semibold">{formatDate(today.activityDate ?? today.activity_date)}</p>
-                  <StatusChip value={readString(today, ["status"], "DRAFT")} />
+              <div className="flex flex-col gap-3 px-4 py-4 lg:flex-row lg:items-start lg:justify-between">
+                <div className="min-w-0 space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-semibold text-foreground">{todayDateLabel}</p>
+                    <StatusChip value={readString(today, ["status"], "DRAFT")} />
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    {entries.length === 0
+                      ? "No entries yet. Add the work you completed today."
+                      : `${entries.length} ${entries.length === 1 ? "entry" : "entries"} logged today.`}
+                  </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button
@@ -284,82 +304,131 @@ export function ActivitySelfView({ activeTab }: { activeTab: ActivitySelfTab }) 
                   </button>
                 </div>
               </div>
-              {entries.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No entries yet. Add the work you completed today.</p>
-              ) : (
-                <ul className="grid gap-2">
+              {entries.length > 0 ? (
+                <ul className="divide-y divide-border/70 border-t border-border/70">
                   {entries.map((entry) => {
                     const id = rowId(entry)
                     return (
-                      <li key={id || readString(entry, ["title"])} className="rounded-lg bg-muted/40 px-3 py-2">
-                        <div className="flex flex-wrap items-start justify-between gap-2">
-                          <div>
-                            <p className="text-sm font-medium">{readString(entry, ["title"], "Entry")}</p>
-                            <p className="text-xs text-muted-foreground">{readString(entry, ["description"], "")}</p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <StatusChip value={readString(entry, ["status"], "PLANNED")} />
-                            <button
-                              type="button"
-                              className={actionButtonClass}
-                              disabled={busyId === `del-${id}`}
-                              onClick={() => {
-                                const token = readStoredToken()
-                                const reportId = rowId(today)
-                                if (!token || !reportId || !id) return
-                                setBusyId(`del-${id}`)
-                                void deleteMyActivityEntry(token, reportId, id)
-                                  .then(() => { toast.success("Entry removed."); return load() })
-                                  .catch((errorObject) => toast.error(errorObject instanceof Error ? errorObject.message : "Could not delete."))
-                                  .finally(() => setBusyId(""))
-                              }}
-                            >
-                              Remove
-                            </button>
-                          </div>
+                      <li key={id || readString(entry, ["title"])} className="flex flex-wrap items-start justify-between gap-2 px-4 py-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-foreground">{readString(entry, ["title"], "Entry")}</p>
+                          <p className="text-xs text-muted-foreground">{readString(entry, ["description"], "")}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <StatusChip value={readString(entry, ["status"], "PLANNED")} />
+                          <button
+                            type="button"
+                            className={actionButtonClass}
+                            disabled={busyId === `del-${id}`}
+                            onClick={() => {
+                              const token = readStoredToken()
+                              const reportId = rowId(today)
+                              if (!token || !reportId || !id) return
+                              setBusyId(`del-${id}`)
+                              void deleteMyActivityEntry(token, reportId, id)
+                                .then(() => { toast.success("Entry removed."); return load() })
+                                .catch((errorObject) => toast.error(errorObject instanceof Error ? errorObject.message : "Could not delete."))
+                                .finally(() => setBusyId(""))
+                            }}
+                          >
+                            Remove
+                          </button>
                         </div>
                       </li>
                     )
                   })}
                 </ul>
-              )}
+              ) : null}
             </>
           ) : (
-            <p className="text-sm text-muted-foreground">No report for today yet. Create one to start logging work.</p>
+            <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+              No report for today yet. Create one to start logging work.
+            </div>
           )}
         </div>
       ) : (
         <div className="overflow-hidden rounded-xl border border-border bg-card">
-          <ResizableTable
-            title="My reports"
-            data={reports}
-            columns={columns}
-            loading={loading}
-            itemsPerPage={20}
-            showExport={false}
-            storageKey="me-activities-reports"
-            onRowSelect={(_, row) => row && void openReport(row)}
-          />
+          {loading && reports.length === 0 ? (
+            <div className="flex items-center justify-center gap-2 px-3 py-10 text-sm text-muted-foreground">
+              <Loader2Icon className="size-4 animate-spin" />
+              Loading your reports...
+            </div>
+          ) : reports.length === 0 ? (
+            <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+              No daily reports yet. Create one to start logging work.
+            </div>
+          ) : (
+            <div className="divide-y divide-border/70">
+              {reports.map((row) => {
+                const id = rowId(row)
+                const isSelected = Boolean(id && rowId(selected) === id)
+                const summary = readString(row, ["employeeSummary", "employee_summary"], "")
+                const rowEntries = isSelected ? entries : []
+                return (
+                  <div key={id || readString(row, ["activity_date", "activityDate"])}>
+                    <div className="flex flex-col gap-3 px-4 py-4 lg:flex-row lg:items-start lg:justify-between">
+                      <button
+                        type="button"
+                        className="min-w-0 space-y-1 text-left"
+                        onClick={() => void openReport(row)}
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-semibold text-foreground">
+                            {formatDate(row.activityDate ?? row.activity_date)}
+                          </p>
+                          <StatusChip value={readString(row, ["status"], "DRAFT")} />
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          {summary || "No summary yet."}
+                        </p>
+                      </button>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          className={actionButtonClass}
+                          onClick={() => {
+                            setCreateMode("entry")
+                            setForm({ id, status: "COMPLETED" })
+                            setCreateOpen(true)
+                          }}
+                        >
+                          Add entry
+                        </button>
+                        <button
+                          type="button"
+                          className={actionButtonClass}
+                          onClick={() => {
+                            setCreateMode("submit")
+                            setForm({ id, employee_summary: summary })
+                            setCreateOpen(true)
+                          }}
+                        >
+                          Submit
+                        </button>
+                      </div>
+                    </div>
+                    {rowEntries.length > 0 ? (
+                      <ul className="divide-y divide-border/70 border-t border-border/70">
+                        {rowEntries.map((entry) => (
+                          <li
+                            key={rowId(entry) || readString(entry, ["title"])}
+                            className="flex flex-wrap items-center justify-between gap-2 px-4 py-3"
+                          >
+                            <p className="text-sm font-medium text-foreground">
+                              {readString(entry, ["title"], "Entry")}
+                            </p>
+                            <StatusChip value={readString(entry, ["status"], "PLANNED")} />
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       )}
-
-      {activeTab === "reports" && selected ? (
-        <div className="rounded-xl border border-border bg-card p-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold">{formatDate(selected.activityDate ?? selected.activity_date)}</h2>
-            <StatusChip value={readString(selected, ["status"], "DRAFT")} />
-          </div>
-          <p className="mt-2 text-sm text-muted-foreground">{readString(selected, ["employeeSummary", "employee_summary"], "No summary yet.")}</p>
-          <ul className="mt-3 grid gap-2">
-            {entries.map((entry) => (
-              <li key={rowId(entry) || readString(entry, ["title"])} className="rounded-lg bg-muted/40 px-3 py-2 text-sm">
-                <span className="font-medium">{readString(entry, ["title"], "Entry")}</span>
-                <span className="ml-2 text-xs text-muted-foreground">{prettify(readString(entry, ["status"], ""))}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogPopup className="max-w-xl">

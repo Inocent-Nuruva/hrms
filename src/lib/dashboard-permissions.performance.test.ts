@@ -56,7 +56,7 @@ describe("performance and probation route access", () => {
     ).toBe(false)
   })
 
-  it("keeps My performance when a helper is also granted HR performance", () => {
+  it("keeps employee-mode helpers in My performance and probation even with extra grants", () => {
     expect(
       canAccessDashboardRoute("/dashboard/me/performance/overview", ["performance:read"], "employee"),
     ).toBe(true)
@@ -65,7 +65,7 @@ describe("performance and probation route access", () => {
     ).toBe(true)
     expect(
       canAccessDashboardRoute("/dashboard/performance/overview", ["performance:read"], "employee"),
-    ).toBe(true)
+    ).toBe(false)
     expect(hasAdminDashboardAccess(["performance:read"])).toBe(false)
     expect(hasAdminDashboardAccess(["view_performance"])).toBe(false)
     expect(
@@ -73,7 +73,7 @@ describe("performance and probation route access", () => {
     ).toBe("employee")
     expect(
       canAccessDashboardRoute("/dashboard/probation/cases", ["probation:read"], "employee"),
-    ).toBe(true)
+    ).toBe(false)
   })
 
   it("leaves personal performance and probation available without HR permissions", () => {

@@ -39,6 +39,10 @@ describe("structure and insights route access", () => {
     expect(
       canAccessDashboardRoute("/dashboard/structure/numbering", ["employee_numbering:read"], "admin"),
     ).toBe(true)
+    expect(
+      canAccessDashboardRoute("/dashboard/structure", ["employee_numbering:read"], "admin"),
+    ).toBe(true)
+    expect(hasStructureAccess(["employee_numbering:read"])).toBe(true)
   })
 
   it("hides grades when the actor only has cost-center access", () => {

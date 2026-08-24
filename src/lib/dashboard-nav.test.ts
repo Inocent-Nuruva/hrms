@@ -35,7 +35,7 @@ describe("mixed employee helper navigation", () => {
     expect(selfServiceHomeFor("/dashboard/leave-management/requests")).toBe(
       "/dashboard/me/leave/requests",
     )
-    expect(selfServiceHomeFor("/dashboard/operations/payroll")).toBe("/dashboard/me/payroll")
+    expect(selfServiceHomeFor("/dashboard/operations/payroll")).toBe("/dashboard/me/finance/payroll")
     expect(selfServiceHomeFor("/dashboard/field/visits")).toBe("/dashboard/me/field/visits")
     expect(selfServiceHomeFor("/dashboard/attendance/policies")).toBe("/dashboard/attendance/today")
   })

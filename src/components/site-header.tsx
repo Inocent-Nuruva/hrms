@@ -19,6 +19,9 @@ import {
 import { NotificationCenter } from "@/components/notification-center"
 import { useNotifications } from "@/lib/notifications-store"
 
+const headerActionButtonClass =
+  "relative z-10 bg-transparent text-foreground shadow-none hover:bg-transparent hover:text-primary dark:bg-transparent dark:hover:bg-transparent"
+
 interface SiteHeaderProps {
   onRefresh: () => void | Promise<void>
   loading: boolean
@@ -63,28 +66,37 @@ export function SiteHeader({
       <div
         aria-hidden
         data-site-header-decor
-        className="pointer-events-none absolute inset-0 hidden overflow-hidden md:block"
+        className="pointer-events-none absolute inset-0 overflow-hidden"
       >
-        <div className="absolute -left-10 top-1/2 h-24 w-40 -translate-y-1/2 rounded-full bg-primary/[0.08] blur-2xl dark:bg-primary/15" />
-        <div className="absolute -right-8 top-0 h-20 w-32 rounded-full bg-primary/[0.06] blur-2xl dark:bg-primary/12" />
+        <div
+          className="absolute inset-y-0 right-0 w-28 bg-primary/16 dark:bg-primary/22"
+          style={{ clipPath: "polygon(32% 0%, 100% 0%, 100% 100%, 0% 100%)" }}
+        />
+        <div
+          className="absolute -left-6 bottom-0 h-10 w-36 bg-primary/10 dark:bg-primary/16"
+          style={{ clipPath: "polygon(0% 100%, 28% 8%, 100% 0%, 70% 100%)" }}
+        />
+        <div
+          className="absolute right-24 top-0 h-full w-16 bg-primary/8 dark:bg-primary/14"
+          style={{ clipPath: "polygon(40% 0%, 100% 0%, 60% 100%, 0% 100%)" }}
+        />
         <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
-        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/70 to-transparent dark:via-white/10" />
       </div>
 
       <div className="relative z-[1] flex w-full min-w-0 items-center gap-1.5 px-3 sm:px-4 lg:px-4">
         <SidebarTrigger className="-ml-1" />
         <Separator orientation="vertical" className="mx-1 h-3.5 data-vertical:self-auto bg-border/80" />
 
-        <div className="ml-auto flex items-center gap-1.5">
+        <div className="ml-auto flex items-center gap-1">
           <Dialog open={notificationsOpen} onOpenChange={setNotificationsOpen}>
-            {/* Badge sits outside the button so overflow-hidden doesn't clip it */}
             <div className="relative">
               <DialogTrigger
                 render={
                   <Button
                     type="button"
                     size="icon-sm"
-                    variant="outline"
+                    variant="ghost"
+                    className={headerActionButtonClass}
                     aria-label={
                       unreadNotificationCount > 0
                         ? `Notifications, ${unreadNotificationCount} unread`
@@ -145,23 +157,25 @@ export function SiteHeader({
             </DialogPopup>
           </Dialog>
           <ThemeTogglerButton
-            variant="outline"
+            variant="ghost"
             size="icon-sm"
             direction="right"
             modes={["light", "dark"]}
+            className={headerActionButtonClass}
           />
-          <AccentColorPicker />
+          <AccentColorPicker className={headerActionButtonClass} />
           <Button
-            variant="outline"
-            size="sm"
+            variant="ghost"
+            size="icon-sm"
             onClick={() => {
               void Promise.resolve(onRefresh()).finally(() => window.location.reload())
             }}
             disabled={loading}
             aria-label="Refresh page data"
             title="Refresh page data"
+            className={headerActionButtonClass}
           >
-            <RefreshCwIcon className={`text-primary ${loading ? "animate-spin" : ""}`} />
+            <RefreshCwIcon className={loading ? "animate-spin text-primary" : "text-primary"} />
           </Button>
         </div>
       </div>

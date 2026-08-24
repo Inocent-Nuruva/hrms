@@ -1,17 +1,13 @@
 "use client"
 
 import * as React from "react"
-import { Loader2Icon, RefreshCwIcon } from "lucide-react"
+import { InfoIcon, Loader2Icon, RefreshCwIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared"
 import {
-  CycleRail,
-  HeroBand,
   MetricTile,
-  ScoreRing,
   StatusChip,
-  StatusStack,
   TalentDoodleSprites,
   actionButtonClass,
   asRecord,
@@ -28,6 +24,7 @@ import {
   statusChartItems,
   textareaClass,
 } from "@/components/dashboard/talent-visuals"
+import { cn } from "@/lib/utils"
 import { forgetForbiddenRoute } from "@/lib/forbidden-routes"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { useForbiddenRouteGuard } from "@/hooks/use-forbidden-route-guard"
@@ -57,7 +54,9 @@ import {
 } from "@/lib/admin-api"
 import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
 import { readStoredSessionTokens } from "@/lib/session-client"
+import { Button } from "@/components/ui/button"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
 export type PerformanceSelfTab =
   | "overview"
@@ -68,6 +67,133 @@ export type PerformanceSelfTab =
   | "team"
 
 type ActionMode = "self-review" | "appeal" | "achievement" | "manager-review" | "validate"
+
+const PERFORMANCE_CYCLE_STEPS = [
+  {
+    key: "OPEN",
+    label: "Cycle started",
+    hint: "The review period has begun",
+  },
+  {
+    key: "SELF_REVIEW_PENDING",
+    label: "Your self-review",
+    hint: "Write how this period went",
+  },
+  {
+    key: "MANAGER_REVIEW_PENDING",
+    label: "Manager review",
+    hint: "Your manager adds their view",
+  },
+  {
+    key: "APPROVED",
+    label: "Approved",
+    hint: "The review has been signed off",
+  },
+  {
+    key: "PUBLISHED",
+    label: "Shared with you",
+    hint: "Final scores are now visible",
+  },
+] as const
+
+function PerformancePrimaryCard({
+  title,
+  aside,
+  fields,
+  emptyMessage,
+  heading = "h2",
+  tone = "primary",
+}: {
+  title: string
+  aside?: React.ReactNode
+  fields: Array<{ label: string; value: string; hint?: string; muted?: boolean }>
+  emptyMessage?: string
+  heading?: "h1" | "h2"
+  tone?: "primary" | "plain"
+}) {
+  const Heading = heading
+  const isPrimary = tone === "primary"
+  return (
+    <div
+      className={cn(
+        "relative overflow-hidden rounded-2xl p-4 md:p-5",
+        isPrimary ? "text-white" : "border border-border bg-card text-foreground"
+      )}
+      style={isPrimary ? { backgroundColor: "var(--primary)" } : undefined}
+    >
+      <div className="relative z-10 space-y-4">
+        <div className="min-w-0 space-y-2">
+          <Heading
+            className={cn(
+              "text-xl font-semibold tracking-tight md:text-2xl",
+              isPrimary ? "text-white" : "text-foreground"
+            )}
+          >
+            {title}
+          </Heading>
+          {aside}
+        </div>
+        {fields.length > 0 ? (
+          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 sm:grid-cols-3 lg:grid-cols-5">
+            {fields.map((field) => (
+              <div key={field.label} className="min-w-0">
+                <p
+                  className={cn(
+                    "flex min-w-0 items-center gap-1 text-[9px] font-semibold uppercase tracking-wide",
+                    isPrimary ? "text-white/50" : "text-muted-foreground"
+                  )}
+                >
+                  <span className="min-w-0 truncate">{field.label}</span>
+                  {field.hint ? (
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <button
+                            type="button"
+                            className={cn(
+                              "inline-flex size-3.5 shrink-0 items-center justify-center rounded-full",
+                              isPrimary
+                                ? "text-white/70 hover:text-white"
+                                : "text-muted-foreground hover:text-foreground"
+                            )}
+                            aria-label={field.hint}
+                          />
+                        }
+                      >
+                        <InfoIcon className="size-3" />
+                      </TooltipTrigger>
+                      <TooltipContent side="top" align="start" className="max-w-56 text-left leading-relaxed">
+                        {field.hint}
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : null}
+                </p>
+                <p
+                  className={cn(
+                    "text-xs font-semibold leading-tight",
+                    isPrimary
+                      ? field.muted
+                        ? "text-white/60"
+                        : "text-white"
+                      : field.muted
+                        ? "text-muted-foreground"
+                        : "text-foreground"
+                  )}
+                >
+                  {field.value}
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : emptyMessage ? (
+          <p className={cn("text-xs font-semibold", isPrimary ? "text-white/70" : "text-muted-foreground")}>
+            {emptyMessage}
+          </p>
+        ) : null}
+      </div>
+    </div>
+  )
+}
 
 function readStoredToken() {
   return readStoredSessionTokens().accessToken.trim()
@@ -171,6 +297,11 @@ export function PerformanceSelfView({
   const score =
     readNumber(summary, ["current_score", "currentScore", "final_score", "finalScore", "average_score", "averageScore"]) ??
     readNumber(asRecord(summary?.latest_review ?? summary?.latestReview), ["finalScore", "final_score"])
+  const cycleStatus = readString(reviews[0], ["status"], "OPEN").toUpperCase()
+  const cycleStepIndex = Math.max(
+    0,
+    PERFORMANCE_CYCLE_STEPS.findIndex((step) => step.key === cycleStatus),
+  )
 
   const rows =
     activeTab === "assignments"
@@ -450,49 +581,60 @@ export function PerformanceSelfView({
       <TalentDoodleSprites />
       {activeTab === "overview" ? (
         <>
-          <HeroBand
-            eyebrow="My performance"
-            title="Your scorecard"
-            description="Current score, open assignments, and anything still waiting on you."
-            actions={
-              <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
-                {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
-                Refresh
-              </button>
+          <PerformancePrimaryCard
+            heading="h1"
+            title="My performance"
+            aside={
+              <div className="flex min-w-0 items-center gap-2">
+                <p className="min-w-0 truncate text-xs font-semibold text-white/90">
+                  Current review cycle
+                </p>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 shrink-0 px-2.5 text-xs border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+                  onClick={() => void load()}
+                  disabled={loading}
+                >
+                  {loading ? <Loader2Icon className="size-3.5 animate-spin" /> : <RefreshCwIcon className="size-3.5" />}
+                  Refresh
+                </Button>
+              </div>
             }
+            fields={[
+              { label: "Score", value: score === null || score === undefined ? "—" : String(score) },
+              { label: "Assignments", value: String(assignments.length) },
+              { label: "Reviews", value: String(reviews.length) },
+              { label: "Achievements", value: String(achievements.length) },
+              { label: "Improvement", value: String(pips.length) },
+            ]}
           />
           {error ? (
             <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-300">
               {error}
             </div>
           ) : null}
-          <div className="grid gap-4 xl:grid-cols-[220px_minmax(0,1fr)]">
-            <div className="rounded-xl border border-border bg-card p-4">
-              <ScoreRing value={score} label="Current score" />
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <MetricTile label="Assignments" value={assignments.length} hint="Open period assignments" />
-              <MetricTile label="Reviews" value={reviews.length} hint="Self and manager cycle" />
-              <MetricTile label="Achievements" value={achievements.length} hint="Values you can still update" />
-              <MetricTile label="Improvement" value={pips.length} hint="Plans to acknowledge" />
-            </div>
-          </div>
           <div className="grid gap-4 xl:grid-cols-2">
-            <div className="rounded-xl border border-border bg-card p-4">
-              <h2 className="text-sm font-semibold">Review mix</h2>
-              <div className="mt-4">
-                <StatusStack items={statusChartItems(reviews)} />
-              </div>
-            </div>
-            <div className="rounded-xl border border-border bg-card p-4">
-              <h2 className="text-sm font-semibold">Cycle</h2>
-              <div className="mt-4">
-                <CycleRail
-                  steps={["OPEN", "SELF_REVIEW_PENDING", "MANAGER_REVIEW_PENDING", "APPROVED", "PUBLISHED"]}
-                  current={readString(reviews[0], ["status"], "OPEN")}
-                />
-              </div>
-            </div>
+            <PerformancePrimaryCard
+              tone="plain"
+              title="Review"
+              fields={statusChartItems(reviews).map((item) => ({
+                label: item.label,
+                value: String(item.value),
+              }))}
+              emptyMessage="No reviews in this cycle yet."
+            />
+            <PerformancePrimaryCard
+              tone="plain"
+              title="Review cycle"
+              fields={PERFORMANCE_CYCLE_STEPS.map((step, index) => ({
+                label: step.label,
+                value: index < cycleStepIndex ? "Done" : index === cycleStepIndex ? "Current" : "Coming up",
+                hint: step.hint,
+                muted: index > cycleStepIndex,
+              }))}
+            />
           </div>
         </>
       ) : (

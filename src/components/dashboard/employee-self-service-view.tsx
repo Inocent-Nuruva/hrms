@@ -25,6 +25,7 @@ import { Sparkles } from "@/components/animate-ui/icons/sparkles"
 import { LumaSpin } from "@/components/ui/luma-spin"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Textarea } from "@/components/ui/textarea"
+import { HeroBand } from "@/components/dashboard/talent-visuals"
 
 import {
   acknowledgeMyMovement,
@@ -3498,101 +3499,59 @@ function ProfileSummaryTab({
 
   return (
     <div className="space-y-4 animate-in fade-in-0 slide-in-from-bottom-1 duration-300">
-      {/* Profile header — primary background, compact meta */}
       <div
         className="relative overflow-hidden rounded-2xl p-4 text-white md:p-5"
         style={{ backgroundColor: "var(--primary)" }}
       >
-        <Doodle name="doodle-circles" />
-        <div className="relative z-10 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex min-w-0 items-start gap-3 sm:items-center">
+        <div className="relative z-10 space-y-4">
+          <div className="flex min-w-0 items-start gap-3">
             <Avatar className="size-14 shrink-0 ring-2 ring-white/30 md:size-16">
               {profilePhotoUrl ? <AvatarImage src={profilePhotoUrl} alt={displayName} /> : null}
               <AvatarFallback className="bg-white/20 text-lg font-semibold text-white">
                 {initials || "ME"}
               </AvatarFallback>
             </Avatar>
-
-            <div className="min-w-0 space-y-2.5">
-              {/* Identity: who you are */}
-              <div className="min-w-0 space-y-0.5">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="text-xl font-semibold tracking-tight text-white md:text-2xl">
-                    {displayName}
-                  </h1>
-                  <span className="inline-flex items-center rounded-full border border-white/30 bg-white/20 px-2 py-0.5 text-[11px] font-semibold capitalize text-white">
-                    {employmentStatusLabel}
-                  </span>
-                </div>
-                <p className="text-sm font-medium text-white/95">{positionLabel}</p>
+            <div className="min-w-0 space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-xl font-semibold tracking-tight text-white md:text-2xl">
+                  {displayName}
+                </h1>
+                <span className="text-[11px] font-semibold capitalize text-white/85">
+                  {employmentStatusLabel}
+                </span>
               </div>
-
-              {/* Labeled facts — avoids the old unlabeled · list */}
-              <div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3 lg:grid-cols-5">
-                <div className="min-w-0">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-white/55">
-                    Employee no.
-                  </p>
-                  <p className="truncate text-sm font-semibold text-white">{employeeNumber}</p>
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-white/55">
-                    Department
-                  </p>
-                  <p className="truncate text-sm font-semibold text-white">{departmentLabel}</p>
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-white/55">
-                    Branch
-                  </p>
-                  <p className="truncate text-sm font-semibold text-white">{branchLabel}</p>
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-white/55">
-                    Employment
-                  </p>
-                  <p className="truncate text-sm font-semibold text-white">{employmentTypeLabel}</p>
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-white/55">
-                    Joined
-                  </p>
-                  <p className="truncate text-sm font-semibold text-white">{hireDateLabel}</p>
-                </div>
+              <div className="flex min-w-0 items-center gap-2">
+                <p className="min-w-0 truncate text-xs font-semibold text-white/90">{positionLabel}</p>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 shrink-0 px-2.5 text-xs border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+                  onClick={() =>
+                    openSectionEditor("profile-photo", "Profile Picture", ["profile_photo_url"])
+                  }
+                >
+                  Change photo
+                </Button>
               </div>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 sm:shrink-0 sm:justify-end">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-7 px-2.5 text-xs border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white"
-              onClick={() =>
-                openSectionEditor("personal-details", "Personal Details", [
-                  "first_name",
-                  "last_name",
-                  "email",
-                  "phone",
-                ])
-              }
-            >
-              <PencilIcon className="mr-1 size-3" />
-              Edit Profile
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-7 px-2.5 text-xs border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white"
-              onClick={() =>
-                openSectionEditor("profile-photo", "Profile Picture", ["profile_photo_url"])
-              }
-            >
-              <PencilIcon className="mr-1 size-3" />
-              Change Photo
-            </Button>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 sm:grid-cols-3 lg:grid-cols-5">
+            {[
+              { label: "Employee no.", value: employeeNumber },
+              { label: "Department", value: departmentLabel },
+              { label: "Branch", value: branchLabel },
+              { label: "Employment", value: employmentTypeLabel },
+              { label: "Joined", value: hireDateLabel },
+            ].map((field) => (
+              <div key={field.label} className="min-w-0">
+                <p className="text-[9px] font-semibold uppercase tracking-wide text-white/50">
+                  {field.label}
+                </p>
+                <p className="truncate text-xs font-semibold text-white">{field.value}</p>
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -5166,6 +5125,7 @@ export function EmployeePayrollView() {
   const [payslipsLoading, setPayslipsLoading] = React.useState(false)
   const [payslipsError, setPayslipsError] = React.useState<string | null>(null)
   const [payslips, setPayslips] = React.useState<AdminRecord[]>([])
+  const [mounted, setMounted] = React.useState(false)
   const [detailOpen, setDetailOpen] = React.useState(false)
   const [detailLoading, setDetailLoading] = React.useState(false)
   const [selectedPayslip, setSelectedPayslip] = React.useState<AdminRecord | null>(null)
@@ -5193,6 +5153,7 @@ export function EmployeePayrollView() {
   }, [token])
 
   React.useEffect(() => {
+    setMounted(true)
     if (!loading && token) {
       void loadPayslips()
     }
@@ -5255,139 +5216,115 @@ export function EmployeePayrollView() {
   const earningsRows = readPayslipLineItems(selectedPayslip, ["earnings", "earning_lines", "earningLines"])
   const deductionRows = readPayslipLineItems(selectedPayslip, ["deductions", "deduction_lines", "deductionLines"])
 
+  const listLoading = loading || payslipsLoading
+
   return (
-    <section className="space-y-4 px-4 py-2 lg:px-6">
-      <DoodleSprites />
-      {loading ? (
-        <div className="flex flex-col items-center justify-center py-10">
-          <LumaSpin />
-          <p className="text-sm text-muted-foreground">Loading payroll history...</p>
-        </div>
-      ) : error ? (
-        <p className="text-sm text-red-600">{error}</p>
-      ) : (
-        <>
-          <div className="grid gap-4 md:grid-cols-3">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardDescription>Total payslips</CardDescription>
-                <CardTitle>{payslipSummary.total}</CardTitle>
-              </CardHeader>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardDescription>Latest gross pay</CardDescription>
-                <CardTitle>{payslipSummary.latestGross}</CardTitle>
-              </CardHeader>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardDescription>Latest net pay</CardDescription>
-                <CardTitle>{payslipSummary.latestNet}</CardTitle>
-              </CardHeader>
-            </Card>
+    <section className="space-y-4">
+      <HeroBand
+        eyebrow="My finance"
+        title="Payroll"
+        description="Payslips issued to you, with period totals, a detailed breakdown, and download."
+        actions={
+          <button
+            type="button"
+            className="inline-flex h-9 items-center gap-1.5 rounded-md border border-white/30 bg-white/10 px-3 text-sm font-medium text-white transition hover:bg-white/20 hover:text-white disabled:opacity-60"
+            onClick={() => void loadPayslips()}
+            disabled={mounted ? listLoading || !token : undefined}
+          >
+            {mounted && listLoading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+            Refresh
+          </button>
+        }
+      />
+      {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      <div className="grid grid-cols-3 gap-4">
+        {[
+          { label: "Payslips", value: String(payslipSummary.total) },
+          { label: "Latest gross", value: payslipSummary.latestGross },
+          { label: "Latest net", value: payslipSummary.latestNet },
+        ].map((field) => (
+          <div key={field.label} className="min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              {field.label}
+            </p>
+            <p className="mt-1 truncate text-2xl font-semibold tracking-tight text-foreground">
+              {field.value}
+            </p>
           </div>
+        ))}
+      </div>
+      {payslipsError ? (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-300">
+          {payslipsError}
+        </div>
+      ) : null}
+      <div className="overflow-hidden rounded-xl border border-border bg-card">
+        {listLoading ? (
+          <div className="flex items-center justify-center gap-2 px-3 py-10 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" />
+            Loading your payslips...
+          </div>
+        ) : payslips.length === 0 ? (
+          <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+            No payslips have been published to your account yet.
+          </div>
+        ) : (
+          <div className="divide-y divide-border/70">
+            {payslips.map((payslip) => {
+              const id = readPayslipId(payslip) ?? 0
+              const currency = readPayslipCurrency(payslip)
+              const status = readPayslipStatus(payslip)
+              const statusTone = resolvePayslipStatusTone(status)
+              const isDownloading = downloadingId === id
 
-          <Card>
-            <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div className="space-y-1">
-                <CardTitle>My Payslips</CardTitle>
-                <CardDescription>
-                  Review issued payroll slips for {employeeName}, open the detailed breakdown, and download copies when available.
-                </CardDescription>
-              </div>
-              <Button type="button" variant="outline" onClick={() => void loadPayslips()} disabled={payslipsLoading || !token}>
-                {payslipsLoading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
-                Refresh
-              </Button>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {payslipsError ? (
-                <div className="rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-xs text-rose-700 dark:text-rose-300">
-                  {payslipsError}
-                </div>
-              ) : null}
-
-              {payslipsLoading ? (
-                <div className="flex items-center gap-2 rounded-lg border bg-muted/20 px-3 py-4 text-sm text-muted-foreground">
-                  <Loader2 className="size-4 animate-spin" />
-                  Loading your payslips...
-                </div>
-              ) : payslips.length === 0 ? (
-                <div className="mx-auto max-w-xl">
-                  <div className="relative overflow-hidden rounded-2xl p-6 text-white flex flex-col items-center justify-center min-h-[180px]" style={{ backgroundColor: "var(--primary)" }}>
-                    <Doodle name="doodle-circles" />
-                    <div className="relative z-10 flex flex-col items-center">
-                      <h3 className="text-xl font-semibold tracking-tight text-center">
-                        No payslips available yet
-                      </h3>
-                      <p className="mt-2 text-sm text-white/70 text-center">
-                        Once payroll is generated and published for you, each payslip will show up here with a detail view and download action.
+              return (
+                <div key={id} className="flex flex-col gap-3 px-4 py-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="min-w-0 space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-sm font-semibold text-foreground">
+                        {readString(payslip, ["payslip_number", "payslipNo", "payslip_no"], `Payslip #${id}`)}
                       </p>
+                      <AssignmentBadge tone={statusTone}>
+                        {status && status !== "-" ? formatMovementLabel(status) : "Available"}
+                      </AssignmentBadge>
+                    </div>
+                    <p className="text-sm text-muted-foreground">{readPayslipPeriodLabel(payslip)}</p>
+                    <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
+                      <div className="flex items-center gap-1.5">
+                        <CalendarIcon className="size-3.5" />
+                        <span>
+                          Issued {formatDate(payslip.issued_at ?? payslip.issuedAt ?? payslip.created_at ?? payslip.createdAt)}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <BriefcaseIcon className="size-3.5" />
+                        <span>Gross {formatPayslipMoney(payslip.gross_pay ?? payslip.grossPay, currency)}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <UsersIcon className="size-3.5" />
+                        <span>Net {formatPayslipMoney(payslip.net_pay ?? payslip.netPay, currency)}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <FileTextIcon className="size-3.5" />
+                        <span>{currency || "Currency pending"}</span>
+                      </div>
                     </div>
                   </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" variant="outline" onClick={() => void openPayslipDetail(payslip)}>
+                      Details
+                    </Button>
+                    <Button type="button" onClick={() => void handleDownloadPayslip(payslip)} disabled={isDownloading}>
+                      {isDownloading ? <Loader2 className="size-4 animate-spin" /> : <DownloadIcon className="size-4" />}
+                      Download
+                    </Button>
+                  </div>
                 </div>
-              ) : (
-                <div className="grid gap-3">
-                  {payslips.map((payslip) => {
-                    const id = readPayslipId(payslip) ?? 0
-                    const currency = readPayslipCurrency(payslip)
-                    const status = readPayslipStatus(payslip)
-                    const statusTone = resolvePayslipStatusTone(status)
-                    const isDownloading = downloadingId === id
-
-                    return (
-                      <div key={id} className="rounded-xl border bg-background p-4 shadow-sm">
-                        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                          <div className="space-y-2">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <p className="text-sm font-semibold text-foreground">
-                                {readString(payslip, ["payslip_number", "payslipNo", "payslip_no"], `Payslip #${id}`)}
-                              </p>
-                              <AssignmentBadge tone={statusTone}>
-                                {status && status !== "-" ? formatMovementLabel(status) : "Available"}
-                              </AssignmentBadge>
-                            </div>
-                            <p className="text-sm text-muted-foreground">
-                              {readPayslipPeriodLabel(payslip)}
-                            </p>
-                            <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
-                              <div className="flex items-center gap-1.5">
-                                <CalendarIcon className="size-3.5" />
-                                <span>Issued {formatDate(payslip.issued_at ?? payslip.issuedAt ?? payslip.created_at ?? payslip.createdAt)}</span>
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                <BriefcaseIcon className="size-3.5" />
-                                <span>Gross {formatPayslipMoney(payslip.gross_pay ?? payslip.grossPay, currency)}</span>
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                <UsersIcon className="size-3.5" />
-                                <span>Net {formatPayslipMoney(payslip.net_pay ?? payslip.netPay, currency)}</span>
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                <FileTextIcon className="size-3.5" />
-                                <span>{currency || "Currency pending"}</span>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="flex flex-wrap gap-2">
-                            <Button type="button" variant="outline" onClick={() => void openPayslipDetail(payslip)}>
-                              Details
-                            </Button>
-                            <Button type="button" onClick={() => void handleDownloadPayslip(payslip)} disabled={isDownloading}>
-                              {isDownloading ? <Loader2 className="size-4 animate-spin" /> : <DownloadIcon className="size-4" />}
-                              Download
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+              )
+            })}
+          </div>
+        )}
+      </div>
 
           <Dialog
             open={detailOpen}
@@ -5514,8 +5451,6 @@ export function EmployeePayrollView() {
               </DialogFooter>
             </DialogPopup>
           </Dialog>
-        </>
-      )}
     </section>
   )
 }

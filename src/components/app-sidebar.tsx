@@ -424,11 +424,6 @@ const selfServiceNavMain: SidebarNavItem[] = [
       matchUrls: ["/dashboard/me/profile", "/dashboard/me/organization", "/dashboard/me/promotion"],
     },
     {
-      title: "My Payroll",
-      icon: IUsers,
-      url: "/dashboard/me/payroll",
-    },
-    {
       title: "My Performance",
       icon: IPerformance,
       url: "/dashboard/me/performance/overview",
@@ -461,7 +456,13 @@ const selfServiceNavMain: SidebarNavItem[] = [
     {
       title: "My Finance",
       icon: IUsers,
-      url: "/dashboard/me/finance",
+      url: "/dashboard/me/finance/payroll",
+      matchUrls: [
+        "/dashboard/me/finance",
+        "/dashboard/me/finance/applications",
+        "/dashboard/me/finance/payroll",
+        "/dashboard/me/payroll",
+      ],
     },
     {
       title: "My Activities",
@@ -564,12 +565,12 @@ const employeeSearchIndex = [
   { title: "My Leave / Balances", url: "/dashboard/me/leave/balances", section: "Leave", keywords: ["leave", "balance", "quota"] },
   { title: "My Leave / Holidays", url: "/dashboard/me/leave/holidays", section: "Leave", keywords: ["leave", "holiday"] },
   { title: "My Leave / Policies", url: "/dashboard/me/leave/policies", section: "Leave", keywords: ["leave", "policy"] },
-  { title: "My Payroll", url: "/dashboard/me/payroll", section: "Payroll", keywords: ["payroll", "payslips", "salary", "earnings", "deductions"] },
+  { title: "My Payroll", url: "/dashboard/me/finance/payroll", section: "Finance", keywords: ["payroll", "payslips", "salary", "earnings", "deductions"] },
   { title: "My Performance", url: "/dashboard/me/performance/overview", section: "Performance", keywords: ["performance", "kpi", "review", "score", "self review"] },
   { title: "My Performance / Team", url: "/dashboard/me/performance/team", section: "Performance", keywords: ["performance", "team", "manager", "review"] },
   { title: "My Probation", url: "/dashboard/me/probation", section: "Probation", keywords: ["probation", "confirmation", "self assessment"] },
   { title: "My Field", url: "/dashboard/me/field/visits", section: "Field", keywords: ["field", "visit", "check in", "plan"] },
-  { title: "My Finance", url: "/dashboard/me/finance", section: "Finance", keywords: ["loan", "advance", "application"] },
+  { title: "My Finance", url: "/dashboard/me/finance/payroll", section: "Finance", keywords: ["loan", "advance", "application", "finance", "payroll"] },
   { title: "My Activities", url: "/dashboard/me/activities/today", section: "Activities", keywords: ["activity", "daily", "report"] },
   { title: "My Movements", url: "/dashboard/me/movements", section: "Movements", keywords: ["movement", "transfer", "acknowledge"] },
   { title: "My Team", url: "/dashboard/me/team/overview", section: "Team", keywords: ["team", "manager", "direct reports", "action items"] },

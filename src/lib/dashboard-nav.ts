@@ -57,7 +57,7 @@ export function selfServiceHomeFor(url: string): string | null {
     return "/dashboard/me/field/visits"
   }
   if (path.startsWith("/dashboard/me/finance") || path.startsWith("/dashboard/finance")) {
-    return "/dashboard/me/finance"
+    return "/dashboard/me/finance/payroll"
   }
   if (path.startsWith("/dashboard/me/activities") || path.startsWith("/dashboard/activities")) {
     return "/dashboard/me/activities/today"
@@ -72,7 +72,7 @@ export function selfServiceHomeFor(url: string): string | null {
     return "/dashboard/me/leave/requests"
   }
   if (path.startsWith("/dashboard/me/payroll") || path.startsWith("/dashboard/operations/payroll")) {
-    return "/dashboard/me/payroll"
+    return "/dashboard/me/finance/payroll"
   }
   if (path.startsWith("/dashboard/me/requests")) {
     return "/dashboard/me/requests/actions"

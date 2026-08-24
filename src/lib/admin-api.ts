@@ -10579,13 +10579,77 @@ export async function getMyStatus(token: string) {
   return normalizeSingle(payload);
 }
 
+function asPlainRecord(value: unknown): AdminRecord | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as AdminRecord)
+    : null;
+}
+
+function isEmployeeDashboardRecord(value: unknown): value is AdminRecord {
+  const record = asPlainRecord(value);
+  return Boolean(record && asPlainRecord(record.user) && asPlainRecord(record.employee));
+}
+
+function looksLikeEmployeeDashboardEnvelope(record: AdminRecord) {
+  return (
+    isEmployeeDashboardRecord(record) ||
+    "generated_at" in record ||
+    "attendance_today" in record ||
+    "attendance_overview" in record ||
+    "schedule_preview" in record
+  );
+}
+
+function unwrapEmployeeDashboardPayload(payload: unknown): AdminRecord | null {
+  const queue: unknown[] = [payload];
+  const seen = new Set<unknown>();
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (current == null || seen.has(current)) {
+      continue;
+    }
+    seen.add(current);
+
+    if (Array.isArray(current)) {
+      for (const item of current) {
+        queue.push(item);
+      }
+      continue;
+    }
+
+    const record = asPlainRecord(current);
+    if (!record) {
+      continue;
+    }
+
+    if (isEmployeeDashboardRecord(record)) {
+      return record;
+    }
+
+    for (const key of ["data", "result", "payload", "dashboard", "item"]) {
+      if (key in record) {
+        queue.push(record[key]);
+      }
+    }
+  }
+
+  const record = asPlainRecord(payload);
+  if (record && looksLikeEmployeeDashboardEnvelope(record)) {
+    return record;
+  }
+
+  return normalizeSingle(payload) ?? record;
+}
+
 export async function getMyDashboard(token: string) {
   const payload = await adminRequest<unknown>("/api/me/dashboard", { token });
-  return asRecord(payload) ?? normalizeSingle(payload);
+  return unwrapEmployeeDashboardPayload(payload);
 }
 
 export async function getEmployeeDashboard(token: string) {
-  return getHrDashboard(token, "employee");
+  const payload = await adminRequest<unknown>("/api/dashboards/employee", { token });
+  return unwrapEmployeeDashboardPayload(payload);
 }
 
 export async function getMyAttendanceAssignments(token: string) {

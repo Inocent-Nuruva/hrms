@@ -6,6 +6,7 @@ import {
   getHrAttendanceSchedulePreview,
   getHrDashboard,
   getHrLaunchReadiness,
+  getMyDashboard,
   getSystemHealth,
   listSecurityEvents,
   runHrAttendanceSetupWizard,
@@ -73,6 +74,38 @@ describe("insights, readiness, and payroll report API helpers", () => {
     expect(health).toEqual(expect.objectContaining({ status: "ok" }))
     expect(readiness).toEqual(expect.objectContaining({ blockers: [] }))
     expect(events).toEqual([expect.objectContaining({ id: 7 })])
+  })
+
+  it("preserves the full employee dashboard payload shape when the endpoint returns a dashboard object", async () => {
+    const dashboardPayload = {
+      generated_at: "2026-08-24T07:26:33.896Z",
+      user: { id: 44, first_name: "Inocent", last_name: "Nuruva" },
+      employee: { id: 42, employee_no: "AICL/00042" },
+      attendance_today: { date: "2026-08-24" },
+      leave: { current_fiscal_year: "2026" },
+    }
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(dashboardPayload)))
+
+    const employeeDashboard = await getEmployeeDashboard("token")
+
+    expect(employeeDashboard).toEqual(dashboardPayload)
+  })
+
+  it("unwraps a nested employee dashboard object from a data envelope", async () => {
+    const dashboardPayload = {
+      generated_at: "2026-08-24T07:26:33.896Z",
+      user: { id: 44, first_name: "Inocent", last_name: "Nuruva" },
+      employee: { id: 42, employee_no: "AICL/00042" },
+      attendance_today: { date: "2026-08-24" },
+      leave: { current_fiscal_year: "2026" },
+    }
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(() => jsonResponse({ data: dashboardPayload })),
+    )
+
+    await expect(getEmployeeDashboard("token")).resolves.toEqual(dashboardPayload)
+    await expect(getMyDashboard("token")).resolves.toEqual(dashboardPayload)
   })
 
   it("runs attendance setup, schedule preview, and payroll report actions", async () => {

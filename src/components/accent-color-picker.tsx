@@ -53,7 +53,7 @@ function applyAccent(accent: string) {
   root.style.setProperty("--primary-rgb", rgb ? `${rgb.r} ${rgb.g} ${rgb.b}` : "17 17 17")
 }
 
-export function AccentColorPicker() {
+export function AccentColorPicker({ className }: { className?: string }) {
   const [open, setOpen] = React.useState(false)
   const [color, setColor] = React.useState(DEFAULT_ACCENT)
 
@@ -92,7 +92,7 @@ export function AccentColorPicker() {
         aria-label="Customize color"
         title="Customize color"
         aria-expanded={open}
-        className={cn(buttonVariants({ variant: "outline", size: "icon-sm" }))}
+        className={cn(buttonVariants({ variant: "ghost", size: "icon-sm" }), className)}
       >
         <PaletteIcon className="size-4" />
       </PopoverTrigger>

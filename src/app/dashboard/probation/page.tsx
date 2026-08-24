@@ -6,6 +6,7 @@ export default function ProbationIndexPage() {
     <DashboardSectionRootRedirect
       groups={probationSectionTabGroups}
       fallbackHref="/dashboard"
+      employeeFallbackHref="/dashboard/me/probation"
     />
   )
 }

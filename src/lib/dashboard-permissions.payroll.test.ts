@@ -50,5 +50,6 @@ describe("payroll route access", () => {
 
   it("leaves personal payroll available without payroll admin permissions", () => {
     expect(canAccessDashboardRoute("/dashboard/me/payroll", [], "employee")).toBe(true)
+    expect(canAccessDashboardRoute("/dashboard/me/finance/payroll", [], "employee")).toBe(true)
   })
 })

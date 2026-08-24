@@ -65,5 +65,7 @@ describe("field and finance route access", () => {
   it("leaves personal field and finance available without operations permissions", () => {
     expect(canAccessDashboardRoute("/dashboard/me/field/visits", [], "employee")).toBe(true)
     expect(canAccessDashboardRoute("/dashboard/me/finance", [], "admin")).toBe(true)
+    expect(canAccessDashboardRoute("/dashboard/me/finance/applications", [], "employee")).toBe(true)
+    expect(canAccessDashboardRoute("/dashboard/me/finance/payroll", [], "employee")).toBe(true)
   })
 })

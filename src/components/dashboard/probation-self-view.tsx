@@ -32,6 +32,7 @@ import {
   submitMyProbationSelfAssessment,
   type AdminRecord,
 } from "@/lib/admin-api"
+import { forgetForbiddenRoute } from "@/lib/forbidden-routes"
 import { useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
 import { readStoredSessionTokens } from "@/lib/session-client"
 
@@ -102,6 +103,10 @@ export function ProbationSelfView() {
       setLoading(false)
     }
   }, [leaveIfForbidden])
+
+  React.useEffect(() => {
+    forgetForbiddenRoute("/dashboard/me/probation")
+  }, [])
 
   React.useEffect(() => {
     void load()

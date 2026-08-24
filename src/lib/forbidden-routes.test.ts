@@ -111,6 +111,18 @@ describe("forbidden route memory", () => {
     expect(canSeeDashboardPage("/dashboard/attendance/today", [], "admin")).toBe(false)
   })
 
+  it("keeps employee-mode performance and probation redirects inside the My shell", () => {
+    expect(canAccessDashboardRoute("/dashboard/performance/overview", ["performance:read"], "employee")).toBe(false)
+    expect(canSeeDashboardPage("/dashboard/performance/overview", ["performance:read"], "employee")).toBe(false)
+    expect(
+      firstVisibleSiblingOrHome("/dashboard/performance/overview", ["performance:read"], "employee"),
+    ).toBe("/dashboard/me/performance/overview")
+    expect(canAccessDashboardRoute("/dashboard/probation/cases", ["probation:read"], "employee")).toBe(false)
+    expect(
+      firstVisibleSiblingOrHome("/dashboard/probation/cases", ["probation:read"], "employee"),
+    ).toBe("/dashboard/me/probation")
+  })
+
   it("shows permission-granted HR routes in employee navigation", () => {
     expect(canAccessDashboardRoute("/dashboard/employees/all", ["employees:read"], "employee")).toBe(true)
     expect(canSeeDashboardPage("/dashboard/employees/all", ["employees:read"], "employee")).toBe(true)
@@ -166,6 +178,7 @@ describe("forbidden route memory", () => {
     ).toBe(true)
     rememberForbiddenRoute("/dashboard/structure/cost-centers")
     rememberForbiddenRoute("/dashboard/structure/grades")
+    expect(canSeeDashboardPage("/dashboard/structure", ["employee_numbering:read"], "admin")).toBe(true)
     expect(canSeeDashboardPage("/dashboard/structure", ["cost_centers:read"], "admin")).toBe(false)
   })
 

@@ -95,10 +95,24 @@ function sampleEmployeeNumber(prefix: string, padding: string, nextNumber: strin
   return `${prefix.trim()}${body}`
 }
 
+function normalizeNumberingForm(record: AdminRecord | null) {
+  const normalized = record ?? {}
+  return {
+    prefix: readString(normalized, ["prefix"]),
+    padding: String(readNumber(normalized, ["padding"]) ?? 5),
+    next_number: String(readNumber(normalized, ["next_number", "nextNumber"]) ?? 1),
+  }
+}
+
 export function EmployeeSetupView() {
   const leaveIfForbidden = useLeaveIfForbidden()
   const [numbering, setNumbering] = React.useState<AdminRecord | null>(null)
   const [numberingForm, setNumberingForm] = React.useState({
+    prefix: "",
+    padding: "5",
+    next_number: "1",
+  })
+  const [savedNumberingForm, setSavedNumberingForm] = React.useState({
     prefix: "",
     padding: "5",
     next_number: "1",
@@ -118,22 +132,25 @@ export function EmployeeSetupView() {
 
     setLoading(true)
     setNumberingError(null)
+    setNumberingMessage(null)
     try {
       const numberingRecord = await getEmployeeNumbering(accessToken)
-      const normalizedNumbering = numberingRecord ?? {}
+      const nextForm = normalizeNumberingForm(numberingRecord)
 
       setNumbering(numberingRecord)
-      setNumberingForm({
-        prefix: readString(normalizedNumbering, ["prefix"]),
-        padding: String(readNumber(normalizedNumbering, ["padding"]) ?? 5),
-        next_number: String(readNumber(normalizedNumbering, ["next_number", "nextNumber"]) ?? 1),
-      })
+      setNumberingForm(nextForm)
+      setSavedNumberingForm(nextForm)
     } catch (errorObject) {
       if (leaveIfForbidden(errorObject)) {
         return
       }
       setNumberingError(apiErrorMessage(errorObject, "Failed to load employee numbering."))
       setNumbering(null)
+      setSavedNumberingForm({
+        prefix: "",
+        padding: "5",
+        next_number: "1",
+      })
     } finally {
       setLoading(false)
     }
@@ -176,13 +193,10 @@ export function EmployeeSetupView() {
         padding,
         next_number: nextNumber,
       })
-      const normalizedUpdated = updated ?? {}
+      const nextForm = normalizeNumberingForm(updated)
       setNumbering(updated)
-      setNumberingForm({
-        prefix: readString(normalizedUpdated, ["prefix"]),
-        padding: String(readNumber(normalizedUpdated, ["padding"]) ?? padding),
-        next_number: String(readNumber(normalizedUpdated, ["next_number", "nextNumber"]) ?? nextNumber),
-      })
+      setNumberingForm(nextForm)
+      setSavedNumberingForm(nextForm)
       setNumberingMessage("Employee numbering updated.")
     } catch (errorObject) {
       setNumberingError(apiErrorMessage(errorObject, "Failed to update employee numbering."))
@@ -198,6 +212,10 @@ export function EmployeeSetupView() {
   const previewPrefix = numberingForm.prefix.trim()
   const previewDigits =
     numberingPreview === "-" ? [] : numberingPreview.slice(previewPrefix.length).split("")
+  const isDirty =
+    numberingForm.prefix !== savedNumberingForm.prefix ||
+    numberingForm.padding !== savedNumberingForm.padding ||
+    numberingForm.next_number !== savedNumberingForm.next_number
 
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-card">
@@ -255,6 +273,12 @@ export function EmployeeSetupView() {
                   {numbering ? (readNumber(numbering, ["next_number", "nextNumber"]) ?? "—") : "—"}
                 </span>
               </p>
+              <p>
+                Status{" "}
+                <span className="font-medium text-foreground">
+                  {loading ? "Refreshing..." : numberingSaving ? "Saving..." : isDirty ? "Unsaved changes" : "Synced"}
+                </span>
+              </p>
             </div>
           </div>
         </div>
@@ -265,9 +289,11 @@ export function EmployeeSetupView() {
               <Input
                 id="employee-number-prefix"
                 value={numberingForm.prefix}
-                onChange={(event) =>
+                onChange={(event) => {
+                  setNumberingMessage(null)
+                  setNumberingError(null)
                   setNumberingForm((current) => ({ ...current, prefix: event.target.value.toUpperCase() }))
-                }
+                }}
                 placeholder="EMP"
                 className="font-mono uppercase"
               />
@@ -278,9 +304,11 @@ export function EmployeeSetupView() {
                 id="employee-number-padding"
                 inputMode="numeric"
                 value={numberingForm.padding}
-                onChange={(event) =>
+                onChange={(event) => {
+                  setNumberingMessage(null)
+                  setNumberingError(null)
                   setNumberingForm((current) => ({ ...current, padding: event.target.value }))
-                }
+                }}
                 placeholder="5"
               />
             </div>
@@ -290,9 +318,11 @@ export function EmployeeSetupView() {
                 id="employee-number-next"
                 inputMode="numeric"
                 value={numberingForm.next_number}
-                onChange={(event) =>
+                onChange={(event) => {
+                  setNumberingMessage(null)
+                  setNumberingError(null)
                   setNumberingForm((current) => ({ ...current, next_number: event.target.value }))
-                }
+                }}
                 placeholder="1"
               />
             </div>
@@ -303,9 +333,9 @@ export function EmployeeSetupView() {
           {numberingMessage ? <p className="text-sm text-emerald-600">{numberingMessage}</p> : null}
           {numberingError ? <p className="text-sm text-rose-600">{numberingError}</p> : null}
           <div className="flex justify-end">
-            <Button type="button" onClick={() => void saveNumbering()} disabled={numberingSaving || loading}>
+            <Button type="button" onClick={() => void saveNumbering()} disabled={numberingSaving || loading || !isDirty}>
               {numberingSaving ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Save className="mr-2 size-4" />}
-              Save numbering
+              {isDirty ? "Save numbering" : "Saved"}
             </Button>
           </div>
         </div>

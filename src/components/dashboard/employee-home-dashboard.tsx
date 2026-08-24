@@ -54,6 +54,8 @@ import {
 import {
   getEmployeeDashboard,
   getMyDashboard,
+  getMyProfile,
+  getCurrentEmployee,
   getMyAttendanceToday,
   listMyPayslips,
   listMyAttendancePunches,
@@ -71,8 +73,13 @@ import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { useForbiddenPrefixes } from "@/hooks/use-forbidden-route-guard"
 import { canSeeDashboardPage } from "@/lib/forbidden-routes"
 import { useMyProfilePhoto } from "@/lib/my-profile-photo"
+import {
+  clearStoredSession,
+  readStoredSessionTokens,
+  redirectToLogin,
+} from "@/lib/session-client"
 import { cn } from "@/lib/utils"
-import { AUTH_STORAGE_KEYS } from "@/utils/constants"
+import { ROUTES } from "@/utils/constants"
 import { asRecord, readString } from "@/utils/token-utils"
 
 type DashboardRole = {
@@ -231,8 +238,42 @@ type EmployeeDashboardData = {
   } | null
   links?: {
     profile?: string
+    attendance_today?: string
+    attendance_history?: string
+    attendance_schedule?: string
     leave_requests?: string
     leave_balances?: string
+  } | null
+  attendance_overview?: {
+    recent_history?: unknown[]
+    stats_last_30_days?: {
+      from_date?: string
+      to_date?: string
+      total_days?: number
+      present_days?: number
+      absent_days?: number
+      half_days?: number
+      leave_days?: number
+      incomplete_days?: number
+      late_days?: number
+      overtime_days?: number
+    } | null
+  } | null
+  schedule_preview?: {
+    from_date?: string
+    to_date?: string
+    days?: unknown[]
+  } | null
+  leave?: {
+    current_fiscal_year?: string
+    counts?: Record<string, unknown> | null
+    balances?: unknown[]
+    recent_requests?: unknown[]
+    upcoming_approved_leave?: unknown[]
+  } | null
+  pending_profile_change?: {
+    has_pending_profile_change?: boolean
+    pending_request_count?: number
   } | null
   [key: string]: unknown
 }
@@ -242,6 +283,7 @@ type EmployeeDashboardViewProps = {
   attendanceToday?: AdminRecord | null
   attendancePunchesToday?: AdminRecord[]
   leaveBalances?: AdminRecord[]
+  leaveBalanceTotals?: Record<string, number>
   leaveTypes?: AdminRecord[]
   payslips?: AdminRecord[]
 }
@@ -570,14 +612,128 @@ function isEmployeeDashboardData(value: unknown): value is EmployeeDashboardData
   return Boolean(user && employee)
 }
 
-async function loadEmployeeDashboardOverview(token: string) {
-  const dedicatedDashboard = await getEmployeeDashboard(token).catch(() => null)
-  if (isEmployeeDashboardData(dedicatedDashboard)) {
-    return dedicatedDashboard
+function safeJsonStringify(value: unknown) {
+  try {
+    return JSON.stringify(value, null, 2)
+  } catch (errorObject) {
+    return errorObject instanceof Error
+      ? `Unable to serialize dashboard payload: ${errorObject.message}`
+      : "Unable to serialize dashboard payload."
+  }
+}
+
+function formatDashboardPayloadError(value: unknown) {
+  if (value == null) {
+    return "The dashboard API did not return any data. Please refresh or sign in again."
   }
 
-  const fallbackDashboard = await getMyDashboard(token).catch(() => dedicatedDashboard)
-  return fallbackDashboard
+  const record = asRecord(value)
+  if (!record) {
+    return `Dashboard payload is not an object.\n\n${safeJsonStringify(value)}`
+  }
+
+  const missingSections: string[] = []
+  if (!asRecord(record.user)) missingSections.push("user")
+  if (!asRecord(record.employee)) missingSections.push("employee")
+
+  const topLevelKeys = Object.keys(record)
+  const summary = [
+    "Dashboard payload is incomplete.",
+    missingSections.length > 0
+      ? `Missing required sections: ${missingSections.join(", ")}.`
+      : "Required sections exist, but the payload still failed validation.",
+    topLevelKeys.length > 0
+      ? `Top-level keys received: ${topLevelKeys.join(", ")}.`
+      : "The payload did not include any top-level keys.",
+  ].join("\n")
+
+  return `${summary}\n\n${safeJsonStringify(value)}`
+}
+
+function readErrorStatus(errorObject: unknown) {
+  if (!errorObject || typeof errorObject !== "object") return null
+  if (!("status" in errorObject)) return null
+  const status = Number(errorObject.status)
+  return Number.isFinite(status) ? status : null
+}
+
+function isSessionEndedError(errorObject: unknown) {
+  const status = readErrorStatus(errorObject)
+  const payload = errorObject && typeof errorObject === "object" && "payload" in errorObject
+    ? asRecord(errorObject.payload)
+    : null
+  const code = typeof payload?.code === "string" ? payload.code : ""
+  const message = errorObject instanceof Error ? errorObject.message : ""
+  return (
+    status === 401 ||
+    code === "SESSION_REPLACED" ||
+    /session ended|signed in on another device/i.test(message)
+  )
+}
+
+async function composeDashboardFromProfile(token: string) {
+  const [profile, employee] = await Promise.all([
+    getMyProfile(token).catch(() => null),
+    getCurrentEmployee(token).catch(() => null),
+  ])
+  const user = asRecord(profile)
+  const employeeRecord = asRecord(employee)
+  if (!user || !employeeRecord) {
+    return null
+  }
+  return {
+    user,
+    employee: employeeRecord,
+  }
+}
+
+async function loadEmployeeDashboardOverview(token: string) {
+  const errors: unknown[] = []
+  let lastPayload: unknown = null
+
+  try {
+    const dedicatedDashboard = await getEmployeeDashboard(token)
+    lastPayload = dedicatedDashboard
+    if (isEmployeeDashboardData(dedicatedDashboard)) {
+      return dedicatedDashboard
+    }
+  } catch (errorObject) {
+    if (isSessionEndedError(errorObject)) {
+      throw errorObject
+    }
+    errors.push(errorObject)
+  }
+
+  try {
+    const fallbackDashboard = await getMyDashboard(token)
+    lastPayload = fallbackDashboard
+    if (isEmployeeDashboardData(fallbackDashboard)) {
+      return fallbackDashboard
+    }
+  } catch (errorObject) {
+    if (isSessionEndedError(errorObject)) {
+      throw errorObject
+    }
+    errors.push(errorObject)
+  }
+
+  try {
+    const composedDashboard = await composeDashboardFromProfile(token)
+    lastPayload = composedDashboard ?? lastPayload
+    if (isEmployeeDashboardData(composedDashboard)) {
+      return composedDashboard
+    }
+  } catch (errorObject) {
+    if (isSessionEndedError(errorObject)) {
+      throw errorObject
+    }
+    errors.push(errorObject)
+  }
+
+  if (errors.length > 0 && lastPayload == null) {
+    throw errors[errors.length - 1]
+  }
+  return lastPayload
 }
 
 function isAdminIdentity() {
@@ -599,6 +755,50 @@ function formatDate(value?: string | null) {
     day: "numeric",
     month: "short",
     year: "numeric",
+  }).format(parsed)
+}
+
+function dashboardPathFromApiLink(value: unknown, fallback: string) {
+  if (typeof value !== "string" || !value.trim()) return fallback
+  const trimmed = value.trim()
+  if (trimmed.startsWith("/dashboard/")) return trimmed
+  if (trimmed.startsWith("/me/")) return `/dashboard${trimmed}`
+  if (trimmed.startsWith("/")) return `/dashboard${trimmed}`
+  return fallback
+}
+
+function formatCompactDate(value?: string | null) {
+  if (!value) return "—"
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return value
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+  }).format(parsed)
+}
+
+function formatWeekdayLabel(value?: string | null) {
+  if (!value) return "—"
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return value
+  return new Intl.DateTimeFormat("en-GB", {
+    weekday: "short",
+  }).format(parsed)
+}
+
+function formatClockLabel(value?: string | null) {
+  if (!value?.trim()) return ""
+  const trimmed = value.trim()
+  const match = trimmed.match(/^(\d{2}):(\d{2})/)
+  if (match) {
+    return `${match[1]}:${match[2]}`
+  }
+  const parsed = new Date(trimmed)
+  if (Number.isNaN(parsed.getTime())) return trimmed
+  return new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
   }).format(parsed)
 }
 
@@ -742,6 +942,41 @@ function formatBalanceNumber(value: unknown): string {
     return value.trim()
   }
   return "—"
+}
+
+function readLeaveTotalsValue(totals: Record<string, number> | undefined, keys: string[]) {
+  if (!totals) return null
+  for (const key of keys) {
+    const value = totals[key]
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value
+    }
+  }
+  return null
+}
+
+function flattenDashboardLeaveBalances(leavePayload: unknown): AdminRecord[] {
+  const leaveRecord = asRecord(leavePayload)
+  if (!leaveRecord || !Array.isArray(leaveRecord.balances)) return []
+
+  const rows: AdminRecord[] = []
+  for (const entry of leaveRecord.balances) {
+    const groupRecord = asRecord(entry)
+    const balances = Array.isArray(groupRecord?.leave_balances)
+      ? groupRecord.leave_balances
+      : Array.isArray(groupRecord?.leaveBalances)
+        ? groupRecord.leaveBalances
+        : []
+
+    for (const row of balances) {
+      const record = asRecord(row)
+      if (record) {
+        rows.push(record)
+      }
+    }
+  }
+
+  return rows
 }
 
 function readMoneyAmount(record: AdminRecord | null | undefined, keys: string[]) {
@@ -1013,6 +1248,62 @@ function extractLeaveSummaries(
       used,
       allocated,
     }))
+}
+
+function countVisibleLeaveTypes(
+  leaveTypes: AdminRecord[] | undefined,
+  employee?: AdminRecord | DashboardEmployee | null
+): number {
+  if (!Array.isArray(leaveTypes) || leaveTypes.length === 0) return 0
+
+  const employeeGender = readEmployeeGender(employee)
+  const visibleKeys = new Set<string>()
+
+  for (const row of leaveTypes) {
+    const leaveTypeRecord = asRecord(row.leave_type) ?? asRecord(row.leaveType) ?? row
+    const leaveTypeId =
+      readNumericish(row, ["id", "leave_type_id", "leaveTypeId", "type_id", "typeId"]) ??
+      readNumericish(leaveTypeRecord, ["id", "leave_type_id", "leaveTypeId"])
+    const typeName =
+      readString(row, [
+        "name",
+        "display_name",
+        "displayName",
+        "leave_type_name",
+        "leaveTypeName",
+        "type_name",
+        "typeName",
+        "title",
+        "code",
+      ]) ||
+      readString(leaveTypeRecord, [
+        "name",
+        "display_name",
+        "displayName",
+        "leave_type_name",
+        "leaveTypeName",
+        "type_name",
+        "typeName",
+        "title",
+        "code",
+      ]) ||
+      ""
+
+    const restriction = resolveLeaveTypeGenderRestriction(typeName || "Leave", leaveTypeRecord, row)
+    if (!isLeaveTypeVisibleForGender(restriction, employeeGender)) continue
+
+    if (leaveTypeId !== null) {
+      visibleKeys.add(`id:${leaveTypeId}`)
+      continue
+    }
+
+    const normalizedName = typeName.trim().toLowerCase()
+    if (normalizedName) {
+      visibleKeys.add(`name:${normalizedName}`)
+    }
+  }
+
+  return visibleKeys.size
 }
 
 function formatPunchState(state: string | null | undefined): string {
@@ -1610,13 +1901,35 @@ function QuickActionLink({
   return (
     <Link
       href={href}
-      className="group flex items-center gap-1.5 rounded-md border border-white/25 bg-white/10 px-2 py-1.5 text-white no-underline transition-colors hover:bg-white/18 hover:no-underline"
+      className="group relative flex items-center gap-2 overflow-hidden rounded-xl bg-white/10 px-3 py-2 text-white no-underline shadow-[0_10px_24px_-18px_rgba(0,0,0,0.55)] transition-all duration-300 hover:bg-white/16 hover:no-underline focus:no-underline active:no-underline"
+      style={{ textDecoration: "none" }}
     >
-      <span className="flex size-6 shrink-0 items-center justify-center rounded bg-white/15 text-white [&_svg]:size-3">
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0 right-0 w-14 bg-white/12 transition-transform duration-300 group-hover:translate-x-1"
+        style={{ clipPath: "polygon(30% 0%, 100% 0%, 100% 100%, 0% 100%)" }}
+      />
+      <span
+        aria-hidden
+        className="pointer-events-none absolute -left-3 bottom-0 h-7 w-16 bg-white/10 transition-transform duration-300 group-hover:-translate-x-1"
+        style={{ clipPath: "polygon(0% 100%, 24% 12%, 100% 0%, 76% 100%)" }}
+      />
+      <span
+        className="relative z-10 flex size-7 shrink-0 items-center justify-center rounded-lg bg-white/14 text-white no-underline backdrop-blur-sm group-hover:no-underline [&_svg]:size-3.5"
+        style={{ textDecoration: "none" }}
+      >
         {icon}
       </span>
-      <span className="min-w-0 flex-1 truncate text-xs font-semibold leading-tight">{title}</span>
-      <span className="text-[10px] font-medium text-white/75 transition-transform group-hover:translate-x-0.5">
+      <span
+        className="relative z-10 min-w-0 flex-1 truncate text-xs font-semibold leading-tight no-underline group-hover:no-underline"
+        style={{ textDecoration: "none" }}
+      >
+        {title}
+      </span>
+      <span
+        className="relative z-10 text-[10px] font-medium text-white/75 no-underline transition-transform group-hover:translate-x-0.5 group-hover:no-underline"
+        style={{ textDecoration: "none" }}
+      >
         →
       </span>
     </Link>
@@ -1706,6 +2019,7 @@ export function EmployeeDashboardView({
   attendanceToday,
   attendancePunchesToday,
   leaveBalances,
+  leaveBalanceTotals,
   leaveTypes,
   payslips,
 }: EmployeeDashboardViewProps) {
@@ -1715,11 +2029,14 @@ export function EmployeeDashboardView({
 
   if (!isEmployeeDashboardData(dashboardData)) {
     return (
-      <Card className="rounded-2xl border border-border bg-card">
+      <Card className="rounded-2xl border border-destructive/30 bg-card">
         <CardContent className="py-10">
-          <p className="text-sm text-muted-foreground">
-            Your dashboard data is not ready yet. Please refresh in a moment.
-          </p>
+          <div className="space-y-3">
+            <p className="text-sm font-medium text-destructive">Dashboard payload error</p>
+            <pre className="overflow-x-auto rounded-xl bg-muted/50 p-3 text-xs text-foreground whitespace-pre-wrap">
+              {formatDashboardPayloadError(dashboardData)}
+            </pre>
+          </div>
         </CardContent>
       </Card>
     )
@@ -1728,12 +2045,19 @@ export function EmployeeDashboardView({
   const fullName = `${dashboardData.user.first_name} ${dashboardData.user.last_name}`.trim()
   const preferredName =
     dashboardData.employee.preferred_name?.trim() || dashboardData.user.first_name
-  const profileHref = "/dashboard/me/profile"
-  const leaveBalancesHref = "/dashboard/me/leave/balances"
-  const leaveRequestHref = "/dashboard/me/leave/requests"
-  const attendanceHref = "/dashboard/attendance/today"
-  const holidaysHref = "/dashboard/me/leave/holidays"
-  const payrollHref = "/dashboard/me/payroll"
+  const linksRecord = asRecord(dashboardData.links)
+  const dashboardRoot = asRecord(dashboardData)
+  const dashboardLeave = asRecord(dashboardRoot?.leave)
+  const dashboardAttendanceOverview = asRecord(dashboardRoot?.attendance_overview)
+  const dashboardSchedulePreview = asRecord(dashboardRoot?.schedule_preview)
+  const dashboardPendingProfileChange = asRecord(dashboardRoot?.pending_profile_change)
+  const profileHref = dashboardPathFromApiLink(linksRecord?.profile, "/dashboard/me/profile")
+  const leaveBalancesHref = dashboardPathFromApiLink(linksRecord?.leave_balances, "/dashboard/me/leave/balances")
+  const leaveRequestHref = dashboardPathFromApiLink(linksRecord?.leave_requests, "/dashboard/me/leave/requests")
+  const attendanceHref = dashboardPathFromApiLink(linksRecord?.attendance_today, "/dashboard/me/attendance/today")
+  const attendanceHistoryHref = dashboardPathFromApiLink(linksRecord?.attendance_history, "/dashboard/me/attendance/history")
+  const attendanceScheduleHref = dashboardPathFromApiLink(linksRecord?.attendance_schedule, "/dashboard/me/attendance/schedule")
+  const payrollHref = "/dashboard/me/finance/payroll"
 
   const employeeProfilePhotoUrl =
     myProfilePhotoUrl || resolveDashboardProfilePhotoUrl(dashboardData) || undefined
@@ -1752,7 +2076,6 @@ export function EmployeeDashboardView({
   const userRecord = asRecord(dashboardData.user)
   const statusRecord = asRecord(dashboardData.status)
   const actionFlagsRecord = asRecord(dashboardData.action_flags)
-  const dashboardRoot = asRecord(dashboardData)
 
   const nationalityRaw =
     readString(employeeRecord, ["nationality"]) ||
@@ -1846,15 +2169,72 @@ export function EmployeeDashboardView({
   const settingsEmailVerifyHref = "/dashboard/settings?tab=email"
 
   const att = getAttendanceStatus(attendanceToday, attendancePunchesToday)
+  const dashboardLeaveBalances = flattenDashboardLeaveBalances(dashboardLeave)
+  const resolvedLeaveBalances =
+    Array.isArray(leaveBalances) && leaveBalances.length > 0 ? leaveBalances : dashboardLeaveBalances
   const leaveSummaries = extractLeaveSummaries(
-    leaveBalances,
+    resolvedLeaveBalances,
     leaveTypes,
     asRecord(dashboardData.employee)
   )
+  const leaveAvailableTotal = readLeaveTotalsValue(leaveBalanceTotals, [
+    "available_days",
+    "available",
+    "remaining_days",
+    "remaining",
+  ])
   const totalLeaveDays = leaveSummaries.reduce((sum, item) => {
     const n = Number(String(item.available).replace(/[^\d.-]/g, ""))
     return sum + (Number.isFinite(n) ? n : 0)
   }, 0)
+  const leaveLeftValue =
+    leaveAvailableTotal !== null
+      ? formatBalanceNumber(leaveAvailableTotal)
+      : leaveSummaries.length > 0
+        ? formatBalanceNumber(totalLeaveDays)
+        : "—"
+  const leaveTypeCount =
+    leaveSummaries.length > 0
+      ? new Set(leaveSummaries.map((item) => item.typeName.trim().toLowerCase()).filter(Boolean)).size
+      : countVisibleLeaveTypes(leaveTypes, asRecord(dashboardData.employee))
+  const leaveCountsRecord = asRecord(dashboardLeave?.counts)
+  const leaveFiscalYear = readString(dashboardLeave, ["current_fiscal_year", "currentFiscalYear"])
+  const pendingLeaveRequests =
+    readNumericish(leaveCountsRecord, [
+      "pending_total",
+      "pendingTotal",
+      "submitted",
+      "in_review",
+      "pending_department_manager",
+      "pending_hr",
+      "returned_for_correction",
+    ]) ?? 0
+  const approvedLeaveRequests = readNumericish(leaveCountsRecord, ["approved"]) ?? 0
+  const attendanceStatsRecord = asRecord(dashboardAttendanceOverview?.stats_last_30_days)
+  const attendanceFromDate = readString(attendanceStatsRecord, ["from_date", "fromDate"])
+  const attendanceToDate = readString(attendanceStatsRecord, ["to_date", "toDate"])
+  const attendanceTotalDays = readNumericish(attendanceStatsRecord, ["total_days", "totalDays"]) ?? 0
+  const attendancePresentDays = readNumericish(attendanceStatsRecord, ["present_days", "presentDays"]) ?? 0
+  const attendanceAbsentDays = readNumericish(attendanceStatsRecord, ["absent_days", "absentDays"]) ?? 0
+  const attendanceLeaveDays = readNumericish(attendanceStatsRecord, ["leave_days", "leaveDays"]) ?? 0
+  const attendanceLateDays = readNumericish(attendanceStatsRecord, ["late_days", "lateDays"]) ?? 0
+  const attendancePresentRate =
+    attendanceTotalDays > 0 ? Math.round((attendancePresentDays / attendanceTotalDays) * 100) : null
+  const scheduleDays = Array.isArray(dashboardSchedulePreview?.days)
+    ? dashboardSchedulePreview.days
+        .map((item) => asRecord(item))
+        .filter((item): item is AdminRecord => Boolean(item))
+    : []
+  const hasPendingProfileChange =
+    readBooleanValue(dashboardPendingProfileChange, [
+      "has_pending_profile_change",
+      "hasPendingProfileChange",
+    ]) ?? false
+  const pendingProfileChangeCount =
+    readNumericish(dashboardPendingProfileChange, [
+      "pending_request_count",
+      "pendingRequestCount",
+    ]) ?? 0
   const latestPayslip = Array.isArray(payslips) && payslips.length > 0 ? payslips[0] : null
   const latestPayslipCurrency =
     readString(latestPayslip, ["currency", "pay_currency", "payCurrency"]) ||
@@ -1902,17 +2282,16 @@ export function EmployeeDashboardView({
     {
       key: "leave",
       label: "Leave left",
-      value: leaveSummaries.length > 0 ? String(totalLeaveDays) : "—",
+      value: leaveLeftValue,
       className: "bg-background",
-      valueClassName:
-        leaveSummaries.length > 0 ? "text-primary" : "text-muted-foreground",
+      valueClassName: leaveLeftValue === "—" ? "text-muted-foreground" : "text-primary",
     },
     {
       key: "types",
       label: "Leave types",
-      value: String(leaveSummaries.length),
+      value: String(leaveTypeCount),
       className: "bg-background",
-      valueClassName: leaveSummaries.length > 0 ? "text-primary" : "text-muted-foreground",
+      valueClassName: leaveTypeCount > 0 ? "text-primary" : "text-muted-foreground",
     },
   ]
 
@@ -1997,7 +2376,6 @@ export function EmployeeDashboardView({
         className="relative overflow-hidden rounded-2xl p-4 text-white md:p-5"
         style={{ backgroundColor: "var(--primary)" }}
       >
-        <Doodle name="doodle-circles" />
         <div className="relative z-10 space-y-4">
           <div className="flex min-w-0 items-start gap-3">
             <motion.div
@@ -2019,7 +2397,7 @@ export function EmployeeDashboardView({
                 <h2 className="text-xl font-semibold tracking-tight text-white md:text-2xl">
                   {fullName}
                 </h2>
-                <span className="inline-flex items-center rounded-full border border-white/30 bg-white/20 px-2 py-0.5 text-[11px] font-semibold capitalize text-white">
+                <span className="text-[11px] font-semibold capitalize text-white/85">
                   {employmentStatus}
                 </span>
               </div>
@@ -2062,18 +2440,8 @@ export function EmployeeDashboardView({
             {[
               { href: attendanceHref, title: "Attendance", icon: <ClockIcon /> },
               { href: leaveRequestHref, title: "Request leave", icon: <CalendarClockIcon /> },
-              { href: leaveBalancesHref, title: "Leave balances", icon: <CalendarIcon /> },
               { href: payrollHref, title: "My payroll", icon: <Landmark /> },
               { href: "/dashboard/me/performance/overview", title: "My performance", icon: <Target /> },
-              { href: "/dashboard/me/probation", title: "My probation", icon: <BadgeCheck /> },
-              { href: "/dashboard/me/field/visits", title: "My field", icon: <MapPin /> },
-              { href: "/dashboard/me/finance", title: "My finance", icon: <Landmark /> },
-              { href: "/dashboard/me/activities/today", title: "My activities", icon: <FileText /> },
-              { href: "/dashboard/me/movements", title: "My movements", icon: <Users /> },
-              { href: "/dashboard/me/team/overview", title: "My team", icon: <UserCheck /> },
-              { href: "/dashboard/me/insights", title: "My insights", icon: <Sparkles /> },
-              { href: "/dashboard/me/requests/actions", title: "My requests", icon: <FileText /> },
-              { href: holidaysHref, title: "Holidays", icon: <CalendarIcon /> },
             ].filter((action) =>
               actor.ready &&
               canSeeDashboardPage(action.href, actor.permissionLabels, actor.accessMode)
@@ -2096,13 +2464,55 @@ export function EmployeeDashboardView({
         </div>
       </motion.div>
 
+      {hasPendingProfileChange || pendingProfileChangeCount > 0 ? (
+        <motion.div variants={dashboardItem}>
+          <DashboardSection
+            title="Profile update pending"
+            subtitle="Your submitted profile changes are waiting for review"
+            action={
+              <Link
+                href={profileHref}
+                className="shrink-0 text-xs font-medium text-primary no-underline hover:underline"
+              >
+                Open profile
+              </Link>
+            }
+            barClassName="bg-amber-500"
+          >
+            <div className="flex items-center gap-3 px-3 py-3">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                <BadgeCheck className="size-4" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-foreground">
+                  {pendingProfileChangeCount} pending change request{pendingProfileChangeCount === 1 ? "" : "s"}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  We&apos;ll reflect approved updates here once they are reviewed.
+                </p>
+              </div>
+            </div>
+          </DashboardSection>
+        </motion.div>
+      ) : null}
+
       {/* Leave balances — full width */}
       <motion.div variants={dashboardItem}>
         <DashboardSection
           title="Leave balances"
-          subtitle="Available days by type"
+          subtitle={leaveFiscalYear ? `Available days by type · FY ${leaveFiscalYear}` : "Available days by type"}
           action={
             <div className="flex max-w-full flex-wrap items-center justify-end gap-1.5">
+              {pendingLeaveRequests > 0 ? (
+                <span className="rounded-full bg-amber-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">
+                  {pendingLeaveRequests} pending
+                </span>
+              ) : null}
+              {approvedLeaveRequests > 0 ? (
+                <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
+                  {approvedLeaveRequests} approved
+                </span>
+              ) : null}
               <Link
                 href={leaveBalancesHref}
                 className="shrink-0 text-xs font-medium text-primary no-underline hover:underline"
@@ -2139,7 +2549,9 @@ export function EmployeeDashboardView({
             </div>
           ) : (
             <div className="px-3 py-4 text-sm text-muted-foreground">
-              No leave balance information available yet.
+              {leaveFiscalYear
+                ? `No leave balance information is available for FY ${leaveFiscalYear} yet.`
+                : "No leave balance information available yet."}
             </div>
           )}
         </DashboardSection>
@@ -2194,6 +2606,139 @@ export function EmployeeDashboardView({
           )}
         </DashboardSection>
       </motion.div>
+
+      <div className="grid gap-3 lg:grid-cols-2">
+        <motion.div variants={dashboardItem}>
+          <DashboardSection
+            title="Attendance trend"
+            subtitle={
+              attendanceFromDate && attendanceToDate
+                ? `${formatCompactDate(attendanceFromDate)} - ${formatCompactDate(attendanceToDate)}`
+                : "Last 30 days"
+            }
+            action={
+              <Link
+                href={attendanceHistoryHref}
+                className="shrink-0 text-xs font-medium text-primary no-underline hover:underline"
+              >
+                View history
+              </Link>
+            }
+            barClassName="bg-primary"
+          >
+            {attendanceTotalDays > 0 ? (
+              <div className="grid gap-3 px-3 py-3 sm:grid-cols-2 xl:grid-cols-4">
+                {[
+                  {
+                    label: "Tracked days",
+                    value: String(attendanceTotalDays),
+                    tone: "text-foreground",
+                  },
+                  {
+                    label: "Present",
+                    value:
+                      attendancePresentRate !== null
+                        ? `${attendancePresentDays} (${attendancePresentRate}%)`
+                        : String(attendancePresentDays),
+                    tone: "text-emerald-700 dark:text-emerald-400",
+                  },
+                  {
+                    label: "Absent",
+                    value: String(attendanceAbsentDays),
+                    tone: "text-rose-700 dark:text-rose-400",
+                  },
+                  {
+                    label: "Leave / Late",
+                    value: `${attendanceLeaveDays} / ${attendanceLateDays}`,
+                    tone: "text-amber-700 dark:text-amber-400",
+                  },
+                ].map((item) => (
+                  <div key={item.label} className="rounded-xl bg-muted/40 px-3 py-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                      {item.label}
+                    </p>
+                    <p className={cn("mt-1 text-sm font-semibold", item.tone)}>{item.value}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="px-3 py-4 text-sm text-muted-foreground">
+                Attendance trend data will appear once your recent attendance is available.
+              </div>
+            )}
+          </DashboardSection>
+        </motion.div>
+
+        <motion.div variants={dashboardItem}>
+          <DashboardSection
+            title="This week"
+            subtitle="Upcoming schedule preview"
+            action={
+              <Link
+                href={attendanceScheduleHref}
+                className="shrink-0 text-xs font-medium text-primary no-underline hover:underline"
+              >
+                Open schedule
+              </Link>
+            }
+            barClassName="bg-primary"
+          >
+            {scheduleDays.length > 0 ? (
+              <div className="flex flex-nowrap gap-2 overflow-x-auto overscroll-x-contain px-3 py-3 [-webkit-overflow-scrolling:touch]">
+                {scheduleDays.slice(0, 7).map((day) => {
+                  const dayDate = readString(day, ["date"])
+                  const holidayRecord = asRecord(day.holiday)
+                  const shiftRecord = asRecord(day.shift)
+                  const isOffDay =
+                    readBooleanValue(day, ["is_off_day", "isOffDay"]) ?? false
+                  const holidayName = readString(holidayRecord, ["name"]) || "Public holiday"
+                  const shiftName = readString(shiftRecord, ["name"]) || "Work day"
+                  const shiftStart = formatClockLabel(readString(shiftRecord, ["start_time", "startTime"]))
+                  const shiftEnd = formatClockLabel(readString(shiftRecord, ["end_time", "endTime"]))
+                  const detail = holidayRecord
+                    ? holidayName
+                    : isOffDay
+                      ? "Off day"
+                      : shiftStart && shiftEnd
+                        ? `${shiftStart} - ${shiftEnd}`
+                        : "Scheduled"
+
+                  return (
+                    <div
+                      key={dayDate || shiftName}
+                      className="flex min-w-[7.5rem] flex-1 flex-col rounded-xl bg-muted/40 px-3 py-3"
+                    >
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                        {formatWeekdayLabel(dayDate)}
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-foreground">
+                        {formatCompactDate(dayDate)}
+                      </p>
+                      <p
+                        className={cn(
+                          "mt-2 text-xs font-medium",
+                          holidayRecord
+                            ? "text-amber-700 dark:text-amber-400"
+                            : isOffDay
+                              ? "text-muted-foreground"
+                              : "text-primary"
+                        )}
+                      >
+                        {holidayRecord ? holidayName : isOffDay ? "Off day" : shiftName}
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-muted-foreground">{detail}</p>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="px-3 py-4 text-sm text-muted-foreground">
+                Your upcoming schedule preview is not available yet.
+              </div>
+            )}
+          </DashboardSection>
+        </motion.div>
+      </div>
 
       {/* Manager (left) + Employment (right) — same card design */}
       <div className="grid gap-3 lg:grid-cols-2">
@@ -2398,6 +2943,7 @@ export function EmployeeHomeDashboard() {
   const [attendanceToday, setAttendanceToday] = React.useState<AdminRecord | null>(null)
   const [attendancePunchesToday, setAttendancePunchesToday] = React.useState<AdminRecord[]>([])
   const [leaveBalances, setLeaveBalances] = React.useState<AdminRecord[]>([])
+  const [leaveBalanceTotals, setLeaveBalanceTotals] = React.useState<Record<string, number> | undefined>(undefined)
   const [leaveTypes, setLeaveTypes] = React.useState<AdminRecord[]>([])
   const [payslips, setPayslips] = React.useState<AdminRecord[]>([])
   const [loading, setLoading] = React.useState(true)
@@ -2426,24 +2972,7 @@ export function EmployeeHomeDashboard() {
       return
     }
 
-    const rawTokens = window.localStorage.getItem(AUTH_STORAGE_KEYS.tokens)
-    if (!rawTokens) {
-      setError("Your session has expired. Please sign in again.")
-      setLoading(false)
-      return
-    }
-
-    let accessToken = ""
-    try {
-      const parsed = JSON.parse(rawTokens) as Record<string, unknown>
-      accessToken =
-        (typeof parsed.accessToken === "string" && parsed.accessToken.trim()) ||
-        (typeof parsed.access_token === "string" && parsed.access_token.trim()) ||
-        ""
-    } catch {
-      accessToken = ""
-    }
-
+    const accessToken = readStoredSessionTokens().accessToken
     if (!accessToken) {
       setError("Your session has expired. Please sign in again.")
       setLoading(false)
@@ -2459,7 +2988,7 @@ export function EmployeeHomeDashboard() {
     const load = async () => {
       try {
         const todayIso = localDateIso()
-        const [dash, attToday, punchesResult, leaves, types, payrollRows] = await Promise.all([
+        const [dash, attToday, punchesResult, leaveBalancesResult, types, payrollRows] = await Promise.all([
           loadEmployeeDashboardOverview(accessToken),
           getMyAttendanceToday(accessToken).catch(() => null),
           // Match Android: load recent punches, then filter to today client-side.
@@ -2484,7 +3013,15 @@ export function EmployeeHomeDashboard() {
                 .then((r) => r.rows || [])
                 .catch(() => [] as AdminRecord[])
             ),
-          listMyLeaveBalances(accessToken, { limit: 8 }).then((r) => r.rows || []).catch(() => []),
+          listMyLeaveBalances(accessToken, { limit: 8 })
+            .then((result) => ({
+              rows: (result.rows || []) as AdminRecord[],
+              totals: result.totals,
+            }))
+            .catch(() => ({
+              rows: [] as AdminRecord[],
+              totals: undefined as Record<string, number> | undefined,
+            })),
           listLeaveTypes(accessToken, { page: 1, limit: 100 })
             .then((r) => r.rows || [])
             .catch(() => []),
@@ -2503,12 +3040,13 @@ export function EmployeeHomeDashboard() {
         setDashboardData(validDash)
         setAttendanceToday((attToday as AdminRecord) || null)
         setAttendancePunchesToday(punchesToday)
-        setLeaveBalances(leaves as AdminRecord[])
+        setLeaveBalances(leaveBalancesResult.rows)
+        setLeaveBalanceTotals(leaveBalancesResult.totals)
         setLeaveTypes(types as AdminRecord[])
         setPayslips(payrollRows as AdminRecord[])
 
         if (!validDash) {
-          setError("Your dashboard payload is incomplete right now. Please refresh and try again.")
+          setError(formatDashboardPayloadError(dash))
         } else if (validDash.employee.employment_status === "onboarding") {
           const dismissedKey = `onboarding_dialog_dismissed_${validDash.user?.id || "current"}`
           if (!sessionStorage.getItem(dismissedKey)) {
@@ -2517,6 +3055,16 @@ export function EmployeeHomeDashboard() {
         }
       } catch (err: unknown) {
         if (!cancelled) {
+          if (isSessionEndedError(err)) {
+            setError(
+              err instanceof Error && err.message.trim()
+                ? err.message
+                : "Your session has expired. Please sign in again.",
+            )
+            clearStoredSession()
+            redirectToLogin()
+            return
+          }
           setError(err instanceof Error ? err.message : "Failed to load your dashboard.")
         }
       } finally {
@@ -2667,10 +3215,21 @@ export function EmployeeHomeDashboard() {
   }
 
   if (error) {
+    const sessionEnded = /session has expired|session ended|signed in on another device|sign in again/i.test(error)
     return (
       <Card className="rounded-2xl border border-destructive/30 bg-card">
         <CardContent className="py-10">
-          <p className="text-sm text-destructive">{error}</p>
+          <div className="space-y-3">
+            <p className="text-sm font-medium text-destructive">Dashboard error</p>
+            <pre className="overflow-x-auto rounded-xl bg-muted/50 p-3 text-xs text-foreground whitespace-pre-wrap">
+              {error}
+            </pre>
+            {sessionEnded ? (
+              <Button type="button" onClick={() => window.location.assign(ROUTES.login)}>
+                Sign in again
+              </Button>
+            ) : null}
+          </div>
         </CardContent>
       </Card>
     )
@@ -2889,6 +3448,7 @@ export function EmployeeHomeDashboard() {
         attendanceToday={attendanceToday}
         attendancePunchesToday={attendancePunchesToday}
         leaveBalances={leaveBalances}
+        leaveBalanceTotals={leaveBalanceTotals}
         leaveTypes={leaveTypes}
         payslips={payslips}
       />

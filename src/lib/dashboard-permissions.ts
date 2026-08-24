@@ -445,7 +445,13 @@ export const GRADE_ROUTE_PERMISSION: PermissionRequirement = {
 }
 
 export const STRUCTURE_ROUTE_PERMISSION: PermissionRequirement = {
-  permissions: [...COST_CENTER_PERMISSIONS, ...GRADE_PERMISSIONS],
+  permissions: [
+    ...COST_CENTER_PERMISSIONS,
+    ...GRADE_PERMISSIONS,
+    "employee_numbering:read",
+    "employee_numbering:update",
+    "employee_numbering:create",
+  ],
   mode: "any",
 }
 
@@ -640,6 +646,8 @@ const ADMIN_DASHBOARD_LANDING_ROUTES = [
 const DASHBOARD_ROUTE_SHELLS: Record<string, DashboardAccessMode> = {
   // This is the admin-shell overview surface, not a generic feature route.
   "/dashboard/company-overview": "admin",
+  "/dashboard/performance": "admin",
+  "/dashboard/probation": "admin",
 }
 
 /** Permissions that unlock the company employee directory and employee profiles. */
@@ -753,6 +761,7 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/me/organization": null,
   "/dashboard/me/promotion": null,
   "/dashboard/me/payroll": null,
+  "/dashboard/me/finance/payroll": null,
   "/dashboard/me/performance": null,
   "/dashboard/me/performance/overview": null,
   "/dashboard/me/performance/assignments": null,
@@ -766,6 +775,7 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/me/field/plans": null,
   "/dashboard/me/field/follow-ups": null,
   "/dashboard/me/finance": null,
+  "/dashboard/me/finance/applications": null,
   "/dashboard/me/activities": null,
   "/dashboard/me/activities/today": null,
   "/dashboard/me/activities/reports": null,
@@ -1588,8 +1598,19 @@ export function hasGradeAccess(permissionLabels: string[]) {
   ])
 }
 
+export function hasNumberingAccess(permissionLabels: string[]) {
+  return hasPrefixedAccess(permissionLabels, NUMBERING_ROUTE_PERMISSION, [
+    "employee_numbering",
+    "employee_number",
+  ])
+}
+
 export function hasStructureAccess(permissionLabels: string[]) {
-  return hasCostCenterAccess(permissionLabels) || hasGradeAccess(permissionLabels)
+  return (
+    hasCostCenterAccess(permissionLabels) ||
+    hasGradeAccess(permissionLabels) ||
+    hasNumberingAccess(permissionLabels)
+  )
 }
 
 export function hasAnalyticsAccess(permissionLabels: string[]) {

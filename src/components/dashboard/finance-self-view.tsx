@@ -6,7 +6,6 @@ import { toast } from "sonner"
 
 import {
   HeroBand,
-  MetricTile,
   StatusChip,
   TalentDoodleSprites,
   actionButtonClass,
@@ -49,6 +48,7 @@ export function FinanceSelfView() {
   const [applications, setApplications] = React.useState<AdminRecord[]>([])
   const [products, setProducts] = React.useState<AdminRecord[]>([])
   const [loading, setLoading] = React.useState(true)
+  const [mounted, setMounted] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [createOpen, setCreateOpen] = React.useState(false)
   const [form, setForm] = React.useState<Record<string, string>>({})
@@ -82,6 +82,7 @@ export function FinanceSelfView() {
   }, [leaveIfForbidden])
 
   React.useEffect(() => {
+    setMounted(true)
     void load()
   }, [load])
 
@@ -172,16 +173,42 @@ export function FinanceSelfView() {
         title="Loans and advances"
         description="Apply, submit, accept an offer, or withdraw — only your own applications."
         actions={
-          <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
-            {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+          <button
+            type="button"
+            className="inline-flex h-9 items-center gap-1.5 rounded-md border border-white/30 bg-white/10 px-3 text-sm font-medium text-white transition hover:bg-white/20 hover:text-white disabled:opacity-60"
+            onClick={() => void load()}
+            disabled={mounted ? loading : undefined}
+          >
+            {mounted && loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
             Refresh
           </button>
         }
       />
-      <div className="grid gap-3 sm:grid-cols-3">
-        <MetricTile label="Applications" value={applications.length} />
-        <MetricTile label="Products" value={products.length} hint="Available if you can read the catalog" />
-        <MetricTile label="Open" value={applications.filter((row) => !["WITHDRAWN", "REJECTED", "CLOSED"].includes(readString(row, ["status"]).toUpperCase())).length} />
+      <div className="grid grid-cols-3 gap-4">
+        {[
+          { label: "Applications", value: String(applications.length) },
+          { label: "Products", value: String(products.length) },
+          {
+            label: "Open",
+            value: String(
+              applications.filter(
+                (row) =>
+                  !["WITHDRAWN", "REJECTED", "CLOSED"].includes(
+                    readString(row, ["status"]).toUpperCase(),
+                  ),
+              ).length,
+            ),
+          },
+        ].map((field) => (
+          <div key={field.label} className="min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              {field.label}
+            </p>
+            <p className="mt-1 truncate text-2xl font-semibold tracking-tight text-foreground">
+              {field.value}
+            </p>
+          </div>
+        ))}
       </div>
       <div className="flex justify-end">
         <button type="button" className={primaryButtonClass} onClick={() => { setForm({}); setCreateOpen(true) }}>

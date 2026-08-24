@@ -1017,7 +1017,7 @@ export function PayrollOperationsView() {
     }
     if (!canAccessPayroll) {
       router.replace(
-        actor.accessMode === "employee" ? "/dashboard/me/payroll" : "/dashboard",
+        actor.accessMode === "employee" ? "/dashboard/me/finance/payroll" : "/dashboard",
       )
     }
   }, [actor.accessMode, actor.ready, canAccessPayroll, router])

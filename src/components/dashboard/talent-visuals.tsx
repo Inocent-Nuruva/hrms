@@ -245,17 +245,32 @@ export function HeroBand({
       initial="hidden"
       animate="show"
     >
-      <motion.div
-        aria-hidden
-        className="pointer-events-none absolute -right-8 -top-10 h-40 w-40 rounded-full bg-white/10"
-        animate={
-          motionPreset.reduce
-            ? undefined
-            : { x: [0, 10, 0], y: [0, 8, 0], scale: [1, 1.06, 1] }
-        }
-        transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
-      />
-      <TalentDoodle />
+      <TalentDoodleSprites />
+      <div aria-hidden className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
+        <motion.div
+          className="absolute -left-8 top-1/2 h-28 w-44 -translate-y-1/2 bg-white/12"
+          style={{ clipPath: "polygon(0% 18%, 78% 0%, 100% 42%, 22% 100%)" }}
+          animate={
+            motionPreset.reduce
+              ? undefined
+              : { x: [0, 8, 0], y: [0, -6, 0] }
+          }
+          transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
+        />
+        <motion.div
+          className="absolute right-[22%] -top-6 h-24 w-36 bg-white/10"
+          style={{ clipPath: "polygon(18% 0%, 100% 22%, 72% 100%, 0% 68%)" }}
+          animate={
+            motionPreset.reduce
+              ? undefined
+              : { x: [0, -6, 0], y: [0, 8, 0] }
+          }
+          transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
+        />
+        <div className="absolute inset-y-0 left-0 w-[68%] text-white/35">
+          <TalentDoodle />
+        </div>
+      </div>
       <div className="relative z-10 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="max-w-2xl space-y-1.5">
           <motion.p
