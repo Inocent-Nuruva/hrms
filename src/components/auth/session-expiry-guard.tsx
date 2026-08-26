@@ -3,8 +3,16 @@
 import * as React from "react"
 
 import { clearStoredSession, persistSessionTokens, readJwtExpiry, readStoredSessionTokens, redirectToLogin } from "@/lib/session-client"
-import { publishDashboardActorSnapshotFromBrowserStorage } from "@/lib/dashboard-permissions"
+import {
+  DASHBOARD_ACCESS_REFRESH_EVENT,
+  DASHBOARD_PERMISSION_STORAGE_KEY,
+  publishDashboardActorSnapshot,
+  publishDashboardActorSnapshotFromBrowserStorage,
+  publishDashboardActorSnapshotFromSources,
+  readDashboardActorSnapshotFromBrowser,
+} from "@/lib/dashboard-permissions"
 import { authService } from "@/services/authService"
+import { ApiError } from "@/services/api"
 import { AUTH_STORAGE_KEYS, ROUTES } from "@/utils/constants"
 import { env } from "@/lib/env"
 
@@ -31,6 +39,8 @@ function readStoredUserPasswordChangeRequirement() {
 
 export function SessionExpiryGuard() {
   const refreshInFlightRef = React.useRef<Promise<void> | null>(null)
+  const accessSyncInFlightRef = React.useRef<Promise<"ok" | "unauthorized" | "failed"> | null>(null)
+  const lastAccessSyncAtRef = React.useRef(0)
 
   const expireSession = React.useCallback(() => {
     clearStoredSession()
@@ -41,7 +51,54 @@ export function SessionExpiryGuard() {
     return pathname.startsWith(ROUTES.dashboard) || pathname.startsWith(ROUTES.onboarding)
   }, [])
 
-  const ensureFreshSession = React.useCallback(async () => {
+  const syncAccessContext = React.useCallback(
+    async (accessToken: string, force = false) => {
+      if (
+        !force &&
+        Date.now() - lastAccessSyncAtRef.current < SESSION_CHECK_INTERVAL_MS
+      ) {
+        return "ok" as const
+      }
+
+      if (!accessSyncInFlightRef.current) {
+        accessSyncInFlightRef.current = (async () => {
+          try {
+            const user = await authService.getCurrentUser(accessToken)
+            window.localStorage.setItem(AUTH_STORAGE_KEYS.user, JSON.stringify(user))
+            // When /api/users/me explicitly includes access fields it replaces
+            // every cached/JWT permission. Older API deployments that omit the
+            // access context retain the current token as a compatibility fallback.
+            publishDashboardActorSnapshotFromSources(
+              user,
+              ...(user.accessContextResolved ? [] : [accessToken]),
+            )
+            lastAccessSyncAtRef.current = Date.now()
+            return "ok" as const
+          } catch (errorObject) {
+            if (errorObject instanceof ApiError && errorObject.statusCode === 401) {
+              return "unauthorized" as const
+            }
+            // A temporary network outage must not make the authenticated shell
+            // unusable. Prefer the last exact live snapshot; only older sessions
+            // without one need the legacy browser/JWT compatibility fallback.
+            if (window.sessionStorage.getItem(DASHBOARD_PERMISSION_STORAGE_KEY) !== null) {
+              publishDashboardActorSnapshot(readDashboardActorSnapshotFromBrowser())
+            } else {
+              publishDashboardActorSnapshotFromBrowserStorage(accessToken)
+            }
+            return "failed" as const
+          } finally {
+            accessSyncInFlightRef.current = null
+          }
+        })()
+      }
+
+      return accessSyncInFlightRef.current
+    },
+    [],
+  )
+
+  const ensureFreshSession = React.useCallback(async (forceAccessSync = false) => {
     if (typeof window === "undefined") {
       return
     }
@@ -70,19 +127,24 @@ export function SessionExpiryGuard() {
       return
     }
 
-    publishDashboardActorSnapshotFromBrowserStorage(accessToken)
-
     const accessExpiry = readJwtExpiry(accessToken)
-    if (accessExpiry === null || accessExpiry - Date.now() > ACCESS_TOKEN_REFRESH_WINDOW_MS) {
-      return
-    }
+    let activeAccessToken = accessToken
 
-    if (!refreshToken) {
+    if (
+      accessExpiry !== null &&
+      accessExpiry - Date.now() <= ACCESS_TOKEN_REFRESH_WINDOW_MS &&
+      !refreshToken
+    ) {
       expireSession()
       return
     }
 
-    if (!refreshInFlightRef.current) {
+    if (
+      accessExpiry !== null &&
+      accessExpiry - Date.now() <= ACCESS_TOKEN_REFRESH_WINDOW_MS &&
+      refreshToken &&
+      !refreshInFlightRef.current
+    ) {
       refreshInFlightRef.current = (async () => {
         try {
           const response = await authService.refresh(refreshToken)
@@ -101,7 +163,7 @@ export function SessionExpiryGuard() {
               JSON.stringify(response.user)
             )
           }
-          publishDashboardActorSnapshotFromBrowserStorage(response.user ?? nextAccessToken)
+          activeAccessToken = nextAccessToken
         } catch {
           expireSession()
         } finally {
@@ -110,11 +172,19 @@ export function SessionExpiryGuard() {
       })()
     }
 
-    await refreshInFlightRef.current
-  }, [expireSession, isProtectedPath])
+    if (refreshInFlightRef.current) {
+      await refreshInFlightRef.current
+      activeAccessToken = readStoredSessionTokens().accessToken || activeAccessToken
+    }
+
+    const accessSyncResult = await syncAccessContext(activeAccessToken, forceAccessSync)
+    if (accessSyncResult === "unauthorized") {
+      expireSession()
+    }
+  }, [expireSession, isProtectedPath, syncAccessContext])
 
   React.useEffect(() => {
-    void ensureFreshSession()
+    void ensureFreshSession(true)
 
     const intervalId = window.setInterval(() => {
       void ensureFreshSession()
@@ -122,21 +192,27 @@ export function SessionExpiryGuard() {
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
-        void ensureFreshSession()
+        void ensureFreshSession(true)
       }
     }
 
     const handleFocus = () => {
-      void ensureFreshSession()
+      void ensureFreshSession(true)
+    }
+
+    const handleAccessRefreshRequest = () => {
+      void ensureFreshSession(true)
     }
 
     document.addEventListener("visibilitychange", handleVisibilityChange)
     window.addEventListener("focus", handleFocus)
+    window.addEventListener(DASHBOARD_ACCESS_REFRESH_EVENT, handleAccessRefreshRequest)
 
     return () => {
       window.clearInterval(intervalId)
       document.removeEventListener("visibilitychange", handleVisibilityChange)
       window.removeEventListener("focus", handleFocus)
+      window.removeEventListener(DASHBOARD_ACCESS_REFRESH_EVENT, handleAccessRefreshRequest)
     }
   }, [ensureFreshSession])
 

@@ -33,6 +33,7 @@ import {
   canAccessDashboardRoute,
   canPerformPermission,
   COMPANY_MANAGEMENT_ROUTE_PERMISSION,
+  requestDashboardAccessRefresh,
 } from "@/lib/dashboard-permissions"
 import { env } from "@/lib/env"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
@@ -835,6 +836,7 @@ export function CompaniesView() {
       }
       setEditingMember(null)
       await loadData()
+      requestDashboardAccessRefresh()
     } catch (errorObject) {
       setMembersError(
         errorObject instanceof Error

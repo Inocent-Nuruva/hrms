@@ -227,6 +227,43 @@ function readRole(record: UnknownRecord | null): string | undefined {
   return undefined;
 }
 
+const ACCESS_CONTEXT_KEYS = new Set([
+  "permissions",
+  "effective_permissions",
+  "effectivePermissions",
+  "direct_permissions",
+  "directPermissions",
+  "role_permissions",
+  "rolePermissions",
+  "granted_permissions",
+  "grantedPermissions",
+  "authorities",
+  "scopes",
+  "roles",
+]);
+
+function hasExplicitAccessContext(value: unknown, seen = new Set<object>()): boolean {
+  if (Array.isArray(value)) {
+    return value.some((entry) => hasExplicitAccessContext(entry, seen));
+  }
+
+  const record = asRecord(value);
+  if (!record || seen.has(record)) {
+    return false;
+  }
+  seen.add(record);
+
+  if (Object.keys(record).some((key) => ACCESS_CONTEXT_KEYS.has(key))) {
+    return true;
+  }
+
+  return Object.values(record).some((entry) =>
+    typeof entry === "object" && entry !== null
+      ? hasExplicitAccessContext(entry, seen)
+      : false,
+  );
+}
+
 function normalizeTokens(payload: unknown): AuthTokens | undefined {
   const root = asRecord(payload);
   const rootData = asRecord(root?.data);
@@ -368,6 +405,7 @@ function normalizeUser(payload: unknown): AuthUser | undefined {
           readString(candidate, ["companyName", "company_name", "organization_name"]) ??
           readString(resolvedCompanyRecord, ["companyName", "company_name", "name", "display_name"]),
         permissions: readPermissionLabelsFromUnknown(candidate, root, rootData, rootResult),
+        accessContextResolved: hasExplicitAccessContext(payload),
       };
     }
   }

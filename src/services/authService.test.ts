@@ -219,6 +219,45 @@ describe("authService foundation helpers", () => {
     })
   })
 
+  it("treats an explicitly empty live permission list as authoritative", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        data: {
+          id: 7,
+          full_name: "Revoked User",
+          email: "revoked@example.com",
+          dashboard_type: "admin",
+          roles: [],
+          permissions: [],
+        },
+      }),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const user = await authService.getCurrentUser("access-token")
+
+    expect(user.permissions).toEqual([])
+    expect(user.accessContextResolved).toBe(true)
+  })
+
+  it("marks profile-only current-user responses for token compatibility fallback", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        data: {
+          id: 8,
+          full_name: "Legacy User",
+          email: "legacy@example.com",
+        },
+      }),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const user = await authService.getCurrentUser("access-token")
+
+    expect(user.permissions).toEqual([])
+    expect(user.accessContextResolved).toBe(false)
+  })
+
   it("surfaces expired verification links as API errors", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse(

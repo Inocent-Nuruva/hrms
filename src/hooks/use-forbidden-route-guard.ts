@@ -10,6 +10,7 @@ import {
   COMPANY_MANAGEMENT_ROUTE_PERMISSION,
   canAccessDashboardRoute,
   hasPermission,
+  requestDashboardAccessRefresh,
   type DashboardAccessMode,
 } from "@/lib/dashboard-permissions"
 import {
@@ -68,6 +69,9 @@ export function useLeaveIfForbidden() {
   return React.useCallback(
     (error: unknown) => {
       if (!isPermissionError(error)) return false
+      // The backend is authoritative. Revalidate the live access context so a
+      // revoked route disappears everywhere, including sidebar and tab rails.
+      requestDashboardAccessRefresh()
       if (
         pathname &&
         canAccessDashboardRoute(pathname, actor.permissionLabels, actor.accessMode)

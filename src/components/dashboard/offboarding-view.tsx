@@ -373,6 +373,17 @@ export function OffboardingView() {
   const actor = useDashboardActor()
   const isEmployeeMode = actor.ready ? actor.accessMode === "employee" || !actor.isAdmin : false
   const canManage = actor.ready && actor.isAdmin
+  const canViewWorkflows =
+    actor.ready &&
+    canPerformPermission(actor.permissionLabels, {
+      permissions: [
+        "offboarding_workflows:read",
+        "offboarding_workflows:create",
+        "offboarding_workflows:update",
+        "offboarding_workflows:delete",
+      ],
+      mode: "any",
+    })
   const canSelfCreate =
     actor.ready &&
     (isEmployeeMode || canPerformPermission(actor.permissionLabels, "offboarding_requests:create"))
@@ -819,8 +830,10 @@ export function OffboardingView() {
   }, [canManage, isEmployeeMode, loadSelfEmployee, selectedWorkflowId, selfEmployeeId, tab])
 
   React.useEffect(() => {
-    if (isEmployeeMode && tab === "workflows") setTab("requests")
-  }, [isEmployeeMode, tab])
+    if (actor.ready && tab === "workflows" && !canViewWorkflows) {
+      setTab("requests")
+    }
+  }, [actor.ready, canViewWorkflows, tab])
 
   React.useEffect(() => {
     if (loadedTabs[tab]) return
@@ -1934,7 +1947,7 @@ export function OffboardingView() {
         >
           My clearances
         </button>
-        {canManage ? (
+        {canViewWorkflows ? (
           <button
             type="button"
             onClick={() => setTab("workflows")}
@@ -2496,7 +2509,7 @@ export function OffboardingView() {
         </div>
       ) : null}
 
-      {tab === "workflows" && canManage ? (
+      {tab === "workflows" && canViewWorkflows ? (
         <div className="flex flex-col gap-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">

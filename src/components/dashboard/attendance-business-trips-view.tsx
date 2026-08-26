@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { useRouter } from "next/navigation"
 import { Loader2, Pencil, Plus, RefreshCw } from "lucide-react"
 
 import {
@@ -29,7 +28,10 @@ import {
   type AdminRecord,
 } from "@/lib/admin-api"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
-import { canPerformPermission } from "@/lib/dashboard-permissions"
+import {
+  ATTENDANCE_BUSINESS_TRIPS_ROUTE_PERMISSION,
+  canPerformPermission,
+} from "@/lib/dashboard-permissions"
 import { showErrorAlert } from "@/lib/error-alert"
 import { showSuccessAlert } from "@/lib/success-alert"
 import { cn } from "@/lib/utils"
@@ -245,13 +247,11 @@ function tripDateRange(row: AdminRecord) {
 }
 
 export function AttendanceBusinessTripsView() {
-  const router = useRouter()
   const actor = useDashboardActor()
   const [trips, setTrips] = React.useState<AdminRecord[]>([])
   const [employees, setEmployees] = React.useState<AdminRecord[]>([])
   const [selectedTrip, setSelectedTrip] = React.useState<AdminRecord | null>(null)
   const [detailsOpen, setDetailsOpen] = React.useState(false)
-  const [allowed, setAllowed] = React.useState<boolean | null>(null)
 
   const [statusFilter, setStatusFilter] = React.useState("all")
   const [dateFrom, setDateFrom] = React.useState("")
@@ -272,23 +272,28 @@ export function AttendanceBusinessTripsView() {
   const [actionTrip, setActionTrip] = React.useState<AdminRecord | null>(null)
   const [actionNote, setActionNote] = React.useState("")
 
-  const canCreate = canPerformPermission(actor.permissionLabels, {
-    permissions: ["attendance_business_trips:create", "attendance_business_trips:update"],
-    mode: "any",
-  })
-  const canManage = canPerformPermission(actor.permissionLabels, "attendance_business_trips:update")
-
-  React.useEffect(() => {
-    if (!actor.ready) {
-      return
-    }
-    if (!actor.isAdmin) {
-      setAllowed(false)
-      router.replace("/dashboard/me/leave/requests")
-      return
-    }
-    setAllowed(true)
-  }, [actor.isAdmin, actor.ready, router])
+  const canView =
+    actor.ready &&
+    canPerformPermission(
+      actor.permissionLabels,
+      ATTENDANCE_BUSINESS_TRIPS_ROUTE_PERMISSION,
+    )
+  const canCreate = canPerformPermission(
+    actor.permissionLabels,
+    "attendance_business_trips:create",
+  )
+  const canUpdate = canPerformPermission(
+    actor.permissionLabels,
+    "attendance_business_trips:update",
+  )
+  const canApprove = canPerformPermission(
+    actor.permissionLabels,
+    "attendance_business_trips:approve",
+  )
+  const canCancel = canPerformPermission(
+    actor.permissionLabels,
+    "attendance_business_trips:cancel",
+  )
 
   React.useEffect(() => {
     const timer = window.setTimeout(() => setSearch(searchInput.trim()), 300)
@@ -344,14 +349,14 @@ export function AttendanceBusinessTripsView() {
   }, [dateFrom, dateTo, employeeFilterId, search, statusFilter])
 
   React.useEffect(() => {
-    if (allowed !== true) {
+    if (!canView) {
       return
     }
     void loadTrips()
-  }, [allowed, loadTrips])
+  }, [canView, loadTrips])
 
   React.useEffect(() => {
-    if (allowed !== true) {
+    if (!canView) {
       return
     }
     const token = readStoredToken()
@@ -375,7 +380,7 @@ export function AttendanceBusinessTripsView() {
     return () => {
       cancelled = true
     }
-  }, [allowed])
+  }, [canView])
 
   function openCreateDialog() {
     setEditingTripId(null)
@@ -549,7 +554,7 @@ export function AttendanceBusinessTripsView() {
         sortable: false,
         render: (row) => {
           const status = getTripStatus(row)
-          const editable = canCreate && (status === "draft" || status === "submitted")
+          const editable = canUpdate && (status === "draft" || status === "submitted")
           if (!editable) {
             return null
           }
@@ -568,16 +573,16 @@ export function AttendanceBusinessTripsView() {
         },
       },
     ],
-    [canCreate]
+    [canUpdate]
   )
 
   const selectedStatus = getTripStatus(selectedTrip)
   const selectedMeta = getStatusMeta(selectedTrip?.status)
 
-  if (allowed !== true) {
+  if (!actor.ready || !canView) {
     return (
       <div className="rounded-md border border-slate-200 bg-white px-3 py-6 text-center text-xs text-slate-500">
-        {allowed === false ? "Business trips are only available to HR administrators." : "Checking access…"}
+        Checking access…
       </div>
     )
   }
@@ -737,7 +742,7 @@ export function AttendanceBusinessTripsView() {
             >
               Close
             </button>
-            {selectedTrip && canCreate && (selectedStatus === "draft" || selectedStatus === "submitted") ? (
+            {selectedTrip && canUpdate && (selectedStatus === "draft" || selectedStatus === "submitted") ? (
               <button
                 type="button"
                 className="inline-flex h-8 items-center justify-center rounded-md border border-slate-300 px-3 text-xs font-medium text-slate-700"
@@ -746,7 +751,7 @@ export function AttendanceBusinessTripsView() {
                 Edit
               </button>
             ) : null}
-            {selectedTrip && canCreate && selectedStatus === "draft" ? (
+            {selectedTrip && canUpdate && selectedStatus === "draft" ? (
               <button
                 type="button"
                 className="inline-flex h-8 items-center justify-center rounded-md bg-primary px-3 text-xs font-medium !text-white"
@@ -756,7 +761,7 @@ export function AttendanceBusinessTripsView() {
                 Send for approval
               </button>
             ) : null}
-            {selectedTrip && canManage && selectedStatus === "submitted" ? (
+            {selectedTrip && canApprove && selectedStatus === "submitted" ? (
               <>
                 <button
                   type="button"
@@ -774,15 +779,17 @@ export function AttendanceBusinessTripsView() {
                 >
                   Reject
                 </button>
-                <button
-                  type="button"
-                  className="inline-flex h-8 items-center justify-center rounded-md border border-rose-300 px-3 text-xs font-medium text-rose-700"
-                  disabled={saving}
-                  onClick={() => openActionDialog(selectedTrip, "cancel")}
-                >
-                  Cancel trip
-                </button>
               </>
+            ) : null}
+            {selectedTrip && canCancel && selectedStatus === "submitted" ? (
+              <button
+                type="button"
+                className="inline-flex h-8 items-center justify-center rounded-md border border-rose-300 px-3 text-xs font-medium text-rose-700"
+                disabled={saving}
+                onClick={() => openActionDialog(selectedTrip, "cancel")}
+              >
+                Cancel trip
+              </button>
             ) : null}
           </DialogFooter>
         </DialogPopup>

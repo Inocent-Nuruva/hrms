@@ -12,6 +12,8 @@ export interface AuthUser {
   companyName?: string;
   requiresPasswordChange?: boolean;
   permissions?: string[];
+  /** True when the API response explicitly included roles/permissions for this session. */
+  accessContextResolved?: boolean;
 }
 
 export interface AuthTokens {

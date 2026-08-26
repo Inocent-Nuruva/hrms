@@ -7,7 +7,10 @@ import {
   persistSessionTokens,
   readStoredSessionTokens,
 } from "@/lib/session-client";
-import { publishDashboardActorSnapshotFromSources } from "@/lib/dashboard-permissions";
+import {
+  publishDashboardActorSnapshotFromSources,
+  requestDashboardAccessRefresh,
+} from "@/lib/dashboard-permissions";
 import type {
   AuthSessionRecord,
   AuthTokens,
@@ -50,7 +53,10 @@ export function useAuth() {
     if (user) {
       setStoredUser(user);
     }
-    publishDashboardActorSnapshotFromSources(user ?? null, tokens, tokens.accessToken);
+    publishDashboardActorSnapshotFromSources(
+      user ?? null,
+      ...(user?.accessContextResolved ? [] : [tokens, tokens.accessToken]),
+    );
     setError(null);
   };
 
@@ -104,7 +110,10 @@ export function useAuth() {
     try {
       const user = await authService.getCurrentUser(accessToken);
       setStoredUser(user);
-      publishDashboardActorSnapshotFromSources(user, storedTokens, accessToken);
+      publishDashboardActorSnapshotFromSources(
+        user,
+        ...(user.accessContextResolved ? [] : [storedTokens, accessToken]),
+      );
       return user;
     } catch {
       clearSession();
@@ -164,9 +173,12 @@ export function useAuth() {
             ...storedUser,
             companyId: response.companyId ?? storedUser.companyId,
             companyName: response.companyName ?? storedUser.companyName,
+            permissions: undefined,
+            accessContextResolved: false,
           }
         : undefined
     );
+    requestDashboardAccessRefresh();
     return response;
   };
 

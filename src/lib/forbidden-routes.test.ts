@@ -129,6 +129,16 @@ describe("forbidden route memory", () => {
     expect(canSeeDashboardPage("/dashboard/companies", ["employees:read"], "employee")).toBe(false)
   })
 
+  it("opens granted Business Trips instead of falling back to My Leave", () => {
+    expect(
+      firstVisibleSiblingOrHome(
+        "/dashboard/leave-management",
+        ["attendance_business_trips:approve"],
+        "employee",
+      ),
+    ).toBe("/dashboard/leave-management/business-trips")
+  })
+
   it("redirects restricted self-service manager routes to a safe fallback", () => {
     expect(firstVisibleSiblingOrHome("/dashboard/me/team/overview", [], "employee")).toBe(
       "/dashboard/me/profile",

@@ -71,12 +71,12 @@ function loadAdminApi() {
 }
 import { useMyProfilePhoto } from "@/lib/my-profile-photo";
 import {
-  buildDashboardActorSnapshotFromSources,
   canAccessDashboardRoute,
   clearDashboardActorSnapshot,
   persistDashboardAccessToken,
-  publishDashboardActorSnapshot,
+  requestDashboardAccessRefresh,
 } from "@/lib/dashboard-permissions";
+import { useDashboardActor } from "@/hooks/use-dashboard-actor";
 import { authService } from "@/services/authService";
 import {
   asRecord,
@@ -249,95 +249,6 @@ function formatRoleName(roleName: string) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function collectPermissionLabelsFromUnknown(value: unknown, sink: Set<string>) {
-  if (typeof value === "string" && value.trim()) {
-    const normalized = value.trim().toLowerCase();
-    const looksLikePermission =
-      normalized.includes(":") ||
-      normalized.startsWith("view_") ||
-      normalized.startsWith("create_") ||
-      normalized.startsWith("update_") ||
-      normalized.startsWith("delete_") ||
-      normalized.startsWith("manage_");
-    if (looksLikePermission) {
-      sink.add(normalized);
-    }
-    return;
-  }
-
-  if (Array.isArray(value)) {
-    value.forEach((entry) => collectPermissionLabelsFromUnknown(entry, sink));
-    return;
-  }
-
-  const record = asRecord(value);
-  if (!record) {
-    return;
-  }
-
-  const direct = readString(record, [
-    "name",
-    "key",
-    "code",
-    "slug",
-    "permission",
-    "action",
-  ]);
-  if (direct) {
-    collectPermissionLabelsFromUnknown(direct, sink);
-  }
-
-  for (const key of [
-    "permissions",
-    "permission",
-    "authorities",
-    "scopes",
-    "actions",
-    "role_permissions",
-    "rolePermissions",
-    "granted_permissions",
-    "grantedPermissions",
-    "data",
-    "items",
-    "records",
-    "results",
-    "user",
-    "profile",
-    "meta",
-  ]) {
-    collectPermissionLabelsFromUnknown(record[key], sink);
-  }
-
-  for (const nestedValue of Object.values(record)) {
-    if (typeof nestedValue === "object" && nestedValue !== null) {
-      collectPermissionLabelsFromUnknown(nestedValue, sink);
-    }
-  }
-}
-
-function resolvePermissionLabels(root: AdminRecord | null) {
-  const labels = new Set<string>();
-  if (!root) {
-    return labels;
-  }
-
-  for (const key of [
-    "permissions",
-    "permission",
-    "authorities",
-    "scopes",
-    "actions",
-    "role_permissions",
-    "rolePermissions",
-  ]) {
-    collectPermissionLabelsFromUnknown(root[key], labels);
-  }
-
-  collectPermissionLabelsFromUnknown(root.roles, labels);
-
-  return labels;
-}
-
 interface AdminDashboardViewProps {
   activeResource?: AdminResourceKey;
   showOverview?: boolean;
@@ -376,6 +287,7 @@ export default function AdminDashboardView({
   const router = useRouter();
   const pathname = usePathname();
   const currentPath = pathname ?? "";
+  const actorSnapshot = useDashboardActor();
   useHideRememberedForbiddenPath();
   const inferredActiveResource = React.useMemo(() => {
     const match = currentPath.match(
@@ -916,6 +828,7 @@ export default function AdminDashboardView({
       await api.revokeRoleFromCurrentCompanyUser(accessToken, userId, roleId);
     }
     await loadData(accessToken);
+    requestDashboardAccessRefresh();
   };
 
   const [clientIdentity, setClientIdentity] = React.useState<{
@@ -923,7 +836,6 @@ export default function AdminDashboardView({
     adminEmail: string | null;
     companyName: string | null;
     tokenCompanyName: string | null;
-    permissionLabels: string[];
     rawUser: AdminRecord | null;
     tokenPayload: AdminRecord | null;
   }>({
@@ -931,7 +843,6 @@ export default function AdminDashboardView({
     adminEmail: null,
     companyName: null,
     tokenCompanyName: null,
-    permissionLabels: [],
     rawUser: null,
     tokenPayload: null,
   });
@@ -946,7 +857,6 @@ export default function AdminDashboardView({
     let adminEmail: string | null = null;
     let companyName: string | null = null;
     let parsedUser: AdminRecord | null = null;
-    const permissionLabels = new Set<string>();
 
     const rawUser = window.localStorage.getItem(AUTH_STORAGE_KEYS.user);
     if (rawUser) {
@@ -989,9 +899,6 @@ export default function AdminDashboardView({
           readString(root, ["fullName", "full_name", "name"]) ??
           composedAdminName;
         adminEmail = readString(root, ["email"]) ?? null;
-        resolvePermissionLabels(root).forEach((entry) =>
-          permissionLabels.add(entry),
-        );
       } catch {
         adminName = null;
         adminEmail = null;
@@ -1008,16 +915,11 @@ export default function AdminDashboardView({
         "company",
         "organization_name",
       ]) ?? null;
-    resolvePermissionLabels(payload).forEach((entry) =>
-      permissionLabels.add(entry),
-    );
-
     setClientIdentity({
       adminName,
       adminEmail,
       companyName,
       tokenCompanyName,
-      permissionLabels: Array.from(permissionLabels),
       rawUser: parsedUser,
       tokenPayload: payload,
     });
@@ -1072,32 +974,18 @@ export default function AdminDashboardView({
 
     return orderedNames.join(" • ");
   }, [clientIdentity.rawUser, clientIdentity.tokenPayload, currentAdmin]);
-  const actorSnapshot = React.useMemo(
-    () =>
-      buildDashboardActorSnapshotFromSources(
-        currentAdmin,
-        clientIdentity.rawUser,
-        clientIdentity.tokenPayload,
-        clientIdentity.permissionLabels,
-      ),
-    [
-      clientIdentity.permissionLabels,
-      clientIdentity.rawUser,
-      clientIdentity.tokenPayload,
-      currentAdmin,
-    ],
-  );
   const accessMode = actorSnapshot.accessMode;
   const effectivePermissionLabels = actorSnapshot.permissionLabels;
+  const accessIdentityReady = identityReady && actorSnapshot.ready;
   const homeDashboardKind = resolveHomeDashboardKind({
     accessMode,
     permissionLabels: effectivePermissionLabels,
     roleNames: actorSnapshot.roleNames,
   });
-  const showCompanyDashboard = identityReady && homeDashboardKind === "company";
+  const showCompanyDashboard = accessIdentityReady && homeDashboardKind === "company";
 
   React.useEffect(() => {
-    if (!resolvedUseApis || !identityReady || !token) {
+    if (!resolvedUseApis || !accessIdentityReady || !token) {
       return;
     }
     void loadData(token);
@@ -1105,19 +993,11 @@ export default function AdminDashboardView({
     accessMode,
     currentPath,
     effectivePermissionLabels,
-    identityReady,
+    accessIdentityReady,
     token,
     loadData,
     resolvedUseApis,
   ]);
-
-  React.useEffect(() => {
-    if (!identityReady) {
-      return;
-    }
-
-    publishDashboardActorSnapshot(actorSnapshot);
-  }, [actorSnapshot, identityReady]);
 
   React.useEffect(() => {
     if (typeof window === "undefined") {
@@ -1150,7 +1030,7 @@ export default function AdminDashboardView({
   }, [accessMode, token]);
 
   React.useEffect(() => {
-    if (!identityReady) {
+    if (!accessIdentityReady) {
       return;
     }
 
@@ -1182,7 +1062,7 @@ export default function AdminDashboardView({
     accessMode,
     currentPath,
     effectivePermissionLabels,
-    identityReady,
+    accessIdentityReady,
     router,
   ]);
 
@@ -1201,7 +1081,7 @@ export default function AdminDashboardView({
         userEmail={adminEmail}
         userAvatar={adminAvatar}
         accessMode={accessMode}
-        identityReady={identityReady}
+        identityReady={accessIdentityReady}
         permissionLabels={effectivePermissionLabels}
         activeResource={resolvedActiveResource}
         onSelectResource={navigateToResource}
@@ -1224,11 +1104,20 @@ export default function AdminDashboardView({
               />
             ) : null}
             <div className="flex min-w-0 max-w-full flex-col gap-3 px-3 pt-0 pb-3 sm:px-4 md:gap-4 md:px-4 md:pb-4">
-              {showAccessControlTabs ? (
+              {accessIdentityReady && showAccessControlTabs ? (
                 <DashboardSectionTabs groups={accessControlSectionTabGroups} />
               ) : null}
-              <div className="min-w-0">{children}</div>
-              {resolvedActiveResource &&
+              <div className="min-w-0">
+                {accessIdentityReady ? (
+                  children
+                ) : (
+                  <div className="flex min-h-40 items-center justify-center text-sm text-muted-foreground">
+                    Checking your access…
+                  </div>
+                )}
+              </div>
+              {accessIdentityReady &&
+              resolvedActiveResource &&
               resolvedUseApis &&
               resolvedActiveResource !== "companies" ? (
                 <DataTable
@@ -1262,7 +1151,7 @@ export default function AdminDashboardView({
                   onRefresh={refreshCurrentResource}
                 />
               ) : null}
-              {resolvedShowSettings ? (
+              {accessIdentityReady && resolvedShowSettings ? (
                 <AccountSettingsPanel
                   token={token}
                   loading={loading}

@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { showErrorAlert } from "@/lib/error-alert";
 import { showSuccessAlert } from "@/lib/success-alert";
 import { cn } from "@/lib/utils";
+import { requestDashboardAccessRefresh } from "@/lib/dashboard-permissions";
 
 import {
   AlertDialog,
@@ -2287,6 +2288,7 @@ export function DataTable({
         // Reload from GET /api/roles/{roleId}/users so the list stays accurate.
         setMembersRefreshKey((key) => key + 1);
       }
+      requestDashboardAccessRefresh();
       setMemberToAdd("");
     } catch (errorObject) {
       const message =
@@ -2358,6 +2360,7 @@ export function DataTable({
         showSuccessAlert(`Removed ${personLabel} from this role.`);
         setMembersRefreshKey((key) => key + 1);
       }
+      requestDashboardAccessRefresh();
       setRevokeConfirm(null);
     } catch (errorObject) {
       const message =
@@ -2491,6 +2494,7 @@ export function DataTable({
         }
       }
       setInitialEditingRolePermissionNames(nextNames);
+      requestDashboardAccessRefresh();
       showSuccessAlert(
         toAdd.length > 0 && toRemove.length === 0
           ? toAdd.length === 1

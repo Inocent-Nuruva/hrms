@@ -2,6 +2,7 @@ import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import { asRecord, readString } from "@/utils/token-utils"
 
 export const DASHBOARD_ACTOR_EVENT = "hrms:dashboard-actor-changed"
+export const DASHBOARD_ACCESS_REFRESH_EVENT = "hrms:dashboard-access-refresh-requested"
 export const DASHBOARD_PERMISSION_STORAGE_KEY = "hrms.dashboard.actorPermissions"
 export const DASHBOARD_ACCESS_MODE_STORAGE_KEY = "hrms.dashboard.accessMode"
 export const DASHBOARD_IS_ADMIN_STORAGE_KEY = "hrms.dashboard.isAdmin"
@@ -11,6 +12,14 @@ export const DASHBOARD_TOKEN_COOKIE = "hrms_dashboard_token"
 export const DASHBOARD_PERMISSIONS_COOKIE = "hrms_dashboard_permissions"
 
 const LEGACY_ADMIN_USER_STORAGE_KEY = "hrms.admin.user"
+const FORBIDDEN_ROUTES_STORAGE_KEY = "hrms.forbiddenRoutes"
+const CONFIRMED_PLATFORM_ROUTES_STORAGE_KEY = "hrms.confirmedPlatformRoutes"
+const FORBIDDEN_ROUTES_EVENT = "hrms:forbidden-routes-changed"
+
+// A persisted snapshot makes reloads fast, but it is not authoritative. Each
+// new document keeps permission-controlled UI hidden until /api/users/me has
+// verified the current access context (or a safe fallback is deliberately used).
+let dashboardActorVerifiedThisPage = false
 
 type PermissionMode = "any" | "all"
 
@@ -603,6 +612,18 @@ export const COMPANY_MANAGEMENT_ROUTE_PERMISSION: PermissionRequirement = {
   mode: "any",
 }
 
+export const ATTENDANCE_BUSINESS_TRIPS_ROUTE_PERMISSION = {
+  permissions: [
+    "attendance_business_trips:approve",
+    "attendance_business_trips:cancel",
+    "attendance_business_trips:create",
+    "attendance_business_trips:delete",
+    "attendance_business_trips:read",
+    "attendance_business_trips:update",
+  ],
+  mode: "any",
+} satisfies PermissionRequirement
+
 const ADMIN_DASHBOARD_LANDING_ROUTES = [
   "/dashboard/branches",
   "/dashboard/departments",
@@ -892,9 +913,7 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
       "attendance_holidays:read",
       "leave_policies:read",
       "leave_workflows:read",
-      "attendance_business_trips:read",
-      "attendance_business_trips:create",
-      "attendance_business_trips:update",
+      ...ATTENDANCE_BUSINESS_TRIPS_ROUTE_PERMISSION.permissions,
     ],
     mode: "any",
   },
@@ -904,14 +923,7 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
     permissions: ["leave_balances:read", "leave-balances.view", "leave-balances.manage"],
     mode: "any",
   },
-  "/dashboard/leave-management/business-trips": {
-    permissions: [
-      "attendance_business_trips:read",
-      "attendance_business_trips:create",
-      "attendance_business_trips:update",
-    ],
-    mode: "any",
-  },
+  "/dashboard/leave-management/business-trips": ATTENDANCE_BUSINESS_TRIPS_ROUTE_PERMISSION,
   "/dashboard/leave-management/holidays": {
     permissions: ["holidays:read", "attendance_holidays:read"],
     mode: "any",
@@ -1803,6 +1815,33 @@ export function publishDashboardActorSnapshot(snapshot: DashboardActorSnapshot) 
     return
   }
 
+  const previousPermissionsRaw = window.sessionStorage.getItem(
+    DASHBOARD_PERMISSION_STORAGE_KEY,
+  )
+  const previousAccessMode = window.sessionStorage.getItem(
+    DASHBOARD_ACCESS_MODE_STORAGE_KEY,
+  )
+  let previousPermissions: string[] = []
+  try {
+    const parsed = previousPermissionsRaw ? JSON.parse(previousPermissionsRaw) : []
+    previousPermissions = Array.isArray(parsed)
+      ? parsed.filter((entry): entry is string => typeof entry === "string")
+      : []
+  } catch {
+    previousPermissions = []
+  }
+
+  const previousFingerprint = [
+    previousAccessMode ?? "",
+    ...normalizePermissionLabels(previousPermissions).sort(),
+  ].join("|")
+  const nextFingerprint = [
+    snapshot.accessMode,
+    ...normalizePermissionLabels(snapshot.permissionLabels).sort(),
+  ].join("|")
+  const accessChanged = Boolean(previousPermissionsRaw) && previousFingerprint !== nextFingerprint
+
+  dashboardActorVerifiedThisPage = true
   window.sessionStorage.setItem(
     DASHBOARD_PERMISSION_STORAGE_KEY,
     JSON.stringify(snapshot.permissionLabels)
@@ -1816,6 +1855,14 @@ export function publishDashboardActorSnapshot(snapshot: DashboardActorSnapshot) 
 
   writeCookie(DASHBOARD_AUTH_COOKIE, "1")
   writeCookie(DASHBOARD_PERMISSIONS_COOKIE, JSON.stringify(snapshot.permissionLabels))
+
+  if (accessChanged) {
+    // A denial learned under the old grant set must not survive a later grant,
+    // and a platform confirmation must be re-probed after access changes.
+    window.sessionStorage.removeItem(FORBIDDEN_ROUTES_STORAGE_KEY)
+    window.sessionStorage.removeItem(CONFIRMED_PLATFORM_ROUTES_STORAGE_KEY)
+    window.dispatchEvent(new Event(FORBIDDEN_ROUTES_EVENT))
+  }
 
   window.dispatchEvent(
     new CustomEvent<DashboardActorSnapshot>(DASHBOARD_ACTOR_EVENT, {
@@ -1835,6 +1882,7 @@ export function clearDashboardActorSnapshot() {
     return
   }
 
+  dashboardActorVerifiedThisPage = false
   window.sessionStorage.removeItem(DASHBOARD_PERMISSION_STORAGE_KEY)
   window.sessionStorage.removeItem(DASHBOARD_ACCESS_MODE_STORAGE_KEY)
   window.sessionStorage.removeItem(DASHBOARD_IS_ADMIN_STORAGE_KEY)
@@ -1952,19 +2000,35 @@ export function readDashboardActorSnapshotFromBrowser(): DashboardActorSnapshot 
         Array.isArray(parsed) ? parsed.filter((entry) => typeof entry === "string") : []
       )
       const derivedSnapshot = buildDashboardActorSnapshotFromSources(
-        permissionLabels,
         ...readDashboardActorBrowserSources()
       )
-      // Always prefer live derivation. A stale session "admin" must not keep
-      // showing the company dashboard after company-dashboard permission is removed.
-      const accessMode = derivedSnapshot.accessMode
+      const storedAccessMode = window.sessionStorage.getItem(
+        DASHBOARD_ACCESS_MODE_STORAGE_KEY,
+      )
+      const accessMode: DashboardAccessMode =
+        storedAccessMode === "admin" || storedAccessMode === "employee"
+          ? storedAccessMode
+          : derivedSnapshot.accessMode
+      const rawRoleNames = window.sessionStorage.getItem(DASHBOARD_ROLES_STORAGE_KEY)
+      let roleNames = derivedSnapshot.roleNames
+      try {
+        const parsedRoleNames = rawRoleNames ? JSON.parse(rawRoleNames) : []
+        if (Array.isArray(parsedRoleNames)) {
+          roleNames = parsedRoleNames.filter(
+            (entry): entry is string => typeof entry === "string",
+          )
+        }
+      } catch {
+        // Fall back to identity hints when stored roles are malformed.
+      }
       return {
-        permissionLabels:
-          permissionLabels.length > 0 ? permissionLabels : derivedSnapshot.permissionLabels,
-        roleNames: derivedSnapshot.roleNames,
+        // An empty list is a valid, authoritative revocation result. Never
+        // refill it from a stale local user record or JWT.
+        permissionLabels,
+        roleNames,
         accessMode,
         isAdmin: accessMode === "admin",
-        ready: true,
+        ready: dashboardActorVerifiedThisPage,
         version: Date.now(),
       }
     } catch {
@@ -1972,7 +2036,11 @@ export function readDashboardActorSnapshotFromBrowser(): DashboardActorSnapshot 
     }
   }
 
-  return buildDashboardActorSnapshotFromSources(...readDashboardActorBrowserSources())
+  const snapshot = buildDashboardActorSnapshotFromSources(...readDashboardActorBrowserSources())
+  return {
+    ...snapshot,
+    ready: dashboardActorVerifiedThisPage,
+  }
 }
 
 export function readDashboardPermissionLabelsFromBrowser() {
@@ -2009,6 +2077,13 @@ export function publishDashboardActorSnapshotFromBrowserStorage(...sources: unkn
   )
   publishDashboardActorSnapshot(snapshot)
   return snapshot
+}
+
+export function requestDashboardAccessRefresh() {
+  if (typeof window === "undefined") {
+    return
+  }
+  window.dispatchEvent(new Event(DASHBOARD_ACCESS_REFRESH_EVENT))
 }
 
 export function subscribeToDashboardActorSnapshot(

@@ -858,6 +858,37 @@ export function OnboardingView() {
   const actor = useDashboardActor()
   const actorPermissions = actor.permissionLabels
   const isEmployeeMode = actor.ready ? actor.accessMode === "employee" || !actor.isAdmin : false
+  const canViewOnboardingRequests = React.useMemo(
+    () =>
+      actor.ready &&
+      (isEmployeeMode ||
+        canPerformPermission(actorPermissions, {
+          permissions: [
+            "onboarding_requests:read",
+            "onboarding_requests:create",
+            "onboarding_requests:update",
+            "onboarding_requests:approve",
+            "onboarding_requests:cancel",
+            "onboarding_requests:complete",
+          ],
+          mode: "any",
+        })),
+    [actor.ready, actorPermissions, isEmployeeMode],
+  )
+  const canViewOnboardingWorkflows = React.useMemo(
+    () =>
+      actor.ready &&
+      canPerformPermission(actorPermissions, {
+        permissions: [
+          "onboarding_workflows:read",
+          "onboarding_workflows:create",
+          "onboarding_workflows:update",
+          "onboarding_workflows:delete",
+        ],
+        mode: "any",
+      }),
+    [actor.ready, actorPermissions],
+  )
   const canCreateOnboardingRequests = React.useMemo(
     () => canPerformPermission(actorPermissions, "onboarding_requests:create"),
     [actorPermissions]
@@ -1358,15 +1389,31 @@ export function OnboardingView() {
   ])
 
   React.useEffect(() => {
-    if (isEmployeeMode && activeTab === "workflows") {
+    if (!actor.ready) return
+    if (activeTab === "requests" && canViewOnboardingRequests) return
+    if (activeTab === "workflows" && canViewOnboardingWorkflows) return
+    if (canViewOnboardingRequests) {
       setActiveTab("requests")
+    } else if (canViewOnboardingWorkflows) {
+      setActiveTab("workflows")
     }
-  }, [activeTab, isEmployeeMode])
+  }, [
+    activeTab,
+    actor.ready,
+    canViewOnboardingRequests,
+    canViewOnboardingWorkflows,
+  ])
 
   React.useEffect(() => {
+    if (!actor.ready) return
+    if (activeTab === "requests" && !canViewOnboardingRequests) return
+    if (activeTab === "workflows" && !canViewOnboardingWorkflows) return
     void reloadAll(activeTab)
   }, [
     activeTab,
+    actor.ready,
+    canViewOnboardingRequests,
+    canViewOnboardingWorkflows,
     debouncedRequestSearch,
     debouncedWorkflowSearch,
     requestEmployeeFilter,
@@ -2942,38 +2989,40 @@ export function OnboardingView() {
     <div className="space-y-2 px-4 pb-6 pt-2 lg:px-6">
       <div className="tab-rail-scroll">
         <div className="inline-flex min-w-full items-center gap-1 border-b border-border/80">
-          <button
-            type="button"
-            onClick={() => setActiveTab("requests")}
-            className={cn(
-              "shrink-0 border-b-2 px-1.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors duration-200",
-              activeTab === "requests"
-                ? "border-[var(--primary)] text-[var(--primary)]"
-                : "border-transparent text-slate-600 hover:text-slate-900"
-            )}
-          >
-            Requests
-          </button>
-          {isEmployeeMode ? null : (
-          <button
-            type="button"
-            onClick={() => setActiveTab("workflows")}
-            className={cn(
-              "shrink-0 border-b-2 px-1.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors duration-200",
-              activeTab === "workflows"
-                ? "border-[var(--primary)] text-[var(--primary)]"
-                : "border-transparent text-slate-600 hover:text-slate-900"
-            )}
-          >
-            Workflows
-          </button>
-          )}
+          {canViewOnboardingRequests ? (
+            <button
+              type="button"
+              onClick={() => setActiveTab("requests")}
+              className={cn(
+                "shrink-0 border-b-2 px-1.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors duration-200",
+                activeTab === "requests"
+                  ? "border-[var(--primary)] text-[var(--primary)]"
+                  : "border-transparent text-slate-600 hover:text-slate-900"
+              )}
+            >
+              Requests
+            </button>
+          ) : null}
+          {canViewOnboardingWorkflows ? (
+            <button
+              type="button"
+              onClick={() => setActiveTab("workflows")}
+              className={cn(
+                "shrink-0 border-b-2 px-1.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors duration-200",
+                activeTab === "workflows"
+                  ? "border-[var(--primary)] text-[var(--primary)]"
+                  : "border-transparent text-slate-600 hover:text-slate-900"
+              )}
+            >
+              Workflows
+            </button>
+          ) : null}
         </div>
       </div>
 
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
-      {activeTab === "requests" ? (
+      {activeTab === "requests" && canViewOnboardingRequests ? (
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-1.5">
             <SearchToggleField
@@ -4669,7 +4718,7 @@ export function OnboardingView() {
             </DialogPopup>
           </Dialog>
         </div>
-      ) : (
+      ) : activeTab === "workflows" && canViewOnboardingWorkflows ? (
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-1.5">
             <SearchToggleField
@@ -5195,7 +5244,7 @@ export function OnboardingView() {
             </DialogPopup>
           </Dialog>
         </div>
-      )}
+      ) : null}
     </div>
   )
 }

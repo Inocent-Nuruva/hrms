@@ -60,7 +60,7 @@ export function Tabs2({ groups, currentPath, className }: Tabs2Props) {
   const subTabs = activeGroup?.items ?? []
 
   return (
-    <div className={cn("flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-border/80", className)}>
+    <div className={cn("flex min-w-0 flex-nowrap items-center gap-x-3 gap-y-1.5 border-b border-border/80", className)}>
       <DropdownMenu>
         <DropdownMenuTrigger
           render={
@@ -110,7 +110,7 @@ export function Tabs2({ groups, currentPath, className }: Tabs2Props) {
       />
 
       <div
-        className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-0.5"
+        className="tab-rail-scroll flex min-w-0 flex-1 flex-nowrap items-center gap-x-1.5 gap-y-0.5"
         role="tablist"
         aria-label="Section pages"
       >

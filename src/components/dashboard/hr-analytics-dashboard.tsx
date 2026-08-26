@@ -772,7 +772,7 @@ function DashboardSurface({
   return (
     <div
       className={cn(
-        "rounded-[1.75rem] border border-primary/20 bg-card p-4 sm:p-5 dark:bg-[#181818]",
+        "rounded-none border border-primary/20 bg-card p-4 sm:p-5 dark:bg-[#181818]",
         "shadow-[0_1px_0_rgb(var(--primary-rgb)_/_0.12)_inset,0_16px_36px_-22px_rgb(var(--primary-rgb)_/_0.45)] dark:shadow-none",
         className,
       )}

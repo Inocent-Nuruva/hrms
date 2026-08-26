@@ -113,6 +113,25 @@ describe("tightened dashboard permissions", () => {
     ).toBe(true)
   })
 
+  it("lets employee-shell users open Business Trips with any trip grant", () => {
+    for (const permission of [
+      "attendance_business_trips:approve",
+      "attendance_business_trips:cancel",
+      "attendance_business_trips:create",
+      "attendance_business_trips:delete",
+      "attendance_business_trips:read",
+      "attendance_business_trips:update",
+    ]) {
+      expect(
+        canAccessDashboardRoute(
+          "/dashboard/leave-management/business-trips",
+          [permission],
+          "employee",
+        ),
+      ).toBe(true)
+    }
+  })
+
   it("does not let employees:read open Access Control", () => {
     expect(
       canAccessDashboardRoute("/dashboard/access-control", ["employees:read"], "admin"),
