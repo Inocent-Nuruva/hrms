@@ -13,6 +13,8 @@ import {
 } from "@/lib/dashboard-permissions";
 import type {
   AuthSessionRecord,
+  AuthScope,
+  DashboardType,
   AuthTokens,
   AuthUser,
   AuthSwitchCompanyResponse,
@@ -47,15 +49,24 @@ export function useAuth() {
     clearStoredSession();
   };
 
-  const saveSession = (tokens: AuthTokens, user?: AuthUser) => {
+  const saveSession = (
+    tokens: AuthTokens,
+    user?: AuthUser,
+    dashboardType?: DashboardType,
+    scope?: AuthScope,
+  ) => {
+    const sessionUser =
+      user && (dashboardType || scope) ? { ...user, dashboardType, scope } : user;
     persistSessionTokens(tokens.accessToken, tokens.refreshToken);
     setStoredTokens(tokens);
-    if (user) {
-      setStoredUser(user);
+    if (sessionUser) {
+      setStoredUser(sessionUser);
     }
     publishDashboardActorSnapshotFromSources(
-      user ?? null,
-      ...(user?.accessContextResolved ? [] : [tokens, tokens.accessToken]),
+      ...(dashboardType ? [{ dashboard_type: dashboardType }] : []),
+      ...(scope ? [{ scope }] : []),
+      sessionUser ?? null,
+      ...(sessionUser?.accessContextResolved ? [] : [tokens, tokens.accessToken]),
     );
     setError(null);
   };
@@ -68,7 +79,7 @@ export function useAuth() {
       const response = await authService.login(payload);
 
       if (!response.requiresOtp && response.tokens) {
-        saveSession(response.tokens, response.user);
+        saveSession(response.tokens, response.user, response.dashboardType, response.scope);
       }
 
       return response;
@@ -87,7 +98,12 @@ export function useAuth() {
 
     try {
       const response = await authService.verifyOtp({ tempToken, code });
-      saveSession(response.tokens, response.user);
+      saveSession(
+        response.tokens,
+        response.user,
+        response.user.dashboardType,
+        response.user.scope,
+      );
       return response;
     } catch (err) {
       const message = err instanceof Error ? err.message : "OTP verification failed.";
@@ -173,10 +189,16 @@ export function useAuth() {
             ...storedUser,
             companyId: response.companyId ?? storedUser.companyId,
             companyName: response.companyName ?? storedUser.companyName,
+            // Dashboard type is company-membership specific. Never retain the
+            // previous company's shell while the refreshed /users/me loads.
+            dashboardType: response.dashboardType,
+            scope: response.scope,
             permissions: undefined,
             accessContextResolved: false,
           }
-        : undefined
+        : undefined,
+      response.dashboardType,
+      response.scope,
     );
     requestDashboardAccessRefresh();
     return response;

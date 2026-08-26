@@ -19,6 +19,7 @@ import {
   BadgeCheck,
   BarChart3,
   Bell,
+  Building2,
   HelpCircle,
   Kanban,
   LayoutDashboard,
@@ -26,10 +27,12 @@ import {
   Route,
   Search,
   Settings,
+  ShieldCheck,
   Users,
   XCircle,
 } from "lucide-react"
 import type { AdminResourceKey } from "@/lib/admin-api"
+import type { AuthScope } from "@/types"
 import {
   normalizePermissionLabels,
 } from "@/lib/dashboard-permissions"
@@ -57,6 +60,8 @@ const IDepartments = <Kanban />
 const ISettings = <Settings />
 const IHelp = <HelpCircle />
 const ISearch = <Search />
+const ICompanies = <Building2 />
+const IGovernance = <ShieldCheck />
 
 type AppSidebarAccessMode = "admin" | "employee"
 
@@ -304,6 +309,46 @@ const adminData: SidebarData = {
     },
   ],
 }
+
+const platformData: SidebarData = {
+  navMain: [
+    {
+      title: "Companies",
+      url: "/dashboard/companies",
+      icon: ICompanies,
+    },
+    {
+      title: "Access Governance",
+      url: "/dashboard/roles",
+      matchUrls: ["/dashboard/roles", "/dashboard/permissions"],
+      icon: IGovernance,
+      items: [
+        { title: "Roles", url: "/dashboard/roles" },
+        { title: "Permissions", url: "/dashboard/permissions" },
+      ],
+    },
+    {
+      title: "Notifications",
+      url: "/dashboard/operations/notifications",
+      icon: <Bell />,
+    },
+    {
+      title: "SMS Platform",
+      url: "/dashboard/sms/platform",
+      icon: ISms,
+    },
+  ],
+  navSecondary: adminData.navSecondary,
+}
+
+const platformSearchIndex: SearchItem[] = [
+  { title: "Dashboard", url: "/dashboard", section: "Platform", keywords: ["platform", "overview"] },
+  { title: "Companies", url: "/dashboard/companies", section: "Platform", keywords: ["tenants", "organizations"] },
+  { title: "Roles", url: "/dashboard/roles", section: "Governance", keywords: ["access", "roles"] },
+  { title: "Permissions", url: "/dashboard/permissions", section: "Governance", keywords: ["access", "permissions"] },
+  { title: "Notifications", url: "/dashboard/operations/notifications", section: "Delivery", keywords: ["email", "channels", "logs"] },
+  { title: "SMS Platform", url: "/dashboard/sms/platform", section: "Delivery", keywords: ["sms", "registry", "logs"] },
+]
 
 const adminSearchIndex = [
   { title: "Dashboard", url: "/dashboard", section: "General", keywords: ["home", "overview"] },
@@ -588,6 +633,7 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
   userEmail?: string | null
   userAvatar?: string | null
   accessMode?: AppSidebarAccessMode
+  scope?: AuthScope | null
   permissionLabels?: string[]
   /** False until the dashboard shell has read the signed-in identity. */
   identityReady?: boolean
@@ -665,6 +711,7 @@ export function AppSidebar({
   userEmail,
   userAvatar,
   accessMode = "admin",
+  scope = null,
   permissionLabels = [],
   identityReady = false,
   activeResource,
@@ -712,8 +759,11 @@ export function AppSidebar({
   const permissionsResolved = navReady && identityReady
 
   const navData = React.useMemo(() => {
-    const secondary =
-      resolvedAccessMode === "employee" ? employeeData.navSecondary : adminData.navSecondary
+    const secondary = scope === "platform"
+      ? platformData.navSecondary
+      : resolvedAccessMode === "employee"
+        ? employeeData.navSecondary
+        : adminData.navSecondary
     // Do not paint the full admin/employee catalog first and then hide items.
     // SSR and the first client frame both render an empty rail; after identity
     // is known we show only the routes this person may open.
@@ -724,6 +774,16 @@ export function AppSidebar({
       }
     }
     void forbiddenVersion
+    if (scope === "platform") {
+      return {
+        navMain: filterNavByPermissions(
+          platformData.navMain,
+          normalizedPermissions,
+          resolvedAccessMode,
+        ),
+        navSecondary: secondary,
+      }
+    }
     const selfService = filterNavByPermissions(
       selfServiceNavMain,
       normalizedPermissions,
@@ -752,19 +812,26 @@ export function AppSidebar({
       navMain: adminItems,
       navSecondary: secondary,
     }
-  }, [forbiddenVersion, normalizedPermissions, permissionsResolved, resolvedAccessMode])
+  }, [forbiddenVersion, normalizedPermissions, permissionsResolved, resolvedAccessMode, scope])
 
   const searchIndex = React.useMemo(() => {
     if (!permissionsResolved) {
       return [] as SearchItem[]
     }
     void forbiddenVersion
+    if (scope === "platform") {
+      return filterAdminSearchByPermissions(
+        platformSearchIndex,
+        normalizedPermissions,
+        resolvedAccessMode,
+      )
+    }
     return filterAdminSearchByPermissions(
       mergeUniqueNavItems(employeeSearchIndex, adminSearchIndex),
       normalizedPermissions,
       resolvedAccessMode,
     )
-  }, [forbiddenVersion, normalizedPermissions, permissionsResolved, resolvedAccessMode])
+  }, [forbiddenVersion, normalizedPermissions, permissionsResolved, resolvedAccessMode, scope])
 
   return (
     <Sidebar collapsible="offcanvas" className="app-sidebar" {...props}>

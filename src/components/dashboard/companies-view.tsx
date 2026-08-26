@@ -1,7 +1,17 @@
 "use client"
 
 import * as React from "react"
-import { CheckCircle2, KeyRound, Pencil, Plus, RefreshCw, ShieldAlert, Trash2 } from "lucide-react"
+import {
+  Building2,
+  CheckCircle2,
+  KeyRound,
+  LogIn,
+  Pencil,
+  Plus,
+  RefreshCw,
+  ShieldAlert,
+  Trash2,
+} from "lucide-react"
 
 import { SearchToggleField } from "@/components/common/search-toggle-field"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
@@ -11,6 +21,7 @@ import {
   activateCompany,
   assignPermissionToCurrentCompanyUser,
   assignRoleToCurrentCompanyUser,
+  createCompany,
   createCurrentCompanyUser,
   deleteCurrentCompanyUser,
   getCompanyById,
@@ -28,6 +39,7 @@ import {
   type UsersQueryParams,
 } from "@/lib/admin-api"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
+import { useAuth } from "@/hooks/useAuth"
 import { useForbiddenRouteGuard, useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
 import {
   canAccessDashboardRoute,
@@ -60,6 +72,26 @@ const DEFAULT_MEMBERS_QUERY: Required<UsersQueryParams> = {
 type CompanyForm = {
   name: string
   metadata: string
+}
+
+type CreateCompanyForm = {
+  companyName: string
+  companySlug: string
+  adminFirstName: string
+  adminLastName: string
+  adminEmail: string
+  adminPhone: string
+  adminPassword: string
+}
+
+const EMPTY_CREATE_COMPANY_FORM: CreateCompanyForm = {
+  companyName: "",
+  companySlug: "",
+  adminFirstName: "",
+  adminLastName: "",
+  adminEmail: "",
+  adminPhone: "",
+  adminPassword: "",
 }
 
 type CurrentCompanyUserForm = {
@@ -346,13 +378,17 @@ function memberPermissionIds(row: AdminRecord) {
 
 export function CompaniesView() {
   const actor = useDashboardActor()
+  const { switchCompany } = useAuth()
   const actorPermissions = actor.permissionLabels
   const permissionsReady = actor.ready
+  const isPlatformScope = actor.scope === "platform"
   const canAccessCompaniesRoute =
     permissionsReady &&
     canAccessDashboardRoute("/dashboard/companies", actorPermissions, actor.accessMode)
   const canListPlatformCompanies =
-    permissionsReady && canPerformPermission(actorPermissions, COMPANY_MANAGEMENT_ROUTE_PERMISSION)
+    permissionsReady &&
+    isPlatformScope &&
+    canPerformPermission(actorPermissions, COMPANY_MANAGEMENT_ROUTE_PERMISSION)
   const leaveIfForbidden = useLeaveIfForbidden()
   useForbiddenRouteGuard(canAccessCompaniesRoute)
   const [rows, setRows] = React.useState<AdminRecord[]>([])
@@ -368,6 +404,12 @@ export function CompaniesView() {
     company: AdminRecord
     nextAction: "activate" | "suspend"
   } | null>(null)
+  const [showCreateCompany, setShowCreateCompany] = React.useState(false)
+  const [createCompanyForm, setCreateCompanyForm] = React.useState<CreateCompanyForm>(
+    EMPTY_CREATE_COMPANY_FORM
+  )
+  const [switchingCompanyId, setSwitchingCompanyId] = React.useState<number | null>(null)
+  const [successMessage, setSuccessMessage] = React.useState<string | null>(null)
 
   const [myCompany, setMyCompany] = React.useState<AdminRecord | null>(null)
   const [onboardingStatus, setOnboardingStatus] = React.useState<AdminRecord | null>(null)
@@ -385,7 +427,19 @@ export function CompaniesView() {
   const [editingMemberPermissionIds, setEditingMemberPermissionIds] = React.useState<string[]>([])
 
   const canUpdateCompanies =
-    permissionsReady && canPerformPermission(actorPermissions, "companies:update")
+    permissionsReady &&
+    isPlatformScope &&
+    canPerformPermission(actorPermissions, {
+      permissions: ["companies:update", "update_company"],
+      mode: "any",
+    })
+  const canCreateCompanies =
+    permissionsReady &&
+    isPlatformScope &&
+    canPerformPermission(actorPermissions, {
+      permissions: ["companies:create", "create_company"],
+      mode: "any",
+    })
   const canManageCompanyUsers =
     permissionsReady &&
     (canPerformPermission(actorPermissions, "company_users:create") ||
@@ -422,10 +476,34 @@ export function CompaniesView() {
     setLoading(true)
     setError(null)
     setMembersError(null)
+
+    if (isPlatformScope) {
+      try {
+        const companies = await probePlatformCompaniesList(token)
+        setRows(companies)
+        setMyCompany(null)
+        setOnboardingStatus(null)
+        setMembers([])
+        setAllUsers([])
+        setRoles([])
+        setPermissions([])
+      } catch (errorObject) {
+        const message =
+          errorObject instanceof Error
+            ? errorObject.message
+            : "Failed to load platform companies."
+        setRows([])
+        setError(message)
+        if (/platform access is required|forbidden|permission/i.test(message)) {
+          leaveIfForbidden(Object.assign(new Error(message), { status: 403 }))
+        }
+      } finally {
+        setLoading(false)
+      }
+      return
+    }
+
     const settled = await Promise.allSettled([
-      canListPlatformCompanies
-        ? probePlatformCompaniesList(token)
-        : Promise.resolve([] as AdminRecord[]),
       getMyCompany(token),
       getCurrentCompanyOnboardingStatus(token),
       listCurrentCompanyUsers(token, DEFAULT_MEMBERS_QUERY, {
@@ -453,25 +531,19 @@ export function CompaniesView() {
           : null
     }
 
-    setRows(value(0, [] as AdminRecord[]))
-    setMyCompany(value(1, null) ?? companyFromStoredUser())
-    setOnboardingStatus(value(2, null))
-    setMembers(value(3, [] as AdminRecord[]))
-    setAllUsers(value(4, [] as AdminRecord[]))
-    setRoles(value(5, [] as AdminRecord[]))
-    setPermissions(value(6, [] as AdminRecord[]))
+    setRows([])
+    setMyCompany(value(0, null) ?? companyFromStoredUser())
+    setOnboardingStatus(value(1, null))
+    setMembers(value(2, [] as AdminRecord[]))
+    setAllUsers(value(3, [] as AdminRecord[]))
+    setRoles(value(4, [] as AdminRecord[]))
+    setPermissions(value(5, [] as AdminRecord[]))
 
-    const platformError = canListPlatformCompanies ? reason(0) : null
-    if (platformError && /platform access is required|forbidden/i.test(platformError)) {
-      leaveIfForbidden(Object.assign(new Error(platformError), { status: 403 }))
-      setLoading(false)
-      return
-    }
-    const contextError = reason(1) || reason(3)
-    setError(platformError || contextError)
-    setMembersError(reason(3))
+    const contextError = reason(0) || reason(2)
+    setError(contextError)
+    setMembersError(reason(2))
     setLoading(false)
-  }, [canAccessCompaniesRoute, canListPlatformCompanies, leaveIfForbidden, permissionsReady])
+  }, [canAccessCompaniesRoute, isPlatformScope, leaveIfForbidden, permissionsReady])
 
   React.useEffect(() => {
     void loadData()
@@ -547,12 +619,41 @@ export function CompaniesView() {
     {
       key: "actions",
       label: "Actions",
-      defaultWidth: 160,
+      defaultWidth: 220,
       sortable: false,
       render: (row) => {
         const status = companyStatus(row).toLowerCase()
+        const companyId = readNumber(row, ["id", "company_id", "companyId"])
+        const switchDisabled =
+          saving ||
+          companyId === null ||
+          switchingCompanyId !== null ||
+          status === "suspended" ||
+          status === "inactive"
         return (
           <div className="flex justify-end gap-1 pr-1" onClick={(event) => event.stopPropagation()}>
+            <button
+              type="button"
+              className="admin-table-icon-button"
+              disabled={switchDisabled}
+              onClick={() => {
+                if (companyId !== null) {
+                  void enterCompany(companyId)
+                }
+              }}
+              aria-label={`Enter ${companyName(row)}`}
+              title={
+                status === "suspended" || status === "inactive"
+                  ? "Activate the company before entering it"
+                  : "Switch to this company"
+              }
+            >
+              {switchingCompanyId === companyId ? (
+                <RefreshCw className="size-4 animate-spin" />
+              ) : (
+                <LogIn className="size-4" />
+              )}
+            </button>
             {canUpdateCompanies ? (
               <button
                 type="button"
@@ -716,6 +817,81 @@ export function CompaniesView() {
     },
   ]
 
+  async function enterCompany(companyId: number) {
+    setSwitchingCompanyId(companyId)
+    setError(null)
+    setSuccessMessage(null)
+    try {
+      await switchCompany(companyId)
+      // A full navigation rebuilds the dashboard shell and all permission-
+      // controlled tabs from the refreshed company-scoped access token.
+      window.location.replace("/dashboard")
+    } catch (errorObject) {
+      setError(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to switch to the selected company."
+      )
+      setSwitchingCompanyId(null)
+    }
+  }
+
+  async function submitCreateCompany() {
+    const token = readStoredToken()
+    if (!token) {
+      setError("Authentication required. Please log in again.")
+      return
+    }
+
+    const firstName = createCompanyForm.adminFirstName.trim()
+    const lastName = createCompanyForm.adminLastName.trim()
+    if (!createCompanyForm.companyName.trim()) {
+      setError("Company name is required.")
+      return
+    }
+    if (!/^[A-Za-z\s]+$/.test(firstName) || !/^[A-Za-z\s]+$/.test(lastName)) {
+      setError("Administrator first and last names may only contain letters and spaces.")
+      return
+    }
+    if (!/^\S+@\S+\.\S+$/.test(createCompanyForm.adminEmail.trim())) {
+      setError("Enter a valid administrator email address.")
+      return
+    }
+    if (!createCompanyForm.adminPhone.trim()) {
+      setError("Administrator phone is required.")
+      return
+    }
+    if (createCompanyForm.adminPassword.length < 8) {
+      setError("Administrator password must contain at least 8 characters.")
+      return
+    }
+
+    setSaving(true)
+    setError(null)
+    setSuccessMessage(null)
+    try {
+      await createCompany(token, {
+        company_name: createCompanyForm.companyName.trim(),
+        ...(createCompanyForm.companySlug.trim()
+          ? { company_slug: createCompanyForm.companySlug.trim() }
+          : {}),
+        admin_first_name: firstName,
+        admin_last_name: lastName,
+        admin_email: createCompanyForm.adminEmail.trim().toLowerCase(),
+        admin_phone: createCompanyForm.adminPhone.trim(),
+        admin_password: createCompanyForm.adminPassword,
+      })
+      setShowCreateCompany(false)
+      setCreateCompanyForm(EMPTY_CREATE_COMPANY_FORM)
+      setSuccessMessage("Company and its first administrator were created successfully.")
+      await loadData()
+    } catch (errorObject) {
+      setError(errorObject instanceof Error ? errorObject.message : "Failed to create company.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
   async function saveCompany() {
     const token = readStoredToken()
     const companyId = readNumber(editingCompany ?? {}, ["id"])
@@ -866,7 +1042,8 @@ export function CompaniesView() {
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+      {!isPlatformScope ? (
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
         <div className="rounded-xl border border-border/70 bg-card p-4">
           <div className="flex items-start justify-between gap-3">
             <div className="space-y-1">
@@ -985,10 +1162,40 @@ export function CompaniesView() {
             {membersError ? <p className="text-sm text-rose-600">{membersError}</p> : null}
           </div>
         </div>
-      </div>
+        </div>
+      ) : null}
 
       {canListPlatformCompanies ? (
-        <div className="rounded-xl border border-border/70 bg-card p-4">
+        <div className="border border-border/70 bg-card p-4 shadow-sm">
+          <div className="mb-4 flex flex-wrap items-start gap-3">
+            <div className="flex min-w-0 items-start gap-3">
+              <div className="flex size-10 shrink-0 items-center justify-center border border-primary/20 bg-primary/10 text-primary">
+                <Building2 className="size-5" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">Tenant companies</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Create and maintain tenants, or enter a company to work in its own dashboard context.
+                </p>
+              </div>
+            </div>
+            {canCreateCompanies ? (
+              <button
+                type="button"
+                className="ml-auto inline-flex h-9 items-center gap-1.5 bg-primary px-3 text-sm font-semibold text-white transition hover:brightness-95 disabled:opacity-60"
+                onClick={() => {
+                  setError(null)
+                  setSuccessMessage(null)
+                  setShowCreateCompany(true)
+                }}
+                disabled={saving}
+              >
+                <Plus className="size-4" />
+                Create company
+              </button>
+            ) : null}
+          </div>
+
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <SearchToggleField
               className="min-w-0"
@@ -1001,6 +1208,11 @@ export function CompaniesView() {
             </div>
           </div>
 
+          {successMessage ? (
+            <p className="mb-3 border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200">
+              {successMessage}
+            </p>
+          ) : null}
           {error ? <p className="mb-3 text-sm text-rose-600">{error}</p> : null}
 
           <ResizableTable
@@ -1016,17 +1228,183 @@ export function CompaniesView() {
         <p className="text-sm text-rose-600">{error}</p>
       ) : null}
 
-      <div className="rounded-xl border border-border/70 bg-card p-4">
-        <h3 className="mb-3 text-base font-semibold text-foreground">Active Company Members</h3>
-        <ResizableTable
-          title="Current company users"
-          data={members}
-          columns={memberColumns}
-          itemsPerPage={10}
-          loading={loading}
-          storageKey="current-company-users"
-        />
-      </div>
+      {!isPlatformScope ? (
+        <div className="rounded-xl border border-border/70 bg-card p-4">
+          <h3 className="mb-3 text-base font-semibold text-foreground">Active Company Members</h3>
+          <ResizableTable
+            title="Current company users"
+            data={members}
+            columns={memberColumns}
+            itemsPerPage={10}
+            loading={loading}
+            storageKey="current-company-users"
+          />
+        </div>
+      ) : null}
+
+      {showCreateCompany ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="create-company-title"
+            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto border border-border bg-background p-5 shadow-xl"
+          >
+            <div>
+              <h3 id="create-company-title" className="text-lg font-semibold text-foreground">
+                Create company
+              </h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Create the tenant and the administrator who will complete its setup.
+              </p>
+            </div>
+
+            <div className="mt-5 grid gap-4 sm:grid-cols-2">
+              <label className="grid gap-1 sm:col-span-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Company name
+                </span>
+                <input
+                  autoFocus
+                  className="h-10 border border-border bg-background px-3 text-sm"
+                  value={createCompanyForm.companyName}
+                  onChange={(event) =>
+                    setCreateCompanyForm((previous) => ({
+                      ...previous,
+                      companyName: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <label className="grid gap-1 sm:col-span-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Company slug <span className="font-normal normal-case">(optional)</span>
+                </span>
+                <input
+                  className="h-10 border border-border bg-background px-3 text-sm"
+                  placeholder="alliance-insurance"
+                  value={createCompanyForm.companySlug}
+                  onChange={(event) =>
+                    setCreateCompanyForm((previous) => ({
+                      ...previous,
+                      companySlug: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <label className="grid gap-1">
+                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Admin first name
+                </span>
+                <input
+                  className="h-10 border border-border bg-background px-3 text-sm"
+                  autoComplete="given-name"
+                  value={createCompanyForm.adminFirstName}
+                  onChange={(event) =>
+                    setCreateCompanyForm((previous) => ({
+                      ...previous,
+                      adminFirstName: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <label className="grid gap-1">
+                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Admin last name
+                </span>
+                <input
+                  className="h-10 border border-border bg-background px-3 text-sm"
+                  autoComplete="family-name"
+                  value={createCompanyForm.adminLastName}
+                  onChange={(event) =>
+                    setCreateCompanyForm((previous) => ({
+                      ...previous,
+                      adminLastName: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <label className="grid gap-1">
+                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Admin email
+                </span>
+                <input
+                  type="email"
+                  className="h-10 border border-border bg-background px-3 text-sm"
+                  autoComplete="email"
+                  value={createCompanyForm.adminEmail}
+                  onChange={(event) =>
+                    setCreateCompanyForm((previous) => ({
+                      ...previous,
+                      adminEmail: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <label className="grid gap-1">
+                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Admin phone
+                </span>
+                <input
+                  type="tel"
+                  className="h-10 border border-border bg-background px-3 text-sm"
+                  autoComplete="tel"
+                  value={createCompanyForm.adminPhone}
+                  onChange={(event) =>
+                    setCreateCompanyForm((previous) => ({
+                      ...previous,
+                      adminPhone: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <label className="grid gap-1 sm:col-span-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Temporary admin password
+                </span>
+                <input
+                  type="password"
+                  minLength={8}
+                  autoComplete="new-password"
+                  className="h-10 border border-border bg-background px-3 text-sm"
+                  value={createCompanyForm.adminPassword}
+                  onChange={(event) =>
+                    setCreateCompanyForm((previous) => ({
+                      ...previous,
+                      adminPassword: event.target.value,
+                    }))
+                  }
+                />
+                <span className="text-xs text-muted-foreground">Minimum 8 characters.</span>
+              </label>
+            </div>
+
+            {error ? <p className="mt-3 text-sm text-rose-600">{error}</p> : null}
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                className="border border-border px-3 py-2 text-sm"
+                disabled={saving}
+                onClick={() => {
+                  setShowCreateCompany(false)
+                  setError(null)
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="bg-primary px-3 py-2 text-sm font-semibold text-white transition hover:brightness-95 disabled:opacity-60"
+                disabled={saving}
+                onClick={() => void submitCreateCompany()}
+              >
+                {saving ? "Creating..." : "Create company"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {editingCompany ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">

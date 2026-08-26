@@ -1,5 +1,6 @@
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import { asRecord, readString } from "@/utils/token-utils"
+import type { AuthScope } from "@/types"
 
 export const DASHBOARD_ACTOR_EVENT = "hrms:dashboard-actor-changed"
 export const DASHBOARD_ACCESS_REFRESH_EVENT = "hrms:dashboard-access-refresh-requested"
@@ -7,6 +8,7 @@ export const DASHBOARD_PERMISSION_STORAGE_KEY = "hrms.dashboard.actorPermissions
 export const DASHBOARD_ACCESS_MODE_STORAGE_KEY = "hrms.dashboard.accessMode"
 export const DASHBOARD_IS_ADMIN_STORAGE_KEY = "hrms.dashboard.isAdmin"
 export const DASHBOARD_ROLES_STORAGE_KEY = "hrms.dashboard.actorRoles"
+export const DASHBOARD_SCOPE_STORAGE_KEY = "hrms.dashboard.scope"
 export const DASHBOARD_AUTH_COOKIE = "hrms_dashboard_auth"
 export const DASHBOARD_TOKEN_COOKIE = "hrms_dashboard_token"
 export const DASHBOARD_PERMISSIONS_COOKIE = "hrms_dashboard_permissions"
@@ -35,6 +37,7 @@ export type DashboardAccessMode = "admin" | "employee"
 export type DashboardActorSnapshot = {
   permissionLabels: string[]
   roleNames: string[]
+  scope: AuthScope | null
   accessMode: DashboardAccessMode
   isAdmin: boolean
   ready: boolean
@@ -44,6 +47,7 @@ export type DashboardActorSnapshot = {
 type DashboardActorIdentityResolution = {
   permissionLabels: string[]
   roleNames: string[]
+  scope: AuthScope | null
   hasExplicitAdminIdentity: boolean
   hasExplicitEmployeeIdentity: boolean
   hasPermissionBasedAdminAccess: boolean
@@ -585,6 +589,10 @@ export const NOTIFICATIONS_ADMIN_ROUTE_PERMISSION: PermissionRequirement = {
     "notifications:read",
     "notifications:update",
     "notifications:create",
+    "notifications:settings:read",
+    "notifications:settings:update",
+    "notifications:mail-logs:read",
+    "notifications:mail-logs:retry",
     "view_notifications",
     "manage_notifications",
   ],
@@ -608,7 +616,7 @@ export const ATTENDANCE_REPORTS_ROUTE_PERMISSION: PermissionRequirement = {
  * page — those users get "Platform access is required" from GET /api/companies.
  */
 export const COMPANY_MANAGEMENT_ROUTE_PERMISSION: PermissionRequirement = {
-  permissions: ["companies:read", "companies:update"],
+  permissions: ["companies:read", "companies:update", "view_companies", "update_company"],
   mode: "any",
 }
 
@@ -685,15 +693,23 @@ const EMPLOYEE_DIRECTORY_ROUTE_PERMISSION: PermissionRequirement = {
   mode: "any",
 }
 
-/** Permissions that unlock employee administration workflows beyond directory read. */
-const EMPLOYEE_DIRECTORY_MANAGE_PERMISSIONS: PermissionRequirement = {
+/** Permissions that allow an administrator or HR user to register another employee. */
+export const EMPLOYEE_REGISTRATION_PERMISSION = {
   permissions: [
     "employees:create",
-    "employees:update",
-    "employees:delete",
     "company_users:create",
     "users:create",
     "create_company_user",
+  ],
+  mode: "any",
+} satisfies PermissionRequirement
+
+/** Permissions that unlock employee administration workflows beyond directory read. */
+const EMPLOYEE_DIRECTORY_MANAGE_PERMISSIONS: PermissionRequirement = {
+  permissions: [
+    ...EMPLOYEE_REGISTRATION_PERMISSION.permissions,
+    "employees:update",
+    "employees:delete",
   ],
   mode: "any",
 }
@@ -845,15 +861,7 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
     mode: "any",
   },
   "/dashboard/employees/all": EMPLOYEE_DIRECTORY_ROUTE_PERMISSION,
-  "/dashboard/employees/registration": {
-    permissions: [
-      "employees:create",
-      "company_users:create",
-      "users:create",
-      "create_company_user",
-    ],
-    mode: "any",
-  },
+  "/dashboard/employees/registration": EMPLOYEE_REGISTRATION_PERMISSION,
   "/dashboard/employees/offboarding": {
     permissions: ["offboarding_requests:read", "offboarding_workflows:read"],
     mode: "any",
@@ -1211,6 +1219,50 @@ function normalizeDashboardAccessMode(value: unknown): DashboardAccessMode | nul
   return null
 }
 
+function normalizeDashboardScope(value: unknown): AuthScope | null {
+  if (typeof value !== "string") {
+    return null
+  }
+
+  const normalized = value.trim().toLowerCase()
+  return normalized === "platform" || normalized === "company" ? normalized : null
+}
+
+function readDashboardScopeFromUnknown(value: unknown): AuthScope | null {
+  if (!value) return null
+  if (typeof value === "string") {
+    return value.includes(".")
+      ? readDashboardScopeFromUnknown(decodeJwtPayload(value))
+      : normalizeDashboardScope(value)
+  }
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const scope = readDashboardScopeFromUnknown(entry)
+      if (scope) return scope
+    }
+    return null
+  }
+
+  const record = asRecord(value)
+  if (!record) return null
+  const direct = normalizeDashboardScope(record.scope)
+  if (direct) return direct
+
+  for (const key of ["user", "profile", "data", "result", "tokens", "accessToken", "access_token", "token"]) {
+    const scope = readDashboardScopeFromUnknown(record[key])
+    if (scope) return scope
+  }
+  return null
+}
+
+function readDashboardScope(...sources: unknown[]): AuthScope | null {
+  for (const source of sources) {
+    const scope = readDashboardScopeFromUnknown(source)
+    if (scope) return scope
+  }
+  return null
+}
+
 function readExplicitDashboardAccessModeFromUnknown(value: unknown): DashboardAccessMode | null {
   if (!value) {
     return null
@@ -1269,8 +1321,8 @@ function readExplicitDashboardAccessModeFromUnknown(value: unknown): DashboardAc
 }
 
 function readExplicitDashboardAccessMode(...sources: unknown[]) {
-  for (let index = sources.length - 1; index >= 0; index -= 1) {
-    const resolved = readExplicitDashboardAccessModeFromUnknown(sources[index])
+  for (const source of sources) {
+    const resolved = readExplicitDashboardAccessModeFromUnknown(source)
     if (resolved) {
       return resolved
     }
@@ -1744,6 +1796,7 @@ export function hasAdminDashboardAccess(permissionLabels: string[]) {
 
 function resolveDashboardActorIdentity(...sources: unknown[]): DashboardActorIdentityResolution {
   const explicitAccessMode = readExplicitDashboardAccessMode(...sources)
+  const scope = readDashboardScope(...sources)
   const permissionLabels = readPermissionLabelsFromUnknown(...sources)
   const roleNames = readRoleNamesFromUnknown(...sources)
   const identityHints = readDashboardIdentityHintsFromUnknown(...sources)
@@ -1756,19 +1809,24 @@ function resolveDashboardActorIdentity(...sources: unknown[]): DashboardActorIde
   const hasPermissionBasedAdminAccess = hasAdminDashboardAccess(permissionLabels)
   const hasAdminRole = roleNames.some(roleNameImpliesAdminShell)
   const accessMode: DashboardAccessMode =
-    explicitAccessMode === "admin" || hasExplicitAdminIdentity || hasAdminRole
+    explicitAccessMode === "admin"
       ? "admin"
-      : explicitAccessMode === "employee" || hasExplicitEmployeeIdentity
+      : explicitAccessMode === "employee"
         ? "employee"
-        : "employee"
+        : hasExplicitAdminIdentity || hasAdminRole
+          ? "admin"
+          : "employee"
 
   return {
     permissionLabels,
     roleNames,
-    hasExplicitAdminIdentity:
-      explicitAccessMode === "admin" || hasExplicitAdminIdentity,
-    hasExplicitEmployeeIdentity:
-      explicitAccessMode === "employee" || hasExplicitEmployeeIdentity,
+    scope,
+    hasExplicitAdminIdentity: explicitAccessMode
+      ? explicitAccessMode === "admin"
+      : hasExplicitAdminIdentity,
+    hasExplicitEmployeeIdentity: explicitAccessMode
+      ? explicitAccessMode === "employee"
+      : hasExplicitEmployeeIdentity,
     hasPermissionBasedAdminAccess,
     accessMode,
     isAdmin: accessMode === "admin",
@@ -1797,12 +1855,13 @@ function clearCookie(name: string) {
 export function buildDashboardActorSnapshotFromSources(
   ...sources: unknown[]
 ): DashboardActorSnapshot {
-  const { permissionLabels, roleNames, accessMode, isAdmin } =
+  const { permissionLabels, roleNames, scope, accessMode, isAdmin } =
     resolveDashboardActorIdentity(...sources)
 
   return {
     permissionLabels,
     roleNames,
+    scope,
     accessMode,
     isAdmin,
     ready: true,
@@ -1821,6 +1880,7 @@ export function publishDashboardActorSnapshot(snapshot: DashboardActorSnapshot) 
   const previousAccessMode = window.sessionStorage.getItem(
     DASHBOARD_ACCESS_MODE_STORAGE_KEY,
   )
+  const previousScope = window.sessionStorage.getItem(DASHBOARD_SCOPE_STORAGE_KEY)
   let previousPermissions: string[] = []
   try {
     const parsed = previousPermissionsRaw ? JSON.parse(previousPermissionsRaw) : []
@@ -1833,10 +1893,12 @@ export function publishDashboardActorSnapshot(snapshot: DashboardActorSnapshot) 
 
   const previousFingerprint = [
     previousAccessMode ?? "",
+    previousScope ?? "",
     ...normalizePermissionLabels(previousPermissions).sort(),
   ].join("|")
   const nextFingerprint = [
     snapshot.accessMode,
+    snapshot.scope ?? "",
     ...normalizePermissionLabels(snapshot.permissionLabels).sort(),
   ].join("|")
   const accessChanged = Boolean(previousPermissionsRaw) && previousFingerprint !== nextFingerprint
@@ -1847,6 +1909,11 @@ export function publishDashboardActorSnapshot(snapshot: DashboardActorSnapshot) 
     JSON.stringify(snapshot.permissionLabels)
   )
   window.sessionStorage.setItem(DASHBOARD_ACCESS_MODE_STORAGE_KEY, snapshot.accessMode)
+  if (snapshot.scope) {
+    window.sessionStorage.setItem(DASHBOARD_SCOPE_STORAGE_KEY, snapshot.scope)
+  } else {
+    window.sessionStorage.removeItem(DASHBOARD_SCOPE_STORAGE_KEY)
+  }
   window.sessionStorage.setItem(DASHBOARD_IS_ADMIN_STORAGE_KEY, snapshot.isAdmin ? "1" : "0")
   window.sessionStorage.setItem(
     DASHBOARD_ROLES_STORAGE_KEY,
@@ -1887,6 +1954,7 @@ export function clearDashboardActorSnapshot() {
   window.sessionStorage.removeItem(DASHBOARD_ACCESS_MODE_STORAGE_KEY)
   window.sessionStorage.removeItem(DASHBOARD_IS_ADMIN_STORAGE_KEY)
   window.sessionStorage.removeItem(DASHBOARD_ROLES_STORAGE_KEY)
+  window.sessionStorage.removeItem(DASHBOARD_SCOPE_STORAGE_KEY)
 
   clearCookie(DASHBOARD_AUTH_COOKIE)
   clearCookie(DASHBOARD_TOKEN_COOKIE)
@@ -1897,6 +1965,7 @@ export function clearDashboardActorSnapshot() {
       detail: {
         permissionLabels: [],
         roleNames: [],
+        scope: null,
         accessMode: "employee",
         isAdmin: false,
         ready: true,
@@ -1985,6 +2054,7 @@ export function readDashboardActorSnapshotFromBrowser(): DashboardActorSnapshot 
     return {
       permissionLabels: [],
       roleNames: [],
+      scope: null,
       accessMode: "employee",
       isAdmin: false,
       ready: false,
@@ -2005,6 +2075,7 @@ export function readDashboardActorSnapshotFromBrowser(): DashboardActorSnapshot 
       const storedAccessMode = window.sessionStorage.getItem(
         DASHBOARD_ACCESS_MODE_STORAGE_KEY,
       )
+      const storedScope = window.sessionStorage.getItem(DASHBOARD_SCOPE_STORAGE_KEY)
       const accessMode: DashboardAccessMode =
         storedAccessMode === "admin" || storedAccessMode === "employee"
           ? storedAccessMode
@@ -2026,6 +2097,10 @@ export function readDashboardActorSnapshotFromBrowser(): DashboardActorSnapshot 
         // refill it from a stale local user record or JWT.
         permissionLabels,
         roleNames,
+        scope:
+          storedScope === "platform" || storedScope === "company"
+            ? storedScope
+            : derivedSnapshot.scope,
         accessMode,
         isAdmin: accessMode === "admin",
         ready: dashboardActorVerifiedThisPage,
@@ -2104,6 +2179,7 @@ export function subscribeToDashboardActorSnapshot(
         DASHBOARD_PERMISSION_STORAGE_KEY,
         DASHBOARD_ACCESS_MODE_STORAGE_KEY,
         DASHBOARD_IS_ADMIN_STORAGE_KEY,
+        DASHBOARD_SCOPE_STORAGE_KEY,
       ].includes(event.key)
     ) {
       listener()

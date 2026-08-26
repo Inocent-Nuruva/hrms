@@ -11,6 +11,7 @@ import {
 const EMPTY_SNAPSHOT: DashboardActorSnapshot = {
   permissionLabels: [],
   roleNames: [],
+  scope: null,
   accessMode: "employee",
   isAdmin: false,
   ready: false,
@@ -20,6 +21,7 @@ const EMPTY_SNAPSHOT: DashboardActorSnapshot = {
 function snapshotsEqual(a: DashboardActorSnapshot, b: DashboardActorSnapshot) {
   return (
     a.ready === b.ready &&
+    a.scope === b.scope &&
     a.accessMode === b.accessMode &&
     a.isAdmin === b.isAdmin &&
     a.permissionLabels.length === b.permissionLabels.length &&

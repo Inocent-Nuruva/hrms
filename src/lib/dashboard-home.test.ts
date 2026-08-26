@@ -4,6 +4,17 @@ import { readRoleNamesFromUnknown } from "./dashboard-permissions"
 import { resolveHomeDashboardKind } from "./dashboard-home"
 
 describe("resolveHomeDashboardKind", () => {
+  it("sends platform scope to the platform operations dashboard", () => {
+    expect(
+      resolveHomeDashboardKind({
+        accessMode: "admin",
+        scope: "platform",
+        permissionLabels: ["companies:read"],
+        roleNames: ["SUPER_ADMIN"],
+      }),
+    ).toBe("platform")
+  })
+
   it("sends HR Manager to the HR dashboard even with company-dashboard access", () => {
     expect(
       resolveHomeDashboardKind({

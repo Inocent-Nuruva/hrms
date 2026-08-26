@@ -29,7 +29,7 @@ function decodeBase64Url(input: string): string | null {
   }
 }
 
-function decodeJwtPayload(token: string): UnknownRecord | null {
+export function decodeJwtPayload(token: string): UnknownRecord | null {
   const parts = token.split(".")
   if (parts.length !== 3 || !parts[1]) {
     return null

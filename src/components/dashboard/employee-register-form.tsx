@@ -91,6 +91,11 @@ import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import { asRecord, isLikelyRefreshToken, readString } from "@/utils/token-utils"
 import { cn } from "@/lib/utils"
 import { buildEmployeeOnboardingInput } from "@/lib/onboarding-provisioning"
+import { useDashboardActor } from "@/hooks/use-dashboard-actor"
+import {
+  EMPLOYEE_REGISTRATION_PERMISSION,
+  hasPermission,
+} from "@/lib/dashboard-permissions"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 const LEGACY_TOKEN_STORAGE_KEY = "ess_auth_token"
@@ -330,41 +335,6 @@ const MOBILE_MONEY_PROVIDER_OPTIONS = [
 ]
 const DEFAULT_MOBILE_MONEY_PROVIDER =
   MOBILE_MONEY_PROVIDER_OPTIONS.find((option) => option !== "none") ?? "M-Pesa"
-const REGISTRATION_STAFF_ROLE_NAMES = new Set([
-  "owner",
-  "platformowner",
-  "administrator",
-  "companyadministrator",
-  "hrmanager",
-  "managerheadofdepartmenthrmanager",
-  "hrofficer",
-  "junioremployeehrofficer",
-  "itadministrator",
-  "midlevelemployeeitadministrator",
-])
-const ADMIN_ROLE_KEYS = new Set([
-  "admin",
-  "administrator",
-  "super_admin",
-  "super-admin",
-  "company_admin",
-  "company-admin",
-  "hr_admin",
-  "hr-admin",
-  "owner",
-  "root",
-])
-
-const REGISTRATION_STAFF_ROLE_HINTS = [
-  "admin",
-  "administrator",
-  "owner",
-  "hrmanager",
-  "hrofficer",
-  "manager",
-  "itadministrator",
-]
-
 const EMPTY_CONTACT: ContactFormState = {
   contactType: "personal",
   isPrimary: false,
@@ -675,34 +645,6 @@ type RoleOption = {
 
 function normalizeRoleText(value: string) {
   return value.trim().toLowerCase().replace(/[\s_-]+/g, "")
-}
-
-function decodeBase64Url(input: string) {
-  try {
-    const normalized = input.replace(/-/g, "+").replace(/_/g, "/")
-    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=")
-    return atob(padded)
-  } catch {
-    return null
-  }
-}
-
-function decodeJwtPayload(token: string) {
-  const parts = token.split(".")
-  if (parts.length !== 3 || !parts[1]) {
-    return null
-  }
-
-  const decoded = decodeBase64Url(parts[1])
-  if (!decoded) {
-    return null
-  }
-
-  try {
-    return asRecord(JSON.parse(decoded))
-  } catch {
-    return null
-  }
 }
 
 function resolveDefaultRoleId(roleOptions: RoleOption[]) {
@@ -1177,100 +1119,6 @@ function resolveInitializedRoleId(
   return byLabel?.id ?? ""
 }
 
-function readRoleCandidate(value: unknown): string | null {
-  if (typeof value === "string" && value.trim()) {
-    return value.trim()
-  }
-  const record = asRecord(value)
-  if (!record) {
-    return null
-  }
-  return (
-    readString(record, [
-      "name",
-      "display_name",
-      "label",
-      "title",
-      "role",
-      "role_name",
-      "key",
-      "code",
-      "slug",
-      "type",
-      "user_type",
-    ]) ?? null
-  )
-}
-
-function collectRoleLabels(record: AdminRecord | null, sink: Set<string>) {
-  if (!record) {
-    return
-  }
-
-  const push = (value: unknown) => {
-    const role = readRoleCandidate(value)
-    if (role) {
-      sink.add(normalizeRoleText(role))
-    }
-  }
-
-  push(record.role)
-  push(record.user_type)
-  push(record.type)
-  push(record.role_name)
-  push(record.roleName)
-
-  for (const candidate of [record.roles, record.authorities, record.userRole, record.user_role]) {
-    if (Array.isArray(candidate)) {
-      candidate.forEach((entry) => push(entry))
-      continue
-    }
-    push(candidate)
-  }
-}
-
-function resolveAdminFlag(record: AdminRecord | null) {
-  if (!record) {
-    return false
-  }
-
-  const candidates = [
-    record.is_admin,
-    record.isAdmin,
-    record.admin,
-    record.is_super_admin,
-    record.isSuperAdmin,
-    record.super_admin,
-    record.superAdmin,
-  ]
-
-  return candidates.some((value) => value === true || value === 1 || value === "1" || value === "true")
-}
-
-function canManageOtherEmployees(
-  sources: [AdminRecord | null, AdminRecord | null, AdminRecord | null],
-  accessToken: string
-) {
-  const roleLabels = new Set<string>()
-  const decodedToken = decodeJwtPayload(accessToken)
-  const records = [...sources, decodedToken]
-
-  records.forEach((record) => {
-    collectRoleLabels(record, roleLabels)
-  })
-
-  if (records.some((record) => resolveAdminFlag(record))) {
-    return true
-  }
-
-  return Array.from(roleLabels).some(
-    (role) =>
-      REGISTRATION_STAFF_ROLE_NAMES.has(role) ||
-      ADMIN_ROLE_KEYS.has(role) ||
-      REGISTRATION_STAFF_ROLE_HINTS.some((hint) => role.includes(hint))
-  )
-}
-
 const REGISTER_DRAFT_STORAGE_KEY = "hrms.employee.register.draft.v2"
 
 function countryNameFromIso(isoCode: string) {
@@ -1435,6 +1283,9 @@ function MultiSelectChecklist({
 }
 
 export function EmployeeRegisterForm() {
+  const actor = useDashboardActor()
+  const isRegisteringOthers =
+    actor.ready && hasPermission(actor.permissionLabels, EMPLOYEE_REGISTRATION_PERMISSION)
   const [currentStep, setCurrentStep] = React.useState<RegisterStep>("details")
   const [tabDirection, setTabDirection] = React.useState<"forward" | "backward">("forward")
   const [form, setForm] = React.useState<RegisterFormState>(EMPTY_FORM)
@@ -1517,7 +1368,6 @@ export function EmployeeRegisterForm() {
   const [initializedFields, setInitializedFields] = React.useState<InitializedRegistrationFields>(
     EMPTY_INITIALIZED_FIELDS
   )
-  const [isRegisteringOthers, setIsRegisteringOthers] = React.useState(false)
   const [registrationContextResolved, setRegistrationContextResolved] = React.useState(false)
   const [selfRegistrationStatus, setSelfRegistrationStatus] = React.useState("")
 
@@ -2643,6 +2493,11 @@ export function EmployeeRegisterForm() {
   }, [loadRoles])
 
   React.useEffect(() => {
+    if (!actor.ready) {
+      setRegistrationContextResolved(false)
+      return
+    }
+
     const accessToken = resolveAccessTokenFromStorage()
     if (!accessToken) {
       setInitializedFields(EMPTY_INITIALIZED_FIELDS)
@@ -2679,10 +2534,7 @@ export function EmployeeRegisterForm() {
         readString(currentEmployee, ["employment_status", "status", "employmentStatus"]) ||
         readString(storedUser, ["employment_status", "status", "employmentStatus"])
       setSelfRegistrationStatus((employeeStatus ?? "").toLowerCase())
-      const registeringOthers = canManageOtherEmployees(initializationSources, accessToken)
-      setIsRegisteringOthers(registeringOthers)
-
-      if (registeringOthers) {
+      if (isRegisteringOthers) {
         setInitializedFields(EMPTY_INITIALIZED_FIELDS)
         setForm((previous) => ({
           ...previous,
@@ -2733,7 +2585,7 @@ export function EmployeeRegisterForm() {
     return () => {
       isActive = false
     }
-  }, [roles])
+  }, [actor.ready, isRegisteringOthers, roles])
 
   React.useEffect(() => {
     if (isInviteMode) {
@@ -3230,7 +3082,11 @@ export function EmployeeRegisterForm() {
     )
   }
 
-  if (!isRegisteringOthers && selfRegistrationStatus !== "onboarding") {
+  if (
+    !isRegisteringOthers &&
+    actor.accessMode === "employee" &&
+    selfRegistrationStatus !== "onboarding"
+  ) {
     return (
       <div className="rounded-lg border border-border bg-card px-3 py-4">
         <p className="text-sm font-medium text-foreground">Self registration unavailable</p>
@@ -3239,6 +3095,10 @@ export function EmployeeRegisterForm() {
         </p>
       </div>
     )
+  }
+
+  if (!isRegisteringOthers && actor.accessMode !== "employee") {
+    return null
   }
 
   return (

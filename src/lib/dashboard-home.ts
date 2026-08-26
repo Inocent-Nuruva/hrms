@@ -4,6 +4,7 @@ import {
 } from "@/lib/dashboard-permissions"
 
 export type HomeDashboardKind =
+  | "platform"
   | "employee"
   | "hr"
   | "management"
@@ -131,9 +132,12 @@ function kindFromSpecificPermissions(permissionLabels: string[]): HomeDashboardK
  */
 export function resolveHomeDashboardKind(input: {
   accessMode: DashboardAccessMode
+  scope?: "platform" | "company" | null
   permissionLabels: string[]
   roleNames?: string[]
 }): HomeDashboardKind {
+  if (input.scope === "platform") return "platform"
+
   const fromRole = kindFromRoles(input.roleNames ?? [])
   if (fromRole) return fromRole
 

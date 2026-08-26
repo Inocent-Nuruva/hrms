@@ -12,6 +12,7 @@ import {
   prefetchDashboardWarmCache,
 } from "@/lib/dashboard-warm-cache";
 import { AUTH_STORAGE_KEYS, ROUTES } from "@/utils/constants";
+import type { AuthScope, DashboardType } from "@/types";
 import Link from "next/link";
 
 interface LoginFlowProps {
@@ -89,6 +90,8 @@ export function LoginFlow({ defaultEmail = "", nextPath, onSuccess }: LoginFlowP
     accessToken: string,
     normalizedEmail: string,
     redirect: string,
+    dashboardType?: DashboardType,
+    scope?: AuthScope,
   ) => {
     if (typeof window !== "undefined") {
       if (rememberMe) {
@@ -102,13 +105,13 @@ export function LoginFlow({ defaultEmail = "", nextPath, onSuccess }: LoginFlowP
 
     // Hide form; keep loader only here while dashboard data is prefetched.
     setIsDone(true);
-    if (redirect === "/dashboard") {
+    if (redirect === "/dashboard" && dashboardType !== "employee" && scope !== "platform") {
       markDashboardFromLogin();
     }
 
     try {
       // Cap wait so a slow network still opens the app; snapshot is best-effort.
-      if (redirect === "/dashboard") {
+      if (redirect === "/dashboard" && dashboardType !== "employee" && scope !== "platform") {
         await Promise.race([
           prefetchDashboardWarmCache(accessToken),
           new Promise<void>((resolve) => {
@@ -194,6 +197,8 @@ export function LoginFlow({ defaultEmail = "", nextPath, onSuccess }: LoginFlowP
         response.requiresPasswordChange || response.user?.requiresPasswordChange
           ? "/change-password?required=1"
           : homePath,
+        response.dashboardType,
+        response.scope,
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : "Login failed. Please try again.";
@@ -233,6 +238,8 @@ export function LoginFlow({ defaultEmail = "", nextPath, onSuccess }: LoginFlowP
         response.user.requiresPasswordChange
           ? "/change-password?required=1"
           : homePath,
+        response.user.dashboardType,
+        response.user.scope,
       );
     } catch (err) {
       const message =

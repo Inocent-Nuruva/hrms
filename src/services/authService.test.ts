@@ -19,6 +19,40 @@ describe("authService foundation helpers", () => {
     vi.restoreAllMocks()
   })
 
+  it("preserves the platform login scope and dashboard_type", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse(
+        {
+          scope: "platform",
+          dashboard_type: "admin",
+          access_token: "access-token",
+          refresh_token: "refresh-token",
+          user: {
+            id: 12,
+            first_name: "Platform",
+            last_name: "Owner",
+            email: "owner@example.com",
+            user_type: "OWNER",
+            roles: ["SUPER_ADMIN"],
+            permissions: ["companies:read"],
+          },
+        },
+        { status: 201 },
+      ),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const result = await authService.login({
+      email: "owner@example.com",
+      password: "password",
+    })
+
+    expect(result.dashboardType).toBe("admin")
+    expect(result.scope).toBe("platform")
+    expect(result.user?.dashboardType).toBe("admin")
+    expect(result.user?.scope).toBe("platform")
+  })
+
   it("lists and normalizes active sessions", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse({
@@ -194,6 +228,8 @@ describe("authService foundation helpers", () => {
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse({
         access_token: "next-access-token",
+        scope: "company",
+        dashboard_type: "employee",
         company_id: 4,
         company_name: "Acme East",
       })
@@ -214,8 +250,43 @@ describe("authService foundation helpers", () => {
     )
     expect(result).toEqual({
       accessToken: "next-access-token",
+      scope: "company",
+      dashboardType: "employee",
       companyId: 4,
       companyName: "Acme East",
+    })
+  })
+
+  it("reads omitted switch context fields from the refreshed JWT", async () => {
+    const encoded = btoa(
+      JSON.stringify({
+        scope: "company",
+        dashboardType: "admin",
+        companyId: 9,
+        companyName: "Acme North",
+      }),
+    )
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=+$/g, "")
+    const switchedToken = `eyJhbGciOiJIUzI1NiJ9.${encoded}.signature`
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        access_token: switchedToken,
+        company_id: 9,
+        company_name: "Acme North",
+      }),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const result = await authService.switchCompany("platform-access-token", 9)
+
+    expect(result).toEqual({
+      accessToken: switchedToken,
+      scope: "company",
+      dashboardType: "admin",
+      companyId: 9,
+      companyName: "Acme North",
     })
   })
 

@@ -36,6 +36,21 @@ describe("tightened dashboard permissions", () => {
     ).toEqual(["employees:read"])
   })
 
+  it("uses employee-creation permissions, not HR or admin role names, for registration", () => {
+    expect(
+      canAccessDashboardRoute("/dashboard/employees/registration", ["employees:create"], "admin"),
+    ).toBe(true)
+    expect(
+      canAccessDashboardRoute("/dashboard/employees/registration", ["company_users:create"], "admin"),
+    ).toBe(true)
+    expect(
+      canAccessDashboardRoute("/dashboard/employees/registration", ["users:create"], "admin"),
+    ).toBe(true)
+    expect(
+      canAccessDashboardRoute("/dashboard/employees/registration", ["admin", "hr_manager"], "admin"),
+    ).toBe(false)
+  })
+
   it("keeps explicit employee identity on the employee shell even with extra grants", () => {
     expect(hasAdminDashboardAccess(["branches:read"])).toBe(true)
     expect(hasAdminDashboardAccess(["leave_types:read"])).toBe(true)
@@ -184,8 +199,30 @@ describe("tightened dashboard permissions", () => {
     expect(
       buildDashboardActorSnapshotFromSources({
         dashboard_type: "employee",
-        permissions: ["branches:read"],
+        roles: [{ name: "ADMIN" }],
+        permissions: ["*", "branches:read"],
       }).accessMode,
     ).toBe("employee")
+  })
+
+  it("uses the first explicit API dashboard_type ahead of token fallback claims", () => {
+    expect(
+      buildDashboardActorSnapshotFromSources(
+        { dashboard_type: "employee", roles: [{ name: "ADMIN" }] },
+        { dashboard_type: "admin" },
+      ).accessMode,
+    ).toBe("employee")
+  })
+
+  it("preserves platform scope independently from the admin dashboard type", () => {
+    const snapshot = buildDashboardActorSnapshotFromSources({
+      scope: "platform",
+      dashboard_type: "admin",
+      roles: ["SUPER_ADMIN"],
+      permissions: ["companies:read"],
+    })
+
+    expect(snapshot.scope).toBe("platform")
+    expect(snapshot.accessMode).toBe("admin")
   })
 })

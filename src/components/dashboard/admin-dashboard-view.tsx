@@ -979,6 +979,7 @@ export default function AdminDashboardView({
   const accessIdentityReady = identityReady && actorSnapshot.ready;
   const homeDashboardKind = resolveHomeDashboardKind({
     accessMode,
+    scope: actorSnapshot.scope,
     permissionLabels: effectivePermissionLabels,
     roleNames: actorSnapshot.roleNames,
   });
@@ -1004,7 +1005,7 @@ export default function AdminDashboardView({
       return;
     }
 
-    if (accessMode !== "admin" || !token) {
+    if (accessMode !== "admin" || actorSnapshot.scope === "platform" || !token) {
       return;
     }
 
@@ -1027,7 +1028,7 @@ export default function AdminDashboardView({
 
     const timeoutId = globalThis.setTimeout(prefetchEmployees, 600);
     return () => globalThis.clearTimeout(timeoutId);
-  }, [accessMode, token]);
+  }, [accessMode, actorSnapshot.scope, token]);
 
   React.useEffect(() => {
     if (!accessIdentityReady) {
@@ -1081,6 +1082,7 @@ export default function AdminDashboardView({
         userEmail={adminEmail}
         userAvatar={adminAvatar}
         accessMode={accessMode}
+        scope={actorSnapshot.scope}
         identityReady={accessIdentityReady}
         permissionLabels={effectivePermissionLabels}
         activeResource={resolvedActiveResource}
@@ -1093,6 +1095,7 @@ export default function AdminDashboardView({
           loading={loading}
           adminName={adminName}
           companyName={companyName}
+          scope={actorSnapshot.scope}
         />
         <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain">
           <div className="@container/main flex min-w-0 max-w-full flex-col">

@@ -18,6 +18,7 @@ import {
 } from "@/components/animate-ui/components/base/dialog"
 import { NotificationCenter } from "@/components/notification-center"
 import { useNotifications } from "@/lib/notifications-store"
+import type { AuthScope } from "@/types"
 
 const headerActionButtonClass =
   "relative z-10 bg-transparent text-foreground shadow-none hover:bg-transparent hover:text-primary dark:bg-transparent dark:hover:bg-transparent"
@@ -27,11 +28,13 @@ interface SiteHeaderProps {
   loading: boolean
   adminName: string | null
   companyName: string | null
+  scope?: AuthScope | null
 }
 
 export function SiteHeader({
   onRefresh,
   loading,
+  scope = null,
 }: SiteHeaderProps) {
   const [notificationsOpen, setNotificationsOpen] = React.useState(false)
   const {
@@ -52,10 +55,11 @@ export function SiteHeader({
   const liveStatusLabel = connected ? "Live" : socketConfigured ? "Connecting" : "REST only"
 
   React.useEffect(() => {
+    if (scope === "platform") return
     void loadNotifications()
     void loadUnreadCount()
     connectSocket()
-  }, [connectSocket, loadNotifications, loadUnreadCount])
+  }, [connectSocket, loadNotifications, loadUnreadCount, scope])
 
   return (
     <header
@@ -88,7 +92,7 @@ export function SiteHeader({
         <Separator orientation="vertical" className="mx-1 h-3.5 data-vertical:self-auto bg-border/80" />
 
         <div className="ml-auto flex items-center gap-1">
-          <Dialog open={notificationsOpen} onOpenChange={setNotificationsOpen}>
+          {scope !== "platform" ? <Dialog open={notificationsOpen} onOpenChange={setNotificationsOpen}>
             <div className="relative">
               <DialogTrigger
                 render={
@@ -155,7 +159,7 @@ export function SiteHeader({
                 <DialogClose render={<Button variant="outline" size="sm">Close</Button>} />
               </DialogFooter>
             </DialogPopup>
-          </Dialog>
+          </Dialog> : null}
           <ThemeTogglerButton
             variant="ghost"
             size="icon-sm"

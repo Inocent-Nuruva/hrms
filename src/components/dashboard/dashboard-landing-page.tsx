@@ -1,6 +1,7 @@
 "use client"
 
 import { EmployeeHomeDashboard } from "@/components/dashboard/employee-home-dashboard"
+import { PlatformAdminDashboard } from "@/components/dashboard/platform-admin-dashboard"
 import { InsightsOperationsView, type InsightsOpsTab } from "@/components/dashboard/insights-operations-view"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { resolveHomeDashboardKind } from "@/lib/dashboard-home"
@@ -25,12 +26,17 @@ export function DashboardLandingPage() {
 
   const kind = resolveHomeDashboardKind({
     accessMode: actor.accessMode,
+    scope: actor.scope,
     permissionLabels: actor.permissionLabels,
     roleNames: actor.roleNames ?? [],
   })
 
   if (kind === "employee") {
     return <EmployeeHomeDashboard />
+  }
+
+  if (kind === "platform") {
+    return <PlatformAdminDashboard />
   }
 
   if (kind === "company") {

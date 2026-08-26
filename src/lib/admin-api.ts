@@ -10037,6 +10037,15 @@ export async function getMyCompany(token: string) {
   return extractCompanyRecord(payload);
 }
 
+/** Companies the authenticated user may enter with POST /api/auth/switch-company. */
+export async function listMyCompanies(token: string) {
+  const payload = await adminRequest<unknown>("/api/companies/my", {
+    token,
+    cacheTtlMs: 0,
+  });
+  return dedupeAdminRecordsById(normalizeList(payload));
+}
+
 function payloadDeniesPlatformAccess(payload: unknown) {
   const record = asRecord(payload);
   const haystack = [
@@ -10082,6 +10091,14 @@ export async function getCompanyById(token: string, id: string | number) {
     token,
   });
   return normalizeSingle(payload);
+}
+
+export async function createCompany(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/companies", {
+    method: "POST",
+    token,
+    body: data,
+  });
 }
 
 export async function updateCompanyById(

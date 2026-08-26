@@ -62,6 +62,16 @@ export function SessionExpiryGuard() {
 
       if (!accessSyncInFlightRef.current) {
         accessSyncInFlightRef.current = (async () => {
+          const cachedActor = readDashboardActorSnapshotFromBrowser()
+          if (cachedActor.scope === "platform") {
+            // /api/users/me is company-membership scoped and correctly rejects
+            // platform-only owners. Re-verify from the signed login/JWT context
+            // instead of repeatedly turning that expected 403 into shell churn.
+            publishDashboardActorSnapshotFromBrowserStorage(accessToken)
+            lastAccessSyncAtRef.current = Date.now()
+            return "ok" as const
+          }
+
           try {
             const user = await authService.getCurrentUser(accessToken)
             window.localStorage.setItem(AUTH_STORAGE_KEYS.user, JSON.stringify(user))

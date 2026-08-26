@@ -1,5 +1,6 @@
 export type UserRole = "employee" | "hr" | "admin";
 export type DashboardType = "admin" | "employee"
+export type AuthScope = "platform" | "company"
 
 export interface AuthUser {
   id: string | number;
@@ -7,6 +8,7 @@ export interface AuthUser {
   fullName: string;
   email: string;
   role?: UserRole | string;
+  scope?: AuthScope;
   dashboardType?: DashboardType;
   companyId?: number;
   companyName?: string;
@@ -31,6 +33,10 @@ export interface LoginResponse {
   tempToken?: string;
   tokens?: AuthTokens;
   user?: AuthUser;
+  /** Tenant boundary returned by the login API. */
+  scope?: AuthScope;
+  /** Authoritative dashboard shell returned by the login API. */
+  dashboardType?: DashboardType;
   requiresPasswordChange?: boolean;
   requiresEmailVerification?: boolean;
   requires2FASetup?: boolean;
@@ -98,6 +104,8 @@ export interface AuthSessionRecord {
 
 export interface AuthSwitchCompanyResponse {
   accessToken: string;
+  scope?: AuthScope;
+  dashboardType?: DashboardType;
   companyId?: number;
   companyName?: string;
 }

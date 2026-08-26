@@ -1,5 +1,6 @@
 import type {
   AuthSessionRecord,
+  AuthScope,
   AuthSwitchCompanyResponse,
   ChangePasswordRequest,
   DashboardType,
@@ -18,7 +19,7 @@ import type {
 import { extractBackupCodes } from "@/lib/admin-api";
 import { readPermissionLabelsFromUnknown } from "@/lib/dashboard-permissions";
 import { apiRequest, ApiError } from "@/services/api";
-import { isLikelyRefreshToken } from "@/utils/token-utils";
+import { decodeJwtPayload, isLikelyRefreshToken } from "@/utils/token-utils";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -205,6 +206,67 @@ function normalizeDashboardType(value: unknown): DashboardType | undefined {
   return undefined
 }
 
+function normalizeAuthScope(value: unknown): AuthScope | undefined {
+  if (typeof value !== "string") {
+    return undefined
+  }
+
+  const normalized = value.trim().toLowerCase()
+  if (normalized === "platform" || normalized === "company") {
+    return normalized
+  }
+
+  return undefined
+}
+
+function readAuthScope(payload: unknown): AuthScope | undefined {
+  const root = asRecord(payload)
+  const rootData = asRecord(root?.data)
+  const rootResult = asRecord(root?.result)
+  const candidates = [
+    root,
+    rootData,
+    rootResult,
+    asRecord(root?.user),
+    asRecord(rootData?.user),
+    asRecord(rootResult?.user),
+  ]
+
+  for (const candidate of candidates) {
+    const scope = normalizeAuthScope(candidate?.scope)
+    if (scope) {
+      return scope
+    }
+  }
+
+  return undefined
+}
+
+function readDashboardType(payload: unknown): DashboardType | undefined {
+  const root = asRecord(payload)
+  const rootData = asRecord(root?.data)
+  const rootResult = asRecord(root?.result)
+  const candidates = [
+    root,
+    rootData,
+    rootResult,
+    asRecord(root?.user),
+    asRecord(rootData?.user),
+    asRecord(rootResult?.user),
+  ]
+
+  for (const candidate of candidates) {
+    const dashboardType =
+      normalizeDashboardType(candidate?.dashboard_type) ??
+      normalizeDashboardType(candidate?.dashboardType)
+    if (dashboardType) {
+      return dashboardType
+    }
+  }
+
+  return undefined
+}
+
 function readRole(record: UnknownRecord | null): string | undefined {
   const direct = readString(record, ["role", "user_type"]);
   if (direct) {
@@ -371,15 +433,8 @@ function normalizeUser(payload: unknown): AuthUser | undefined {
         fullName,
         email,
         role: readRole(candidate),
-        dashboardType:
-          normalizeDashboardType(candidate.dashboard_type) ??
-          normalizeDashboardType(candidate.dashboardType) ??
-          normalizeDashboardType(root?.dashboard_type) ??
-          normalizeDashboardType(root?.dashboardType) ??
-          normalizeDashboardType(rootData?.dashboard_type) ??
-          normalizeDashboardType(rootData?.dashboardType) ??
-          normalizeDashboardType(rootResult?.dashboard_type) ??
-          normalizeDashboardType(rootResult?.dashboardType),
+        scope: readAuthScope(payload),
+        dashboardType: readDashboardType(payload),
         employeeId,
         requiresPasswordChange:
           readBoolean(candidate, [
@@ -425,6 +480,8 @@ function normalizeLoginResponse(payload: unknown): LoginResponse {
 
   const tokens = normalizeTokens(payload);
   const user = normalizeUser(payload);
+  const scope = readAuthScope(payload) ?? user?.scope;
+  const dashboardType = readDashboardType(payload) ?? user?.dashboardType;
   const twoFactorKeys = [
     "requiresOtp",
     "requires_otp",
@@ -465,6 +522,8 @@ function normalizeLoginResponse(payload: unknown): LoginResponse {
 
   if (user) {
     user.requiresPasswordChange = requiresPasswordChange;
+    user.scope = scope;
+    user.dashboardType = dashboardType;
   }
 
   return {
@@ -472,6 +531,8 @@ function normalizeLoginResponse(payload: unknown): LoginResponse {
     tempToken,
     tokens,
     user,
+    scope,
+    dashboardType,
     requiresPasswordChange,
     requiresEmailVerification,
     requires2FASetup,
@@ -482,6 +543,8 @@ function normalizeLoginResponse(payload: unknown): LoginResponse {
 function normalizeVerifyOtpResponse(payload: unknown): VerifyOtpResponse {
   const tokens = normalizeTokens(payload);
   let user = normalizeUser(payload);
+  const dashboardType = readDashboardType(payload);
+  const scope = readAuthScope(payload);
 
   // Complete-login may return a minimal user { id, email } without names.
   if (!user && tokens) {
@@ -499,8 +562,17 @@ function normalizeVerifyOtpResponse(payload: unknown): VerifyOtpResponse {
           readString(candidate, ["fullName", "full_name", "name"]) ??
           email.split("@")[0]?.replace(/[._-]+/g, " ").trim() ??
           email,
+        dashboardType,
+        scope,
       };
     }
+  }
+
+  if (user && dashboardType) {
+    user.dashboardType = dashboardType;
+  }
+  if (user && scope) {
+    user.scope = scope;
   }
 
   if (!tokens) {
@@ -524,14 +596,23 @@ function normalizeSwitchCompanyResponse(payload: unknown): AuthSwitchCompanyResp
     throw new Error("Company switch response did not include a new access token.");
   }
 
+  // The documented response only guarantees the refreshed token and company
+  // identity. Read context claims from that token so the UI changes shells
+  // immediately even when `scope` and `dashboard_type` are omitted by the API.
+  const tokenPayload = decodeJwtPayload(accessToken);
+
   return {
     accessToken,
+    scope: readAuthScope(payload) ?? readAuthScope(tokenPayload),
+    dashboardType: readDashboardType(payload) ?? readDashboardType(tokenPayload),
     companyId:
       readNumber(root, ["company_id", "companyId"]) ??
-      readNumber(rootData, ["company_id", "companyId"]),
+      readNumber(rootData, ["company_id", "companyId"]) ??
+      readNumber(tokenPayload, ["company_id", "companyId"]),
     companyName:
       readString(root, ["company_name", "companyName"]) ??
-      readString(rootData, ["company_name", "companyName"]),
+      readString(rootData, ["company_name", "companyName"]) ??
+      readString(tokenPayload, ["company_name", "companyName"]),
   };
 }
 

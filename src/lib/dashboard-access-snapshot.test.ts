@@ -50,6 +50,7 @@ describe("dashboard access snapshots", () => {
     publishDashboardActorSnapshot({
       permissionLabels: ["employees:read"],
       roleNames: ["HR_MANAGER"],
+      scope: "company",
       accessMode: "admin",
       isAdmin: true,
       ready: true,
@@ -64,6 +65,7 @@ describe("dashboard access snapshots", () => {
     publishDashboardActorSnapshot({
       permissionLabels: ["employees:read", "payroll:read"],
       roleNames: ["HR_MANAGER"],
+      scope: "company",
       accessMode: "admin",
       isAdmin: true,
       ready: true,
@@ -87,6 +89,7 @@ describe("dashboard access snapshots", () => {
     publishDashboardActorSnapshot({
       permissionLabels: [],
       roleNames: ["HR_MANAGER"],
+      scope: "company",
       accessMode: "admin",
       isAdmin: true,
       ready: true,
