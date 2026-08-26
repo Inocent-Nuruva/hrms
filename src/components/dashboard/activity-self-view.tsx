@@ -252,7 +252,7 @@ export function ActivitySelfView({ activeTab }: { activeTab: ActivitySelfTab }) 
           {loading && !today ? (
             <div className="flex items-center justify-center gap-2 px-3 py-10 text-sm text-muted-foreground">
               <Loader2Icon className="size-4 animate-spin" />
-              Loading today's report...
+              Loading today&apos;s report...
             </div>
           ) : today ? (
             <>

@@ -70,21 +70,6 @@ export function StructureOperationsView({ activeTab }: { activeTab: StructureOps
   const leaveIfForbidden = useLeaveIfForbidden()
   useForbiddenRouteGuard(canAccess)
 
-  if (activeTab === "numbering") {
-    if (!canAccess) return null
-    return (
-      <section className="space-y-4">
-        <TalentDoodleSprites />
-        <HeroBand
-          eyebrow="Structure"
-          title="Employee numbering"
-          description="Set the prefix, digit width, and next ID assigned when someone joins."
-        />
-        <EmployeeSetupView />
-      </section>
-    )
-  }
-
   const [rows, setRows] = React.useState<AdminRecord[]>([])
   const [branches, setBranches] = React.useState<AdminRecord[]>([])
   const [departments, setDepartments] = React.useState<AdminRecord[]>([])
@@ -137,9 +122,9 @@ export function StructureOperationsView({ activeTab }: { activeTab: StructureOps
   }, [activeTab, leaveIfForbidden])
 
   React.useEffect(() => {
-    if (!canAccess) return
+    if (!canAccess || activeTab === "numbering") return
     void load()
-  }, [canAccess, load])
+  }, [activeTab, canAccess, load])
 
   const visible = rows.filter((row) => !search || JSON.stringify(row).toLowerCase().includes(search.toLowerCase()))
 
@@ -268,6 +253,20 @@ export function StructureOperationsView({ activeTab }: { activeTab: StructureOps
   }, [activeTab, busyId])
 
   if (!canAccess) return null
+
+  if (activeTab === "numbering") {
+    return (
+      <section className="space-y-4">
+        <TalentDoodleSprites />
+        <HeroBand
+          eyebrow="Structure"
+          title="Employee numbering"
+          description="Set the prefix, digit width, and next ID assigned when someone joins."
+        />
+        <EmployeeSetupView />
+      </section>
+    )
+  }
 
   return (
     <section className="space-y-4">

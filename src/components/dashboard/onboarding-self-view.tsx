@@ -126,7 +126,6 @@ export function OnboardingSelfView() {
     setMounted(true)
     void load()
     // First load only; later refresh is explicit.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   React.useEffect(() => {

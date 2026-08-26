@@ -100,7 +100,6 @@ export function OffboardingSelfView() {
   React.useEffect(() => {
     setMounted(true)
     void load()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const motionProps = reduceMotion
