@@ -391,20 +391,18 @@ export function playNotificationSound() {
 /**
  * Socket.IO engine is served at `{API_ORIGIN}/socket.io`.
  * Notifications use the `/notifications` namespace (not a custom engine path).
- * Building `new URL("/notifications", apiBase)` as a bare connect URL is fine
- * only when we also keep path: "/socket.io" and allow polling fallback.
+ * Prefer the configured API origin: Next development rewrites handle ordinary
+ * HTTP requests but do not reliably proxy Socket.IO WebSocket upgrades.
  */
 export function resolveNotificationsSocketOrigin() {
-  if (typeof window !== "undefined") {
-    const protocol = window.location.protocol.toLowerCase()
-    if (protocol === "http:" || protocol === "https:") {
-      return window.location.origin
-    }
-  }
-
   const candidates = [
     process.env.NEXT_PUBLIC_BACKEND_URL?.trim(),
     process.env.NEXT_PUBLIC_API_BASE_URL?.trim(),
+    typeof window !== "undefined" &&
+    (window.location.protocol.toLowerCase() === "http:" ||
+      window.location.protocol.toLowerCase() === "https:")
+      ? window.location.origin
+      : null,
     // Keep parity with admin-api default so local REST + socket share a host.
     "http://192.168.1.30:8888",
   ].filter((value): value is string => Boolean(value))
@@ -920,7 +918,9 @@ function connectSocket(token: string) {
     path: "/socket.io",
     auth: { token },
     query: { token },
-    transports: ["polling", "websocket"],
+    // Connect straight to the API gateway. Polling would require browser CORS
+    // headers and previously fell through the broken Next `/socket.io` proxy.
+    transports: ["websocket"],
     reconnection: true,
     reconnectionAttempts: 5,
     reconnectionDelay: 1000,
