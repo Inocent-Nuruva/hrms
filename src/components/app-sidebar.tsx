@@ -37,6 +37,7 @@ import {
   normalizePermissionLabels,
 } from "@/lib/dashboard-permissions"
 import { mergeUniqueNavItems } from "@/lib/dashboard-nav"
+import type { HomeDashboardKind } from "@/lib/dashboard-home"
 import { canSeeDashboardPage } from "@/lib/forbidden-routes"
 import {
   useForbiddenPrefixes,
@@ -634,6 +635,7 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
   userAvatar?: string | null
   accessMode?: AppSidebarAccessMode
   scope?: AuthScope | null
+  homeDashboardKind?: HomeDashboardKind
   permissionLabels?: string[]
   /** False until the dashboard shell has read the signed-in identity. */
   identityReady?: boolean
@@ -712,6 +714,7 @@ export function AppSidebar({
   userAvatar,
   accessMode = "admin",
   scope = null,
+  homeDashboardKind,
   permissionLabels = [],
   identityReady = false,
   activeResource,
@@ -787,13 +790,31 @@ export function AppSidebar({
     const selfService = filterNavByPermissions(
       selfServiceNavMain,
       normalizedPermissions,
-      resolvedAccessMode,
+      homeDashboardKind === "hr" ? "employee" : resolvedAccessMode,
     )
     const adminItems = filterNavByPermissions(
       adminData.navMain,
       normalizedPermissions,
       resolvedAccessMode,
     )
+    if (homeDashboardKind === "hr") {
+      return {
+        // HR operational routes are the work surface. Personal employee routes
+        // remain available, but no longer displace HR work from the main rail.
+        navMain: [
+          ...adminItems,
+          ...(selfService.length > 0
+            ? [
+                {
+                  title: "Additional Access",
+                  items: selfService,
+                },
+              ]
+            : []),
+        ],
+        navSecondary: secondary,
+      }
+    }
     if (resolvedAccessMode === "employee") {
       return {
         navMain: adminItems.length > 0
@@ -812,7 +833,14 @@ export function AppSidebar({
       navMain: adminItems,
       navSecondary: secondary,
     }
-  }, [forbiddenVersion, normalizedPermissions, permissionsResolved, resolvedAccessMode, scope])
+  }, [
+    forbiddenVersion,
+    homeDashboardKind,
+    normalizedPermissions,
+    permissionsResolved,
+    resolvedAccessMode,
+    scope,
+  ])
 
   const searchIndex = React.useMemo(() => {
     if (!permissionsResolved) {

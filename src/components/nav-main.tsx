@@ -119,12 +119,6 @@ export function NavMain({
   const [openGroups, setOpenGroups] = React.useState<Record<string, boolean>>(() => {
     return defaultOpenGroups
   })
-  const groupedItems = React.useMemo(() => {
-    const expandable = items.filter((item) => item.items?.length)
-    const directLinks = items.filter((item) => !item.items?.length)
-    return { expandable, directLinks }
-  }, [items])
-
   React.useEffect(() => {
     setOpenGroups((previous) => ({ ...defaultOpenGroups, ...previous }))
   }, [defaultOpenGroups])
@@ -261,7 +255,7 @@ export function NavMain({
           </SidebarMenuItem>
         </SidebarMenu>
         <SidebarMenu className="gap-0.5">
-          {groupedItems.expandable.map((item) => (
+          {items.map((item) => (
             <SidebarMenuItem key={item.title}>
               <SidebarMenuButton
                 tooltip={item.title}
@@ -317,44 +311,6 @@ export function NavMain({
             </SidebarMenuItem>
           ))}
         </SidebarMenu>
-        {groupedItems.directLinks.length > 0 ? (
-          <SidebarMenu className="gap-0.5 pt-1">
-            {groupedItems.directLinks.map((item) => (
-            <SidebarMenuItem key={item.title}>
-              <SidebarMenuButton
-                tooltip={item.title}
-                className={`relative ${SIDEBAR_ITEM_BASE} ${SIDEBAR_ITEM_ACTIVE} ${SIDEBAR_ITEM_ICON}`}
-                isActive={nodeContainsCurrentPath(item, currentPath)}
-                onClick={() => {
-                  if (!item.items) {
-                    if (item.url) {
-                      navigateTo(item.url)
-                    }
-                    return
-                  }
-                  setOpenGroups((previous) => ({
-                    ...previous,
-                    [item.title]: !previous[item.title],
-                  }))
-                }}
-              >
-                <NavActiveGlow active={nodeContainsCurrentPath(item, currentPath)} />
-                {item.icon}
-                <span className="relative z-[1] min-w-0 flex-1 truncate text-left">{item.title}</span>
-                {item.items ? (
-                  <ChevronDownIcon
-                    className={
-                      openGroups[item.title]
-                        ? "ml-auto size-3.5 shrink-0 transition-transform duration-300 rotate-180"
-                        : "ml-auto size-3.5 shrink-0 transition-transform duration-300"
-                    }
-                  />
-                ) : null}
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            ))}
-          </SidebarMenu>
-        ) : null}
       </SidebarGroupContent>
     </SidebarGroup>
   )

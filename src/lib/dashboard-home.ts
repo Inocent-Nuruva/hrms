@@ -12,13 +12,105 @@ export type HomeDashboardKind =
   | "sales-field"
   | "company"
 
+type UnknownRecord = Record<string, unknown>
+
+function asUnknownRecord(value: unknown): UnknownRecord | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as UnknownRecord)
+    : null
+}
+
+function readDepartmentLabel(record: UnknownRecord, keys: string[]) {
+  for (const key of keys) {
+    const value = record[key]
+    if (typeof value === "string" && value.trim()) return value
+  }
+  return null
+}
+
+function isHumanResourcesLabel(value: string | null) {
+  const normalized = value?.trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ") ?? ""
+  return (
+    normalized === "hr" ||
+    normalized.includes("human resource") ||
+    normalized.includes("people operations") ||
+    normalized.includes("people ops")
+  )
+}
+
+/**
+ * Detect an HR employee from either `/api/employees/me` or an employee
+ * dashboard envelope. The API uses both direct employee records and nested
+ * `{ employee: ... }` payloads, so checking only the first response level can
+ * make the sidebar change between a hot reload and a fresh login.
+ */
+export function isHumanResourcesEmployeeRecord(value: unknown) {
+  const root = asUnknownRecord(value)
+  if (!root) return false
+
+  const queue: UnknownRecord[] = [root]
+  const visited = new Set<UnknownRecord>()
+  const wrapperKeys = ["employee", "data", "result", "item", "profile"]
+  const departmentKeys = [
+    "department",
+    "primary_department",
+    "primaryDepartment",
+    "employee_department",
+  ]
+
+  while (queue.length > 0) {
+    const record = queue.shift()
+    if (!record || visited.has(record)) continue
+    visited.add(record)
+
+    if (
+      isHumanResourcesLabel(
+        readDepartmentLabel(record, [
+          "department_name",
+          "departmentName",
+          "primary_department_name",
+          "primaryDepartmentName",
+        ]),
+      )
+    ) {
+      return true
+    }
+
+    for (const key of departmentKeys) {
+      const department = asUnknownRecord(record[key])
+      if (
+        department &&
+        isHumanResourcesLabel(
+          readDepartmentLabel(department, [
+            "name",
+            "department_name",
+            "departmentName",
+            "display_name",
+          ]),
+        )
+      ) {
+        return true
+      }
+    }
+
+    for (const key of wrapperKeys) {
+      const nested = asUnknownRecord(record[key])
+      if (nested && !visited.has(nested)) queue.push(nested)
+    }
+  }
+
+  return false
+}
+
 function normalizeRoleName(value: string) {
   return value.trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ")
 }
 
 function isHrRole(name: string) {
+  const words = name.split(" ").filter(Boolean)
   return (
     name === "hr" ||
+    words.includes("hr") ||
     name.startsWith("hr ") ||
     name.endsWith(" hr") ||
     name.includes("human resource") ||
@@ -140,6 +232,18 @@ export function resolveHomeDashboardKind(input: {
 
   const fromRole = kindFromRoles(input.roleNames ?? [])
   if (fromRole) return fromRole
+
+  // Some HR users intentionally keep the employee shell for self-service,
+  // while the API grants their HR work surface explicitly. That dedicated
+  // grant must be evaluated before the generic employee fallback.
+  if (
+    hasPermission(input.permissionLabels, {
+      permissions: ["view_hr_dashboard", "hr_dashboards:read"],
+      mode: "any",
+    })
+  ) {
+    return "hr"
+  }
 
   if (input.accessMode === "employee") return "employee"
 

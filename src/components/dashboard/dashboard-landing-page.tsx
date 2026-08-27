@@ -7,7 +7,6 @@ import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { resolveHomeDashboardKind } from "@/lib/dashboard-home"
 
 const INSIGHTS_HOME_TABS = new Set<InsightsOpsTab>([
-  "hr",
   "management",
   "manager",
   "sales-field",
@@ -39,7 +38,10 @@ export function DashboardLandingPage() {
     return <PlatformAdminDashboard />
   }
 
-  if (kind === "company") {
+  // Company administrators and HR users receive the full workforce dashboard
+  // from the surrounding dashboard shell. Returning no second view prevents
+  // the lighter Insights screen from being mounted underneath it.
+  if (kind === "company" || kind === "hr") {
     return null
   }
 

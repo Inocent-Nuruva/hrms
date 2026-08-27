@@ -24,6 +24,7 @@ import {
 import {
   getAnalyticsDashboard,
   getAnalyticsFreshness,
+  getHrDashboard,
   listEmployees,
   listDepartments,
   listLeaveRequests,
@@ -1007,11 +1008,19 @@ export default function HrAnalyticsDashboard({
 
     // Progressive paint: each slice updates as soon as it resolves (no waiting on the slowest).
     const tasks: Promise<void>[] = [
+      // The advanced analytics HR dashboard is the authoritative structured
+      // contract. Keep the older role dashboard as a compatibility fallback.
       getAnalyticsDashboard(token, "hr", {
         date_from: from_date,
         date_to: to_date,
         purpose: "dashboard",
       })
+        .catch(() =>
+          getHrDashboard(token, "hr", {
+            date_from: from_date,
+            date_to: to_date,
+          }),
+        )
         .catch(() => null)
         .then((summary) => {
           setAnalyticsSummary(summary)
@@ -1108,6 +1117,7 @@ export default function HrAnalyticsDashboard({
   // Derived metrics
   const totalHeadcount =
     readNumberDeep(analyticsSummary, [
+      "period_end_headcount",
       "headcount",
       "employee_count",
       "employees_total",
@@ -1117,7 +1127,12 @@ export default function HrAnalyticsDashboard({
     employees.length
 
   const activeCount =
-    readNumberDeep(analyticsSummary, ["active_headcount", "active_employees", "active_count"]) ??
+    readNumberDeep(analyticsSummary, [
+      "active_headcount",
+      "active_employees",
+      "active_count",
+      "period_end_headcount",
+    ]) ??
     resolvedStatusCounts["active"] ??
     0
   const activePct = totalHeadcount > 0 ? Math.round((activeCount / totalHeadcount) * 100) : 0
@@ -1204,6 +1219,7 @@ export default function HrAnalyticsDashboard({
       "new_hires",
       "hires_in_range",
       "recent_hires",
+      "joiners",
     ])
     if (analyticsValue !== null) return analyticsValue
     if (!fromDate || !toDate) return 0
@@ -1334,6 +1350,63 @@ export default function HrAnalyticsDashboard({
   const statusOrder = ["active", "onboarding", "suspended", "terminated", "exited"]
   const dashboardTitle = companyName?.trim() || "HRMS"
   const motionPreset = useDashboardMotion()
+  const hrAnalyticsGroups = React.useMemo(() => {
+    if (!analyticsSummary) return []
+
+    const number = (keys: string[]) => readNumberDeep(analyticsSummary, keys) ?? 0
+    const decimal = (value: number) =>
+      new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(value)
+    const percent = (keys: string[]) => `${decimal(number(keys))}%`
+    const hours = Math.round((number(["work_minutes"]) / 60) * 10) / 10
+    const risks = Array.isArray(analyticsSummary.risk_indicators)
+      ? analyticsSummary.risk_indicators.length
+      : 0
+
+    return [
+      {
+        title: "Workforce movement",
+        items: [
+          { label: "Period-end headcount", value: decimal(number(["period_end_headcount"])) },
+          { label: "Joiners", value: decimal(number(["joiners"])) },
+          { label: "Exits", value: decimal(number(["exits"])) },
+          { label: "Attrition rate", value: percent(["attrition_rate"]) },
+        ],
+      },
+      {
+        title: "Attendance and leave",
+        items: [
+          { label: "Finalized days", value: decimal(number(["finalized_days"])) },
+          { label: "Work hours", value: decimal(hours) },
+          { label: "Late rate", value: percent(["late_rate"]) },
+          { label: "Missing punch days", value: decimal(number(["missing_punch_days"])) },
+          { label: "Approved leave requests", value: decimal(number(["approved_requests"])) },
+          { label: "Approved leave days", value: decimal(number(["approved_days"])) },
+        ],
+      },
+      {
+        title: "Payroll and employee finance",
+        items: [
+          { label: "Locked payroll runs", value: decimal(number(["locked_runs"])) },
+          { label: "Gross pay", value: decimal(number(["gross_pay"])) },
+          { label: "Net pay", value: decimal(number(["net_pay"])) },
+          { label: "Employer cost", value: decimal(number(["employer_cost"])) },
+          { label: "Outstanding finance", value: decimal(number(["total_outstanding"])) },
+          { label: "Arrears ratio", value: percent(["arrears_ratio"]) },
+        ],
+      },
+      {
+        title: "Performance and operations",
+        items: [
+          { label: "Published reviews", value: decimal(number(["published_reviews"])) },
+          { label: "Average score", value: decimal(number(["average_score"])) },
+          { label: "Approved daily reports", value: decimal(number(["approved_daily_reports"])) },
+          { label: "Reviewed field visits", value: decimal(number(["reviewed_field_visits"])) },
+          { label: "Pending approvals", value: decimal(number(["pending_actions"])) },
+          { label: "Risk indicators", value: decimal(risks) },
+        ],
+      },
+    ]
+  }, [analyticsSummary])
   const latestAnalyticsRefresh =
     analyticsFreshness
       .map((row) =>
@@ -1344,7 +1417,8 @@ export default function HrAnalyticsDashboard({
           "lastUpdatedAt",
         ]),
       )
-      .find(Boolean) || ""
+      .find(Boolean) ||
+    readStringDeep(analyticsSummary, ["generated_at", "generatedAt"])
 
   return (
     <motion.div
@@ -1482,6 +1556,41 @@ export default function HrAnalyticsDashboard({
           <AlertCircleIcon className="mt-0.5 h-4 w-4 shrink-0" />
           <span>{error}</span>
         </motion.div>
+      ) : null}
+
+      {hrAnalyticsGroups.length > 0 ? (
+        <motion.section className="mt-5" variants={motionPreset.item}>
+          <div className="mb-3">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+              HR analytics
+            </div>
+            <div className="mt-1 text-sm font-semibold text-foreground">
+              Workforce, attendance, pay, and performance snapshot
+            </div>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {hrAnalyticsGroups.map((group) => (
+              <div key={group.title} className="border border-border/70 bg-card p-4 shadow-sm">
+                <h2 className="text-xs font-semibold uppercase tracking-[0.12em] text-primary">
+                  {group.title}
+                </h2>
+                <dl className="mt-3 space-y-2">
+                  {group.items.map((item) => (
+                    <div
+                      key={item.label}
+                      className="flex items-center justify-between gap-3 border-t border-border/70 pt-2 first:border-t-0 first:pt-0"
+                    >
+                      <dt className="text-xs leading-5 text-muted-foreground">{item.label}</dt>
+                      <dd className="shrink-0 text-sm font-semibold tabular-nums text-foreground">
+                        {item.value}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            ))}
+          </div>
+        </motion.section>
       ) : null}
 
       <div className="mt-5 grid grid-cols-1 gap-x-4 gap-y-4 lg:grid-cols-12 lg:items-start">

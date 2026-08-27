@@ -8,7 +8,10 @@ import { DashboardSectionTabs } from "@/components/dashboard/dashboard-section-t
 import { SiteHeader } from "@/components/site-header";
 import { SupportChatWidget } from "@/components/support-chat-widget";
 import { accessControlSectionTabGroups } from "@/lib/dashboard-sections";
-import { resolveHomeDashboardKind } from "@/lib/dashboard-home";
+import {
+  isHumanResourcesEmployeeRecord,
+  resolveHomeDashboardKind,
+} from "@/lib/dashboard-home";
 import dynamic from "next/dynamic";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 
@@ -323,6 +326,10 @@ export default function AdminDashboardView({
   const [currentAdmin, setCurrentAdmin] = React.useState<AdminRecord | null>(
     null,
   );
+  const [currentEmployeeIdentity, setCurrentEmployeeIdentity] =
+    React.useState<AdminRecord | null>(null);
+  const [employeeIdentityChecked, setEmployeeIdentityChecked] =
+    React.useState(false);
   const [overviewRefreshKey, setOverviewRefreshKey] = React.useState(0);
   const [myCompany, setMyCompany] = React.useState<AdminRecord | null>(null);
   const [usersQuery, setUsersQuery] =
@@ -983,7 +990,62 @@ export default function AdminDashboardView({
     permissionLabels: effectivePermissionLabels,
     roleNames: actorSnapshot.roleNames,
   });
-  const showCompanyDashboard = accessIdentityReady && homeDashboardKind === "company";
+  React.useEffect(() => {
+    if (
+      !accessIdentityReady ||
+      !token ||
+      actorSnapshot.scope === "platform" ||
+      homeDashboardKind !== "employee"
+    ) {
+      setCurrentEmployeeIdentity(null);
+      setEmployeeIdentityChecked(homeDashboardKind !== "employee");
+      return;
+    }
+
+    let active = true;
+    setEmployeeIdentityChecked(false);
+    void loadAdminApi()
+      .then(async (api) => {
+        const employee = await api.getCurrentEmployee(token).catch(() => null);
+        if (isHumanResourcesEmployeeRecord(employee)) return employee;
+
+        // The employee dashboard endpoint is the authoritative source used by
+        // the employee home itself and can contain a richer nested department.
+        const dashboard = await api.getEmployeeDashboard(token).catch(() => null);
+        if (isHumanResourcesEmployeeRecord(dashboard)) return dashboard;
+
+        const fallbackDashboard = await api.getMyDashboard(token).catch(() => null);
+        if (isHumanResourcesEmployeeRecord(fallbackDashboard)) {
+          return fallbackDashboard;
+        }
+
+        return employee;
+      })
+      .then((employeeIdentity) => {
+        if (active) setCurrentEmployeeIdentity(employeeIdentity);
+      })
+      .catch(() => {
+        if (active) setCurrentEmployeeIdentity(null);
+      })
+      .finally(() => {
+        if (active) setEmployeeIdentityChecked(true);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [accessIdentityReady, actorSnapshot.scope, homeDashboardKind, token]);
+
+  const effectiveHomeDashboardKind =
+    homeDashboardKind === "employee" &&
+    isHumanResourcesEmployeeRecord(currentEmployeeIdentity)
+      ? "hr"
+      : homeDashboardKind;
+  const showWorkforceDashboard =
+    accessIdentityReady &&
+    (effectiveHomeDashboardKind === "company" || effectiveHomeDashboardKind === "hr");
+  const checkingEmployeeDashboardIdentity =
+    accessIdentityReady && homeDashboardKind === "employee" && !employeeIdentityChecked;
 
   React.useEffect(() => {
     if (!resolvedUseApis || !accessIdentityReady || !token) {
@@ -1083,6 +1145,7 @@ export default function AdminDashboardView({
         userAvatar={adminAvatar}
         accessMode={accessMode}
         scope={actorSnapshot.scope}
+        homeDashboardKind={effectiveHomeDashboardKind}
         identityReady={accessIdentityReady}
         permissionLabels={effectivePermissionLabels}
         activeResource={resolvedActiveResource}
@@ -1099,7 +1162,7 @@ export default function AdminDashboardView({
         />
         <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain">
           <div className="@container/main flex min-w-0 max-w-full flex-col">
-            {resolvedShowOverview && showCompanyDashboard ? (
+            {resolvedShowOverview && showWorkforceDashboard ? (
               <HrAnalyticsDashboard
                 refreshKey={overviewRefreshKey}
                 companyName={companyName}
@@ -1112,7 +1175,10 @@ export default function AdminDashboardView({
               ) : null}
               <div className="min-w-0">
                 {accessIdentityReady ? (
-                  children
+                  resolvedShowOverview &&
+                  (showWorkforceDashboard || checkingEmployeeDashboardIdentity) ? null : (
+                    children
+                  )
                 ) : (
                   <div className="flex min-h-40 items-center justify-center text-sm text-muted-foreground">
                     Checking your access…

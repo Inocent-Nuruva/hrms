@@ -1,7 +1,42 @@
 import { describe, expect, it } from "vitest"
 
 import { readRoleNamesFromUnknown } from "./dashboard-permissions"
-import { resolveHomeDashboardKind } from "./dashboard-home"
+import {
+  isHumanResourcesEmployeeRecord,
+  resolveHomeDashboardKind,
+} from "./dashboard-home"
+
+describe("isHumanResourcesEmployeeRecord", () => {
+  it("recognizes a direct employee department", () => {
+    expect(
+      isHumanResourcesEmployeeRecord({
+        employee_no: "AICL/00035",
+        primary_department: { name: "Human Resources" },
+      }),
+    ).toBe(true)
+  })
+
+  it("recognizes the nested employee dashboard envelope", () => {
+    expect(
+      isHumanResourcesEmployeeRecord({
+        data: {
+          employee: {
+            primary_department: { name: "Human Resources" },
+          },
+        },
+      }),
+    ).toBe(true)
+  })
+
+  it("does not infer HR from an unrelated position label", () => {
+    expect(
+      isHumanResourcesEmployeeRecord({
+        primary_department: { name: "Administration" },
+        primary_position: { name: "Human Resources Officer" },
+      }),
+    ).toBe(false)
+  })
+})
 
 describe("resolveHomeDashboardKind", () => {
   it("sends platform scope to the platform operations dashboard", () => {
@@ -21,6 +56,26 @@ describe("resolveHomeDashboardKind", () => {
         accessMode: "admin",
         permissionLabels: ["view_company_dashboard", "dashboards:read"],
         roleNames: ["HR_MANAGER"],
+      }),
+    ).toBe("hr")
+  })
+
+  it("recognizes HR inside longer job-role names", () => {
+    expect(
+      resolveHomeDashboardKind({
+        accessMode: "employee",
+        permissionLabels: [],
+        roleNames: ["Manager - Head of Department - HR Manager"],
+      }),
+    ).toBe("hr")
+  })
+
+  it("uses an explicit HR dashboard grant before the employee fallback", () => {
+    expect(
+      resolveHomeDashboardKind({
+        accessMode: "employee",
+        permissionLabels: ["hr_dashboards:read"],
+        roleNames: ["COMPANY_USER"],
       }),
     ).toBe("hr")
   })
