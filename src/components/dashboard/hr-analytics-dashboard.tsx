@@ -42,6 +42,7 @@ import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import { motion } from "framer-motion"
@@ -596,6 +597,19 @@ interface HrAnalyticsDashboardProps {
   refreshKey?: number
   companyName?: string | null
   adminRolesLabel?: string | null
+  userName?: string | null
+  profilePhotoUrl?: string | null
+}
+
+function getInitials(value?: string | null) {
+  const initials = (value ?? "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("")
+  return initials || "HR"
 }
 
 function AnimatedMetricValue({ value }: { value: string | number }) {
@@ -852,6 +866,8 @@ export default function HrAnalyticsDashboard({
   refreshKey = 0,
   companyName,
   adminRolesLabel,
+  userName,
+  profilePhotoUrl,
 }: HrAnalyticsDashboardProps) {
   const router = useRouter()
   const actor = useDashboardActor()
@@ -1446,30 +1462,40 @@ export default function HrAnalyticsDashboard({
         />
         <Doodle name="doodle-circles" />
         <div className="relative z-10 flex w-full flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
-          <div className="min-w-0">
-            {adminRolesLabel ? (
-              <motion.p
-                className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/70"
-                initial={motionPreset.reduce ? false : { opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.32 }}
+          <div className="flex min-w-0 items-center gap-3">
+            <Avatar className="h-11 w-11 shrink-0 border-2 border-white/30 bg-white/15 shadow-sm sm:h-12 sm:w-12">
+              {profilePhotoUrl ? (
+                <AvatarImage src={profilePhotoUrl} alt={userName || "HR profile"} />
+              ) : null}
+              <AvatarFallback className="bg-white/15 text-sm font-semibold text-white">
+                {getInitials(userName)}
+              </AvatarFallback>
+            </Avatar>
+            <div className="min-w-0">
+              {adminRolesLabel ? (
+                <motion.p
+                  className="text-[11px] font-semibold uppercase leading-4 tracking-[0.16em] text-white/75"
+                  initial={motionPreset.reduce ? false : { opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ duration: 0.32 }}
+                >
+                  {adminRolesLabel}
+                </motion.p>
+              ) : null}
+              <motion.h1
+                className="mt-0.5 truncate text-base font-semibold tracking-tight text-white sm:text-lg"
+                initial={motionPreset.reduce ? false : { opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.38, delay: 0.05 }}
               >
-                {adminRolesLabel}
-              </motion.p>
-            ) : null}
-            <motion.h1
-              className="mt-0.5 truncate text-base font-semibold tracking-tight text-white sm:text-lg"
-              initial={motionPreset.reduce ? false : { opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.38, delay: 0.05 }}
-            >
-              {dashboardTitle}
-            </motion.h1>
-            {latestAnalyticsRefresh ? (
-              <p className="mt-1 text-[11px] text-white/70">
-                Analytics snapshot refreshed {formatDateShort(latestAnalyticsRefresh)}
-              </p>
-            ) : null}
+                {dashboardTitle}
+              </motion.h1>
+              {latestAnalyticsRefresh ? (
+                <p className="mt-1 text-[11px] text-white/70">
+                  Analytics snapshot refreshed {formatDateShort(latestAnalyticsRefresh)}
+                </p>
+              ) : null}
+            </div>
           </div>
           <div className="flex flex-wrap items-center gap-2 xl:justify-end">
             <div className="grid min-w-[240px] gap-2 sm:grid-cols-2">

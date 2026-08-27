@@ -73,6 +73,7 @@ function loadAdminApi() {
   return import("@/lib/admin-api");
 }
 import { useMyProfilePhoto } from "@/lib/my-profile-photo";
+import { DashboardIdentityProvider } from "@/components/dashboard/dashboard-identity";
 import {
   canAccessDashboardRoute,
   clearDashboardActorSnapshot,
@@ -244,6 +245,48 @@ function collectRoleNamesFromUnknown(value: unknown, sink: Set<string>) {
   }
 }
 
+function collectAssignedRoleNames(
+  value: unknown,
+  sink: Set<string>,
+  visited = new Set<AdminRecord>(),
+) {
+  const record = asRecord(value);
+  if (!record || visited.has(record)) return;
+  visited.add(record);
+
+  for (const key of [
+    "role",
+    "roles",
+    "user_roles",
+    "userRoles",
+    "assigned_roles",
+    "assignedRoles",
+  ]) {
+    collectRoleNamesFromUnknown(record[key], sink);
+  }
+
+  for (const key of [
+    "user",
+    "company_user",
+    "companyUser",
+    "membership",
+    "employee",
+    "profile",
+    "data",
+    "result",
+    "item",
+    "dashboard",
+    "fallback_dashboard",
+  ]) {
+    const nested = record[key];
+    if (Array.isArray(nested)) {
+      nested.forEach((entry) => collectAssignedRoleNames(entry, sink, visited));
+    } else {
+      collectAssignedRoleNames(nested, sink, visited);
+    }
+  }
+}
+
 function formatRoleName(roleName: string) {
   return roleName
     .trim()
@@ -327,6 +370,8 @@ export default function AdminDashboardView({
     null,
   );
   const [currentEmployeeIdentity, setCurrentEmployeeIdentity] =
+    React.useState<AdminRecord | null>(null);
+  const [currentEmployeeProfile, setCurrentEmployeeProfile] =
     React.useState<AdminRecord | null>(null);
   const [employeeIdentityChecked, setEmployeeIdentityChecked] =
     React.useState(false);
@@ -953,6 +998,8 @@ export default function AdminDashboardView({
     myProfilePhotoUrl ||
     resolveUserAvatarUrl(
       currentAdmin,
+      currentEmployeeProfile,
+      currentEmployeeIdentity,
       clientIdentity.rawUser,
       clientIdentity.tokenPayload,
     ) ||
@@ -965,22 +1012,35 @@ export default function AdminDashboardView({
     null;
   const adminRolesLabel = React.useMemo(() => {
     const roleNames = new Set<string>();
-    collectRoleNamesFromUnknown(currentAdmin?.role, roleNames);
-    collectRoleNamesFromUnknown(currentAdmin?.roles, roleNames);
-    collectRoleNamesFromUnknown(clientIdentity.rawUser?.role, roleNames);
-    collectRoleNamesFromUnknown(clientIdentity.rawUser?.roles, roleNames);
-    collectRoleNamesFromUnknown(clientIdentity.tokenPayload?.role, roleNames);
-    collectRoleNamesFromUnknown(clientIdentity.tokenPayload?.roles, roleNames);
+    actorSnapshot.roleNames.forEach((roleName) => roleNames.add(roleName));
+    collectAssignedRoleNames(currentAdmin, roleNames);
+    collectAssignedRoleNames(currentEmployeeProfile, roleNames);
+    collectAssignedRoleNames(currentEmployeeIdentity, roleNames);
+    collectAssignedRoleNames(clientIdentity.rawUser, roleNames);
+    collectAssignedRoleNames(clientIdentity.tokenPayload, roleNames);
 
-    const orderedNames = Array.from(roleNames)
+    const orderedNames = Array.from(
+      new Set(
+        Array.from(roleNames)
+          .filter(Boolean)
+          .map((roleName) => formatRoleName(roleName)),
+      ),
+    )
       .filter(Boolean)
-      .map((roleName) => formatRoleName(roleName));
+      .sort((left, right) => left.localeCompare(right));
     if (orderedNames.length === 0) {
       return null;
     }
 
     return orderedNames.join(" • ");
-  }, [clientIdentity.rawUser, clientIdentity.tokenPayload, currentAdmin]);
+  }, [
+    actorSnapshot.roleNames,
+    clientIdentity.rawUser,
+    clientIdentity.tokenPayload,
+    currentAdmin,
+    currentEmployeeIdentity,
+    currentEmployeeProfile,
+  ]);
   const accessMode = actorSnapshot.accessMode;
   const effectivePermissionLabels = actorSnapshot.permissionLabels;
   const accessIdentityReady = identityReady && actorSnapshot.ready;
@@ -998,6 +1058,7 @@ export default function AdminDashboardView({
       homeDashboardKind !== "employee"
     ) {
       setCurrentEmployeeIdentity(null);
+      setCurrentEmployeeProfile(null);
       setEmployeeIdentityChecked(homeDashboardKind !== "employee");
       return;
     }
@@ -1006,26 +1067,37 @@ export default function AdminDashboardView({
     setEmployeeIdentityChecked(false);
     void loadAdminApi()
       .then(async (api) => {
-        const employee = await api.getCurrentEmployee(token).catch(() => null);
-        if (isHumanResourcesEmployeeRecord(employee)) return employee;
+        const [employee, profile] = await Promise.all([
+          api.getCurrentEmployee(token).catch(() => null),
+          api.getMyProfile(token).catch(() => null),
+        ]);
+        let identity = employee;
 
         // The employee dashboard endpoint is the authoritative source used by
         // the employee home itself and can contain a richer nested department.
-        const dashboard = await api.getEmployeeDashboard(token).catch(() => null);
-        if (isHumanResourcesEmployeeRecord(dashboard)) return dashboard;
-
-        const fallbackDashboard = await api.getMyDashboard(token).catch(() => null);
-        if (isHumanResourcesEmployeeRecord(fallbackDashboard)) {
-          return fallbackDashboard;
+        if (!isHumanResourcesEmployeeRecord(identity)) {
+          const dashboard = await api.getEmployeeDashboard(token).catch(() => null);
+          if (isHumanResourcesEmployeeRecord(dashboard)) identity = dashboard;
         }
 
-        return employee;
+        if (!isHumanResourcesEmployeeRecord(identity)) {
+          const fallbackDashboard = await api.getMyDashboard(token).catch(() => null);
+          if (isHumanResourcesEmployeeRecord(fallbackDashboard)) {
+            identity = fallbackDashboard;
+          }
+        }
+
+        return { identity, profile };
       })
-      .then((employeeIdentity) => {
-        if (active) setCurrentEmployeeIdentity(employeeIdentity);
+      .then(({ identity, profile }) => {
+        if (!active) return;
+        setCurrentEmployeeIdentity(identity);
+        setCurrentEmployeeProfile(profile);
       })
       .catch(() => {
-        if (active) setCurrentEmployeeIdentity(null);
+        if (!active) return;
+        setCurrentEmployeeIdentity(null);
+        setCurrentEmployeeProfile(null);
       })
       .finally(() => {
         if (active) setEmployeeIdentityChecked(true);
@@ -1130,14 +1202,21 @@ export default function AdminDashboardView({
   ]);
 
   return (
-    <SidebarProvider
-      style={
-        {
-          "--sidebar-width": "15.75rem",
-          "--header-height": "calc(var(--spacing) * 11)",
-        } as React.CSSProperties
-      }
+    <DashboardIdentityProvider
+      value={{
+        name: adminName,
+        photoUrl: adminAvatar,
+        rolesLabel: adminRolesLabel,
+      }}
     >
+      <SidebarProvider
+        style={
+          {
+            "--sidebar-width": "15.75rem",
+            "--header-height": "calc(var(--spacing) * 11)",
+          } as React.CSSProperties
+        }
+      >
       <AppSidebar
         variant="inset"
         userName={adminName}
@@ -1167,6 +1246,8 @@ export default function AdminDashboardView({
                 refreshKey={overviewRefreshKey}
                 companyName={companyName}
                 adminRolesLabel={adminRolesLabel}
+                userName={adminName}
+                profilePhotoUrl={adminAvatar}
               />
             ) : null}
             <div className="flex min-w-0 max-w-full flex-col gap-3 px-3 pt-0 pb-3 sm:px-4 md:gap-4 md:px-4 md:pb-4">
@@ -1238,7 +1319,8 @@ export default function AdminDashboardView({
           </div>
         </div>
       </SidebarInset>
-      <SupportChatWidget />
-    </SidebarProvider>
+        <SupportChatWidget />
+      </SidebarProvider>
+    </DashboardIdentityProvider>
   );
 }

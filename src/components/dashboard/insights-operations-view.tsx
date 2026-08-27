@@ -7,6 +7,7 @@ import { toast } from "sonner"
 import { SearchToggleField } from "@/components/common/search-toggle-field"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared"
+import { DashboardIdentitySummary } from "@/components/dashboard/dashboard-identity"
 import {
   HeroBand,
   MetricTile,
@@ -434,6 +435,7 @@ export function InsightsOperationsView({
     >
       <TalentDoodleSprites />
       <HeroBand
+        identity={<DashboardIdentitySummary compact />}
         eyebrow={embedded ? "Home" : "Insights"}
         title={
           <>

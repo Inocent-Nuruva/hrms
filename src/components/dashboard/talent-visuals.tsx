@@ -236,11 +236,13 @@ export function HeroBand({
   title,
   description,
   actions,
+  identity,
 }: {
   eyebrow: string
   title: React.ReactNode
   description?: string
   actions?: React.ReactNode
+  identity?: React.ReactNode
 }) {
   const motionPreset = useDashboardMotion()
   return (
@@ -279,6 +281,7 @@ export function HeroBand({
       </div>
       <div className="relative z-10 flex w-full min-w-0 flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0 flex-1 space-y-1.5">
+          {identity ? <div className="mb-3">{identity}</div> : null}
           <motion.p
             className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/70"
             initial={motionPreset.reduce ? false : { opacity: 0, x: -10 }}

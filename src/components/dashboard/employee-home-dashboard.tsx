@@ -70,6 +70,7 @@ import {
 } from "@/lib/admin-api"
 import { hasDashboardAdminIdentity } from "@/lib/dashboard-identity"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
+import { useDashboardIdentity } from "@/components/dashboard/dashboard-identity"
 import { useForbiddenPrefixes } from "@/hooks/use-forbidden-route-guard"
 import { canSeeDashboardPage } from "@/lib/forbidden-routes"
 import { useMyProfilePhoto } from "@/lib/my-profile-photo"
@@ -2043,6 +2044,7 @@ export function EmployeeDashboardView({
 }: EmployeeDashboardViewProps) {
   const { url: myProfilePhotoUrl } = useMyProfilePhoto()
   const actor = useDashboardActor()
+  const dashboardIdentity = useDashboardIdentity()
   useForbiddenPrefixes()
 
   if (!isEmployeeDashboardData(dashboardData)) {
@@ -2428,6 +2430,11 @@ export function EmployeeDashboardView({
                   {employmentStatus}
                 </span>
               </div>
+              {dashboardIdentity.rolesLabel ? (
+                <p className="text-[10px] font-semibold uppercase leading-4 tracking-[0.15em] text-white/75">
+                  {dashboardIdentity.rolesLabel}
+                </p>
+              ) : null}
               <Link href={profileHref} className="inline-block no-underline hover:no-underline">
                 <Button
                   size="sm"
