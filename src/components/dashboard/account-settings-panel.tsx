@@ -32,10 +32,19 @@ import { showSuccessAlert } from "@/lib/success-alert"
 import { authService } from "@/services/authService"
 import type { AuthSessionRecord, TwoFactorSetupResponse } from "@/types"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
-import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
-import { AUTH_STORAGE_KEYS, ROUTES } from "@/utils/constants"
+import {
+  canAccessDashboardRoute,
+  publishDashboardActorSnapshotFromBrowserStorage,
+} from "@/lib/dashboard-permissions"
+import {
+  AUTH_STORAGE_KEYS,
+  ROUTES,
+  SETTINGS_SECURITY_TABS,
+  buildDashboardResetPasswordHref,
+} from "@/utils/constants"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { ChangePasswordForm } from "@/components/auth/ChangePasswordForm"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -125,8 +134,50 @@ function securityTabFromQuery(value: string | null): SecurityTab {
   if (normalized === "two-factor" || normalized === "2fa" || normalized === "mfa") return "two-factor"
   if (normalized === "devices" || normalized === "device") return "devices"
   if (normalized === "email" || normalized === "verify-email" || normalized === "verify") return "email"
-  if (normalized === "password" || normalized === "reset-password") return "reset-password"
-  return "reset-password"
+  if (normalized === "password" || normalized === SETTINGS_SECURITY_TABS.resetPassword) {
+    return SETTINGS_SECURITY_TABS.resetPassword
+  }
+  return SETTINGS_SECURITY_TABS.resetPassword
+}
+
+function persistCurrentUserSnapshot(user: unknown, accessToken: string) {
+  if (typeof window === "undefined" || !user || typeof user !== "object") {
+    return false
+  }
+
+  try {
+    window.localStorage.setItem(AUTH_STORAGE_KEYS.user, JSON.stringify(user))
+    publishDashboardActorSnapshotFromBrowserStorage(user, accessToken)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function clearStoredPasswordChangeRequirement(accessToken: string) {
+  if (typeof window === "undefined") {
+    return
+  }
+
+  try {
+    const raw = window.localStorage.getItem(AUTH_STORAGE_KEYS.user)
+    if (!raw) {
+      return
+    }
+
+    const parsed = JSON.parse(raw)
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return
+    }
+
+    const nextUser = {
+      ...parsed,
+      requiresPasswordChange: false,
+    }
+    persistCurrentUserSnapshot(nextUser, accessToken)
+  } catch {
+    // Ignore malformed local cache and rely on the next sync.
+  }
 }
 
 function resolveQrImageSrc(qrCode?: string | null): string | null {
@@ -250,8 +301,9 @@ function AccountSettingsPanelContent({
   const searchParams = useSearchParams()
   const [hasHydrated, setHasHydrated] = React.useState(false)
   const [activeTab, setActiveTab] = React.useState<SecurityTab>("reset-password")
-  const [currentPassword, setCurrentPassword] = React.useState("")
-  const [newPassword, setNewPassword] = React.useState("")
+  const [requiresPasswordChange, setRequiresPasswordChange] = React.useState(false)
+  const [passwordBusy, setPasswordBusy] = React.useState(false)
+  const [passwordError, setPasswordError] = React.useState<string | null>(null)
 
   const [twoFactorEnabled, setTwoFactorEnabled] = React.useState(false)
   const [emailVerified, setEmailVerified] = React.useState(false)
@@ -294,12 +346,24 @@ function AccountSettingsPanelContent({
     setActiveTab(securityTabFromQuery(searchParams?.get("tab") ?? null))
   }, [hasHydrated, searchParams])
 
+  React.useEffect(() => {
+    if (!hasHydrated) {
+      return
+    }
+
+    setRequiresPasswordChange(searchParams?.get("required") === "1")
+  }, [hasHydrated, searchParams])
+
   const handleTabChange = React.useCallback(
     (tab: SecurityTab) => {
+      if (requiresPasswordChange && tab !== SETTINGS_SECURITY_TABS.resetPassword) {
+        router.replace(buildDashboardResetPasswordHref({ required: true }), { scroll: false })
+        return
+      }
       const nextHref = buildSettingsTabHref(pathname, searchParams, tab)
       router.replace(nextHref, { scroll: false })
     },
-    [pathname, router, searchParams]
+    [pathname, requiresPasswordChange, router, searchParams]
   )
 
   const refreshSecurityFlags = React.useCallback(async () => {
@@ -428,27 +492,53 @@ function AccountSettingsPanelContent({
     return map
   }, [notificationPreferences])
 
-  const handleChangePassword = async () => {
+  const handleChangePassword = async ({
+    currentPassword,
+    newPassword,
+  }: {
+    currentPassword: string
+    newPassword: string
+    confirmPassword: string
+  }) => {
     const accessToken = resolveFreshAccessToken(token)
     if (!accessToken) {
-      toast.error("Your session expired. Please sign in again.")
-      return
-    }
-    if (!currentPassword.trim() || !newPassword.trim()) {
-      toast.error("Current and new passwords are required.")
+      const message = "Your session expired. Please sign in again."
+      setPasswordError(message)
+      toast.error(message)
       return
     }
 
+    setPasswordBusy(true)
+    setPasswordError(null)
     try {
       await onChangeMyPassword(currentPassword, newPassword)
-      setCurrentPassword("")
-      setNewPassword("")
-      showSuccessAlert("Password changed.")
+      const currentUser = await authService.getCurrentUser(accessToken).catch(() => null)
+      if (!persistCurrentUserSnapshot(currentUser, accessToken)) {
+        clearStoredPasswordChangeRequirement(accessToken)
+      }
+      setRequiresPasswordChange(false)
+      showSuccessAlert(
+        searchParams?.get("required") === "1"
+          ? "Password updated. You can continue in HRMS."
+          : "Password changed.",
+      )
+      if (searchParams?.get("required") === "1") {
+        router.replace(buildDashboardResetPasswordHref(), { scroll: false })
+      }
+      void refreshSecurityFlags()
     } catch (errorObject) {
       const message = errorObject instanceof Error ? errorObject.message : "Password change failed."
+      setPasswordError(message)
       toast.error(message)
+    } finally {
+      setPasswordBusy(false)
     }
   }
+
+  const handleUseDifferentAccount = React.useCallback(() => {
+    clearStoredSession()
+    window.location.assign(ROUTES.login)
+  }, [])
 
   const handleStartTwoFactorSetup = async () => {
     const accessToken = resolveFreshAccessToken(token)
@@ -799,6 +889,7 @@ function AccountSettingsPanelContent({
               variant="ghost"
               className="relative z-10 justify-center gap-2 px-2 text-xs sm:text-sm"
               onClick={() => handleTabChange("two-factor")}
+              disabled={requiresPasswordChange}
             >
               <ShieldCheck
                 className={`size-4 transition-all duration-300 ${
@@ -814,6 +905,7 @@ function AccountSettingsPanelContent({
               variant="ghost"
               className="relative z-10 justify-center gap-2 px-2 text-xs sm:text-sm"
               onClick={() => handleTabChange("devices")}
+              disabled={requiresPasswordChange}
             >
               <Smartphone
                 className={`size-4 transition-all duration-300 ${
@@ -829,6 +921,7 @@ function AccountSettingsPanelContent({
               variant="ghost"
               className="relative z-10 justify-center gap-2 px-2 text-xs sm:text-sm"
               onClick={() => handleTabChange("email")}
+              disabled={requiresPasswordChange}
             >
               <MailCheck
                 className={`size-4 transition-all duration-300 ${
@@ -841,33 +934,25 @@ function AccountSettingsPanelContent({
             </Button>
           </div>
 
+          {requiresPasswordChange ? (
+            <div className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-100">
+              Finish updating your temporary password to unlock the rest of security settings.
+            </div>
+          ) : null}
+
           <div className="overflow-hidden rounded-lg border">
             <div
               className="flex w-full transition-transform duration-300 ease-out"
               style={{ transform: `translateX(-${tabIndex * 100}%)` }}
             >
               <div className="w-full shrink-0 p-4">
-                <div className="space-y-3">
-                  <div className="space-y-1">
-                    <Label>Current Password</Label>
-                    <Input
-                      type="password"
-                      value={currentPassword}
-                      onChange={(event) => setCurrentPassword(event.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label>New Password</Label>
-                    <Input
-                      type="password"
-                      value={newPassword}
-                      onChange={(event) => setNewPassword(event.target.value)}
-                    />
-                  </div>
-                  <Button onClick={handleChangePassword} disabled={loading}>
-                    Change Password
-                  </Button>
-                </div>
+                <ChangePasswordForm
+                  onSubmit={handleChangePassword}
+                  loading={passwordBusy || loading}
+                  error={passwordError}
+                  requiredMode={requiresPasswordChange}
+                  onUseDifferentAccount={requiresPasswordChange ? handleUseDifferentAccount : undefined}
+                />
               </div>
 
               <div className="w-full shrink-0 p-4">

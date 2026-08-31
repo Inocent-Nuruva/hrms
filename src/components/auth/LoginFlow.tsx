@@ -194,9 +194,7 @@ export function LoginFlow({ defaultEmail = "", nextPath, onSuccess }: LoginFlowP
       await finishLogin(
         response.tokens.accessToken,
         normalizedEmail,
-        response.requiresPasswordChange || response.user?.requiresPasswordChange
-          ? "/change-password?required=1"
-          : homePath,
+        homePath,
         response.dashboardType,
         response.scope,
       );
@@ -235,9 +233,7 @@ export function LoginFlow({ defaultEmail = "", nextPath, onSuccess }: LoginFlowP
       await finishLogin(
         response.tokens.accessToken,
         completedEmail,
-        response.user.requiresPasswordChange
-          ? "/change-password?required=1"
-          : homePath,
+        homePath,
         response.user.dashboardType,
         response.user.scope,
       );

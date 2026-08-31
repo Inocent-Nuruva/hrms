@@ -22,8 +22,40 @@ export const ROUTES = {
   forgotPassword: "/forgot-password",
   resetPassword: "/reset-password",
   dashboard: "/dashboard",
+  dashboardSettings: "/dashboard/settings",
   onboarding: "/onboarding",
 } as const;
+
+export const SETTINGS_SECURITY_TABS = {
+  resetPassword: "reset-password",
+} as const;
+
+export function buildDashboardResetPasswordHref(options?: { required?: boolean }) {
+  const params = new URLSearchParams()
+  params.set("tab", SETTINGS_SECURITY_TABS.resetPassword)
+  if (options?.required) {
+    params.set("required", "1")
+  }
+  return `${ROUTES.dashboardSettings}?${params.toString()}`
+}
+
+export function isDashboardResetPasswordLocation(
+  pathname: string | null | undefined,
+  search?: string | URLSearchParams | null,
+) {
+  if ((pathname ?? "").trim() !== ROUTES.dashboardSettings) {
+    return false
+  }
+
+  const params =
+    typeof search === "string"
+      ? new URLSearchParams(search.startsWith("?") ? search.slice(1) : search)
+      : search instanceof URLSearchParams
+        ? search
+        : new URLSearchParams()
+  const tab = (params.get("tab") ?? "").trim().toLowerCase()
+  return tab === "password" || tab === SETTINGS_SECURITY_TABS.resetPassword
+}
 
 export const ONBOARDING_STEPS: OnboardingStep[] = [
   {

@@ -1034,20 +1034,56 @@ export function LeaveManagementView({
     permissions: ["leave_requests:create", "leave_requests:update"],
     mode: "any",
   })
+  const canReadTypes = canPerformPermission(actor.permissionLabels, "leave_types:read")
+  const canReadRequests = canPerformPermission(actor.permissionLabels, "leave_requests:read")
+  const canReadBalances = canPerformPermission(actor.permissionLabels, {
+    permissions: ["leave_balances:read", "leave-balances.view", "leave-balances.manage"],
+    mode: "any",
+  })
   const canAdjustBalances = canPerformPermission(actor.permissionLabels, {
     permissions: ["leave_balances:update", "leave_balances:create", "leave-balances.manage"],
     mode: "any",
   })
-  const canMutateHolidays = canPerformPermission(actor.permissionLabels, {
-    permissions: ["holidays:create", "holidays:update", "attendance_holidays:create"],
+  const canReadHolidays = canPerformPermission(actor.permissionLabels, {
+    permissions: ["holidays:read", "attendance_holidays:read"],
     mode: "any",
   })
-  const canMutatePolicies = canPerformPermission(actor.permissionLabels, {
-    permissions: ["leave_policies:create", "leave_policies:update"],
+  const canCreateHolidays = canPerformPermission(actor.permissionLabels, {
+    permissions: ["holidays:create", "attendance_holidays:create"],
     mode: "any",
   })
-  const canMutateWorkflows = canPerformPermission(actor.permissionLabels, {
-    permissions: ["leave_workflows:create", "leave_workflows:update"],
+  const canUpdateHolidays = canPerformPermission(actor.permissionLabels, {
+    permissions: ["holidays:update", "attendance_holidays:update"],
+    mode: "any",
+  })
+  const canDeleteHolidays = canPerformPermission(actor.permissionLabels, {
+    permissions: ["holidays:delete", "attendance_holidays:delete"],
+    mode: "any",
+  })
+  const canReadPolicies = canPerformPermission(actor.permissionLabels, "leave_policies:read")
+  const canCreatePolicies = canPerformPermission(actor.permissionLabels, {
+    permissions: ["leave_policies:create"],
+    mode: "any",
+  })
+  const canUpdatePolicies = canPerformPermission(actor.permissionLabels, {
+    permissions: ["leave_policies:update"],
+    mode: "any",
+  })
+  const canDeletePolicies = canPerformPermission(actor.permissionLabels, {
+    permissions: ["leave_policies:delete"],
+    mode: "any",
+  })
+  const canReadWorkflows = canPerformPermission(actor.permissionLabels, "leave_workflows:read")
+  const canCreateWorkflows = canPerformPermission(actor.permissionLabels, {
+    permissions: ["leave_workflows:create"],
+    mode: "any",
+  })
+  const canUpdateWorkflows = canPerformPermission(actor.permissionLabels, {
+    permissions: ["leave_workflows:update"],
+    mode: "any",
+  })
+  const canDeleteWorkflows = canPerformPermission(actor.permissionLabels, {
+    permissions: ["leave_workflows:delete"],
     mode: "any",
   })
   const highlightedRequestId = React.useMemo(
@@ -1205,6 +1241,26 @@ export function LeaveManagementView({
     assigned_department_id: "",
     is_required: "true",
   })
+
+  const visibleLeaveTabs = React.useMemo(
+    () =>
+      [
+        { key: "types" as LeaveTab, label: "Leave Types", visible: canReadTypes },
+        { key: "requests" as LeaveTab, label: "Leave Requests", visible: canReadRequests },
+        { key: "balances" as LeaveTab, label: "Leave Balances", visible: canReadBalances },
+        { key: "holidays" as LeaveTab, label: "Holidays", visible: canReadHolidays },
+        { key: "policies" as LeaveTab, label: "Leave Policies", visible: canReadPolicies },
+        { key: "workflows" as LeaveTab, label: "Leave Workflows", visible: canReadWorkflows },
+      ].filter((entry) => entry.visible),
+    [
+      canReadBalances,
+      canReadHolidays,
+      canReadPolicies,
+      canReadRequests,
+      canReadTypes,
+      canReadWorkflows,
+    ],
+  )
 
   const hydrateLeaveMedicalForm = React.useCallback((row: AdminRecord | null) => {
     const medical = row ? asRecord(row.medical_detail) : null
@@ -1416,8 +1472,20 @@ export function LeaveManagementView({
   }, [loadLookups, tab])
 
   React.useEffect(() => {
-    setTab(activeTab)
-  }, [activeTab])
+    const fallbackTab = visibleLeaveTabs[0]?.key ?? activeTab
+    const nextTab = visibleLeaveTabs.some((entry) => entry.key === activeTab) ? activeTab : fallbackTab
+    setTab((current) => (current === nextTab ? current : nextTab))
+  }, [activeTab, visibleLeaveTabs])
+
+  React.useEffect(() => {
+    const fallbackTab = visibleLeaveTabs[0]?.key
+    if (!fallbackTab) {
+      return
+    }
+    if (!visibleLeaveTabs.some((entry) => entry.key === tab)) {
+      setTab(fallbackTab)
+    }
+  }, [tab, visibleLeaveTabs])
 
   // Always refetch the active tab when it changes (or on login remount).
   // Previously we skipped after the first load via loadedTabs, so new leave
@@ -1879,6 +1947,9 @@ export function LeaveManagementView({
       .toLowerCase()
       .includes(query)
   })
+  const canSubmitPolicyChanges = editingPolicyId === null ? canCreatePolicies : canUpdatePolicies
+  const canSubmitWorkflowChanges = editingWorkflowId === null ? canCreateWorkflows : canUpdateWorkflows
+  const canManageWorkflowSteps = editingWorkflowId === null ? canCreateWorkflows : canUpdateWorkflows
 
   const filteredTypes = types.filter((row) => {
     const status = readString(row, ["status"]).toLowerCase()
@@ -2404,6 +2475,9 @@ export function LeaveManagementView({
   }
 
   async function submitHolidayForm() {
+    if (!canCreateHolidays) {
+      return
+    }
     const token = readStoredToken()
     if (!token) {
       const message = "Authentication required. Please log in again."
@@ -2433,6 +2507,9 @@ export function LeaveManagementView({
   }
 
   async function submitPolicyForm() {
+    if ((editingPolicyId === null && !canCreatePolicies) || (editingPolicyId !== null && !canUpdatePolicies)) {
+      return
+    }
     const token = readStoredToken()
     if (!token) {
       const message = "Authentication required. Please log in again."
@@ -2492,6 +2569,9 @@ export function LeaveManagementView({
   }
 
   async function togglePolicyStatus(row: AdminRecord) {
+    if (!canUpdatePolicies) {
+      return
+    }
     const token = readStoredToken()
     const id = readNumber(row, ["id", "policy_id"])
     if (!token || id === null) {
@@ -2512,6 +2592,9 @@ export function LeaveManagementView({
   }
 
   async function removePolicy(row: AdminRecord) {
+    if (!canDeletePolicies) {
+      return
+    }
     const token = readStoredToken()
     const id = readNumber(row, ["id", "policy_id"])
     if (!token || id === null) {
@@ -2531,6 +2614,9 @@ export function LeaveManagementView({
   }
 
   function loadPolicyIntoForm(row: AdminRecord) {
+    if (!canUpdatePolicies) {
+      return
+    }
     const policyId = readNumber(row, ["id", "policy_id"])
     const rawLeaveTypes = Array.isArray(row.leave_types) ? row.leave_types : []
     const firstLeaveType = rawLeaveTypes[0]
@@ -2585,6 +2671,9 @@ export function LeaveManagementView({
   }
 
   function openCreatePolicySheet() {
+    if (!canCreatePolicies) {
+      return
+    }
     void (async () => {
       const loaded = await ensureLookups(["types", "departments", "positions"])
       if (!loaded) {
@@ -2612,6 +2701,9 @@ export function LeaveManagementView({
   }
 
   async function submitWorkflowForm() {
+    if ((editingWorkflowId === null && !canCreateWorkflows) || (editingWorkflowId !== null && !canUpdateWorkflows)) {
+      return
+    }
     const token = readStoredToken()
     if (!token) {
       const message = "Authentication required. Please log in again."
@@ -2675,6 +2767,9 @@ export function LeaveManagementView({
   }
 
   function openCreateWorkflowSheet() {
+    if (!canCreateWorkflows) {
+      return
+    }
     void (async () => {
       const loaded = await ensureLookups(["types"])
       if (!loaded) {
@@ -2694,6 +2789,9 @@ export function LeaveManagementView({
   }
 
   async function openEditWorkflowSheet(row: AdminRecord) {
+    if (!canUpdateWorkflows) {
+      return
+    }
     const loaded = await ensureLookups(["types"])
     if (!loaded) {
       return
@@ -2737,8 +2835,12 @@ export function LeaveManagementView({
   }
 
   async function submitWorkflowStepForm(workflowIdOverride?: string) {
-    const token = readStoredToken()
     const workflowId = workflowIdOverride ?? selectedWorkflowId
+    const canManageDraftSteps = editingWorkflowId === null ? canCreateWorkflows : canUpdateWorkflows
+    if ((!workflowId && !canManageDraftSteps) || (workflowId && !canUpdateWorkflows)) {
+      return
+    }
+    const token = readStoredToken()
     const stepPayload = buildWorkflowStepPayload(workflowStepForm)
 
     if (!Number.isFinite(stepPayload.approval_level) || stepPayload.approval_level < 1) {
@@ -2825,6 +2927,10 @@ export function LeaveManagementView({
   }
 
   function openCreateStepDialog() {
+    const canManageDraftSteps = editingWorkflowId === null ? canCreateWorkflows : canUpdateWorkflows
+    if (!canManageDraftSteps) {
+      return
+    }
     void (async () => {
       const loaded = await ensureLookups(["employees", "departments", "positions", "branches", "roles"])
       if (!loaded) {
@@ -2847,6 +2953,10 @@ export function LeaveManagementView({
   }
 
   function openEditStepDialog(row: AdminRecord) {
+    const canManageDraftSteps = editingWorkflowId === null ? canCreateWorkflows : canUpdateWorkflows
+    if (!canManageDraftSteps) {
+      return
+    }
     void (async () => {
       const loaded = await ensureLookups(["employees", "departments", "positions", "branches", "roles"])
       if (!loaded) {
@@ -2873,6 +2983,9 @@ export function LeaveManagementView({
   }
 
   async function toggleWorkflowStatus(row: AdminRecord) {
+    if (!canUpdateWorkflows) {
+      return
+    }
     const token = readStoredToken()
     const id = readNumber(row, ["id", "workflow_id"])
     if (!token || id === null) {
@@ -2893,6 +3006,9 @@ export function LeaveManagementView({
   }
 
   async function removeWorkflow(row: AdminRecord) {
+    if (!canDeleteWorkflows) {
+      return
+    }
     const token = readStoredToken()
     const id = readNumber(row, ["id", "workflow_id"])
     if (!token || id === null) {
@@ -2916,6 +3032,10 @@ export function LeaveManagementView({
   }
 
   async function removeWorkflowStep(row: AdminRecord) {
+    const canManageDraftSteps = editingWorkflowId === null ? canCreateWorkflows : canUpdateWorkflows
+    if ((!selectedWorkflowId && !canManageDraftSteps) || (selectedWorkflowId && !canDeleteWorkflows)) {
+      return
+    }
     const token = readStoredToken()
     const stepId = readNumber(row, ["id", "step_id"])
     if (stepId === null) {
@@ -3178,6 +3298,9 @@ export function LeaveManagementView({
   }
 
   async function toggleHolidayRecurring(row: AdminRecord) {
+    if (!canUpdateHolidays) {
+      return
+    }
     const token = readStoredToken()
     const id = readNumber(row, ["id"])
     if (!token || id === null) {
@@ -3199,6 +3322,9 @@ export function LeaveManagementView({
   }
 
   async function removeHoliday(row: AdminRecord) {
+    if (!canDeleteHolidays) {
+      return
+    }
     const token = readStoredToken()
     const id = readLeaveHolidayId(row)
     if (!token || id === null) {
@@ -3234,11 +3360,10 @@ export function LeaveManagementView({
     <div className="space-y-2">
       {showTabButtons ? (
         <div className="flex flex-wrap items-center gap-1.5">
-          {["types", "requests", "balances", "holidays", "policies", "workflows"].map((entry) => {
-            const key = entry as LeaveTab
+          {visibleLeaveTabs.map(({ key, label }) => {
             return (
               <button
-                key={entry}
+                key={key}
                 type="button"
                 className={
                   tab === key
@@ -3247,17 +3372,7 @@ export function LeaveManagementView({
                 }
                 onClick={() => setTab(key)}
               >
-                {entry === "types"
-                  ? "Leave Types"
-                  : entry === "requests"
-                    ? "Leave Requests"
-                    : entry === "balances"
-                      ? "Leave Balances"
-                      : entry === "holidays"
-                        ? "Holidays"
-                        : entry === "policies"
-                          ? "Leave Policies"
-                          : "Leave Workflows"}
+                {label}
               </button>
             )
           })}
@@ -4830,7 +4945,7 @@ export function LeaveManagementView({
             title="Holidays"
             toolbarActions={
               <>
-                {canMutateHolidays ? (
+                {canCreateHolidays ? (
                   <button
                     type="button"
                     className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-medium text-slate-700"
@@ -4840,7 +4955,7 @@ export function LeaveManagementView({
                     Import
                   </button>
                 ) : null}
-                {canMutateHolidays ? (
+                {canDeleteHolidays ? (
                   <button
                     type="button"
                     className="inline-flex h-8 items-center gap-1.5 rounded-md border border-rose-200 bg-white px-2.5 text-xs font-medium text-rose-700"
@@ -4850,7 +4965,7 @@ export function LeaveManagementView({
                     Remove Country
                   </button>
                 ) : null}
-                {canMutateHolidays ? (
+                {canCreateHolidays ? (
                   <button
                     type="button"
                     className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white"
@@ -4875,19 +4990,32 @@ export function LeaveManagementView({
                   <Switch
                     size="sm"
                     checked={readBoolean(r, ["is_recurring"])}
-                    onCheckedChange={() => void toggleHolidayRecurring(r)}
+                    disabled={!canUpdateHolidays}
+                    onCheckedChange={canUpdateHolidays ? () => void toggleHolidayRecurring(r) : undefined}
                     aria-label="Toggle recurring"
                     className="scale-90"
                   />
                 ),
               },
-              { key: "actions", label: "Act", defaultWidth: 45, sortable: false, render: (row) => (
-                <div className="flex justify-end" onClick={e=>e.stopPropagation()}>
-                  <button type="button" className="rounded-md border border-rose-200 p-2 text-rose-600" onClick={() => setPendingHolidayDelete(row)}>
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-              ) },
+              ...(canDeleteHolidays
+                ? [{
+                    key: "actions",
+                    label: "Act",
+                    defaultWidth: 45,
+                    sortable: false,
+                    render: (row: AdminRecord) => (
+                      <div className="flex justify-end" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          className="rounded-md border border-rose-200 p-2 text-rose-600"
+                          onClick={() => setPendingHolidayDelete(row)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ),
+                  }]
+                : []),
             ]}
             itemsPerPage={20}
             loading={loading}
@@ -4902,7 +5030,7 @@ export function LeaveManagementView({
             title="Leave Policies"
             toolbarActions={
               <>
-                {canMutatePolicies ? (
+                {canCreatePolicies ? (
                   <button
                     type="button"
                     className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white"
@@ -4926,33 +5054,49 @@ export function LeaveManagementView({
               { key: "name", label: "Name", defaultWidth: 140, sortable: true },
               { key: "accrual_method", label: "Accrual", defaultWidth: 90, sortable: true },
               { key: "status", label: "Status", defaultWidth: 80, sortable: true },
-              {
-                key: "actions",
-                label: "Actions",
-                defaultWidth: 90,
-                sortable: false,
-                render: (row) => (
-                  <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-                    <button
-                      type="button"
-                      className="admin-table-icon-button"
-                      aria-label="Edit"
-                      onClick={() => loadPolicyIntoForm(row)}
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      className="admin-table-icon-button"
-                      aria-label="Toggle status"
-                      disabled={saving}
-                      onClick={() => void togglePolicyStatus(row)}
-                    >
-                      <RefreshCw className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                ),
-              },
+              ...((canUpdatePolicies || canDeletePolicies)
+                ? [{
+                    key: "actions",
+                    label: "Actions",
+                    defaultWidth: 110,
+                    sortable: false,
+                    render: (row: AdminRecord) => (
+                      <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+                        {canUpdatePolicies ? (
+                          <>
+                            <button
+                              type="button"
+                              className="admin-table-icon-button"
+                              aria-label="Edit"
+                              onClick={() => loadPolicyIntoForm(row)}
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              className="admin-table-icon-button"
+                              aria-label="Toggle status"
+                              disabled={saving}
+                              onClick={() => void togglePolicyStatus(row)}
+                            >
+                              <RefreshCw className="h-3.5 w-3.5" />
+                            </button>
+                          </>
+                        ) : null}
+                        {canDeletePolicies ? (
+                          <button
+                            type="button"
+                            className="admin-table-icon-button text-rose-600"
+                            aria-label="Delete"
+                            onClick={() => setPendingPolicyDelete(row)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        ) : null}
+                      </div>
+                    ),
+                  }]
+                : []),
             ]}
           />
 
@@ -5047,7 +5191,7 @@ export function LeaveManagementView({
                 <button
                   type="button"
                   className="rounded-md bg-primary px-4 py-2 text-sm font-medium !text-white"
-                  disabled={saving}
+                  disabled={saving || !canSubmitPolicyChanges}
                   onClick={() => void submitPolicyForm()}
                 >
                   {saving ? "Saving..." : editingPolicyId === null ? "Create Policy" : "Save Changes"}
@@ -5077,18 +5221,20 @@ export function LeaveManagementView({
                 <button type="button" className="rounded-md border border-slate-300 px-4 py-2 text-sm" onClick={() => setPolicyPreviewOpen(false)}>
                   Close
                 </button>
-                <button
-                  type="button"
-                  className="rounded-md bg-primary px-4 py-2 text-sm font-medium !text-white"
-                  onClick={() => {
-                    if (selectedPolicyRow) {
-                      loadPolicyIntoForm(selectedPolicyRow)
-                    }
-                    setPolicyPreviewOpen(false)
-                  }}
-                >
-                  Open in Editor
-                </button>
+                {canUpdatePolicies ? (
+                  <button
+                    type="button"
+                    className="rounded-md bg-primary px-4 py-2 text-sm font-medium !text-white"
+                    onClick={() => {
+                      if (selectedPolicyRow) {
+                        loadPolicyIntoForm(selectedPolicyRow)
+                      }
+                      setPolicyPreviewOpen(false)
+                    }}
+                  >
+                    Open in Editor
+                  </button>
+                ) : null}
               </DialogFooter>
             </DialogPopup>
           </Dialog>
@@ -5121,7 +5267,7 @@ export function LeaveManagementView({
               }
               toolbarActions={
                 <>
-                  {canMutateWorkflows ? (
+                  {canCreateWorkflows ? (
                     <button
                       type="button"
                       className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white"
@@ -5139,39 +5285,55 @@ export function LeaveManagementView({
               loading={loading}
               storageKey="leave-workflows"
               onRowSelect={(_, row) => {
-                if (row) void openEditWorkflowSheet(row)
+                if (row && canUpdateWorkflows) void openEditWorkflowSheet(row)
               }}
               columns={[
                 { key: "name", label: "Name", defaultWidth: 140, sortable: true },
                 { key: "status", label: "Status", defaultWidth: 80, sortable: true },
                 { key: "is_default", label: "Default", defaultWidth: 70, sortable: true },
-                {
-                  key: "actions",
-                  label: "Actions",
-                  defaultWidth: 90,
-                  sortable: false,
-                  render: (row) => (
-                    <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        type="button"
-                        className="admin-table-icon-button"
-                        aria-label="Edit"
-                        onClick={() => void openEditWorkflowSheet(row)}
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        className="admin-table-icon-button"
-                        aria-label="Toggle status"
-                        disabled={saving}
-                        onClick={() => void toggleWorkflowStatus(row)}
-                      >
-                        <RefreshCw className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  ),
-                },
+                ...((canUpdateWorkflows || canDeleteWorkflows)
+                  ? [{
+                      key: "actions",
+                      label: "Actions",
+                      defaultWidth: 110,
+                      sortable: false,
+                      render: (row: AdminRecord) => (
+                        <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+                          {canUpdateWorkflows ? (
+                            <>
+                              <button
+                                type="button"
+                                className="admin-table-icon-button"
+                                aria-label="Edit"
+                                onClick={() => void openEditWorkflowSheet(row)}
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                className="admin-table-icon-button"
+                                aria-label="Toggle status"
+                                disabled={saving}
+                                onClick={() => void toggleWorkflowStatus(row)}
+                              >
+                                <RefreshCw className="h-3.5 w-3.5" />
+                              </button>
+                            </>
+                          ) : null}
+                          {canDeleteWorkflows ? (
+                            <button
+                              type="button"
+                              className="admin-table-icon-button text-rose-600"
+                              aria-label="Delete"
+                              onClick={() => setPendingWorkflowDelete(row)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          ) : null}
+                        </div>
+                      ),
+                    }]
+                  : []),
               ]}
             />
 
@@ -5204,7 +5366,12 @@ export function LeaveManagementView({
                 <div className="rounded-md border border-slate-200 p-3">
                   <div className="mb-3 flex items-center justify-between">
                     <p className="text-sm font-semibold text-slate-800">Workflow Steps Summary ({workflowSteps.length})</p>
-                    <button type="button" className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium" disabled={saving} onClick={openCreateStepDialog}>
+                    <button
+                      type="button"
+                      className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium"
+                      disabled={saving || !canManageWorkflowSteps}
+                      onClick={openCreateStepDialog}
+                    >
                       Add Workflow Step
                     </button>
                   </div>
@@ -5226,14 +5393,30 @@ export function LeaveManagementView({
                                 Approver: {readString(row, ["approver_type"])} · Required: {readBoolean(row, ["is_required"]) ? "Yes" : "No"}
                               </p>
                             </div>
-                            <div className="inline-flex items-center gap-2">
-                              <button type="button" className="rounded-md border border-slate-300 p-2 text-slate-700 hover:bg-slate-100" onClick={() => openEditStepDialog(row)} aria-label="Edit step">
-                                <Pencil className="h-4 w-4" />
-                              </button>
-                              <button type="button" className="rounded-md border border-rose-300 p-2 text-rose-700 hover:bg-rose-50" onClick={() => void removeWorkflowStep(row)} aria-label="Delete step">
-                                <Trash2 className="h-4 w-4" />
-                              </button>
-                            </div>
+                            {(canManageWorkflowSteps || canDeleteWorkflows) ? (
+                              <div className="inline-flex items-center gap-2">
+                                {canManageWorkflowSteps ? (
+                                  <button
+                                    type="button"
+                                    className="rounded-md border border-slate-300 p-2 text-slate-700 hover:bg-slate-100"
+                                    onClick={() => openEditStepDialog(row)}
+                                    aria-label="Edit step"
+                                  >
+                                    <Pencil className="h-4 w-4" />
+                                  </button>
+                                ) : null}
+                                {canDeleteWorkflows || !selectedWorkflowId ? (
+                                  <button
+                                    type="button"
+                                    className="rounded-md border border-rose-300 p-2 text-rose-700 hover:bg-rose-50"
+                                    onClick={() => void removeWorkflowStep(row)}
+                                    aria-label="Delete step"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                ) : null}
+                              </div>
+                            ) : null}
                           </div>
                         )
                       })}
@@ -5243,7 +5426,7 @@ export function LeaveManagementView({
               </div>
               <SheetFooter className="sm:flex-row sm:justify-end">
                 <button type="button" className="rounded-md border border-slate-300 px-3 py-2 text-sm" onClick={() => setWorkflowSheetOpen(false)}>Cancel</button>
-                <button type="button" className="rounded-md bg-primary px-3 py-2 text-sm font-medium !text-white" disabled={saving} onClick={() => void submitWorkflowForm()}>
+                <button type="button" className="rounded-md bg-primary px-3 py-2 text-sm font-medium !text-white" disabled={saving || !canSubmitWorkflowChanges} onClick={() => void submitWorkflowForm()}>
                   {editingWorkflowId === null ? "Create Workflow" : "Save Workflow"}
                 </button>
               </SheetFooter>
@@ -5334,7 +5517,7 @@ export function LeaveManagementView({
               </div>
               <DialogFooter>
                 <button type="button" className="rounded-md border border-slate-300 px-3 py-2 text-sm" onClick={() => setStepDialogOpen(false)}>Cancel</button>
-                <button type="button" className="rounded-md bg-primary px-3 py-2 text-sm font-medium !text-white" disabled={saving} onClick={async () => {
+                <button type="button" className="rounded-md bg-primary px-3 py-2 text-sm font-medium !text-white" disabled={saving || !canManageWorkflowSteps} onClick={async () => {
                   const targetWorkflowId = selectedWorkflowId || (editingWorkflowId !== null ? String(editingWorkflowId) : "")
                   if (targetWorkflowId) {
                     setSelectedWorkflowId(targetWorkflowId)

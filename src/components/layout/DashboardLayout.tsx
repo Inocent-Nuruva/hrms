@@ -3,6 +3,7 @@ import Link from "next/link";
 import Head from "next/head";
 import { Button } from "@/components/common/Button";
 import { Logo } from "@/components/common/Logo";
+import { buildDashboardResetPasswordHref } from "@/utils/constants";
 
 interface DashboardLayoutProps {
   title: string;
@@ -22,7 +23,7 @@ export function DashboardLayout({ title, onLogout, children }: DashboardLayoutPr
           <nav className="dashboard-nav" aria-label="Main navigation">
             <Link href="/dashboard">Dashboard</Link>
             <Link href="/onboarding">Onboarding</Link>
-            <Link href="/change-password">Security</Link>
+            <Link href={buildDashboardResetPasswordHref()}>Security</Link>
           </nav>
           {onLogout ? (
             <Button type="button" variant="secondary" size="sm" onClick={onLogout}>

@@ -673,6 +673,12 @@ function isSessionEndedError(errorObject: unknown) {
   )
 }
 
+function isPasswordResetRequiredMessage(message: string) {
+  return /temporary password|must change.+password|change.+password before continuing|before you can continue/i.test(
+    message,
+  )
+}
+
 async function composeDashboardFromProfile(token: string) {
   const [profile, employee] = await Promise.all([
     getMyProfile(token).catch(() => null),
@@ -3089,6 +3095,14 @@ export function EmployeeHomeDashboard() {
         }
       } catch (err: unknown) {
         if (!cancelled) {
+          const message = err instanceof Error ? err.message : "Failed to load your dashboard."
+          if (isPasswordResetRequiredMessage(message)) {
+            setError(null)
+            if (typeof window !== "undefined") {
+              window.dispatchEvent(new CustomEvent("hrms:force-password-reset"))
+            }
+            return
+          }
           if (isSessionEndedError(err)) {
             setError(
               err instanceof Error && err.message.trim()
@@ -3099,7 +3113,7 @@ export function EmployeeHomeDashboard() {
             redirectToLogin()
             return
           }
-          setError(err instanceof Error ? err.message : "Failed to load your dashboard.")
+          setError(message)
         }
       } finally {
         if (!cancelled) setLoading(false)

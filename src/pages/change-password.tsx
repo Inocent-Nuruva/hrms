@@ -28,7 +28,7 @@ function useClientReady() {
 export default function ChangePasswordPage() {
   const router = useRouter()
   const clientReady = useClientReady()
-  const { tokens, user, refreshCurrentUser, clearSession } = useAuth()
+  const { tokens, user, clearSession } = useAuth()
   const [isLoading, setIsLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
 
@@ -58,8 +58,8 @@ export default function ChangePasswordPage() {
 
     try {
       await authService.changePassword(payload, tokens.accessToken)
-      await refreshCurrentUser()
-      void router.push(ROUTES.dashboard)
+      clearSession()
+      void router.replace(ROUTES.login)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to update password.")
     } finally {

@@ -15156,7 +15156,7 @@ function buildAnalyticsQuery(params: AnalyticsQueryParams = {}) {
   return query ? `?${query}` : "";
 }
 
-export type HrDashboardKind = "employee" | "hr" | "management" | "manager";
+export type HrDashboardKind = "employee" | "hr" | "management" | "manager" | "sales-field";
 
 export async function getHrDashboard(
   token: string,

@@ -530,8 +530,37 @@ export function CompactStatStrip({
   items: Array<{ label: string; value: React.ReactNode }>
 }) {
   return (
+    <CompactFactGrid items={items} columns={3} />
+  )
+}
+
+export function CompactFactGrid({
+  items,
+  columns = 3,
+  title,
+  aside,
+}: {
+  items: Array<{ label: string; value: React.ReactNode }>
+  columns?: 3 | 4
+  title?: string
+  aside?: React.ReactNode
+}) {
+  return (
     <div className={cn("overflow-hidden rounded-none border-y border-border bg-card sm:border-x", pageBleedClass)}>
-      <div className="grid grid-cols-3 divide-x divide-border">
+      {title ? (
+        <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
+          <p className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
+            {title}
+          </p>
+          {aside ? <p className="truncate text-xs font-semibold text-foreground">{aside}</p> : null}
+        </div>
+      ) : null}
+      <div
+        className={cn(
+          "grid divide-x divide-y divide-border",
+          columns === 4 ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3",
+        )}
+      >
         {items.map((field) => (
           <div key={field.label} className="min-w-0 px-3 py-2.5">
             <p className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">

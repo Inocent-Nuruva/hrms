@@ -2,8 +2,17 @@
 
 import * as React from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { ShieldCheck } from "lucide-react";
 
 import { AppSidebar } from "@/components/app-sidebar";
+import { ChangePasswordForm } from "@/components/auth/ChangePasswordForm";
+import {
+  Dialog,
+  DialogDescription,
+  DialogHeader,
+  DialogPopup,
+  DialogTitle,
+} from "@/components/animate-ui/components/base/dialog";
 import { DashboardSectionTabs } from "@/components/dashboard/dashboard-section-tabs";
 import { SiteHeader } from "@/components/site-header";
 import { SupportChatWidget } from "@/components/support-chat-widget";
@@ -98,6 +107,7 @@ import { useHideRememberedForbiddenPath } from "@/hooks/use-forbidden-route-guar
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken";
 const LEGACY_TOKEN_STORAGE_KEY = "ess_auth_token";
+const FORCE_PASSWORD_RESET_EVENT = "hrms:force-password-reset";
 const DEFAULT_USERS_QUERY: Required<UsersQueryParams> = {
   page: 1,
   limit: 20,
@@ -323,6 +333,30 @@ function isUnauthorizedError(errorObject: unknown) {
   return /\b401\b|unauthorized/i.test(message);
 }
 
+function isPasswordResetRequiredMessage(message: string) {
+  return /temporary password|must change.+password|change.+password before continuing|before you can continue/i.test(
+    message,
+  );
+}
+
+function readStoredUserPasswordChangeRequirement() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(AUTH_STORAGE_KEYS.user);
+    if (!raw) {
+      return false;
+    }
+
+    const parsed = JSON.parse(raw) as { requiresPasswordChange?: unknown };
+    return parsed.requiresPasswordChange === true;
+  } catch {
+    return false;
+  }
+}
+
 export default function AdminDashboardView({
   activeResource,
   showOverview = false,
@@ -376,6 +410,13 @@ export default function AdminDashboardView({
   const [employeeIdentityChecked, setEmployeeIdentityChecked] =
     React.useState(false);
   const [overviewRefreshKey, setOverviewRefreshKey] = React.useState(0);
+  const [forcePasswordResetOpen, setForcePasswordResetOpen] =
+    React.useState(false);
+  const [forcePasswordResetBusy, setForcePasswordResetBusy] =
+    React.useState(false);
+  const [forcePasswordResetError, setForcePasswordResetError] = React.useState<
+    string | null
+  >(null);
   const [myCompany, setMyCompany] = React.useState<AdminRecord | null>(null);
   const [usersQuery, setUsersQuery] =
     React.useState<Required<UsersQueryParams>>(DEFAULT_USERS_QUERY);
@@ -657,6 +698,14 @@ export default function AdminDashboardView({
           errorObject instanceof Error
             ? errorObject.message
             : "Failed to load dashboard data.";
+        if (isPasswordResetRequiredMessage(message)) {
+          setError(null);
+          setForcePasswordResetOpen(true);
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent(FORCE_PASSWORD_RESET_EVENT));
+          }
+          return;
+        }
         setError(message);
       } finally {
         setLoading(false);
@@ -843,6 +892,39 @@ export default function AdminDashboardView({
     await api.changeCurrentUserPassword(accessToken, oldPassword, newPassword);
   };
 
+  const handleForcedPasswordReset = React.useCallback(
+    async (payload: {
+      currentPassword: string;
+      newPassword: string;
+      confirmPassword: string;
+    }) => {
+      setForcePasswordResetBusy(true);
+      setForcePasswordResetError(null);
+      try {
+        await handleChangeMyPassword(payload.currentPassword, payload.newPassword);
+        setForcePasswordResetOpen(false);
+        clearStoredSession();
+        setToken("");
+        router.replace(ROUTES.login);
+      } catch (err) {
+        setForcePasswordResetError(
+          err instanceof Error ? err.message : "Unable to update password.",
+        );
+      } finally {
+        setForcePasswordResetBusy(false);
+      }
+    },
+    [clearStoredSession, handleChangeMyPassword, router],
+  );
+
+  const handleUseDifferentAccountForForcedReset = React.useCallback(() => {
+    setForcePasswordResetOpen(false);
+    setForcePasswordResetError(null);
+    clearStoredSession();
+    setToken("");
+    router.replace(ROUTES.login);
+  }, [clearStoredSession, router]);
+
   const handleSetUserPassword = async (
     id: string | number,
     newPassword: string,
@@ -977,6 +1059,29 @@ export default function AdminDashboardView({
     });
     setIdentityReady(true);
   }, [resolveStoredTokens]);
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const syncFromStoredUser = () => {
+      setForcePasswordResetOpen(Boolean(token) && readStoredUserPasswordChangeRequirement());
+    };
+    const openFromApiGuard = () => {
+      setForcePasswordResetOpen(Boolean(token));
+    };
+
+    syncFromStoredUser();
+    window.addEventListener("focus", syncFromStoredUser);
+    window.addEventListener(FORCE_PASSWORD_RESET_EVENT, openFromApiGuard);
+
+    return () => {
+      window.removeEventListener("focus", syncFromStoredUser);
+      window.removeEventListener(FORCE_PASSWORD_RESET_EVENT, openFromApiGuard);
+    };
+  }, [token]);
+
   const adminName =
     getStringValue(currentAdmin, ["full_name", "fullName", "name"]) ??
     ([
@@ -1319,6 +1424,38 @@ export default function AdminDashboardView({
           </div>
         </div>
       </SidebarInset>
+        <Dialog open={forcePasswordResetOpen}>
+          <DialogPopup
+            className="w-[min(94vw,440px)] border-primary/20 p-0"
+            showCloseButton={false}
+          >
+            <div className="overflow-hidden rounded-[inherit]">
+              <div className="bg-gradient-to-br from-primary via-primary to-[#18195f] px-6 py-5 text-primary-foreground">
+                <div className="mb-4 flex size-11 items-center justify-center rounded-2xl bg-white/12 ring-1 ring-white/20">
+                  <ShieldCheck className="size-5" />
+                </div>
+                <DialogHeader>
+                  <DialogTitle className="text-lg text-primary-foreground">
+                    Change your temporary password
+                  </DialogTitle>
+                  <DialogDescription className="text-primary-foreground/75">
+                    Your account was reset by an administrator. Set a new password
+                    here before continuing.
+                  </DialogDescription>
+                </DialogHeader>
+              </div>
+              <div className="bg-card p-6">
+                <ChangePasswordForm
+                  onSubmit={handleForcedPasswordReset}
+                  loading={forcePasswordResetBusy}
+                  error={forcePasswordResetError}
+                  requiredMode
+                  onUseDifferentAccount={handleUseDifferentAccountForForcedReset}
+                />
+              </div>
+            </div>
+          </DialogPopup>
+        </Dialog>
         <SupportChatWidget />
       </SidebarProvider>
     </DashboardIdentityProvider>

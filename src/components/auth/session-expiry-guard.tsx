@@ -19,24 +19,6 @@ import { env } from "@/lib/env"
 const SESSION_CHECK_INTERVAL_MS = env.NEXT_PUBLIC_SESSION_CHECK_INTERVAL_MS
 const ACCESS_TOKEN_REFRESH_WINDOW_MS = env.NEXT_PUBLIC_TOKEN_REFRESH_WINDOW_MS
 
-function readStoredUserPasswordChangeRequirement() {
-  if (typeof window === "undefined") {
-    return false
-  }
-
-  try {
-    const raw = window.localStorage.getItem(AUTH_STORAGE_KEYS.user)
-    if (!raw) {
-      return false
-    }
-
-    const parsed = JSON.parse(raw) as { requiresPasswordChange?: unknown }
-    return parsed.requiresPasswordChange === true
-  } catch {
-    return false
-  }
-}
-
 export function SessionExpiryGuard() {
   const refreshInFlightRef = React.useRef<Promise<void> | null>(null)
   const accessSyncInFlightRef = React.useRef<Promise<"ok" | "unauthorized" | "failed"> | null>(null)
@@ -116,16 +98,6 @@ export function SessionExpiryGuard() {
     const pathname = window.location.pathname
 
     if (pathname === ROUTES.login) {
-      return
-    }
-
-    const requiresPasswordChange = readStoredUserPasswordChangeRequirement()
-    if (
-      requiresPasswordChange &&
-      pathname !== ROUTES.changePassword &&
-      isProtectedPath(pathname)
-    ) {
-      window.location.assign(`${ROUTES.changePassword}?required=1`)
       return
     }
 

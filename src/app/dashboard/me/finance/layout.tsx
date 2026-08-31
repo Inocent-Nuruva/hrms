@@ -7,7 +7,7 @@ export default function SelfFinanceLayout({
   children: React.ReactNode
 }) {
   return (
-    <div className="flex flex-col gap-3 md:gap-4">
+    <div className="flex flex-col gap-0">
       <DashboardSectionTabs groups={selfFinanceSectionTabGroups} />
       <div className="min-w-0">{children}</div>
     </div>
