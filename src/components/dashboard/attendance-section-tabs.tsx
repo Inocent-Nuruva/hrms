@@ -5,8 +5,7 @@ import * as React from "react"
 import { DashboardSectionTabs } from "@/components/dashboard/dashboard-section-tabs"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import {
-  attendanceSectionTabGroups,
-  employeeAttendanceSectionTabGroups,
+  resolveAttendanceSectionTabGroups,
 } from "@/lib/dashboard-sections"
 
 export function AttendanceSectionTabs() {
@@ -18,7 +17,11 @@ export function AttendanceSectionTabs() {
 
   return (
     <DashboardSectionTabs
-      groups={actor.isAdmin ? attendanceSectionTabGroups : employeeAttendanceSectionTabGroups}
+      groups={resolveAttendanceSectionTabGroups(
+        actor.permissionLabels,
+        actor.accessMode,
+        actor.isAdmin,
+      )}
     />
   )
 }

@@ -3,8 +3,7 @@
 import { DashboardSectionRootRedirect } from "@/components/dashboard/dashboard-section-root-redirect"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import {
-  attendanceSectionTabGroups,
-  employeeAttendanceSectionTabGroups,
+  resolveAttendanceSectionTabGroups,
 } from "@/lib/dashboard-sections"
 
 export default function AttendanceIndexPage() {
@@ -16,7 +15,11 @@ export default function AttendanceIndexPage() {
 
   return (
     <DashboardSectionRootRedirect
-      groups={actor.isAdmin ? attendanceSectionTabGroups : employeeAttendanceSectionTabGroups}
+      groups={resolveAttendanceSectionTabGroups(
+        actor.permissionLabels,
+        actor.accessMode,
+        actor.isAdmin,
+      )}
       fallbackHref="/dashboard"
     />
   )

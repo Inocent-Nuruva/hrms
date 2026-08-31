@@ -1,4 +1,7 @@
-import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
+import {
+  canAccessDashboardRoute,
+  type DashboardAccessMode,
+} from "@/lib/dashboard-permissions"
 
 export type DashboardSectionTab = {
   title: string
@@ -83,6 +86,29 @@ export const employeeAttendanceSectionTabGroups: DashboardSectionTabGroup[] = [
     ],
   },
 ]
+
+/**
+ * HR staff can intentionally use the employee shell while retaining access to
+ * operational attendance pages. Route permissions, rather than the shell
+ * label alone, decide whether Attendance opens the HR or personal workspace.
+ */
+export function resolveAttendanceSectionTabGroups(
+  permissionLabels: string[],
+  accessMode: DashboardAccessMode,
+  isAdmin: boolean,
+): DashboardSectionTabGroup[] {
+  const canAccessAttendanceOperations = Boolean(
+    findFirstAccessibleSectionUrl(
+      attendanceSectionTabGroups,
+      permissionLabels,
+      accessMode,
+    ),
+  )
+
+  return isAdmin || canAccessAttendanceOperations
+    ? attendanceSectionTabGroups
+    : employeeAttendanceSectionTabGroups
+}
 
 export const selfRequestSectionTabGroups: DashboardSectionTabGroup[] = [
   {
