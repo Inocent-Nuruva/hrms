@@ -3,12 +3,14 @@
 import * as React from "react"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import type { HomeDashboardKind } from "@/lib/dashboard-home"
 import { cn } from "@/lib/utils"
 
 export type DashboardIdentity = {
   name: string | null
   photoUrl: string | null
   rolesLabel: string | null
+  homeDashboardKind?: HomeDashboardKind | null
 }
 
 const EMPTY_IDENTITY: DashboardIdentity = {

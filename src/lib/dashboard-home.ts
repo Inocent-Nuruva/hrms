@@ -252,3 +252,43 @@ export function resolveHomeDashboardKind(input: {
 
   return "company"
 }
+
+function hasLeaveRequestWorkPermission(permissionLabels: string[]) {
+  return hasPermission(permissionLabels, {
+    permissions: [
+      "leave_requests:read",
+      "leave_requests:approve",
+      "leave_requests:update",
+    ],
+    mode: "any",
+  })
+}
+
+export function isCompanyLeaveRequestsPath(url: string) {
+  const path = url.split("?")[0] ?? url
+  return (
+    path === "/dashboard/leave-management/requests" ||
+    path.startsWith("/dashboard/leave-management/requests/")
+  )
+}
+
+/**
+ * Company-wide leave request queues belong to HR, not company admin.
+ */
+export function canSeeHrLeaveRequestsQueue(input: {
+  homeDashboardKind?: HomeDashboardKind | null
+  accessMode: DashboardAccessMode
+  scope?: "platform" | "company" | null
+  permissionLabels: string[]
+  roleNames?: string[]
+}) {
+  const kind =
+    input.homeDashboardKind ??
+    resolveHomeDashboardKind({
+      accessMode: input.accessMode,
+      scope: input.scope,
+      permissionLabels: input.permissionLabels,
+      roleNames: input.roleNames ?? [],
+    })
+  return kind === "hr" && hasLeaveRequestWorkPermission(input.permissionLabels)
+}

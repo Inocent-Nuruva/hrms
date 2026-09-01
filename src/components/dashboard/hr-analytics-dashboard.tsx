@@ -599,6 +599,7 @@ interface HrAnalyticsDashboardProps {
   adminRolesLabel?: string | null
   userName?: string | null
   profilePhotoUrl?: string | null
+  showLeaveRequests?: boolean
 }
 
 function getInitials(value?: string | null) {
@@ -868,6 +869,7 @@ export default function HrAnalyticsDashboard({
   adminRolesLabel,
   userName,
   profilePhotoUrl,
+  showLeaveRequests = false,
 }: HrAnalyticsDashboardProps) {
   const router = useRouter()
   const actor = useDashboardActor()
@@ -913,6 +915,7 @@ export default function HrAnalyticsDashboard({
   const hydratedFromWarmRef = React.useRef(Boolean(warm))
   const firstFetchRef = React.useRef(true)
   const canOpenLeaveRequests =
+    showLeaveRequests &&
     actor.ready &&
     canAccessDashboardRoute(
       "/dashboard/leave-management/requests",
@@ -1067,12 +1070,17 @@ export default function HrAnalyticsDashboard({
           markReady("departments")
         }),
 
-      listLeaveRequests(token, leaveParams)
-        .catch((): PagedRowsResult => ({ rows: [], total: null }))
-        .then((leaveRes) => {
-          setLeaveRequests(leaveRes.rows ?? [])
-          markReady("leave")
-        }),
+      showLeaveRequests
+        ? listLeaveRequests(token, leaveParams)
+            .catch((): PagedRowsResult => ({ rows: [], total: null }))
+            .then((leaveRes) => {
+              setLeaveRequests(leaveRes.rows ?? [])
+              markReady("leave")
+            })
+        : Promise.resolve().then(() => {
+            setLeaveRequests([])
+            markReady("leave")
+          }),
 
       listAttendanceDailySummariesPage(token, attParams, listOpts)
         .catch((): PagedRowsResult => ({ rows: [], total: null }))
@@ -1098,7 +1106,7 @@ export default function HrAnalyticsDashboard({
 
     await Promise.allSettled(tasks)
     setLoading(false)
-  }, [fromDate, toDate, markReady])
+  }, [fromDate, toDate, markReady, showLeaveRequests])
 
   React.useEffect(() => {
     // First mount after login: revalidate quietly so we don't flash skeletons again.
@@ -1306,14 +1314,18 @@ export default function HrAnalyticsDashboard({
       ready: sliceReady.departments,
       href: canOpenDepartments ? "/dashboard/departments" : undefined,
     },
-    {
-      label: "Pending Leave",
-      value: pendingLeaves,
-      sub: "Awaiting action",
-      icon: CalendarIcon,
-      ready: sliceReady.leave,
-      href: canOpenLeaveRequests ? "/dashboard/leave-management/requests" : undefined,
-    },
+    ...(showLeaveRequests
+      ? [
+          {
+            label: "Pending Leave",
+            value: pendingLeaves,
+            sub: "Awaiting action",
+            icon: CalendarIcon,
+            ready: sliceReady.leave,
+            href: canOpenLeaveRequests ? "/dashboard/leave-management/requests" : undefined,
+          } satisfies MetricWithReady,
+        ]
+      : []),
     {
       label: "Attendance",
       value: attendanceRate != null ? `${attendanceRate}%` : "—",
@@ -1620,6 +1632,7 @@ export default function HrAnalyticsDashboard({
       ) : null}
 
       <div className="mt-5 grid grid-cols-1 gap-x-4 gap-y-4 lg:grid-cols-12 lg:items-start">
+        {showLeaveRequests ? (
         <motion.section className="self-start lg:col-span-6" variants={motionPreset.item}>
           <DashboardSurface>
             <div className="flex items-start justify-between gap-3">
@@ -1714,8 +1727,9 @@ export default function HrAnalyticsDashboard({
             </div>
           </DashboardSurface>
         </motion.section>
+        ) : null}
 
-        <motion.section className="self-start lg:col-span-6" variants={motionPreset.item}>
+        <motion.section className={`self-start ${showLeaveRequests ? "lg:col-span-6" : "lg:col-span-12"}`} variants={motionPreset.item}>
           <DashboardSurface>
             <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
               Employment status

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import { readRoleNamesFromUnknown } from "./dashboard-permissions"
 import {
+  canSeeHrLeaveRequestsQueue,
   isHumanResourcesEmployeeRecord,
   resolveHomeDashboardKind,
 } from "./dashboard-home"
@@ -156,5 +157,38 @@ describe("resolveHomeDashboardKind", () => {
         roleNames: ["MANAGER"],
       }),
     ).toBe("manager")
+  })
+})
+
+describe("canSeeHrLeaveRequestsQueue", () => {
+  it("shows the company leave queue to HR", () => {
+    expect(
+      canSeeHrLeaveRequestsQueue({
+        accessMode: "admin",
+        permissionLabels: ["leave_requests:read", "leave_requests:approve"],
+        roleNames: ["HR_MANAGER"],
+      }),
+    ).toBe(true)
+  })
+
+  it("hides the company leave queue from company admin", () => {
+    expect(
+      canSeeHrLeaveRequestsQueue({
+        accessMode: "admin",
+        permissionLabels: ["leave_requests:read", "leave_requests:approve", "view_company_dashboard"],
+        roleNames: ["COMPANY_ADMIN"],
+      }),
+    ).toBe(false)
+  })
+
+  it("uses an explicit home kind when department detection upgraded the person to HR", () => {
+    expect(
+      canSeeHrLeaveRequestsQueue({
+        homeDashboardKind: "hr",
+        accessMode: "employee",
+        permissionLabels: ["leave_requests:approve"],
+        roleNames: ["COMPANY_USER"],
+      }),
+    ).toBe(true)
   })
 })

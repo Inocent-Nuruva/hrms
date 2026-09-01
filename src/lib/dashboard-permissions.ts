@@ -953,7 +953,14 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
     mode: "any",
   },
   "/dashboard/leave-management/types": "leave_types:read",
-  "/dashboard/leave-management/requests": "leave_requests:read",
+  "/dashboard/leave-management/requests": {
+    permissions: [
+      "leave_requests:read",
+      "leave_requests:approve",
+      "leave_requests:update",
+    ],
+    mode: "any",
+  },
   "/dashboard/leave-management/balances": {
     permissions: ["leave_balances:read", "leave-balances.view", "leave-balances.manage"],
     mode: "any",

@@ -1,9 +1,11 @@
 "use client"
 
 import * as React from "react"
-import { useSearchParams } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
+import { useDashboardIdentity } from "@/components/dashboard/dashboard-identity"
+import { canSeeHrLeaveRequestsQueue } from "@/lib/dashboard-home"
 import { canPerformPermission } from "@/lib/dashboard-permissions"
 import { ResizableTable } from "@/components/ui/resizable-table"
 import { Textarea } from "@/components/ui/textarea"
@@ -1024,7 +1026,9 @@ export function LeaveManagementView({
   showTabButtons = true,
 }: LeaveManagementViewProps) {
   const searchParams = useSearchParams()
+  const router = useRouter()
   const actor = useDashboardActor()
+  const identity = useDashboardIdentity()
   const canCreateTypes = canPerformPermission(actor.permissionLabels, {
     permissions: ["leave_types:create", "leave_types:update"],
     mode: "any",
@@ -1035,7 +1039,13 @@ export function LeaveManagementView({
     mode: "any",
   })
   const canReadTypes = canPerformPermission(actor.permissionLabels, "leave_types:read")
-  const canReadRequests = canPerformPermission(actor.permissionLabels, "leave_requests:read")
+  const canReadRequests = canSeeHrLeaveRequestsQueue({
+    homeDashboardKind: identity.homeDashboardKind,
+    accessMode: actor.accessMode,
+    scope: actor.scope,
+    permissionLabels: actor.permissionLabels,
+    roleNames: actor.roleNames,
+  })
   const canReadBalances = canPerformPermission(actor.permissionLabels, {
     permissions: ["leave_balances:read", "leave-balances.view", "leave-balances.manage"],
     mode: "any",
@@ -1261,6 +1271,14 @@ export function LeaveManagementView({
       canReadWorkflows,
     ],
   )
+
+  React.useEffect(() => {
+    if (!actor.ready || activeTab !== "requests" || canReadRequests) {
+      return
+    }
+    const fallback = visibleLeaveTabs.find((entry) => entry.key !== "requests")
+    router.replace(fallback ? `/dashboard/leave-management/${fallback.key}` : "/dashboard/leave-management")
+  }, [activeTab, actor.ready, canReadRequests, router, visibleLeaveTabs])
 
   const hydrateLeaveMedicalForm = React.useCallback((row: AdminRecord | null) => {
     const medical = row ? asRecord(row.medical_detail) : null

@@ -647,21 +647,23 @@ function firstAccessibleNavUrl(
   url: string | undefined,
   matchUrls: string[] | undefined,
   normalizedPermissions: string[],
-  accessMode: AppSidebarAccessMode
+  accessMode: AppSidebarAccessMode,
+  homeDashboardKind?: HomeDashboardKind,
 ) {
   const candidates = [
     ...(url ? [url] : []),
     ...(Array.isArray(matchUrls) ? matchUrls : []),
   ]
   return candidates.find((candidate) =>
-    canSeeDashboardPage(candidate, normalizedPermissions, accessMode)
+    canSeeDashboardPage(candidate, normalizedPermissions, accessMode, { homeDashboardKind }),
   )
 }
 
 function filterNavByPermissions(
   navMain: SidebarNavItem[],
   normalizedPermissions: string[],
-  accessMode: AppSidebarAccessMode
+  accessMode: AppSidebarAccessMode,
+  homeDashboardKind?: HomeDashboardKind,
 ): SidebarNavItem[] {
   return navMain
     .map((item) => {
@@ -670,7 +672,8 @@ function filterNavByPermissions(
         item.url,
         item.matchUrls,
         normalizedPermissions,
-        accessMode
+        accessMode,
+        homeDashboardKind,
       )
 
       if (!hasChildren) {
@@ -681,7 +684,8 @@ function filterNavByPermissions(
       const filteredItems: SidebarNavItem[] = filterNavByPermissions(
         item.items ?? [],
         normalizedPermissions,
-        accessMode
+        accessMode,
+        homeDashboardKind,
       )
       // Never show a section with zero visible children (no empty menus).
       if (filteredItems.length === 0) {
@@ -698,10 +702,11 @@ function filterNavByPermissions(
 function filterAdminSearchByPermissions(
   searchItems: SearchItem[],
   normalizedPermissions: string[],
-  accessMode: AppSidebarAccessMode
+  accessMode: AppSidebarAccessMode,
+  homeDashboardKind?: HomeDashboardKind,
 ) {
   return searchItems.filter((item) =>
-    canSeeDashboardPage(item.url, normalizedPermissions, accessMode)
+    canSeeDashboardPage(item.url, normalizedPermissions, accessMode, { homeDashboardKind }),
   )
 }
 
@@ -780,6 +785,7 @@ export function AppSidebar({
           platformData.navMain,
           normalizedPermissions,
           resolvedAccessMode,
+          homeDashboardKind,
         ),
         navSecondary: secondary,
       }
@@ -788,11 +794,13 @@ export function AppSidebar({
       selfServiceNavMain,
       normalizedPermissions,
       homeDashboardKind === "hr" ? "employee" : resolvedAccessMode,
+      homeDashboardKind,
     )
     const adminItems = filterNavByPermissions(
       adminData.navMain,
       normalizedPermissions,
       resolvedAccessMode,
+      homeDashboardKind,
     )
     if (homeDashboardKind === "hr") {
       return {
@@ -849,14 +857,23 @@ export function AppSidebar({
         platformSearchIndex,
         normalizedPermissions,
         resolvedAccessMode,
+        homeDashboardKind,
       )
     }
     return filterAdminSearchByPermissions(
       mergeUniqueNavItems(employeeSearchIndex, adminSearchIndex),
       normalizedPermissions,
       resolvedAccessMode,
+      homeDashboardKind,
     )
-  }, [forbiddenVersion, normalizedPermissions, permissionsResolved, resolvedAccessMode, scope])
+  }, [
+    forbiddenVersion,
+    homeDashboardKind,
+    normalizedPermissions,
+    permissionsResolved,
+    resolvedAccessMode,
+    scope,
+  ])
 
   return (
     <Sidebar collapsible="offcanvas" className="app-sidebar" {...props}>

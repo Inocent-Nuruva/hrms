@@ -1,6 +1,11 @@
 import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
 import type { DashboardAccessMode } from "@/lib/dashboard-permissions"
 import {
+  canSeeHrLeaveRequestsQueue,
+  isCompanyLeaveRequestsPath,
+  type HomeDashboardKind,
+} from "@/lib/dashboard-home"
+import {
   isDashboardRouteEnabledForCompanyModules,
   readPublishedCompanyModules,
 } from "@/lib/company-modules"
@@ -285,6 +290,11 @@ export function canSeeDashboardPage(
   url: string,
   permissionLabels: string[],
   accessMode?: DashboardAccessMode,
+  options?: {
+    roleNames?: string[]
+    scope?: "platform" | "company" | null
+    homeDashboardKind?: HomeDashboardKind | null
+  },
 ) {
   if (!canShowDashboardRouteInNavigation(url, accessMode)) {
     return false
@@ -306,6 +316,15 @@ export function canSeeDashboardPage(
   }
   if (path === "/dashboard/sms") {
     return canSeeSmsSection(permissionLabels, accessMode)
+  }
+  if (isCompanyLeaveRequestsPath(url)) {
+    return canSeeHrLeaveRequestsQueue({
+      homeDashboardKind: options?.homeDashboardKind,
+      accessMode: accessMode ?? "employee",
+      scope: options?.scope,
+      permissionLabels,
+      roleNames: options?.roleNames,
+    })
   }
   return canAccessDashboardRoute(url, permissionLabels, accessMode)
 }

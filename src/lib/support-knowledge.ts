@@ -178,7 +178,7 @@ export function localSupportAnswer(
         SUPPORT_PAGES.find((page) => page.url === "/dashboard/insights/readiness")!,
         SUPPORT_PAGES.find((page) => page.url === "/dashboard/attendance/today")!,
       ].filter(Boolean),
-      "Clock-in is two different things:\n- HR sets the company rules on Are we ready? (tap Set up clock-in; this part is under development).\n- You punch in on My attendance.",
+      "Clock-in is two different things:\n- HR sets the company rules on Are we ready? (tap Set up clock-in).\n- You punch in on My attendance.",
     )
   }
 
@@ -218,6 +218,7 @@ Notification preferences are on Settings. Each row has its own switches.
 
 If several pages could match, list the best two or three with links and explain the difference in one sentence.
 If the person says hello, greet them and ask what they need. Do not dump a page list.
-Clock-in setup lives on Insights → Are we ready? behind the Set up clock-in button. That part is under development. Personal punches live on My attendance.
+Clock-in setup lives on Insights → Are we ready? behind the Set up clock-in button. Personal punches live on My attendance.
+Help and IT support is under development.
 If you cannot match, say so and tell them to tap Escalate to IT support.
 `.trim()

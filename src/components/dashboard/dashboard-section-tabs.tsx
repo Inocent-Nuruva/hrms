@@ -5,6 +5,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
+import { useDashboardIdentity } from "@/components/dashboard/dashboard-identity"
 import { Tabs2 } from "@/components/ui/tabs-2"
 import { canSeeDashboardPage } from "@/lib/forbidden-routes"
 import { useForbiddenPrefixes } from "@/hooks/use-forbidden-route-guard"
@@ -29,6 +30,7 @@ export function DashboardSectionTabs({
   const pathname = usePathname()
   const currentPath = pathname ?? ""
   const actor = useDashboardActor()
+  const identity = useDashboardIdentity()
   const motionPreset = useDashboardMotion()
   const forbiddenVersion = useForbiddenPrefixes()
   // Defer permission-filtered UI until after mount so SSR and the first client
@@ -53,11 +55,25 @@ export function DashboardSectionTabs({
       .map((group) => ({
         ...group,
         items: group.items.filter((item) =>
-          canSeeDashboardPage(item.url, actor.permissionLabels, actor.accessMode)
+          canSeeDashboardPage(item.url, actor.permissionLabels, actor.accessMode, {
+            roleNames: actor.roleNames,
+            scope: actor.scope,
+            homeDashboardKind: identity.homeDashboardKind,
+          }),
         ),
       }))
       .filter((group) => group.items.length > 0)
-  }, [actor.accessMode, actor.permissionLabels, actor.ready, forbiddenVersion, groups, mounted])
+  }, [
+    actor.accessMode,
+    actor.permissionLabels,
+    actor.ready,
+    actor.roleNames,
+    actor.scope,
+    forbiddenVersion,
+    groups,
+    identity.homeDashboardKind,
+    mounted,
+  ])
 
   const hasGroupedTabs =
     filteredGroups.length > 1 && filteredGroups.every((group) => Boolean(group.title))

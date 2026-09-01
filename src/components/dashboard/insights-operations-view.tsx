@@ -482,7 +482,7 @@ export function InsightsOperationsView({
               variant="onPrimary"
               text={
                 activeTab === "readiness"
-                  ? "This page is under development. You can check system health, create starter clock-in rules, and review blocked actions — some tools are still being finished."
+                  ? "Check system health, create starter clock-in rules, and review blocked actions."
                   : "A snapshot of how the company is doing for the dates you pick."
               }
             />
@@ -572,9 +572,8 @@ export function InsightsOperationsView({
             <div className="rounded-xl border border-border bg-card p-4">
               <div className="flex items-center gap-1.5">
                 <h2 className="text-sm font-semibold">Set up clock-in</h2>
-                <TipIcon text="This part is under development. Creating rules here only builds a starter set. Full clock-in setup (devices, maps, shifts) is still being finished under Attendance." />
+                <TipIcon text="Creating rules here only builds a starter set. Refine devices, maps, and shifts later under Attendance." />
               </div>
-              <p className="mt-1 text-sm text-muted-foreground">This part is under development.</p>
               {readString(asRecord(setup?.activePolicy), ["name"]) ? (
                 <p className="mt-2 text-sm text-foreground">
                   Clock-in rules already exist:{" "}
@@ -688,7 +687,7 @@ export function InsightsOperationsView({
           <AlertDialogHeader>
             <AlertDialogTitle>Set up clock-in</AlertDialogTitle>
             <AlertDialogDescription>
-              This part is under development. Give this starter set a simple label, then create it. Example: “Office clock-in”. This is not a person or a time — just a name so you can find the rules later.
+              Give this starter set a simple label, then create it. Example: “Office clock-in”. This is not a person or a time — just a name so you can find the rules later.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <p className="mt-3 text-sm text-amber-800 dark:text-amber-200">
