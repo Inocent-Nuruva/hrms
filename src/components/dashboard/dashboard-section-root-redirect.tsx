@@ -4,6 +4,7 @@ import * as React from "react"
 import { usePathname, useRouter } from "next/navigation"
 
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
+import { useForbiddenPrefixes } from "@/hooks/use-forbidden-route-guard"
 import { selfServiceHomeFor } from "@/lib/dashboard-nav"
 import { canSeeDashboardPage } from "@/lib/forbidden-routes"
 import type { DashboardSectionTabGroup } from "@/lib/dashboard-sections"
@@ -22,6 +23,7 @@ export function DashboardSectionRootRedirect({
  const actor = useDashboardActor()
  const pathname = usePathname()
  const router = useRouter()
+ const forbiddenVersion = useForbiddenPrefixes()
 
  const targetHref = React.useMemo(() => {
  if (!actor.ready) {
@@ -44,6 +46,7 @@ export function DashboardSectionRootRedirect({
    actor.ready,
    employeeFallbackHref,
    fallbackHref,
+   forbiddenVersion,
    groups,
    pathname,
  ])

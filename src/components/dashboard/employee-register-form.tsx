@@ -20,6 +20,7 @@ import {
 
 import {
   createEmployeeProfile,
+  ensureDraftOnboardingRequest,
   getOnboardingRequest,
   getCurrentAdmin,
   getCurrentEmployee,
@@ -461,7 +462,7 @@ const EMPTY_ONBOARDING_FORM: OnboardingFormState = {
   description: "",
   plannedStartDate: "",
   plannedCompletionDate: "",
-  submit: true,
+  submit: false,
   roleIds: [],
   branchAccessIds: [],
   attendanceMode: "",
@@ -1363,6 +1364,8 @@ export function EmployeeRegisterForm() {
   const [onboarding, setOnboarding] = React.useState<OnboardingFormState>(createEmptyOnboardingForm)
   const [, setRolesLoading] = React.useState(false)
   const [, setRolesError] = React.useState<string | null>(null)
+  const [submitError, setSubmitError] = React.useState<string | null>(null)
+  const [employeeNoTouched, setEmployeeNoTouched] = React.useState(false)
   const [isSubmitting, setIsSubmitting] = React.useState(false)
   const [createdEmployeeResult, setCreatedEmployeeResult] = React.useState<CreateEmployeeResponse | null>(null)
   const [initializedFields, setInitializedFields] = React.useState<InitializedRegistrationFields>(
@@ -2536,6 +2539,7 @@ export function EmployeeRegisterForm() {
       setSelfRegistrationStatus((employeeStatus ?? "").toLowerCase())
       if (isRegisteringOthers) {
         setInitializedFields(EMPTY_INITIALIZED_FIELDS)
+        setEmployeeNoTouched(false)
         setForm((previous) => ({
           ...previous,
           employeeNo: "",
@@ -2561,6 +2565,7 @@ export function EmployeeRegisterForm() {
         ...nextInitializedFields,
         roleId: nextRoleId,
       })
+      setEmployeeNoTouched(false)
 
       setForm((previous) => ({
         ...previous,
@@ -2615,7 +2620,12 @@ export function EmployeeRegisterForm() {
         setCurrentStep(parsed.currentStep)
       }
       if (parsed.form) {
-        setForm((previous) => ({ ...previous, ...parsed.form }))
+        const { employeeNo: draftEmployeeNo, ...restForm } = parsed.form
+        setForm((previous) => ({
+          ...previous,
+          ...restForm,
+          employeeNo: isRegisteringOthers ? "" : (draftEmployeeNo ?? previous.employeeNo),
+        }))
       }
       if (parsed.inviteContact) {
         setInviteContact((previous) => ({ ...previous, ...parsed.inviteContact }))
@@ -2647,6 +2657,9 @@ export function EmployeeRegisterForm() {
           deviceAssignment: {
             ...EMPTY_ONBOARDING_DEVICE_ASSIGNMENT,
             ...draftOnboarding.deviceAssignment,
+            employeeNo: isRegisteringOthers
+              ? ""
+              : (draftOnboarding.deviceAssignment?.employeeNo ?? ""),
             deviceIds: Array.isArray(draftOnboarding.deviceAssignment?.deviceIds)
               ? draftOnboarding.deviceAssignment.deviceIds
               : [],
@@ -2680,6 +2693,7 @@ export function EmployeeRegisterForm() {
     if (isSubmitting) {
       return
     }
+    setSubmitError(null)
 
     const accessToken = resolveAccessTokenFromStorage()
     if (!accessToken) {
@@ -2697,6 +2711,7 @@ export function EmployeeRegisterForm() {
     }
 
     const normalizedEmployeeNo = form.employeeNo.trim()
+    const employeeNoForCreate = employeeNoTouched && normalizedEmployeeNo ? normalizedEmployeeNo : undefined
 
     if (isInviteMode && !form.branch.trim()) {
       toast.error("Branch is required for send invite.")
@@ -2923,7 +2938,7 @@ export function EmployeeRegisterForm() {
         plannedStartDate: onboarding.plannedStartDate,
         plannedCompletionDate: onboarding.plannedCompletionDate,
         submit: onboarding.submit,
-        fallbackEmployeeNo: normalizedEmployeeNo,
+        fallbackEmployeeNo: employeeNoForCreate,
         provisioningDraft: onboarding,
       })
     if (onboardingError) {
@@ -2934,7 +2949,7 @@ export function EmployeeRegisterForm() {
     setIsSubmitting(true)
     try {
       const response = await createEmployeeProfile(accessToken, {
-        employee_no: normalizedEmployeeNo || undefined,
+        employee_no: employeeNoForCreate,
         primary_branch_id: selectedBranchId ?? undefined,
         primary_department_id: selectedDepartmentId ?? undefined,
         primary_position_id: selectedPositionId ?? undefined,
@@ -2984,12 +2999,46 @@ export function EmployeeRegisterForm() {
           registration_mode: isInviteMode ? "send_invite" : "full_registration",
         },
       })
-      if (response.onboarding_request && onboardingPayload?.submit) {
-        const onboardingRequestId = readRecordId(response.onboarding_request)
+      const createdEmployeeId = readRecordId(response)
+      let onboardingRequest = response.onboarding_request ?? null
+      if (!onboardingRequest && createdEmployeeId !== null && isRegisteringOthers) {
+        const selectedWorkflowId =
+          onboarding.workflowId && onboarding.workflowId !== "none"
+            ? Number(onboarding.workflowId)
+            : null
+        const defaultWorkflow =
+          onboardingWorkflows.find((row) => row.is_default === true || row.isDefault === true) ??
+          onboardingWorkflows[0] ??
+          null
+        const defaultWorkflowId = defaultWorkflow ? readRecordId(defaultWorkflow) : null
+        const workflowId =
+          selectedWorkflowId && Number.isFinite(selectedWorkflowId) && selectedWorkflowId > 0
+            ? selectedWorkflowId
+            : defaultWorkflowId
+        const employeeName = [form.firstName, form.middleName, form.lastName]
+          .map((value) => value.trim())
+          .filter(Boolean)
+          .join(" ")
+        try {
+          onboardingRequest = await ensureDraftOnboardingRequest(accessToken, {
+            employee_id: createdEmployeeId,
+            workflow_id: workflowId ?? undefined,
+            title: employeeName ? `Onboarding for ${employeeName}` : "Onboarding",
+          })
+        } catch (onboardingError) {
+          toast.message(
+            onboardingError instanceof Error
+              ? `Employee saved, but onboarding could not be started. ${onboardingError.message}`
+              : "Employee saved, but onboarding could not be started from this page.",
+          )
+        }
+      }
+      if (onboardingRequest && onboardingPayload?.submit) {
+        const onboardingRequestId = readRecordId(onboardingRequest)
         void notifySubmittedRequestApprovers({
           kind: "onboarding_request",
           token: accessToken,
-          request: response.onboarding_request,
+          request: onboardingRequest,
           requesterName: [form.firstName, form.middleName, form.lastName]
             .map((value) => value.trim())
             .filter(Boolean)
@@ -3000,17 +3049,24 @@ export function EmployeeRegisterForm() {
               : () => getOnboardingRequest(accessToken, onboardingRequestId),
         })
       }
-      setCreatedEmployeeResult(response)
+      setCreatedEmployeeResult({
+        ...response,
+        onboarding_request: onboardingRequest ?? response.onboarding_request,
+      })
       showSuccessAlert(
-        response.onboarding_request
-          ? "Employee created and onboarding started."
+        onboardingRequest
+          ? onboardingPayload?.submit
+            ? "Employee created and onboarding started."
+            : "Employee saved. Onboarding is listed as a draft request."
           : isInviteMode
             ? "Employee invite saved successfully."
             : "Employee saved successfully."
       )
       clearForm()
     } catch (errorObject) {
-      toast.error(errorObject instanceof Error ? errorObject.message : "Failed to save employee.")
+      const message = errorObject instanceof Error ? errorObject.message : "Failed to save employee."
+      setSubmitError(message)
+      toast.error(message)
     } finally {
       setIsSubmitting(false)
     }
@@ -3067,6 +3123,8 @@ export function EmployeeRegisterForm() {
     setEditingBankIndex(null)
     setOnboarding(createEmptyOnboardingForm())
     setPendingDelete(null)
+    setSubmitError(null)
+    setEmployeeNoTouched(false)
     if (typeof window !== "undefined") {
       window.localStorage.removeItem(REGISTER_DRAFT_STORAGE_KEY)
     }
@@ -3103,6 +3161,11 @@ export function EmployeeRegisterForm() {
 
   return (
     <div className="space-y-2">
+      {submitError ? (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {submitError}
+        </div>
+      ) : null}
       <div className="animate-card-entrance overflow-visible rounded-xl bg-card text-card-foreground ring-1 ring-foreground/10">
         <Tabs
           value={currentStep}
@@ -3191,12 +3254,24 @@ export function EmployeeRegisterForm() {
             <TabsContents className="[&_[data-slot=input]]:h-9 [&_[data-slot=input]]:px-3 [&_[data-slot=select-trigger]]:h-9 [&_[data-slot=select-trigger]]:px-3 [&_[data-slot=select-content]]:p-1 [&_[data-slot=select-item]]:px-2.5 [&_[data-slot=select-item]]:py-1.5">
               <TabsContent value="details" className={getStepTransitionClass("details")}>
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                  <Field label="Employee Number" htmlFor="employeeNo" delayMs={30}>
+                  <Field
+                    label="Employee Number (Optional)"
+                    htmlFor="employeeNo"
+                    delayMs={30}
+                    hint="Leave blank to auto-assign the next unused number."
+                  >
                     <Input
                       id="employeeNo"
+                      name="hrms-new-employee-number"
+                      autoComplete="off"
+                      autoCorrect="off"
+                      spellCheck={false}
                       value={form.employeeNo}
-                      onChange={(event) => updateField("employeeNo", event.target.value)}
-                      placeholder="Enter employee number (optional)"
+                      onChange={(event) => {
+                        setEmployeeNoTouched(true)
+                        updateField("employeeNo", event.target.value)
+                      }}
+                      placeholder="Leave blank to auto-assign"
                       disabled={lockedFields.employeeNo}
                     />
                   </Field>
@@ -3692,7 +3767,7 @@ export function EmployeeRegisterForm() {
                                 </p>
                                 <InfoTooltip
                                   label="Submit immediately help"
-                                  content="Turn off to save the onboarding request as a draft."
+                                  content="Leave this off unless the workflow already has eligible approvers on every required step. Turned off, the employee is saved and onboarding stays a draft."
                                 />
                               </div>
                               <Switch

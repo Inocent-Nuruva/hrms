@@ -34,6 +34,7 @@ export function PermissionPicker({
   className,
   compact = false,
   loading = false,
+  reviewSelected = false,
 }: {
   options: PermissionOption[]
   selectedNames: string[]
@@ -42,9 +43,14 @@ export function PermissionPicker({
   className?: string
   compact?: boolean
   loading?: boolean
+  reviewSelected?: boolean
 }) {
   const [query, setQuery] = React.useState("")
-  const [enabledOnly, setEnabledOnly] = React.useState(false)
+  const [enabledOnly, setEnabledOnly] = React.useState(reviewSelected)
+
+  React.useEffect(() => {
+    setEnabledOnly(reviewSelected)
+  }, [reviewSelected])
   const [openGroups, setOpenGroups] = React.useState<Record<string, boolean>>({})
   const selectedSet = React.useMemo(() => new Set(selectedNames), [selectedNames])
 

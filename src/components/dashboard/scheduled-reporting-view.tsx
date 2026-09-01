@@ -1,5 +1,8 @@
 "use client"
 
+/* Setters in useCallback deps trip react-hooks/preserve-manual-memoization. */
+/* eslint-disable react-hooks/preserve-manual-memoization */
+
 import * as React from "react"
 import {
   DownloadIcon,
@@ -43,7 +46,8 @@ import {
 } from "@/lib/admin-api"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import {
-  SCHEDULED_REPORTING_ROUTE_PERMISSION,
+  SCHEDULED_REPORTING_MUTATE_PERMISSION,
+  SCHEDULED_REPORTING_SMTP_PERMISSION,
   canPerformPermission,
 } from "@/lib/dashboard-permissions"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
@@ -628,26 +632,12 @@ const textareaClass =
 
 export function ScheduledReportingView() {
   const actor = useDashboardActor()
-  const canAccessScheduledReporting =
-    !actor.ready ||
-    actor.isAdmin ||
-    canPerformPermission(actor.permissionLabels, SCHEDULED_REPORTING_ROUTE_PERMISSION)
   const canMutateReports =
-    canAccessScheduledReporting ||
-    canPerformPermission(actor.permissionLabels, {
-      permissions: [
-        "scheduled_reporting:create",
-        "scheduled_reporting:update",
-        "scheduled_reporting:delete",
-        "report_schedules:create",
-        "report_templates:create",
-        "smtp_configurations:create",
-        "smtp_configurations:update",
-        "smtp_configurations:delete",
-        "manage_scheduled_reports",
-      ],
-      mode: "any",
-    })
+    !actor.ready ||
+    canPerformPermission(actor.permissionLabels, SCHEDULED_REPORTING_MUTATE_PERMISSION)
+  const canManageSmtp =
+    !actor.ready ||
+    canPerformPermission(actor.permissionLabels, SCHEDULED_REPORTING_SMTP_PERMISSION)
   const [tab, setTab] = React.useState<ReportingTab>("templates")
   const [rows, setRows] = React.useState<AdminRecord[]>([])
   const [definitions, setDefinitions] = React.useState<AdminRecord[]>([])
@@ -1986,7 +1976,6 @@ export function ScheduledReportingView() {
             ? "Executions"
             : "SMTP configurations"
 
-  const canManageSmtp = tab === "smtp" || canMutateReports
   const canCreate =
     (tab === "smtp" ? canManageSmtp : canMutateReports) &&
     tab !== "definitions" &&
@@ -2582,7 +2571,7 @@ export function ScheduledReportingView() {
       </div>
 
       <div className="flex flex-wrap items-center gap-1 border-b border-border/80">
-        {TABS.map((entry) => {
+        {TABS.filter((entry) => entry.id !== "smtp" || canManageSmtp).map((entry) => {
           const active = tab === entry.id
           return (
             <button

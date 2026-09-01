@@ -192,8 +192,18 @@ export function buildOnboardingProvisioningPayload(
 export function buildEmployeeOnboardingInput(
   args: BuildEmployeeOnboardingInputArgs
 ): { error?: string; onboarding?: EmployeeOnboardingInput } {
-  if (!args.enabled) {
-    return {}
+  const hasWorkflow =
+    Boolean(args.workflowId?.trim()) && args.workflowId.trim() !== "none"
+
+  // Explicitly disable auto-start so a company default workflow is not submitted
+  // during employee create when onboarding was left optional.
+  if (!args.enabled || !hasWorkflow) {
+    return {
+      onboarding: {
+        auto_start: false,
+        submit: false,
+      },
+    }
   }
 
   const workflowId = args.workflowId ? toOptionalNumber(args.workflowId) : undefined

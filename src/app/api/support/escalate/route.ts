@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server"
 
+import { env } from "@/lib/env"
+
 export const dynamic = "force-dynamic"
+
+function backendEscalateUrl() {
+  const base = env.NEXT_PUBLIC_API_BASE_URL.replace(/\/$/, "").replace(/\/api$/i, "")
+  return `${base}/api/support/escalate`
+}
 
 export async function POST(request: Request) {
   let body: unknown
@@ -10,29 +17,37 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Describe what you need help with." }, { status: 400 })
   }
 
-  const record = body && typeof body === "object" ? (body as Record<string, unknown>) : {}
-  const summary = typeof record.summary === "string" ? record.summary.trim() : ""
-  const transcript = Array.isArray(record.transcript)
-    ? record.transcript
-        .map((entry) => {
-          if (!entry || typeof entry !== "object") return ""
-          const role = (entry as Record<string, unknown>).role
-          const content = (entry as Record<string, unknown>).content
-          if (typeof content !== "string" || !content.trim()) return ""
-          return `${role === "assistant" ? "Assistant" : "You"}: ${content.trim()}`
-        })
-        .filter(Boolean)
-    : []
-
-  if (!summary && transcript.length === 0) {
-    return NextResponse.json({ error: "Add a short note or chat first." }, { status: 400 })
+  const authorization = request.headers.get("authorization") ?? ""
+  if (!authorization) {
+    return NextResponse.json({ error: "Sign in to send this chat to IT support." }, { status: 401 })
   }
 
-  const ticketId = `IT-${Date.now().toString(36).toUpperCase()}`
-  console.info("[support-escalate]", ticketId, summary || transcript.at(-1))
-
-  return NextResponse.json({
-    ticketId,
-    message: "IT support has the conversation and will follow up.",
-  })
+  try {
+    const response = await fetch(backendEscalateUrl(), {
+      method: "POST",
+      headers: {
+        Authorization: authorization,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    })
+    const payload = (await response.json()) as Record<string, unknown>
+    if (!response.ok) {
+      return NextResponse.json(
+        {
+          error:
+            (typeof payload.message === "string" && payload.message) ||
+            (typeof payload.error === "string" && payload.error) ||
+            "Could not email IT support.",
+        },
+        { status: response.status },
+      )
+    }
+    return NextResponse.json(payload)
+  } catch {
+    return NextResponse.json(
+      { error: "Could not reach the mail service. Check SMTP settings and try again." },
+      { status: 502 },
+    )
+  }
 }

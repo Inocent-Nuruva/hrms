@@ -49,7 +49,9 @@ import {
   updateAccessScheduleTemplate,
 } from "@/lib/admin-api"
 import { canPerformPermission } from "@/lib/dashboard-permissions"
+import { canSeeDashboardPage } from "@/lib/forbidden-routes"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
+import { useForbiddenRouteGuard } from "@/hooks/use-forbidden-route-guard"
 import { useDebouncedValue } from "@/hooks/use-debounced-value"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import { readStoredCompanyName } from "@/components/dashboard/admin-view-shared"
@@ -808,6 +810,11 @@ export function AccessControlManagementView({
     readStoredCompanyName()
   )
   const activeSection = (Object.keys(ROUTE_TO_RESOURCE).includes(section) ? section : "doors") as AccessControlSectionKey
+  const sectionPath = `/dashboard/access-control/${activeSection}`
+  const canAccess =
+    actor.ready &&
+    canSeeDashboardPage(sectionPath, actor.permissionLabels, actor.accessMode)
+  useForbiddenRouteGuard(canAccess)
   const resource = ROUTE_TO_RESOURCE[activeSection]
   const fields = React.useMemo(() => SECTION_FIELDS[activeSection], [activeSection])
   const fieldAliases = React.useMemo(() => FIELD_VALUE_ALIASES[activeSection], [activeSection])
@@ -1015,8 +1022,9 @@ export function AccessControlManagementView({
   }, [activeSection, debouncedTemplateSearch, resource, templateStatusFilter, templateTypeFilter, title])
 
   React.useEffect(() => {
+    if (!canAccess) return
     void fetchRows()
-  }, [fetchRows])
+  }, [canAccess, fetchRows])
 
   React.useEffect(() => {
     setCurrentCompanyName(readStoredCompanyName())
@@ -1396,6 +1404,8 @@ export function AccessControlManagementView({
   const canDelete =
     actor.ready &&
     canPerformPermission(actor.permissionLabels, `${SECTION_PERMISSION_PREFIX[activeSection]}:delete`)
+
+  if (!canAccess) return null
 
   return (
     <div className="w-full space-y-2">

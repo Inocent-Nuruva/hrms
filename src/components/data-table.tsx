@@ -105,6 +105,12 @@ import {
   toPermissionOptions,
   type PermissionOption,
 } from "@/components/dashboard/permission-picker";
+import { RoleSuggestionStrip } from "@/components/dashboard/role-suggestion-strip";
+import {
+  availableRoleSuggestions,
+  resolveSuggestionPermissions,
+  type ResolvedRoleSuggestion,
+} from "@/components/dashboard/role-suggestions";
 import {
   CheckIcon,
   CopyIcon,
@@ -124,6 +130,8 @@ import {
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { usePublishedCompanyModules } from "@/hooks/use-company-modules";
+import { useDashboardActor } from "@/hooks/use-dashboard-actor";
 
 interface DataTableProps {
   token: string;
@@ -1079,6 +1087,13 @@ export function DataTable({
 }: DataTableProps) {
   const shouldReduceMotion = useReducedMotion();
   const shouldAnimateRows = !shouldReduceMotion;
+  const companyModules = usePublishedCompanyModules();
+  const dashboardActor = useDashboardActor();
+  const canUsePermissionCatalog = companyModules.permissions !== false;
+  const canUsePermissionCatalogRef = React.useRef(canUsePermissionCatalog);
+  React.useEffect(() => {
+    canUsePermissionCatalogRef.current = canUsePermissionCatalog;
+  }, [canUsePermissionCatalog]);
   const [searchInput, setSearchInput] = React.useState(usersQuery.search);
   const [createUserForm, setCreateUserForm] =
     React.useState<UserFormState>(EMPTY_USER_FORM);
@@ -1118,6 +1133,8 @@ export function DataTable({
   >([]);
   const [createAccessOpen, setCreateAccessOpen] = React.useState(false);
   const [roleKeyTouched, setRoleKeyTouched] = React.useState(false);
+  const [activeRoleSuggestion, setActiveRoleSuggestion] =
+    React.useState<ResolvedRoleSuggestion | null>(null);
   const [companyForm, setCompanyForm] =
     React.useState<CompanyForm>(EMPTY_COMPANY_FORM);
   const [editingEntity, setEditingEntity] = React.useState<{
@@ -1205,6 +1222,13 @@ export function DataTable({
         pickerPermissions.length > 0 ? pickerPermissions : permissions,
       ),
     [permissions, pickerPermissions],
+  );
+  const roleSuggestions = React.useMemo(
+    () =>
+      activeResource === "roles"
+        ? availableRoleSuggestions(rows, permissionOptions)
+        : [],
+    [activeResource, permissionOptions, rows],
   );
 
   React.useEffect(() => {
@@ -1320,6 +1344,42 @@ export function DataTable({
     },
     [permissionOptions],
   );
+
+  const applyRoleSuggestion = React.useCallback(
+    (suggestion: ResolvedRoleSuggestion) => {
+      const resolved = resolveSuggestionPermissions(
+        suggestion,
+        permissionOptions.map((option) => option.name),
+      );
+      setRoleForm({
+        name: suggestion.key,
+        display_name: suggestion.displayName,
+        description: suggestion.description,
+      });
+      setRolePermissionNames(
+        canonicalizePermissionNames(
+          resolved.length > 0 ? resolved : suggestion.permissionNames,
+          permissionOptions,
+        ),
+      );
+      setRoleKeyTouched(true);
+      setActiveRoleSuggestion(suggestion);
+      setCreateAccessOpen(true);
+    },
+    [permissionOptions],
+  );
+
+  React.useEffect(() => {
+    if (!activeRoleSuggestion || permissionOptions.length === 0) return;
+    setRolePermissionNames((current) => {
+      if (current.length > 0) return current;
+      const resolved = resolveSuggestionPermissions(
+        activeRoleSuggestion,
+        permissionOptions.map((option) => option.name),
+      );
+      return canonicalizePermissionNames(resolved, permissionOptions);
+    });
+  }, [activeRoleSuggestion, permissionOptions]);
 
   const canCreateResource = hasActorPermission(
     actorPermissions,
@@ -1441,11 +1501,14 @@ export function DataTable({
           name: roleForm.name.trim(),
           display_name: roleForm.display_name.trim(),
           description: roleForm.description.trim(),
-          permission_ids: permissionIdsFromSelection(rolePermissionNames),
+          permission_ids: canUsePermissionCatalog
+            ? permissionIdsFromSelection(rolePermissionNames)
+            : [],
         });
         setRoleForm(EMPTY_ENTITY_FORM);
         setRolePermissionNames([]);
         setRoleKeyTouched(false);
+        setActiveRoleSuggestion(null);
         setCreateAccessOpen(false);
       }
 
@@ -1707,17 +1770,21 @@ export function DataTable({
             </span>
           ),
         },
-        {
-          key: "permissions_count",
-          label: "Permissions",
-          defaultWidth: 110,
-          sortable: true,
-          render: (row) => (
-            <span className="text-sm tabular-nums text-slate-700 dark:text-slate-300">
-              {row.permissions_count ?? 0}
-            </span>
-          ),
-        },
+        ...(canUsePermissionCatalog
+          ? ([
+              {
+                key: "permissions_count",
+                label: "Permissions",
+                defaultWidth: 110,
+                sortable: true,
+                render: (row) => (
+                  <span className="text-sm tabular-nums text-slate-700 dark:text-slate-300">
+                    {row.permissions_count ?? 0}
+                  </span>
+                ),
+              },
+            ] as Column<AccessControlTableRow>[])
+          : []),
         {
           key: "description",
           label: "Description",
@@ -1742,7 +1809,13 @@ export function DataTable({
         },
         actionsColumn,
       ];
-    }, [activeResource, canDeleteResource, openAccessControlRow, handleDelete]);
+    }, [
+      activeResource,
+      canDeleteResource,
+      canUsePermissionCatalog,
+      handleDelete,
+      openAccessControlRow,
+    ]);
 
   const handleSetPassword = async () => {
     if (!token || !targetPasswordUser) {
@@ -1924,8 +1997,14 @@ export function DataTable({
     // in-place label updates don't reset the detail sheet's tab/search/picker state.
   }, [editingEntity?.id, editingEntity?.resource]);
 
+  const roleSheetTab: DetailSheetTab =
+    !canUsePermissionCatalog && detailSheetTab === "permissions"
+      ? "assigned"
+      : detailSheetTab;
+
   React.useEffect(() => {
     const needsCatalog =
+      canUsePermissionCatalogRef.current &&
       Boolean(token) &&
       (editingEntity?.resource === "roles" ||
         (createAccessOpen && activeResource === "roles"));
@@ -2041,9 +2120,11 @@ export function DataTable({
 
           const [roleDetail, rolePermissions] = await Promise.all([
             getRoleById(entityId, token).catch(() => null),
-            listRolePermissions(token, entityId).catch(
-              () => [] as AdminRecord[],
-            ),
+            canUsePermissionCatalogRef.current
+              ? listRolePermissions(token, entityId).catch(
+                  () => [] as AdminRecord[],
+                )
+              : Promise.resolve([] as AdminRecord[]),
           ]);
           if (cancelled) return;
 
@@ -2117,7 +2198,7 @@ export function DataTable({
       }
     };
 
-    if (editingEntity.resource === "roles") {
+    if (editingEntity.resource === "roles" && canUsePermissionCatalogRef.current) {
       setRolePermissionsLoading(true);
     }
     void loadMembers();
@@ -2374,7 +2455,11 @@ export function DataTable({
   };
 
   const handleRolePermissionsChange = (nextNames: string[]) => {
-    if (!editingEntity || editingEntity.resource !== "roles") {
+    if (
+      !canUsePermissionCatalog ||
+      !editingEntity ||
+      editingEntity.resource !== "roles"
+    ) {
       return;
     }
     rolePermissionsDraftDirtyRef.current = true;
@@ -2384,7 +2469,12 @@ export function DataTable({
   };
 
   const handleSaveRolePermissions = async () => {
-    if (!token || !editingEntity || editingEntity.resource !== "roles") {
+    if (
+      !canUsePermissionCatalog ||
+      !token ||
+      !editingEntity ||
+      editingEntity.resource !== "roles"
+    ) {
       return;
     }
 
@@ -2540,7 +2630,10 @@ export function DataTable({
         <button
           type="button"
           className="inline-flex h-8 items-center justify-center gap-1 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white transition hover:brightness-95"
-          onClick={() => setCreateAccessOpen(true)}
+          onClick={() => {
+            setActiveRoleSuggestion(null);
+            setCreateAccessOpen(true);
+          }}
         >
           <PlusIcon className="h-3.5 w-3.5" />
           <span className="hidden sm:inline">
@@ -2555,6 +2648,7 @@ export function DataTable({
               setRoleForm(EMPTY_ENTITY_FORM);
               setRolePermissionNames([]);
               setRoleKeyTouched(false);
+              setActiveRoleSuggestion(null);
             }
           }}
         >
@@ -2568,7 +2662,9 @@ export function DataTable({
               </DialogTitle>
               <DialogDescription className="text-xs">
                 {isCreatingRole
-                  ? "Give it a name, then pick what this role can do."
+                  ? activeRoleSuggestion
+                    ? `Started from ${activeRoleSuggestion.displayName}. Review the selected permissions, then create.`
+                    : "Give it a name, then pick what this role can do."
                   : "Add a permission key and a short label."}
               </DialogDescription>
             </DialogHeader>
@@ -2637,13 +2733,26 @@ export function DataTable({
                   placeholder="What this is for"
                 />
               </div>
-              {isCreatingRole ? (
+              {isCreatingRole && canUsePermissionCatalog ? (
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Permissions</Label>
+                  <Label className="text-xs">
+                    Permissions
+                    {rolePermissionNames.length > 0 ? (
+                      <span className="ml-1 font-normal text-muted-foreground">
+                        {rolePermissionNames.length} selected
+                      </span>
+                    ) : null}
+                  </Label>
+                  {activeRoleSuggestion ? (
+                    <p className="text-[11px] text-muted-foreground">
+                      Selected permissions are shown first. Uncheck anything this role should not have.
+                    </p>
+                  ) : null}
                   <div className="rounded-md border border-slate-200 p-2 dark:border-border">
                     <PermissionPicker
                       compact
                       loading={pickerPermissionsLoading}
+                      reviewSelected={Boolean(activeRoleSuggestion)}
                       options={permissionOptions}
                       selectedNames={rolePermissionNames}
                       onChange={setRolePermissionNames}
@@ -3044,6 +3153,15 @@ export function DataTable({
                 {error}
               </div>
             ) : (
+              <div className="space-y-3">
+              {activeResource === "roles" &&
+              canCreateResource &&
+              dashboardActor.scope !== "platform" ? (
+                <RoleSuggestionStrip
+                  suggestions={roleSuggestions}
+                  onUse={applyRoleSuggestion}
+                />
+              ) : null}
               <ResizableTable
                 key={`access-control-${activeResource}`}
                 title={RESOURCE_LABELS[activeResource]}
@@ -3134,6 +3252,7 @@ export function DataTable({
                   </>
                 }
               />
+              </div>
             )}
           </div>
         ) : null}
@@ -3821,7 +3940,9 @@ export function DataTable({
               </DialogTitle>
               <DialogDescription className="mt-0.5 text-xs text-muted-foreground sm:text-sm">
                 {editingEntity?.resource === "roles"
-                  ? "Review role details, assigned people, and included permissions."
+                  ? canUsePermissionCatalog
+                    ? "Review role details, assigned people, and included permissions."
+                    : "Review role details and assigned people."
                   : "Review this permission and manage direct user grants."}
               </DialogDescription>
             </div>
@@ -3831,20 +3952,22 @@ export function DataTable({
                   ? [
                       { id: "general", label: "General" },
                       { id: "assigned", label: "Assigned" },
-                      { id: "permissions", label: "Permissions" },
+                      ...(canUsePermissionCatalog
+                        ? [{ id: "permissions" as const, label: "Permissions" }]
+                        : []),
                     ]
                   : [
                       { id: "general", label: "General" },
                       { id: "assigned", label: "Assigned" },
                     ]
               }
-              value={detailSheetTab}
+              value={roleSheetTab}
               onChange={setDetailSheetTab}
             />
           </DialogHeader>
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-5 py-3 sm:px-6 sm:py-4">
-            {detailSheetTab === "general" ? (
+            {roleSheetTab === "general" ? (
               <div className="space-y-4 overflow-y-auto">
                 {canUpdateResource ? (
                   <>
@@ -3926,7 +4049,8 @@ export function DataTable({
                     </div>
                   </>
                 )}
-                {editingEntity?.resource === "roles" ? (
+                {editingEntity?.resource === "roles" &&
+                canUsePermissionCatalog ? (
                   <div className="space-y-1">
                     <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                       Permissions included
@@ -3940,7 +4064,7 @@ export function DataTable({
               </div>
             ) : null}
 
-            {detailSheetTab === "assigned" ? (
+            {roleSheetTab === "assigned" ? (
               <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-hidden">
                 <div className="flex shrink-0 items-center gap-2">
                   <div className="min-w-0 flex-1">
@@ -4086,7 +4210,8 @@ export function DataTable({
               </div>
             ) : null}
 
-            {detailSheetTab === "permissions" &&
+            {canUsePermissionCatalog &&
+            roleSheetTab === "permissions" &&
             editingEntity?.resource === "roles" ? (
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                 {membersLoading || rolePermissionsLoading ? (
@@ -4117,7 +4242,7 @@ export function DataTable({
 
           <DialogFooter className="mt-0 shrink-0 border-t border-border/70 px-6 py-3">
             {canUpdateResource &&
-            detailSheetTab === "general" &&
+            roleSheetTab === "general" &&
             isEditingEntityDirty ? (
               <Button
                 type="button"
@@ -4127,8 +4252,9 @@ export function DataTable({
                 Save changes
               </Button>
             ) : null}
-            {canUpdateResource &&
-            detailSheetTab === "permissions" &&
+            {canUsePermissionCatalog &&
+            canUpdateResource &&
+            roleSheetTab === "permissions" &&
             editingEntity?.resource === "roles" &&
             isRolePermissionsDirty ? (
               <Button

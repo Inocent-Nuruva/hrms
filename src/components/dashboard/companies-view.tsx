@@ -15,7 +15,7 @@ import {
 
 import { SearchToggleField } from "@/components/common/search-toggle-field"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
-import { Textarea } from "@/components/ui/textarea"
+
 import { useDebouncedValue } from "@/hooks/use-debounced-value"
 import {
   activateCompany,
@@ -25,6 +25,7 @@ import {
   createCurrentCompanyUser,
   deleteCurrentCompanyUser,
   getCompanyById,
+  getCompanyModules,
   getCurrentCompanyOnboardingStatus,
   getMyCompany,
   listCurrentCompanyUsers,
@@ -35,12 +36,25 @@ import {
   revokeRoleFromCurrentCompanyUser,
   suspendCompany,
   updateCompanyById,
+  updateCompanyModules,
   type AdminRecord,
   type UsersQueryParams,
 } from "@/lib/admin-api"
+import { usePublishedCompanyModules } from "@/hooks/use-company-modules"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { useAuth } from "@/hooks/useAuth"
 import { useForbiddenRouteGuard, useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
+import {
+  companyModulesSummary,
+  DEFAULT_COMPANY_MODULES,
+  parseCompanyModules,
+  parseCompanyModulesFromCompany,
+  readRememberedCompanyModules,
+  rememberCompanyModules,
+  toCompanyModulesPayload,
+  withCompanyModules,
+  type CompanyModules,
+} from "@/lib/company-modules"
 import {
   canAccessDashboardRoute,
   canPerformPermission,
@@ -71,7 +85,7 @@ const DEFAULT_MEMBERS_QUERY: Required<UsersQueryParams> = {
 
 type CompanyForm = {
   name: string
-  metadata: string
+  modules: CompanyModules
 }
 
 type CreateCompanyForm = {
@@ -82,6 +96,7 @@ type CreateCompanyForm = {
   adminEmail: string
   adminPhone: string
   adminPassword: string
+  modules: CompanyModules
 }
 
 const EMPTY_CREATE_COMPANY_FORM: CreateCompanyForm = {
@@ -92,6 +107,58 @@ const EMPTY_CREATE_COMPANY_FORM: CreateCompanyForm = {
   adminEmail: "",
   adminPhone: "",
   adminPassword: "",
+  modules: { ...DEFAULT_COMPANY_MODULES },
+}
+
+function CompanyModulesFields({
+  value,
+  onChange,
+}: {
+  value: CompanyModules
+  onChange: (next: CompanyModules) => void
+}) {
+  return (
+    <fieldset className="grid gap-2 sm:col-span-2">
+      <legend className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        Roles and permissions
+      </legend>
+      <p className="text-sm text-muted-foreground">
+        Enable or deny each catalog independently for this company. Platform
+        administrators keep Access Governance regardless.
+      </p>
+      <label className="flex items-start gap-2 border border-border bg-background px-3 py-2">
+        <input
+          type="checkbox"
+          className="mt-1"
+          checked={value.roles}
+          onChange={(event) => onChange({ ...value, roles: event.target.checked })}
+        />
+        <span>
+          <span className="block text-sm font-medium text-foreground">Enable roles</span>
+          <span className="block text-xs text-muted-foreground">
+            Allows this company to view and manage roles in its dashboard.
+          </span>
+        </span>
+      </label>
+      <label className="flex items-start gap-2 border border-border bg-background px-3 py-2">
+        <input
+          type="checkbox"
+          className="mt-1"
+          checked={value.permissions}
+          onChange={(event) =>
+            onChange({ ...value, permissions: event.target.checked })
+          }
+        />
+        <span>
+          <span className="block text-sm font-medium text-foreground">Enable permissions</span>
+          <span className="block text-xs text-muted-foreground">
+            Allows this company to view and manage the permission catalog. Can stay
+            off while roles remain enabled.
+          </span>
+        </span>
+      </label>
+    </fieldset>
+  )
 }
 
 type CurrentCompanyUserForm = {
@@ -136,6 +203,12 @@ function readNumber(row: AdminRecord, keys: string[]) {
     if (typeof value === "number" && Number.isFinite(value)) {
       return value
     }
+    if (typeof value === "bigint") {
+      const parsed = Number(value)
+      if (Number.isFinite(parsed)) {
+        return parsed
+      }
+    }
     if (typeof value === "string" && value.trim()) {
       const parsed = Number(value)
       if (Number.isFinite(parsed)) {
@@ -146,23 +219,9 @@ function readNumber(row: AdminRecord, keys: string[]) {
   return null
 }
 
-function safeJsonParse(value: string) {
-  try {
-    return JSON.parse(value) as Record<string, unknown>
-  } catch {
-    return null
-  }
-}
-
-function formatMetadata(value: unknown) {
-  if (!value || typeof value !== "object") {
-    return ""
-  }
-  try {
-    return JSON.stringify(value, null, 2)
-  } catch {
-    return ""
-  }
+function readCompanyId(row: AdminRecord | null | undefined) {
+  if (!row) return null
+  return readNumber(row, ["id", "company_id", "companyId"])
 }
 
 function readCompletedStepNames(status: AdminRecord) {
@@ -382,6 +441,8 @@ export function CompaniesView() {
   const actorPermissions = actor.permissionLabels
   const permissionsReady = actor.ready
   const isPlatformScope = actor.scope === "platform"
+  const companyModules = usePublishedCompanyModules()
+  const canUsePermissionCatalog = companyModules.permissions !== false
   const canAccessCompaniesRoute =
     permissionsReady &&
     canAccessDashboardRoute("/dashboard/companies", actorPermissions, actor.accessMode)
@@ -399,7 +460,11 @@ export function CompaniesView() {
   const debouncedSearch = useDebouncedValue(search, 300)
 
   const [editingCompany, setEditingCompany] = React.useState<AdminRecord | null>(null)
-  const [companyForm, setCompanyForm] = React.useState<CompanyForm>({ name: "", metadata: "" })
+  const [editingCompanyId, setEditingCompanyId] = React.useState<number | null>(null)
+  const [companyForm, setCompanyForm] = React.useState<CompanyForm>({
+    name: "",
+    modules: { ...DEFAULT_COMPANY_MODULES },
+  })
   const [pendingStatusChange, setPendingStatusChange] = React.useState<{
     company: AdminRecord
     nextAction: "activate" | "suspend"
@@ -480,7 +545,20 @@ export function CompaniesView() {
     if (isPlatformScope) {
       try {
         const companies = await probePlatformCompaniesList(token)
-        setRows(companies)
+        const hydrated = await Promise.all(
+          companies.map(async (row) => {
+            const id = readCompanyId(row)
+            if (id === null) return row
+            const payload = await getCompanyModules(token, id).catch(() => null)
+            const modules = payload
+              ? parseCompanyModules(payload)
+              : readRememberedCompanyModules(id)
+            if (!modules) return row
+            rememberCompanyModules(id, modules)
+            return withCompanyModules(row, modules)
+          }),
+        )
+        setRows(hydrated)
         setMyCompany(null)
         setOnboardingStatus(null)
         setMembers([])
@@ -515,7 +593,9 @@ export function CompaniesView() {
         { cacheTtlMs: env.NEXT_PUBLIC_LIST_CACHE_TTL_SHORT_MS },
       ).then((result) => result.rows),
       listResource("roles", token, { pageAll: false }),
-      listResource("permissions", token, { pageAll: false }),
+      canUsePermissionCatalog
+        ? listResource("permissions", token, { pageAll: false })
+        : Promise.resolve([] as AdminRecord[]),
     ])
 
     const value = <T,>(index: number, fallback: T): T => {
@@ -543,7 +623,13 @@ export function CompaniesView() {
     setError(contextError)
     setMembersError(reason(2))
     setLoading(false)
-  }, [canAccessCompaniesRoute, isPlatformScope, leaveIfForbidden, permissionsReady])
+  }, [
+    canAccessCompaniesRoute,
+    canUsePermissionCatalog,
+    isPlatformScope,
+    leaveIfForbidden,
+    permissionsReady,
+  ])
 
   React.useEffect(() => {
     void loadData()
@@ -617,6 +703,13 @@ export function CompaniesView() {
       render: (row) => companyStatus(row),
     },
     {
+      key: "modules",
+      label: "Roles & permissions",
+      defaultWidth: 170,
+      sortable: false,
+      render: (row) => companyModulesSummary(parseCompanyModulesFromCompany(row)),
+    },
+    {
       key: "actions",
       label: "Actions",
       defaultWidth: 220,
@@ -660,25 +753,35 @@ export function CompaniesView() {
                 className="admin-table-icon-button"
                 onClick={async () => {
                   const token = readStoredToken()
-                  const id = readNumber(row, ["id"])
+                  const id = readCompanyId(row)
                   if (!token || id === null) {
                     return
                   }
-                  setSaving(true)
                   setError(null)
+                  setEditingCompanyId(id)
                   try {
                     const detail = (await getCompanyById(token, id)) ?? row
-                    setEditingCompany(detail)
+                    const modulesPayload = await getCompanyModules(token, id).catch(() => null)
+                    const modules = modulesPayload
+                      ? parseCompanyModules(modulesPayload)
+                      : parseCompanyModulesFromCompany({ ...row, ...detail })
+                    rememberCompanyModules(id, modules)
+                    setEditingCompany({
+                      ...row,
+                      ...detail,
+                      id,
+                    })
                     setCompanyForm({
-                      name: readString(detail, ["name", "company_name", "display_name"]) === "-"
-                        ? ""
-                        : readString(detail, ["name", "company_name", "display_name"]),
-                      metadata: formatMetadata(detail.metadata),
+                      name: readString(detail, ["name", "company_name", "display_name", "companyName"]) === "-"
+                        ? readString(row, ["name", "company_name", "display_name", "companyName"]) === "-"
+                          ? ""
+                          : readString(row, ["name", "company_name", "display_name", "companyName"])
+                        : readString(detail, ["name", "company_name", "display_name", "companyName"]),
+                      modules,
                     })
                   } catch (errorObject) {
+                    setEditingCompanyId(null)
                     setError(errorObject instanceof Error ? errorObject.message : "Failed to load company details.")
-                  } finally {
-                    setSaving(false)
                   }
                 }}
                 aria-label="Edit company"
@@ -741,18 +844,22 @@ export function CompaniesView() {
         return ids.slice(0, 3).map(roleNameById).join(", ")
       },
     },
-    {
-      key: "direct_permissions",
-      label: "Direct Permissions",
-      defaultWidth: 180,
-      render: (row) => {
-        const ids = memberPermissionIds(row)
-        if (ids.length === 0) {
-          return "-"
-        }
-        return ids.slice(0, 2).map(permissionNameById).join(", ")
-      },
-    },
+    ...(canUsePermissionCatalog
+      ? [
+          {
+            key: "direct_permissions",
+            label: "Direct Permissions",
+            defaultWidth: 180,
+            render: (row: AdminRecord) => {
+              const ids = memberPermissionIds(row)
+              if (ids.length === 0) {
+                return "-"
+              }
+              return ids.slice(0, 2).map(permissionNameById).join(", ")
+            },
+          } satisfies Column<AdminRecord>,
+        ]
+      : []),
     {
       key: "actions",
       label: "Actions",
@@ -870,7 +977,7 @@ export function CompaniesView() {
     setError(null)
     setSuccessMessage(null)
     try {
-      await createCompany(token, {
+      const created = await createCompany(token, {
         company_name: createCompanyForm.companyName.trim(),
         ...(createCompanyForm.companySlug.trim()
           ? { company_slug: createCompanyForm.companySlug.trim() }
@@ -881,6 +988,20 @@ export function CompaniesView() {
         admin_phone: createCompanyForm.adminPhone.trim(),
         admin_password: createCompanyForm.adminPassword,
       })
+      const createdRecord =
+        created && typeof created === "object" && !Array.isArray(created)
+          ? (created as AdminRecord)
+          : null
+      const nestedCreated =
+        createdRecord && typeof createdRecord.data === "object" && createdRecord.data
+          ? (createdRecord.data as AdminRecord)
+          : createdRecord
+      const createdId = readCompanyId(nestedCreated) ?? readCompanyId(createdRecord)
+      if (createdId !== null) {
+        const modules = toCompanyModulesPayload(createCompanyForm.modules)
+        await updateCompanyModules(token, createdId, modules)
+        rememberCompanyModules(createdId, modules)
+      }
       setShowCreateCompany(false)
       setCreateCompanyForm(EMPTY_CREATE_COMPANY_FORM)
       setSuccessMessage("Company and its first administrator were created successfully.")
@@ -894,26 +1015,29 @@ export function CompaniesView() {
 
   async function saveCompany() {
     const token = readStoredToken()
-    const companyId = readNumber(editingCompany ?? {}, ["id"])
-    if (!token || companyId === null || !editingCompany) {
+    const companyId = editingCompanyId ?? readCompanyId(editingCompany)
+    if (!token) {
+      setError("Authentication required. Please log in again.")
       return
     }
-
-    const metadataText = companyForm.metadata.trim()
-    const metadata = metadataText ? safeJsonParse(metadataText) : null
-    if (metadataText && !metadata) {
-      setError("Metadata must be valid JSON.")
+    if (companyId === null || !editingCompany) {
+      setError("This company record is missing an id, so it cannot be saved.")
       return
     }
 
     setSaving(true)
     setError(null)
     try {
+      const name = companyForm.name.trim()
       await updateCompanyById(token, companyId, {
-        name: companyForm.name.trim(),
-        metadata,
+        name,
+        company_name: name,
       })
+      const modules = toCompanyModulesPayload(companyForm.modules)
+      await updateCompanyModules(token, companyId, modules)
+      rememberCompanyModules(companyId, modules)
       setEditingCompany(null)
+      setEditingCompanyId(null)
       await loadData()
     } catch (errorObject) {
       setError(errorObject instanceof Error ? errorObject.message : "Failed to update company.")
@@ -991,7 +1115,9 @@ export function CompaniesView() {
     const removeRoleIds = Array.from(previousRoleIds).filter((id) => !nextRoleIds.has(id))
 
     const previousPermissionIds = new Set(memberPermissionIds(editingMember))
-    const nextPermissionIds = new Set(editingMemberPermissionIds)
+    const nextPermissionIds = new Set(
+      canUsePermissionCatalog ? editingMemberPermissionIds : Array.from(previousPermissionIds),
+    )
     const addPermissionIds = Array.from(nextPermissionIds).filter((id) => !previousPermissionIds.has(id))
     const removePermissionIds = Array.from(previousPermissionIds).filter((id) => !nextPermissionIds.has(id))
 
@@ -1377,6 +1503,12 @@ export function CompaniesView() {
                 />
                 <span className="text-xs text-muted-foreground">Minimum 8 characters.</span>
               </label>
+              <CompanyModulesFields
+                value={createCompanyForm.modules}
+                onChange={(modules) =>
+                  setCreateCompanyForm((previous) => ({ ...previous, modules }))
+                }
+              />
             </div>
 
             {error ? <p className="mt-3 text-sm text-rose-600">{error}</p> : null}
@@ -1407,42 +1539,53 @@ export function CompaniesView() {
       ) : null}
 
       {editingCompany ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-          <div className="w-full max-w-2xl rounded-lg border border-slate-200 bg-white p-4 shadow-lg">
-            <h3 className="text-lg font-semibold text-slate-900">Edit Company</h3>
-            <div className="mt-3 grid gap-3">
-              <label className="grid gap-1">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Name</span>
-                <input
-                  className="h-10 rounded-md border border-slate-300 px-3 text-sm"
-                  value={companyForm.name}
-                  onChange={(event) =>
-                    setCompanyForm((previous) => ({ ...previous, name: event.target.value }))
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/40 p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="edit-company-title"
+            className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden border border-border bg-background shadow-xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h3 id="edit-company-title" className="shrink-0 px-4 pt-4 text-lg font-semibold text-foreground">
+              Edit Company
+            </h3>
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+              <div className="grid gap-3">
+                <label className="grid gap-1">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Name</span>
+                  <input
+                    className="h-10 border border-border bg-background px-3 text-sm"
+                    value={companyForm.name}
+                    onChange={(event) =>
+                      setCompanyForm((previous) => ({ ...previous, name: event.target.value }))
+                    }
+                  />
+                </label>
+                <CompanyModulesFields
+                  value={companyForm.modules}
+                  onChange={(modules) =>
+                    setCompanyForm((previous) => ({ ...previous, modules }))
                   }
                 />
-              </label>
-              <label className="grid gap-1">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Metadata JSON</span>
-                <Textarea
-                  className="min-h-32 rounded-md border border-slate-300 px-3 py-2 text-sm font-mono"
-                  value={companyForm.metadata}
-                  onChange={(event) =>
-                    setCompanyForm((previous) => ({ ...previous, metadata: event.target.value }))
-                  }
-                />
-              </label>
+              </div>
+              {error ? <p className="mt-3 text-sm text-rose-600">{error}</p> : null}
             </div>
-            <div className="mt-4 flex justify-end gap-2">
+            <div className="flex shrink-0 justify-end gap-2 border-t border-border px-4 py-3">
               <button
                 type="button"
-                className="rounded-md border border-slate-300 px-3 py-2 text-sm"
-                onClick={() => setEditingCompany(null)}
+                className="inline-flex h-9 cursor-pointer items-center border border-border bg-card px-3 text-sm font-medium text-foreground transition hover:bg-muted"
+                onClick={() => {
+                  setEditingCompany(null)
+                  setEditingCompanyId(null)
+                  setError(null)
+                }}
               >
                 Cancel
               </button>
               <button
                 type="button"
-                className="rounded-md bg-primary px-3 py-2 text-sm font-medium !text-white transition hover:brightness-95 disabled:opacity-60"
+                className="inline-flex h-9 cursor-pointer items-center bg-primary px-3 text-sm font-semibold text-white transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
                 disabled={saving}
                 onClick={() => void saveCompany()}
               >
@@ -1459,7 +1602,7 @@ export function CompaniesView() {
             <h3 className="text-lg font-semibold text-slate-900">
               Manage Access: {currentCompanyUserLabel(editingMember)}
             </h3>
-            <div className="mt-4 grid gap-4 lg:grid-cols-2">
+            <div className={`mt-4 grid gap-4 ${canUsePermissionCatalog ? "lg:grid-cols-2" : ""}`}>
               <fieldset className="grid gap-1">
                 <legend className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Company Roles
@@ -1491,6 +1634,7 @@ export function CompaniesView() {
                 </div>
               </fieldset>
 
+              {canUsePermissionCatalog ? (
               <fieldset className="grid gap-1">
                 <legend className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Direct Permissions
@@ -1521,6 +1665,7 @@ export function CompaniesView() {
                   </div>
                 </div>
               </fieldset>
+              ) : null}
             </div>
 
             {membersError ? <p className="mt-3 text-sm text-rose-600">{membersError}</p> : null}

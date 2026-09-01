@@ -22,6 +22,7 @@ import {
   cloneOnboardingWorkflow,
   createOnboardingRequest,
   createOnboardingTask,
+  ensureDraftOnboardingRequest,
   createOnboardingWorkflow,
   createOnboardingWorkflowStep,
   delegateOnboardingApproval,
@@ -281,6 +282,49 @@ function getEmployeeEmploymentStatus(row: AdminRecord) {
 
 function isOnboardingEligibleEmployee(row: AdminRecord) {
   return ONBOARDING_ELIGIBLE_EMPLOYEE_STATUSES.has(getEmployeeEmploymentStatus(row))
+}
+
+function isPendingOnboardingRow(row: AdminRecord) {
+  return row.pending_employee_onboarding === true
+}
+
+function collectRequestEmployeeIds(rows: AdminRecord[]) {
+  const ids = new Set<number>()
+  rows.forEach((row) => {
+    if (isPendingOnboardingRow(row)) {
+      const pendingId = readNumber(row, ["employee_id", "employeeId"])
+      if (pendingId !== null) {
+        ids.add(pendingId)
+      }
+      return
+    }
+    const nested = toRecord(row.employee) ?? toRecord(row.employee_profile)
+    const id =
+      readNumber(row, ["employee_id", "employeeId"]) ??
+      readNumber(nested ?? {}, ["id", "employee_id", "employeeId"])
+    if (id !== null) {
+      ids.add(id)
+    }
+  })
+  return ids
+}
+
+function defaultOnboardingWorkflowId(workflows: AdminRecord[]) {
+  const preferred =
+    workflows.find((row) => row.is_default === true || row.isDefault === true) ?? workflows[0] ?? null
+  return preferred ? readNumber(preferred, ["id", "workflow_id"]) : null
+}
+
+function buildPendingOnboardingRow(employee: AdminRecord): AdminRecord {
+  const employeeId = readNumber(employee, ["id", "employee_id", "employeeId"])
+  const name = getEmployeeDisplayName(employee) || formatEmployeeOptionLabel(employee, employeeId)
+  return {
+    pending_employee_onboarding: true,
+    employee_id: employeeId,
+    employee,
+    title: name && name !== "Unknown employee" ? `Onboarding for ${name}` : "Onboarding",
+    status: PENDING_ONBOARDING_STATUS,
+  }
 }
 
 function mergeEmployeeRows(...groups: AdminRecord[][]) {
@@ -553,6 +597,7 @@ function toWorkflowStepApiPayload(step: OnboardingWorkflowStepDraft) {
 
 const REQUEST_STATUS_FILTER_OPTIONS = [
   "all",
+  "not_started",
   "draft",
   "pending",
   "submitted",
@@ -564,6 +609,8 @@ const REQUEST_STATUS_FILTER_OPTIONS = [
   "cancelled",
   "completed",
 ] as const
+
+const PENDING_ONBOARDING_STATUS = "not_started"
 
 const WORKFLOW_STATUS_FILTER_OPTIONS = ["all", "active", "inactive"] as const
 
@@ -719,7 +766,7 @@ function parseAllowedActions(row: AdminRecord): Set<RequestAction> {
       picked.add("delete")
     } else if (status === "cancelled" || status === "completed") {
       picked.add("delete")
-    } else if (status) {
+    } else if (status && status !== PENDING_ONBOARDING_STATUS) {
       // Unknown non-empty status: still allow cancel when not terminal.
       if (!["completed", "cancelled", "rejected"].includes(status)) {
         picked.add("cancel")
@@ -741,7 +788,7 @@ function statusBadgeClass(status: string) {
   if (value === "active" || value === "in_progress" || value === "processing") {
     return "bg-sky-100 text-sky-700"
   }
-  if (value === "draft" || value === "pending" || value === "submitted" || value === "in_review") {
+  if (value === "draft" || value === "pending" || value === "submitted" || value === "in_review" || value === PENDING_ONBOARDING_STATUS) {
     return "bg-amber-100 text-amber-700"
   }
   return "bg-slate-100 text-slate-700"
@@ -1356,11 +1403,63 @@ export function OnboardingView() {
           setRequests(mine)
           requestsFetchKeyRef.current = fetchKey
         } else {
-          const [requestsResult] = await Promise.all([
+          const [requestsResult, employeesResult, workflowsResult] = await Promise.all([
             listOnboardingRequests(token, requestQuery),
-            loadLookups(token, ["employees", "workflows"], force),
+            listEmployees(token, {
+              page: 1,
+              limit: 200,
+              sortBy: "created_at",
+              sortOrder: "DESC",
+              employment_status: "onboarding",
+            }),
+            listOnboardingWorkflows(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
           ])
-          setRequests(requestsResult.rows)
+          const onboardingEmployees = mergeEmployeeRows(employeesResult.rows).filter(
+            isOnboardingEligibleEmployee,
+          )
+          setEmployees(onboardingEmployees)
+          setWorkflows(workflowsResult.rows)
+          setLoadedLookups((current) => ({ ...current, employees: true, workflows: true }))
+
+          let requestRows = requestsResult.rows
+          const defaultWorkflowId = defaultOnboardingWorkflowId(workflowsResult.rows)
+          const missingEmployees = onboardingEmployees.filter((employee) => {
+            const employeeId = readNumber(employee, ["id", "employee_id", "employeeId"])
+            return employeeId !== null && !collectRequestEmployeeIds(requestRows).has(employeeId)
+          })
+
+          if (canCreateOnboardingRequests && missingEmployees.length > 0) {
+            await Promise.allSettled(
+              missingEmployees.map((employee) => {
+                const employeeId = readNumber(employee, ["id", "employee_id", "employeeId"])
+                if (employeeId === null) {
+                  return Promise.resolve(null)
+                }
+                const name =
+                  getEmployeeDisplayName(employee) || formatEmployeeOptionLabel(employee, employeeId)
+                return ensureDraftOnboardingRequest(token, {
+                  employee_id: employeeId,
+                  workflow_id: defaultWorkflowId ?? undefined,
+                  title:
+                    name && name !== "Unknown employee"
+                      ? `Onboarding for ${name}`
+                      : "Onboarding",
+                })
+              })
+            )
+            const refreshed = await listOnboardingRequests(token, requestQuery)
+            requestRows = refreshed.rows
+          }
+
+          const coveredEmployeeIds = collectRequestEmployeeIds(requestRows)
+          const pendingRows = onboardingEmployees
+            .filter((employee) => {
+              const employeeId = readNumber(employee, ["id", "employee_id", "employeeId"])
+              return employeeId !== null && !coveredEmployeeIds.has(employeeId)
+            })
+            .map(buildPendingOnboardingRow)
+
+          setRequests([...pendingRows, ...requestRows])
           requestsFetchKeyRef.current = fetchKey
         }
       } else {
@@ -1383,6 +1482,7 @@ export function OnboardingView() {
     debouncedWorkflowSearch,
     loadLookups,
     isEmployeeMode,
+    canCreateOnboardingRequests,
     requestEmployeeFilter,
     requestStatusFilter,
     workflowStatusFilter,
@@ -2170,6 +2270,49 @@ export function OnboardingView() {
       await reloadAll(activeTab, true)
     } catch (errorObject) {
       const message = errorObject instanceof Error ? errorObject.message : "Failed to create workflow."
+      setError(message)
+      showErrorAlert(message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function startPendingOnboarding(row: AdminRecord) {
+    if (!canCreateOnboardingRequests) {
+      showErrorAlert("You do not have permission to create onboarding requests.")
+      return
+    }
+    const token = readStoredToken()
+    if (!token) {
+      showErrorAlert("Authentication required. Please log in again.")
+      return
+    }
+    const employee =
+      toRecord(row.employee) ??
+      employees.find((entry) => {
+        const employeeId = readNumber(entry, ["id", "employee_id", "employeeId"])
+        return employeeId !== null && employeeId === readNumber(row, ["employee_id", "employeeId"])
+      }) ??
+      row
+    const employeeId = readNumber(employee, ["id", "employee_id", "employeeId"]) ?? readNumber(row, ["employee_id"])
+    if (employeeId === null) {
+      showErrorAlert("Unable to start onboarding because the employee is missing.")
+      return
+    }
+
+    setSaving(true)
+    setError(null)
+    try {
+      const name = getEmployeeDisplayName(employee) || formatEmployeeOptionLabel(employee, employeeId)
+      await ensureDraftOnboardingRequest(token, {
+        employee_id: employeeId,
+        workflow_id: defaultOnboardingWorkflowId(workflows) ?? undefined,
+        title: name && name !== "Unknown employee" ? `Onboarding for ${name}` : "Onboarding",
+      })
+      showSuccessAlert("Onboarding request created.")
+      await reloadAll("requests", true)
+    } catch (errorObject) {
+      const message = errorObject instanceof Error ? errorObject.message : "Failed to start onboarding."
       setError(message)
       showErrorAlert(message)
     } finally {
@@ -3101,7 +3244,8 @@ export function OnboardingView() {
             </TableHeader>
             <TableBody>
               {filteredRequests.map((row, index) => {
-                const requestId = readNumber(row, ["id", "request_id"])
+                const pendingEmployee = isPendingOnboardingRow(row)
+                const requestId = pendingEmployee ? null : readNumber(row, ["id", "request_id"])
                 const requestStatus = String(
                   readString(row, ["status", "request_status", "onboarding_status", "workflow_status"])
                 ).toLowerCase()
@@ -3117,11 +3261,17 @@ export function OnboardingView() {
                 const canComplete =
                   canCompleteOnboardingRequests && !isCancelled && !isCompleted && allowedActions.has("complete")
                 const canDelete = canUpdateOnboardingRequests && allowedActions.has("delete")
+                const pendingEmployeeId = readNumber(row, ["employee_id", "employeeId"])
                 return (
                   <TableRow
-                    key={requestId ?? `request-${index}`}
+                    key={requestId ?? `pending-employee-${pendingEmployeeId ?? index}`}
                     className="cursor-pointer"
-                    onClick={() => void openRequestDetails(row)}
+                    onClick={() => {
+                      if (pendingEmployee) {
+                        return
+                      }
+                      void openRequestDetails(row)
+                    }}
                   >
                     <TableCell className="text-xs">{requestId ?? "-"}</TableCell>
                     <TableCell className="text-xs font-medium">{requestRowEmployeeLabel(row)}</TableCell>
@@ -3136,7 +3286,21 @@ export function OnboardingView() {
                         className="flex min-h-8 flex-wrap items-center justify-end gap-1"
                         onClick={(event) => event.stopPropagation()}
                       >
-                        {canApprove ? (
+                        {pendingEmployee ? (
+                          canCreateOnboardingRequests ? (
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="h-7 px-2 text-[11px]"
+                              disabled={saving}
+                              onClick={() => void startPendingOnboarding(row)}
+                            >
+                              Start
+                            </Button>
+                          ) : (
+                            <span className="text-[11px] text-muted-foreground">Awaiting request</span>
+                          )
+                        ) : canApprove ? (
                           <Button
                             type="button"
                             size="sm"
@@ -3209,7 +3373,7 @@ export function OnboardingView() {
                             <Trash2 className="h-3.5 w-3.5" />
                           </Button>
                         ) : null}
-                        {!canApprove && !canReject && !canCancel && !canComplete && !canDelete ? (
+                        {!pendingEmployee && !canApprove && !canReject && !canCancel && !canComplete && !canDelete ? (
                           <span className="text-[11px] text-muted-foreground">No actions</span>
                         ) : null}
                       </div>

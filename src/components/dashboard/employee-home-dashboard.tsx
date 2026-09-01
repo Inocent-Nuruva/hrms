@@ -310,6 +310,54 @@ const REQUIRED_ONBOARDING_ITEMS: Array<{ key: string; label: string; description
   { key: "documents", label: "Documents", description: "Supporting files and attachments", icon: <FileText className="h-5 w-5" /> },
 ]
 
+const PROFILE_SECTION_ALIASES: Record<string, string[]> = {
+  contacts: ["contacts", "contact_details", "contactDetails"],
+  addresses: ["addresses", "address_details", "addressDetails"],
+  relatives: ["relatives", "next_of_kin", "nextOfKin"],
+  identifications: ["identifications", "identification_documents", "identificationDocuments"],
+  bank_accounts: ["bank_accounts", "bankAccounts"],
+  departments: ["departments", "department_assignments", "departmentAssignments"],
+  academic_qualifications: ["academic_qualifications", "academicQualifications"],
+  professional_qualifications: ["professional_qualifications", "professionalQualifications"],
+  experience_details: ["experience_details", "experienceDetails"],
+  documents: ["documents", "employee_documents", "employeeDocuments"],
+}
+
+const EMPLOYEE_OWNED_PROFILE_KEYS = new Set(
+  REQUIRED_ONBOARDING_ITEMS.map((item) => item.key).filter((key) => key !== "departments"),
+)
+
+function employeeSectionHasItems(employee: Record<string, unknown> | null | undefined, key: string) {
+  if (!employee) return false
+  const aliases = PROFILE_SECTION_ALIASES[key] ?? [key]
+  return aliases.some((alias) => {
+    const value = employee[alias]
+    return Array.isArray(value) && value.length > 0
+  })
+}
+
+function mergeEmployeeSectionRecords(
+  base: Record<string, unknown>,
+  extra: Record<string, unknown> | null,
+) {
+  if (!extra) return base
+  const next = { ...base }
+  for (const aliases of Object.values(PROFILE_SECTION_ALIASES)) {
+    for (const alias of aliases) {
+      const extraValue = extra[alias]
+      const current = next[alias]
+      if (
+        Array.isArray(extraValue) &&
+        extraValue.length > 0 &&
+        (!Array.isArray(current) || current.length === 0)
+      ) {
+        next[alias] = extraValue
+      }
+    }
+  }
+  return next
+}
+
 const SECTION_KEY_TO_API: Record<string, EmployeeProfileSection | "documents" | null> = {
   contacts: "contacts",
   addresses: "addresses",
@@ -3028,7 +3076,7 @@ export function EmployeeHomeDashboard() {
     const load = async () => {
       try {
         const todayIso = localDateIso()
-        const [dash, attToday, punchesResult, leaveBalancesResult, types, payrollRows] = await Promise.all([
+        const [dash, attToday, punchesResult, leaveBalancesResult, types, payrollRows, currentEmployee, myProfile] = await Promise.all([
           loadEmployeeDashboardOverview(accessToken),
           getMyAttendanceToday(accessToken).catch(() => null),
           // Match Android: load recent punches, then filter to today client-side.
@@ -3066,6 +3114,8 @@ export function EmployeeHomeDashboard() {
             .then((r) => r.rows || [])
             .catch(() => []),
           listMyPayslips(accessToken).catch(() => []),
+          getCurrentEmployee(accessToken).catch(() => null),
+          getMyProfile(accessToken).catch(() => null),
         ])
 
         if (cancelled) return
@@ -3077,7 +3127,25 @@ export function EmployeeHomeDashboard() {
         if (punchesToday.length === 0 && allPunches.length > 0) {
           punchesToday = allPunches.filter((row) => isPunchOnLocalDate(row, todayIso))
         }
-        setDashboardData(validDash)
+        const mergedEmployee = validDash
+          ? mergeEmployeeSectionRecords(
+              mergeEmployeeSectionRecords(
+                asRecord(validDash.employee) ?? {},
+                asRecord(currentEmployee),
+              ),
+              asRecord(myProfile),
+            )
+          : null
+        const resolvedDash = validDash && mergedEmployee
+          ? {
+              ...validDash,
+              employee: {
+                ...validDash.employee,
+                ...mergedEmployee,
+              },
+            }
+          : validDash
+        setDashboardData(resolvedDash)
         setAttendanceToday((attToday as AdminRecord) || null)
         setAttendancePunchesToday(punchesToday)
         setLeaveBalances(leaveBalancesResult.rows)
@@ -3085,11 +3153,16 @@ export function EmployeeHomeDashboard() {
         setLeaveTypes(types as AdminRecord[])
         setPayslips(payrollRows as AdminRecord[])
 
-        if (!validDash) {
+        if (!resolvedDash) {
           setError(formatDashboardPayloadError(dash))
-        } else if (validDash.employee.employment_status === "onboarding") {
-          const dismissedKey = `onboarding_dialog_dismissed_${validDash.user?.id || "current"}`
-          if (!sessionStorage.getItem(dismissedKey)) {
+        } else {
+          const dismissedKey = `onboarding_dialog_dismissed_${resolvedDash.user?.id || "current"}`
+          const hasPendingProfileItems = REQUIRED_ONBOARDING_ITEMS.some(
+            (item) =>
+              EMPLOYEE_OWNED_PROFILE_KEYS.has(item.key) &&
+              !employeeSectionHasItems(mergedEmployee, item.key),
+          )
+          if (hasPendingProfileItems && !sessionStorage.getItem(dismissedKey)) {
             setShowOnboardingDialog(true)
           }
         }
@@ -3288,11 +3361,13 @@ export function EmployeeHomeDashboard() {
   }
 
   const pendingItems = REQUIRED_ONBOARDING_ITEMS.filter((item) => {
+    if (!EMPLOYEE_OWNED_PROFILE_KEYS.has(item.key)) return false
     const emp = dashboardData.employee as Record<string, unknown>
-    const arr = emp?.[item.key]
-    const hasData = Array.isArray(arr) && arr.length > 0
-    return !hasData && !completedOnboardingItems.includes(item.key)
+    return !employeeSectionHasItems(emp, item.key) && !completedOnboardingItems.includes(item.key)
   })
+  const ownedProfileItemCount = REQUIRED_ONBOARDING_ITEMS.filter((item) =>
+    EMPLOYEE_OWNED_PROFILE_KEYS.has(item.key),
+  ).length
 
   const currentFillingItem = fillingItemKey
     ? REQUIRED_ONBOARDING_ITEMS.find((i) => i.key === fillingItemKey) || null
@@ -3450,13 +3525,15 @@ export function EmployeeHomeDashboard() {
 
       // If this was the last pending, optionally activate + close
       if (remainingAfter <= 0) {
-        try {
-          await patchEmployeeStatus(accessToken, empId, {
-            employment_status: "active",
-            effective_date: new Date().toISOString().slice(0, 10),
-          })
-        } catch {
-          // non-fatal; backend may auto-handle or admin may do later
+        if (dashboardData.employee.employment_status === "onboarding") {
+          try {
+            await patchEmployeeStatus(accessToken, empId, {
+              employment_status: "active",
+              effective_date: new Date().toISOString().slice(0, 10),
+            })
+          } catch {
+            // non-fatal; backend may auto-handle or admin may do later
+          }
         }
         handleCloseOnboardingDialog()
       }
@@ -3469,27 +3546,30 @@ export function EmployeeHomeDashboard() {
   }
 
   const isStillOnboarding = !isAdmin && dashboardData?.employee?.employment_status === "onboarding"
+  const showMissingProfileBanner =
+    !isAdmin && !showOnboardingDialog && pendingItems.length > 0
 
   return (
     <>
-      {isStillOnboarding && (
-        <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50/70 dark:bg-blue-950/30 dark:border-blue-900 px-4 py-2.5 flex items-center justify-between gap-3">
-          <div className="text-sm text-blue-800 dark:text-blue-200">
-            Your employee profile is still in onboarding.
+      {showMissingProfileBanner ? (
+        <div className="mb-4 flex items-center justify-between gap-3 border border-amber-200 bg-amber-50/80 px-4 py-2.5 dark:border-amber-900 dark:bg-amber-950/30">
+          <div className="text-sm text-amber-900 dark:text-amber-200">
+            {isStillOnboarding
+              ? "Your employee profile is still in onboarding."
+              : `Your profile is missing ${pendingItems.map((item) => item.label.toLowerCase()).join(", ")}.`}
           </div>
           <Button
             size="sm"
             onClick={() => {
-              // allow re-opening the modal
               const dismissedKey = `onboarding_dialog_dismissed_${dashboardData.user?.id || "current"}`
               try { sessionStorage.removeItem(dismissedKey) } catch {}
               setShowOnboardingDialog(true)
             }}
           >
-            Finish onboarding
+            {isStillOnboarding ? "Finish onboarding" : "Fill details"}
           </Button>
         </div>
-      )}
+      ) : null}
 
       <EmployeeDashboardView
         dashboardData={dashboardData}
@@ -3514,10 +3594,12 @@ export function EmployeeHomeDashboard() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <DialogTitle className="text-xl font-semibold tracking-tight text-slate-900 dark:text-white">
-                    Complete your onboarding
+                    {isStillOnboarding ? "Complete your onboarding" : "Complete your profile"}
                   </DialogTitle>
                   <DialogDescription className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">
-                    Fill the missing sections to activate your account.
+                    {isStillOnboarding
+                      ? "Fill the missing sections to activate your account."
+                      : "Some details were not filled during registration or onboarding. You can complete them now, or continue and we will remind you the next time you sign in."}
                   </DialogDescription>
                 </div>
               </div>
@@ -3525,12 +3607,12 @@ export function EmployeeHomeDashboard() {
               <div className="mt-4">
                 <div className="flex items-center justify-between text-xs mb-1.5">
                   <span className="font-medium text-slate-700 dark:text-slate-300">Progress</span>
-                  <span className="font-mono text-slate-500 dark:text-slate-400">{REQUIRED_ONBOARDING_ITEMS.length - pendingItems.length} / {REQUIRED_ONBOARDING_ITEMS.length}</span>
+                  <span className="font-mono text-slate-500 dark:text-slate-400">{ownedProfileItemCount - pendingItems.length} / {ownedProfileItemCount}</span>
                 </div>
                 <div className="h-2 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
                   <div 
                     className="h-2 rounded-full bg-blue-600 transition-all duration-300" 
-                    style={{ width: `${((REQUIRED_ONBOARDING_ITEMS.length - pendingItems.length) / REQUIRED_ONBOARDING_ITEMS.length) * 100}%` }} 
+                    style={{ width: `${ownedProfileItemCount === 0 ? 0 : ((ownedProfileItemCount - pendingItems.length) / ownedProfileItemCount) * 100}%` }} 
                   />
                 </div>
               </div>
@@ -3541,7 +3623,11 @@ export function EmployeeHomeDashboard() {
                 <div className="text-center py-8">
                   <CheckCircle className="h-10 w-10 mx-auto text-emerald-600 mb-3" />
                   <p className="text-base font-semibold">All done! Your profile is complete.</p>
-                  <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">Your account will be activated shortly.</p>
+                  <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
+                    {isStillOnboarding
+                      ? "Your account will be activated shortly."
+                      : "Thanks for keeping your records up to date."}
+                  </p>
                 </div>
               ) : fillingItemKey && currentFillingItem ? (
                 <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 sm:p-5">

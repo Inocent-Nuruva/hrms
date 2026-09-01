@@ -1,4 +1,5 @@
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
+import { clearPublishedCompanyModules } from "@/lib/company-modules"
 import { asRecord, readString } from "@/utils/token-utils"
 import type { AuthScope } from "@/types"
 
@@ -572,15 +573,41 @@ export const MANAGER_ROUTE_PERMISSION: PermissionRequirement = {
   mode: "any",
 }
 
+/**
+ * Scheduled reporting and SMTP are company-scoped (`scheduled_reports:*`).
+ * Do not treat platform/shared aliases as access — each company configures
+ * its own SMTP and only that company's Company Admin (or a company role
+ * granted these permissions) can see it.
+ */
+const SCHEDULED_REPORTING_BACKEND_PERMISSIONS = [
+  "scheduled_reports:read",
+  "scheduled_reports:create",
+  "scheduled_reports:update",
+  "scheduled_reports:delete",
+  "scheduled_reports:run",
+  "scheduled_reports:manage_smtp",
+  "scheduled_reports:test_smtp",
+  "scheduled_reports:view_history",
+  "scheduled_reports:download",
+]
+
 export const SCHEDULED_REPORTING_ROUTE_PERMISSION: PermissionRequirement = {
+  permissions: [...SCHEDULED_REPORTING_BACKEND_PERMISSIONS],
+  mode: "any",
+}
+
+export const SCHEDULED_REPORTING_MUTATE_PERMISSION: PermissionRequirement = {
   permissions: [
-    "scheduled_reporting:read",
-    "scheduled_reporting:create",
-    "report_schedules:read",
-    "report_templates:read",
-    "view_scheduled_reports",
-    "manage_scheduled_reports",
+    "scheduled_reports:create",
+    "scheduled_reports:update",
+    "scheduled_reports:delete",
+    "scheduled_reports:manage_smtp",
   ],
+  mode: "any",
+}
+
+export const SCHEDULED_REPORTING_SMTP_PERMISSION: PermissionRequirement = {
+  permissions: ["scheduled_reports:manage_smtp", "scheduled_reports:test_smtp"],
   mode: "any",
 }
 
@@ -1921,7 +1948,10 @@ export function publishDashboardActorSnapshot(snapshot: DashboardActorSnapshot) 
   )
 
   writeCookie(DASHBOARD_AUTH_COOKIE, "1")
-  writeCookie(DASHBOARD_PERMISSIONS_COOKIE, JSON.stringify(snapshot.permissionLabels))
+  // Permission lists can exceed the 4KB browser cookie limit for admin/HR users.
+  // Keep the authoritative live snapshot in sessionStorage and clear the legacy
+  // cookie so browsers do not reject it on every dashboard refresh.
+  clearCookie(DASHBOARD_PERMISSIONS_COOKIE)
 
   if (accessChanged) {
     // A denial learned under the old grant set must not survive a later grant,
@@ -1955,6 +1985,7 @@ export function clearDashboardActorSnapshot() {
   window.sessionStorage.removeItem(DASHBOARD_IS_ADMIN_STORAGE_KEY)
   window.sessionStorage.removeItem(DASHBOARD_ROLES_STORAGE_KEY)
   window.sessionStorage.removeItem(DASHBOARD_SCOPE_STORAGE_KEY)
+  clearPublishedCompanyModules()
 
   clearCookie(DASHBOARD_AUTH_COOKIE)
   clearCookie(DASHBOARD_TOKEN_COOKIE)
@@ -2026,18 +2057,6 @@ function readDashboardActorBrowserSources() {
       localSources.push(JSON.parse(rawValue))
     } catch {
       localSources.push(rawValue)
-    }
-  }
-
-  const cookiePermissions = readCookieValue(DASHBOARD_PERMISSIONS_COOKIE)
-  if (cookiePermissions) {
-    try {
-      const parsed = JSON.parse(cookiePermissions) as unknown
-      if (Array.isArray(parsed)) {
-        localSources.push(parsed.filter((entry) => typeof entry === "string"))
-      }
-    } catch {
-      // Ignore malformed cookie snapshot.
     }
   }
 

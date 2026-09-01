@@ -12,6 +12,7 @@ import {
   HeroBand,
   MetricTile,
   TalentDoodleSprites,
+  asRecord,
   asRecordArray,
   employeeLabel,
   formatDate,
@@ -292,12 +293,17 @@ export function InsightsOperationsView({
       if (!label) {
         return
       }
-      const companyUserId = readNumber(row, ["id", "company_user_id", "companyUserId", "membership_id", "membershipId"])
+      const companyUserId = readNumber(row, [
+        "company_user_id",
+        "companyUserId",
+        "membership_id",
+        "membershipId",
+      ])
       if (companyUserId !== null) {
         byCompanyUserId.set(companyUserId, label)
       }
       const userId =
-        readNumber(row, ["user_id", "userId", "platform_user_id", "platformUserId"]) ??
+        readNumber(row, ["user_id", "userId", "platform_user_id", "platformUserId", "id"]) ??
         (nestedUser ? readNumber(nestedUser, ["id", "user_id", "userId"]) : null)
       if (userId !== null) {
         byUserId.set(userId, label)
@@ -310,16 +316,32 @@ export function InsightsOperationsView({
     const token = readStoredToken()
     if (!token) return
     if (!policyName.trim()) {
-      toast.error("Policy name is required.")
+      toast.error("Type a short name for these clock-in rules, for example Office clock-in.")
       return
     }
     setSaving(true)
     try {
-      await runHrAttendanceSetupWizard(token, { policy: { name: policyName.trim() } })
-      toast.success("Attendance setup wizard started.")
+      const result = await runHrAttendanceSetupWizard(token, {
+        policy: { name: policyName.trim() },
+      })
+      const payload = asRecord(result)
+      const details = asRecord(payload?.data) ?? payload
+      const policyId = readNumber(details, ["policyId", "policy_id", "id"])
+      const apiMessage = readString(payload, ["message"])
+      toast.success(
+        policyId || /created successfully/i.test(apiMessage)
+          ? `Clock-in rules “${policyName.trim()}” are saved. This is a starter set — refine it later under Attendance.`
+          : apiMessage || `Clock-in rules “${policyName.trim()}” are saved.`,
+      )
       await load()
     } catch (errorObject) {
-      toast.error(errorObject instanceof Error ? errorObject.message : "Wizard failed.")
+      const message =
+        errorObject instanceof Error ? errorObject.message : "Could not create clock-in rules."
+      toast.error(
+        /already exists/i.test(message)
+          ? `Clock-in rules named "${policyName.trim()}" already exist. Use a different name only if you want a new set.`
+          : message,
+      )
     } finally {
       setSaving(false)
     }
@@ -448,7 +470,7 @@ export function InsightsOperationsView({
               variant="onPrimary"
               text={
                 activeTab === "readiness"
-                  ? "Check that the system is working, see what still needs fixing, set up clock-in, and review recent security activity."
+                  ? "This page is under development. You can check system health, create starter clock-in rules, and review blocked actions — some tools are still being finished."
                   : "A snapshot of how the company is doing for the dates you pick."
               }
             />
@@ -534,42 +556,57 @@ export function InsightsOperationsView({
               }
             />
           </motion.div>
-          <div className="rounded-xl border border-border bg-card p-4">
-            <div className="flex items-center gap-1.5">
-              <h2 className="text-sm font-semibold">Clock-in setup</h2>
-              <TipIcon
-                text={
-                  readString(
-                    setup,
-                    ["status", "message", "summary"],
-                    "Create the default attendance rules so people can clock in.",
-                  )
-                }
-              />
-            </div>
-            <div className="mt-3 flex flex-wrap items-end gap-2">
-              <label className="space-y-1">
-                <span className="text-xs text-slate-500">Rule name</span>
-                <input className={inputClass + " max-w-xs"} value={policyName} onChange={(event) => setPolicyName(event.target.value)} />
-              </label>
-              <button type="button" className={primaryButtonClass} disabled={saving} onClick={() => void onWizard()}>
-                {saving ? <Loader2Icon className="size-4 animate-spin" /> : "Create default rules"}
-              </button>
-            </div>
-            <div className="mt-4 space-y-2">
+          <div className="grid gap-3 lg:grid-cols-2">
+            <div className="rounded-xl border border-border bg-card p-4">
               <div className="flex items-center gap-1.5">
-                <p className="text-sm font-medium text-foreground">See someone’s schedule</p>
-                <TipIcon text="Pick a person and dates to see when they are expected at work." />
+                <h2 className="text-sm font-semibold">Set up clock-in</h2>
+                <TipIcon text="This page is under development. Creating rules here only builds a starter set. Full clock-in setup (devices, maps, shifts) is still being finished under Attendance." />
               </div>
-              <div className="flex flex-wrap items-end gap-2">
-                <label className="space-y-1">
-                  <span className="text-xs text-slate-500">Employee</span>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Give this starter set a simple label, then create it. Example: “Office clock-in”. This is not a person or a time — just a name so you can find the rules later.
+              </p>
+              {readString(asRecord(setup?.activePolicy), ["name"]) ? (
+                <p className="mt-2 text-sm text-foreground">
+                  Clock-in rules already exist:{" "}
+                  <span className="font-medium">
+                    {readString(asRecord(setup?.activePolicy), ["name"])}
+                  </span>
+                  . Creating the same name again will fail.
+                </p>
+              ) : (
+                <p className="mt-2 text-sm text-amber-800 dark:text-amber-200">
+                  No clock-in rules yet. People cannot punch in until you create this set.
+                </p>
+              )}
+              <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
+                <label className="min-w-0 flex-1 space-y-1">
+                  <span className="text-xs font-medium text-muted-foreground">Name for these clock-in rules</span>
+                  <input
+                    className={inputClass}
+                    value={policyName}
+                    onChange={(event) => setPolicyName(event.target.value)}
+                    placeholder="Office clock-in"
+                  />
+                </label>
+                <button type="button" className={primaryButtonClass} disabled={saving} onClick={() => void onWizard()}>
+                  {saving ? <Loader2Icon className="size-4 animate-spin" /> : "Create clock-in rules"}
+                </button>
+              </div>
+            </div>
+            <div className="rounded-xl border border-border bg-card p-4">
+              <h2 className="text-sm font-semibold">Preview a work schedule</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Choose a person and dates to see planned start and end times. This does not clock them in.
+              </p>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                <label className="space-y-1 sm:col-span-2">
+                  <span className="text-xs font-medium text-muted-foreground">Employee</span>
                   <select
-                    className={inputClass + " max-w-xs"}
+                    className={inputClass}
                     value={previewEmployeeId}
                     onChange={(event) => setPreviewEmployeeId(event.target.value)}
                   >
-                    <option value="">Select employee</option>
+                    <option value="">Select an employee</option>
                     {employees.map((row, index) => {
                       const id = readNumber(row, ["id", "employee_id", "employeeId"])
                       if (id === null) return null
@@ -582,15 +619,19 @@ export function InsightsOperationsView({
                   </select>
                 </label>
                 <label className="space-y-1">
-                  <span className="text-xs text-slate-500">Start</span>
-                  <DatePickerPresets value={dateFrom} onChange={setDateFrom} placeholder="Pick a date" />
+                  <span className="text-xs font-medium text-muted-foreground">From</span>
+                  <DatePickerPresets value={dateFrom} onChange={setDateFrom} placeholder="Start date" />
                 </label>
                 <label className="space-y-1">
-                  <span className="text-xs text-slate-500">End</span>
-                  <DatePickerPresets value={dateTo} onChange={setDateTo} placeholder="Pick a date" />
+                  <span className="text-xs font-medium text-muted-foreground">To</span>
+                  <DatePickerPresets value={dateTo} onChange={setDateTo} placeholder="End date" />
                 </label>
-                <button type="button" className={secondaryButtonClass} onClick={() => void onPreview()}>
-                  Show schedule
+                <button
+                  type="button"
+                  className={`${secondaryButtonClass} sm:col-span-2`}
+                  onClick={() => void onPreview()}
+                >
+                  Show planned hours
                 </button>
               </div>
             </div>

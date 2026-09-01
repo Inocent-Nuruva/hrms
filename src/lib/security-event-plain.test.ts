@@ -37,6 +37,27 @@ describe("describeSecurityEvent", () => {
     expect(described.who).toBe("Name not provided")
   })
 
+  it("uses the actor name returned with the event", () => {
+    const described = describeSecurityEvent({
+      actor_user_id: 2,
+      actor_name: "Kelvin Kiggundu",
+      actor_email: "kelvin@example.com",
+      metadata: { path: "/api/analytics/freshness" },
+    })
+    expect(described.who).toBe("Kelvin Kiggundu")
+  })
+
+  it("falls back to the actor email stored on the event", () => {
+    const described = describeSecurityEvent({
+      actor_user_id: 2,
+      metadata: {
+        path: "/api/analytics/freshness",
+        actor_email: "kelvin@example.com",
+      },
+    })
+    expect(described.who).toBe("kelvin@example.com")
+  })
+
   it("names common API areas", () => {
     expect(describeApiPath("/api/leave/balances")).toBe("leave")
     expect(describeApiPath("/api/attendance/daily-summaries")).toBe("attendance")

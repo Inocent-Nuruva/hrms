@@ -60,7 +60,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Send a question." }, { status: 400 })
   }
 
-  const local = localSupportAnswer(question, previousQuestion)
+  const accessMode =
+    record.accessMode === "admin" || record.accessMode === "employee"
+      ? record.accessMode
+      : undefined
+  const local = localSupportAnswer(question, previousQuestion, accessMode)
   const apiKey = process.env.XAI_API_KEY?.trim()
   if (!apiKey) {
     return NextResponse.json({ ...local, source: "guide" })
@@ -90,7 +94,7 @@ export async function POST(request: Request) {
     if (!reply) {
       return NextResponse.json({ ...local, source: "guide" })
     }
-    const links = findSupportPages(`${previousQuestion} ${question} ${reply}`, 4).map((page) => ({
+    const links = findSupportPages(`${previousQuestion} ${question} ${reply}`, 4, accessMode).map((page) => ({
       title: page.title,
       url: page.url,
     }))

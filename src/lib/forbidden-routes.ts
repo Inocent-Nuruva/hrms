@@ -1,6 +1,10 @@
 import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
 import type { DashboardAccessMode } from "@/lib/dashboard-permissions"
 import {
+  isDashboardRouteEnabledForCompanyModules,
+  readPublishedCompanyModules,
+} from "@/lib/company-modules"
+import {
   canShowDashboardRouteInNavigation,
   isSelfServiceDashboardRoute,
   selfServiceHomeFor,
@@ -283,6 +287,9 @@ export function canSeeDashboardPage(
   accessMode?: DashboardAccessMode,
 ) {
   if (!canShowDashboardRouteInNavigation(url, accessMode)) {
+    return false
+  }
+  if (!isDashboardRouteEnabledForCompanyModules(url, readPublishedCompanyModules())) {
     return false
   }
   if (isRememberedForbiddenRoute(url)) {

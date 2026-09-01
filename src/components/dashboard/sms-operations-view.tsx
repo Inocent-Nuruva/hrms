@@ -60,6 +60,11 @@ import {
 import { useForbiddenRouteGuard, useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
 import { readStoredSessionTokens } from "@/lib/session-client"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
+import { SmsRecipientPhoneInput } from "@/components/dashboard/sms-recipient-phone"
+import {
+  DEFAULT_SMS_DIAL_DIGITS,
+  composeE164,
+} from "@/components/dashboard/sms-recipient-phone-utils"
 
 export type SmsOpsTab = "overview" | "registry" | "logs" | "platform"
 
@@ -244,9 +249,15 @@ export function SmsOperationsView({ activeTab }: { activeTab: SmsOpsTab }) {
     setFormError(null)
     try {
       if (createMode === "test") {
-        if (!form.recipient_phone || !form.message) throw new Error("Phone and message are required.")
+        const recipientPhone = composeE164(
+          form.country_code || DEFAULT_SMS_DIAL_DIGITS,
+          form.phone_digits ?? "",
+        )
+        if (!recipientPhone || !form.message) {
+          throw new Error("Enter a country code, 9-digit phone number, and message.")
+        }
         await sendTestSms(token, {
-          recipient_phone: form.recipient_phone,
+          recipient_phone: recipientPhone,
           message: form.message,
         })
       } else {
@@ -360,7 +371,11 @@ export function SmsOperationsView({ activeTab }: { activeTab: SmsOpsTab }) {
                     className={primaryButtonClass}
                     onClick={() => {
                       setCreateMode("test")
-                      setForm({ recipient_phone: "", message: "" })
+                      setForm({
+                        country_code: DEFAULT_SMS_DIAL_DIGITS,
+                        phone_digits: "",
+                        message: "",
+                      })
                       setCreateOpen(true)
                     }}
                   >
@@ -482,7 +497,7 @@ export function SmsOperationsView({ activeTab }: { activeTab: SmsOpsTab }) {
       <RecordDetailsDialog open={Boolean(detail)} onOpenChange={(open) => !open && setDetail(null)} title={optionLabel(detail)} row={detail} />
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogPopup className="max-w-xl">
+        <DialogPopup className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>{createMode === "test" ? "Send test SMS" : "Update registry item"}</DialogTitle>
             <DialogDescription>Send a test message or update this registry item.</DialogDescription>
@@ -490,7 +505,17 @@ export function SmsOperationsView({ activeTab }: { activeTab: SmsOpsTab }) {
           <div className="grid gap-3">
             {createMode === "test" ? (
               <>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Recipient phone</span><input className={inputClass} value={form.recipient_phone ?? ""} onChange={(event) => setForm((current) => ({ ...current, recipient_phone: event.target.value }))} /></label>
+                <SmsRecipientPhoneInput
+                  countryCode={form.country_code || DEFAULT_SMS_DIAL_DIGITS}
+                  nationalDigits={form.phone_digits ?? ""}
+                  onChange={({ countryCode, nationalDigits }) =>
+                    setForm((current) => ({
+                      ...current,
+                      country_code: countryCode,
+                      phone_digits: nationalDigits,
+                    }))
+                  }
+                />
                 <label className="grid gap-1.5 text-sm"><span className="font-medium">Message</span><textarea className={textareaClass} value={form.message ?? ""} onChange={(event) => setForm((current) => ({ ...current, message: event.target.value }))} /></label>
               </>
             ) : (

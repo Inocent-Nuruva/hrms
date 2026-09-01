@@ -7,6 +7,11 @@ import { isPermissionError } from "@/components/dashboard/talent-visuals"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { probePlatformCompaniesList } from "@/lib/admin-api"
 import {
+  companyModuleForDashboardRoute,
+  isDashboardRouteEnabledForCompanyModules,
+  readPublishedCompanyModules,
+} from "@/lib/company-modules"
+import {
   COMPANY_MANAGEMENT_ROUTE_PERMISSION,
   canAccessDashboardRoute,
   hasPermission,
@@ -98,7 +103,10 @@ export function useHideRememberedForbiddenPath() {
 
   React.useEffect(() => {
     if (!pathname || pathname === "/dashboard") return
-    if (!isRememberedForbiddenRoute(pathname)) return
+    const moduleDisabled =
+      companyModuleForDashboardRoute(pathname) !== null &&
+      !isDashboardRouteEnabledForCompanyModules(pathname, readPublishedCompanyModules())
+    if (!isRememberedForbiddenRoute(pathname) && !moduleDisabled) return
     router.replace(
       firstVisibleSiblingOrHome(pathname, actor.permissionLabels, actor.accessMode),
     )

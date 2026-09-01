@@ -72,6 +72,30 @@ export function resolveSecurityActorName(
   row: SecurityEventRow,
   names?: { byCompanyUserId?: Map<number, string>; byUserId?: Map<number, string> },
 ): string | null {
+  const metadata = parseSecurityMetadata(row)
+  const nameKeys = [
+    "actor_name",
+    "actorName",
+    "full_name",
+    "fullName",
+    "actor_email",
+    "actorEmail",
+    "email",
+  ]
+  const namedOnEvent = readText(row, nameKeys) || readText(metadata, nameKeys)
+  if (namedOnEvent) {
+    return namedOnEvent
+  }
+  const first =
+    readText(row, ["first_name", "firstName", "actor_first_name"]) ||
+    readText(metadata, ["first_name", "firstName", "actor_first_name"])
+  const last =
+    readText(row, ["last_name", "lastName", "actor_last_name"]) ||
+    readText(metadata, ["last_name", "lastName", "actor_last_name"])
+  const combined = [first, last].filter(Boolean).join(" ").trim()
+  if (combined) {
+    return combined
+  }
   const companyUserId = Number(row.actor_company_user_id ?? row.actorCompanyUserId)
   if (Number.isFinite(companyUserId) && names?.byCompanyUserId?.has(companyUserId)) {
     return names.byCompanyUserId.get(companyUserId) ?? null

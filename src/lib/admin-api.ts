@@ -1,5 +1,6 @@
 import { env } from "@/lib/env";
 import { resolveBackendMediaUrl } from "@/lib/backend-media-url";
+import { AUTH_STORAGE_KEYS } from "@/utils/constants";
 
 export { resolveBackendMediaUrl } from "@/lib/backend-media-url";
 
@@ -2509,10 +2510,36 @@ function isBinaryContentType(contentType: string | null): boolean {
   );
 }
 
+const EMPLOYEE_NUMBER_CONFLICT_PATTERN =
+  /UQ_employee_company_employee_no|employee number already exists|employee number is already in use|duplicate key value violates unique constraint ["']?[^"']*employee_no/i;
+
+function humanizeConstraintMessage(text: string): string | null {
+  if (/required workflow step at order \d+ has no eligible approver/i.test(text)) {
+    return "The onboarding workflow cannot start because a required step has no eligible approver. Assign a person or a role with members on that step, or save the employee without submitting onboarding.";
+  }
+  if (
+    /UQ_employee_company_employee_no/i.test(text) ||
+    /duplicate key value violates unique constraint ["']?[^"']*employee_no/i.test(
+      text,
+    )
+  ) {
+    return "That employee number is already in use. Leave Employee Number blank to auto-assign the next number, or enter a unique number.";
+  }
+  if (
+    /^UQ_[A-Za-z0-9_]+$/.test(text.trim()) ||
+    /duplicate key value violates unique constraint/i.test(text)
+  ) {
+    return "A record with those details already exists.";
+  }
+  return null;
+}
+
 function sanitizeHumanMessage(text: string, fallback: string): string {
   const trimmed = text.trim();
   if (!trimmed) return fallback;
   if (looksLikeBinaryPayload(trimmed)) return fallback;
+  const constraintMessage = humanizeConstraintMessage(trimmed);
+  if (constraintMessage) return constraintMessage;
   // Cap length so accidental HTML/log dumps don't flood the UI
   return trimmed.length > 400 ? `${trimmed.slice(0, 400)}…` : trimmed;
 }
@@ -2538,6 +2565,79 @@ function parseResponseBodyText(
       message: sanitizeHumanMessage(text, "Unexpected response from server."),
     };
   }
+}
+
+function collectValidationMessages(value: unknown, prefix = ""): string[] {
+  if (value === null || value === undefined) {
+    return [];
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed ? [prefix ? `${prefix}: ${trimmed}` : trimmed] : [];
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap((entry) => collectValidationMessages(entry, prefix));
+  }
+
+  const record = asRecord(value);
+  if (!record) {
+    return [];
+  }
+
+  const field =
+    typeof record.property === "string"
+      ? record.property
+      : typeof record.field === "string"
+        ? record.field
+        : typeof record.path === "string"
+          ? record.path
+          : prefix;
+
+  const directMessages = [
+    record.message,
+    record.messages,
+    record.error,
+    record.errors,
+    record.constraints,
+  ].flatMap((entry) => collectValidationMessages(entry, field));
+
+  const childMessages = [record.children, record.validation].flatMap((entry) =>
+    collectValidationMessages(entry, field),
+  );
+
+  if (directMessages.length || childMessages.length) {
+    return [...directMessages, ...childMessages];
+  }
+
+  return Object.entries(record).flatMap(([key, entry]) => {
+    if (["property", "field", "path"].includes(key)) {
+      return [];
+    }
+    return collectValidationMessages(entry, field || key);
+  });
+}
+
+function extractValidationMessage(payload: unknown) {
+  const record = asRecord(payload);
+  if (!record) {
+    return null;
+  }
+
+  const errors = asRecord(record.errors);
+  const messages = [
+    ...collectValidationMessages(errors?.validation),
+    ...collectValidationMessages(record.validation),
+    ...collectValidationMessages(errors),
+  ]
+    .map((entry) => sanitizeHumanMessage(entry, ""))
+    .filter(Boolean);
+  const uniqueMessages = Array.from(new Set(messages));
+  if (uniqueMessages.length === 0) {
+    return null;
+  }
+  return uniqueMessages.slice(0, 6).join(". ");
 }
 
 const GET_THROTTLE_MAX_RETRIES = 3;
@@ -2592,6 +2692,10 @@ function extractMessage(payload: unknown, status: number) {
   const record = asRecord(payload);
   if (!record) {
     return `Request failed with status ${status}`;
+  }
+  const validationMessage = extractValidationMessage(payload);
+  if (validationMessage) {
+    return validationMessage;
   }
   const candidate = record.message;
   if (typeof candidate === "string" && candidate.trim()) {
@@ -8688,6 +8792,34 @@ export async function createOnboardingRequest(
   });
 }
 
+export async function ensureDraftOnboardingRequest(
+  token: string,
+  data: {
+    employee_id: number;
+    workflow_id?: number;
+    title: string;
+  },
+) {
+  try {
+    const payload = await createOnboardingRequest(token, {
+      employee_id: data.employee_id,
+      workflow_id: data.workflow_id,
+      title: data.title,
+      submit: false,
+    });
+    return (normalizeSingle(payload) ?? asRecord(payload) ?? {}) as AdminRecord;
+  } catch (errorObject) {
+    if (
+      /already has active onboarding request/i.test(
+        errorMessageAndPayload(errorObject),
+      )
+    ) {
+      return null;
+    }
+    throw errorObject;
+  }
+}
+
 export async function getOnboardingRequest(token: string, id: string | number) {
   const payload = await adminRequest<unknown>(
     `/api/onboarding/requests/${id}`,
@@ -10090,7 +10222,7 @@ export async function getCompanyById(token: string, id: string | number) {
   const payload = await adminRequest<unknown>(`/api/companies/${id}`, {
     token,
   });
-  return normalizeSingle(payload);
+  return extractCompanyRecord(payload) ?? normalizeSingle(payload);
 }
 
 export async function createCompany(token: string, data: AdminRecord) {
@@ -10111,6 +10243,45 @@ export async function updateCompanyById(
     token,
     body: data,
   });
+}
+
+function extractCompanyModulesRecord(payload: unknown): AdminRecord | null {
+  const root = asRecord(payload);
+  const nested =
+    asRecord(root?.data) ??
+    asRecord(root?.result) ??
+    asRecord(root?.modules);
+  if (nested && ("roles" in nested || "permissions" in nested)) {
+    return nested;
+  }
+  if (root && ("roles" in root || "permissions" in root)) {
+    return root;
+  }
+  return nested ?? normalizeSingle(payload) ?? root;
+}
+
+export async function getCompanyModules(token: string, id: string | number) {
+  const payload = await adminRequest<unknown>(`/api/companies/${id}/modules`, {
+    token,
+    cacheTtlMs: 0,
+  });
+  return extractCompanyModulesRecord(payload);
+}
+
+export async function updateCompanyModules(
+  token: string,
+  id: string | number,
+  modules: { roles: boolean; permissions: boolean },
+) {
+  const payload = await adminRequest<unknown>(`/api/companies/${id}/modules`, {
+    method: "PATCH",
+    token,
+    body: {
+      roles: modules.roles !== false,
+      permissions: modules.permissions !== false,
+    },
+  });
+  return extractCompanyModulesRecord(payload);
 }
 
 export async function activateCompany(token: string, id: string | number) {
@@ -10149,18 +10320,418 @@ export async function createResource(
   });
 }
 
-export async function createEmployeeProfile(
-  token: string,
-  data: CreateEmployeePayload,
+function readAdminRecordString(record: AdminRecord | null, keys: string[]) {
+  if (!record) {
+    return null;
+  }
+
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return String(value);
+    }
+  }
+  return null;
+}
+
+const KNOWN_EMPLOYEE_NUMBER_KEYS = [
+  "employee_no",
+  "employeeNo",
+  "employee_number",
+  "employeeNumber",
+  "user_no",
+  "userNo",
+];
+
+function collectKnownEmployeeNumbersFromRecord(
+  record: AdminRecord | null,
+  into: Set<string>,
+  visited: Set<object>,
 ) {
+  if (!record || visited.has(record)) {
+    return;
+  }
+  visited.add(record);
+
+  const direct = readAdminRecordString(record, KNOWN_EMPLOYEE_NUMBER_KEYS);
+  if (direct) {
+    into.add(direct.toLowerCase());
+  }
+
+  for (const key of [
+    "employee",
+    "active_employee",
+    "activeEmployee",
+    "company_user",
+    "companyUser",
+    "membership",
+    "user",
+  ]) {
+    collectKnownEmployeeNumbersFromRecord(asRecord(record[key]), into, visited);
+  }
+
+  for (const key of [
+    "employees",
+    "memberships",
+    "company_users",
+    "companyUsers",
+  ]) {
+    const value = record[key];
+    if (Array.isArray(value)) {
+      value.forEach((entry) =>
+        collectKnownEmployeeNumbersFromRecord(asRecord(entry), into, visited),
+      );
+    }
+  }
+}
+
+function collectKnownSessionEmployeeNumbers() {
+  const numbers = new Set<string>();
+  if (typeof window === "undefined") {
+    return numbers;
+  }
+
+  try {
+    const rawUser = window.localStorage.getItem(AUTH_STORAGE_KEYS.user);
+    collectKnownEmployeeNumbersFromRecord(
+      rawUser ? asRecord(JSON.parse(rawUser)) : null,
+      numbers,
+      new Set<object>(),
+    );
+  } catch {
+    // Ignore malformed session snapshots.
+  }
+
+  return numbers;
+}
+
+function cloneCreateEmployeePayload(
+  data: CreateEmployeePayload,
+): CreateEmployeePayload {
+  return {
+    ...data,
+    onboarding: data.onboarding
+      ? {
+          ...data.onboarding,
+          provisioning: data.onboarding.provisioning
+            ? {
+                ...data.onboarding.provisioning,
+                device_assignment: data.onboarding.provisioning
+                  .device_assignment
+                  ? { ...data.onboarding.provisioning.device_assignment }
+                  : undefined,
+              }
+            : undefined,
+        }
+      : undefined,
+  };
+}
+
+function stripReservedEmployeeNumbers(body: CreateEmployeePayload) {
+  const reservedNumbers = collectKnownSessionEmployeeNumbers();
+  const candidateEmployeeNo = body.employee_no?.trim();
+  if (
+    !candidateEmployeeNo ||
+    reservedNumbers.has(candidateEmployeeNo.toLowerCase())
+  ) {
+    delete body.employee_no;
+  } else {
+    body.employee_no = candidateEmployeeNo;
+  }
+
+  const deviceAssignment = body.onboarding?.provisioning?.device_assignment;
+  const deviceEmployeeNo = deviceAssignment?.employee_no?.trim();
+  if (deviceAssignment) {
+    if (
+      !deviceEmployeeNo ||
+      reservedNumbers.has(deviceEmployeeNo.toLowerCase())
+    ) {
+      delete deviceAssignment.employee_no;
+    } else {
+      deviceAssignment.employee_no = deviceEmployeeNo;
+    }
+  }
+}
+
+function stripEmployeeNumbersFromCreatePayload(data: CreateEmployeePayload) {
+  const body = cloneCreateEmployeePayload(data);
+  delete body.employee_no;
+  if (body.onboarding?.provisioning?.device_assignment) {
+    delete body.onboarding.provisioning.device_assignment.employee_no;
+  }
+  return body;
+}
+
+function payloadHasExplicitEmployeeNumber(body: CreateEmployeePayload) {
+  return Boolean(
+    body.employee_no?.trim() ||
+      body.onboarding?.provisioning?.device_assignment?.employee_no?.trim(),
+  );
+}
+
+function errorMessageAndPayload(errorObject: unknown) {
+  const message =
+    errorObject instanceof Error ? errorObject.message : String(errorObject);
+  const payload =
+    typeof errorObject === "object" &&
+    errorObject !== null &&
+    "payload" in errorObject
+      ? JSON.stringify((errorObject as { payload?: unknown }).payload)
+      : "";
+  return `${message} ${payload}`;
+}
+
+function isMissingOnboardingApprover(errorObject: unknown) {
+  return /no eligible approver/i.test(errorMessageAndPayload(errorObject));
+}
+
+async function createEmployeeDowngradingOnboarding(
+  token: string,
+  body: CreateEmployeePayload,
+  errorObject: unknown,
+) {
+  const draft = cloneCreateEmployeePayload(body);
+  draft.onboarding = {
+    ...(draft.onboarding ?? {}),
+    auto_start: true,
+    submit: false,
+  };
+  if (body.onboarding?.submit !== false) {
+    try {
+      return await postCreateEmployee(token, draft);
+    } catch (retryError) {
+      if (!isMissingOnboardingApprover(retryError)) {
+        throw retryError;
+      }
+    }
+  }
+
+  draft.onboarding = {
+    ...(draft.onboarding ?? {}),
+    auto_start: false,
+    submit: false,
+  };
+  if (body.onboarding?.auto_start !== false) {
+    try {
+      return await postCreateEmployee(token, draft);
+    } catch (retryError) {
+      if (!isMissingOnboardingApprover(retryError)) {
+        throw retryError;
+      }
+    }
+  }
+
+  const stripped = cloneCreateEmployeePayload(body);
+  delete stripped.onboarding;
+  try {
+    return await postCreateEmployee(token, stripped);
+  } catch (retryError) {
+    if (!isMissingOnboardingApprover(retryError)) {
+      throw retryError;
+    }
+  }
+
+  throw errorObject;
+}
+
+function isEmployeeNumberConflict(errorObject: unknown) {
+  const status =
+    typeof errorObject === "object" &&
+    errorObject !== null &&
+    "status" in errorObject &&
+    typeof (errorObject as { status?: unknown }).status === "number"
+      ? (errorObject as { status: number }).status
+      : null;
+  if (status === 400) {
+    return false;
+  }
+  const message =
+    errorObject instanceof Error ? errorObject.message : String(errorObject);
+  const payload =
+    typeof errorObject === "object" &&
+    errorObject !== null &&
+    "payload" in errorObject
+      ? JSON.stringify((errorObject as { payload?: unknown }).payload)
+      : "";
+  return EMPLOYEE_NUMBER_CONFLICT_PATTERN.test(`${message} ${payload}`);
+}
+
+function incrementEmployeeNumber(current: string): string | null {
+  const match = current.trim().match(/^(.*?)(\d+)$/);
+  if (!match) {
+    return null;
+  }
+  const nextValue = Number(match[2]) + 1;
+  if (!Number.isSafeInteger(nextValue) || nextValue < 1) {
+    return null;
+  }
+  return `${match[1]}${String(nextValue).padStart(match[2].length, "0")}`;
+}
+
+function formatEmployeeNumberFromSettings(record: AdminRecord | null) {
+  if (!record) {
+    return null;
+  }
+  const prefix = readAdminRecordString(record, ["prefix"]) ?? "";
+  const padding = Number(record.padding);
+  const nextNumber = Number(record.next_number ?? record.nextNumber);
+  if (!Number.isInteger(nextNumber) || nextNumber < 1) {
+    return null;
+  }
+  const width = Number.isInteger(padding) && padding > 0 ? padding : 5;
+  return `${prefix}${String(nextNumber).padStart(width, "0")}`;
+}
+
+async function employeeNumberExists(token: string, employeeNo: string) {
+  const existing = await listEmployees(token, {
+    page: 1,
+    limit: 5,
+    search: employeeNo,
+  });
+  return existing.rows.some((row) => {
+    const value = readAdminRecordString(row, [
+      "employee_no",
+      "employeeNo",
+      "employee_number",
+      "employeeNumber",
+    ]);
+    return value?.toLowerCase() === employeeNo.toLowerCase();
+  });
+}
+
+async function resolveUnusedEmployeeNumber(token: string) {
+  const [numberingResult, latestResult] = await Promise.allSettled([
+    getEmployeeNumbering(token),
+    listEmployees(token, {
+      page: 1,
+      limit: 1,
+      sortBy: "employee_no",
+      sortOrder: "DESC",
+    }),
+  ]);
+  const numbering =
+    numberingResult.status === "fulfilled" ? numberingResult.value : null;
+  const latestNo =
+    latestResult.status === "fulfilled"
+      ? readAdminRecordString(latestResult.value.rows[0] ?? null, [
+          "employee_no",
+          "employeeNo",
+          "employee_number",
+          "employeeNumber",
+        ])
+      : null;
+
+  const candidates: string[] = [];
+  if (latestNo) {
+    const incremented = incrementEmployeeNumber(latestNo);
+    if (incremented) {
+      candidates.push(incremented);
+    }
+  }
+  const fromSettings = formatEmployeeNumberFromSettings(numbering);
+  if (fromSettings) {
+    candidates.push(fromSettings);
+  }
+
+  const seen = new Set<string>();
+  const queue = candidates.filter((value) => {
+    const key = value.toLowerCase();
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+
+  for (let i = 0; i < 25 && queue.length > 0; i += 1) {
+    const candidate = queue.shift()!;
+    if (!(await employeeNumberExists(token, candidate))) {
+      return candidate;
+    }
+    const next = incrementEmployeeNumber(candidate);
+    if (next && !seen.has(next.toLowerCase())) {
+      seen.add(next.toLowerCase());
+      queue.push(next);
+    }
+  }
+
+  return undefined;
+}
+
+async function postCreateEmployee(token: string, body: CreateEmployeePayload) {
   const payload = await adminRequest<unknown>("/api/employees", {
     method: "POST",
     token,
-    body: data,
+    body,
   });
   return (normalizeSingle(payload) ??
     asRecord(payload) ??
     {}) as CreateEmployeeResponse;
+}
+
+export async function createEmployeeProfile(
+  token: string,
+  data: CreateEmployeePayload,
+) {
+  const body = cloneCreateEmployeePayload(data);
+  stripReservedEmployeeNumbers(body);
+
+  try {
+    return await postCreateEmployee(token, body);
+  } catch (errorObject) {
+    if (isMissingOnboardingApprover(errorObject)) {
+      return await createEmployeeDowngradingOnboarding(token, body, errorObject);
+    }
+    if (!isEmployeeNumberConflict(errorObject)) {
+      throw errorObject;
+    }
+
+    const stripped = stripEmployeeNumbersFromCreatePayload(body);
+    if (payloadHasExplicitEmployeeNumber(body)) {
+      try {
+        return await postCreateEmployee(token, stripped);
+      } catch (retryError) {
+        if (isMissingOnboardingApprover(retryError)) {
+          return await createEmployeeDowngradingOnboarding(
+            token,
+            stripped,
+            retryError,
+          );
+        }
+        if (!isEmployeeNumberConflict(retryError)) {
+          throw retryError;
+        }
+      }
+    }
+
+    let candidate = await resolveUnusedEmployeeNumber(token);
+    for (let attempt = 0; attempt < 5 && candidate; attempt += 1) {
+      const allocatedBody = {
+        ...stripped,
+        employee_no: candidate,
+      };
+      try {
+        return await postCreateEmployee(token, allocatedBody);
+      } catch (retryError) {
+        if (isMissingOnboardingApprover(retryError)) {
+          return await createEmployeeDowngradingOnboarding(
+            token,
+            allocatedBody,
+            retryError,
+          );
+        }
+        if (!isEmployeeNumberConflict(retryError)) {
+          throw retryError;
+        }
+        candidate = incrementEmployeeNumber(candidate) ?? undefined;
+      }
+    }
+
+    throw errorObject;
+  }
 }
 
 export async function getEmployeeById(id: string | number, token: string) {

@@ -3,23 +3,24 @@ export type SupportPage = {
   url: string
   hint: string
   keywords: string[]
+  audience?: "self" | "company"
 }
 
 export const SUPPORT_PAGES: SupportPage[] = [
-  { title: "My profile", url: "/dashboard/me/profile", hint: "Name, photo, and contact details", keywords: ["profile", "photo", "name", "contact", "me"] },
-  { title: "My attendance", url: "/dashboard/attendance/today", hint: "Today’s state and punch history", keywords: ["attendance", "punch", "clock", "timesheet", "today"] },
-  { title: "My leave", url: "/dashboard/me/leave/requests", hint: "Requests, balances, and holidays", keywords: ["leave", "holiday", "vacation", "balance", "time off"] },
-  { title: "My payroll", url: "/dashboard/me/finance/payroll", hint: "Your payslips and payment details", keywords: ["payslip", "salary", "pay", "wage"] },
-  { title: "My performance", url: "/dashboard/me/performance/overview", hint: "Reviews, scores, and plans", keywords: ["performance", "review", "kpi", "score"] },
-  { title: "My probation", url: "/dashboard/me/probation", hint: "Your confirmation case", keywords: ["probation", "confirmation"] },
-  { title: "My field", url: "/dashboard/me/field/visits", hint: "Visits, plans, and follow-ups", keywords: ["field", "visit", "customer"] },
-  { title: "My finance", url: "/dashboard/me/finance/payroll", hint: "Payroll, loans, and advances", keywords: ["advance", "loan", "finance", "payroll"] },
-  { title: "My activities", url: "/dashboard/me/activities/today", hint: "Daily activity reports", keywords: ["activity", "daily report"] },
-  { title: "My movements", url: "/dashboard/me/movements", hint: "Transfers and role changes", keywords: ["movement", "transfer"] },
-  { title: "My team", url: "/dashboard/me/team/overview", hint: "People who report to you", keywords: ["team", "reports"] },
-  { title: "My requests", url: "/dashboard/me/requests/actions", hint: "Things waiting on you", keywords: ["request", "approval"] },
-  { title: "Onboarding", url: "/dashboard/me/onboarding", hint: "Your joining checklist", keywords: ["onboarding", "joining", "new hire"] },
-  { title: "Offboarding", url: "/dashboard/me/offboarding", hint: "Your exit checklist", keywords: ["offboarding", "exit", "resign"] },
+  { title: "My profile", url: "/dashboard/me/profile", hint: "Name, photo, and contact details", keywords: ["profile", "photo", "name", "contact", "me"], audience: "self" },
+  { title: "My attendance", url: "/dashboard/attendance/today", hint: "Today’s punches and timesheet", keywords: ["attendance", "punch", "clock", "clock-in", "timesheet", "today"], audience: "self" },
+  { title: "My leave", url: "/dashboard/me/leave/requests", hint: "Request leave and see balances", keywords: ["leave", "holiday", "vacation", "balance", "time off", "off"], audience: "self" },
+  { title: "My payroll", url: "/dashboard/me/finance/payroll", hint: "Your own payslips and salary details", keywords: ["payslip", "payslips", "salary", "wage", "my payroll"], audience: "self" },
+  { title: "My performance", url: "/dashboard/me/performance/overview", hint: "Reviews, scores, and plans", keywords: ["performance", "review", "kpi", "score"], audience: "self" },
+  { title: "My probation", url: "/dashboard/me/probation", hint: "Your confirmation case", keywords: ["probation", "confirmation"], audience: "self" },
+  { title: "My field", url: "/dashboard/me/field/visits", hint: "Visits, plans, and follow-ups", keywords: ["field", "visit", "customer"], audience: "self" },
+  { title: "My finance", url: "/dashboard/me/finance/payroll", hint: "Your loans, advances, and payslips", keywords: ["advance", "loan", "finance"], audience: "self" },
+  { title: "My activities", url: "/dashboard/me/activities/today", hint: "Daily activity reports", keywords: ["activity", "daily report"], audience: "self" },
+  { title: "My movements", url: "/dashboard/me/movements", hint: "Transfers and role changes", keywords: ["movement", "transfer"], audience: "self" },
+  { title: "My team", url: "/dashboard/me/team/overview", hint: "People who report to you", keywords: ["team", "direct reports"], audience: "self" },
+  { title: "My requests", url: "/dashboard/me/requests/actions", hint: "Approvals waiting on you", keywords: ["request", "approval", "pending"], audience: "self" },
+  { title: "Onboarding", url: "/dashboard/me/onboarding", hint: "Your joining checklist", keywords: ["onboarding", "joining", "new hire"], audience: "self" },
+  { title: "Offboarding", url: "/dashboard/me/offboarding", hint: "Your exit checklist", keywords: ["offboarding", "exit", "resign"], audience: "self" },
   { title: "Settings", url: "/dashboard/settings", hint: "Password, two-factor, devices, and notification preferences", keywords: ["settings", "password", "2fa", "two-factor", "mfa", "device", "notification", "alert"] },
   { title: "Help", url: "/dashboard/help", hint: "Shortcuts and pages you can open", keywords: ["help", "shortcut"] },
   { title: "Branches", url: "/dashboard/branches", hint: "Company branch locations", keywords: ["branch", "branches", "location", "office"] },
@@ -40,16 +41,17 @@ export const SUPPORT_PAGES: SupportPage[] = [
   { title: "Grades", url: "/dashboard/structure/grades", hint: "Pay grades and ranks", keywords: ["grade", "structure"] },
   { title: "Employee numbering", url: "/dashboard/structure/numbering", hint: "Prefix and next employee number", keywords: ["numbering", "prefix", "employee number"] },
   { title: "Invite and register", url: "/dashboard/operations/recruitment", hint: "Invites and new hires", keywords: ["invite", "register", "recruit", "hire"] },
-  { title: "Payroll", url: "/dashboard/operations/payroll", hint: "Runs, inputs, profiles, and configuration", keywords: ["payroll", "payslip", "salary", "run"] },
-  { title: "Reports", url: "/dashboard/operations/reports", hint: "Attendance downloads", keywords: ["report", "download", "export"] },
-  { title: "Notifications", url: "/dashboard/operations/notifications", hint: "Company alerts", keywords: ["notification", "inbox"] },
-  { title: "SMS", url: "/dashboard/sms/overview", hint: "Templates and message logs", keywords: ["sms", "text", "message"] },
-  { title: "Insights", url: "/dashboard/insights/hr", hint: "HR and management dashboards", keywords: ["insight", "analytics", "dashboard"] },
+  { title: "Payroll", url: "/dashboard/operations/payroll", hint: "Company payroll runs, inputs, and configuration (HR/finance)", keywords: ["payroll", "run", "salary processing"], audience: "company" },
+  { title: "Reports", url: "/dashboard/operations/reports", hint: "Attendance downloads", keywords: ["report", "download", "export"], audience: "company" },
+  { title: "Notifications", url: "/dashboard/operations/notifications", hint: "Company alerts", keywords: ["notification", "inbox"], audience: "company" },
+  { title: "SMS", url: "/dashboard/sms/overview", hint: "Send texts, templates, and message logs", keywords: ["sms", "text", "message", "test sms"], audience: "company" },
+  { title: "Insights", url: "/dashboard/insights/hr", hint: "HR and management dashboards", keywords: ["insight", "analytics", "dashboard"], audience: "company" },
+  { title: "Are we ready?", url: "/dashboard/insights/readiness", hint: "Clock-in setup, system health, and blocked actions", keywords: ["ready", "readiness", "clock-in", "clock in", "setup", "health"], audience: "company" },
 ]
 
 const STOP_WORDS = new Set([
   "a", "an", "the", "to", "of", "and", "or", "in", "on", "for", "is", "are",
-  "how", "do", "i", "me", "my", "we", "you", "it", "this", "that", "where",
+  "how", "do", "i", "we", "you", "it", "this", "that", "where",
   "find", "open", "page", "pages", "route", "routes", "link", "links", "go",
   "point", "please", "can", "what", "which",
 ])
@@ -68,28 +70,49 @@ function tokensFrom(question: string) {
     .filter((token) => token.length > 1 && !STOP_WORDS.has(token))
 }
 
-function scorePage(page: SupportPage, tokens: string[]) {
+function scorePage(
+  page: SupportPage,
+  tokens: string[],
+  query: string,
+  accessMode?: "admin" | "employee",
+) {
   const title = page.title.toLowerCase()
   const hint = page.hint.toLowerCase()
   const haystack = `${title} ${hint} ${page.keywords.join(" ")}`
   let score = 0
   for (const token of tokens) {
-    if (title === token) score += 12
+    if (title === token) score += 14
     else if (title.includes(token)) score += 8
-    if (page.keywords.some((keyword) => keyword === token || keyword.includes(token) || token.includes(keyword))) {
-      score += 6
+    if (page.keywords.some((keyword) => keyword === token || keyword === query)) {
+      score += 8
+    } else if (
+      page.keywords.some(
+        (keyword) => keyword.includes(token) || (token.length > 3 && token.includes(keyword)),
+      )
+    ) {
+      score += 4
     }
-    if (haystack.includes(token)) score += 2
+    if (haystack.includes(token)) score += 1
   }
+  if (query.includes("my ") && page.audience === "self") score += 10
+  if (query.includes("my ") && page.audience === "company") score -= 6
+  if (accessMode === "employee" && page.audience === "self") score += 5
+  if (accessMode === "employee" && page.audience === "company") score -= 4
+  if (accessMode === "admin" && !query.includes("my ") && page.audience === "company") score += 3
   return score
 }
 
-export function findSupportPages(question: string, limit = 3) {
+export function findSupportPages(
+  question: string,
+  limit = 3,
+  accessMode?: "admin" | "employee",
+) {
   const tokens = tokensFrom(question)
   if (tokens.length === 0) return []
+  const query = question.toLowerCase().trim()
   return SUPPORT_PAGES
-    .map((page) => ({ page, score: scorePage(page, tokens) }))
-    .filter((entry) => entry.score >= 6)
+    .map((page) => ({ page, score: scorePage(page, tokens, query, accessMode) }))
+    .filter((entry) => entry.score >= 8)
     .sort((left, right) => right.score - left.score || left.page.title.localeCompare(right.page.title))
     .slice(0, limit)
     .map((entry) => entry.page)
@@ -98,20 +121,41 @@ export function findSupportPages(question: string, limit = 3) {
 export function formatSupportMatch(pages: SupportPage[], extra?: string): SupportMatch {
   if (pages.length === 0) {
     return {
-      reply: extra ?? "I could not match that to a page. Try another word, or send this chat to IT support.",
+      reply:
+        extra ??
+        "I could not match that to a page. Try naming the area (leave, payroll, attendance, SMS). If you are stuck, tap Escalate to IT support.",
       links: [],
     }
   }
-  const lines = pages.map((page) => `${page.title}: ${page.hint} [${page.title}](${page.url})`)
+  const intro =
+    extra ??
+    (pages.length === 1
+      ? `Open ${pages[0].title} — ${pages[0].hint}`
+      : "These are different pages. Pick the one that matches what you need:")
+  const lines =
+    pages.length === 1
+      ? [`[${pages[0].title}](${pages[0].url})`]
+      : pages.map((page) => `- ${page.title}: ${page.hint} [${page.title}](${page.url})`)
   return {
-    reply: [extra, ...lines].filter(Boolean).join("\n"),
+    reply: [intro, ...lines].filter(Boolean).join("\n"),
     links: pages.map((page) => ({ title: page.title, url: page.url })),
   }
 }
 
-export function localSupportAnswer(question: string, previousQuestion = ""): SupportMatch {
-  const combined = `${previousQuestion} ${question}`.trim()
+export function localSupportAnswer(
+  question: string,
+  previousQuestion = "",
+  accessMode?: "admin" | "employee",
+): SupportMatch {
   const query = question.toLowerCase().trim()
+
+  if (/^(hi|hello|hey|howdy|good morning|good afternoon|good evening|help|yo)\b/.test(query)) {
+    return {
+      reply:
+        "Hi. I can take you to the right HRMS page and explain how to use it. Ask for something like leave, payroll, attendance, SMS, or clock-in. If I cannot help, tap Escalate to IT support.",
+      links: [],
+    }
+  }
 
   if (/dark|theme|night|light mode/.test(query)) {
     return {
@@ -120,13 +164,43 @@ export function localSupportAnswer(question: string, previousQuestion = ""): Sup
     }
   }
 
-  const pages = findSupportPages(/^(point me|show me|that|there|it|yes)$/i.test(query) ? previousQuestion || question : combined)
+  if (/escalat|it support|ticket|human|filbert|innocent|inocent/.test(query)) {
+    return {
+      reply:
+        "Tap Escalate to IT support below. That emails Filbert and Innocent with this chat so they can follow up.",
+      links: [],
+    }
+  }
+
+  if (/clock[\s-]?in|punch|biometric|attendance policy|work schedule|someone.?s schedule/.test(query)) {
+    return formatSupportMatch(
+      [
+        SUPPORT_PAGES.find((page) => page.url === "/dashboard/insights/readiness")!,
+        SUPPORT_PAGES.find((page) => page.url === "/dashboard/attendance/today")!,
+      ].filter(Boolean),
+      "Clock-in is two different things:\n- HR sets the company rules on Are we ready? (policy name, then create default rules).\n- You punch in on My attendance.",
+    )
+  }
+
+  const followUp = /^(point me|show me|that|there|it|yes|the first one|ok|okay)$/i.test(query)
+  const combined = followUp ? previousQuestion || question : question
+  const pages = findSupportPages(combined, 3, accessMode)
   if (pages.length > 0) {
-    return formatSupportMatch(pages, "Open one of these:")
+    if (pages.length === 1) {
+      return formatSupportMatch(pages)
+    }
+    const payrollMix = pages.some((page) => page.title === "Payroll") && pages.some((page) => page.title === "My payroll")
+    return formatSupportMatch(
+      pages,
+      payrollMix
+        ? "These are different pages. Payroll is for HR/finance processing company runs. My payroll is your own payslip. Pick the one you need:"
+        : "These are different pages. Pick the one that matches what you need:",
+    )
   }
 
   return {
-    reply: "I can take you to the page if you name it — payroll, SMS, branches, settings, leave, or attendance. Or send this chat to IT support.",
+    reply:
+      "I can take you there if you name the area — leave, payroll, attendance, SMS, clock-in, or settings. Or tap Escalate to IT support.",
     links: [],
   }
 }
@@ -142,6 +216,8 @@ Theme: the sun and moon button in the top bar switches light and dark. There is 
 
 Notification preferences are on Settings. Each row has its own switches.
 
-If several pages could match, list the best two or three with links.
-If you cannot match, say so and suggest escalating to IT support.
+If several pages could match, list the best two or three with links and explain the difference in one sentence.
+If the person says hello, greet them and ask what they need. Do not dump a page list.
+Clock-in setup lives on Insights → Are we ready?. Personal punches live on My attendance.
+If you cannot match, say so and tell them to tap Escalate to IT support.
 `.trim()

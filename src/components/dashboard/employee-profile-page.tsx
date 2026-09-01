@@ -4,8 +4,6 @@ import * as React from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
-  ChevronLeftIcon,
-  ChevronRightIcon,
   EyeIcon,
   EyeOffIcon,
   DownloadIcon,
@@ -68,6 +66,7 @@ import {
   type EmployeeProfileSection,
 } from "@/lib/admin-api"
 import { cn } from "@/lib/utils"
+import { pageBleedClass } from "@/components/dashboard/talent-visuals"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import { AnimatePresence, motion } from "framer-motion"
 import { useDashboardMotion } from "@/lib/dashboard-motion"
@@ -359,13 +358,33 @@ function formatLabelValue(value: string) {
 
 function statusTone(status: string) {
   const normalized = status.trim().toLowerCase()
-  if (["terminated", "exited", "inactive"].includes(normalized)) {
-    return "text-primary/55"
+  if (["terminated", "exited"].includes(normalized)) {
+    return "text-rose-600 dark:text-rose-400"
+  }
+  if (["inactive", "completed"].includes(normalized)) {
+    return "text-muted-foreground"
   }
   if (["pending", "probation", "suspended"].includes(normalized)) {
+    return "text-amber-600 dark:text-amber-400"
+  }
+  if (normalized === "active") {
+    return "text-emerald-600 dark:text-emerald-400"
+  }
+  return "text-foreground"
+}
+
+function assignmentTypeTone(assignmentType: string) {
+  const normalized = assignmentType.trim().toLowerCase()
+  if (normalized === "primary") {
     return "text-primary"
   }
-  return "text-primary"
+  if (normalized === "acting") {
+    return "text-amber-600 dark:text-amber-400"
+  }
+  if (normalized === "temporary") {
+    return "text-orange-600 dark:text-orange-400"
+  }
+  return "text-muted-foreground"
 }
 
 function SummaryField({
@@ -396,19 +415,12 @@ function SummaryField({
               },
             }
       }
-      className="relative isolate min-w-0 overflow-hidden rounded-[1.25rem] border border-primary/20 bg-card px-3 py-3 shadow-[0_1px_0_rgb(var(--primary-rgb)_/_0.12)_inset,0_12px_28px_-20px_rgb(var(--primary-rgb)_/_0.4)] dark:bg-[#181818] dark:shadow-none"
+      className="min-w-0 px-3 py-3"
     >
-      <motion.div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 bg-primary"
-        initial={reduce ? false : { clipPath: "circle(0% at 96% -4%)", opacity: 0 }}
-        animate={{ clipPath: "circle(28% at 96% -4%)", opacity: 0.38 }}
-        transition={{ duration: 0.8, delay: 0.05 + index * 0.03, ease: [0.16, 1, 0.3, 1] }}
-      />
-      <dt className="relative z-10 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+      <dt className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
         {label}
       </dt>
-      <dd className="relative z-10 mt-1.5 truncate text-sm font-semibold text-primary">
+      <dd className="mt-1.5 truncate text-sm font-semibold text-foreground">
         {children ?? value ?? "-"}
       </dd>
     </motion.div>
@@ -666,9 +678,8 @@ function positionAssignmentPreview(row: AdminRecord) {
     asRecord(row.primaryPosition)
   const positionName = positionRecord ? recordOptionLabel(positionRecord) : "-"
   const fallbackPosition = readString(row, ["position_name", "positionName", "title", "name"])
-  const assignmentType = readString(row, ["assignment_type", "assignmentType"])
   const previewPosition = positionName !== "-" ? positionName : fallbackPosition
-  return [previewPosition, assignmentType].filter((value) => value !== "-").join(" • ") || "Position assignment"
+  return previewPosition !== "-" ? previewPosition : "Position assignment"
 }
 
 function readPositionAssignmentForm(row: AdminRecord): PositionAssignmentFormState {
@@ -1689,11 +1700,13 @@ function ProfileSectionsTabs({
   employeeId,
   onMutated,
   requestedRouteKey,
+  header,
 }: {
   employee: AdminRecord
   employeeId: number | null
   onMutated: () => Promise<void>
   requestedRouteKey?: string | null
+  header?: React.ReactNode
 }) {
   const sections = React.useMemo(
     () =>
@@ -1725,54 +1738,6 @@ function ProfileSectionsTabs({
   const activeIndex = Math.max(0, sections.findIndex((section) => section.title === active?.title))
   const [slideDirection, setSlideDirection] = React.useState(1)
   const motionPreset = useDashboardMotion()
-  const tabsScrollRef = React.useRef<HTMLDivElement | null>(null)
-  const [tabScrollState, setTabScrollState] = React.useState({
-    canScrollLeft: false,
-    canScrollRight: false,
-    scrollable: false,
-  })
-
-  const updateTabScrollState = React.useCallback(() => {
-    const element = tabsScrollRef.current
-    if (!element) {
-      setTabScrollState({ canScrollLeft: false, canScrollRight: false, scrollable: false })
-      return
-    }
-
-    const maxScrollLeft = Math.max(0, element.scrollWidth - element.clientWidth)
-    const next = {
-      canScrollLeft: element.scrollLeft > 2,
-      canScrollRight: element.scrollLeft < maxScrollLeft - 2,
-      scrollable: maxScrollLeft > 2,
-    }
-
-    setTabScrollState((current) =>
-      current.canScrollLeft === next.canScrollLeft &&
-      current.canScrollRight === next.canScrollRight &&
-      current.scrollable === next.scrollable
-        ? current
-        : next
-    )
-  }, [])
-
-  React.useEffect(() => {
-    const element = tabsScrollRef.current
-    updateTabScrollState()
-    if (!element) {
-      return
-    }
-
-    const handleScrollUpdate = () => updateTabScrollState()
-    element.addEventListener("scroll", handleScrollUpdate, { passive: true })
-    window.addEventListener("resize", handleScrollUpdate)
-    const frameId = window.requestAnimationFrame(updateTabScrollState)
-
-    return () => {
-      element.removeEventListener("scroll", handleScrollUpdate)
-      window.removeEventListener("resize", handleScrollUpdate)
-      window.cancelAnimationFrame(frameId)
-    }
-  }, [sections.length, updateTabScrollState])
 
   const selectSection = React.useCallback((title: string) => {
     const nextIndex = sections.findIndex((section) => section.title === title)
@@ -1781,91 +1746,49 @@ function ProfileSectionsTabs({
     setActiveTitle(title)
   }, [activeIndex, activeTitle, sections])
 
-  const scrollTabs = React.useCallback((direction: "left" | "right") => {
-    const element = tabsScrollRef.current
-    if (!element) {
-      return
-    }
-
-    const distance = Math.max(element.clientWidth * 0.65, 140)
-    element.scrollBy({
-      left: direction === "left" ? -distance : distance,
-      behavior: "smooth",
-    })
-    window.setTimeout(updateTabScrollState, 260)
-  }, [updateTabScrollState])
-
   return (
-    <div className="relative isolate overflow-hidden rounded-[1.75rem] border border-primary/20 bg-card p-4 shadow-[0_1px_0_rgb(var(--primary-rgb)_/_0.12)_inset,0_16px_36px_-22px_rgb(var(--primary-rgb)_/_0.4)] dark:bg-[#181818] dark:shadow-none sm:p-5">
+    <div className="border border-border bg-card">
+      {header}
       <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 bg-primary opacity-[0.22]"
-        style={{ clipPath: "circle(12% at 98% -2%)" }}
-      />
-      <div className="relative z-10 space-y-4">
-        <div className="flex min-w-0 items-center gap-1.5">
-          <button
-            type="button"
-            aria-label="Scroll profile sections left"
-            disabled={!tabScrollState.canScrollLeft}
-            onClick={() => scrollTabs("left")}
-            className="inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-primary/20 bg-card text-primary shadow-sm transition hover:bg-primary/10 disabled:pointer-events-none disabled:opacity-40 dark:bg-[#181818] dark:shadow-none"
-          >
-            <ChevronLeftIcon className="size-3.5" />
-          </button>
-          <div
-            ref={tabsScrollRef}
-            className="min-w-0 flex-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-            role="tablist"
-            aria-label="Employee profile sections"
-          >
-            <div className="inline-flex items-center gap-2">
-              {sections.map((section) => {
-                const isActive = section.title === active?.title
-                const needsAttention = requestedRouteKey === section.routeKey
-                return (
-                  <button
-                    key={section.routeKey}
-                    type="button"
-                    role="tab"
-                    title={`${section.title} (${section.count})`}
-                    aria-label={`${section.title}, ${section.count} items`}
-                    aria-selected={isActive}
-                    onClick={() => selectSection(section.title)}
-                    className={cn(
-                      "relative isolate inline-flex h-8 shrink-0 items-center overflow-hidden rounded-full border px-3 text-xs font-semibold whitespace-nowrap transition",
-                      isActive
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-primary/15 bg-card text-primary hover:border-primary/30 hover:bg-primary/8 dark:bg-[#181818]",
-                      needsAttention && !isActive ? "ring-2 ring-primary/25" : null
-                    )}
-                  >
-                    {section.tabLabel}
-                    <span
-                      className={cn(
-                        "ml-1.5 tabular-nums",
-                        isActive ? "text-primary-foreground/80" : "text-primary/70"
-                      )}
-                    >
-                      {section.count}
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-          <button
-            type="button"
-            aria-label="Scroll profile sections right"
-            disabled={!tabScrollState.canScrollRight}
-            onClick={() => scrollTabs("right")}
-            className="inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-primary/20 bg-card text-primary shadow-sm transition hover:bg-primary/10 disabled:pointer-events-none disabled:opacity-40 dark:bg-[#181818] dark:shadow-none"
-          >
-            <ChevronRightIcon className="size-3.5" />
-          </button>
-        </div>
+        className="flex flex-wrap items-center gap-x-0.5 gap-y-0.5 border-t border-border px-2 py-1"
+        role="tablist"
+        aria-label="Employee profile sections"
+      >
+        {sections.map((section) => {
+          const isActive = section.title === active?.title
+          const needsAttention = requestedRouteKey === section.routeKey
+          return (
+            <button
+              key={section.routeKey}
+              type="button"
+              role="tab"
+              title={`${section.title} (${section.count})`}
+              aria-label={`${section.title}, ${section.count} items`}
+              aria-selected={isActive}
+              onClick={() => selectSection(section.title)}
+              className={cn(
+                "inline-flex h-6 items-center border-b-2 px-1.5 text-[10px] font-semibold whitespace-nowrap transition-colors",
+                isActive
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground",
+                needsAttention && !isActive ? "text-primary" : null
+              )}
+            >
+              {section.tabLabel}
+              <span
+                className={cn(
+                  "ml-1 tabular-nums",
+                  isActive ? "text-primary/70" : "text-muted-foreground"
+                )}
+              >
+                {section.count}
+              </span>
+            </button>
+          )
+        })}
+      </div>
 
-        <div className="relative overflow-hidden">
+        <div className="relative overflow-hidden border-t border-border p-4 sm:p-5">
           <AnimatePresence mode="wait" custom={slideDirection} initial={false}>
             {active ? (
               <motion.div
@@ -1919,7 +1842,6 @@ function ProfileSectionsTabs({
             ) : null}
           </AnimatePresence>
         </div>
-      </div>
     </div>
   )
 }
@@ -2004,7 +1926,7 @@ function Section({
         aria-label={`${title} section`}
         className={cn(
           "scroll-mt-24 outline-none",
-          isHighlighted && "rounded-2xl ring-2 ring-primary/30"
+          isHighlighted && "ring-2 ring-primary/30"
         )}
       >
         {supportsAdd || items.length === 0 || isHighlighted ? (
@@ -2014,7 +1936,7 @@ function Section({
               <span className="text-xs font-medium text-primary/70">Not provided</span>
             ) : null}
             {isHighlighted ? (
-              <span className="rounded-full bg-primary/12 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-primary">
+              <span className="bg-primary/12 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-primary">
                 Needs attention
               </span>
             ) : null}
@@ -2022,10 +1944,10 @@ function Section({
           {supportsAdd ? (
             <button
               type="button"
-              className="inline-flex items-center gap-1 rounded-full border border-primary/15 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary transition hover:bg-primary/15"
+              className="inline-flex h-9 items-center gap-1.5 border border-border bg-card px-3 text-sm font-medium text-foreground transition hover:bg-muted"
               onClick={() => setAddingRecord(true)}
             >
-              <PlusIcon className="size-3.5" /> Add
+              <PlusIcon className="size-4" /> Add
             </button>
           ) : null}
         </div>
@@ -2034,15 +1956,15 @@ function Section({
           <p className="mb-2 text-sm text-rose-600">{mutationError}</p>
         ) : null}
         {items.length === 0 ? (
-          <p className="rounded-2xl border border-dashed border-primary/20 bg-primary/4 px-4 py-6 text-center text-sm text-muted-foreground">
+          <p className="border border-dashed border-border bg-muted/30 px-4 py-6 text-center text-sm text-muted-foreground">
             No data available.
           </p>
         ) : (
-          <div className="grid gap-2">
+          <div>
             {items.map((item, index) => (
               <div
                 key={`${title}-${index}`}
-                className="rounded-2xl border border-primary/12 bg-card px-3 py-3 dark:bg-[#181818] dark:shadow-none"
+                className="border-t border-border py-3 first:border-t-0 first:pt-0"
               >
                 <div className="mb-2 flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -2676,7 +2598,7 @@ function DepartmentAssignmentsSection({
         tabIndex={-1}
         aria-label="Departments section"
         className={cn(
-          "scroll-mt-24 rounded-xl px-3 py-3 outline-none transition-all duration-500 lg:px-4",
+          "scroll-mt-24 px-3 py-3 outline-none transition-all duration-500 lg:px-4",
           isHighlighted &&
             "ring-2 ring-amber-400 ring-offset-2 ring-offset-background bg-amber-50/80 shadow-sm"
         )}
@@ -2684,14 +2606,7 @@ function DepartmentAssignmentsSection({
         <div className="mb-2 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="text-base font-semibold">Departments</span>
-            <span
-              className={cn(
-                "inline-flex min-w-5 items-center justify-center rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums",
-                items.length === 0
-                  ? "bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300"
-                  : "bg-primary/10 text-primary"
-              )}
-            >
+            <span className="text-xs font-semibold tabular-nums text-muted-foreground">
               {items.length}
             </span>
             {items.length === 0 ? (
@@ -2708,10 +2623,10 @@ function DepartmentAssignmentsSection({
           {employeeId ? (
             <button
               type="button"
-              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+              className="inline-flex h-9 items-center gap-1.5 border border-border bg-card px-3 text-sm font-medium text-foreground transition hover:bg-muted"
               onClick={() => setAddingRecord(true)}
             >
-              <PlusIcon className="size-3.5" /> Add
+              <PlusIcon className="size-4" /> Add
             </button>
           ) : null}
         </div>
@@ -2736,9 +2651,7 @@ function DepartmentAssignmentsSection({
                       </p>
                       <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
                         {isPrimaryDepartmentAssignment(item) ? (
-                          <span className="rounded-full bg-primary/10 px-2 py-0.5 font-medium text-primary">
-                            Primary
-                          </span>
+                          <span className="text-xs text-muted-foreground">Primary</span>
                         ) : null}
                       </div>
                     </div>
@@ -3097,21 +3010,14 @@ function PositionAssignmentsSection({
         tabIndex={-1}
         aria-label="Positions section"
         className={cn(
-          "scroll-mt-24 rounded-xl px-3 py-3 outline-none transition-all duration-500 lg:px-4",
+          "scroll-mt-24 px-3 py-3 outline-none transition-all duration-500 lg:px-4",
           isHighlighted && "ring-2 ring-amber-400 ring-offset-2 ring-offset-background bg-amber-50/80 shadow-sm"
         )}
       >
         <div className="mb-2 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="text-base font-semibold">Positions</span>
-            <span
-              className={cn(
-                "inline-flex min-w-5 items-center justify-center rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums",
-                items.length === 0
-                  ? "bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300"
-                  : "bg-primary/10 text-primary"
-              )}
-            >
+            <span className="text-xs font-semibold tabular-nums text-muted-foreground">
               {items.length}
             </span>
             {items.length === 0 ? (
@@ -3126,10 +3032,10 @@ function PositionAssignmentsSection({
           {employeeId ? (
             <button
               type="button"
-              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+              className="inline-flex h-9 items-center gap-1.5 border border-border bg-card px-3 text-sm font-medium text-foreground transition hover:bg-muted"
               onClick={() => setAddingRecord(true)}
             >
-              <PlusIcon className="size-3.5" /> Add
+              <PlusIcon className="size-4" /> Add
             </button>
           ) : null}
         </div>
@@ -3159,9 +3065,9 @@ function PositionAssignmentsSection({
                   <div className="mb-2 flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="break-words text-sm font-semibold text-foreground">{positionName}</p>
-                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+                      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
                         {assignmentType !== "-" ? (
-                          <span className="rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                          <span className={cn("font-medium", assignmentTypeTone(assignmentType))}>
                             {formatLabelValue(assignmentType)}
                           </span>
                         ) : null}
@@ -3170,10 +3076,9 @@ function PositionAssignmentsSection({
                             {formatLabelValue(status)}
                           </span>
                         ) : null}
-                        {isPrimaryEmployeePosition(item) ? (
-                          <span className="rounded-full bg-primary/10 px-2 py-0.5 font-medium text-primary">
-                            Primary
-                          </span>
+                        {isPrimaryEmployeePosition(item) &&
+                        assignmentType.trim().toLowerCase() !== "primary" ? (
+                          <span className="font-medium text-primary">Primary</span>
                         ) : null}
                       </div>
                     </div>
@@ -3452,24 +3357,47 @@ function EmployeeMovementsSection({
     let cancelled = false
     setOptionsLoading(true)
 
-    void Promise.all([
+    void Promise.allSettled([
       listBranches(token, { page: 1, limit: 200 }),
       listDepartments(token, { page: 1, limit: 200 }),
       listPositions(token, { page: 1, limit: 200 }),
-      listEmployees(token, { page: 1, limit: 200, sortBy: "created_at", sortOrder: "DESC" }),
       listEmployeeGrades(token),
       listCostCenters(token),
     ])
-      .then(([branches, departments, positions, managers, grades, costCenters]) => {
+      .then(([branches, departments, positions, grades, costCenters]) => {
         if (cancelled) {
           return
         }
-        setBranchOptions(branches.rows)
-        setDepartmentOptions(departments.rows)
-        setPositionOptions(positions.rows)
-        setManagerOptions(managers.rows)
-        setGradeOptions(grades)
-        setCostCenterOptions(costCenters)
+        const failedOptions: string[] = []
+        if (branches.status === "fulfilled") {
+          setBranchOptions(branches.value.rows)
+        } else {
+          failedOptions.push("branches")
+        }
+        if (departments.status === "fulfilled") {
+          setDepartmentOptions(departments.value.rows)
+        } else {
+          failedOptions.push("departments")
+        }
+        if (positions.status === "fulfilled") {
+          setPositionOptions(positions.value.rows)
+        } else {
+          failedOptions.push("positions")
+        }
+        if (grades.status === "fulfilled") {
+          setGradeOptions(grades.value)
+        } else {
+          failedOptions.push("grades")
+        }
+        if (costCenters.status === "fulfilled") {
+          setCostCenterOptions(costCenters.value)
+        } else {
+          failedOptions.push("cost centers")
+        }
+        setManagerOptions([])
+        if (failedOptions.length > 0) {
+          setMutationError(`Some movement options could not be loaded: ${failedOptions.join(", ")}.`)
+        }
       })
       .catch((errorObject) => {
         if (!cancelled) {
@@ -3556,7 +3484,7 @@ function EmployeeMovementsSection({
     setScopedManagerOptionsLoading(true)
     setScopedManagerOptionsLoaded(false)
 
-    void Promise.all([
+    void Promise.allSettled([
       listDepartmentPositions(token, selectedDepartmentId),
       listEmployees(token, {
         page: 1,
@@ -3570,23 +3498,24 @@ function EmployeeMovementsSection({
         if (cancelled) {
           return
         }
-        setScopedPositionOptions(
-          normalizeDepartmentScopedPositionOptions(positions, selectedDepartmentId)
-        )
-        setScopedPositionOptionsLoaded(true)
-        setScopedManagerOptions(
-          managers.rows.filter((row) => readNumber(row.id) !== employeeId)
-        )
-        setScopedManagerOptionsLoaded(true)
-      })
-      .catch(() => {
-        if (cancelled) {
-          return
+        if (positions.status === "fulfilled") {
+          setScopedPositionOptions(
+            normalizeDepartmentScopedPositionOptions(positions.value, selectedDepartmentId)
+          )
+          setScopedPositionOptionsLoaded(true)
+        } else {
+          setScopedPositionOptions([])
+          setScopedPositionOptionsLoaded(false)
         }
-        setScopedPositionOptions([])
-        setScopedPositionOptionsLoaded(false)
-        setScopedManagerOptions([])
-        setScopedManagerOptionsLoaded(false)
+        if (managers.status === "fulfilled") {
+          setScopedManagerOptions(
+            managers.value.rows.filter((row) => readNumber(row.id) !== employeeId)
+          )
+          setScopedManagerOptionsLoaded(true)
+        } else {
+          setScopedManagerOptions([])
+          setScopedManagerOptionsLoaded(true)
+        }
       })
       .finally(() => {
         if (!cancelled) {
@@ -3949,21 +3878,14 @@ function EmployeeMovementsSection({
         tabIndex={-1}
         aria-label="Movements section"
         className={cn(
-          "scroll-mt-24 rounded-xl px-3 py-3 outline-none transition-all duration-500 lg:px-4",
+          "scroll-mt-24 px-3 py-3 outline-none transition-all duration-500 lg:px-4",
           isHighlighted && "ring-2 ring-amber-400 ring-offset-2 ring-offset-background bg-amber-50/80 shadow-sm"
         )}
       >
         <div className="mb-2 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="text-base font-semibold">Movements</span>
-            <span
-              className={cn(
-                "inline-flex min-w-5 items-center justify-center rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums",
-                sortedItems.length === 0
-                  ? "bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300"
-                  : "bg-primary/10 text-primary"
-              )}
-            >
+            <span className="text-xs font-semibold tabular-nums text-muted-foreground">
               {sortedItems.length}
             </span>
             {sortedItems.length === 0 ? (
@@ -3978,10 +3900,10 @@ function EmployeeMovementsSection({
           {employeeId !== null ? (
             <button
               type="button"
-              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+              className="inline-flex h-9 items-center gap-1.5 border border-border bg-card px-3 text-sm font-medium text-foreground transition hover:bg-muted"
               onClick={() => setAddingRecord(true)}
             >
-              <PlusIcon className="size-3.5" /> Add
+              <PlusIcon className="size-4" /> Add
             </button>
           ) : null}
         </div>
@@ -4767,10 +4689,11 @@ export function EmployeeProfilePage({
     const token = readStoredToken()
     if (!token) return
     setOrganizationOptionsLoading(true)
+    setIdentityError(null)
     try {
       const selectedDepartmentNumber = Number(selectedDepartmentId)
       const hasSelectedDepartment = Number.isFinite(selectedDepartmentNumber) && selectedDepartmentNumber > 0
-      const [branches, departments, positions, managers, grades, costCenters] = await Promise.all([
+      const [branches, departments, positions, managers, grades, costCenters] = await Promise.allSettled([
         listBranches(token, { page: 1, limit: 100 }),
         listDepartments(token, { page: 1, limit: 100 }),
         hasSelectedDepartment
@@ -4790,12 +4713,43 @@ export function EmployeeProfilePage({
         listEmployeeGrades(token),
         listCostCenters(token),
       ])
-      setBranchOptions(branches.rows)
-      setDepartmentOptions(departments.rows)
-      setPositionOptions(positions)
-      setManagerOptions(managers)
-      setGradeOptions(grades)
-      setCostCenterOptions(costCenters)
+      const failedOptions: string[] = []
+      if (branches.status === "fulfilled") {
+        setBranchOptions(branches.value.rows)
+      } else {
+        failedOptions.push("branches")
+      }
+      if (departments.status === "fulfilled") {
+        setDepartmentOptions(departments.value.rows)
+      } else {
+        failedOptions.push("departments")
+      }
+      if (positions.status === "fulfilled") {
+        setPositionOptions(positions.value)
+      } else {
+        setPositionOptions([])
+        if (hasSelectedDepartment) {
+          failedOptions.push("positions")
+        }
+      }
+      if (managers.status === "fulfilled") {
+        setManagerOptions(managers.value)
+      } else {
+        setManagerOptions([])
+      }
+      if (grades.status === "fulfilled") {
+        setGradeOptions(grades.value)
+      } else {
+        failedOptions.push("grades")
+      }
+      if (costCenters.status === "fulfilled") {
+        setCostCenterOptions(costCenters.value)
+      } else {
+        failedOptions.push("cost centers")
+      }
+      if (failedOptions.length > 0) {
+        setIdentityError(`Some organization options could not be loaded: ${failedOptions.join(", ")}.`)
+      }
     } catch (errorObject) {
       setIdentityError(errorObject instanceof Error ? errorObject.message : "Failed to load organization options.")
     } finally {
@@ -4897,11 +4851,11 @@ export function EmployeeProfilePage({
   }
 
   return (
-    <div className="space-y-4 px-4 pb-4 lg:px-6">
-      <div className="sticky top-3 z-30 border-b border-border bg-background/95 px-4 py-3 backdrop-blur lg:px-6">
+    <div className={cn("space-y-4 pb-4", pageBleedClass)}>
+      <div className="sticky top-0 z-30 border-b border-border bg-background/95 px-4 py-3 backdrop-blur sm:px-5">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <h2 className="text-xl font-semibold text-foreground">{employeeDisplayNameFromLinkedUser(employee)}</h2>
+            <h2 className="text-xl font-semibold text-primary">{employeeDisplayNameFromLinkedUser(employee)}</h2>
             <Popover open={profileSearchOpen} onOpenChange={setProfileSearchOpen}>
               <PopoverTrigger
                 type="button"
@@ -4963,7 +4917,7 @@ export function EmployeeProfilePage({
           <div className="flex items-center gap-2">
             <button
               type="button"
-              className="px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              className="inline-flex h-9 items-center bg-primary px-3 text-sm font-semibold text-white transition hover:brightness-95"
               onClick={() => {
                 const companyUser = resolveCompanyUserRecord(employee)
                 const currentBranchId = String(
@@ -5035,7 +4989,7 @@ export function EmployeeProfilePage({
             </button>
             <button
               type="button"
-              className="px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              className="inline-flex h-9 items-center border border-border bg-card px-3 text-sm font-medium text-foreground transition hover:bg-muted"
               onClick={() => {
                 setStatusForm(readEmployeeStatusForm(employee))
                 setStatusError(null)
@@ -5048,8 +5002,7 @@ export function EmployeeProfilePage({
         </div>
       </div>
 
-      <div className="px-4 py-4">
-        {(() => {
+      {(() => {
           const employeeNo = readString(employee, [
             "employee_no",
             "employeeNo",
@@ -5095,57 +5048,57 @@ export function EmployeeProfilePage({
               : employeeDisplayName(asRecord(employee.manager) ?? {})
 
           return (
-            <motion.dl
-              className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5"
-              variants={motionPreset.metrics}
-              initial="hidden"
-              animate="show"
-            >
-              <SummaryField label="Employee No" value={employeeNo} index={0} reduce={motionPreset.reduce} />
-              <SummaryField label="Status" index={1} reduce={motionPreset.reduce}>
-                <span className={cn("text-sm font-semibold", statusTone(statusRaw))}>
-                  {formatLabelValue(statusRaw)}
-                </span>
-              </SummaryField>
-              <SummaryField
-                label="Employment Type"
-                value={employmentType}
-                index={2}
-                reduce={motionPreset.reduce}
-              />
-              <SummaryField
-                label="Hire Date"
-                value={formatProfileDate(employee.hire_date ?? employee.hireDate)}
-                index={3}
-                reduce={motionPreset.reduce}
-              />
-              <SummaryField label="Branch" value={branch} index={4} reduce={motionPreset.reduce} />
-              <SummaryField label="Department" value={department} index={5} reduce={motionPreset.reduce} />
-              <SummaryField label="Position" value={position} index={6} reduce={motionPreset.reduce} />
-              <SummaryField label="Manager" value={manager} index={7} reduce={motionPreset.reduce} />
-              <SummaryField
-                label="Last Updated"
-                value={formatDateTime(employee.updated_at ?? employee.updatedAt)}
-                index={8}
-                reduce={motionPreset.reduce}
-              />
-              <SummaryField
-                label="Employee Id"
-                value={String(employee.id ?? "-")}
-                index={9}
-                reduce={motionPreset.reduce}
-              />
-            </motion.dl>
+            <ProfileSectionsTabs
+              employee={employee}
+              employeeId={readNumber(employee.id)}
+              onMutated={fetchEmployee}
+              requestedRouteKey={requestedRouteKey}
+              header={
+                <motion.dl
+                  className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5"
+                  variants={motionPreset.metrics}
+                  initial="hidden"
+                  animate="show"
+                >
+                  <SummaryField label="Employee No" value={employeeNo} index={0} reduce={motionPreset.reduce} />
+                  <SummaryField label="Status" index={1} reduce={motionPreset.reduce}>
+                    <span className={cn("text-sm font-semibold", statusTone(statusRaw))}>
+                      {formatLabelValue(statusRaw)}
+                    </span>
+                  </SummaryField>
+                  <SummaryField
+                    label="Employment Type"
+                    value={employmentType}
+                    index={2}
+                    reduce={motionPreset.reduce}
+                  />
+                  <SummaryField
+                    label="Hire Date"
+                    value={formatProfileDate(employee.hire_date ?? employee.hireDate)}
+                    index={3}
+                    reduce={motionPreset.reduce}
+                  />
+                  <SummaryField label="Branch" value={branch} index={4} reduce={motionPreset.reduce} />
+                  <SummaryField label="Department" value={department} index={5} reduce={motionPreset.reduce} />
+                  <SummaryField label="Position" value={position} index={6} reduce={motionPreset.reduce} />
+                  <SummaryField label="Manager" value={manager} index={7} reduce={motionPreset.reduce} />
+                  <SummaryField
+                    label="Last Updated"
+                    value={formatDateTime(employee.updated_at ?? employee.updatedAt)}
+                    index={8}
+                    reduce={motionPreset.reduce}
+                  />
+                  <SummaryField
+                    label="Employee Id"
+                    value={String(employee.id ?? "-")}
+                    index={9}
+                    reduce={motionPreset.reduce}
+                  />
+                </motion.dl>
+              }
+            />
           )
         })()}
-      </div>
-
-      <ProfileSectionsTabs
-        employee={employee}
-        employeeId={readNumber(employee.id)}
-        onMutated={fetchEmployee}
-        requestedRouteKey={requestedRouteKey}
-      />
 
       <AlertDialog open={statusDialogOpen} onOpenChange={setStatusDialogOpen}>
         <AlertDialogContent className="max-w-2xl">

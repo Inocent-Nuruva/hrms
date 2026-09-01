@@ -5,6 +5,7 @@ import {
   assignOffboardingClearance,
   delegateOnboardingApproval,
   deleteOffboardingDocument,
+  ensureDraftOnboardingRequest,
   listMyOffboardingRequests,
   listMyOnboardingRequests,
   updateOffboardingAction,
@@ -24,6 +25,53 @@ describe("documented onboarding and offboarding leftovers", () => {
   afterEach(() => {
     vi.unstubAllGlobals()
     vi.restoreAllMocks()
+  })
+
+  it("creates a draft onboarding request and treats an existing one as success", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: { id: 2, status: "draft", employee_id: 139 },
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            statusCode: 409,
+            message: "Employee already has active onboarding request ONB-2026-000001",
+          },
+          { status: 409 },
+        ),
+      )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const created = await ensureDraftOnboardingRequest("token", {
+      employee_id: 139,
+      workflow_id: 1,
+      title: "Onboarding for Damas Urio Damas",
+    })
+    const existing = await ensureDraftOnboardingRequest("token", {
+      employee_id: 139,
+      workflow_id: 1,
+      title: "Onboarding for Damas Urio Damas",
+    })
+
+    expect(created).toEqual(expect.objectContaining({ id: 2, status: "draft" }))
+    expect(existing).toBeNull()
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "http://localhost:8888/api/onboarding/requests",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          employee_id: 139,
+          workflow_id: 1,
+          title: "Onboarding for Damas Urio Damas",
+          submit: false,
+        }),
+      }),
+    )
   })
 
   it("lists my onboarding and offboarding requests", async () => {

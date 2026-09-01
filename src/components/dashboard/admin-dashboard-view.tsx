@@ -15,8 +15,10 @@ import {
 } from "@/components/animate-ui/components/base/dialog";
 import { DashboardSectionTabs } from "@/components/dashboard/dashboard-section-tabs";
 import { SiteHeader } from "@/components/site-header";
-import { SupportChatWidget } from "@/components/support-chat-widget";
-import { accessControlSectionTabGroups } from "@/lib/dashboard-sections";
+import {
+  accessControlSectionTabGroups,
+  accessGovernanceSectionTabGroups,
+} from "@/lib/dashboard-sections";
 import {
   isHumanResourcesEmployeeRecord,
   resolveHomeDashboardKind,
@@ -26,6 +28,13 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 
 const DataTable = dynamic(
   () => import("@/components/data-table").then((mod) => mod.DataTable),
+  { ssr: false },
+);
+const SupportChatWidget = dynamic(
+  () =>
+    import("@/components/support-chat-widget").then(
+      (mod) => mod.SupportChatWidget,
+    ),
   { ssr: false },
 );
 const AccountSettingsPanel = dynamic(
@@ -83,6 +92,14 @@ function loadAdminApi() {
 }
 import { useMyProfilePhoto } from "@/lib/my-profile-photo";
 import { DashboardIdentityProvider } from "@/components/dashboard/dashboard-identity";
+import {
+  DEFAULT_COMPANY_MODULES,
+  isDashboardRouteEnabledForCompanyModules,
+  PLATFORM_COMPANY_MODULES,
+  publishCompanyModules,
+  readPublishedCompanyModules,
+  resolveCompanyDashboardModules,
+} from "@/lib/company-modules";
 import {
   canAccessDashboardRoute,
   clearDashboardActorSnapshot,
@@ -384,11 +401,18 @@ export default function AdminDashboardView({
   const resolvedUseApis = useApis || Boolean(resolvedActiveResource);
   // Keep Access Control tabs mounted in the shell so switching Devices → Roles
   // (different route trees) does not remount/refresh the tab rail.
+  // Keep Access Control tabs mounted in the shell so switching Devices → Roles
+  // (different route trees) does not remount/refresh the tab rail.
+  // Platform Access Governance is roles/permissions only — not tenant devices.
   const showAccessControlTabs =
     currentPath === "/dashboard/roles" ||
     currentPath === "/dashboard/permissions" ||
     currentPath === "/dashboard/access-control" ||
     currentPath.startsWith("/dashboard/access-control/");
+  const accessControlTabGroups =
+    actorSnapshot.scope === "platform"
+      ? accessGovernanceSectionTabGroups
+      : accessControlSectionTabGroups;
   const [token, setToken] = React.useState("");
   const [collections, setCollections] =
     React.useState<AdminResourceCollections>({
@@ -653,7 +677,6 @@ export default function AdminDashboardView({
           companies: previous.companies,
         }));
         setCurrentAdmin(admin);
-        setMyCompany(null);
         if (usersResult) {
           setUsersTotal(usersResult.total);
           setUsersTotalPages(usersResult.totalPages);
@@ -981,6 +1004,7 @@ export default function AdminDashboardView({
     tokenPayload: null,
   });
   const [identityReady, setIdentityReady] = React.useState(false);
+  const [companyModulesReady, setCompanyModulesReady] = React.useState(false);
 
   React.useEffect(() => {
     if (typeof window === "undefined") {
@@ -1149,6 +1173,65 @@ export default function AdminDashboardView({
   const accessMode = actorSnapshot.accessMode;
   const effectivePermissionLabels = actorSnapshot.permissionLabels;
   const accessIdentityReady = identityReady && actorSnapshot.ready;
+
+  React.useEffect(() => {
+    if (!accessIdentityReady) {
+      setCompanyModulesReady(false);
+      return;
+    }
+
+    if (actorSnapshot.scope === "platform") {
+      publishCompanyModules(PLATFORM_COMPANY_MODULES);
+      setMyCompany(null);
+      setCompanyModulesReady(true);
+      return;
+    }
+
+    if (!token) {
+      publishCompanyModules(DEFAULT_COMPANY_MODULES);
+      setCompanyModulesReady(true);
+      return;
+    }
+
+    let active = true;
+    setCompanyModulesReady(false);
+    void loadAdminApi()
+      .then(async (api) => {
+        const company = await api.getMyCompany(token);
+        if (!active) return;
+        setMyCompany(company);
+        const modules = await resolveCompanyDashboardModules({
+          company,
+          extraIdSources: [
+            clientIdentity.rawUser,
+            clientIdentity.tokenPayload,
+          ],
+          loadModules: (id) => api.getCompanyModules(token, id),
+        });
+        if (!active) return;
+        publishCompanyModules(modules);
+      })
+      .catch(() => {
+        if (!active) return;
+        setMyCompany(null);
+        publishCompanyModules(DEFAULT_COMPANY_MODULES);
+      })
+      .finally(() => {
+        if (active) setCompanyModulesReady(true);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [
+    accessIdentityReady,
+    actorSnapshot.scope,
+    clientIdentity.rawUser,
+    clientIdentity.tokenPayload,
+    token,
+  ]);
+
+  const navigationReady = accessIdentityReady && companyModulesReady;
   const homeDashboardKind = resolveHomeDashboardKind({
     accessMode,
     scope: actorSnapshot.scope,
@@ -1330,7 +1413,7 @@ export default function AdminDashboardView({
         accessMode={accessMode}
         scope={actorSnapshot.scope}
         homeDashboardKind={effectiveHomeDashboardKind}
-        identityReady={accessIdentityReady}
+        identityReady={navigationReady}
         permissionLabels={effectivePermissionLabels}
         activeResource={resolvedActiveResource}
         onSelectResource={navigateToResource}
@@ -1356,8 +1439,8 @@ export default function AdminDashboardView({
               />
             ) : null}
             <div className="flex min-w-0 max-w-full flex-col gap-3 px-3 pt-0 pb-3 sm:px-4 md:gap-4 md:px-4 md:pb-4">
-              {accessIdentityReady && showAccessControlTabs ? (
-                <DashboardSectionTabs groups={accessControlSectionTabGroups} />
+              {navigationReady && showAccessControlTabs ? (
+                <DashboardSectionTabs groups={accessControlTabGroups} />
               ) : null}
               <div className="min-w-0">
                 {accessIdentityReady ? (
@@ -1374,7 +1457,15 @@ export default function AdminDashboardView({
               {accessIdentityReady &&
               resolvedActiveResource &&
               resolvedUseApis &&
-              resolvedActiveResource !== "companies" ? (
+              resolvedActiveResource !== "companies" &&
+              (resolvedActiveResource !== "roles" &&
+              resolvedActiveResource !== "permissions"
+                ? true
+                : navigationReady &&
+                  isDashboardRouteEnabledForCompanyModules(
+                    `/dashboard/${resolvedActiveResource}`,
+                    readPublishedCompanyModules(),
+                  )) ? (
                 <DataTable
                   token={token}
                   activeResource={resolvedActiveResource}

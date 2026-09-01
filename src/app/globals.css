@@ -157,6 +157,17 @@ input::placeholder {
   color: color-mix(in srgb, var(--muted-foreground) 80%, transparent);
 }
 
+button,
+[role="button"] {
+  cursor: pointer;
+}
+
+button:disabled,
+button[aria-disabled="true"],
+[role="button"][aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
 button:focus-visible {
   outline: 2px solid var(--blue);
   outline-offset: 2px;
@@ -371,6 +382,7 @@ table.min-w-full > tbody > tr > td {
   border: 1px solid color-mix(in srgb, var(--section-tab-rail-border) 70%, transparent);
   background: transparent;
   color: var(--foreground);
+  cursor: pointer;
   transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease, transform 180ms ease;
 }
 

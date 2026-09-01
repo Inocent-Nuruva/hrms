@@ -66,7 +66,8 @@ import {
   type AttendanceResourceKey,
 } from "@/lib/admin-api"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
-import { canAccessDashboardRoute, canPerformPermission } from "@/lib/dashboard-permissions"
+import { canPerformPermission } from "@/lib/dashboard-permissions"
+import { canSeeDashboardPage } from "@/lib/forbidden-routes"
 import { AttendanceSetupWizard } from "@/components/dashboard/attendance-setup-wizard"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 
@@ -1974,7 +1975,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
   const isDeviceSyncLogsSection = activeSection === "device-sync-logs"
   const canOpenAccessControlDevices =
     actor.ready &&
-    canAccessDashboardRoute(
+    canSeeDashboardPage(
       "/dashboard/access-control/devices",
       actor.permissionLabels,
       actor.accessMode

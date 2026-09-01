@@ -77,7 +77,7 @@ import {
   type EmployeeAccessRemovalTarget,
 } from "@/components/dashboard/employee-access-removal-dialog"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
-import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
+import { canSeeDashboardPage } from "@/lib/forbidden-routes"
 import { cn } from "@/lib/utils"
 import { showErrorAlert } from "@/lib/error-alert"
 import { showSuccessAlert } from "@/lib/success-alert"
@@ -851,7 +851,7 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
   )
   const canOpenAccessControlDevices =
     actor.ready &&
-    canAccessDashboardRoute(
+    canSeeDashboardPage(
       "/dashboard/access-control/devices",
       actor.permissionLabels,
       actor.accessMode

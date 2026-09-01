@@ -53,11 +53,7 @@ import {
 import { DEFAULT_NOTIFICATION_QUERY, useNotifications } from "@/lib/notifications-store"
 import { readStoredSessionTokens } from "@/lib/session-client"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
-import {
-  canPerformPermission,
-  COMPANY_MANAGEMENT_ROUTE_PERMISSION,
-  decodeJwtPayload,
-} from "@/lib/dashboard-permissions"
+import { decodeJwtPayload } from "@/lib/dashboard-permissions"
 import { Badge } from "@/components/ui/badge"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 import {
@@ -547,15 +543,13 @@ export function NotificationsView() {
   const [markingAllRead, setMarkingAllRead] = React.useState(false)
   const [sendingTestNotification, setSendingTestNotification] = React.useState(false)
   const loadRequestIdRef = React.useRef(0)
-  const hasPlatformNotificationAccess =
-    actor.ready &&
-    canPerformPermission(actor.permissionLabels, COMPANY_MANAGEMENT_ROUTE_PERMISSION)
+  const isPlatformAdmin = actor.scope === "platform"
   const availableTabs = React.useMemo(
     () =>
       TABS.filter((entry) =>
-        PLATFORM_NOTIFICATION_TABS.has(entry.id) ? hasPlatformNotificationAccess : true
+        PLATFORM_NOTIFICATION_TABS.has(entry.id) ? isPlatformAdmin : !isPlatformAdmin
       ),
-    [hasPlatformNotificationAccess]
+    [isPlatformAdmin]
   )
   const unreadInboxCount = React.useMemo(
     () => (tab === "inbox" ? rows.filter((row) => !isArchivedNotification(row) && isUnreadNotification(row)).length : 0),
@@ -567,11 +561,14 @@ export function NotificationsView() {
   )
 
   React.useEffect(() => {
-    if (PLATFORM_NOTIFICATION_TABS.has(tab) && !hasPlatformNotificationAccess) {
-      setTab("inbox")
-      setError("Platform notification controls are hidden for your current role.")
-    }
-  }, [hasPlatformNotificationAccess, tab])
+    if (!actor.ready) return
+    setTab((current) => {
+      if (isPlatformAdmin) {
+        return PLATFORM_NOTIFICATION_TABS.has(current) ? current : "platform-settings"
+      }
+      return PLATFORM_NOTIFICATION_TABS.has(current) ? "inbox" : current
+    })
+  }, [actor.ready, isPlatformAdmin])
 
   const activeFilterCount =
     tab === "inbox"
@@ -1884,13 +1881,15 @@ export function NotificationsView() {
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div className="min-w-0">
           <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-            Operations
+            {isPlatformAdmin ? "Platform" : "Operations"}
           </p>
           <h1 className="text-xl font-semibold tracking-tight text-foreground">
-            Notifications
+            {isPlatformAdmin ? "Platform Notifications" : "Notifications"}
           </h1>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            Review inbox events, delivery outcomes, global channel switches, and outbound mail activity.
+            {isPlatformAdmin
+              ? "Configure platform channel registry, delivery settings, and outbound mail logs."
+              : "Review inbox events, delivery outcomes, company channel switches, and outbound mail activity."}
           </p>
         </div>
       </div>

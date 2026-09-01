@@ -330,6 +330,7 @@ export function EmployeeInviteView() {
   const [loading, setLoading] = React.useState(false)
   const [departmentPositionsLoading, setDepartmentPositionsLoading] = React.useState(false)
   const [departmentPositionsLoaded, setDepartmentPositionsLoaded] = React.useState(false)
+  const [employeesLoading, setEmployeesLoading] = React.useState(false)
   const [submitting, setSubmitting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [token, setToken] = React.useState("")
@@ -370,18 +371,11 @@ export function EmployeeInviteView() {
               total: 0,
               totalPages: 0,
             })
-        const [br, de, po, wo, em] = await Promise.allSettled([
+        const [br, de, po, wo] = await Promise.allSettled([
           listBranches(token, { page: 1, limit: 100, sortBy: "name", sortOrder: "ASC" }),
           listDepartments(token, { page: 1, limit: 200, sortBy: "name", sortOrder: "ASC" }),
           listPositions(token, { page: 1, limit: 200, sortBy: "name", sortOrder: "ASC" }),
           workflowLookup,
-          listEmployees(token, {
-            page: 1,
-            limit: 200,
-            sortBy: "first_name",
-            sortOrder: "ASC",
-            employment_status: "active",
-          }),
         ])
         if (cancelled) return
 
@@ -417,12 +411,7 @@ export function EmployeeInviteView() {
           }
         }
 
-        if (em.status === "fulfilled") {
-          setEmployees(em.value.rows || [])
-        } else {
-          setEmployees([])
-          failures.push("employees")
-        }
+        setEmployees([])
 
         if (failures.length > 0) {
           setError(`Some reference data could not be loaded: ${failures.join(", ")}.`)
@@ -514,9 +503,6 @@ export function EmployeeInviteView() {
     if (departmentId === null) return []
     const candidates: Array<LookupOption | null> = employees
       .filter((record) => {
-        if (!relatedDepartmentIds(record).has(departmentId)) {
-          return false
-        }
         const employeeBranchId = relatedBranchId(record)
         return branchId === null || employeeBranchId === null || employeeBranchId === branchId
       })
@@ -552,27 +538,46 @@ export function EmployeeInviteView() {
       setDepartmentPositions([])
       setDepartmentPositionsLoaded(false)
       setDepartmentPositionsLoading(false)
+      setEmployees([])
+      setEmployeesLoading(false)
       return
     }
 
     let cancelled = false
     setDepartmentPositionsLoading(true)
     setDepartmentPositionsLoaded(false)
+    setEmployeesLoading(true)
 
-    void listDepartmentPositions(token, departmentId)
-      .then((rows) => {
+    void Promise.allSettled([
+      listDepartmentPositions(token, departmentId),
+      listEmployees(token, {
+        page: 1,
+        limit: 200,
+        sortBy: "first_name",
+        sortOrder: "ASC",
+        employment_status: "active",
+        department_id: departmentId,
+      }),
+    ])
+      .then(([departmentPositionResult, employeeResult]) => {
         if (cancelled) return
-        setDepartmentPositions(normalizeDepartmentPositionRows(rows, departmentId))
-        setDepartmentPositionsLoaded(true)
-      })
-      .catch(() => {
-        if (cancelled) return
-        setDepartmentPositions([])
-        setDepartmentPositionsLoaded(false)
+        if (departmentPositionResult.status === "fulfilled") {
+          setDepartmentPositions(normalizeDepartmentPositionRows(departmentPositionResult.value, departmentId))
+          setDepartmentPositionsLoaded(true)
+        } else {
+          setDepartmentPositions([])
+          setDepartmentPositionsLoaded(false)
+        }
+        if (employeeResult.status === "fulfilled") {
+          setEmployees(employeeResult.value.rows || [])
+        } else {
+          setEmployees([])
+        }
       })
       .finally(() => {
         if (!cancelled) {
           setDepartmentPositionsLoading(false)
+          setEmployeesLoading(false)
         }
       })
 
@@ -602,6 +607,8 @@ export function EmployeeInviteView() {
     setDepartmentPositions([])
     setDepartmentPositionsLoaded(false)
     setDepartmentPositionsLoading(false)
+    setEmployees([])
+    setEmployeesLoading(false)
   }
 
   const handleDepartmentChange = (value: string | null) => {
@@ -612,6 +619,8 @@ export function EmployeeInviteView() {
     setDepartmentPositions([])
     setDepartmentPositionsLoaded(false)
     setDepartmentPositionsLoading(false)
+    setEmployees([])
+    setEmployeesLoading(false)
   }
 
   const handlePositionChange = (value: string | null) => {
@@ -804,7 +813,7 @@ export function EmployeeInviteView() {
 
   const departmentDisabled = branchId === null || loading
   const positionDisabled = departmentId === null || loading || departmentPositionsLoading
-  const reportsToDisabled = departmentId === null || loading
+  const reportsToDisabled = departmentId === null || loading || employeesLoading
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 pb-8">
@@ -1008,11 +1017,15 @@ export function EmployeeInviteView() {
                     placeholder={
                       departmentId === null
                         ? "Select department first"
+                        : employeesLoading
+                          ? "Loading managers..."
                         : "Select manager (optional)"
                     }
                   >
                     {departmentId === null
                       ? "Select department first"
+                      : employeesLoading
+                        ? "Loading managers..."
                       : getSelectedLabel(employeeOptions, reportsToId, "Select manager (optional)")}
                   </SelectValue>
                 </SelectTrigger>
@@ -1021,9 +1034,9 @@ export function EmployeeInviteView() {
                     <div className="px-2 py-2 text-xs text-muted-foreground">
                       {departmentId === null
                         ? "Select a department first"
-                        : loading
-                          ? "Loading employees..."
-                          : "No managers found in this department"}
+                        : employeesLoading
+                          ? "Loading managers..."
+                        : "No managers found in this department"}
                     </div>
                   ) : null}
                   {employeeOptions.map((option) => (

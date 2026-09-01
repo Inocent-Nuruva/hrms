@@ -180,7 +180,21 @@ describe("tightened dashboard permissions", () => {
     expect(
       canAccessDashboardRoute(
         "/dashboard/operations/scheduled-reporting",
-        ["scheduled_reporting:read"],
+        ["scheduled_reporting:read", "manage_scheduled_reports"],
+        "admin",
+      ),
+    ).toBe(false)
+    expect(
+      canAccessDashboardRoute(
+        "/dashboard/operations/scheduled-reporting",
+        ["scheduled_reports:read"],
+        "admin",
+      ),
+    ).toBe(true)
+    expect(
+      canAccessDashboardRoute(
+        "/dashboard/operations/scheduled-reporting",
+        ["scheduled_reports:manage_smtp"],
         "admin",
       ),
     ).toBe(true)

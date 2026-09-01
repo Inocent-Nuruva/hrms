@@ -26,7 +26,8 @@ import {
   updateAccessCredentialStatus,
   type AdminRecord,
 } from "@/lib/admin-api"
-import { canAccessDashboardRoute, canPerformPermission } from "@/lib/dashboard-permissions"
+import { canPerformPermission } from "@/lib/dashboard-permissions"
+import { canSeeDashboardPage } from "@/lib/forbidden-routes"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { useForbiddenRouteGuard, useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
 import { useDebouncedValue } from "@/hooks/use-debounced-value"
@@ -425,7 +426,7 @@ export function AccessControlActivityView({
   const sectionPath = `/dashboard/access-control/${activeSection}`
   const canAccess =
     actor.ready &&
-    canAccessDashboardRoute(sectionPath, actor.permissionLabels, actor.accessMode)
+    canSeeDashboardPage(sectionPath, actor.permissionLabels, actor.accessMode)
   useForbiddenRouteGuard(canAccess)
 
   const [rows, setRows] = React.useState<AdminRecord[]>([])

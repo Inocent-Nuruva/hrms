@@ -314,11 +314,11 @@ export function PlatformAdminDashboard() {
             </span>
             <Button
               type="button"
-              variant="secondary"
+              variant="outline"
               size="sm"
               onClick={() => setRefreshKey((value) => value + 1)}
               disabled={loading}
-              className="border-0"
+              className="border-white/40 bg-white !text-primary shadow-none hover:bg-white/90 hover:!text-primary [&_svg]:!text-primary before:bg-white/80"
             >
               <RefreshCw className={cn("size-4", loading && "animate-spin")} />
               Refresh

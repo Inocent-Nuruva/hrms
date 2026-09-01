@@ -137,7 +137,8 @@ function SidebarProvider({
 
   // This is the internal state of the sidebar.
   // We use openProp and setOpenProp for control from outside the component.
-  const [_open, _setOpen] = React.useState(() => readSidebarOpenState(defaultOpen))
+  // Cookie state is applied after mount so SSR HTML matches the first client render.
+  const [_open, _setOpen] = React.useState(defaultOpen)
   const open = openProp ?? _open
   const setOpen = React.useCallback(
     (value: boolean | ((value: boolean) => boolean)) => {
@@ -190,6 +191,16 @@ function SidebarProvider({
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [toggleSidebar])
+
+  React.useEffect(() => {
+    if (openProp !== undefined) {
+      return
+    }
+    const cookieOpen = readSidebarOpenState(defaultOpen)
+    if (cookieOpen !== defaultOpen) {
+      _setOpen(cookieOpen)
+    }
+  }, [defaultOpen, openProp])
 
   React.useEffect(() => {
     if (typeof window === "undefined") return

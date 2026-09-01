@@ -6,6 +6,8 @@ import { HeadphonesIcon, Loader2Icon, SendIcon, XIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
+import { useDashboardActor } from "@/hooks/use-dashboard-actor"
+import { readStoredSessionTokens } from "@/lib/session-client"
 import { cn } from "@/lib/utils"
 
 type SupportLink = { title: string; url: string }
@@ -14,6 +16,55 @@ type ChatMessage = {
   role: "user" | "assistant"
   content: string
   links?: SupportLink[]
+}
+
+const SUPPORT_WIDGET_POSITION_KEY = "hrms.support.widget.position"
+const SUPPORT_WIDGET_SIZE = 48
+const SUPPORT_WIDGET_MARGIN = 16
+
+type SupportWidgetPosition = {
+  left: number
+  top: number
+}
+
+function defaultSupportWidgetPosition() {
+  return {
+    left: Math.max(SUPPORT_WIDGET_MARGIN, window.innerWidth - SUPPORT_WIDGET_SIZE - SUPPORT_WIDGET_MARGIN),
+    top: Math.max(SUPPORT_WIDGET_MARGIN, window.innerHeight - SUPPORT_WIDGET_SIZE - SUPPORT_WIDGET_MARGIN),
+  }
+}
+
+function clampSupportWidgetPosition(position: SupportWidgetPosition) {
+  if (typeof window === "undefined") {
+    return position
+  }
+  return {
+    left: Math.min(
+      Math.max(SUPPORT_WIDGET_MARGIN, position.left),
+      Math.max(SUPPORT_WIDGET_MARGIN, window.innerWidth - SUPPORT_WIDGET_SIZE - SUPPORT_WIDGET_MARGIN),
+    ),
+    top: Math.min(
+      Math.max(SUPPORT_WIDGET_MARGIN, position.top),
+      Math.max(SUPPORT_WIDGET_MARGIN, window.innerHeight - SUPPORT_WIDGET_SIZE - SUPPORT_WIDGET_MARGIN),
+    ),
+  }
+}
+
+function readStoredSupportWidgetPosition() {
+  if (typeof window === "undefined") {
+    return null
+  }
+  try {
+    const raw = window.localStorage.getItem(SUPPORT_WIDGET_POSITION_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<SupportWidgetPosition>
+    if (typeof parsed.left !== "number" || typeof parsed.top !== "number") {
+      return null
+    }
+    return clampSupportWidgetPosition({ left: parsed.left, top: parsed.top })
+  } catch {
+    return null
+  }
 }
 
 function renderMessageBody(content: string) {
@@ -32,22 +83,118 @@ function renderMessageBody(content: string) {
 }
 
 export function SupportChatWidget() {
+  const actor = useDashboardActor()
   const [open, setOpen] = React.useState(false)
+  const [position, setPosition] = React.useState<SupportWidgetPosition | null>(null)
+  const [viewport, setViewport] = React.useState({ width: 0, height: 0 })
   const [input, setInput] = React.useState("")
   const [busy, setBusy] = React.useState(false)
   const [escalating, setEscalating] = React.useState(false)
   const [messages, setMessages] = React.useState<ChatMessage[]>([
     {
       role: "assistant",
-      content: "I can help you find pages and how to use HRMS. Ask a question, or send this chat to IT support.",
+      content:
+        "Hi. Ask me where to go in HRMS — leave, payroll, attendance, SMS, clock-in — and I will point you there. If I cannot help, tap Escalate to IT support.",
     },
   ])
   const scrollerRef = React.useRef<HTMLDivElement | null>(null)
+  const dragStateRef = React.useRef<{
+    pointerId: number
+    startX: number
+    startY: number
+    startLeft: number
+    startTop: number
+    moved: boolean
+  } | null>(null)
+  const suppressClickRef = React.useRef(false)
+  const alignPanelToLeft = Boolean(position && position.left < viewport.width / 2)
+  const openPanelBelow = Boolean(position && position.top < viewport.height / 2)
+  const widgetPositionStyle: React.CSSProperties = position
+    ? { left: position.left, top: position.top }
+    : { right: SUPPORT_WIDGET_MARGIN, bottom: SUPPORT_WIDGET_MARGIN }
 
   React.useEffect(() => {
     if (!open) return
     scrollerRef.current?.scrollTo({ top: scrollerRef.current.scrollHeight })
   }, [messages, open])
+
+  React.useEffect(() => {
+    setViewport({ width: window.innerWidth, height: window.innerHeight })
+    setPosition(readStoredSupportWidgetPosition() ?? defaultSupportWidgetPosition())
+  }, [])
+
+  React.useEffect(() => {
+    if (!position) {
+      return
+    }
+    window.localStorage.setItem(SUPPORT_WIDGET_POSITION_KEY, JSON.stringify(position))
+  }, [position])
+
+  React.useEffect(() => {
+    const handleResize = () => {
+      setViewport({ width: window.innerWidth, height: window.innerHeight })
+      setPosition((current) => (current ? clampSupportWidgetPosition(current) : current))
+    }
+    window.addEventListener("resize", handleResize)
+    return () => window.removeEventListener("resize", handleResize)
+  }, [])
+
+  const beginDrag = React.useCallback(
+    (event: React.PointerEvent<HTMLButtonElement>) => {
+      if (event.button !== 0) {
+        return
+      }
+      if (!position) {
+        return
+      }
+      dragStateRef.current = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        startLeft: position.left,
+        startTop: position.top,
+        moved: false,
+      }
+      event.currentTarget.setPointerCapture(event.pointerId)
+    },
+    [position],
+  )
+
+  const continueDrag = React.useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
+    const dragState = dragStateRef.current
+    if (!dragState || dragState.pointerId !== event.pointerId) {
+      return
+    }
+    const deltaX = event.clientX - dragState.startX
+    const deltaY = event.clientY - dragState.startY
+    if (Math.abs(deltaX) > 4 || Math.abs(deltaY) > 4) {
+      dragState.moved = true
+      suppressClickRef.current = true
+    }
+    setPosition(
+      clampSupportWidgetPosition({
+        left: dragState.startLeft + deltaX,
+        top: dragState.startTop + deltaY,
+      }),
+    )
+  }, [])
+
+  const endDrag = React.useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
+    const dragState = dragStateRef.current
+    if (!dragState || dragState.pointerId !== event.pointerId) {
+      return
+    }
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    suppressClickRef.current = dragState.moved
+    dragStateRef.current = null
+    if (suppressClickRef.current) {
+      window.setTimeout(() => {
+        suppressClickRef.current = false
+      }, 0)
+    }
+  }, [])
 
   async function sendMessage() {
     const question = input.trim()
@@ -60,7 +207,10 @@ export function SupportChatWidget() {
       const response = await fetch("/api/support/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: nextMessages }),
+        body: JSON.stringify({
+          messages: nextMessages,
+          accessMode: actor.accessMode,
+        }),
       })
       const payload = (await response.json()) as { reply?: string; links?: SupportLink[]; error?: string }
       if (!response.ok || !payload.reply) {
@@ -84,12 +234,19 @@ export function SupportChatWidget() {
   async function escalate() {
     setEscalating(true)
     try {
+      const token = readStoredSessionTokens().accessToken.trim()
       const response = await fetch("/api/support/escalate", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           summary: input.trim() || messages.filter((entry) => entry.role === "user").at(-1)?.content || "",
-          transcript: messages,
+          transcript: messages.map((entry) => ({
+            role: entry.role,
+            content: entry.content,
+          })),
         }),
       })
       const payload = (await response.json()) as { ticketId?: string; message?: string; error?: string }
@@ -107,13 +264,24 @@ export function SupportChatWidget() {
   }
 
   return (
-    <div className="pointer-events-none fixed right-4 bottom-4 z-[80] flex flex-col items-end gap-3">
+    <div
+      className="pointer-events-none fixed z-[80] size-12"
+      style={widgetPositionStyle}
+    >
       {open ? (
-        <div className="pointer-events-auto flex h-[min(32rem,calc(100vh-6rem))] w-[min(24rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-xl">
+        <div
+          className={cn(
+            "pointer-events-auto absolute flex h-[min(32rem,calc(100vh-6rem))] w-[min(24rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-xl",
+            openPanelBelow ? "top-[calc(100%+0.75rem)]" : "bottom-[calc(100%+0.75rem)]",
+            alignPanelToLeft ? "left-0" : "right-0",
+          )}
+        >
           <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
             <div>
               <p className="text-sm font-semibold">Help and IT support</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">Ask where something is, or pass this chat to IT.</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Ask where a page is or how to use it. Escalate emails IT.
+              </p>
             </div>
             <button
               type="button"
@@ -192,9 +360,20 @@ export function SupportChatWidget() {
       ) : null}
       <button
         type="button"
-        className="pointer-events-auto inline-flex size-12 items-center justify-center rounded-full bg-primary text-white shadow-lg transition hover:brightness-95"
-        onClick={() => setOpen((current) => !current)}
+        className="pointer-events-auto inline-flex size-12 touch-none items-center justify-center rounded-full bg-primary text-white shadow-lg transition hover:brightness-95 active:cursor-grabbing"
+        onPointerDown={beginDrag}
+        onPointerMove={continueDrag}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+        onClick={() => {
+          if (suppressClickRef.current) {
+            suppressClickRef.current = false
+            return
+          }
+          setOpen((current) => !current)
+        }}
         aria-label={open ? "Close help chat" : "Open help chat"}
+        title="Drag to move. Click to open help chat."
       >
         {open ? <XIcon className="size-5" /> : <HeadphonesIcon className="size-5" />}
       </button>

@@ -986,6 +986,175 @@ function readNestedRecord(row: AdminRecord, keys: string[]) {
   return null
 }
 
+const ATTENDANCE_EMPLOYEE_ID_KEYS = [
+  "employee_id",
+  "employeeId",
+  "employeeID",
+  "employee",
+  "employee_record_id",
+  "employeeRecordId",
+  "company_user_id",
+  "companyUserId",
+  "companyUserID",
+  "user_id",
+  "userId",
+  "userID",
+]
+
+const ATTENDANCE_EMPLOYEE_NO_KEYS = [
+  "employee_no",
+  "employeeNo",
+  "employee_number",
+  "employeeNumber",
+  "employee_code",
+  "employeeCode",
+  "staff_no",
+  "staffNo",
+  "staff_number",
+  "staffNumber",
+]
+
+const ATTENDANCE_EMPLOYEE_NAME_KEYS = [
+  "employee_name",
+  "employeeName",
+  "full_name",
+  "fullName",
+  "display_name",
+  "displayName",
+  "name",
+]
+
+const ATTENDANCE_DEVICE_NAME_KEYS = [
+  "device_name",
+  "deviceName",
+  "terminal_name",
+  "terminalName",
+  "name",
+]
+
+const ATTENDANCE_DEVICE_ID_KEYS = ["device_id", "deviceId", "deviceID", "device"]
+
+function collectEmployeeIdentityIds(record: AdminRecord | null | undefined) {
+  const ids = new Set<number>()
+  if (!record) {
+    return ids
+  }
+
+  ATTENDANCE_EMPLOYEE_ID_KEYS.forEach((key) => {
+    const id = readNumberFromRow(record, [key])
+    if (id !== null) {
+      ids.add(id)
+    }
+  })
+  return ids
+}
+
+function readEmployeeIdentityLabel(row: AdminRecord) {
+  const nestedEmployee =
+    readNestedRecord(row, ["employee", "employeeDetail", "employee_details", "staff"]) ??
+    readNestedRecord(readNestedRecord(row, ["attendance", "summary", "daily_summary", "dailySummary"]) ?? {}, [
+      "employee",
+      "employeeDetail",
+    ])
+  const nestedUser =
+    readNestedRecord(row, ["user", "company_user", "companyUser"]) ??
+    readNestedRecord(nestedEmployee ?? {}, ["user", "company_user", "companyUser"])
+
+  const employeeNo =
+    readFirstValue(row, ATTENDANCE_EMPLOYEE_NO_KEYS) ??
+    readFirstValue(nestedEmployee, ATTENDANCE_EMPLOYEE_NO_KEYS) ??
+    readFirstValue(nestedUser, ATTENDANCE_EMPLOYEE_NO_KEYS)
+  const rawName =
+    readFirstValue(row, ATTENDANCE_EMPLOYEE_NAME_KEYS) ??
+    readFirstValue(nestedEmployee, ATTENDANCE_EMPLOYEE_NAME_KEYS) ??
+    readFirstValue(nestedUser, ATTENDANCE_EMPLOYEE_NAME_KEYS) ??
+    [
+      readFirstValue(nestedEmployee, ["first_name", "firstName", "preferred_name", "preferredName"]) ??
+        readFirstValue(nestedUser, ["first_name", "firstName"]),
+      readFirstValue(nestedEmployee, ["middle_name", "middleName"]),
+      readFirstValue(nestedEmployee, ["last_name", "lastName"]) ??
+        readFirstValue(nestedUser, ["last_name", "lastName"]),
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .trim()
+  const employeeLabel = composeEmployeeIdentity(rawName || null, employeeNo)
+
+  if (employeeLabel.name) {
+    return employeeLabel.number ? `${employeeLabel.name} (${employeeLabel.number})` : employeeLabel.name
+  }
+
+  const employeeId = Array.from(collectEmployeeIdentityIds(row))[0] ?? null
+  return employeeId === null ? "—" : `Employee ID ${employeeId}`
+}
+
+function readDeviceIdentityLabel(row: AdminRecord) {
+  const nestedDevice = readNestedRecord(row, ["device", "attendance_device", "attendanceDevice", "terminal"])
+  const name =
+    readFirstValue(row, ATTENDANCE_DEVICE_NAME_KEYS) ??
+    readFirstValue(nestedDevice, ATTENDANCE_DEVICE_NAME_KEYS)
+  if (name) {
+    return name
+  }
+  const id =
+    readNumberFromRow(row, ATTENDANCE_DEVICE_ID_KEYS) ??
+    readNumberFromRow(nestedDevice ?? {}, ATTENDANCE_DEVICE_ID_KEYS)
+  return id === null ? "—" : `Device ${id}`
+}
+
+function filterProcessingExceptionRows(rows: AdminRecord[], filters: Record<string, string>) {
+  const fromDate = filters.from_date.trim()
+  const toDate = filters.to_date.trim()
+  const employeeId = filters.employee_id.trim()
+  const status = filters.status.trim().toUpperCase()
+  const exceptionType = filters.exception_type.trim().toUpperCase()
+  const search = filters.search.trim().toLowerCase()
+
+  return rows.filter((row) => {
+    const rowDate = String(
+      readFirstValue(row, ["attendance_date", "attendanceDate", "date", "created_at", "createdAt"]) ?? ""
+    ).slice(0, 10)
+    if (fromDate && rowDate && rowDate < fromDate) return false
+    if (toDate && rowDate && rowDate > toDate) return false
+
+    if (employeeId) {
+      const ids = collectEmployeeIdentityIds(row)
+      if (![...ids].some((id) => String(id) === employeeId)) {
+        return false
+      }
+    }
+
+    if (status) {
+      const rowStatus = String(readFirstValue(row, ["status"]) ?? "").trim().toUpperCase()
+      if (rowStatus !== status) return false
+    }
+
+    if (exceptionType) {
+      const rowType = String(readFirstValue(row, ["exception_type", "exceptionType", "type"]) ?? "")
+        .trim()
+        .toUpperCase()
+      if (rowType !== exceptionType) return false
+    }
+
+    if (search) {
+      const haystack = [
+        readEmployeeIdentityLabel(row),
+        readDeviceIdentityLabel(row),
+        readFirstValue(row, ATTENDANCE_EMPLOYEE_NO_KEYS),
+        readFirstValue(row, ATTENDANCE_EMPLOYEE_ID_KEYS),
+        readFirstValue(row, ["exception_type", "exceptionType", "type"]),
+        readFirstValue(row, ["status"]),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+      if (!haystack.includes(search)) return false
+    }
+
+    return true
+  })
+}
+
 function readWithFallback(
   record: AdminRecord | null | undefined,
   keys: string[],
@@ -1255,23 +1424,30 @@ function enrichRowsWithReadableNames(rows: AdminRecord[], branches: AdminRecord[
   })
 
   employees.forEach((employee) => {
-    const id = readNumberFromRow(employee, ["id", "employee_id"])
-    const employeeNo = readStringFromRow(employee, ["employee_no", "employee_number", "employee_code"])
+    const employeeNo = readStringFromRow(employee, ATTENDANCE_EMPLOYEE_NO_KEYS)
     const fullName =
-      readStringFromRow(employee, ["full_name", "display_name", "name"]) ??
+      readStringFromRow(employee, ATTENDANCE_EMPLOYEE_NAME_KEYS) ??
       [employee.first_name, employee.middle_name, employee.last_name]
         .filter((value) => typeof value === "string" && value.trim())
         .join(" ")
         .trim()
-    if (id !== null && fullName) {
-      employeeNameById.set(id, composeEmployeeIdentity(fullName, employeeNo).name ?? fullName)
+    const label = composeEmployeeIdentity(fullName || null, employeeNo)
+    const displayName = label.name
+      ? label.number
+        ? `${label.name} (${label.number})`
+        : label.name
+      : fullName
+    if (displayName) {
+      collectEmployeeIdentityIds(employee).forEach((id) => {
+        employeeNameById.set(id, displayName)
+      })
     }
   })
 
   return rows.map((row) => {
     const next = { ...row }
     const branchId = readNumberFromRow(row, ["branch_id", "branchId"])
-    const employeeId = readNumberFromRow(row, ["employee_id", "employeeId"])
+    const employeeId = Array.from(collectEmployeeIdentityIds(row))[0] ?? null
 
     if (!readStringFromRow(next, ["branch_name", "branchName"]) && branchId !== null) {
       const branchName = branchNameById.get(branchId)
@@ -1287,11 +1463,11 @@ function enrichRowsWithReadableNames(rows: AdminRecord[], branches: AdminRecord[
       }
     }
 
-    const nestedEmployee = readNestedRecord(row, ["employee"])
+    const nestedEmployee = readNestedRecord(row, ["employee", "employeeDetail", "employee_details", "staff"])
     if (!readStringFromRow(next, ["employee_name", "employeeName"]) && nestedEmployee) {
-      const nestedEmployeeNo = readStringFromRow(nestedEmployee, ["employee_no", "employeeNo"])
+      const nestedEmployeeNo = readStringFromRow(nestedEmployee, ATTENDANCE_EMPLOYEE_NO_KEYS)
       const nestedEmployeeName =
-        readStringFromRow(nestedEmployee, ["full_name", "fullName", "display_name", "displayName", "name"]) ??
+        readStringFromRow(nestedEmployee, ATTENDANCE_EMPLOYEE_NAME_KEYS) ??
         [
           readStringFromRow(nestedEmployee, ["first_name", "firstName", "preferred_name", "preferredName"]),
           readStringFromRow(nestedEmployee, ["middle_name", "middleName"]),
@@ -1302,9 +1478,15 @@ function enrichRowsWithReadableNames(rows: AdminRecord[], branches: AdminRecord[
           .trim()
 
       if (nestedEmployeeName) {
-        next.employee_name =
-          composeEmployeeIdentity(nestedEmployeeName, nestedEmployeeNo).name ?? nestedEmployeeName
+        const nestedLabel = composeEmployeeIdentity(nestedEmployeeName, nestedEmployeeNo)
+        next.employee_name = nestedLabel.number
+          ? `${nestedLabel.name ?? nestedEmployeeName} (${nestedLabel.number})`
+          : nestedLabel.name ?? nestedEmployeeName
       }
+    }
+
+    if (!readStringFromRow(next, ["employee_name", "employeeName"])) {
+      next.employee_name = readEmployeeIdentityLabel(row)
     }
 
     if (!readStringFromRow(next, ["attendance_date"]) ) {
@@ -1393,11 +1575,11 @@ function resolveVisibleColumns(rows: AdminRecord[], section: AttendanceActivityS
         ]
       : section === "processing-exceptions"
       ? [
+          "employee_name",
           "exception_type",
           "status",
-          "employee_name",
           "attendance_date",
-          "device_id",
+          "device_name",
           "created_at",
         ]
       : section === "attendance-history"
@@ -2181,17 +2363,13 @@ function resolveTableCellValue(section: AttendanceActivitySectionKey, column: st
       return <span className={`text-xs font-medium ${textClass}`}>{String(status)}</span>
     }
     if (column === "employee_name") {
-      return (
-        readFirstValue(row, ["employee_name", "employeeName", "full_name", "fullName"]) ??
-        readFirstValue(readNestedRecord(row, ["employee"]), ["full_name", "fullName", "name"]) ??
-        "—"
-      )
+      return readEmployeeIdentityLabel(row)
     }
     if (column === "attendance_date") {
       return readFirstValue(row, ["attendance_date", "attendanceDate", "date"]) ?? "—"
     }
-    if (column === "device_id") {
-      return readFirstValue(row, ["device_name", "deviceName", "device_id", "deviceId"]) ?? "—"
+    if (column === "device_name" || column === "device_id") {
+      return readDeviceIdentityLabel(row)
     }
     return stringifyValue(row[column]) || "—"
   }
@@ -2408,6 +2586,17 @@ function TableBlock({
 
 const DAILY_SUMMARY_PAGE_SIZE_OPTIONS = [20, 50, 100, 200] as const
 const DEFAULT_DAILY_SUMMARY_PAGE_SIZE = 50
+const PROCESSING_EXCEPTION_PAGE_SIZE_OPTIONS = [50, 100, 200] as const
+const DEFAULT_PROCESSING_EXCEPTION_PAGE_SIZE = 100
+const PROCESSING_EXCEPTION_STATUS_OPTIONS = ["OPEN", "RESOLVED", "IGNORED"] as const
+const PROCESSING_EXCEPTION_TYPE_OPTIONS = [
+  "MISSING_CHECK_IN",
+  "MISSING_CHECK_OUT",
+  "MISSING_BOTH_CHECK_IN_AND_CHECK_OUT",
+  "DUPLICATE_PUNCH",
+  "INVALID_PUNCH_TIME",
+  "MANUAL_REVIEW_REQUIRED",
+] as const
 
 type DailySummaryAdjustmentFormState = {
   check_in_at: string
@@ -2576,6 +2765,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
   )
   const [exceptionStatus, setExceptionStatus] = React.useState("RESOLVED")
   const [exceptionResolutionNote, setExceptionResolutionNote] = React.useState("")
+  const [processingExceptionFiltersOpen, setProcessingExceptionFiltersOpen] = React.useState(false)
   const [loading, setLoading] = React.useState(true)
   const [message, setMessage] = React.useState<string | null>(null)
   const [error, setError] = React.useState<string | null>(null)
@@ -2609,6 +2799,30 @@ export function AttendanceActivityView({ section }: { section: string }) {
       status: "",
       check_in_after: "",
       check_in_before: "",
+    }
+  })
+  const [processingExceptionFilters, setProcessingExceptionFilters] = React.useState<Record<string, string>>(() => {
+    const today = getTodayDateInputValue()
+    return {
+      from_date: today,
+      to_date: today,
+      employee_id: "",
+      search: "",
+      status: "OPEN",
+      exception_type: "",
+      limit: String(DEFAULT_PROCESSING_EXCEPTION_PAGE_SIZE),
+    }
+  })
+  const [appliedProcessingExceptionFilters, setAppliedProcessingExceptionFilters] = React.useState<Record<string, string>>(() => {
+    const today = getTodayDateInputValue()
+    return {
+      from_date: today,
+      to_date: today,
+      employee_id: "",
+      search: "",
+      status: "OPEN",
+      exception_type: "",
+      limit: String(DEFAULT_PROCESSING_EXCEPTION_PAGE_SIZE),
     }
   })
   const [hasAppliedDailySummaryFilters, setHasAppliedDailySummaryFilters] = React.useState(true)
@@ -2660,6 +2874,23 @@ export function AttendanceActivityView({ section }: { section: string }) {
     return count
   }, [appliedDailySummaryFilters, dailySummaryPageSize])
 
+  const processingExceptionActiveFilterCount = React.useMemo(() => {
+    const today = getTodayDateInputValue()
+    let count = 0
+    if (
+      appliedProcessingExceptionFilters.from_date !== today ||
+      appliedProcessingExceptionFilters.to_date !== today
+    ) {
+      count += 1
+    }
+    if (appliedProcessingExceptionFilters.employee_id) count += 1
+    if (appliedProcessingExceptionFilters.search.trim()) count += 1
+    if (appliedProcessingExceptionFilters.status && appliedProcessingExceptionFilters.status !== "OPEN") count += 1
+    if (appliedProcessingExceptionFilters.exception_type) count += 1
+    if (appliedProcessingExceptionFilters.limit !== String(DEFAULT_PROCESSING_EXCEPTION_PAGE_SIZE)) count += 1
+    return count
+  }, [appliedProcessingExceptionFilters])
+
   const branchNameById = React.useMemo(() => {
     const map = new Map<string, string>()
     branches.forEach((branch) => {
@@ -2698,6 +2929,31 @@ export function AttendanceActivityView({ section }: { section: string }) {
     setError(null)
     setMessage(null)
     setDailySummaryFiltersOpen(false)
+  }, [])
+
+  const applyProcessingExceptionDraftFilters = React.useCallback(() => {
+    setAppliedProcessingExceptionFilters({ ...processingExceptionFilters })
+    setMessage(null)
+    setError(null)
+    setProcessingExceptionFiltersOpen(false)
+  }, [processingExceptionFilters])
+
+  const resetProcessingExceptionFiltersToToday = React.useCallback(() => {
+    const today = getTodayDateInputValue()
+    const resetFilters = {
+      from_date: today,
+      to_date: today,
+      employee_id: "",
+      search: "",
+      status: "OPEN",
+      exception_type: "",
+      limit: String(DEFAULT_PROCESSING_EXCEPTION_PAGE_SIZE),
+    }
+    setProcessingExceptionFilters(resetFilters)
+    setAppliedProcessingExceptionFilters(resetFilters)
+    setError(null)
+    setMessage(null)
+    setProcessingExceptionFiltersOpen(false)
   }, [])
 
   /** Form state for POST /api/attendance/daily-summaries/refresh */
@@ -2952,21 +3208,55 @@ export function AttendanceActivityView({ section }: { section: string }) {
       }
 
       if (activeSection === "processing-exceptions") {
-        const result = await listAttendanceProcessingExceptions(token, {
+        const exceptionEmployeeId = appliedProcessingExceptionFilters.employee_id
+          ? Number(appliedProcessingExceptionFilters.employee_id)
+          : undefined
+        const exceptionLimit = Number(appliedProcessingExceptionFilters.limit)
+        const baseExceptionParams = {
           page: 1,
-          limit: 100,
+          limit:
+            Number.isFinite(exceptionLimit) && exceptionLimit > 0
+              ? exceptionLimit
+              : DEFAULT_PROCESSING_EXCEPTION_PAGE_SIZE,
           sortBy: "created_at",
           sortOrder: "DESC",
-        })
+        } as const
+        const serverExceptionParams = {
+          ...baseExceptionParams,
+          employee_id:
+            exceptionEmployeeId && Number.isFinite(exceptionEmployeeId)
+              ? exceptionEmployeeId
+              : undefined,
+          status: appliedProcessingExceptionFilters.status || undefined,
+          exception_type: appliedProcessingExceptionFilters.exception_type || undefined,
+        }
+        let result
+        try {
+          result = await listAttendanceProcessingExceptions(token, serverExceptionParams)
+        } catch (errorObject) {
+          const hasServerFilters = Boolean(
+            serverExceptionParams.employee_id ||
+              serverExceptionParams.status ||
+              serverExceptionParams.exception_type
+          )
+          if (!hasServerFilters) {
+            throw errorObject
+          }
+          result = await listAttendanceProcessingExceptions(token, baseExceptionParams)
+        }
         const enrichedRows = enrichRowsWithReadableNames(
           result.rows,
           branchesRef.current,
           employeesRef.current
         )
+        const filteredRows = filterProcessingExceptionRows(
+          enrichedRows,
+          appliedProcessingExceptionFilters
+        )
         setDailySummaryRows([])
         setDailySummaryTotal(null)
         setDailySummaryTotalPages(null)
-        setRows(enrichedRows)
+        setRows(filteredRows)
         setSingleRecord(null)
         setCorrectionRequests([])
         return
@@ -3003,6 +3293,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
   }, [
     activeSection,
     appliedDailySummaryFilters,
+    appliedProcessingExceptionFilters,
     config.title,
     dailySummaryPage,
     dailySummaryPageSize,
@@ -3115,6 +3406,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
       dailySummaryPageSize,
       dailySummarySearch: debouncedRecordSearch,
       hasAppliedDailySummaryFilters,
+      processingExceptionFilters: appliedProcessingExceptionFilters,
     })
 
     if (!force) {
@@ -3727,6 +4019,159 @@ export function AttendanceActivityView({ section }: { section: string }) {
     </Popover>
   ) : null
 
+  const processingExceptionFilterPopover = activeSection === "processing-exceptions" ? (
+    <Popover open={processingExceptionFiltersOpen} onOpenChange={setProcessingExceptionFiltersOpen}>
+      <PopoverTrigger
+        className={cn(
+          "relative inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border text-xs font-medium text-foreground transition hover:bg-muted",
+          processingExceptionActiveFilterCount > 0 && "border-primary/40 bg-primary/5"
+        )}
+        aria-label="Filter processing exceptions"
+        title="Filter processing exceptions"
+      >
+        <Filter className="size-3.5 text-primary" />
+        {processingExceptionActiveFilterCount > 0 ? (
+          <span className="absolute -right-1 -top-1 inline-flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-primary px-0.5 text-[8px] font-semibold text-primary-foreground">
+            {processingExceptionActiveFilterCount}
+          </span>
+        ) : null}
+      </PopoverTrigger>
+      <PopoverContent className="w-[min(100vw-1rem,20rem)] p-3" align="end" sideOffset={6}>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Exception filters
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                className="inline-flex h-6 items-center rounded px-2 text-[10px] font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                onClick={resetProcessingExceptionFiltersToToday}
+              >
+                Reset
+              </button>
+              <button
+                type="button"
+                className="inline-flex h-6 items-center rounded bg-primary px-2 text-[10px] font-semibold !text-white transition hover:brightness-95 disabled:opacity-60"
+                disabled={loading}
+                onClick={applyProcessingExceptionDraftFilters}
+              >
+                Apply
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <label className={dailySummaryFilterLabelClass}>
+              <span>From</span>
+              <DatePickerPresets
+                value={processingExceptionFilters.from_date}
+                onChange={(value) =>
+                  setProcessingExceptionFilters((current) => ({ ...current, from_date: value }))
+                }
+                placeholder="From"
+                className="h-7 gap-1 border-slate-300 bg-white px-2 text-[11px] text-slate-900 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100 [&_svg]:size-3"
+              />
+            </label>
+            <label className={dailySummaryFilterLabelClass}>
+              <span>To</span>
+              <DatePickerPresets
+                value={processingExceptionFilters.to_date}
+                onChange={(value) =>
+                  setProcessingExceptionFilters((current) => ({ ...current, to_date: value }))
+                }
+                placeholder="To"
+                className="h-7 gap-1 border-slate-300 bg-white px-2 text-[11px] text-slate-900 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100 [&_svg]:size-3"
+              />
+            </label>
+            <label className={`${dailySummaryFilterLabelClass} col-span-2`}>
+              <span>Search name or number</span>
+              <input
+                className="h-7 w-full rounded border border-slate-300 bg-white px-2 text-[11px] text-slate-900 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100"
+                value={processingExceptionFilters.search}
+                onChange={(event) =>
+                  setProcessingExceptionFilters((current) => ({ ...current, search: event.target.value }))
+                }
+                placeholder="Example: Mwaija or 00000010"
+              />
+            </label>
+            <label className={dailySummaryFilterLabelClass}>
+              <span>Employee</span>
+              <select
+                className={dailySummaryFilterControlClass}
+                value={processingExceptionFilters.employee_id}
+                onChange={(event) =>
+                  setProcessingExceptionFilters((current) => ({ ...current, employee_id: event.target.value }))
+                }
+              >
+                <option value="">All</option>
+                {employees.map((employee, index) => {
+                  const employeeId = readNumberFromRow(employee, ["id", "employee_id", "employeeId"])
+                  if (employeeId === null) return null
+                  return (
+                    <option key={`exception-employee-${employeeId}-${index}`} value={String(employeeId)}>
+                      {getEmployeeOptionLabel(employee)}
+                    </option>
+                  )
+                })}
+              </select>
+            </label>
+            <label className={dailySummaryFilterLabelClass}>
+              <span>Status</span>
+              <select
+                className={dailySummaryFilterControlClass}
+                value={processingExceptionFilters.status}
+                onChange={(event) =>
+                  setProcessingExceptionFilters((current) => ({ ...current, status: event.target.value }))
+                }
+              >
+                <option value="">All</option>
+                {PROCESSING_EXCEPTION_STATUS_OPTIONS.map((status) => (
+                  <option key={status} value={status}>
+                    {prettifyLabel(status)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className={dailySummaryFilterLabelClass}>
+              <span>Type</span>
+              <select
+                className={dailySummaryFilterControlClass}
+                value={processingExceptionFilters.exception_type}
+                onChange={(event) =>
+                  setProcessingExceptionFilters((current) => ({ ...current, exception_type: event.target.value }))
+                }
+              >
+                <option value="">All</option>
+                {PROCESSING_EXCEPTION_TYPE_OPTIONS.map((type) => (
+                  <option key={type} value={type}>
+                    {prettifyLabel(type)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className={dailySummaryFilterLabelClass}>
+              <span>Rows</span>
+              <select
+                className={dailySummaryFilterControlClass}
+                value={processingExceptionFilters.limit}
+                onChange={(event) =>
+                  setProcessingExceptionFilters((current) => ({ ...current, limit: event.target.value }))
+                }
+              >
+                {PROCESSING_EXCEPTION_PAGE_SIZE_OPTIONS.map((size) => (
+                  <option key={size} value={String(size)}>
+                    {size}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  ) : null
+
   const refreshButton = (
     <button
       className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border text-xs font-medium text-foreground transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
@@ -3834,6 +4279,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
                 </button>
               </>
             )}
+            {processingExceptionFilterPopover}
             {refreshButton}
           </div>
         </div>

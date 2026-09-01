@@ -308,23 +308,34 @@ export const leaveManagementSectionTabGroups: DashboardSectionTabGroup[] = [
   },
 ]
 
+const ACCESS_CONTROL_DEVICE_TABS: DashboardSectionTab[] = [
+  { title: "Devices", url: "/dashboard/access-control/devices" },
+  { title: "Doors", url: "/dashboard/access-control/doors" },
+  { title: "Templates", url: "/dashboard/access-control/templates" },
+  { title: "Week Plans", url: "/dashboard/access-control/week-plans" },
+  { title: "Organization", url: "/dashboard/access-control/organizations" },
+  { title: "Groups", url: "/dashboard/access-control/groups" },
+  { title: "Credentials", url: "/dashboard/access-control/access-credentials" },
+  { title: "Audit Logs", url: "/dashboard/access-control/audit-logs" },
+  { title: "Command Logs", url: "/dashboard/access-control/device-command-logs" },
+  { title: "Sync Logs", url: "/dashboard/access-control/hikvision-sync-logs" },
+]
+
+const ACCESS_GOVERNANCE_TABS: DashboardSectionTab[] = [
+  { title: "Roles", url: "/dashboard/roles" },
+  { title: "Permissions", url: "/dashboard/permissions" },
+]
+
+export const accessControlDeviceSectionTabGroups: DashboardSectionTabGroup[] = [
+  { items: ACCESS_CONTROL_DEVICE_TABS },
+]
+
+export const accessGovernanceSectionTabGroups: DashboardSectionTabGroup[] = [
+  { items: ACCESS_GOVERNANCE_TABS },
+]
+
 export const accessControlSectionTabGroups: DashboardSectionTabGroup[] = [
-  {
-    items: [
-      { title: "Devices", url: "/dashboard/access-control/devices" },
-      { title: "Doors", url: "/dashboard/access-control/doors" },
-      { title: "Templates", url: "/dashboard/access-control/templates" },
-      { title: "Week Plans", url: "/dashboard/access-control/week-plans" },
-      { title: "Organization", url: "/dashboard/access-control/organizations" },
-      { title: "Groups", url: "/dashboard/access-control/groups" },
-      { title: "Credentials", url: "/dashboard/access-control/access-credentials" },
-      { title: "Audit Logs", url: "/dashboard/access-control/audit-logs" },
-      { title: "Command Logs", url: "/dashboard/access-control/device-command-logs" },
-      { title: "Sync Logs", url: "/dashboard/access-control/hikvision-sync-logs" },
-      { title: "Roles", url: "/dashboard/roles" },
-      { title: "Permissions", url: "/dashboard/permissions" },
-    ],
-  },
+  { items: [...ACCESS_CONTROL_DEVICE_TABS, ...ACCESS_GOVERNANCE_TABS] },
 ]
 
 export function allDashboardSectionTabGroups(): DashboardSectionTabGroup[] {

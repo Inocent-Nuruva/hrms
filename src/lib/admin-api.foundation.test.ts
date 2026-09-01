@@ -5,6 +5,7 @@ import {
   assignDepartmentPosition,
   downloadEmployeeDocument,
   getCompanyById,
+  getCompanyModules,
   getCurrentCompanyOnboardingStatus,
   getMyCompany,
   grantDepartmentAccess,
@@ -14,6 +15,7 @@ import {
   revokeDepartmentAccess,
   suspendCompany,
   updateCompanyById,
+  updateCompanyModules,
 } from "./admin-api"
 
 function jsonResponse(payload: unknown, init?: ResponseInit) {
@@ -74,6 +76,89 @@ describe("foundation admin API helpers", () => {
         method: "PATCH",
         body: JSON.stringify({ company_name: "Alliance HQ" }),
       })
+    )
+  })
+
+  it("loads split company role and permission modules from a data envelope", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        data: {
+          roles: true,
+          permissions: false,
+        },
+      }),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const result = await getCompanyModules("token", 4)
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8888/api/companies/4/modules",
+      expect.objectContaining({
+        method: "GET",
+        headers: expect.objectContaining({
+          Authorization: "Bearer token",
+        }),
+      }),
+    )
+    expect(result).toEqual(
+      expect.objectContaining({
+        roles: true,
+        permissions: false,
+      }),
+    )
+  })
+
+  it("loads split company modules from a first-class roles/permissions body", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        roles: false,
+        permissions: false,
+      }),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const result = await getCompanyModules("token", 4)
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        roles: false,
+        permissions: false,
+      }),
+    )
+  })
+
+  it("updates split company role and permission modules", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        data: {
+          roles: true,
+          permissions: false,
+        },
+      }),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const result = await updateCompanyModules("token", 4, {
+      roles: true,
+      permissions: false,
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8888/api/companies/4/modules",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({
+          roles: true,
+          permissions: false,
+        }),
+      }),
+    )
+    expect(result).toEqual(
+      expect.objectContaining({
+        roles: true,
+        permissions: false,
+      }),
     )
   })
 
