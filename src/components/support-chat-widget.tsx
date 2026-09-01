@@ -280,7 +280,7 @@ export function SupportChatWidget() {
             <div>
               <p className="text-sm font-semibold">Help and IT support</p>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                Ask where a page is or how to use it. Escalate emails IT.
+                This part is under development. Ask where a page is or how to use it. Escalate emails IT.
               </p>
             </div>
             <button

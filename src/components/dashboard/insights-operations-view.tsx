@@ -60,6 +60,15 @@ import {
 } from "@/lib/employee-readiness-plain"
 
 import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
   Dialog,
   DialogDescription,
   DialogFooter,
@@ -207,7 +216,8 @@ export function InsightsOperationsView({
   const [readinessDetail, setReadinessDetail] = React.useState<AdminRecord | null>(null)
   const [dateFrom, setDateFrom] = React.useState(() => defaultScheduleRange().from)
   const [dateTo, setDateTo] = React.useState(() => defaultScheduleRange().to)
-  const [policyName, setPolicyName] = React.useState("Default attendance policy")
+  const [policyName, setPolicyName] = React.useState("")
+  const [clockInDialogOpen, setClockInDialogOpen] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const [exporting, setExporting] = React.useState(false)
   const [previewEmployeeId, setPreviewEmployeeId] = React.useState("")
@@ -333,6 +343,8 @@ export function InsightsOperationsView({
           ? `Clock-in rules “${policyName.trim()}” are saved. This is a starter set — refine it later under Attendance.`
           : apiMessage || `Clock-in rules “${policyName.trim()}” are saved.`,
       )
+      setClockInDialogOpen(false)
+      setPolicyName("")
       await load()
     } catch (errorObject) {
       const message =
@@ -560,38 +572,26 @@ export function InsightsOperationsView({
             <div className="rounded-xl border border-border bg-card p-4">
               <div className="flex items-center gap-1.5">
                 <h2 className="text-sm font-semibold">Set up clock-in</h2>
-                <TipIcon text="This page is under development. Creating rules here only builds a starter set. Full clock-in setup (devices, maps, shifts) is still being finished under Attendance." />
+                <TipIcon text="This part is under development. Creating rules here only builds a starter set. Full clock-in setup (devices, maps, shifts) is still being finished under Attendance." />
               </div>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Give this starter set a simple label, then create it. Example: “Office clock-in”. This is not a person or a time — just a name so you can find the rules later.
-              </p>
+              <p className="mt-1 text-sm text-muted-foreground">This part is under development.</p>
               {readString(asRecord(setup?.activePolicy), ["name"]) ? (
                 <p className="mt-2 text-sm text-foreground">
                   Clock-in rules already exist:{" "}
                   <span className="font-medium">
                     {readString(asRecord(setup?.activePolicy), ["name"])}
                   </span>
-                  . Creating the same name again will fail.
+                  .
                 </p>
               ) : (
-                <p className="mt-2 text-sm text-amber-800 dark:text-amber-200">
-                  No clock-in rules yet. People cannot punch in until you create this set.
-                </p>
-              )}
-              <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
-                <label className="min-w-0 flex-1 space-y-1">
-                  <span className="text-xs font-medium text-muted-foreground">Name for these clock-in rules</span>
-                  <input
-                    className={inputClass}
-                    value={policyName}
-                    onChange={(event) => setPolicyName(event.target.value)}
-                    placeholder="Office clock-in"
-                  />
-                </label>
-                <button type="button" className={primaryButtonClass} disabled={saving} onClick={() => void onWizard()}>
-                  {saving ? <Loader2Icon className="size-4 animate-spin" /> : "Create clock-in rules"}
+                <button
+                  type="button"
+                  className={`${primaryButtonClass} mt-3`}
+                  onClick={() => setClockInDialogOpen(true)}
+                >
+                  Set up clock-in
                 </button>
-              </div>
+              )}
             </div>
             <div className="rounded-xl border border-border bg-card p-4">
               <h2 className="text-sm font-semibold">Preview a work schedule</h2>
@@ -682,6 +682,35 @@ export function InsightsOperationsView({
           </div>
         </>
       )}
+
+      <AlertDialog open={clockInDialogOpen} onOpenChange={setClockInDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Set up clock-in</AlertDialogTitle>
+            <AlertDialogDescription>
+              This part is under development. Give this starter set a simple label, then create it. Example: “Office clock-in”. This is not a person or a time — just a name so you can find the rules later.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <p className="mt-3 text-sm text-amber-800 dark:text-amber-200">
+            No clock-in rules yet. People cannot punch in until you create this set.
+          </p>
+          <label className="mt-3 block space-y-1">
+            <span className="text-xs font-medium text-muted-foreground">Name for these clock-in rules</span>
+            <input
+              className={inputClass}
+              value={policyName}
+              onChange={(event) => setPolicyName(event.target.value)}
+              placeholder="Office clock-in"
+            />
+          </label>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={saving}>Cancel</AlertDialogCancel>
+            <button type="button" className={primaryButtonClass} disabled={saving} onClick={() => void onWizard()}>
+              {saving ? <Loader2Icon className="size-4 animate-spin" /> : "Create clock-in rules"}
+            </button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <RecordDetailsDialog open={Boolean(detail)} onOpenChange={(open) => !open && setDetail(null)} title={optionLabel(detail) || "Details"} row={detail} />
 

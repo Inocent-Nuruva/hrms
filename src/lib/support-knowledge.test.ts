@@ -5,9 +5,10 @@ import { localSupportAnswer } from "./support-knowledge"
 describe("localSupportAnswer", () => {
   it("greets without dumping a page list", () => {
     const result = localSupportAnswer("hello")
-    expect(result.reply.toLowerCase()).toContain("hi")
+    expect(result.reply).toBe(
+      "Hi. Ask me where to go in HRMS — leave, payroll, attendance, SMS, clock-in — and I will point you there. If I cannot help, tap Escalate to IT support.",
+    )
     expect(result.links).toEqual([])
-    expect(result.reply.toLowerCase()).not.toContain("open one of these")
   })
 
   it("explains company payroll vs my payroll", () => {
