@@ -233,6 +233,7 @@ export function resolveApprovalOwnerLabel(
   if (!approval) return ""
   const explicit = readText(approval, [
     "approver_name",
+    "approverName",
     "company_user_name",
     "assigned_to_name",
     "owner_name",
@@ -242,6 +243,8 @@ export function resolveApprovalOwnerLabel(
 
   const nestedApprover = nestedParty(approval, [
     "approver",
+    "original_approver",
+    "originalApprover",
     "assigned_user",
     "assignedUser",
     "assigned_company_user",
@@ -253,7 +256,138 @@ export function resolveApprovalOwnerLabel(
   const nestedName = personDisplayName(nestedApprover)
   if (nestedName && !isIdFallback(nestedName)) return nestedName
 
+  const companyUserId = readNumber(approval, [
+    "approver_company_user_id",
+    "approverCompanyUserId",
+    "original_approver_company_user_id",
+    "originalApproverCompanyUserId",
+    "assigned_company_user_id",
+    "assignedCompanyUserId",
+    "company_user_id",
+    "companyUserId",
+  ])
+  const catalogName = resolvePersonLabel(users, companyUserId)
+  if (catalogName && !isIdFallback(catalogName)) return catalogName
+
   return resolveResponsiblePartyLabel(approval, roles, users)
+}
+
+function coerceApprovalsList(value: unknown): AdminRecord[] {
+  if (Array.isArray(value)) {
+    return value.filter((entry): entry is AdminRecord => asRecord(entry) !== null)
+  }
+  const record = asRecord(value)
+  if (!record) return []
+  for (const key of ["data", "items", "results", "rows", "records", "list", "approvals"] as const) {
+    const nested = record[key]
+    if (Array.isArray(nested)) {
+      const rows = nested.filter((entry): entry is AdminRecord => asRecord(entry) !== null)
+      if (rows.length > 0) return rows
+    }
+  }
+  return []
+}
+
+export function collectOnboardingApprovals(sources: Array<AdminRecord | null | undefined>) {
+  const rows: AdminRecord[] = []
+  const seen = new Set<string>()
+  for (const source of sources) {
+    if (!source) continue
+    const lists = [
+      source.approvals,
+      source.approval_records,
+      source.approvalRecords,
+      source.pending_approvals,
+      source.pendingApprovals,
+      source.approval_chain,
+      source.approvalChain,
+      asRecord(source.progress)?.approvals,
+    ]
+    for (const list of lists) {
+      for (const row of coerceApprovalsList(list)) {
+        const id = readNumber(row, ["id", "approval_id", "approvalId"])
+        const key = id == null ? JSON.stringify(row).slice(0, 80) : String(id)
+        if (seen.has(key)) continue
+        seen.add(key)
+        rows.push(row)
+      }
+    }
+  }
+  return rows
+}
+
+export type OnboardingApprovalNode = {
+  id: number | null
+  level: number
+  status: string
+  name: string
+  comments: string
+  isCurrent: boolean
+  raw: AdminRecord
+}
+
+export function summarizeOnboardingApprovals(
+  sources: Array<AdminRecord | null | undefined>,
+  roles: AdminRecord[],
+  users: AdminRecord[]
+) {
+  const request = sources.find((source): source is AdminRecord => Boolean(source)) ?? null
+  const currentLevel =
+    readNumber(request, [
+      "current_approval_level",
+      "currentApprovalLevel",
+      "current_level",
+      "currentLevel",
+    ]) ?? 0
+
+  const rows = collectOnboardingApprovals(sources)
+    .map((approval) => {
+      const level =
+        readNumber(approval, ["approval_level", "approvalLevel", "level"]) ?? 0
+      const status = (readText(approval, ["status", "approval_status", "approvalStatus"]) || "pending")
+        .trim()
+        .toLowerCase()
+      const name = resolveApprovalOwnerLabel(approval, roles, users)
+      return {
+        id: readNumber(approval, ["id", "approval_id", "approvalId"]),
+        level,
+        status,
+        name,
+        comments: readText(approval, ["comments", "comment", "notes"]),
+        isCurrent: currentLevel > 0 ? level === currentLevel : status === "pending" || status === "waiting",
+        raw: approval,
+      }
+    })
+    .sort((left, right) => left.level - right.level || String(left.id).localeCompare(String(right.id)))
+
+  const pending = rows.filter((row) => {
+    const pendingStatus = row.status === "pending" || row.status === "waiting" || row.status.includes("pending")
+    if (!pendingStatus) return false
+    return currentLevel > 0 ? row.level === currentLevel || row.isCurrent : true
+  })
+  const pendingNames = pending.map((row) => row.name).filter(Boolean)
+  const requestStatus = (readText(request, ["status", "request_status"]) || "").toLowerCase()
+
+  let waitingLabel = "No pending approver on the current level"
+  if (["completed", "approved"].includes(requestStatus)) {
+    waitingLabel = "Fully approved"
+  } else if (["rejected", "cancelled", "canceled"].includes(requestStatus)) {
+    waitingLabel = requestStatus.replace(/\b\w/g, (char) => char.toUpperCase())
+  } else if (pendingNames.length === 1) {
+    waitingLabel = `Pending with ${pendingNames[0]}`
+  } else if (pendingNames.length > 1) {
+    waitingLabel = `Pending with ${pendingNames[0]} +${pendingNames.length - 1}`
+  } else if (currentLevel > 0) {
+    waitingLabel = `Waiting at approval level ${currentLevel}`
+  }
+
+  return {
+    rows,
+    currentLevel,
+    pending,
+    pendingNames,
+    waitingLabel,
+  }
 }
 
 export function isOnboardingDraftStatus(status: string) {
@@ -263,14 +397,7 @@ export function isOnboardingDraftStatus(status: string) {
 
 export function isOnboardingActableStatus(status: string) {
   const value = status.trim().toLowerCase().replace(/[_-]+/g, " ")
-  return [
-    "active",
-    "pending",
-    "submitted",
-    "in review",
-    "awaiting approval",
-    "request",
-  ].includes(value)
+  return ["submitted", "in review", "in progress"].includes(value)
 }
 
 export function mergeAdminRecords(...groups: AdminRecord[][]) {

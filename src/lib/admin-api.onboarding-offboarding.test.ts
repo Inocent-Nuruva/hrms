@@ -139,17 +139,88 @@ describe("documented onboarding and offboarding leftovers", () => {
     )
   })
 
-  it("submits a draft onboarding request", async () => {
-    const fetchMock = vi.fn().mockImplementation(() => jsonResponse({ data: { ok: true } }))
+  it("submits a draft by creating a new request with submit=true", async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      const method = String(init?.method ?? "GET").toUpperCase()
+      const path = String(url)
+      if (path.endsWith("/api/onboarding/requests/3") && method === "GET") {
+        return jsonResponse({
+          data: {
+            id: 3,
+            employee_id: 139,
+            workflow_id: 1,
+            title: "TEST",
+            description: "TEST",
+            status: "draft",
+          },
+        })
+      }
+      if (path.endsWith("/api/onboarding/requests") && method === "POST") {
+        return jsonResponse({ data: { id: 4, status: "submitted" } })
+      }
+      if (path.endsWith("/api/onboarding/requests/3/cancel") && method === "POST") {
+        return jsonResponse({ data: { ok: true } })
+      }
+      return jsonResponse({ data: {} })
+    })
     vi.stubGlobal("fetch", fetchMock)
 
     await submitOnboardingRequest("token", 3, { workflow_id: 9 })
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8888/api/onboarding/requests/3/submit",
+      "http://localhost:8888/api/onboarding/requests/3",
+      expect.objectContaining({ method: "GET" }),
+    )
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8888/api/onboarding/requests",
       expect.objectContaining({
         method: "POST",
-        body: JSON.stringify({ workflow_id: 9 }),
+        body: JSON.stringify({
+          employee_id: 139,
+          submit: true,
+          workflow_id: 1,
+          title: "TEST",
+          description: "TEST",
+        }),
+      }),
+    )
+  })
+
+  it("reads employee_id from nested employee when the GET envelope also has company", async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      const method = String(init?.method ?? "GET").toUpperCase()
+      const path = String(url)
+      if (path.endsWith("/api/onboarding/requests/3") && method === "GET") {
+        return jsonResponse({
+          data: {
+            id: 3,
+            title: "TEST",
+            status: "draft",
+            company: { id: 1, name: "Acme" },
+            employee: { id: 139, first_name: "Kevin", last_name: "Kiggundu" },
+            workflow: { id: 1, name: "General" },
+          },
+        })
+      }
+      if (path.endsWith("/api/onboarding/requests") && method === "POST") {
+        return jsonResponse({ data: { id: 4, status: "submitted" } })
+      }
+      return jsonResponse({ data: { ok: true } })
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    await submitOnboardingRequest("token", 3, { employee_id: 139 })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8888/api/onboarding/requests",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          employee_id: 139,
+          submit: true,
+          workflow_id: 1,
+          title: "TEST",
+        }),
       }),
     )
   })

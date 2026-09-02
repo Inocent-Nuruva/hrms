@@ -116,6 +116,7 @@ import {
   resolveApprovalOwnerLabel,
   resolveAuditActorLabel,
   resolveResponsiblePartyLabel,
+  summarizeOnboardingApprovals,
 } from "@/lib/onboarding-activity-labels"
 import { notifySubmittedRequestApprovers } from "@/lib/request-notifications"
 
@@ -777,7 +778,7 @@ function parseAllowedActions(row: AdminRecord): Set<RequestAction> {
       picked.add("approve")
       picked.add("reject")
       picked.add("cancel")
-    } else if (["in_progress", "approved", "processing"].includes(status)) {
+    } else if (["ready_for_activation", "activating", "approved", "processing"].includes(status)) {
       picked.add("complete")
       picked.add("cancel")
     } else if (status === "rejected") {
@@ -2395,11 +2396,13 @@ export function OnboardingView() {
           createdRequestId !== null &&
           (isOnboardingDraftStatus(createdStatus) || createdStatus === "-")
         ) {
-          submittedRequest = await submitOnboardingRequest(
-            token,
-            createdRequestId,
-            requestForm.workflow_id ? { workflow_id: Number(requestForm.workflow_id) } : {}
-          )
+          submittedRequest = await submitOnboardingRequest(token, createdRequestId, {
+            ...(createdRecord ?? {}),
+            employee_id: Number(requestForm.employee_id),
+            ...(requestForm.workflow_id
+              ? { workflow_id: Number(requestForm.workflow_id) }
+              : {}),
+          })
         }
         void notifySubmittedRequestApprovers({
           kind: "onboarding_request",
@@ -2472,7 +2475,10 @@ export function OnboardingView() {
         const submittedRequest = await submitOnboardingRequest(
           token,
           requestId,
-          workflowId !== null ? { workflow_id: workflowId } : {}
+          {
+            ...(sourceRow ?? {}),
+            ...(workflowId !== null ? { workflow_id: workflowId } : {}),
+          }
         )
         void notifySubmittedRequestApprovers({
           kind: "onboarding_request",
@@ -2624,30 +2630,15 @@ export function OnboardingView() {
     selectedWorkflowSteps,
   ])
 
-  const selectedRequestApprovals = React.useMemo(() => {
-    const sources = [selectedRequestDetails, selectedRequestProgress, selectedRequestRow]
-    const rows: AdminRecord[] = []
-    const seen = new Set<string>()
-    for (const source of sources) {
-      if (!source) continue
-      const lists = [
-        source.approvals,
-        source.approval_records,
-        source.pending_approvals,
-        toRecord(source.progress)?.approvals,
-      ]
-      for (const list of lists) {
-        for (const row of toRecordList(list)) {
-          const id = readNumber(row, ["id", "approval_id"])
-          const key = id == null ? JSON.stringify(row).slice(0, 40) : String(id)
-          if (seen.has(key)) continue
-          seen.add(key)
-          rows.push(row)
-        }
-      }
-    }
-    return rows
-  }, [selectedRequestDetails, selectedRequestProgress, selectedRequestRow])
+  const approvalSummary = React.useMemo(
+    () =>
+      summarizeOnboardingApprovals(
+        [selectedRequestDetails, selectedRequestProgress, selectedRequestRow],
+        roles,
+        users
+      ),
+    [roles, selectedRequestDetails, selectedRequestProgress, selectedRequestRow, users]
+  )
 
   const selectedRequestProvisioningSummary = React.useMemo(() => {
     const detailProvisioning = extractProvisioning(selectedRequestDetails)
@@ -4284,6 +4275,23 @@ export function OnboardingView() {
                     </div>
                   </div>
 
+                  {isOnboardingActableStatus(
+                    readString(selectedRequestDetails ?? selectedRequestRow ?? {}, [
+                      "status",
+                      "request_status",
+                    ])
+                  ) ? (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+                      <p className="text-xs font-medium uppercase tracking-wide text-amber-800">
+                        Pending approval
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">{approvalSummary.waitingLabel}</p>
+                      <p className="mt-1 text-xs text-slate-600">
+                        Only the assigned approver for the current workflow level can approve or reject.
+                      </p>
+                    </div>
+                  ) : null}
+
                   {(() => {
                     const acknowledgedAt = readString(
                       selectedRequestDetails ?? selectedRequestRow ?? {},
@@ -4312,54 +4320,64 @@ export function OnboardingView() {
                             </Button>
                           ) : null}
                         </div>
-                        {selectedRequestApprovals.length === 0 ? (
-                          <p className="text-sm text-muted-foreground">No pending approval records on this request.</p>
-                        ) : (
-                          <div className="space-y-2">
-                            {selectedRequestApprovals.map((approvalRow, index) => (
-                              <div
-                                key={`onboarding-approval-${readNumber(approvalRow, ["id", "approval_id"]) ?? index}`}
-                                className="rounded-md border border-slate-200 bg-white p-3"
-                              >
-                                <div className="flex flex-wrap items-center justify-between gap-2">
-                                  <p className="text-sm font-medium text-slate-900">
-                                    {(() => {
-                                      const title = readString(approvalRow, [
-                                        "title",
-                                        "step_name",
-                                        "approval_name",
-                                        "name",
-                                      ])
-                                      if (title !== "-") return title
-                                      return resolveApprovalOwnerLabel(approvalRow, roles, users) || "Approval step"
-                                    })()}
-                                  </p>
-                                  <span className="text-xs text-slate-500">
-                                    {toTitleCaseWords(readString(approvalRow, ["status", "approval_status"]))}
-                                  </span>
-                                </div>
-                                <p className="mt-1 text-xs text-slate-600">
-                                  Owner:{" "}
-                                  <span className="font-medium text-slate-800">
-                                    {resolveApprovalOwnerLabel(approvalRow, roles, users) || "-"}
-                                  </span>
-                                </p>
-                                {canApproveOnboardingRequests ? (
-                                  <button
-                                    type="button"
-                                    className="mt-2 text-xs font-medium text-primary"
-                                    onClick={() => void delegateSelectedApproval(approvalRow)}
-                                  >
-                                    Delegate
-                                  </button>
-                                ) : null}
-                              </div>
-                            ))}
-                          </div>
-                        )}
                       </div>
                     )
                   })()}
+
+                  <div className="space-y-3 rounded-lg border border-border p-4">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">Approval trail</p>
+                      <p className="text-xs text-muted-foreground">
+                        {approvalSummary.currentLevel > 0
+                          ? `Current level ${approvalSummary.currentLevel}. ${approvalSummary.waitingLabel}.`
+                          : approvalSummary.waitingLabel}
+                      </p>
+                    </div>
+                    {approvalSummary.rows.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No approval records on this request.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {approvalSummary.rows.map((approval, index) => (
+                          <div
+                            key={`onboarding-approval-${approval.id ?? index}`}
+                            className={cn(
+                              "rounded-md border bg-white p-3",
+                              approval.isCurrent ? "border-amber-300" : "border-slate-200"
+                            )}
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <p className="text-sm font-medium text-slate-900">
+                                {approval.name ||
+                                  readString(approval.raw, ["title", "step_name", "approval_name", "name"]) ||
+                                  `Level ${approval.level || index + 1}`}
+                              </p>
+                              <span className="text-xs text-slate-500">
+                                {toTitleCaseWords(approval.status || "pending")}
+                                {approval.level > 0 ? ` • Level ${approval.level}` : ""}
+                                {approval.isCurrent ? " • Current" : ""}
+                              </span>
+                            </div>
+                            <p className="mt-1 text-xs text-slate-600">
+                              Approver:{" "}
+                              <span className="font-medium text-slate-800">{approval.name || "-"}</span>
+                            </p>
+                            {approval.comments ? (
+                              <p className="mt-1 text-xs text-slate-600">{approval.comments}</p>
+                            ) : null}
+                            {canApproveOnboardingRequests ? (
+                              <button
+                                type="button"
+                                className="mt-2 text-xs font-medium text-primary"
+                                onClick={() => void delegateSelectedApproval(approval.raw)}
+                              >
+                                Delegate
+                              </button>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
 
                   {selectedRequestProvisioningSummary ? (
                     <div className="space-y-3 rounded-lg border border-border p-4">
@@ -4935,7 +4953,12 @@ export function OnboardingView() {
                                 </span>
                               </div>
                               <p className="mt-1 text-xs text-slate-600">
-                                Owner: <span className="font-medium text-slate-800">{node.owner || "-"}</span>
+                                {isPending && approvalSummary.pendingNames.length > 0 ? "Pending approver" : "Owner"}:{" "}
+                                <span className="font-medium text-slate-800">
+                                  {isPending && approvalSummary.pendingNames.length > 0
+                                    ? approvalSummary.pendingNames.join(", ")
+                                    : node.owner || "-"}
+                                </span>
                               </p>
                               <p className="mt-1 text-xs text-slate-600">
                                 Required:{" "}
@@ -5009,6 +5032,9 @@ export function OnboardingView() {
                     isOnboardingActableStatus(selectedStatus)
                   return (
                     <>
+                      {showApprove && approvalSummary.waitingLabel ? (
+                        <p className="mr-auto text-xs text-muted-foreground">{approvalSummary.waitingLabel}</p>
+                      ) : null}
                       {showSubmit ? (
                         <Button
                           type="button"

@@ -8825,7 +8825,7 @@ export async function getOnboardingRequest(token: string, id: string | number) {
     `/api/onboarding/requests/${id}`,
     { token },
   );
-  return normalizeSingle(payload);
+  return unwrapOnboardingRequest(payload);
 }
 
 export async function patchOnboardingRequest(
@@ -8901,24 +8901,198 @@ export async function completeOnboardingRequest(
   });
 }
 
+function looksLikeOnboardingRequest(record: AdminRecord | null) {
+  if (!record) {
+    return false;
+  }
+  if (
+    record.employee_id != null ||
+    record.employeeId != null ||
+    record.onboarding_no != null ||
+    record.onboardingNo != null ||
+    record.current_approval_level != null ||
+    record.currentApprovalLevel != null
+  ) {
+    return true;
+  }
+  const status = typeof record.status === "string" ? record.status.toLowerCase() : "";
+  return Boolean(
+    (record.title || record.workflow_id || record.workflowId) &&
+      /draft|submitted|in_review|in_progress|ready_for_activation|completed|rejected|cancelled/.test(
+        status,
+      ),
+  );
+}
+
+function collectOnboardingRecords(
+  value: unknown,
+  sink: AdminRecord[],
+  depth = 0,
+) {
+  if (depth > 5 || value == null) {
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((entry) => collectOnboardingRecords(entry, sink, depth + 1));
+    return;
+  }
+  const record = asRecord(value);
+  if (!record) {
+    return;
+  }
+  sink.push(record);
+  for (const key of [
+    "data",
+    "result",
+    "item",
+    "request",
+    "onboarding_request",
+    "onboardingRequest",
+  ]) {
+    collectOnboardingRecords(record[key], sink, depth + 1);
+  }
+}
+
+function unwrapOnboardingRequest(payload: unknown): AdminRecord | null {
+  const candidates: AdminRecord[] = [];
+  collectOnboardingRecords(payload, candidates);
+  return (
+    candidates.find((row) => looksLikeOnboardingRequest(row)) ??
+    normalizeSingle(payload)
+  );
+}
+
+function readOnboardingEmployeeId(record: AdminRecord) {
+  const employee =
+    asRecord(record.employee) ??
+    asRecord(record.employee_profile) ??
+    asRecord(record.employeeProfile);
+  const companyUser =
+    asRecord(record.company_user) ??
+    asRecord(record.companyUser) ??
+    asRecord(employee?.company_user) ??
+    asRecord(employee?.companyUser);
+  return (
+    readNumberFromRecord(record, ["employee_id", "employeeId"]) ??
+    readNumberFromRecord(employee, ["id", "employee_id", "employeeId"]) ??
+    readNumberFromRecord(companyUser, ["employee_id", "employeeId"])
+  );
+}
+
+function readOnboardingCreatePayload(
+  record: AdminRecord,
+): CreateOnboardingRequestPayload {
+  const employeeId = readOnboardingEmployeeId(record);
+  if (employeeId === null || employeeId < 1) {
+    throw new Error("Onboarding request is missing employee_id.");
+  }
+
+  const workflow = asRecord(record.workflow) ?? asRecord(record.assigned_workflow);
+  const workflowId =
+    readNumberFromRecord(record, ["workflow_id", "onboarding_workflow_id"]) ??
+    readNumberFromRecord(workflow, ["id", "workflow_id"]);
+
+  const title =
+    typeof record.title === "string" && record.title.trim()
+      ? record.title.trim()
+      : typeof record.name === "string" && record.name.trim()
+        ? record.name.trim()
+        : undefined;
+  const description =
+    typeof record.description === "string" && record.description.trim()
+      ? record.description.trim()
+      : undefined;
+  const plannedStart =
+    typeof record.planned_start_date === "string" && record.planned_start_date.trim()
+      ? record.planned_start_date
+      : undefined;
+  const plannedCompletion =
+    typeof record.planned_completion_date === "string" &&
+    record.planned_completion_date.trim()
+      ? record.planned_completion_date
+      : undefined;
+  const provisioning = asRecord(record.provisioning) as
+    | CreateOnboardingRequestPayload["provisioning"]
+    | null;
+
+  return {
+    employee_id: Math.trunc(employeeId),
+    submit: true,
+    ...(workflowId !== null && workflowId > 0
+      ? { workflow_id: Math.trunc(workflowId) }
+      : {}),
+    ...(title ? { title } : {}),
+    ...(description ? { description } : {}),
+    ...(plannedStart ? { planned_start_date: plannedStart } : {}),
+    ...(plannedCompletion ? { planned_completion_date: plannedCompletion } : {}),
+    ...(provisioning ? { provisioning } : {}),
+  };
+}
+
+function isExistingOnboardingConflict(errorObject: unknown) {
+  const status =
+    typeof errorObject === "object" &&
+    errorObject !== null &&
+    "status" in errorObject &&
+    typeof (errorObject as { status?: unknown }).status === "number"
+      ? (errorObject as { status: number }).status
+      : null;
+  const message = errorMessageAndPayload(errorObject);
+  return (
+    status === 409 ||
+    /already has (an )?active onboarding request/i.test(message) ||
+    /already has onboarding request/i.test(message)
+  );
+}
+
+/**
+ * The documented API has no POST /submit and UpdateOnboardingRequestDto cannot
+ * set `submit` or `status`. Drafts are submitted by creating a request with
+ * `submit: true` (the create-time flag).
+ */
 export async function submitOnboardingRequest(
   token: string,
   id: string | number,
-  data: AdminRecord = {},
+  fallback: AdminRecord = {},
 ) {
-  const workflowId =
-    typeof data.workflow_id === "number" && Number.isFinite(data.workflow_id)
-      ? Math.trunc(data.workflow_id)
-      : null;
-  const body: AdminRecord = {};
-  if (workflowId !== null && workflowId > 0) {
-    body.workflow_id = workflowId;
+  const current = await getOnboardingRequest(token, id);
+  const merged: AdminRecord = {
+    ...fallback,
+    ...(current ?? {}),
+  };
+  if (!looksLikeOnboardingRequest(merged) && !readOnboardingEmployeeId(merged)) {
+    throw new Error("Onboarding request was not found.");
   }
-  return adminRequest<unknown>(`/api/onboarding/requests/${id}/submit`, {
-    method: "POST",
-    token,
-    body,
-  });
+  const payload = readOnboardingCreatePayload(merged);
+
+  const createSubmitted = () => createOnboardingRequest(token, payload);
+
+  try {
+    const created = await createSubmitted();
+    const createdRecord =
+      (normalizeSingle(created) ?? asRecord(created) ?? {}) as AdminRecord;
+    const createdId = readNumberFromRecord(createdRecord, ["id", "request_id"]);
+    if (createdId !== null && String(createdId) !== String(id)) {
+      await cancelOnboardingRequest(token, id, {
+        reason: "Superseded by submitted onboarding request",
+      }).catch(() => undefined);
+    }
+    return created;
+  } catch (errorObject) {
+    if (!isExistingOnboardingConflict(errorObject)) {
+      throw errorObject;
+    }
+    try {
+      await cancelOnboardingRequest(token, id, {
+        reason: "Submitting onboarding request",
+      });
+    } catch {
+      throw new Error(
+        "This draft cannot be submitted in place. Create a new onboarding request with Submit immediately.",
+      );
+    }
+    return createSubmitted();
+  }
 }
 
 export async function reactivateOnboardingRequest(

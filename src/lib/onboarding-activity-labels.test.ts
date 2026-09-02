@@ -11,6 +11,7 @@ import {
   resolvePersonLabel,
   resolveResponsiblePartyLabel,
   resolveRoleLabel,
+  summarizeOnboardingApprovals,
 } from "@/lib/onboarding-activity-labels"
 
 describe("onboarding activity labels", () => {
@@ -100,10 +101,50 @@ describe("onboarding activity labels", () => {
     ).toBe("Line Manager")
   })
 
+  it("resolves pending onboarding approvers from approver_company_user_id", () => {
+    expect(
+      resolveApprovalOwnerLabel(
+        { approver_company_user_id: 146, status: "pending", approval_level: 1 },
+        [],
+        users
+      )
+    ).toBe("Jane Namakula")
+  })
+
+  it("summarizes who the request is waiting on", () => {
+    const summary = summarizeOnboardingApprovals(
+      [
+        {
+          status: "in_review",
+          current_approval_level: 1,
+          approvals: [
+            {
+              id: 11,
+              approval_level: 1,
+              status: "pending",
+              approver: { user: { first_name: "Ssali", last_name: "Ronald" } },
+            },
+            {
+              id: 12,
+              approval_level: 2,
+              status: "pending",
+              approver_company_user_id: 146,
+            },
+          ],
+        },
+      ],
+      [],
+      users
+    )
+    expect(summary.waitingLabel).toBe("Pending with Ssali Ronald")
+    expect(summary.pendingNames).toEqual(["Ssali Ronald"])
+    expect(summary.rows[1]?.name).toBe("Jane Namakula")
+  })
+
   it("treats draft requests as not yet approvable", () => {
     expect(isOnboardingDraftStatus("draft")).toBe(true)
-    expect(isOnboardingDraftStatus("active")).toBe(false)
-    expect(isOnboardingActableStatus("active")).toBe(true)
+    expect(isOnboardingActableStatus("submitted")).toBe(true)
+    expect(isOnboardingActableStatus("in_review")).toBe(true)
     expect(isOnboardingActableStatus("draft")).toBe(false)
   })
 
