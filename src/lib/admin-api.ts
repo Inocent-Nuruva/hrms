@@ -9018,10 +9018,10 @@ function readOnboardingCreatePayload(
   return {
     employee_id: Math.trunc(employeeId),
     submit: true,
+    title: title || "Onboarding",
     ...(workflowId !== null && workflowId > 0
       ? { workflow_id: Math.trunc(workflowId) }
       : {}),
-    ...(title ? { title } : {}),
     ...(description ? { description } : {}),
     ...(plannedStart ? { planned_start_date: plannedStart } : {}),
     ...(plannedCompletion ? { planned_completion_date: plannedCompletion } : {}),
