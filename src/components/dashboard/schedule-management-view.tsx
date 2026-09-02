@@ -173,7 +173,7 @@ const SECTION_CONFIG: Record<ScheduleSectionKey, SectionConfig> = {
     description: "Manage the master shift definitions used across attendance scheduling.",
     fields: [
       { key: "name", label: "Shift Name", type: "text", required: true, placeholder: "Morning Shift" },
-      { key: "code", label: "Shift Code", type: "text", hidden: true, placeholder: "MORNING" },
+      { key: "code", label: "Shift Code", type: "text", required: true, placeholder: "MORNING", helpText: "Short unique code, max 50 characters. Filled from the name if you leave it blank." },
       { key: "description", label: "Description", type: "textarea", placeholder: "Optional note about this shift." },
       { key: "shift_type", label: "Shift Type", type: "select", required: true, options: SHIFT_TYPE_OPTIONS },
       { key: "branch_id", label: "Branch", type: "select" },
@@ -1055,6 +1055,16 @@ function resolveRowId(row: AdminRecord, fallbackIndex: number) {
   return match ?? fallbackIndex
 }
 
+function slugifyScheduleCode(name: string) {
+  const slug = name
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 50)
+  return slug || "SHIFT"
+}
+
 function toPayload(
   fields: FieldConfig[],
   values: Record<string, string>,
@@ -1113,9 +1123,13 @@ function toPayload(
   }
 
   const payload: AdminRecord = {}
+  const nextValues = { ...values }
+  if (fieldKeys.has("code") && !(nextValues.code ?? "").trim()) {
+    nextValues.code = slugifyScheduleCode(nextValues.name ?? "")
+  }
 
   for (const field of fields) {
-    const raw = values[field.key] ?? ""
+    const raw = nextValues[field.key] ?? ""
     const trimmed = raw.trim()
 
     if (
@@ -1164,7 +1178,12 @@ function toPayload(
       continue
     }
 
-    payload[field.key] = trimmed
+    payload[field.key] = field.key === "code" ? trimmed.slice(0, 50) : trimmed
+  }
+
+  if (fieldKeys.has("code")) {
+    const code = typeof payload.code === "string" ? payload.code.trim() : ""
+    payload.code = (code || slugifyScheduleCode(String(values.name ?? ""))).slice(0, 50)
   }
 
   if (fieldKeys.has("assigned_by") && typeof options.currentUserId === "number" && Number.isFinite(options.currentUserId)) {
@@ -2227,6 +2246,15 @@ export function ScheduleManagementView({ section }: { section: string }) {
                 const nextState: Record<string, string> = {
                   ...current,
                   [field.key]: nextValue,
+                }
+
+                if (field.key === "name") {
+                  const suggestedCode = slugifyScheduleCode(nextValue)
+                  const currentCode = current.code?.trim() ?? ""
+                  const previousSuggestedCode = slugifyScheduleCode(current.name ?? "")
+                  if (suggestedCode && (!currentCode || currentCode === previousSuggestedCode)) {
+                    nextState.code = suggestedCode
+                  }
                 }
 
                 if (field.key === "break_type" && field.autoFillLabelFromOption) {
