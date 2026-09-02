@@ -6404,9 +6404,9 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
           </div>
         ) : null}
         {!loading && balances.length === 0 ? <p className="text-sm text-slate-500">No balance records found.</p> : null}
-        <div className="flex flex-wrap items-end gap-x-5 gap-y-2 border-b border-border/70 pb-3">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-3 border-b border-border/70 pb-3 sm:grid-cols-3 xl:grid-cols-6">
           {balanceTotals.map((item) => (
-            <div key={item.label} className="min-w-[88px]">
+            <div key={item.label} className="min-w-0">
               <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
                 {item.label}
               </p>
@@ -6442,11 +6442,24 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
                   })()}
                 </p>
                 <p className="text-white/80">Fiscal Year: {readString(row, ["fiscal_year"], fiscalYear)}</p>
-                <div className="mt-1 grid grid-cols-2 gap-2 text-xs text-white/80">
-                  <div>Allocated: {String(row.allocated_days ?? "-")}</div>
-                  <div>Used: {String(row.used_days ?? "-")}</div>
-                  <div>Pending: {String(row.pending_days ?? "-")}</div>
-                  <div>Available: {String(row.available_days ?? row.remaining_days ?? "-")}</div>
+                <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
+                  {[
+                    { label: "Allocated", value: row.allocated_days },
+                    { label: "Used", value: row.used_days },
+                    { label: "Pending", value: row.pending_days },
+                    { label: "Carried forward", value: row.carried_forward_days },
+                    { label: "Expired", value: row.expired_days },
+                    { label: "Available", value: row.available_days ?? row.remaining_days },
+                  ].map((item) => (
+                    <div key={item.label} className="min-w-0">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/65">
+                        {item.label}
+                      </p>
+                      <p className="mt-0.5 text-base font-semibold text-white">
+                        {formatDayValue(item.value)} <span className="text-xs font-normal text-white/70">days</span>
+                      </p>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>

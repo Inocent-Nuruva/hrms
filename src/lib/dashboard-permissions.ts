@@ -15,7 +15,7 @@ export const DASHBOARD_TOKEN_COOKIE = "hrms_dashboard_token"
 export const DASHBOARD_PERMISSIONS_COOKIE = "hrms_dashboard_permissions"
 
 const LEGACY_ADMIN_USER_STORAGE_KEY = "hrms.admin.user"
-const FORBIDDEN_ROUTES_STORAGE_KEY = "hrms.forbiddenRoutes"
+const FORBIDDEN_ROUTES_STORAGE_KEY = "hrms.forbiddenRoutes.v2"
 const CONFIRMED_PLATFORM_ROUTES_STORAGE_KEY = "hrms.confirmedPlatformRoutes"
 const FORBIDDEN_ROUTES_EVENT = "hrms:forbidden-routes-changed"
 

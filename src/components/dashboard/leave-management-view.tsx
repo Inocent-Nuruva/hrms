@@ -81,6 +81,7 @@ import {
   sortLeaveBalanceRows,
   type LeaveBalanceEmployeeGroup,
 } from "@/lib/leave-balance-groups"
+import { isMedicalLeaveRequest } from "@/lib/leave-request-kind"
 import { cn } from "@/lib/utils"
 import { Switch } from "@/components/ui/switch"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
@@ -4012,6 +4013,7 @@ export function LeaveManagementView({
                     </div>
                   </div>
 
+                  {isMedicalLeaveRequest(selectedLeaveRequestRow) ? (
                   <div className="grid gap-3 rounded-lg border border-border/70 bg-background/60 p-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div>
@@ -4126,6 +4128,7 @@ export function LeaveManagementView({
                       </div>
                     </div>
                   </div>
+                  ) : null}
 
                   <div className="grid gap-3 rounded-lg border border-border/70 bg-background/60 p-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">

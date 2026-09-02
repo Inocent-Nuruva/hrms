@@ -23,6 +23,7 @@ import {
  resolveBackendMediaUrl,
  type AdminRecord,
 } from "@/lib/admin-api"
+import { isMedicalLeaveRequest } from "@/lib/leave-request-kind"
 import { cn } from "@/lib/utils"
 
 export type LeaveApprovalNode = {
@@ -1258,6 +1259,7 @@ export function LeaveWorkflowDialog({
 
  const requestReason = readString(detail, ["reason"])
  const medicalDetail = asRecord(detail?.medical_detail)
+ const showMedicalDetail = isMedicalLeaveRequest(detail)
 
  return (
  <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1333,6 +1335,7 @@ export function LeaveWorkflowDialog({
  </Button>
  </div>
 
+ {showMedicalDetail ? (
  <div className="rounded-lg border border-border/70 bg-background/60 p-3">
  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
  <div>
@@ -1446,6 +1449,7 @@ export function LeaveWorkflowDialog({
  </p>
  ) : null}
  </div>
+ ) : null}
 
  <div className="rounded-lg border border-border/70 bg-background/60 p-3">
  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">

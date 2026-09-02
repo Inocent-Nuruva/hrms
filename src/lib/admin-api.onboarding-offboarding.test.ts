@@ -2,8 +2,10 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
   acknowledgeOnboardingRequest,
+  approveOnboardingRequest,
   assignOffboardingClearance,
   delegateOnboardingApproval,
+  submitOnboardingRequest,
   deleteOffboardingDocument,
   ensureDraftOnboardingRequest,
   listMyOffboardingRequests,
@@ -132,6 +134,43 @@ describe("documented onboarding and offboarding leftovers", () => {
         body: JSON.stringify({
           delegate_company_user_id: 44,
           reason: "On leave",
+        }),
+      }),
+    )
+  })
+
+  it("submits a draft onboarding request", async () => {
+    const fetchMock = vi.fn().mockImplementation(() => jsonResponse({ data: { ok: true } }))
+    vi.stubGlobal("fetch", fetchMock)
+
+    await submitOnboardingRequest("token", 3, { workflow_id: 9 })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8888/api/onboarding/requests/3/submit",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ workflow_id: 9 }),
+      }),
+    )
+  })
+
+  it("approves an onboarding request without sending an empty signature_url", async () => {
+    const fetchMock = vi.fn().mockImplementation(() => jsonResponse({ data: { ok: true } }))
+    vi.stubGlobal("fetch", fetchMock)
+
+    await approveOnboardingRequest("token", 3, {
+      approve: true,
+      comments: "Approved",
+      signature_url: "",
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8888/api/onboarding/requests/3/approve",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          approve: true,
+          comments: "Approved",
         }),
       }),
     )

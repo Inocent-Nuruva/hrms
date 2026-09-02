@@ -17,7 +17,10 @@ import {
 import { allDashboardSectionTabGroups } from "@/lib/dashboard-sections"
 
 export const FORBIDDEN_ROUTES_EVENT = "hrms:forbidden-routes-changed"
-const STORAGE_KEY = "hrms.forbiddenRoutes"
+// Version the learned-denial cache whenever route permission semantics change.
+// Otherwise a route denied under an older frontend policy stays hidden even
+// after a newly supported backend permission has been granted.
+const STORAGE_KEY = "hrms.forbiddenRoutes.v2"
 const CONFIRMED_STORAGE_KEY = "hrms.confirmedPlatformRoutes"
 
 // Attendance download still works without analytics grants. A 403 from

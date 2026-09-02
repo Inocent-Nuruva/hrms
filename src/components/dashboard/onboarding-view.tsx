@@ -4,7 +4,7 @@ import * as React from "react"
 import { useSearchParams } from "next/navigation"
 import { HorizontalScrollContainer } from "@/components/common/horizontal-scroll-container"
 import { SearchToggleField } from "@/components/common/search-toggle-field"
-import { Ban, CheckCheck, CircleHelp, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react"
+import { Ban, CheckCheck, CircleHelp, Pencil, Plus, RefreshCw, Send, Trash2, X } from "lucide-react"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { canPerformPermission } from "@/lib/dashboard-permissions"
 
@@ -37,6 +37,7 @@ import {
   getOnboardingRequest,
   getOnboardingWorkflow,
   listAccessControlResources,
+  listAllCurrentCompanyUsers,
   listAttendanceDevices,
   listBranches,
   listDepartments,
@@ -54,6 +55,7 @@ import {
   patchOnboardingWorkflow,
   patchOnboardingWorkflowStep,
   rejectOnboardingRequest,
+  submitOnboardingRequest,
   uploadOnboardingDocument,
   verifyOnboardingDocument,
   type AdminRecord,
@@ -105,6 +107,16 @@ import {
   type OnboardingShiftAssignmentDraft,
   type OnboardingTimetableAssignmentDraft,
 } from "@/lib/onboarding-provisioning"
+import {
+  isOnboardingActableStatus,
+  isOnboardingDraftStatus,
+  mergeAdminRecords,
+  personDisplayName,
+  recordMatchesId,
+  resolveApprovalOwnerLabel,
+  resolveAuditActorLabel,
+  resolveResponsiblePartyLabel,
+} from "@/lib/onboarding-activity-labels"
 import { notifySubmittedRequestApprovers } from "@/lib/request-notifications"
 
 type OnboardingTab = "requests" | "workflows"
@@ -361,6 +373,7 @@ function toTimestamp(value: unknown) {
 }
 
 type RequestAction =
+  | "submit"
   | "approve"
   | "reject"
   | "cancel"
@@ -710,6 +723,7 @@ function parseAllowedActions(row: AdminRecord): Set<RequestAction> {
   const tryAdd = (value: unknown) => {
     const action = normalized(value)
     if (
+      action === "submit" ||
       action === "approve" ||
       action === "reject" ||
       action === "cancel" ||
@@ -750,16 +764,20 @@ function parseAllowedActions(row: AdminRecord): Set<RequestAction> {
     tryAdd(nestedStep.next_action)
   }
 
+  const status = normalized(
+    row.status ?? row.request_status ?? row.onboarding_status ?? row.workflow_status
+  )
+
   // Status-based fallbacks when API does not expose available_actions.
   if (picked.size === 0) {
-    const status = normalized(
-      row.status ?? row.request_status ?? row.onboarding_status ?? row.workflow_status
-    )
-    if (["draft", "pending", "submitted", "in_review", "request", "awaiting_approval"].includes(status)) {
+    if (isOnboardingDraftStatus(status)) {
+      picked.add("submit")
+      picked.add("cancel")
+    } else if (isOnboardingActableStatus(status)) {
       picked.add("approve")
       picked.add("reject")
       picked.add("cancel")
-    } else if (["active", "in_progress", "approved", "processing"].includes(status)) {
+    } else if (["in_progress", "approved", "processing"].includes(status)) {
       picked.add("complete")
       picked.add("cancel")
     } else if (status === "rejected") {
@@ -772,6 +790,14 @@ function parseAllowedActions(row: AdminRecord): Set<RequestAction> {
         picked.add("cancel")
       }
     }
+  }
+
+  // Backend: "Only active onboarding requests can be acted on".
+  if (isOnboardingDraftStatus(status)) {
+    picked.delete("approve")
+    picked.delete("reject")
+    picked.delete("complete")
+    picked.add("submit")
   }
 
   return picked
@@ -1245,8 +1271,19 @@ export function OnboardingView() {
           }
           case "workflows":
             return { key, result: await listOnboardingWorkflows(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }) }
-          case "users":
-            return { key, result: await listUsers(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }) }
+          case "users": {
+            const [usersResult, companyUsers] = await Promise.all([
+              listUsers(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
+              listAllCurrentCompanyUsers(token).catch(() => [] as AdminRecord[]),
+            ])
+            return {
+              key,
+              result: {
+                ...usersResult,
+                rows: mergeAdminRecords(companyUsers, usersResult.rows),
+              },
+            }
+          }
           case "roles":
             return { key, result: await listResource("roles", token) }
           case "branches":
@@ -1655,10 +1692,12 @@ export function OnboardingView() {
     labelKeys: string[]
   ) {
     if (id === null) return "-"
-    const found = rows.find((row) => readNumber(row, idKeys) === id)
-    if (!found) return `#${id}`
+    const found = rows.find((row) => recordMatchesId(row, id, idKeys))
+    if (!found) return "-"
+    const person = personDisplayName(found)
+    if (person) return person
     const label = readString(found, labelKeys)
-    return label !== "-" ? label : `#${id}`
+    return label !== "-" ? label : "-"
   }
 
   function resolveBooleanLabel(value: string) {
@@ -1758,36 +1797,10 @@ export function OnboardingView() {
     return toRecord(record.metadata)
   }
 
-  const resolveResponsibleParty = React.useCallback((step: AdminRecord) => {
-    const explicitPerson = readString(step, ["assignee_name", "assigned_to_name", "owner_name", "company_user_name"])
-    if (explicitPerson !== "-") {
-      return explicitPerson
-    }
-
-    const assignees: string[] = []
-
-    const roleId = readNumber(step, ["assigned_role_id", "role_id"])
-    if (roleId !== null) {
-      const roleLabel = resolveOptionLabel(roles, roleId, ["id", "role_id"], ["display_name", "name", "title"])
-      if (roleLabel !== "-") {
-        assignees.push(`Role: ${roleLabel}`)
-      }
-    }
-
-    const companyUserId = readNumber(step, ["assigned_user_id", "company_user_id", "user_id"])
-    if (companyUserId !== null) {
-      const personLabel = resolveOptionLabel(users, companyUserId, ["id", "user_id", "company_user_id"], [
-        "full_name",
-        "name",
-        "email",
-      ])
-      if (personLabel !== "-") {
-        assignees.push(`User: ${personLabel}`)
-      }
-    }
-
-    return assignees.join(" • ") || "-"
-  }, [roles, users])
+  const resolveResponsibleParty = React.useCallback(
+    (step: AdminRecord) => resolveResponsiblePartyLabel(step, roles, users) || "-",
+    [roles, users]
+  )
 
   function resetWorkflowStepForm() {
     setWorkflowForm((prev) => ({
@@ -2371,10 +2384,27 @@ export function OnboardingView() {
       if (requestForm.submit === "true") {
         const createdRecord = toRecord(createdRequest)
         const createdRequestId = readNumber(createdRecord ?? {}, ["id", "request_id"])
+        const createdStatus = readString(createdRecord ?? {}, [
+          "status",
+          "request_status",
+          "onboarding_status",
+          "workflow_status",
+        ])
+        let submittedRequest: unknown = createdRequest
+        if (
+          createdRequestId !== null &&
+          (isOnboardingDraftStatus(createdStatus) || createdStatus === "-")
+        ) {
+          submittedRequest = await submitOnboardingRequest(
+            token,
+            createdRequestId,
+            requestForm.workflow_id ? { workflow_id: Number(requestForm.workflow_id) } : {}
+          )
+        }
         void notifySubmittedRequestApprovers({
           kind: "onboarding_request",
           token,
-          request: createdRequest,
+          request: submittedRequest,
           requesterName: selectedEmployee ? formatEmployeeOptionLabel(selectedEmployee, Number(requestForm.employee_id)) : undefined,
           loadRequest:
             createdRequestId === null
@@ -2401,6 +2431,10 @@ export function OnboardingView() {
       return
     }
 
+    if (action === "submit" && !canCreateOnboardingRequests && !canUpdateOnboardingRequests) {
+      showErrorAlert("You do not have permission to submit onboarding requests.")
+      return
+    }
     if (action === "approve" || action === "reject") {
       if (!canApproveOnboardingRequests) {
         showErrorAlert("You do not have permission to approve onboarding requests.")
@@ -2429,11 +2463,27 @@ export function OnboardingView() {
     setSaving(true)
     setError(null)
     try {
-      if (action === "approve") {
+      if (action === "submit") {
+        const sourceRow =
+          requests.find((row) => readNumber(row, ["id", "request_id"]) === requestId) ??
+          selectedRequestRow ??
+          selectedRequestDetails
+        const workflowId = readNumber(sourceRow ?? {}, ["workflow_id", "onboarding_workflow_id"])
+        const submittedRequest = await submitOnboardingRequest(
+          token,
+          requestId,
+          workflowId !== null ? { workflow_id: workflowId } : {}
+        )
+        void notifySubmittedRequestApprovers({
+          kind: "onboarding_request",
+          token,
+          request: submittedRequest ?? sourceRow,
+          loadRequest: () => getOnboardingRequest(token, requestId),
+        })
+      } else if (action === "approve") {
         await approveOnboardingRequest(token, requestId, {
           approve: true,
           comments: "Approved",
-          signature_url: "",
         })
       } else if (action === "reject") {
         await rejectOnboardingRequest(token, requestId, { comments: "Rejected" })
@@ -2447,6 +2497,8 @@ export function OnboardingView() {
 
       if (action === "approve") {
         showSuccessAlert("Approval recorded for this level.")
+      } else if (action === "submit") {
+        showSuccessAlert("Onboarding request submitted. It can now be approved.")
       } else {
         showSuccessAlert(
           action === "delete"
@@ -2455,6 +2507,13 @@ export function OnboardingView() {
         )
       }
       await reloadAll(activeTab, true)
+      if (requestDetailsOpen && readCurrentRequestId() === requestId) {
+        await openRequestDetails({
+          ...(selectedRequestRow ?? {}),
+          id: requestId,
+          request_id: requestId,
+        })
+      }
     } catch (errorObject) {
       const message = errorObject instanceof Error ? errorObject.message : `Failed to ${action} request.`
       setError(message)
@@ -2727,11 +2786,9 @@ export function OnboardingView() {
       toRecord(task.assignee) ??
       toRecord(task.user) ??
       null
-    if (nestedUser) {
-      const nestedLabel = readString(nestedUser, ["full_name", "name", "email"])
-      if (nestedLabel !== "-") {
-        return nestedLabel
-      }
+    const nestedPerson = personDisplayName(nestedUser)
+    if (nestedPerson) {
+      return nestedPerson
     }
 
     const assignedUserId = readNumber(task, ["assigned_company_user_id", "assigned_user_id", "user_id"])
@@ -3072,6 +3129,7 @@ export function OnboardingView() {
     resetTaskForm()
 
     try {
+      const lookupsPromise = loadLookups(token, ["roles", "users"])
       const [detail, progress, auditLogs, documents, tasks] = await Promise.all([
         getOnboardingRequest(token, requestId),
         getOnboardingProgress(token, requestId),
@@ -3079,6 +3137,7 @@ export function OnboardingView() {
         listOnboardingDocuments(token, requestId),
         listOnboardingTasks(token, requestId),
       ])
+      await lookupsPromise
       setSelectedRequestDetails(detail)
       setSelectedRequestProgress(progress)
       setSelectedRequestAuditLogs(auditLogs)
@@ -3251,16 +3310,42 @@ export function OnboardingView() {
                 ).toLowerCase()
                 const isCancelled = requestStatus === "cancelled"
                 const isCompleted = requestStatus === "completed" || requestStatus === "rejected"
+                const isDraft = isOnboardingDraftStatus(requestStatus)
                 const allowedActions = parseAllowedActions(row)
+                const canSubmit =
+                  !pendingEmployee &&
+                  (canCreateOnboardingRequests || canUpdateOnboardingRequests) &&
+                  isDraft &&
+                  !isCancelled &&
+                  allowedActions.has("submit")
                 const canApprove =
-                  canApproveOnboardingRequests && !isCancelled && !isCompleted && allowedActions.has("approve")
+                  !pendingEmployee &&
+                  canApproveOnboardingRequests &&
+                  !isDraft &&
+                  !isCancelled &&
+                  !isCompleted &&
+                  allowedActions.has("approve")
                 const canReject =
-                  canApproveOnboardingRequests && !isCancelled && !isCompleted && allowedActions.has("reject")
+                  !pendingEmployee &&
+                  canApproveOnboardingRequests &&
+                  !isDraft &&
+                  !isCancelled &&
+                  !isCompleted &&
+                  allowedActions.has("reject")
                 const canCancel =
-                  canCancelOnboardingRequests && !isCancelled && !isCompleted && allowedActions.has("cancel")
+                  !pendingEmployee &&
+                  canCancelOnboardingRequests &&
+                  !isCancelled &&
+                  !isCompleted &&
+                  allowedActions.has("cancel")
                 const canComplete =
-                  canCompleteOnboardingRequests && !isCancelled && !isCompleted && allowedActions.has("complete")
-                const canDelete = canUpdateOnboardingRequests && allowedActions.has("delete")
+                  !pendingEmployee &&
+                  canCompleteOnboardingRequests &&
+                  !isCancelled &&
+                  !isCompleted &&
+                  allowedActions.has("complete")
+                const canDelete =
+                  !pendingEmployee && canUpdateOnboardingRequests && allowedActions.has("delete")
                 const pendingEmployeeId = readNumber(row, ["employee_id", "employeeId"])
                 return (
                   <TableRow
@@ -3300,7 +3385,22 @@ export function OnboardingView() {
                           ) : (
                             <span className="text-[11px] text-muted-foreground">Awaiting request</span>
                           )
-                        ) : canApprove ? (
+                        ) : canSubmit ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-7 px-2 text-[11px]"
+                            title="Submit"
+                            aria-label="Submit"
+                            disabled={saving}
+                            onClick={() => void runRequestAction(requestId, "submit")}
+                          >
+                            <Send className="h-3.5 w-3.5" />
+                            Submit
+                          </Button>
+                        ) : null}
+                        {!pendingEmployee && canApprove ? (
                           <Button
                             type="button"
                             size="sm"
@@ -3373,7 +3473,7 @@ export function OnboardingView() {
                             <Trash2 className="h-3.5 w-3.5" />
                           </Button>
                         ) : null}
-                        {!pendingEmployee && !canApprove && !canReject && !canCancel && !canComplete && !canDelete ? (
+                        {!pendingEmployee && !canSubmit && !canApprove && !canReject && !canCancel && !canComplete && !canDelete ? (
                           <span className="text-[11px] text-muted-foreground">No actions</span>
                         ) : null}
                       </div>
@@ -4223,12 +4323,27 @@ export function OnboardingView() {
                               >
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                   <p className="text-sm font-medium text-slate-900">
-                                    {readString(approvalRow, ["title", "step_name", "approval_name", "name"])}
+                                    {(() => {
+                                      const title = readString(approvalRow, [
+                                        "title",
+                                        "step_name",
+                                        "approval_name",
+                                        "name",
+                                      ])
+                                      if (title !== "-") return title
+                                      return resolveApprovalOwnerLabel(approvalRow, roles, users) || "Approval step"
+                                    })()}
                                   </p>
                                   <span className="text-xs text-slate-500">
                                     {toTitleCaseWords(readString(approvalRow, ["status", "approval_status"]))}
                                   </span>
                                 </div>
+                                <p className="mt-1 text-xs text-slate-600">
+                                  Owner:{" "}
+                                  <span className="font-medium text-slate-800">
+                                    {resolveApprovalOwnerLabel(approvalRow, roles, users) || "-"}
+                                  </span>
+                                </p>
                                 {canApproveOnboardingRequests ? (
                                   <button
                                     type="button"
@@ -4860,7 +4975,7 @@ export function OnboardingView() {
                             <p className="mt-1 text-xs text-slate-600">
                               By:{" "}
                               <span className="font-medium text-slate-800">
-                                {readString(entry, ["actor_name", "performed_by_name", "user_name", "created_by"])}
+                                {resolveAuditActorLabel(entry, users) || "-"}
                               </span>
                             </p>
                             <p className="mt-1 text-xs text-slate-600">
@@ -4875,6 +4990,46 @@ export function OnboardingView() {
               )}
 
               <DialogFooter>
+                {(() => {
+                  const selectedStatus = String(
+                    readString(selectedRequestDetails ?? selectedRequestRow ?? {}, [
+                      "status",
+                      "request_status",
+                      "onboarding_status",
+                      "workflow_status",
+                    ])
+                  ).toLowerCase()
+                  const selectedId = readCurrentRequestId()
+                  const showSubmit =
+                    isOnboardingDraftStatus(selectedStatus) &&
+                    (canCreateOnboardingRequests || canUpdateOnboardingRequests)
+                  const showApprove =
+                    canApproveOnboardingRequests &&
+                    !isOnboardingDraftStatus(selectedStatus) &&
+                    isOnboardingActableStatus(selectedStatus)
+                  return (
+                    <>
+                      {showSubmit ? (
+                        <Button
+                          type="button"
+                          disabled={saving || selectedId === null}
+                          onClick={() => void runRequestAction(selectedId, "submit")}
+                        >
+                          Submit request
+                        </Button>
+                      ) : null}
+                      {showApprove ? (
+                        <Button
+                          type="button"
+                          disabled={saving || selectedId === null}
+                          onClick={() => void runRequestAction(selectedId, "approve")}
+                        >
+                          Approve
+                        </Button>
+                      ) : null}
+                    </>
+                  )
+                })()}
                 <Button type="button" variant="outline" onClick={() => setRequestDetailsOpen(false)}>
                   Close
                 </Button>
@@ -5174,7 +5329,7 @@ export function OnboardingView() {
                                   roles,
                                   step.assigned_role_id ?? null,
                                   ["id", "role_id"],
-                                  ["name", "title"]
+                                  ["display_name", "name", "title"]
                                 )}
                               </TableCell>
                               <TableCell>
@@ -5326,6 +5481,7 @@ export function OnboardingView() {
                       <SelectValue placeholder="Assigned role (optional)">
                         {workflowForm.assigned_role_id
                           ? resolveOptionLabel(roles, Number(workflowForm.assigned_role_id), ["id", "role_id"], [
+                              "display_name",
                               "name",
                               "title",
                             ])
@@ -5338,7 +5494,7 @@ export function OnboardingView() {
                         if (roleId === null) return null
                         return (
                           <SelectItem key={roleId} value={String(roleId)}>
-                            {resolveOptionLabel(roles, roleId, ["id", "role_id"], ["name", "title"])}
+                            {resolveOptionLabel(roles, roleId, ["id", "role_id"], ["display_name", "name", "title"])}
                           </SelectItem>
                         )
                       })}

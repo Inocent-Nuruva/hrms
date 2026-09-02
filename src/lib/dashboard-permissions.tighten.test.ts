@@ -200,6 +200,22 @@ describe("tightened dashboard permissions", () => {
     ).toBe(true)
   })
 
+  it.each([
+    "scheduled_reports:read",
+    "scheduled_reports:create",
+    "scheduled_reports:update",
+    "scheduled_reports:manage_smtp",
+    "scheduled_reports:view_history",
+  ])("opens scheduled reporting for its feature permission %s", (permission) => {
+    expect(
+      canAccessDashboardRoute(
+        "/dashboard/operations/scheduled-reporting",
+        [permission],
+        "admin",
+      ),
+    ).toBe(true)
+  })
+
   it("keeps company overview as an intentional admin-shell-only route", () => {
     expect(
       canAccessDashboardRoute("/dashboard/company-overview", ["view_company_dashboard"], "employee"),

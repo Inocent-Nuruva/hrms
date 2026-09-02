@@ -8843,12 +8843,27 @@ export async function patchOnboardingRequest(
 export async function approveOnboardingRequest(
   token: string,
   id: string | number,
-  data: AdminRecord,
+  data: AdminRecord = {},
 ) {
+  const comments =
+    typeof data.comments === "string" ? data.comments.trim() : "";
+  const signatureUrl =
+    typeof data.signature_url === "string" ? data.signature_url.trim() : "";
+  const body: AdminRecord = {};
+  if (typeof data.approve === "boolean") {
+    body.approve = data.approve;
+  }
+  if (comments) {
+    body.comments = comments;
+  }
+  // Empty signature_url fails URL validation on the backend.
+  if (signatureUrl) {
+    body.signature_url = signatureUrl;
+  }
   return adminRequest<unknown>(`/api/onboarding/requests/${id}/approve`, {
     method: "POST",
     token,
-    body: data,
+    body,
   });
 }
 
@@ -8889,10 +8904,21 @@ export async function completeOnboardingRequest(
 export async function submitOnboardingRequest(
   token: string,
   id: string | number,
+  data: AdminRecord = {},
 ) {
-  unsupportedAdminEndpoint(
-    `Onboarding request submission is no longer exposed as a standalone endpoint in the current API spec. Request ${id} should be created with submit=true instead.`,
-  );
+  const workflowId =
+    typeof data.workflow_id === "number" && Number.isFinite(data.workflow_id)
+      ? Math.trunc(data.workflow_id)
+      : null;
+  const body: AdminRecord = {};
+  if (workflowId !== null && workflowId > 0) {
+    body.workflow_id = workflowId;
+  }
+  return adminRequest<unknown>(`/api/onboarding/requests/${id}/submit`, {
+    method: "POST",
+    token,
+    body,
+  });
 }
 
 export async function reactivateOnboardingRequest(

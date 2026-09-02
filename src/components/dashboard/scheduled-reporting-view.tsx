@@ -52,6 +52,7 @@ import {
 } from "@/lib/dashboard-permissions"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import { cn } from "@/lib/utils"
+import { nullablePositiveInteger } from "@/lib/scheduled-reporting-payload"
 import {
   Dialog,
   DialogDescription,
@@ -1027,7 +1028,9 @@ export function ScheduledReportingView() {
 
     const payload: AdminRecord = {
       reportDefinitionId: Number(form.reportDefinitionId),
-      smtpConfigurationId: Number(form.smtpConfigurationId),
+      // The API accepts a missing SMTP relation as null. Number("") is 0,
+      // which fails the backend's minimum-id validation.
+      smtpConfigurationId: nullablePositiveInteger(form.smtpConfigurationId),
       name: form.name.trim(),
       description: form.description.trim() || undefined,
       outputFormat: enumValue(form.outputFormat, OUTPUT_FORMATS, "PDF"),
@@ -1136,13 +1139,6 @@ export function ScheduledReportingView() {
         const missing: string[] = []
         if (!templateForm.name.trim()) missing.push("Name")
         if (!templateForm.reportDefinitionId) missing.push("Report definition")
-        if (!templateForm.smtpConfigurationId) {
-          missing.push(
-            smtpConfigs.length === 0
-              ? "SMTP configuration (create one under the SMTP tab first)"
-              : "SMTP configuration"
-          )
-        }
         if (missing.length) {
           throw new Error(`${missing.join(", ")} ${missing.length === 1 ? "is" : "are"} required.`)
         }
@@ -1180,6 +1176,12 @@ export function ScheduledReportingView() {
     setFormError(null)
     try {
       if (tab === "templates") {
+        const missing: string[] = []
+        if (!templateForm.name.trim()) missing.push("Name")
+        if (!templateForm.reportDefinitionId) missing.push("Report definition")
+        if (missing.length) {
+          throw new Error(`${missing.join(", ")} ${missing.length === 1 ? "is" : "are"} required.`)
+        }
         const recipientError = validateTemplateRecipients(templateForm)
         if (recipientError) throw new Error(recipientError)
         await updateScheduledReportTemplate(token, editingId, buildTemplatePayload(templateForm))
@@ -2018,13 +2020,13 @@ export function ScheduledReportingView() {
           </span>
         ) : null}
       </Field>
-      <Field label="SMTP configuration *">
+      <Field label="SMTP configuration (optional)">
         <select
-          className={cn(selectClass, !form.smtpConfigurationId && "border-amber-400")}
+          className={selectClass}
           value={form.smtpConfigurationId}
           onChange={(e) => setForm((c) => ({ ...c, smtpConfigurationId: e.target.value }))}
         >
-          <option value="">Select SMTP</option>
+          <option value="">Use system/default SMTP</option>
           {smtpConfigs.map((row, index) => {
             const id = smtpConfigId(row)
             if (id === null) return null
@@ -2038,23 +2040,24 @@ export function ScheduledReportingView() {
           })}
         </select>
         {smtpConfigs.length === 0 ? (
-          <span className="text-[11px] text-amber-700 dark:text-amber-300">
-            No SMTP settings yet. Open the{" "}
+          <span className="text-[11px] text-muted-foreground">
+            No company SMTP settings are available. The system/default SMTP will be used. You can{" "}
             <button
               type="button"
-              className="font-semibold underline underline-offset-2"
+              className="font-semibold text-foreground underline underline-offset-2"
               onClick={() => {
                 setCreateOpen(false)
+                setEditOpen(false)
                 setTab("smtp")
               }}
             >
-              SMTP tab
+              open the SMTP tab
             </button>{" "}
-            and create one first, then return to create the template.
+            to add a company-specific server.
           </span>
         ) : !form.smtpConfigurationId ? (
-          <span className="text-[11px] text-amber-700 dark:text-amber-300">
-            Choose which SMTP server should send this report.
+          <span className="text-[11px] text-muted-foreground">
+            Leave blank to use the system/default SMTP server.
           </span>
         ) : null}
       </Field>
