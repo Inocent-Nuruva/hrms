@@ -124,7 +124,7 @@ jobs:
        (github.event_name == 'workflow_dispatch' &&
         ((github.ref == 'refs/heads/uat' && inputs.environment == 'uat') ||
          (github.ref == 'refs/heads/master' && inputs.environment == 'production'))))
-    runs-on: [self-hosted, Linux, X64, hrms-frontend]
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 20
     environment:
       name: ${{ github.ref_name == 'uat' && 'hrms-frontend-uat' || 'hrms-frontend-production' }}

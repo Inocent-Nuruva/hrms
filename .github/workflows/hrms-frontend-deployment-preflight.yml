@@ -10,7 +10,7 @@ on:
 permissions: { contents: read }
 jobs:
   preflight:
-    runs-on: [self-hosted, Linux, X64, hrms-frontend]
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 15
     environment:
       name: ${{ inputs.environment == 'uat' && 'hrms-frontend-uat' || 'hrms-frontend-production' }}

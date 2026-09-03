@@ -19,6 +19,8 @@ Run `server-setup.sh` as root once. The runner itself must run as a non-sudo
 deployment user. Configure environments `hrms-frontend-uat` and
 `hrms-frontend-production`; require reviewers for production.
 
-The self-hosted runner must have the labels `self-hosted`, `Linux`, `X64`, and
-`hrms-frontend`. The last label isolates frontend deployment jobs from backend
-runners; the runner name alone is not a label.
+The self-hosted runner currently uses the labels `self-hosted`, `Linux`, and
+`X64`. GitHub matches jobs using labels; the `hrms-frontend` runner name is not
+a label. If another runner with the same labels is later added to this repository,
+add a unique custom `hrms-frontend` label to this runner and to all three
+workflow `runs-on` lists.

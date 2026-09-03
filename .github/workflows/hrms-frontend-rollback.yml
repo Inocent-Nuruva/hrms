@@ -17,7 +17,7 @@ jobs:
     if: >-
       (inputs.environment == 'uat' && github.ref == 'refs/heads/uat') ||
       (inputs.environment == 'production' && github.ref == 'refs/heads/master')
-    runs-on: [self-hosted, Linux, X64, hrms-frontend]
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 15
     environment:
       name: ${{ inputs.environment == 'uat' && 'hrms-frontend-uat' || 'hrms-frontend-production' }}
