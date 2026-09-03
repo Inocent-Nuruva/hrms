@@ -178,8 +178,8 @@ describe("documented onboarding and offboarding leftovers", () => {
         body: JSON.stringify({
           employee_id: 139,
           submit: true,
-          workflow_id: 1,
           title: "TEST",
+          workflow_id: 1,
           description: "TEST",
         }),
       }),
@@ -218,8 +218,8 @@ describe("documented onboarding and offboarding leftovers", () => {
         body: JSON.stringify({
           employee_id: 139,
           submit: true,
-          workflow_id: 1,
           title: "TEST",
+          workflow_id: 1,
         }),
       }),
     )

@@ -1,0 +1,172 @@
+name: HRMS Frontend CI/CD
+
+on:
+  push:
+    branches: [uat, master]
+    paths:
+      - "src/**"
+      - "public/**"
+      - "deploy/hrms-frontend/**"
+      - "package.json"
+      - "package-lock.json"
+      - "next.config.ts"
+      - "tsconfig.json"
+      - "eslint.config.mjs"
+      - ".github/workflows/hrms-frontend-ci.yml"
+      - ".github/workflows/hrms-frontend-deployment-preflight.yml"
+  pull_request:
+    branches: [uat, master]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment to build and deploy
+        required: true
+        type: choice
+        options: [uat, production]
+
+permissions:
+  contents: read
+
+jobs:
+  validate-and-package:
+    name: Validate and package HRMS frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: ${{ (github.event_name == 'workflow_dispatch' && inputs.environment == 'production') && 'hrms-frontend-production' || 'hrms-frontend-uat' }}
+    concurrency:
+      group: hrms-frontend-ci-${{ github.ref }}-${{ inputs.environment || 'push' }}
+      cancel-in-progress: true
+    env:
+      CI: true
+      NEXT_PUBLIC_APP_NAME: ${{ vars.NEXT_PUBLIC_APP_NAME || 'HRMS' }}
+      NEXT_PUBLIC_API_BASE_URL: ${{ vars.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8888' }}
+      NEXT_PUBLIC_USE_MOCK_AUTH: ${{ vars.NEXT_PUBLIC_USE_MOCK_AUTH || 'false' }}
+      COUNTRIES_API_BASE_URL: ${{ vars.COUNTRIES_API_BASE_URL || 'https://countriesnow.space/api/v0.1' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with: { fetch-depth: 1, persist-credentials: false }
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with: { node-version: "22", cache: npm }
+      - name: Validate required deployment files
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          for file in package.json package-lock.json next.config.ts deploy/hrms-frontend/deploy.sh deploy/hrms-frontend/stage-release.sh deploy/hrms-frontend/rollback.sh deploy/hrms-frontend/server-setup.sh deploy/hrms-frontend/ecosystem.config.js; do
+            [[ -f "$file" ]] || { echo "Required file missing: $file"; exit 1; }
+          done
+          for file in deploy/hrms-frontend/*.sh; do
+            grep -q $'\r' "$file" && { echo "$file contains CRLF line endings."; exit 1; }
+            bash -n "$file"
+          done
+          node --check deploy/hrms-frontend/ecosystem.config.js
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Validate package scripts
+        shell: bash
+        run: |
+          node -e "const s=require('./package.json').scripts; for(const n of ['build','lint','test']) if(!s?.[n]) throw new Error('Missing script: '+n)"
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck
+        run: npx tsc --noEmit
+      - name: Unit tests
+        run: npm test -- --passWithNoTests
+      - name: Build frontend
+        run: npm run build
+      - name: Validate standalone build
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          [[ -f .next/standalone/server.js ]]
+          [[ -d .next/static ]]
+          [[ -f .next/BUILD_ID ]]
+      - name: Build release artifact
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          release="$RUNNER_TEMP/hrms-frontend-release"
+          archive="$RUNNER_TEMP/hrms-frontend-release.tar.gz"
+          rm -rf "$release"; rm -f "$archive" "$archive.sha256"
+          mkdir -p "$release/deploy/hrms-frontend" "$release/.next"
+          cp -a .next/standalone/. "$release/"
+          cp -a .next/static "$release/.next/static"
+          [[ ! -d public ]] || cp -a public "$release/public"
+          cp deploy/hrms-frontend/deploy.sh deploy/hrms-frontend/stage-release.sh deploy/hrms-frontend/ecosystem.config.js "$release/deploy/hrms-frontend/"
+          chmod 750 "$release/deploy/hrms-frontend/deploy.sh" "$release/deploy/hrms-frontend/stage-release.sh"
+          printf '%s\n' "$GITHUB_SHA" > "$release/REVISION"
+          printf '%s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" > "$release/BUILT_AT"
+          tar -C "$release" -czf "$archive" .
+          (cd "$RUNNER_TEMP"; sha256sum hrms-frontend-release.tar.gz > hrms-frontend-release.tar.gz.sha256; sha256sum --check hrms-frontend-release.tar.gz.sha256)
+      - name: Upload frontend artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: hrms-frontend-release-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/hrms-frontend-release.tar.gz
+            ${{ runner.temp }}/hrms-frontend-release.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+  deploy:
+    name: Deploy HRMS frontend
+    needs: validate-and-package
+    if: >-
+      needs.validate-and-package.result == 'success' &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/uat') ||
+       (github.event_name == 'workflow_dispatch' &&
+        ((github.ref == 'refs/heads/uat' && inputs.environment == 'uat') ||
+         (github.ref == 'refs/heads/master' && inputs.environment == 'production'))))
+    runs-on: [self-hosted, Linux, X64, hrms, frontend, deployment]
+    timeout-minutes: 20
+    environment:
+      name: ${{ github.ref_name == 'uat' && 'hrms-frontend-uat' || 'hrms-frontend-production' }}
+    concurrency:
+      group: hrms-frontend-${{ github.event_name == 'push' && 'uat' || inputs.environment }}-deploy
+      cancel-in-progress: false
+    env:
+      TARGET_ENV: ${{ github.event_name == 'push' && 'uat' || inputs.environment }}
+      BASE_DIR: ${{ vars.BASE_DIR }}
+      PM2_APP_NAME: ${{ vars.PM2_APP_NAME }}
+      APP_ENV: ${{ vars.APP_ENV }}
+      APP_HOST: ${{ vars.APP_HOST }}
+      APP_PORT: ${{ vars.APP_PORT }}
+      HEALTH_PATH: ${{ vars.HEALTH_PATH || '/api/health/ready' }}
+      KEEP_RELEASES: ${{ vars.KEEP_RELEASES || '3' }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 1, persist-credentials: false }
+      - uses: actions/download-artifact@v4
+        with:
+          name: hrms-frontend-release-${{ github.sha }}
+          path: ${{ runner.temp }}/hrms-frontend-artifact
+      - name: Validate configuration and artifact
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          for name in BASE_DIR PM2_APP_NAME APP_ENV APP_HOST APP_PORT HEALTH_PATH; do [[ -n "${!name}" ]] || { echo "Missing $name"; exit 1; }; done
+          [[ "$APP_PORT" =~ ^[0-9]+$ && "$KEEP_RELEASES" =~ ^[0-9]+$ ]]
+          [[ "$TARGET_ENV" == uat && "$APP_ENV" == uat || "$TARGET_ENV" == production && "$APP_ENV" == production ]]
+          [[ "$(id -u)" -ne 0 && -w "$BASE_DIR/releases" && -w "$BASE_DIR/shared" && -w "$BASE_DIR/tmp" ]]
+          echo "HEALTH_URL=http://127.0.0.1:${APP_PORT}${HEALTH_PATH}" >> "$GITHUB_ENV"
+          cd "$RUNNER_TEMP/hrms-frontend-artifact"; sha256sum --check hrms-frontend-release.tar.gz.sha256
+      - name: Deploy release locally
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          archive="$RUNNER_TEMP/hrms-frontend-artifact/hrms-frontend-release.tar.gz"
+          stage="$RUNNER_TEMP/stage-hrms-frontend-$GITHUB_SHA.sh"
+          install -m 0750 deploy/hrms-frontend/stage-release.sh "$stage"
+          bash "$stage" "$GITHUB_SHA" "$archive"
+      - name: Verify deployment
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          curl --fail --silent --show-error "$HEALTH_URL" >/dev/null
+          pm2 status "$PM2_APP_NAME"
+          [[ "$(readlink -f "$BASE_DIR/current")" == "$BASE_DIR/releases/$GITHUB_SHA" ]]

@@ -1,0 +1,54 @@
+name: HRMS Frontend Rollback
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment to roll back
+        required: true
+        type: choice
+        options: [uat, production]
+      release_id:
+        description: Optional full Git SHA; blank uses previous release
+        required: false
+        type: string
+permissions: { contents: read }
+jobs:
+  rollback:
+    if: >-
+      (inputs.environment == 'uat' && github.ref == 'refs/heads/uat') ||
+      (inputs.environment == 'production' && github.ref == 'refs/heads/master')
+    runs-on: [self-hosted, Linux, X64, hrms, frontend, deployment]
+    timeout-minutes: 15
+    environment:
+      name: ${{ inputs.environment == 'uat' && 'hrms-frontend-uat' || 'hrms-frontend-production' }}
+    concurrency:
+      group: hrms-frontend-${{ inputs.environment }}-deploy
+      cancel-in-progress: false
+    env:
+      TARGET_ENV: ${{ inputs.environment }}
+      TARGET_RELEASE: ${{ inputs.release_id }}
+      BASE_DIR: ${{ vars.BASE_DIR }}
+      PM2_APP_NAME: ${{ vars.PM2_APP_NAME }}
+      APP_ENV: ${{ vars.APP_ENV }}
+      APP_HOST: ${{ vars.APP_HOST }}
+      APP_PORT: ${{ vars.APP_PORT }}
+      HEALTH_PATH: ${{ vars.HEALTH_PATH || '/api/health/ready' }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 1, persist-credentials: false }
+      - name: Validate rollback configuration
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          for name in BASE_DIR PM2_APP_NAME APP_ENV APP_HOST APP_PORT HEALTH_PATH; do [[ -n "${!name}" ]] || { echo "Missing $name"; exit 1; }; done
+          [[ "$APP_PORT" =~ ^[0-9]+$ ]]
+          [[ "$TARGET_ENV" == uat && "$APP_ENV" == uat || "$TARGET_ENV" == production && "$APP_ENV" == production ]]
+          echo "HEALTH_URL=http://127.0.0.1:${APP_PORT}${HEALTH_PATH}" >> "$GITHUB_ENV"
+      - name: Roll back release locally
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          script="$BASE_DIR/tmp/hrms-frontend-rollback-$GITHUB_RUN_ID.sh"
+          install -m 0750 deploy/hrms-frontend/rollback.sh "$script"
+          trap 'rm -f -- "$script"' EXIT
+          bash "$script" "$TARGET_RELEASE"

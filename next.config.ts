@@ -9,6 +9,7 @@ function resolveBackendOrigin() {
 const backendOrigin = resolveBackendOrigin();
 
 const nextConfig: NextConfig = {
+  output: "standalone",
   bundlePagesRouterDependencies: true,
   turbopack: {
     root: path.resolve(process.cwd()),
