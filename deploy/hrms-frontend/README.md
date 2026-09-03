@@ -18,3 +18,7 @@ The frontend mirrors the backend's immutable release layout at
 Run `server-setup.sh` as root once. The runner itself must run as a non-sudo
 deployment user. Configure environments `hrms-frontend-uat` and
 `hrms-frontend-production`; require reviewers for production.
+
+The self-hosted runner must have the labels `self-hosted`, `Linux`, `X64`, and
+`hrms-frontend`. The last label isolates frontend deployment jobs from backend
+runners; the runner name alone is not a label.
