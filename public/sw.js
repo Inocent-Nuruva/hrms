@@ -1,5 +1,5 @@
-const STATIC_CACHE = "hrms-static-v1";
-const RUNTIME_CACHE = "hrms-runtime-v1";
+const STATIC_CACHE = "hrms-static-v2";
+const RUNTIME_CACHE = "hrms-runtime-v2";
 const OFFLINE_URL = "/offline";
 const PRECACHE_URLS = ["/offline", "/login", "/manifest.webmanifest", "/icon.png", "/apple-icon.png", "/favicon.ico"];
 

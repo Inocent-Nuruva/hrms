@@ -21,7 +21,12 @@ export function PwaProvider() {
 
     const register = async () => {
       try {
-        await navigator.serviceWorker.register(SW_URL, { scope: "/" });
+        const registration = await navigator.serviceWorker.register(SW_URL, {
+          scope: "/",
+          updateViaCache: "none",
+        });
+
+        await registration.update();
       } catch (error) {
         console.error("PWA service worker registration failed", error);
       }

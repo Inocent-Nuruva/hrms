@@ -85,6 +85,10 @@ jobs:
           [[ -f .next/standalone/server.js ]]
           [[ -d .next/static ]]
           [[ -f .next/BUILD_ID ]]
+          grep -R -F -q -- "$NEXT_PUBLIC_API_BASE_URL" .next/static .next/server || {
+            echo "Configured NEXT_PUBLIC_API_BASE_URL was not embedded in the build."
+            exit 1
+          }
       - name: Build release artifact
         if: github.event_name != 'pull_request'
         shell: bash
