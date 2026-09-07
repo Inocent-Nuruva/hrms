@@ -65,22 +65,22 @@ describe("probation admin API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:8888/api/probation/dashboard/summary",
+      "http://localhost:9999/api/probation/dashboard/summary",
       expect.objectContaining({ method: "GET" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:8888/api/probation/policies?status=ACTIVE",
+      "http://localhost:9999/api/probation/policies?status=ACTIVE",
       expect.objectContaining({ method: "GET" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
-      "http://localhost:8888/api/probation/cases?status=IN_REVIEW",
+      "http://localhost:9999/api/probation/cases?status=IN_REVIEW",
       expect.objectContaining({ method: "GET" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       4,
-      "http://localhost:8888/api/probation/cases/my-team?status=IN_REVIEW",
+      "http://localhost:9999/api/probation/cases/my-team?status=IN_REVIEW",
       expect.objectContaining({ method: "GET" }),
     )
     expect(dashboard).toEqual(expect.objectContaining({ open_cases: 5 }))
@@ -125,12 +125,12 @@ describe("probation admin API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:8888/api/probation/policies",
+      "http://localhost:9999/api/probation/policies",
       expect.objectContaining({ method: "POST" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:8888/api/probation/policies/4",
+      "http://localhost:9999/api/probation/policies/4",
       expect.objectContaining({
         method: "PATCH",
         body: JSON.stringify({ status: "ACTIVE" }),
@@ -138,17 +138,17 @@ describe("probation admin API helpers", () => {
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
-      "http://localhost:8888/api/probation/cases/18",
+      "http://localhost:9999/api/probation/cases/18",
       expect.objectContaining({ method: "GET" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       4,
-      "http://localhost:8888/api/probation/cases/18/manager-review",
+      "http://localhost:9999/api/probation/cases/18/manager-review",
       expect.objectContaining({ method: "POST" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       6,
-      "http://localhost:8888/api/probation/cases/18/generate-letter",
+      "http://localhost:9999/api/probation/cases/18/generate-letter",
       expect.objectContaining({ method: "POST" }),
     )
     expect(detail).toEqual(expect.objectContaining({ caseNo: "PRB-18" }))
@@ -173,12 +173,12 @@ describe("probation admin API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:8888/api/me/probation",
+      "http://localhost:9999/api/me/probation",
       expect.objectContaining({ method: "GET" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:8888/api/me/probation/18/self-assessment",
+      "http://localhost:9999/api/me/probation/18/self-assessment",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({

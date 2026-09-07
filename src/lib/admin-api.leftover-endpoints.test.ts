@@ -47,17 +47,17 @@ describe("leftover documented API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:8888/api/me/action-items?limit=20",
+      "http://localhost:9999/api/me/action-items?limit=20",
       expect.objectContaining({ method: "GET" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
-      "http://localhost:8888/api/me/resignation",
+      "http://localhost:9999/api/me/resignation",
       expect.objectContaining({ method: "POST" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       5,
-      "http://localhost:8888/api/hr/profile-change-requests/9/approve",
+      "http://localhost:9999/api/hr/profile-change-requests/9/approve",
       expect.objectContaining({ method: "POST" }),
     )
   })
@@ -83,27 +83,27 @@ describe("leftover documented API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:8888/api/leave/balances/generate",
+      "http://localhost:9999/api/leave/balances/generate",
       expect.objectContaining({ method: "POST" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       4,
-      "http://localhost:8888/api/me/field-sync",
+      "http://localhost:9999/api/me/field-sync",
       expect.objectContaining({ method: "POST" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       7,
-      "http://localhost:8888/api/offboarding/requests/8/access-termination/emergency",
+      "http://localhost:9999/api/offboarding/requests/8/access-termination/emergency",
       expect.objectContaining({ method: "POST" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       9,
-      "http://localhost:8888/api/hikvision/devices/2/attendance/sync-date",
+      "http://localhost:9999/api/hikvision/devices/2/attendance/sync-date",
       expect.objectContaining({ method: "POST" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       10,
-      "http://localhost:8888/api/access-control/employees/39/devices/2/users/cards",
+      "http://localhost:9999/api/access-control/employees/39/devices/2/users/cards",
       expect.objectContaining({ method: "POST" }),
     )
   })

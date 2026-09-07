@@ -68,7 +68,7 @@ describe("batch 2 admin API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:8888/api/employee-grades",
+      "http://localhost:9999/api/employee-grades",
       expect.objectContaining({
         method: "GET",
         headers: expect.objectContaining({
@@ -78,7 +78,7 @@ describe("batch 2 admin API helpers", () => {
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:8888/api/employee-grades/4",
+      "http://localhost:9999/api/employee-grades/4",
       expect.objectContaining({
         method: "GET",
       })
@@ -111,7 +111,7 @@ describe("batch 2 admin API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:8888/api/employee-grades",
+      "http://localhost:9999/api/employee-grades",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({ name: "G8" }),
@@ -119,7 +119,7 @@ describe("batch 2 admin API helpers", () => {
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:8888/api/employee-grades/8",
+      "http://localhost:9999/api/employee-grades/8",
       expect.objectContaining({
         method: "PATCH",
         body: JSON.stringify({ name: "G8A" }),
@@ -127,7 +127,7 @@ describe("batch 2 admin API helpers", () => {
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
-      "http://localhost:8888/api/employee-grades/8",
+      "http://localhost:9999/api/employee-grades/8",
       expect.objectContaining({
         method: "DELETE",
       })
@@ -166,14 +166,14 @@ describe("batch 2 admin API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:8888/api/employee-numbering",
+      "http://localhost:9999/api/employee-numbering",
       expect.objectContaining({
         method: "GET",
       })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:8888/api/employee-numbering",
+      "http://localhost:9999/api/employee-numbering",
       expect.objectContaining({
         method: "PUT",
         body: JSON.stringify({
@@ -243,21 +243,21 @@ describe("batch 2 admin API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:8888/api/employee-movements?page=2&limit=25&employee_id=120&movement_type=TRANSFER",
+      "http://localhost:9999/api/employee-movements?page=2&limit=25&employee_id=120&movement_type=TRANSFER",
       expect.objectContaining({
         method: "GET",
       })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:8888/api/employee-movements/17",
+      "http://localhost:9999/api/employee-movements/17",
       expect.objectContaining({
         method: "GET",
       })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
-      "http://localhost:8888/api/employee-movements/17/operations",
+      "http://localhost:9999/api/employee-movements/17/operations",
       expect.objectContaining({
         method: "GET",
       })
@@ -300,7 +300,7 @@ describe("batch 2 admin API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:8888/api/employee-movements",
+      "http://localhost:9999/api/employee-movements",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({
@@ -312,14 +312,14 @@ describe("batch 2 admin API helpers", () => {
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:8888/api/employee-movements/18/submit",
+      "http://localhost:9999/api/employee-movements/18/submit",
       expect.objectContaining({
         method: "POST",
       })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
-      "http://localhost:8888/api/employee-movements/18/cancel",
+      "http://localhost:9999/api/employee-movements/18/cancel",
       expect.objectContaining({
         method: "POST",
       })
@@ -358,21 +358,21 @@ describe("batch 2 admin API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:8888/api/me/movements",
+      "http://localhost:9999/api/me/movements",
       expect.objectContaining({
         method: "GET",
       })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:8888/api/me/movements/44",
+      "http://localhost:9999/api/me/movements/44",
       expect.objectContaining({
         method: "GET",
       })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
-      "http://localhost:8888/api/me/movements/44/acknowledge",
+      "http://localhost:9999/api/me/movements/44/acknowledge",
       expect.objectContaining({
         method: "POST",
       })
@@ -407,7 +407,7 @@ describe("batch 2 admin API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:8888/api/attendance/daily-summaries/120/2026-08-13/adjustment",
+      "http://localhost:9999/api/attendance/daily-summaries/120/2026-08-13/adjustment",
       expect.objectContaining({
         method: "PUT",
         body: JSON.stringify({
@@ -418,7 +418,7 @@ describe("batch 2 admin API helpers", () => {
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:8888/api/attendance/daily-summaries/120/2026-08-13/adjustment",
+      "http://localhost:9999/api/attendance/daily-summaries/120/2026-08-13/adjustment",
       expect.objectContaining({
         method: "DELETE",
       })
@@ -462,14 +462,14 @@ describe("batch 2 admin API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:8888/api/attendance/processing/exceptions?page=1&limit=2&device_id=1&status=OPEN&exception_type=MISSING_CHECK_OUT",
+      "http://localhost:9999/api/attendance/processing/exceptions?page=1&limit=2&device_id=1&status=OPEN&exception_type=MISSING_CHECK_OUT",
       expect.objectContaining({
         method: "GET",
       })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:8888/api/attendance/processing/exceptions/55",
+      "http://localhost:9999/api/attendance/processing/exceptions/55",
       expect.objectContaining({
         method: "PATCH",
         body: JSON.stringify({

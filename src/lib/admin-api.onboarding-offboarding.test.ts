@@ -63,7 +63,7 @@ describe("documented onboarding and offboarding leftovers", () => {
     expect(existing).toBeNull()
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:8888/api/onboarding/requests",
+      "http://localhost:9999/api/onboarding/requests",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({
@@ -90,12 +90,12 @@ describe("documented onboarding and offboarding leftovers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:8888/api/me/onboarding",
+      "http://localhost:9999/api/me/onboarding",
       expect.objectContaining({ method: "GET" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:8888/api/me/offboarding",
+      "http://localhost:9999/api/me/offboarding",
       expect.objectContaining({ method: "GET" }),
     )
     expect(onboarding).toEqual([expect.objectContaining({ id: 11 })])
@@ -117,7 +117,7 @@ describe("documented onboarding and offboarding leftovers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:8888/api/onboarding/requests/8/acknowledge",
+      "http://localhost:9999/api/onboarding/requests/8/acknowledge",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({
@@ -128,7 +128,7 @@ describe("documented onboarding and offboarding leftovers", () => {
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:8888/api/onboarding/requests/8/approvals/3/delegate",
+      "http://localhost:9999/api/onboarding/requests/8/approvals/3/delegate",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({
@@ -168,11 +168,11 @@ describe("documented onboarding and offboarding leftovers", () => {
     await submitOnboardingRequest("token", 3, { workflow_id: 9 })
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8888/api/onboarding/requests/3",
+      "http://localhost:9999/api/onboarding/requests/3",
       expect.objectContaining({ method: "GET" }),
     )
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8888/api/onboarding/requests",
+      "http://localhost:9999/api/onboarding/requests",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({
@@ -212,7 +212,7 @@ describe("documented onboarding and offboarding leftovers", () => {
     await submitOnboardingRequest("token", 3, { employee_id: 139 })
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8888/api/onboarding/requests",
+      "http://localhost:9999/api/onboarding/requests",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({
@@ -236,7 +236,7 @@ describe("documented onboarding and offboarding leftovers", () => {
     })
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8888/api/onboarding/requests/3/approve",
+      "http://localhost:9999/api/onboarding/requests/3/approve",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({
@@ -262,7 +262,7 @@ describe("documented onboarding and offboarding leftovers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:8888/api/offboarding/requests/9/actions/4",
+      "http://localhost:9999/api/offboarding/requests/9/actions/4",
       expect.objectContaining({
         method: "PATCH",
         body: JSON.stringify({ status: "completed" }),
@@ -270,7 +270,7 @@ describe("documented onboarding and offboarding leftovers", () => {
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:8888/api/offboarding/requests/9/assets/6",
+      "http://localhost:9999/api/offboarding/requests/9/assets/6",
       expect.objectContaining({
         method: "PATCH",
         body: JSON.stringify({ status: "returned" }),
@@ -278,7 +278,7 @@ describe("documented onboarding and offboarding leftovers", () => {
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
-      "http://localhost:8888/api/offboarding/requests/9/clearances/2/assign",
+      "http://localhost:9999/api/offboarding/requests/9/clearances/2/assign",
       expect.objectContaining({
         method: "PATCH",
         body: JSON.stringify({
@@ -289,7 +289,7 @@ describe("documented onboarding and offboarding leftovers", () => {
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       4,
-      "http://localhost:8888/api/offboarding/requests/9/documents/7",
+      "http://localhost:9999/api/offboarding/requests/9/documents/7",
       expect.objectContaining({
         method: "PATCH",
         body: JSON.stringify({ title: "Exit checklist" }),
@@ -297,7 +297,7 @@ describe("documented onboarding and offboarding leftovers", () => {
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       5,
-      "http://localhost:8888/api/offboarding/requests/9/documents/7",
+      "http://localhost:9999/api/offboarding/requests/9/documents/7",
       expect.objectContaining({ method: "DELETE" }),
     )
   })

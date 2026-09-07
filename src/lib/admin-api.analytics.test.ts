@@ -49,7 +49,7 @@ describe("analytics admin API helpers", () => {
     })
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8888/api/analytics/dashboards/hr?date_from=2026-07-01&date_to=2026-07-31&branch_id=4&department_id=7&employee_id=120&purpose=dashboard",
+      "http://localhost:9999/api/analytics/dashboards/hr?date_from=2026-07-01&date_to=2026-07-31&branch_id=4&department_id=7&employee_id=120&purpose=dashboard",
       expect.objectContaining({
         method: "GET",
         headers: expect.objectContaining({
@@ -95,14 +95,14 @@ describe("analytics admin API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:8888/api/analytics/datasets",
+      "http://localhost:9999/api/analytics/datasets",
       expect.objectContaining({
         method: "GET",
       }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:8888/api/analytics/metrics",
+      "http://localhost:9999/api/analytics/metrics",
       expect.objectContaining({
         method: "GET",
       }),
@@ -169,14 +169,14 @@ describe("analytics admin API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:8888/api/analytics/freshness?dataset_code=attendance_daily",
+      "http://localhost:9999/api/analytics/freshness?dataset_code=attendance_daily",
       expect.objectContaining({
         method: "GET",
       }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:8888/api/analytics/reports/custom",
+      "http://localhost:9999/api/analytics/reports/custom",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({
@@ -191,7 +191,7 @@ describe("analytics admin API helpers", () => {
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
-      "http://localhost:8888/api/analytics/exports",
+      "http://localhost:9999/api/analytics/exports",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({
@@ -244,7 +244,7 @@ describe("analytics admin API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:8888/api/analytics/refresh",
+      "http://localhost:9999/api/analytics/refresh",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({
@@ -257,14 +257,14 @@ describe("analytics admin API helpers", () => {
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:8888/api/analytics/reconciliation/run",
+      "http://localhost:9999/api/analytics/reconciliation/run",
       expect.objectContaining({
         method: "POST",
       }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
-      "http://localhost:8888/api/analytics/statutory-reports/run",
+      "http://localhost:9999/api/analytics/statutory-reports/run",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({

@@ -404,7 +404,7 @@ export function resolveNotificationsSocketOrigin() {
       ? window.location.origin
       : null,
     // Keep parity with admin-api default so local REST + socket share a host.
-    "http://192.168.1.30:8888",
+    "http://192.168.1.30:9999",
   ].filter((value): value is string => Boolean(value))
 
   for (const rawValue of candidates) {

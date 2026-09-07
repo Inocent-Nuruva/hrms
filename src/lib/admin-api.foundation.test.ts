@@ -48,7 +48,7 @@ describe("foundation admin API helpers", () => {
     const result = await getCompanyById("token", 9)
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8888/api/companies/9",
+      "http://localhost:9999/api/companies/9",
       expect.objectContaining({
         method: "GET",
         headers: expect.objectContaining({
@@ -71,7 +71,7 @@ describe("foundation admin API helpers", () => {
     await updateCompanyById("token", 9, { company_name: "Alliance HQ" })
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8888/api/companies/9",
+      "http://localhost:9999/api/companies/9",
       expect.objectContaining({
         method: "PATCH",
         body: JSON.stringify({ company_name: "Alliance HQ" }),
@@ -93,7 +93,7 @@ describe("foundation admin API helpers", () => {
     const result = await getCompanyModules("token", 4)
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8888/api/companies/4/modules",
+      "http://localhost:9999/api/companies/4/modules",
       expect.objectContaining({
         method: "GET",
         headers: expect.objectContaining({
@@ -145,7 +145,7 @@ describe("foundation admin API helpers", () => {
     })
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8888/api/companies/4/modules",
+      "http://localhost:9999/api/companies/4/modules",
       expect.objectContaining({
         method: "PATCH",
         body: JSON.stringify({
@@ -174,12 +174,12 @@ describe("foundation admin API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:8888/api/companies/4/activate",
+      "http://localhost:9999/api/companies/4/activate",
       expect.objectContaining({ method: "POST" })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:8888/api/companies/4/suspend",
+      "http://localhost:9999/api/companies/4/suspend",
       expect.objectContaining({ method: "POST" })
     )
   })
@@ -200,7 +200,7 @@ describe("foundation admin API helpers", () => {
     const result = await getMyCompany("token")
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8888/api/companies/my",
+      "http://localhost:9999/api/companies/my",
       expect.objectContaining({ method: "GET" }),
     )
     expect(result).toEqual(
@@ -223,7 +223,7 @@ describe("foundation admin API helpers", () => {
       status: 403,
     })
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8888/api/companies",
+      "http://localhost:9999/api/companies",
       expect.objectContaining({ method: "GET" }),
     )
   })
@@ -255,7 +255,7 @@ describe("foundation admin API helpers", () => {
     const result = await getCurrentCompanyOnboardingStatus("token")
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8888/api/companies/current/onboarding-status",
+      "http://localhost:9999/api/companies/current/onboarding-status",
       expect.objectContaining({
         method: "GET",
       })
@@ -284,7 +284,7 @@ describe("foundation admin API helpers", () => {
     const result = await listDepartmentAccess("token", 3)
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8888/api/departments/3/access",
+      "http://localhost:9999/api/departments/3/access",
       expect.objectContaining({
         method: "GET",
       })
@@ -308,12 +308,12 @@ describe("foundation admin API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:8888/api/departments/3/access/71",
+      "http://localhost:9999/api/departments/3/access/71",
       expect.objectContaining({ method: "POST" })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:8888/api/departments/3/access/71",
+      "http://localhost:9999/api/departments/3/access/71",
       expect.objectContaining({ method: "DELETE" })
     )
   })
@@ -330,7 +330,7 @@ describe("foundation admin API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:8888/api/departments/3/positions",
+      "http://localhost:9999/api/departments/3/positions",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({ position_id: 12 }),
@@ -338,7 +338,7 @@ describe("foundation admin API helpers", () => {
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:8888/api/departments/3/positions/12",
+      "http://localhost:9999/api/departments/3/positions/12",
       expect.objectContaining({ method: "DELETE" }),
     )
   })
@@ -358,7 +358,7 @@ describe("foundation admin API helpers", () => {
     const result = await downloadEmployeeDocument("token", 39, 8)
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8888/api/employees/39/documents/8/download",
+      "http://localhost:9999/api/employees/39/documents/8/download",
       expect.objectContaining({ method: "GET" }),
     )
     expect(result.filename).toBe("id-scan.pdf")

@@ -39,7 +39,7 @@ describe("shared admin API sort guards", () => {
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8888/api/users?page=1&limit=20&search=Ann",
+      "http://localhost:9999/api/users?page=1&limit=20&search=Ann",
       expect.objectContaining({ method: "GET" }),
     );
   });
@@ -58,7 +58,7 @@ describe("shared admin API sort guards", () => {
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8888/api/me/attendance/overview?page=1&limit=20&from_date=2026-08-01&to_date=2026-08-21",
+      "http://localhost:9999/api/me/attendance/overview?page=1&limit=20&from_date=2026-08-01&to_date=2026-08-21",
       expect.objectContaining({ method: "GET" }),
     );
   });
@@ -79,7 +79,7 @@ describe("shared admin API sort guards", () => {
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8888/api/me/attendance/punches?page=1&limit=50&dateFrom=2026-08-21&dateTo=2026-08-21",
+      "http://localhost:9999/api/me/attendance/punches?page=1&limit=50&dateFrom=2026-08-21&dateTo=2026-08-21",
       expect.objectContaining({ method: "GET" }),
     );
   });
@@ -99,7 +99,7 @@ describe("shared admin API sort guards", () => {
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8888/api/me/attendance/correction-requests?page=1&limit=5&status=PENDING",
+      "http://localhost:9999/api/me/attendance/correction-requests?page=1&limit=5&status=PENDING",
       expect.objectContaining({ method: "GET" }),
     );
   });
@@ -116,7 +116,7 @@ describe("shared admin API sort guards", () => {
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8888/api/me/action-items?limit=20&status=OPEN",
+      "http://localhost:9999/api/me/action-items?limit=20&status=OPEN",
       expect.objectContaining({ method: "GET" }),
     );
   });

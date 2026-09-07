@@ -9,7 +9,7 @@
       "distribution": "internal",
       "channel": "development",
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "http://192.168.1.30:8888"
+        "EXPO_PUBLIC_API_BASE_URL": "http://192.168.1.30:9999"
       },
       "ios": {
         "simulator": false
@@ -20,7 +20,7 @@
       "distribution": "internal",
       "channel": "development",
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "http://192.168.1.30:8888"
+        "EXPO_PUBLIC_API_BASE_URL": "http://192.168.1.30:9999"
       },
       "ios": {
         "simulator": true
@@ -30,7 +30,7 @@
       "distribution": "internal",
       "channel": "preview",
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "http://192.168.1.30:8888"
+        "EXPO_PUBLIC_API_BASE_URL": "http://192.168.1.30:9999"
       },
       "ios": {
         "simulator": false

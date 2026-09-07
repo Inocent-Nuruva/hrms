@@ -61,7 +61,7 @@ describe("listAllLeaveBalances", () => {
     })
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8888/api/leave/balances/adjust",
+      "http://localhost:9999/api/leave/balances/adjust",
       expect.objectContaining({
         method: "PATCH",
         body: JSON.stringify({

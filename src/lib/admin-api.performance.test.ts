@@ -58,7 +58,7 @@ describe("performance admin API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:8888/api/performance/dashboard/summary",
+      "http://localhost:9999/api/performance/dashboard/summary",
       expect.objectContaining({
         method: "GET",
         headers: expect.objectContaining({
@@ -68,7 +68,7 @@ describe("performance admin API helpers", () => {
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:8888/api/performance/financial-years",
+      "http://localhost:9999/api/performance/financial-years",
       expect.objectContaining({ method: "GET" }),
     )
     expect(dashboard).toEqual(
@@ -112,7 +112,7 @@ describe("performance admin API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:8888/api/performance/financial-years",
+      "http://localhost:9999/api/performance/financial-years",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({
@@ -125,12 +125,12 @@ describe("performance admin API helpers", () => {
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:8888/api/performance/financial-years/12/generate-periods",
+      "http://localhost:9999/api/performance/financial-years/12/generate-periods",
       expect.objectContaining({ method: "POST" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
-      "http://localhost:8888/api/performance/kpis",
+      "http://localhost:9999/api/performance/kpis",
       expect.objectContaining({ method: "POST" }),
     )
   })
@@ -152,7 +152,7 @@ describe("performance admin API helpers", () => {
     })
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8888/api/performance/kpis/88/versions",
+      "http://localhost:9999/api/performance/kpis/88/versions",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({
@@ -211,12 +211,12 @@ describe("performance admin API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:8888/api/performance/me/summary",
+      "http://localhost:9999/api/performance/me/summary",
       expect.objectContaining({ method: "GET" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       4,
-      "http://localhost:8888/api/performance/me/reviews/41/self-review",
+      "http://localhost:9999/api/performance/me/reviews/41/self-review",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({ review: { comment: "Met the target." } }),
@@ -224,12 +224,12 @@ describe("performance admin API helpers", () => {
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       5,
-      "http://localhost:8888/api/performance/manager/reviews/41/submit",
+      "http://localhost:9999/api/performance/manager/reviews/41/submit",
       expect.objectContaining({ method: "POST" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       6,
-      "http://localhost:8888/api/performance/reviews/41/approve",
+      "http://localhost:9999/api/performance/reviews/41/approve",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({ publish: true }),

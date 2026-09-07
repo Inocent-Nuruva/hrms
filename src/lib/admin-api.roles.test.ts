@@ -58,10 +58,10 @@ describe("roles and permissions admin API helpers", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(2)
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
-      "http://localhost:8888/api/roles?page=1&limit=1",
+      "http://localhost:9999/api/roles?page=1&limit=1",
     )
     expect(fetchMock.mock.calls[1]?.[0]).toBe(
-      "http://localhost:8888/api/roles?page=2&limit=1",
+      "http://localhost:9999/api/roles?page=2&limit=1",
     )
     expect(rows.map((row) => row.name)).toEqual(["COMPANY_ADMIN", "COMPANY_USER"])
   })
@@ -83,7 +83,7 @@ describe("roles and permissions admin API helpers", () => {
     })
 
     expect(fetchMock).toHaveBeenCalledTimes(2)
-    expect(fetchMock.mock.calls[0]?.[0]).toBe("http://localhost:8888/api/permissions")
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("http://localhost:9999/api/permissions")
     expect(rows).toEqual([expect.objectContaining({ id: 10, name: "roles:read" })])
   })
 
@@ -147,7 +147,7 @@ describe("roles and permissions admin API helpers", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8888/api/roles",
+      "http://localhost:9999/api/roles",
       expect.objectContaining({ method: "GET" }),
     )
     expect(result.rows.map((row) => row.name)).toEqual(["HR_MANAGER"])
@@ -170,7 +170,7 @@ describe("roles and permissions admin API helpers", () => {
     })
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8888/api/roles",
+      "http://localhost:9999/api/roles",
       expect.objectContaining({ method: "GET" }),
     )
     expect(result.rows).toEqual([
@@ -200,7 +200,7 @@ describe("roles and permissions admin API helpers", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8888/api/permissions?page=1&limit=20&search=roles",
+      "http://localhost:9999/api/permissions?page=1&limit=20&search=roles",
       expect.objectContaining({ method: "GET" }),
     )
     expect(result.rows).toEqual([expect.objectContaining({ name: "roles:read" })])
@@ -224,7 +224,7 @@ describe("roles and permissions admin API helpers", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
-      "http://localhost:8888/api/roles/4/permissions?page=1&limit=100",
+      "http://localhost:9999/api/roles/4/permissions?page=1&limit=100",
     )
     expect(rows.map((row) => row.name)).toEqual(["roles:read"])
   })
@@ -240,7 +240,7 @@ describe("roles and permissions admin API helpers", () => {
     const role = await getRoleById(4, "token-role-by-id")
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8888/api/roles/4",
+      "http://localhost:9999/api/roles/4",
       expect.objectContaining({
         method: "GET",
         headers: expect.objectContaining({

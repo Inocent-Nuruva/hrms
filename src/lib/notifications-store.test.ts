@@ -13,7 +13,7 @@ describe("notifications socket URL resolution", () => {
 
   it("prefers the configured API origin over the browser origin", () => {
     vi.stubEnv("NEXT_PUBLIC_BACKEND_URL", "");
-    vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "http://192.168.1.30:8888/api");
+    vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "http://192.168.1.30:9999/api");
     vi.stubGlobal("window", {
       location: {
         origin: "http://192.168.1.50:3000",
@@ -21,8 +21,8 @@ describe("notifications socket URL resolution", () => {
       },
     });
 
-    expect(resolveNotificationsSocketOrigin()).toBe("http://192.168.1.30:8888");
-    expect(resolveNotificationsSocketUrl()).toBe("http://192.168.1.30:8888/notifications");
+    expect(resolveNotificationsSocketOrigin()).toBe("http://192.168.1.30:9999");
+    expect(resolveNotificationsSocketUrl()).toBe("http://192.168.1.30:9999/notifications");
   });
 
   it("uses the browser origin when no API origin is configured", () => {

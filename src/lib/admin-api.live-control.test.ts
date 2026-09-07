@@ -51,32 +51,32 @@ describe("live control and leftover documented API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:8888/api/access-control/doors/8/open",
+      "http://localhost:9999/api/access-control/doors/8/open",
       expect.objectContaining({ method: "POST" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:8888/api/access-control/doors/8/close",
+      "http://localhost:9999/api/access-control/doors/8/close",
       expect.objectContaining({ method: "POST" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
-      "http://localhost:8888/api/access-control/doors/8/always-open",
+      "http://localhost:9999/api/access-control/doors/8/always-open",
       expect.objectContaining({ method: "POST" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       4,
-      "http://localhost:8888/api/access-control/doors/8/always-close",
+      "http://localhost:9999/api/access-control/doors/8/always-close",
       expect.objectContaining({ method: "POST" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       5,
-      "http://localhost:8888/api/access-control/doors/8/device-config",
+      "http://localhost:9999/api/access-control/doors/8/device-config",
       expect.objectContaining({ method: "GET" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       6,
-      "http://localhost:8888/api/access-control/doors/8/sync-to-device",
+      "http://localhost:9999/api/access-control/doors/8/sync-to-device",
       expect.objectContaining({ method: "POST" }),
     )
   })
@@ -102,17 +102,17 @@ describe("live control and leftover documented API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:8888/api/attendance/geofences/4/activate",
+      "http://localhost:9999/api/attendance/geofences/4/activate",
       expect.objectContaining({ method: "PATCH" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:8888/api/attendance/geofences/4/deactivate",
+      "http://localhost:9999/api/attendance/geofences/4/deactivate",
       expect.objectContaining({ method: "PATCH" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
-      "http://localhost:8888/api/attendance/geofences/4/validate-location",
+      "http://localhost:9999/api/attendance/geofences/4/validate-location",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({
@@ -124,17 +124,17 @@ describe("live control and leftover documented API helpers", () => {
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       4,
-      "http://localhost:8888/api/attendance/wifi-networks/5/activate",
+      "http://localhost:9999/api/attendance/wifi-networks/5/activate",
       expect.objectContaining({ method: "PATCH" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       5,
-      "http://localhost:8888/api/attendance/wifi-networks/5/deactivate",
+      "http://localhost:9999/api/attendance/wifi-networks/5/deactivate",
       expect.objectContaining({ method: "PATCH" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       6,
-      "http://localhost:8888/api/attendance/wifi-networks/5/validate",
+      "http://localhost:9999/api/attendance/wifi-networks/5/validate",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({
@@ -176,7 +176,7 @@ describe("live control and leftover documented API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:8888/api/hikvision/devices/2/manage",
+      "http://localhost:9999/api/hikvision/devices/2/manage",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({ reboot: true }),
@@ -184,22 +184,22 @@ describe("live control and leftover documented API helpers", () => {
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:8888/api/hikvision/sync-jobs/job-9",
+      "http://localhost:9999/api/hikvision/sync-jobs/job-9",
       expect.objectContaining({ method: "GET" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
-      "http://localhost:8888/api/access-control/devices/2/audit-logs?page=1&limit=20",
+      "http://localhost:9999/api/access-control/devices/2/audit-logs?page=1&limit=20",
       expect.objectContaining({ method: "GET" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       4,
-      "http://localhost:8888/api/access-control/devices/2/command-logs?commandType=SET_USER&page=1&limit=20",
+      "http://localhost:9999/api/access-control/devices/2/command-logs?commandType=SET_USER&page=1&limit=20",
       expect.objectContaining({ method: "GET" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       5,
-      "http://localhost:8888/api/access-control/employees/39/audit-logs?action=ENABLE_ACCESS&page=1&limit=20",
+      "http://localhost:9999/api/access-control/employees/39/audit-logs?action=ENABLE_ACCESS&page=1&limit=20",
       expect.objectContaining({ method: "GET" }),
     )
     expect(job).toEqual(expect.objectContaining({ id: "job-9", status: "RUNNING" }))
@@ -239,37 +239,37 @@ describe("live control and leftover documented API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:8888/api/me/profile-change-requests/11/history",
+      "http://localhost:9999/api/me/profile-change-requests/11/history",
       expect.objectContaining({ method: "GET" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:8888/api/hr/profile-change-requests/11/history",
+      "http://localhost:9999/api/hr/profile-change-requests/11/history",
       expect.objectContaining({ method: "GET" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
-      "http://localhost:8888/api/me/profile-change-requests/11/files/4",
+      "http://localhost:9999/api/me/profile-change-requests/11/files/4",
       expect.objectContaining({ method: "GET" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       4,
-      "http://localhost:8888/api/hr/profile-change-requests/11/files/4",
+      "http://localhost:9999/api/hr/profile-change-requests/11/files/4",
       expect.objectContaining({ method: "GET" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       5,
-      "http://localhost:8888/api/me/profile-change-requests/profile-photo",
+      "http://localhost:9999/api/me/profile-change-requests/profile-photo",
       expect.objectContaining({ method: "POST" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       6,
-      "http://localhost:8888/api/me/field-visits/follow-ups/list?status=OPEN&limit=20",
+      "http://localhost:9999/api/me/field-visits/follow-ups/list?status=OPEN&limit=20",
       expect.objectContaining({ method: "GET" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       7,
-      "http://localhost:8888/api/me/field-visits/follow-ups/7/complete",
+      "http://localhost:9999/api/me/field-visits/follow-ups/7/complete",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({ completion_note: "Done" }),

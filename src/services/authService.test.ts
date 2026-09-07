@@ -82,7 +82,7 @@ describe("authService foundation helpers", () => {
     const result = await authService.listSessions("access-token")
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8888/api/auth/sessions",
+      "http://localhost:9999/api/auth/sessions",
       expect.objectContaining({
         method: "GET",
         headers: expect.objectContaining({
@@ -118,7 +118,7 @@ describe("authService foundation helpers", () => {
     const codes = await authService.regenerateBackupCodes("access-token", "123456")
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8888/api/users/2fa/backup-codes/regenerate",
+      "http://localhost:9999/api/users/2fa/backup-codes/regenerate",
       expect.objectContaining({
         method: "POST",
         headers: expect.objectContaining({
@@ -137,7 +137,7 @@ describe("authService foundation helpers", () => {
     await authService.logout({ accessToken: "session-bearer", refreshToken: "" })
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8888/api/auth/logout",
+      "http://localhost:9999/api/auth/logout",
       expect.objectContaining({
         method: "POST",
         headers: expect.objectContaining({
@@ -158,7 +158,7 @@ describe("authService foundation helpers", () => {
     })
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8888/api/auth/logout",
+      "http://localhost:9999/api/auth/logout",
       expect.objectContaining({
         method: "POST",
         headers: expect.objectContaining({
@@ -185,7 +185,7 @@ describe("authService foundation helpers", () => {
     await authService.logoutAll("access-token")
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8888/api/auth/logout-all",
+      "http://localhost:9999/api/auth/logout-all",
       expect.objectContaining({
         method: "POST",
         headers: expect.objectContaining({
@@ -202,7 +202,7 @@ describe("authService foundation helpers", () => {
     await authService.verifyEmail("abc-123")
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8888/api/auth/verify-email?token=abc-123",
+      "http://localhost:9999/api/auth/verify-email?token=abc-123",
       expect.objectContaining({
         method: "GET",
       })
@@ -216,7 +216,7 @@ describe("authService foundation helpers", () => {
     await authService.resendVerification(" USER@Example.com ")
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8888/api/auth/resend-verification",
+      "http://localhost:9999/api/auth/resend-verification",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({ email: "user@example.com" }),
@@ -239,7 +239,7 @@ describe("authService foundation helpers", () => {
     const result = await authService.switchCompany("access-token", 4)
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8888/api/auth/switch-company",
+      "http://localhost:9999/api/auth/switch-company",
       expect.objectContaining({
         method: "POST",
         headers: expect.objectContaining({
