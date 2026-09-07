@@ -56,6 +56,12 @@ import {
   type AdminRecord,
   type RefreshAttendanceDailySummariesInput,
 } from "@/lib/admin-api"
+import {
+  filterRowsByEmployeeNameSearch,
+  matchesEmployeeNameSearch,
+  readDirectoryEmployeeId,
+  readPrimaryEmployeeId,
+} from "@/lib/attendance-daily-summary-search"
 import { cn } from "@/lib/utils"
 import { useDashboardMotion } from "@/lib/dashboard-motion"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
@@ -1201,112 +1207,9 @@ function normalizeDateOnly(value: string | null) {
   return trimmed.slice(0, 10)
 }
 
-function collectSearchableText(value: unknown, depth = 0): string[] {
-  if (value == null || depth > 3) {
-    return []
-  }
-  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-    const text = String(value).trim()
-    return text ? [text] : []
-  }
-  if (Array.isArray(value)) {
-    return value.flatMap((item) => collectSearchableText(item, depth + 1))
-  }
-  if (typeof value === "object") {
-    return Object.values(value as Record<string, unknown>).flatMap((item) =>
-      collectSearchableText(item, depth + 1)
-    )
-  }
-  return []
-}
-
-/** Free-text haystack for a daily summary row (employee, branch, status, times, etc.). */
-function buildDailySummarySearchText(row: AdminRecord): string {
-  const nestedEmployee = readNestedRecord(row, ["employee"])
-  const nestedBranch = readNestedRecord(row, ["branch", "organization", "org"])
-  const parts: Array<string | number | null> = [
-    readStringFromRow(row, [
-      "employee_name",
-      "employeeName",
-      "full_name",
-      "fullName",
-      "display_name",
-      "displayName",
-      "name",
-    ]),
-    readStringFromRow(row, [
-      "employee_no",
-      "employeeNo",
-      "employee_number",
-      "employeeNumber",
-      "employee_code",
-      "employeeCode",
-    ]),
-    readNumberFromRow(row, ["employee_id", "employeeId"]),
-    nestedEmployee ? getEmployeeOptionLabel(nestedEmployee) : null,
-    readStringFromRow(row, [
-      "branch_name",
-      "branchName",
-      "organization_name",
-      "organizationName",
-      "org_name",
-      "orgName",
-    ]),
-    readNumberFromRow(row, ["branch_id", "branchId", "organization_id", "organizationId"]),
-    nestedBranch ? getBranchOptionLabel(nestedBranch) : null,
-    readStringFromRow(row, [
-      "attendance_status",
-      "attendanceStatus",
-      "status",
-      "summary_status",
-      "summaryStatus",
-      "state",
-    ]),
-    readStringFromRow(row, [
-      "attendance_date",
-      "attendanceDate",
-      "date",
-      "summary_date",
-      "summaryDate",
-      "work_date",
-      "workDate",
-    ]),
-    readStringFromRow(row, [
-      "check_in_time",
-      "checkInTime",
-      "check_in_at",
-      "checkInAt",
-      "check_out_time",
-      "checkOutTime",
-      "check_out_at",
-      "checkOutAt",
-    ]),
-    // Catch remaining primitives so any column value is searchable.
-    ...collectSearchableText(row),
-  ]
-
-  return parts
-    .filter((value): value is string | number => value !== null && value !== undefined && String(value).trim() !== "")
-    .map((value) => String(value).toLowerCase())
-    .join(" ")
-}
-
-/** Client-side free-text search over loaded rows (all tokens must match). */
+/** Client-side name search over loaded daily summary rows. */
 function filterDailySummaryRowsBySearch(rows: AdminRecord[], search: string) {
-  const term = search.trim().toLowerCase()
-  if (!term) {
-    return rows
-  }
-
-  const tokens = term.split(/\s+/).filter(Boolean)
-  if (!tokens.length) {
-    return rows
-  }
-
-  return rows.filter((row) => {
-    const haystack = buildDailySummarySearchText(row)
-    return tokens.every((token) => haystack.includes(token))
-  })
+  return filterRowsByEmployeeNameSearch(rows, search)
 }
 
 /** Parse "HH:mm" or "H:mm" into minutes from midnight. */
@@ -1382,20 +1285,41 @@ function filterDailySummaryRowsByCheckInTime(
   })
 }
 
-function matchDailySummaryEmployeeIds(employees: AdminRecord[], search: string) {
-  const term = search.trim().toLowerCase()
-  if (!term) return [] as number[]
-  const tokens = term.split(/\s+/).filter(Boolean)
+function matchEmployeesByName(employees: AdminRecord[], search: string) {
+  return employees.filter((employee) => matchesEmployeeNameSearch(employee, search))
+}
+
+function employeeDirectoryIds(employees: AdminRecord[]) {
   const ids: number[] = []
   for (const employee of employees) {
-    const id = readNumberFromRow(employee, ["id", "employee_id", "employeeId"])
-    if (id === null) continue
-    const label = getEmployeeOptionLabel(employee).toLowerCase()
-    if (tokens.every((token) => label.includes(token))) {
-      ids.push(id)
-    }
+    const id = readDirectoryEmployeeId(employee)
+    if (id !== null) ids.push(id)
   }
   return ids
+}
+
+async function findEmployeesForDailySummarySearch(
+  token: string,
+  searchTerm: string,
+  cachedEmployees: AdminRecord[],
+): Promise<AdminRecord[]> {
+  const localMatches = matchEmployeesByName(cachedEmployees, searchTerm)
+  if (localMatches.length > 0) {
+    return localMatches
+  }
+
+  try {
+    const result = await listEmployees(token, {
+      page: 1,
+      limit: 100,
+      search: searchTerm,
+      sortBy: "first_name",
+      sortOrder: "ASC",
+    })
+    return matchEmployeesByName(result.rows, searchTerm)
+  } catch {
+    return []
+  }
 }
 
 function filterDailySummaryDisplayRows(
@@ -1437,17 +1361,16 @@ function enrichRowsWithReadableNames(rows: AdminRecord[], branches: AdminRecord[
         ? `${label.name} (${label.number})`
         : label.name
       : fullName
-    if (displayName) {
-      collectEmployeeIdentityIds(employee).forEach((id) => {
-        employeeNameById.set(id, displayName)
-      })
+    const employeeId = readDirectoryEmployeeId(employee)
+    if (displayName && employeeId !== null) {
+      employeeNameById.set(employeeId, displayName)
     }
   })
 
   return rows.map((row) => {
     const next = { ...row }
     const branchId = readNumberFromRow(row, ["branch_id", "branchId"])
-    const employeeId = Array.from(collectEmployeeIdentityIds(row))[0] ?? null
+    const employeeId = readPrimaryEmployeeId(row)
 
     if (!readStringFromRow(next, ["branch_name", "branchName"]) && branchId !== null) {
       const branchName = branchNameById.get(branchId)
@@ -3150,47 +3073,93 @@ export function AttendanceActivityView({ section }: { section: string }) {
         const filterEmployeeId = appliedDailySummaryFilters.employee_id
           ? Number(appliedDailySummaryFilters.employee_id)
           : undefined
-        const matchedEmployeeIds = searchTerm
-          ? matchDailySummaryEmployeeIds(employeesRef.current, searchTerm)
+        const matchedEmployees = searchTerm
+          ? await findEmployeesForDailySummarySearch(
+              token,
+              searchTerm,
+              employeesRef.current,
+            )
           : []
+        const matchedEmployeeIds = employeeDirectoryIds(matchedEmployees)
+
+        // The summaries API ignores free-text name search and returns the
+        // unfiltered page (e.g. Elizabeth). Never fetch that page for a name.
+        if (searchTerm && !Number.isFinite(filterEmployeeId) && matchedEmployeeIds.length === 0) {
+          setDailySummaryRows([])
+          setDailySummaryTotal(0)
+          setDailySummaryTotalPages(1)
+          setRows([])
+          setSingleRecord(null)
+          setCorrectionRequests([])
+          return
+        }
+
         const resolvedEmployeeId =
           filterEmployeeId && Number.isFinite(filterEmployeeId)
             ? filterEmployeeId
             : matchedEmployeeIds.length === 1
               ? matchedEmployeeIds[0]
               : undefined
-        const result = await listAttendanceDailySummariesPage(token, {
+
+        const listParams = {
           page: dailySummaryPage,
           limit: dailySummaryPageSize,
-          sortBy: "created_at",
-          sortOrder: "DESC",
-          search: searchTerm || undefined,
+          sortBy: "created_at" as const,
+          sortOrder: "DESC" as const,
           employee_no: searchTerm.includes("/") ? searchTerm : undefined,
           from_date: appliedDailySummaryFilters.from_date || undefined,
           to_date: appliedDailySummaryFilters.to_date || undefined,
           employee_id: resolvedEmployeeId,
-          // Prefer branch_id; also send organization_id for APIs that scope branches that way.
           branch_id: branchId && Number.isFinite(branchId) ? branchId : undefined,
           organization_id: branchId && Number.isFinite(branchId) ? branchId : undefined,
           status: appliedDailySummaryFilters.status || undefined,
-        })
+        }
+
+        let resultRows: AdminRecord[] = []
+        let resultTotal: number | null = null
+        let resultTotalPages: number | null = null
+
+        if (!resolvedEmployeeId && matchedEmployeeIds.length > 1) {
+          const pages = await Promise.all(
+            matchedEmployeeIds.slice(0, 20).map((employeeId) =>
+              listAttendanceDailySummariesPage(token, {
+                ...listParams,
+                page: 1,
+                employee_id: employeeId,
+              }),
+            ),
+          )
+          resultRows = pages.flatMap((page) => page.rows)
+          resultTotal = resultRows.length
+          resultTotalPages = 1
+        } else {
+          const result = await listAttendanceDailySummariesPage(token, listParams)
+          resultRows = result.rows
+          resultTotal = result.total
+          resultTotalPages = result.totalPages
+        }
+
         const enrichedRows = enrichRowsWithReadableNames(
-          result.rows,
+          resultRows,
           branchesRef.current,
-          employeesRef.current
+          matchedEmployees.length > 0 ? matchedEmployees : employeesRef.current,
         )
+        const visibleRows = searchTerm
+          ? filterRowsByEmployeeNameSearch(enrichedRows, searchTerm)
+          : enrichedRows
         const totalPages =
-          result.totalPages ??
-          (result.total !== null
-            ? Math.max(1, Math.ceil(result.total / dailySummaryPageSize))
-            : result.rows.length >= dailySummaryPageSize
-              ? dailySummaryPage + 1
-              : dailySummaryPage)
-        // Always keep the full unfiltered server page in dailySummaryRows.
-        setDailySummaryRows(enrichedRows)
-        setDailySummaryTotal(result.total ?? enrichedRows.length)
+          searchTerm
+            ? Math.max(1, Math.ceil(visibleRows.length / dailySummaryPageSize) || 1)
+            : resultTotalPages ??
+              (resultTotal !== null
+                ? Math.max(1, Math.ceil(resultTotal / dailySummaryPageSize))
+                : resultRows.length >= dailySummaryPageSize
+                  ? dailySummaryPage + 1
+                  : dailySummaryPage)
+        setDailySummaryRows(visibleRows)
+        setDailySummaryTotal(searchTerm ? visibleRows.length : resultTotal ?? visibleRows.length)
         setDailySummaryTotalPages(totalPages)
-        setRows(enrichedRows)
+        setRows(visibleRows)
         setSingleRecord(null)
         setCorrectionRequests([])
         return
@@ -3445,12 +3414,9 @@ export function AttendanceActivityView({ section }: { section: string }) {
     }
     const after = appliedDailySummaryFilters.check_in_after || ""
     const before = appliedDailySummaryFilters.check_in_before || ""
-    const narrowed = filterDailySummaryDisplayRows(dailySummaryRows, recordSearch, after, before)
-    if (narrowed.length > 0 || !recordSearch.trim()) {
-      return narrowed
-    }
-    // Name is not on this page yet — keep the loaded rows until the server search returns.
-    return filterDailySummaryDisplayRows(dailySummaryRows, "", after, before)
+    // Never fall back to the unfiltered page. A name like "emmy" with no local
+    // hits used to re-show whoever was already loaded (e.g. Elizabeth).
+    return filterDailySummaryDisplayRows(dailySummaryRows, recordSearch, after, before)
   }, [
     activeSection,
     appliedDailySummaryFilters.check_in_after,
@@ -5242,8 +5208,16 @@ export function AttendanceActivityView({ section }: { section: string }) {
               loading={loading}
               itemsPerPage={dailySummaryPageSize}
               page={dailySummaryPage}
-              totalPages={dailySummaryTotalPages}
-              totalItems={dailySummaryTotal}
+              totalPages={
+                recordSearch.trim() && displayedDailySummaryRows.length === 0
+                  ? 1
+                  : dailySummaryTotalPages
+              }
+              totalItems={
+                recordSearch.trim() && displayedDailySummaryRows.length === 0
+                  ? 0
+                  : dailySummaryTotal
+              }
               onPageChange={setDailySummaryPage}
               onRowSelect={(_, row) => {
                 void openRecordDetails(row)
@@ -5258,7 +5232,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
                       value={recordSearch}
                       onChange={(event) => setRecordSearch(event.target.value)}
                       placeholder="Search names…"
-                      aria-label="Search daily summaries by name or any field"
+                      aria-label="Search daily summaries by employee name"
                     />
                     {recordSearch.trim() ? (
                       <button
