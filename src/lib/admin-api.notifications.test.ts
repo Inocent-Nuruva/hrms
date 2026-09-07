@@ -78,7 +78,7 @@ describe("notifications admin API helpers", () => {
     })
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:9999/api/notifications?page=1&limit=20&status=UNREAD&category=HR&priority=HIGH&seen=false&include_archived=true",
+      "http://localhost:8888/api/notifications?page=1&limit=20&status=UNREAD&category=HR&priority=HIGH&seen=false&include_archived=true",
       expect.objectContaining({
         method: "GET",
         headers: expect.objectContaining({
@@ -111,7 +111,7 @@ describe("notifications admin API helpers", () => {
     const result = await markNotificationAsRead("token", 81)
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:9999/api/notifications/81/read",
+      "http://localhost:8888/api/notifications/81/read",
       expect.objectContaining({
         method: "PATCH",
       })
@@ -139,7 +139,7 @@ describe("notifications admin API helpers", () => {
     const result = await markNotificationAsSeen("token", 81)
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:9999/api/notifications/81/seen",
+      "http://localhost:8888/api/notifications/81/seen",
       expect.objectContaining({
         method: "PATCH",
       })
@@ -159,7 +159,7 @@ describe("notifications admin API helpers", () => {
     await markAllNotificationsAsRead("token")
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:9999/api/notifications/read-all",
+      "http://localhost:8888/api/notifications/read-all",
       expect.objectContaining({
         method: "PATCH",
       })
@@ -188,7 +188,7 @@ describe("notifications admin API helpers", () => {
     })
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:9999/api/notifications/test",
+      "http://localhost:8888/api/notifications/test",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({
@@ -216,7 +216,7 @@ describe("notifications admin API helpers", () => {
     const result = await deleteNotification("token", 81)
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:9999/api/notifications/81",
+      "http://localhost:8888/api/notifications/81",
       expect.objectContaining({
         method: "DELETE",
       })
@@ -260,14 +260,14 @@ describe("notifications admin API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:9999/api/me/notifications/preferences",
+      "http://localhost:8888/api/me/notifications/preferences",
       expect.objectContaining({
         method: "GET",
       })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:9999/api/me/notifications/preferences",
+      "http://localhost:8888/api/me/notifications/preferences",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({
@@ -334,21 +334,21 @@ describe("notifications admin API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:9999/api/notifications/channel-settings",
+      "http://localhost:8888/api/notifications/channel-settings",
       expect.objectContaining({
         method: "GET",
       })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:9999/api/notifications/channel-settings/EMAIL",
+      "http://localhost:8888/api/notifications/channel-settings/EMAIL",
       expect.objectContaining({
         method: "GET",
       })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
-      "http://localhost:9999/api/notifications/channel-settings/EMAIL",
+      "http://localhost:8888/api/notifications/channel-settings/EMAIL",
       expect.objectContaining({
         method: "PATCH",
         body: JSON.stringify({
@@ -416,14 +416,14 @@ describe("notifications admin API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:9999/api/notifications/deliveries?page=1&limit=20&channel=EMAIL&status=DELIVERED&notification_id=81",
+      "http://localhost:8888/api/notifications/deliveries?page=1&limit=20&channel=EMAIL&status=DELIVERED&notification_id=81",
       expect.objectContaining({
         method: "GET",
       })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:9999/api/notifications/deliveries/14",
+      "http://localhost:8888/api/notifications/deliveries/14",
       expect.objectContaining({
         method: "GET",
       })
@@ -495,21 +495,21 @@ describe("notifications admin API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:9999/api/notifications/mail-logs?page=1&limit=20&status=FAILED&recipient_email=hr%40example.com&only_unscoped=false",
+      "http://localhost:8888/api/notifications/mail-logs?page=1&limit=20&status=FAILED&recipient_email=hr%40example.com&only_unscoped=false",
       expect.objectContaining({
         method: "GET",
       })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:9999/api/notifications/mail-logs/22",
+      "http://localhost:8888/api/notifications/mail-logs/22",
       expect.objectContaining({
         method: "GET",
       })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
-      "http://localhost:9999/api/notifications/mail-logs/22/retry",
+      "http://localhost:8888/api/notifications/mail-logs/22/retry",
       expect.objectContaining({
         method: "POST",
       })
@@ -595,21 +595,21 @@ describe("notifications admin API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:9999/api/notifications/channel-registry?channel=EMAIL&module=leave&search=approved",
+      "http://localhost:8888/api/notifications/channel-registry?channel=EMAIL&module=leave&search=approved",
       expect.objectContaining({
         method: "GET",
       })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:9999/api/notifications/channel-registry/EMAIL/LEAVE_APPROVED",
+      "http://localhost:8888/api/notifications/channel-registry/EMAIL/LEAVE_APPROVED",
       expect.objectContaining({
         method: "GET",
       })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
-      "http://localhost:9999/api/notifications/channel-registry/EMAIL/LEAVE_APPROVED",
+      "http://localhost:8888/api/notifications/channel-registry/EMAIL/LEAVE_APPROVED",
       expect.objectContaining({
         method: "PATCH",
         body: JSON.stringify({
@@ -667,14 +667,14 @@ describe("notifications admin API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:9999/api/notifications/platform/channel-settings",
+      "http://localhost:8888/api/notifications/platform/channel-settings",
       expect.objectContaining({
         method: "GET",
       })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:9999/api/notifications/platform/channel-settings/SMS",
+      "http://localhost:8888/api/notifications/platform/channel-settings/SMS",
       expect.objectContaining({
         method: "PATCH",
         body: JSON.stringify({
@@ -747,21 +747,21 @@ describe("notifications admin API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:9999/api/notifications/platform/mail-logs?page=1&limit=20&status=FAILED&recipient_email=ops%40example.com",
+      "http://localhost:8888/api/notifications/platform/mail-logs?page=1&limit=20&status=FAILED&recipient_email=ops%40example.com",
       expect.objectContaining({
         method: "GET",
       })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:9999/api/notifications/platform/mail-logs/44",
+      "http://localhost:8888/api/notifications/platform/mail-logs/44",
       expect.objectContaining({
         method: "GET",
       })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
-      "http://localhost:9999/api/notifications/platform/mail-logs/44/retry",
+      "http://localhost:8888/api/notifications/platform/mail-logs/44/retry",
       expect.objectContaining({
         method: "POST",
       })
@@ -831,14 +831,14 @@ describe("notifications admin API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:9999/api/notifications/platform/channel-registry?channel=SMS&module=system&search=alert",
+      "http://localhost:8888/api/notifications/platform/channel-registry?channel=SMS&module=system&search=alert",
       expect.objectContaining({
         method: "GET",
       })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:9999/api/notifications/platform/channel-registry/SMS/SYSTEM_ALERT",
+      "http://localhost:8888/api/notifications/platform/channel-registry/SMS/SYSTEM_ALERT",
       expect.objectContaining({
         method: "PATCH",
         body: JSON.stringify({

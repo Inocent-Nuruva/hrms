@@ -9,11 +9,11 @@ describe("next socket rewrites", () => {
       expect.arrayContaining([
         {
           source: "/socket.io",
-          destination: "http://localhost:9999/socket.io",
+          destination: "http://localhost:8888/socket.io",
         },
         {
           source: "/socket.io/:path*",
-          destination: "http://localhost:9999/socket.io/:path*",
+          destination: "http://localhost:8888/socket.io/:path*",
         },
       ]),
     );

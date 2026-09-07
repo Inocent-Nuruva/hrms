@@ -76,7 +76,7 @@ describe("employee import admin API helpers", () => {
     );
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:9999/api/employees/import/IMPORT-20260730-MAPPED/preview",
+      "http://localhost:8888/api/employees/import/IMPORT-20260730-MAPPED/preview",
       expect.objectContaining({
         method: "GET",
         headers: expect.objectContaining({
@@ -135,7 +135,7 @@ describe("employee import admin API helpers", () => {
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:9999/api/employees/import/confirm",
+      "http://localhost:8888/api/employees/import/confirm",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({
@@ -199,7 +199,7 @@ describe("employee import admin API helpers", () => {
     );
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:9999/api/employees/import/IMPORT-20260730-MAPPED/errors/download",
+      "http://localhost:8888/api/employees/import/IMPORT-20260730-MAPPED/errors/download",
       expect.objectContaining({
         method: "GET",
       }),

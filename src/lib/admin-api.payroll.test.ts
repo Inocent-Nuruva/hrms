@@ -60,7 +60,7 @@ describe("payroll admin API helpers", () => {
     })
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:9999/api/payroll/runs?page=1&limit=20&sortBy=created_at&sortOrder=DESC&search=August&payroll_period_id=8&status=PENDING",
+      "http://localhost:8888/api/payroll/runs?page=1&limit=20&sortBy=created_at&sortOrder=DESC&search=August&payroll_period_id=8&status=PENDING",
       expect.objectContaining({
         method: "GET",
         headers: expect.objectContaining({
@@ -94,7 +94,7 @@ describe("payroll admin API helpers", () => {
     })
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:9999/api/payroll/employees/profiles?page=1&limit=100&search=PN",
+      "http://localhost:8888/api/payroll/employees/profiles?page=1&limit=100&search=PN",
       expect.objectContaining({
         method: "GET",
       }),
@@ -130,7 +130,7 @@ describe("payroll admin API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:9999/api/payroll/inputs",
+      "http://localhost:8888/api/payroll/inputs",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({
@@ -143,14 +143,14 @@ describe("payroll admin API helpers", () => {
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:9999/api/payroll/inputs/77/approve",
+      "http://localhost:8888/api/payroll/inputs/77/approve",
       expect.objectContaining({
         method: "POST",
       }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
-      "http://localhost:9999/api/payroll/runs/41/approve",
+      "http://localhost:8888/api/payroll/runs/41/approve",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({
@@ -188,7 +188,7 @@ describe("payroll admin API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:9999/api/payroll/configuration/periods/generate",
+      "http://localhost:8888/api/payroll/configuration/periods/generate",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({
@@ -200,7 +200,7 @@ describe("payroll admin API helpers", () => {
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:9999/api/payroll/configuration/components",
+      "http://localhost:8888/api/payroll/configuration/components",
       expect.objectContaining({
         method: "GET",
       }),
@@ -228,7 +228,7 @@ describe("payroll admin API helpers", () => {
     const result = await downloadPayrollBankingBatch("token", 55)
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:9999/api/payroll/banking/batches/55/download",
+      "http://localhost:8888/api/payroll/banking/batches/55/download",
       expect.objectContaining({
         method: "GET",
         headers: expect.objectContaining({
@@ -281,7 +281,7 @@ describe("payroll admin API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:9999/api/me/payslips",
+      "http://localhost:8888/api/me/payslips",
       expect.objectContaining({
         method: "GET",
         headers: expect.objectContaining({
@@ -291,14 +291,14 @@ describe("payroll admin API helpers", () => {
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:9999/api/me/payslips/18",
+      "http://localhost:8888/api/me/payslips/18",
       expect.objectContaining({
         method: "GET",
       }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
-      "http://localhost:9999/api/me/payslips/18/download",
+      "http://localhost:8888/api/me/payslips/18/download",
       expect.objectContaining({
         method: "GET",
       }),

@@ -2,7 +2,7 @@ import path from "node:path";
 import type { NextConfig } from "next";
 
 function resolveBackendOrigin() {
-  const rawValue = process.env.NEXT_PUBLIC_API_BASE_URL?.trim() || "http://localhost:9999";
+  const rawValue = process.env.NEXT_PUBLIC_API_BASE_URL?.trim() || "http://localhost:8888";
   return rawValue.replace(/\/api\/?$/i, "").replace(/\/$/, "");
 }
 

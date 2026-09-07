@@ -3,7 +3,7 @@ import { z } from "zod"
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   NEXT_PUBLIC_APP_NAME: z.string().default("HRMS"),
-  NEXT_PUBLIC_API_BASE_URL: z.url().default("http://localhost:9999"),
+  NEXT_PUBLIC_API_BASE_URL: z.url().default("http://localhost:8888"),
   NEXT_PUBLIC_USE_MOCK_AUTH: z
     .string()
     .default("false")

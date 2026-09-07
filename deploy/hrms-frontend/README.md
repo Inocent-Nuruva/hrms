@@ -10,6 +10,8 @@ The frontend mirrors the backend's immutable release layout at
 - Pull requests to either branch run validation without publishing an artifact.
 - The environment-specific `NEXT_PUBLIC_*` values are supplied to the build job
   from the matching GitHub Environment because Next.js embeds them at build time.
+  UAT talks to the API on port **9999**; production talks to the API on port **8888**.
+  Unit tests stay isolated on `http://localhost:8888`.
 - The standalone artifact contains all traced production dependencies; servers do
   not run `npm install` or compile source.
 - Deployment atomically switches `current`, reloads PM2, checks

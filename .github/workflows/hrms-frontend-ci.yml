@@ -40,13 +40,30 @@ jobs:
     env:
       CI: true
       NEXT_PUBLIC_APP_NAME: ${{ vars.NEXT_PUBLIC_APP_NAME || 'HRMS' }}
-      NEXT_PUBLIC_API_BASE_URL: ${{ vars.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8888' }}
+      NEXT_PUBLIC_API_BASE_URL: ${{ vars.NEXT_PUBLIC_API_BASE_URL }}
       NEXT_PUBLIC_USE_MOCK_AUTH: ${{ vars.NEXT_PUBLIC_USE_MOCK_AUTH || 'false' }}
       COUNTRIES_API_BASE_URL: ${{ vars.COUNTRIES_API_BASE_URL || 'https://countriesnow.space/api/v0.1' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with: { fetch-depth: 1, persist-credentials: false }
+      - name: Pin API origin port for environment
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.environment }}" == "production" ]]; then
+            port=8888
+          else
+            port=9999
+          fi
+          current="${NEXT_PUBLIC_API_BASE_URL:-}"
+          if [[ -z "$current" ]]; then
+            current="http://127.0.0.1:${port}"
+          elif [[ "$current" =~ ^https?://[^/]+:[0-9]+ ]]; then
+            current="$(printf '%s\n' "$current" | sed -E "s#:[0-9]+([/?]|$)#:${port}\\1#")"
+          fi
+          echo "NEXT_PUBLIC_API_BASE_URL=${current}" >> "$GITHUB_ENV"
+          echo "Using API origin ${current} (UAT=9999, production=8888)"
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with: { node-version: "22", cache: npm }

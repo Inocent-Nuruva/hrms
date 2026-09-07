@@ -51,17 +51,17 @@ describe("daily activities and employee movement API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:9999/api/hr/activities?page=1&status=SUBMITTED&date_from=2026-08-01",
+      "http://localhost:8888/api/hr/activities?page=1&status=SUBMITTED&date_from=2026-08-01",
       expect.objectContaining({ method: "GET" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:9999/api/me/activities?status=DRAFT",
+      "http://localhost:8888/api/me/activities?status=DRAFT",
       expect.objectContaining({ method: "GET" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
-      "http://localhost:9999/api/me/activities/today",
+      "http://localhost:8888/api/me/activities/today",
       expect.objectContaining({ method: "GET" }),
     )
     expect(hr).toEqual([expect.objectContaining({ id: 9 })])
@@ -103,37 +103,37 @@ describe("daily activities and employee movement API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:9999/api/me/activities/reports",
+      "http://localhost:8888/api/me/activities/reports",
       expect.objectContaining({ method: "POST" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:9999/api/me/activities/reports/12/entries",
+      "http://localhost:8888/api/me/activities/reports/12/entries",
       expect.objectContaining({ method: "POST" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
-      "http://localhost:9999/api/me/activities/reports/12/submit",
+      "http://localhost:8888/api/me/activities/reports/12/submit",
       expect.objectContaining({ method: "POST" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       4,
-      "http://localhost:9999/api/manager/activities/dashboard?date_from=2026-08-01",
+      "http://localhost:8888/api/manager/activities/dashboard?date_from=2026-08-01",
       expect.objectContaining({ method: "GET" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       6,
-      "http://localhost:9999/api/manager/activities/reports/12/review",
+      "http://localhost:8888/api/manager/activities/reports/12/review",
       expect.objectContaining({ method: "POST" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       7,
-      "http://localhost:9999/api/me/activities/reports/12/entries/81",
+      "http://localhost:8888/api/me/activities/reports/12/entries/81",
       expect.objectContaining({ method: "DELETE" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       8,
-      "http://localhost:9999/api/me/activities/entries/81/evidence",
+      "http://localhost:8888/api/me/activities/entries/81/evidence",
       expect.objectContaining({ method: "POST" }),
     )
   })
@@ -152,7 +152,7 @@ describe("daily activities and employee movement API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:9999/api/employee-movements/18/approve",
+      "http://localhost:8888/api/employee-movements/18/approve",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({ comments: "Looks correct." }),
@@ -160,22 +160,22 @@ describe("daily activities and employee movement API helpers", () => {
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:9999/api/employee-movements/18/return",
+      "http://localhost:8888/api/employee-movements/18/return",
       expect.objectContaining({ method: "POST" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
-      "http://localhost:9999/api/employee-movements/18/reject",
+      "http://localhost:8888/api/employee-movements/18/reject",
       expect.objectContaining({ method: "POST" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       4,
-      "http://localhost:9999/api/employee-movements/18/apply",
+      "http://localhost:8888/api/employee-movements/18/apply",
       expect.objectContaining({ method: "POST" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       5,
-      "http://localhost:9999/api/employee-movements/18/operations/71/retry",
+      "http://localhost:8888/api/employee-movements/18/operations/71/retry",
       expect.objectContaining({ method: "POST" }),
     )
   })

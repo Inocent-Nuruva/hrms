@@ -45,7 +45,7 @@ describe("field and finance admin API helpers", () => {
     })
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:9999/api/hr/field-visits?page=1&status=IN_PROGRESS&date_from=2026-08-01",
+      "http://localhost:8888/api/hr/field-visits?page=1&status=IN_PROGRESS&date_from=2026-08-01",
       expect.objectContaining({ method: "GET" }),
     )
     expect(rows).toEqual([expect.objectContaining({ id: 9 })])
@@ -77,12 +77,12 @@ describe("field and finance admin API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:9999/api/field-parties",
+      "http://localhost:8888/api/field-parties",
       expect.objectContaining({ method: "POST" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
-      "http://localhost:9999/api/me/field-visits/44/check-in",
+      "http://localhost:8888/api/me/field-visits/44/check-in",
       expect.objectContaining({ method: "POST" }),
     )
   })
@@ -121,12 +121,12 @@ describe("field and finance admin API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:9999/api/manager/field-visits/44/review",
+      "http://localhost:8888/api/manager/field-visits/44/review",
       expect.objectContaining({ method: "POST" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
-      "http://localhost:9999/api/employee-finance/products",
+      "http://localhost:8888/api/employee-finance/products",
       expect.objectContaining({ method: "POST" }),
     )
     expect(mine).toEqual([expect.objectContaining({ id: 21 })])

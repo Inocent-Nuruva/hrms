@@ -47,7 +47,7 @@ describe("scheduled reporting admin API helpers", () => {
     })
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:9999/api/scheduled-reporting/templates/7/run",
+      "http://localhost:8888/api/scheduled-reporting/templates/7/run",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({
@@ -89,7 +89,7 @@ describe("scheduled reporting admin API helpers", () => {
     const result = await listScheduledReportDefinitions("token")
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:9999/api/scheduled-reporting/report-definitions",
+      "http://localhost:8888/api/scheduled-reporting/report-definitions",
       expect.objectContaining({
         method: "GET",
         headers: expect.objectContaining({
@@ -143,21 +143,21 @@ describe("scheduled reporting admin API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:9999/api/scheduled-reporting/templates/7",
+      "http://localhost:8888/api/scheduled-reporting/templates/7",
       expect.objectContaining({
         method: "GET",
       })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:9999/api/scheduled-reporting/schedules/9",
+      "http://localhost:8888/api/scheduled-reporting/schedules/9",
       expect.objectContaining({
         method: "GET",
       })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
-      "http://localhost:9999/api/scheduled-reporting/smtp-configurations/5",
+      "http://localhost:8888/api/scheduled-reporting/smtp-configurations/5",
       expect.objectContaining({
         method: "GET",
       })
@@ -252,7 +252,7 @@ describe("scheduled reporting admin API helpers", () => {
     const result = await retryScheduledReportExecution("token", 52)
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:9999/api/scheduled-reporting/executions/52/retry",
+      "http://localhost:8888/api/scheduled-reporting/executions/52/retry",
       expect.objectContaining({
         method: "POST",
       })
@@ -282,7 +282,7 @@ describe("scheduled reporting admin API helpers", () => {
     const result = await downloadScheduledReportExecution("token", 52)
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:9999/api/scheduled-reporting/executions/52/download",
+      "http://localhost:8888/api/scheduled-reporting/executions/52/download",
       expect.objectContaining({
         method: "GET",
         headers: expect.objectContaining({
@@ -333,7 +333,7 @@ describe("scheduled reporting admin API helpers", () => {
     })
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:9999/api/scheduled-reporting/smtp-configurations/test-draft",
+      "http://localhost:8888/api/scheduled-reporting/smtp-configurations/test-draft",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({

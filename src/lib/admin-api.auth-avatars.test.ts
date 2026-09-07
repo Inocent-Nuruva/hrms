@@ -39,7 +39,7 @@ describe("documented auth and avatar leftovers", () => {
     const codes = await regenerateMyTwoFactorBackupCodes("token", "123456");
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:9999/api/users/2fa/backup-codes/regenerate",
+      "http://localhost:8888/api/users/2fa/backup-codes/regenerate",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({ token: "123456" }),
@@ -62,7 +62,7 @@ describe("documented auth and avatar leftovers", () => {
     await setUserForceTwoFactor("token", 12, true);
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:9999/api/users/12/two-factor/force",
+      "http://localhost:8888/api/users/12/two-factor/force",
       expect.objectContaining({
         method: "PATCH",
         body: JSON.stringify({ force: true }),
@@ -79,7 +79,7 @@ describe("documented auth and avatar leftovers", () => {
     await resetUserPassword("token", 12, "N3wP@ssw0rd#2026");
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:9999/api/users/12/reset-password",
+      "http://localhost:8888/api/users/12/reset-password",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({ new_password: "N3wP@ssw0rd#2026" }),
@@ -112,22 +112,22 @@ describe("documented auth and avatar leftovers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:9999/api/me/profile/avatar-options",
+      "http://localhost:8888/api/me/profile/avatar-options",
       expect.objectContaining({ method: "GET" }),
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:9999/api/users/me/available-avatars",
+      "http://localhost:8888/api/users/me/available-avatars",
       expect.objectContaining({ method: "GET" }),
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
-      "http://localhost:9999/api/users/me/avatars",
+      "http://localhost:8888/api/users/me/avatars",
       expect.objectContaining({ method: "GET" }),
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       4,
-      "http://localhost:9999/api/users/me/avatar",
+      "http://localhost:8888/api/users/me/avatar",
       expect.objectContaining({
         method: "PATCH",
         body: JSON.stringify({ avatar_id: 3 }),

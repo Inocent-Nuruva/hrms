@@ -49,7 +49,7 @@ describe("business trip API payloads", () => {
     })
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:9999/api/attendance/business-trips",
+      "http://localhost:8888/api/attendance/business-trips",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({
@@ -72,7 +72,7 @@ describe("business trip API payloads", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:9999/api/attendance/business-trips/4/approve",
+      "http://localhost:8888/api/attendance/business-trips/4/approve",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({ note: "Approved by HR" }),
@@ -80,7 +80,7 @@ describe("business trip API payloads", () => {
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:9999/api/attendance/business-trips/4/reject",
+      "http://localhost:8888/api/attendance/business-trips/4/reject",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({ note: "Dates clash" }),

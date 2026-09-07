@@ -50,12 +50,12 @@ describe("sms and manager self-service API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:9999/api/sms/global",
+      "http://localhost:8888/api/sms/global",
       expect.objectContaining({ method: "GET" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:9999/api/sms/global",
+      "http://localhost:8888/api/sms/global",
       expect.objectContaining({
         method: "PATCH",
         body: JSON.stringify({ is_enabled: false }),
@@ -63,12 +63,12 @@ describe("sms and manager self-service API helpers", () => {
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       4,
-      "http://localhost:9999/api/sms/logs?page=1&status=FAILED",
+      "http://localhost:8888/api/sms/logs?page=1&status=FAILED",
       expect.objectContaining({ method: "GET" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       5,
-      "http://localhost:9999/api/sms/logs/9/retry",
+      "http://localhost:8888/api/sms/logs/9/retry",
       expect.objectContaining({ method: "POST" }),
     )
     expect(setting).toEqual(expect.objectContaining({ isEnabled: true }))
@@ -101,32 +101,32 @@ describe("sms and manager self-service API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:9999/api/sms/platform/registry/PAYSLIP_READY",
+      "http://localhost:8888/api/sms/platform/registry/PAYSLIP_READY",
       expect.objectContaining({ method: "PATCH" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
-      "http://localhost:9999/api/manager/dashboard?date_from=2026-08-01",
+      "http://localhost:8888/api/manager/dashboard?date_from=2026-08-01",
       expect.objectContaining({ method: "GET" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       4,
-      "http://localhost:9999/api/manager/action-items?status=OPEN&limit=20",
+      "http://localhost:8888/api/manager/action-items?status=OPEN&limit=20",
       expect.objectContaining({ method: "GET" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       5,
-      "http://localhost:9999/api/manager/team?direct_reports_only=true&limit=20",
+      "http://localhost:8888/api/manager/team?direct_reports_only=true&limit=20",
       expect.objectContaining({ method: "GET" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       6,
-      "http://localhost:9999/api/manager/team/44",
+      "http://localhost:8888/api/manager/team/44",
       expect.objectContaining({ method: "GET" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       7,
-      "http://localhost:9999/api/cost-centers",
+      "http://localhost:8888/api/cost-centers",
       expect.objectContaining({ method: "POST" }),
     )
     expect(dashboard).toEqual(expect.objectContaining({ team_count: 6 }))

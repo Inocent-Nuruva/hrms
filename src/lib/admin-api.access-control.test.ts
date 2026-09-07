@@ -75,7 +75,7 @@ describe("access control admin API helpers", () => {
     })
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:9999/api/access-control/access-credentials?page=1&limit=20&employee_id=39&device_id=2&credential_type=CARD&credential_status=ACTIVE&employee_no=00039&card_no=12345&fingerprint_id=1&search=john&sort_order=ASC",
+      "http://localhost:8888/api/access-control/access-credentials?page=1&limit=20&employee_id=39&device_id=2&credential_type=CARD&credential_status=ACTIVE&employee_no=00039&card_no=12345&fingerprint_id=1&search=john&sort_order=ASC",
       expect.objectContaining({
         method: "GET",
         headers: expect.objectContaining({
@@ -121,21 +121,21 @@ describe("access control admin API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:9999/api/access-control/access-credentials/15",
+      "http://localhost:8888/api/access-control/access-credentials/15",
       expect.objectContaining({
         method: "GET",
       })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:9999/api/access-control/access-credentials/15/device-action-routes",
+      "http://localhost:8888/api/access-control/access-credentials/15/device-action-routes",
       expect.objectContaining({
         method: "GET",
       })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
-      "http://localhost:9999/api/access-control/access-credentials/15/disable",
+      "http://localhost:8888/api/access-control/access-credentials/15/disable",
       expect.objectContaining({
         method: "PATCH",
         body: JSON.stringify({
@@ -167,7 +167,7 @@ describe("access control admin API helpers", () => {
     const result = await getEmployeeAccessCredentials("token", 120)
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:9999/api/access-control/employees/120/access-credentials",
+      "http://localhost:8888/api/access-control/employees/120/access-credentials",
       expect.objectContaining({
         method: "GET",
       })
@@ -275,32 +275,32 @@ describe("access control admin API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:9999/api/access-control/audit-logs?companyId=1&branchId=2&deviceId=3&employeeId=4&employeeNo=E-4&action=ENABLE_ACCESS&status=SUCCESS&dateFrom=2026-08-01&dateTo=2026-08-15&page=1&limit=20",
+      "http://localhost:8888/api/access-control/audit-logs?companyId=1&branchId=2&deviceId=3&employeeId=4&employeeNo=E-4&action=ENABLE_ACCESS&status=SUCCESS&dateFrom=2026-08-01&dateTo=2026-08-15&page=1&limit=20",
       expect.objectContaining({ method: "GET" })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:9999/api/access-control/audit-logs/31",
+      "http://localhost:8888/api/access-control/audit-logs/31",
       expect.objectContaining({ method: "GET" })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
-      "http://localhost:9999/api/access-control/device-command-logs?deviceId=3&commandType=SET_USER&status=SUCCESS&page=1&limit=20",
+      "http://localhost:8888/api/access-control/device-command-logs?deviceId=3&commandType=SET_USER&status=SUCCESS&page=1&limit=20",
       expect.objectContaining({ method: "GET" })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       4,
-      "http://localhost:9999/api/access-control/device-command-logs/41",
+      "http://localhost:8888/api/access-control/device-command-logs/41",
       expect.objectContaining({ method: "GET" })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       5,
-      "http://localhost:9999/api/access-control/hikvision-sync-logs?deviceId=3&syncType=USERS&direction=PUSH&status=PARTIAL&page=1&limit=20",
+      "http://localhost:8888/api/access-control/hikvision-sync-logs?deviceId=3&syncType=USERS&direction=PUSH&status=PARTIAL&page=1&limit=20",
       expect.objectContaining({ method: "GET" })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       6,
-      "http://localhost:9999/api/access-control/hikvision-sync-logs/51",
+      "http://localhost:8888/api/access-control/hikvision-sync-logs/51",
       expect.objectContaining({ method: "GET" })
     )
     expect(auditRows.rows).toHaveLength(1)
@@ -318,7 +318,7 @@ describe("access control admin API helpers", () => {
     await syncAccessWeekPlanToDevice("token", 9, { device_id: 14 })
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:9999/api/access-control/week-plans/9/sync-to-device",
+      "http://localhost:8888/api/access-control/week-plans/9/sync-to-device",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({ device_id: 14 }),
@@ -351,12 +351,12 @@ describe("access control admin API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:9999/api/access-control/groups/12/devices",
+      "http://localhost:8888/api/access-control/groups/12/devices",
       expect.objectContaining({ method: "GET" })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:9999/api/access-control/groups/12/devices",
+      "http://localhost:8888/api/access-control/groups/12/devices",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({
@@ -366,12 +366,12 @@ describe("access control admin API helpers", () => {
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
-      "http://localhost:9999/api/access-control/groups/12/devices/7",
+      "http://localhost:8888/api/access-control/groups/12/devices/7",
       expect.objectContaining({ method: "DELETE" })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       4,
-      "http://localhost:9999/api/access-control/groups/12/sync",
+      "http://localhost:8888/api/access-control/groups/12/sync",
       expect.objectContaining({ method: "POST" })
     )
     expect(devices).toEqual([
@@ -408,12 +408,12 @@ describe("access control admin API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:9999/api/access-control/organizations/9/employees",
+      "http://localhost:8888/api/access-control/organizations/9/employees",
       expect.objectContaining({ method: "GET" })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:9999/api/access-control/organizations/9/employees",
+      "http://localhost:8888/api/access-control/organizations/9/employees",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({
@@ -423,12 +423,12 @@ describe("access control admin API helpers", () => {
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
-      "http://localhost:9999/api/access-control/organizations/9/employees/120",
+      "http://localhost:8888/api/access-control/organizations/9/employees/120",
       expect.objectContaining({ method: "DELETE" })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       4,
-      "http://localhost:9999/api/access-control/organizations/9/sync-to-device",
+      "http://localhost:8888/api/access-control/organizations/9/sync-to-device",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({ device_id: 4 }),
@@ -436,7 +436,7 @@ describe("access control admin API helpers", () => {
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       5,
-      "http://localhost:9999/api/access-control/organizations/sync-from-device/4",
+      "http://localhost:8888/api/access-control/organizations/sync-from-device/4",
       expect.objectContaining({ method: "POST" })
     )
     expect(employees).toEqual([

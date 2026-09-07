@@ -46,27 +46,27 @@ describe("insights, readiness, and payroll report API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:9999/api/dashboards/employee",
+      "http://localhost:8888/api/dashboards/employee",
       expect.objectContaining({ method: "GET" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:9999/api/dashboards/hr?date_from=2026-08-01",
+      "http://localhost:8888/api/dashboards/hr?date_from=2026-08-01",
       expect.objectContaining({ method: "GET" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
-      "http://localhost:9999/api/health",
+      "http://localhost:8888/api/health",
       expect.objectContaining({ method: "GET" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       4,
-      "http://localhost:9999/api/hr/launch-readiness",
+      "http://localhost:8888/api/hr/launch-readiness",
       expect.objectContaining({ method: "GET" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       5,
-      "http://localhost:9999/api/security-events?page=1&limit=20&outcome=SUCCESS",
+      "http://localhost:8888/api/security-events?page=1&limit=20&outcome=SUCCESS",
       expect.objectContaining({ method: "GET" }),
     )
     expect(employeeDashboard).toEqual(expect.objectContaining({ welcome: "employee" }))
@@ -122,27 +122,27 @@ describe("insights, readiness, and payroll report API helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:9999/api/hr/attendance/setup/wizard",
+      "http://localhost:8888/api/hr/attendance/setup/wizard",
       expect.objectContaining({ method: "POST" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:9999/api/hr/attendance/schedules/preview?employee_id=44&from_date=2026-08-01",
+      "http://localhost:8888/api/hr/attendance/schedules/preview?employee_id=44&from_date=2026-08-01",
       expect.objectContaining({ method: "GET" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
-      "http://localhost:9999/api/payroll/reports/reconciliation/run",
+      "http://localhost:8888/api/payroll/reports/reconciliation/run",
       expect.objectContaining({ method: "POST" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       4,
-      "http://localhost:9999/api/payroll/reports/runs/10/variance?comparison_run_id=9",
+      "http://localhost:8888/api/payroll/reports/runs/10/variance?comparison_run_id=9",
       expect.objectContaining({ method: "POST" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       5,
-      "http://localhost:9999/api/payroll/reports/final-settlements/55/calculate",
+      "http://localhost:8888/api/payroll/reports/final-settlements/55/calculate",
       expect.objectContaining({ method: "POST" }),
     )
   })
