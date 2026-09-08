@@ -6679,7 +6679,41 @@ export async function listShiftResources(
   resource: ShiftResourceKey,
   params: UsersQueryParams = {},
 ) {
-  return listGenericCollection(shiftResourcePath(resource), token, params);
+  const result = await listGenericCollection(
+    shiftResourcePath(resource),
+    token,
+    params,
+  );
+  return {
+    ...result,
+    rows: result.rows.map(normalizeScheduleResourceRecord),
+  };
+}
+
+function normalizeScheduleResourceKey(key: string): string {
+  return key
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replace(/([A-Z])([A-Z][a-z])/g, "$1_$2")
+    .toLowerCase();
+}
+
+/**
+ * Attendance schedule entities are serialized by Nest/TypeORM with camelCase
+ * property names, while their create/update DTOs intentionally accept
+ * snake_case. Keep the UI on the DTO naming convention so list columns, edit
+ * forms, and PATCH payloads all describe the same fields.
+ */
+function normalizeScheduleResourceRecord(record: AdminRecord): AdminRecord {
+  const normalized: AdminRecord = {};
+
+  for (const [key, value] of Object.entries(record)) {
+    const normalizedKey = normalizeScheduleResourceKey(key);
+    if (!(normalizedKey in normalized) || normalizedKey === key) {
+      normalized[normalizedKey] = value;
+    }
+  }
+
+  return normalized;
 }
 
 export async function getShiftResourceById(
@@ -6691,7 +6725,8 @@ export async function getShiftResourceById(
     `${shiftResourcePath(resource)}/${id}`,
     { token },
   );
-  return normalizeSingle(payload);
+  const record = normalizeSingle(payload);
+  return record ? normalizeScheduleResourceRecord(record) : null;
 }
 
 export async function createShiftResource(
@@ -6735,7 +6770,15 @@ export async function listTimetableResources(
   resource: TimetableResourceKey,
   params: UsersQueryParams = {},
 ) {
-  return listGenericCollection(timetableResourcePath(resource), token, params);
+  const result = await listGenericCollection(
+    timetableResourcePath(resource),
+    token,
+    params,
+  );
+  return {
+    ...result,
+    rows: result.rows.map(normalizeScheduleResourceRecord),
+  };
 }
 
 export async function getTimetableResourceById(
@@ -6747,7 +6790,8 @@ export async function getTimetableResourceById(
     `${timetableResourcePath(resource)}/${id}`,
     { token },
   );
-  return normalizeSingle(payload);
+  const record = normalizeSingle(payload);
+  return record ? normalizeScheduleResourceRecord(record) : null;
 }
 
 export async function createTimetableResource(

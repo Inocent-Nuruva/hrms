@@ -1193,15 +1193,6 @@ function toPayload(
   return payload
 }
 
-function mergeEditPayload(original: AdminRecord | null, next: AdminRecord) {
-  const base = original ? { ...original } : {}
-  delete base.id
-  delete base.created_at
-  delete base.updated_at
-  delete base.deleted_at
-  return { ...base, ...next }
-}
-
 async function listScheduleRows(token: string, section: ScheduleSectionKey) {
   const config = SECTION_CONFIG[section]
   if (config.module === "shift") {
@@ -1797,7 +1788,6 @@ export function ScheduleManagementView({ section }: { section: string }) {
   const [editValues, setEditValues] = React.useState<Record<string, string>>(() => initialFormState)
   const [editingId, setEditingId] = React.useState("")
   const [deletingId, setDeletingId] = React.useState("")
-  const [editRecord, setEditRecord] = React.useState<AdminRecord | null>(null)
   const [createOpen, setCreateOpen] = React.useState(false)
   const [editOpen, setEditOpen] = React.useState(false)
   const [deleteOpen, setDeleteOpen] = React.useState(false)
@@ -1812,7 +1802,6 @@ export function ScheduleManagementView({ section }: { section: string }) {
     setEditValues(initialFormState)
     setEditingId("")
     setDeletingId("")
-    setEditRecord(null)
     setSelectedRow(null)
     setDetailsOpen(false)
     setError(null)
@@ -1829,17 +1818,6 @@ export function ScheduleManagementView({ section }: { section: string }) {
   React.useEffect(() => {
     setCurrentCompanyName(readStoredCompanyName())
   }, [])
-
-  const editDraftKey = React.useMemo(() => {
-    return editingId ? buildFormDraftStorageKey(`schedule:${activeSection}:edit:${editingId}`) : ""
-  }, [activeSection, editingId])
-
-  React.useEffect(() => {
-    if (!editDraftKey) {
-      return
-    }
-    persistFormState(editDraftKey, editValues)
-  }, [editDraftKey, editValues])
 
   React.useEffect(() => {
     const token = readStoredToken()
@@ -2059,10 +2037,10 @@ export function ScheduleManagementView({ section }: { section: string }) {
         throw new Error("This record could not be loaded.")
       }
       setEditingId(id)
-      setEditRecord(record)
       const initialEditState = buildEditValues(fields, record)
       const initialEditDraftKey = buildFormDraftStorageKey(`schedule:${activeSection}:edit:${id}`)
-      setEditValues(readPersistedFormState(initialEditDraftKey, initialEditState))
+      clearPersistedFormState(initialEditDraftKey)
+      setEditValues(initialEditState)
       setFormError(null)
       setEditOpen(true)
     } catch (errorObject) {
@@ -2183,17 +2161,13 @@ export function ScheduleManagementView({ section }: { section: string }) {
     }
 
     try {
-      const payload = mergeEditPayload(editRecord, toPayload(fields, editValues, { currentUserId }))
+      const payload = toPayload(fields, editValues, { currentUserId })
       await updateScheduleRow(token, activeSection, editingId, payload)
       setMessage("Updated successfully.")
       setFormError(null)
       setEditOpen(false)
-      if (editDraftKey) {
-        clearPersistedFormState(editDraftKey)
-      }
       setEditValues(initialFormState)
       setEditingId("")
-      setEditRecord(null)
       await fetchRows()
       router.refresh()
     } catch (errorObject) {
