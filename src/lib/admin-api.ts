@@ -1,5 +1,10 @@
 import { env } from "@/lib/env";
 import { resolveBackendMediaUrl } from "@/lib/backend-media-url";
+import {
+  employeeOwnsEmail,
+  employeeOwnsPhone,
+  formatEmployeeDirectoryPerson,
+} from "@/lib/employee-directory-search";
 import { AUTH_STORAGE_KEYS } from "@/utils/constants";
 
 export { resolveBackendMediaUrl } from "@/lib/backend-media-url";
@@ -78,7 +83,15 @@ export interface UsersQueryParams {
 
 export interface EmployeesQueryParams extends UsersQueryParams {
   employment_status?:
-    "onboarding" | "pending" | "active" | "suspended" | "terminated" | "exited";
+    | "onboarding"
+    | "pending"
+    | "active"
+    | "suspended"
+    | "inactive"
+    | "resigned"
+    | "terminated"
+    | "retired"
+    | "exited";
   branch_id?: number;
   department_id?: number;
   position_id?: number;
@@ -632,6 +645,8 @@ export interface CreateEmployeePayload {
 }
 
 export type CreateEmployeeResponse = AdminRecord & {
+  employee_id?: number;
+  warning?: string | null;
   onboarding_request?:
     | (AdminRecord & {
         id?: number;
@@ -646,6 +661,50 @@ export type CreateEmployeeResponse = AdminRecord & {
       })
     | null;
 };
+
+export type EmployeeInvitationChannel = "EMAIL" | "SMS";
+
+export interface CreateEmployeeInvitationPayload {
+  first_name: string;
+  last_name: string;
+  gender: string;
+  email: string;
+  phone: string;
+  primary_branch_id: number;
+  primary_department_id: number;
+  primary_position_id: number;
+  employment_type: NonNullable<CreateEmployeePayload["employment_type"]>;
+  reports_to?: number;
+  hire_date?: string;
+  onboarding_workflow_id?: number;
+  channels: EmployeeInvitationChannel[];
+}
+
+export type EmployeeInvitationResponse = AdminRecord & {
+  id?: number;
+  status?: string;
+  expires_at?: string;
+  expiresAt?: string;
+  delivery?: {
+    email?: { status?: string; message_id?: string };
+    sms?: { status?: string; message_id?: string };
+  };
+};
+
+export interface PublicEmployeeInvitation {
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone: string;
+  company_name: string;
+  expires_at: string;
+}
+
+export interface AcceptEmployeeInvitationResponse {
+  status: string;
+  employee_id?: number | null;
+  login_url: string;
+}
 
 export type EmployeeImportMode =
   "CREATE_ONLY" | "UPDATE_EXISTING" | "CREATE_OR_UPDATE";
@@ -2514,8 +2573,13 @@ const EMPLOYEE_NUMBER_CONFLICT_PATTERN =
   /UQ_employee_company_employee_no|employee number already exists|employee number is already in use|duplicate key value violates unique constraint ["']?[^"']*employee_no/i;
 
 function humanizeConstraintMessage(text: string): string | null {
-  if (/required workflow step at order \d+ has no eligible approver/i.test(text)) {
+  if (
+    /required workflow step at order \d+ has no eligible approver/i.test(text)
+  ) {
     return "The onboarding workflow cannot start because a required step has no eligible approver. Assign a person or a role with members on that step, or save the employee without submitting onboarding.";
+  }
+  if (/already has an employee profile/i.test(text)) {
+    return "This person already has an employee profile. Open the existing employee instead of creating another invite.";
   }
   if (
     /UQ_employee_company_employee_no/i.test(text) ||
@@ -8820,6 +8884,37 @@ export async function ensureDraftOnboardingRequest(
   }
 }
 
+export async function startOrDraftOnboardingRequest(
+  token: string,
+  data: CreateOnboardingRequestPayload,
+): Promise<{ request: AdminRecord | null; submitted: boolean }> {
+  try {
+    const payload = await createOnboardingRequest(token, {
+      ...data,
+      submit: data.submit !== false,
+    });
+    return {
+      request: (normalizeSingle(payload) ??
+        asRecord(payload) ??
+        {}) as AdminRecord,
+      submitted: data.submit !== false,
+    };
+  } catch (errorObject) {
+    if (
+      !isMissingOnboardingApprover(errorObject) &&
+      !isExistingOnboardingConflict(errorObject)
+    ) {
+      throw errorObject;
+    }
+    const draft = await ensureDraftOnboardingRequest(token, {
+      employee_id: data.employee_id,
+      workflow_id: data.workflow_id,
+      title: data.title,
+    });
+    return { request: draft, submitted: false };
+  }
+}
+
 export async function getOnboardingRequest(token: string, id: string | number) {
   const payload = await adminRequest<unknown>(
     `/api/onboarding/requests/${id}`,
@@ -8915,12 +9010,13 @@ function looksLikeOnboardingRequest(record: AdminRecord | null) {
   ) {
     return true;
   }
-  const status = typeof record.status === "string" ? record.status.toLowerCase() : "";
+  const status =
+    typeof record.status === "string" ? record.status.toLowerCase() : "";
   return Boolean(
     (record.title || record.workflow_id || record.workflowId) &&
-      /draft|submitted|in_review|in_progress|ready_for_activation|completed|rejected|cancelled/.test(
-        status,
-      ),
+    /draft|submitted|in_review|in_progress|ready_for_activation|completed|rejected|cancelled/.test(
+      status,
+    ),
   );
 }
 
@@ -8987,7 +9083,8 @@ function readOnboardingCreatePayload(
     throw new Error("Onboarding request is missing employee_id.");
   }
 
-  const workflow = asRecord(record.workflow) ?? asRecord(record.assigned_workflow);
+  const workflow =
+    asRecord(record.workflow) ?? asRecord(record.assigned_workflow);
   const workflowId =
     readNumberFromRecord(record, ["workflow_id", "onboarding_workflow_id"]) ??
     readNumberFromRecord(workflow, ["id", "workflow_id"]);
@@ -9003,7 +9100,8 @@ function readOnboardingCreatePayload(
       ? record.description.trim()
       : undefined;
   const plannedStart =
-    typeof record.planned_start_date === "string" && record.planned_start_date.trim()
+    typeof record.planned_start_date === "string" &&
+    record.planned_start_date.trim()
       ? record.planned_start_date
       : undefined;
   const plannedCompletion =
@@ -9012,8 +9110,7 @@ function readOnboardingCreatePayload(
       ? record.planned_completion_date
       : undefined;
   const provisioning = asRecord(record.provisioning) as
-    | CreateOnboardingRequestPayload["provisioning"]
-    | null;
+    CreateOnboardingRequestPayload["provisioning"] | null;
 
   return {
     employee_id: Math.trunc(employeeId),
@@ -9024,7 +9121,9 @@ function readOnboardingCreatePayload(
       : {}),
     ...(description ? { description } : {}),
     ...(plannedStart ? { planned_start_date: plannedStart } : {}),
-    ...(plannedCompletion ? { planned_completion_date: plannedCompletion } : {}),
+    ...(plannedCompletion
+      ? { planned_completion_date: plannedCompletion }
+      : {}),
     ...(provisioning ? { provisioning } : {}),
   };
 }
@@ -9060,7 +9159,10 @@ export async function submitOnboardingRequest(
     ...fallback,
     ...(current ?? {}),
   };
-  if (!looksLikeOnboardingRequest(merged) && !readOnboardingEmployeeId(merged)) {
+  if (
+    !looksLikeOnboardingRequest(merged) &&
+    !readOnboardingEmployeeId(merged)
+  ) {
     throw new Error("Onboarding request was not found.");
   }
   const payload = readOnboardingCreatePayload(merged);
@@ -9069,8 +9171,9 @@ export async function submitOnboardingRequest(
 
   try {
     const created = await createSubmitted();
-    const createdRecord =
-      (normalizeSingle(created) ?? asRecord(created) ?? {}) as AdminRecord;
+    const createdRecord = (normalizeSingle(created) ??
+      asRecord(created) ??
+      {}) as AdminRecord;
     const createdId = readNumberFromRecord(createdRecord, ["id", "request_id"]);
     if (createdId !== null && String(createdId) !== String(id)) {
       await cancelOnboardingRequest(token, id, {
@@ -10448,9 +10551,7 @@ export async function updateCompanyById(
 function extractCompanyModulesRecord(payload: unknown): AdminRecord | null {
   const root = asRecord(payload);
   const nested =
-    asRecord(root?.data) ??
-    asRecord(root?.result) ??
-    asRecord(root?.modules);
+    asRecord(root?.data) ?? asRecord(root?.result) ?? asRecord(root?.modules);
   if (nested && ("roles" in nested || "permissions" in nested)) {
     return nested;
   }
@@ -10668,7 +10769,7 @@ function stripEmployeeNumbersFromCreatePayload(data: CreateEmployeePayload) {
 function payloadHasExplicitEmployeeNumber(body: CreateEmployeePayload) {
   return Boolean(
     body.employee_no?.trim() ||
-      body.onboarding?.provisioning?.device_assignment?.employee_no?.trim(),
+    body.onboarding?.provisioning?.device_assignment?.employee_no?.trim(),
   );
 }
 
@@ -10688,11 +10789,395 @@ function isMissingOnboardingApprover(errorObject: unknown) {
   return /no eligible approver/i.test(errorMessageAndPayload(errorObject));
 }
 
+function isExistingEmployeeProfileConflict(errorObject: unknown) {
+  const status =
+    typeof errorObject === "object" &&
+    errorObject !== null &&
+    "status" in errorObject &&
+    typeof (errorObject as { status?: unknown }).status === "number"
+      ? (errorObject as { status: number }).status
+      : null;
+  const message = errorMessageAndPayload(errorObject);
+  return (
+    /already has an employee profile/i.test(message) ||
+    (status === 409 && /employee profile/i.test(message))
+  );
+}
+
+function isEmailPhoneUserConflict(errorObject: unknown) {
+  return /email and phone belong to different/i.test(
+    errorMessageAndPayload(errorObject),
+  );
+}
+
+function readCreatedEmployeeId(record: AdminRecord | null): number | null {
+  if (!record) {
+    return null;
+  }
+  const direct = readNumberFromRecord(record, [
+    "id",
+    "employee_id",
+    "employeeId",
+  ]);
+  if (direct !== null) {
+    return direct;
+  }
+  const nested = asRecord(record.employee) ?? asRecord(record.employee_profile);
+  return readNumberFromRecord(nested, ["id", "employee_id", "employeeId"]);
+}
+
+function unwrapCreatedEmployee(payload: unknown): CreateEmployeeResponse {
+  const root = asRecord(payload);
+  const nestedEmployee =
+    asRecord(root?.employee) ??
+    asRecord(asRecord(root?.data)?.employee) ??
+    asRecord(asRecord(root?.result)?.employee);
+  const candidates = [
+    looksLikeEmployeeRecord(nestedEmployee) ? nestedEmployee : null,
+    looksLikeEmployeeRecord(asRecord(root?.data)) ? asRecord(root?.data) : null,
+    looksLikeEmployeeRecord(root) ? root : null,
+    normalizeSingle(payload),
+    asRecord(payload),
+  ].filter((value): value is AdminRecord => Boolean(value));
+
+  const record = (candidates.find(
+    (candidate) => readCreatedEmployeeId(candidate) !== null,
+  ) ??
+    candidates[0] ??
+    {}) as CreateEmployeeResponse;
+
+  const onboardingRequest =
+    asRecord(record.onboarding_request) ??
+    asRecord(record.onboardingRequest) ??
+    asRecord(root?.onboarding_request) ??
+    asRecord(asRecord(root?.data)?.onboarding_request) ??
+    null;
+  if (onboardingRequest && !record.onboarding_request) {
+    record.onboarding_request = onboardingRequest;
+  }
+
+  const envelope = asRecord(root?.data) ?? root;
+  const warning =
+    readAdminRecordString(record, [
+      "warning",
+      "onboarding_warning",
+      "onboardingWarning",
+    ]) ??
+    readAdminRecordString(envelope, [
+      "warning",
+      "onboarding_warning",
+      "onboardingWarning",
+    ]) ??
+    readAdminRecordString(root, [
+      "warning",
+      "onboarding_warning",
+      "onboardingWarning",
+    ]);
+  if (warning) {
+    record.warning = warning;
+  }
+
+  const envelopeEmployeeId = readNumberFromRecord(envelope, [
+    "employee_id",
+    "employeeId",
+  ]);
+  if (envelopeEmployeeId !== null && record.employee_id == null) {
+    record.employee_id = envelopeEmployeeId;
+    if (readCreatedEmployeeId(record) === null) {
+      record.id = envelopeEmployeeId;
+    }
+  }
+  return record;
+}
+
+function readInviteContactEmail(body: CreateEmployeePayload): string | null {
+  for (const contact of body.contacts ?? []) {
+    const email = readAdminRecordString(asRecord(contact), [
+      "email",
+      "work_email",
+      "workEmail",
+    ]);
+    if (email) {
+      return email.toLowerCase();
+    }
+  }
+  return null;
+}
+
+function readInviteContactPhone(body: CreateEmployeePayload): string | null {
+  for (const contact of body.contacts ?? []) {
+    const phone = readAdminRecordString(asRecord(contact), [
+      "phone_number",
+      "phone",
+      "mobile_number",
+      "mobile",
+    ]);
+    if (phone) {
+      return phone;
+    }
+  }
+  return null;
+}
+
+function employeeMatchesCreatePayload(
+  row: AdminRecord,
+  body: CreateEmployeePayload,
+) {
+  const email = readInviteContactEmail(body);
+  const phone = readInviteContactPhone(body);
+  if (email) {
+    return employeeOwnsEmail(row, email);
+  }
+  if (phone && employeeOwnsPhone(row, phone)) {
+    return true;
+  }
+  const first = readAdminRecordString(row, [
+    "first_name",
+    "firstName",
+  ])?.toLowerCase();
+  const last = readAdminRecordString(row, [
+    "last_name",
+    "lastName",
+  ])?.toLowerCase();
+  return (
+    Boolean(first && last) &&
+    first === body.first_name.trim().toLowerCase() &&
+    last === body.last_name.trim().toLowerCase()
+  );
+}
+
+async function findExistingEmployeeForCreate(
+  token: string,
+  body: CreateEmployeePayload,
+): Promise<CreateEmployeeResponse | null> {
+  const email = readInviteContactEmail(body);
+  const phone = readInviteContactPhone(body);
+  const searches = [
+    email,
+    phone,
+    `${body.first_name.trim()} ${body.last_name.trim()}`.trim(),
+  ].filter((value): value is string => Boolean(value));
+
+  for (const search of searches) {
+    try {
+      const result = await listEmployees(token, {
+        page: 1,
+        limit: 20,
+        search,
+      });
+      const match = result.rows.find((row) =>
+        employeeMatchesCreatePayload(row, body),
+      );
+      if (match && readCreatedEmployeeId(match) !== null) {
+        return match as CreateEmployeeResponse;
+      }
+    } catch {
+      // Keep trying other search keys.
+    }
+  }
+  return null;
+}
+
+function employeeFromConflictPayload(
+  errorObject: unknown,
+): CreateEmployeeResponse | null {
+  if (
+    typeof errorObject !== "object" ||
+    errorObject === null ||
+    !("payload" in errorObject)
+  ) {
+    return null;
+  }
+  const payload = (errorObject as { payload?: unknown }).payload;
+  const unwrapped = unwrapCreatedEmployee(payload);
+  return readCreatedEmployeeId(unwrapped) === null ? null : unwrapped;
+}
+
+async function recoverExistingEmployeeFromCreateError(
+  token: string,
+  body: CreateEmployeePayload,
+  errorObject: unknown,
+): Promise<CreateEmployeeResponse | null> {
+  if (
+    !isExistingEmployeeProfileConflict(errorObject) &&
+    !isMissingOnboardingApprover(errorObject)
+  ) {
+    return null;
+  }
+  return (
+    employeeFromConflictPayload(errorObject) ??
+    (await findExistingEmployeeForCreate(token, body))
+  );
+}
+
+async function searchDirectoryOwner(
+  token: string,
+  query: string | null,
+  match: "email" | "phone",
+): Promise<{
+  source: "employee" | "company_user";
+  record: AdminRecord;
+} | null> {
+  if (!query) {
+    return null;
+  }
+
+  const matches = (row: AdminRecord) =>
+    match === "email"
+      ? employeeOwnsEmail(row, query)
+      : employeeOwnsPhone(row, query);
+
+  try {
+    const employees = await listEmployees(token, {
+      page: 1,
+      limit: 50,
+      search: query,
+    });
+    const employeeHit = employees.rows.find(matches);
+    if (employeeHit) {
+      return { source: "employee", record: employeeHit };
+    }
+  } catch {
+    // Try a full employee directory scan next.
+  }
+
+  try {
+    const employees = await listAllEmployees(
+      token,
+      {},
+      { pageSize: 100, maxPages: 20 },
+    );
+    const employeeHit = employees.find(matches);
+    if (employeeHit) {
+      return { source: "employee", record: employeeHit };
+    }
+  } catch {
+    // Keep looking through company users.
+  }
+
+  try {
+    const users = await listCurrentCompanyUsers(token, {
+      page: 1,
+      limit: 50,
+      search: query,
+    });
+    const userHit = users.rows.find(matches);
+    if (userHit) {
+      return { source: "company_user", record: userHit };
+    }
+  } catch {
+    // Fall through to a full company-user scan.
+  }
+
+  try {
+    const users = await listAllCurrentCompanyUsers(token, { maxPages: 15 });
+    const userHit = users.find(matches);
+    if (userHit) {
+      return { source: "company_user", record: userHit };
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+async function lookupEmailPhoneConflictOwners(
+  token: string,
+  body: CreateEmployeePayload,
+): Promise<{ emailOwner: string | null; phoneOwner: string | null }> {
+  const email = readInviteContactEmail(body);
+  const phone = readInviteContactPhone(body);
+  const [emailMatch, phoneMatch] = await Promise.all([
+    searchDirectoryOwner(token, email, "email"),
+    searchDirectoryOwner(token, phone, "phone"),
+  ]);
+
+  return {
+    emailOwner: emailMatch
+      ? formatEmployeeDirectoryPerson(emailMatch.record, emailMatch.source)
+      : null,
+    phoneOwner: phoneMatch
+      ? formatEmployeeDirectoryPerson(phoneMatch.record, phoneMatch.source)
+      : null,
+  };
+}
+
+function buildEmailPhoneConflictMessage(
+  body: CreateEmployeePayload,
+  owners: { emailOwner: string | null; phoneOwner: string | null },
+): string {
+  const email = readInviteContactEmail(body);
+  const phone = readInviteContactPhone(body);
+  const parts = [
+    "Email and phone belong to different existing users.",
+    email
+      ? owners.emailOwner
+        ? `Email ${email} is already used by ${owners.emailOwner}.`
+        : `Email ${email} already belongs to an existing user.`
+      : null,
+    phone
+      ? owners.phoneOwner
+        ? `Phone ${phone} is already used by ${owners.phoneOwner}.`
+        : `Phone ${phone} already belongs to an existing user who may not appear under Employees.`
+      : null,
+    "Search Employees by email or phone, or use contact details that belong to the same person.",
+  ];
+  return parts.filter(Boolean).join(" ");
+}
+
+async function throwEmailPhoneConflictError(
+  token: string,
+  body: CreateEmployeePayload,
+  errorObject: unknown,
+): Promise<never> {
+  const owners = await lookupEmailPhoneConflictOwners(token, body);
+  const error = new Error(
+    buildEmailPhoneConflictMessage(body, owners),
+  ) as Error & {
+    status?: number;
+    payload?: unknown;
+  };
+  error.status =
+    typeof errorObject === "object" &&
+    errorObject !== null &&
+    "status" in errorObject &&
+    typeof (errorObject as { status?: unknown }).status === "number"
+      ? (errorObject as { status: number }).status
+      : 409;
+  if (
+    typeof errorObject === "object" &&
+    errorObject !== null &&
+    "payload" in errorObject
+  ) {
+    error.payload = (errorObject as { payload?: unknown }).payload;
+  }
+  throw error;
+}
+
 async function createEmployeeDowngradingOnboarding(
   token: string,
   body: CreateEmployeePayload,
   errorObject: unknown,
 ) {
+  const recover = async (retryError: unknown) => {
+    const existing = await recoverExistingEmployeeFromCreateError(
+      token,
+      body,
+      retryError,
+    );
+    if (existing) {
+      return existing;
+    }
+    if (
+      !isMissingOnboardingApprover(retryError) &&
+      !isExistingEmployeeProfileConflict(retryError)
+    ) {
+      throw retryError;
+    }
+    return null;
+  };
+
   const draft = cloneCreateEmployeePayload(body);
   draft.onboarding = {
     ...(draft.onboarding ?? {}),
@@ -10703,8 +11188,9 @@ async function createEmployeeDowngradingOnboarding(
     try {
       return await postCreateEmployee(token, draft);
     } catch (retryError) {
-      if (!isMissingOnboardingApprover(retryError)) {
-        throw retryError;
+      const existing = await recover(retryError);
+      if (existing) {
+        return existing;
       }
     }
   }
@@ -10718,8 +11204,9 @@ async function createEmployeeDowngradingOnboarding(
     try {
       return await postCreateEmployee(token, draft);
     } catch (retryError) {
-      if (!isMissingOnboardingApprover(retryError)) {
-        throw retryError;
+      const existing = await recover(retryError);
+      if (existing) {
+        return existing;
       }
     }
   }
@@ -10729,9 +11216,19 @@ async function createEmployeeDowngradingOnboarding(
   try {
     return await postCreateEmployee(token, stripped);
   } catch (retryError) {
-    if (!isMissingOnboardingApprover(retryError)) {
-      throw retryError;
+    const existing = await recover(retryError);
+    if (existing) {
+      return existing;
     }
+  }
+
+  const existing = await recoverExistingEmployeeFromCreateError(
+    token,
+    body,
+    errorObject,
+  );
+  if (existing) {
+    return existing;
   }
 
   throw errorObject;
@@ -10867,9 +11364,18 @@ async function postCreateEmployee(token: string, body: CreateEmployeePayload) {
     token,
     body,
   });
-  return (normalizeSingle(payload) ??
-    asRecord(payload) ??
-    {}) as CreateEmployeeResponse;
+  return unwrapCreatedEmployee(payload);
+}
+
+function applySafeEmployeeOnboardingDefaults(body: CreateEmployeePayload) {
+  // Current backend: omitted onboarding is skipped. If the client does send
+  // onboarding without submit, default to draft so create cannot 400 after commit.
+  if (!body.onboarding) {
+    return;
+  }
+  if (body.onboarding.submit === undefined) {
+    body.onboarding.submit = false;
+  }
 }
 
 export async function createEmployeeProfile(
@@ -10878,12 +11384,30 @@ export async function createEmployeeProfile(
 ) {
   const body = cloneCreateEmployeePayload(data);
   stripReservedEmployeeNumbers(body);
+  applySafeEmployeeOnboardingDefaults(body);
 
   try {
     return await postCreateEmployee(token, body);
   } catch (errorObject) {
+    if (isEmailPhoneUserConflict(errorObject)) {
+      await throwEmailPhoneConflictError(token, body, errorObject);
+    }
     if (isMissingOnboardingApprover(errorObject)) {
-      return await createEmployeeDowngradingOnboarding(token, body, errorObject);
+      return await createEmployeeDowngradingOnboarding(
+        token,
+        body,
+        errorObject,
+      );
+    }
+    if (isExistingEmployeeProfileConflict(errorObject)) {
+      const existing = await recoverExistingEmployeeFromCreateError(
+        token,
+        body,
+        errorObject,
+      );
+      if (existing) {
+        return existing;
+      }
     }
     if (!isEmployeeNumberConflict(errorObject)) {
       throw errorObject;
@@ -10932,6 +11456,48 @@ export async function createEmployeeProfile(
 
     throw errorObject;
   }
+}
+
+/**
+ * Creates a pending employee invitation and queues both configured delivery
+ * channels. The backend turns the invitation into a user and employee when
+ * the recipient accepts it.
+ */
+export async function createEmployeeInvitation(
+  token: string,
+  data: CreateEmployeeInvitationPayload,
+) {
+  const payload = await adminRequest<unknown>("/api/employee-invitations", {
+    method: "POST",
+    token,
+    body: data,
+  });
+  return normalizeSingle(payload) as EmployeeInvitationResponse;
+}
+
+export async function getPublicEmployeeInvitation(token: string) {
+  const payload = await adminRequest<unknown>(
+    `/api/employee-invitations/accept/${encodeURIComponent(token)}`,
+    { dedupe: false },
+  );
+  return normalizeSingle(payload) as unknown as PublicEmployeeInvitation;
+}
+
+export async function acceptEmployeeInvitation(
+  token: string,
+  password: string,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/employee-invitations/accept/${encodeURIComponent(token)}`,
+    {
+      method: "POST",
+      body: { password },
+      dedupe: false,
+    },
+  );
+  return normalizeSingle(
+    payload,
+  ) as unknown as AcceptEmployeeInvitationResponse;
 }
 
 export async function getEmployeeById(id: string | number, token: string) {
@@ -12316,11 +12882,16 @@ export async function listAllCurrentCompanyUsers(
       },
     );
     collected.push(...result.rows);
+    const hasKnownTotalPages =
+      typeof result.totalPages === "number" && result.totalPages > 0;
+    const hasKnownTotal = typeof result.total === "number";
     const reachedEnd =
       result.rows.length === 0 ||
-      result.rows.length < 100 ||
-      (typeof result.totalPages === "number" && page >= result.totalPages) ||
-      (typeof result.total === "number" && collected.length >= result.total);
+      (hasKnownTotalPages
+        ? page >= result.totalPages!
+        : hasKnownTotal
+          ? collected.length >= result.total!
+          : result.rows.length < 100);
     if (reachedEnd) {
       break;
     }
@@ -12338,6 +12909,17 @@ export async function createCurrentCompanyUser(
     token,
     body: data,
   });
+}
+
+export async function getCurrentCompanyUser(
+  token: string,
+  userId: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/companies/current/users/${userId}`,
+    { token },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
 }
 
 export async function deleteCurrentCompanyUser(
@@ -13004,26 +13586,71 @@ export async function listRoleUsers(
 ): Promise<PaginatedUsersResult> {
   const fallbackPage = params.page && params.page > 0 ? params.page : 1;
   const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 100;
-  const query = buildUsersQuery({
-    page: fallbackPage,
-    limit: fallbackLimit,
-    sortBy: params.sortBy,
-    sortOrder: params.sortOrder,
-    search: params.search,
-  });
+  // GET /api/roles/{id}/users can return `{ total: N, items: [] }` when page/limit/sort
+  // are sent, same as GET /api/roles. Keep page 1 on the bare path and only send
+  // the page number when walking the remaining pages.
+  const queryParams = new URLSearchParams();
+  if (fallbackPage > 1) {
+    queryParams.set("page", String(fallbackPage));
+  }
+  if (params.search?.trim()) {
+    queryParams.set("search", params.search.trim());
+  }
+  const encodedQuery = queryParams.toString();
+  const query = encodedQuery ? `?${encodedQuery}` : "";
   const payload = await adminRequest<unknown>(
     `/api/roles/${roleId}/users${query}`,
     {
       token,
     },
   );
-  const rows = normalizeList(payload);
+  let rows = normalizeList(payload);
+  if (rows.length === 0 && query) {
+    const retry = await adminRequest<unknown>(`/api/roles/${roleId}/users`, {
+      token,
+    });
+    rows = normalizeList(retry);
+  }
   const pagination = extractUsersPagination(
     payload,
     fallbackPage,
     fallbackLimit,
   );
   return { rows, ...pagination };
+}
+
+/** Load every page returned by GET /api/roles/{id}/users for assignment UIs. */
+export async function listAllRoleUsers(
+  token: string,
+  roleId: string | number,
+  options: { maxPages?: number } = {},
+): Promise<AdminRecord[]> {
+  const maxPages =
+    options.maxPages && options.maxPages > 0 ? options.maxPages : 30;
+  const collected: AdminRecord[] = [];
+  let page = 1;
+
+  while (page <= maxPages) {
+    const result = await listRoleUsers(token, roleId, { page });
+    collected.push(...result.rows);
+
+    const hasKnownTotalPages =
+      typeof result.totalPages === "number" && result.totalPages > 0;
+    const hasKnownTotal = typeof result.total === "number";
+    const reachedEnd =
+      result.rows.length === 0 ||
+      (hasKnownTotalPages
+        ? page >= result.totalPages!
+        : hasKnownTotal
+          ? collected.length >= result.total!
+          : result.rows.length < result.limit);
+    if (reachedEnd) {
+      break;
+    }
+    page += 1;
+  }
+
+  return collected;
 }
 
 export async function assignUserToRole(
@@ -13145,7 +13772,9 @@ export async function patchEmployeeStatus(
     notes: trimmedNotes || undefined,
   };
 
-  if (normalizedStatus === "exited") {
+  if (
+    ["resigned", "terminated", "retired", "exited"].includes(normalizedStatus)
+  ) {
     const trimmedExitDate =
       typeof data.exit_date === "string" ? data.exit_date.trim() : "";
     const trimmedExitReason =
@@ -13158,6 +13787,17 @@ export async function patchEmployeeStatus(
     method: "PATCH",
     token,
     body: normalizedPayload,
+  });
+}
+
+/** Archive an employee profile through the documented employee DELETE endpoint. */
+export async function archiveEmployeeProfile(
+  token: string,
+  employeeId: string | number,
+) {
+  return adminRequest<unknown>(`/api/employees/${employeeId}`, {
+    method: "DELETE",
+    token,
   });
 }
 
@@ -15927,7 +16567,8 @@ function buildAnalyticsQuery(params: AnalyticsQueryParams = {}) {
   return query ? `?${query}` : "";
 }
 
-export type HrDashboardKind = "employee" | "hr" | "management" | "manager" | "sales-field";
+export type HrDashboardKind =
+  "employee" | "hr" | "management" | "manager" | "sales-field";
 
 export async function getHrDashboard(
   token: string,

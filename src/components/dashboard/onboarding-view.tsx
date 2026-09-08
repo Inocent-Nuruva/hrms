@@ -10,7 +10,6 @@ import { canPerformPermission } from "@/lib/dashboard-permissions"
 
 import { cn } from "@/lib/utils"
 import { useDebouncedValue } from "@/hooks/use-debounced-value"
-import { LumaSpin } from "@/components/ui/luma-spin"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
 import {
@@ -34,8 +33,10 @@ import {
   fileToBase64UploadDto,
   getOnboardingAuditLogs,
   getOnboardingProgress,
+  getCurrentCompanyUser,
   getOnboardingRequest,
   getOnboardingWorkflow,
+  getUserById,
   listAccessControlResources,
   listAllCurrentCompanyUsers,
   listAttendanceDevices,
@@ -49,9 +50,9 @@ import {
   listOnboardingWorkflowSteps,
   listOnboardingWorkflows,
   listResource,
+  listAllRoleUsers,
   listShiftResources,
   listTimetableResources,
-  listUsers,
   patchOnboardingWorkflow,
   patchOnboardingWorkflowStep,
   rejectOnboardingRequest,
@@ -67,6 +68,7 @@ import { showSuccessAlert } from "@/lib/success-alert"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
+import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 import {
   Select,
   SelectContent,
@@ -108,9 +110,13 @@ import {
   type OnboardingTimetableAssignmentDraft,
 } from "@/lib/onboarding-provisioning"
 import {
+  filterAssigneesForStep,
+  findAssigneeRecord,
+  flattenAssigneeRecord,
   isOnboardingActableStatus,
   isOnboardingDraftStatus,
-  mergeAdminRecords,
+  preferredAssigneeId,
+  recordHasRole,
   personDisplayName,
   recordMatchesId,
   resolveApprovalOwnerLabel,
@@ -119,6 +125,7 @@ import {
   summarizeOnboardingApprovals,
 } from "@/lib/onboarding-activity-labels"
 import { notifySubmittedRequestApprovers } from "@/lib/request-notifications"
+import { matchesEmployeeDirectorySearch } from "@/lib/employee-directory-search"
 
 type OnboardingTab = "requests" | "workflows"
 type OnboardingLookupKey =
@@ -283,14 +290,54 @@ function getEmployeeEmploymentStatus(row: AdminRecord) {
   return String(
     row.employment_status ??
       row.employmentStatus ??
-      row.status ??
       nested?.employment_status ??
       nested?.employmentStatus ??
-      nested?.status ??
       ""
   )
     .trim()
     .toLowerCase()
+}
+
+function mergeOnboardingRequestRows(...groups: AdminRecord[][]) {
+  const byKey = new Map<string, AdminRecord>()
+  for (const row of groups.flat()) {
+    const requestId = readNumber(row, ["id", "request_id", "onboarding_request_id"])
+    const employeeId = readNumber(row, ["employee_id", "employeeId"])
+    const key =
+      requestId !== null
+        ? `request:${requestId}`
+        : employeeId !== null
+          ? `employee:${employeeId}:${String(row.status ?? "")}`
+          : JSON.stringify(row)
+    if (!byKey.has(key)) {
+      byKey.set(key, row)
+    }
+  }
+  return Array.from(byKey.values())
+}
+
+const ONBOARDING_DRAFT_LIST_STATUSES = ["draft", "not_started", "pending", "new"] as const
+
+async function listOnboardingRequestsIncludingDrafts(
+  token: string,
+  requestQuery: {
+    page: number
+    limit: number
+    sortBy: "created_at"
+    sortOrder: "DESC"
+    search?: string
+    employee_id?: number
+  },
+) {
+  const [main, ...draftLists] = await Promise.all([
+    listOnboardingRequests(token, requestQuery),
+    ...ONBOARDING_DRAFT_LIST_STATUSES.map((status) =>
+      listOnboardingRequests(token, { ...requestQuery, status }).catch(() => ({
+        rows: [] as AdminRecord[],
+      })),
+    ),
+  ])
+  return mergeOnboardingRequestRows(main.rows, ...draftLists.map((result) => result.rows))
 }
 
 function isOnboardingEligibleEmployee(row: AdminRecord) {
@@ -414,6 +461,14 @@ function normalizeWorkflowStep(row: AdminRecord): OnboardingWorkflowStepDraft {
     ...(assignedRoleId !== null && assignedRoleId > 0 ? { assigned_role_id: assignedRoleId } : {}),
     ...(assignedUserId !== null && assignedUserId > 0 ? { assigned_user_id: assignedUserId } : {}),
   }
+}
+
+async function loadAssigneeById(token: string, assignedId: number): Promise<AdminRecord | null> {
+  const fromCompany = await getCurrentCompanyUser(token, assignedId).catch(() => null)
+  if (fromCompany && preferredAssigneeId(fromCompany) !== null) {
+    return fromCompany
+  }
+  return getUserById(assignedId, token).catch(() => null)
 }
 
 function extractWorkflowSteps(record: AdminRecord | null): AdminRecord[] {
@@ -1100,6 +1155,8 @@ export function OnboardingView() {
   const [workflowSteps, setWorkflowSteps] = React.useState<OnboardingWorkflowStepDraft[]>([])
   const [persistedWorkflowStepIds, setPersistedWorkflowStepIds] = React.useState<number[]>([])
   const [stepDialogOpen, setStepDialogOpen] = React.useState(false)
+  const [roleUsers, setRoleUsers] = React.useState<AdminRecord[]>([])
+  const [roleUsersLoading, setRoleUsersLoading] = React.useState(false)
   const [editingStepIndex, setEditingStepIndex] = React.useState<number | null>(null)
   const [workflowSheetOpen, setWorkflowSheetOpen] = React.useState(false)
   const [editingWorkflowId, setEditingWorkflowId] = React.useState<number | null>(null)
@@ -1273,15 +1330,17 @@ export function OnboardingView() {
           case "workflows":
             return { key, result: await listOnboardingWorkflows(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }) }
           case "users": {
-            const [usersResult, companyUsers] = await Promise.all([
-              listUsers(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
-              listAllCurrentCompanyUsers(token).catch(() => [] as AdminRecord[]),
-            ])
+            const companyUsers = await listAllCurrentCompanyUsers(token, { maxPages: 30 }).catch(
+              () => [] as AdminRecord[],
+            )
             return {
               key,
               result: {
-                ...usersResult,
-                rows: mergeAdminRecords(companyUsers, usersResult.rows),
+                rows: companyUsers,
+                page: 1,
+                limit: companyUsers.length,
+                total: companyUsers.length,
+                totalPages: 1,
               },
             }
           }
@@ -1405,7 +1464,6 @@ export function OnboardingView() {
       sortBy: "created_at" as const,
       sortOrder: "DESC" as const,
       search: debouncedRequestSearch.trim() || undefined,
-      status: requestStatusFilter !== "all" ? requestStatusFilter : undefined,
       employee_id:
         requestEmployeeFilter && Number(requestEmployeeFilter) > 0
           ? Number(requestEmployeeFilter)
@@ -1441,8 +1499,9 @@ export function OnboardingView() {
           setRequests(mine)
           requestsFetchKeyRef.current = fetchKey
         } else {
-          const [requestsResult, employeesResult, workflowsResult] = await Promise.all([
-            listOnboardingRequests(token, requestQuery),
+          const [requestRowsResult, employeesResult, recentEmployeesResult, workflowsResult] =
+            await Promise.all([
+            listOnboardingRequestsIncludingDrafts(token, requestQuery),
             listEmployees(token, {
               page: 1,
               limit: 200,
@@ -1450,16 +1509,23 @@ export function OnboardingView() {
               sortOrder: "DESC",
               employment_status: "onboarding",
             }),
+            listEmployees(token, {
+              page: 1,
+              limit: 100,
+              sortBy: "created_at",
+              sortOrder: "DESC",
+            }),
             listOnboardingWorkflows(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
           ])
-          const onboardingEmployees = mergeEmployeeRows(employeesResult.rows).filter(
-            isOnboardingEligibleEmployee,
-          )
+          const onboardingEmployees = mergeEmployeeRows(
+            employeesResult.rows,
+            recentEmployeesResult.rows,
+          ).filter(isOnboardingEligibleEmployee)
           setEmployees(onboardingEmployees)
           setWorkflows(workflowsResult.rows)
           setLoadedLookups((current) => ({ ...current, employees: true, workflows: true }))
 
-          let requestRows = requestsResult.rows
+          let requestRows = requestRowsResult
           const defaultWorkflowId = defaultOnboardingWorkflowId(workflowsResult.rows)
           const missingEmployees = onboardingEmployees.filter((employee) => {
             const employeeId = readNumber(employee, ["id", "employee_id", "employeeId"])
@@ -1467,7 +1533,7 @@ export function OnboardingView() {
           })
 
           if (canCreateOnboardingRequests && missingEmployees.length > 0) {
-            await Promise.allSettled(
+            const createdDrafts = await Promise.allSettled(
               missingEmployees.map((employee) => {
                 const employeeId = readNumber(employee, ["id", "employee_id", "employeeId"])
                 if (employeeId === null) {
@@ -1485,8 +1551,14 @@ export function OnboardingView() {
                 })
               })
             )
-            const refreshed = await listOnboardingRequests(token, requestQuery)
-            requestRows = refreshed.rows
+            const createdRows = createdDrafts.flatMap((result) => {
+              if (result.status !== "fulfilled" || !result.value) {
+                return []
+              }
+              return [result.value]
+            })
+            const refreshedRows = await listOnboardingRequestsIncludingDrafts(token, requestQuery)
+            requestRows = mergeOnboardingRequestRows(refreshedRows, createdRows, requestRows)
           }
 
           const coveredEmployeeIds = collectRequestEmployeeIds(requestRows)
@@ -1631,11 +1703,20 @@ export function OnboardingView() {
     const searchValue = requestSearch.trim().toLowerCase()
     return requests.filter((row) => {
       const statusValue = String(row.status ?? "").trim().toLowerCase()
-      if (requestStatusFilter !== "all" && statusValue !== requestStatusFilter) {
+      if (requestStatusFilter === "draft") {
+        if (!isOnboardingDraftStatus(statusValue)) {
+          return false
+        }
+      } else if (requestStatusFilter !== "all" && statusValue !== requestStatusFilter) {
         return false
       }
 
       if (!searchValue) return true
+
+      const nestedEmployee = toRecord(row.employee) ?? toRecord(row.employee_profile) ?? row
+      if (matchesEmployeeDirectorySearch(nestedEmployee, requestSearch.trim())) {
+        return true
+      }
 
       const rowValues = [
         row.id,
@@ -1802,6 +1883,87 @@ export function OnboardingView() {
     (step: AdminRecord) => resolveResponsiblePartyLabel(step, roles, users) || "-",
     [roles, users]
   )
+
+  const assignableUsers = React.useMemo(() => {
+    const roleId = Number(workflowForm.assigned_role_id)
+    const selectedId = Number(workflowForm.assigned_user_id)
+    const hasRole = Number.isFinite(roleId) && roleId > 0
+    const roleSource = roleUsers.map(flattenAssigneeRecord)
+    const catalog = users.map(flattenAssigneeRecord)
+    const source = hasRole && roleSource.length > 0 ? roleSource : catalog
+    const filtered = filterAssigneesForStep(source, {
+      roleId: hasRole && roleSource.length === 0 ? roleId : null,
+      selectedId: Number.isFinite(selectedId) && selectedId > 0 ? selectedId : null,
+    })
+    const usable = filtered.length > 0 ? filtered : catalog
+    const seen = new Set<number>()
+    return usable.filter((row) => {
+      const id = preferredAssigneeId(row)
+      if (id === null || seen.has(id)) return false
+      seen.add(id)
+      return true
+    })
+  }, [roleUsers, users, workflowForm.assigned_role_id, workflowForm.assigned_user_id])
+
+  React.useEffect(() => {
+    const roleId = Number(workflowForm.assigned_role_id)
+    if (!Number.isFinite(roleId) || roleId <= 0) {
+      setRoleUsers([])
+      setRoleUsersLoading(false)
+      return
+    }
+    const token = readStoredToken()
+    if (!token) {
+      setRoleUsers([])
+      return
+    }
+    let cancelled = false
+    setRoleUsersLoading(true)
+    void (async () => {
+      try {
+        const result = await listAllRoleUsers(token, roleId, { maxPages: 30 })
+        if (!cancelled) {
+          setRoleUsers(result.map(flattenAssigneeRecord))
+        }
+      } catch {
+        if (!cancelled) {
+          setRoleUsers([])
+        }
+      } finally {
+        if (!cancelled) {
+          setRoleUsersLoading(false)
+        }
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [workflowForm.assigned_role_id])
+
+  async function hydrateAssignedUser(assignedId: number | null) {
+    if (assignedId === null || assignedId <= 0) {
+      return ""
+    }
+    const existing = findAssigneeRecord(users, assignedId)
+    if (existing) {
+      return String(preferredAssigneeId(existing) ?? assignedId)
+    }
+    const token = readStoredToken()
+    if (!token) {
+      return String(assignedId)
+    }
+    const extra = await loadAssigneeById(token, assignedId)
+    if (extra) {
+      setUsers((current) => (findAssigneeRecord(current, assignedId) ? current : [extra, ...current]))
+      return String(preferredAssigneeId(extra) ?? assignedId)
+    }
+    setUsers((current) =>
+      findAssigneeRecord(current, assignedId)
+        ? current
+        : [{ id: assignedId, full_name: `User #${assignedId}` }, ...current],
+    )
+    return String(assignedId)
+  }
 
   function resetWorkflowStepForm() {
     setWorkflowForm((prev) => ({
@@ -1994,6 +2156,9 @@ export function OnboardingView() {
         return
       }
       setEditingStepIndex(index)
+      const assignedUserSelectValue = await hydrateAssignedUser(
+        typeof step.assigned_user_id === "number" ? step.assigned_user_id : null,
+      )
       setWorkflowForm((prev) => ({
         ...prev,
         step_name: String(step.name ?? ""),
@@ -2001,7 +2166,7 @@ export function OnboardingView() {
         step_type: String(step.step_type ?? "task"),
         due_days: String(step.due_days ?? "1"),
         is_required: String(step.is_required ?? true) === "true" ? "true" : "false",
-        assigned_user_id: typeof step.assigned_user_id === "number" ? String(step.assigned_user_id) : "",
+        assigned_user_id: assignedUserSelectValue,
         assigned_role_id: typeof step.assigned_role_id === "number" ? String(step.assigned_role_id) : "",
       }))
       setStepDialogOpen(true)
@@ -3178,6 +3343,324 @@ export function OnboardingView() {
     void openRequestDetails(highlightedRow)
   }, [activeTab, highlightedRequestId, requests])
 
+  function renderOnboardingRequestActions(row: AdminRecord) {
+    const pendingEmployee = isPendingOnboardingRow(row)
+    const requestId = pendingEmployee ? null : readNumber(row, ["id", "request_id"])
+    const requestStatus = String(
+      readString(row, ["status", "request_status", "onboarding_status", "workflow_status"])
+    ).toLowerCase()
+    const isCancelled = requestStatus === "cancelled"
+    const isCompleted = requestStatus === "completed" || requestStatus === "rejected"
+    const isDraft = isOnboardingDraftStatus(requestStatus)
+    const allowedActions = parseAllowedActions(row)
+    const canSubmit =
+      !pendingEmployee &&
+      (canCreateOnboardingRequests || canUpdateOnboardingRequests) &&
+      isDraft &&
+      !isCancelled &&
+      allowedActions.has("submit")
+    const canApprove =
+      !pendingEmployee &&
+      canApproveOnboardingRequests &&
+      !isDraft &&
+      !isCancelled &&
+      !isCompleted &&
+      allowedActions.has("approve")
+    const canReject =
+      !pendingEmployee &&
+      canApproveOnboardingRequests &&
+      !isDraft &&
+      !isCancelled &&
+      !isCompleted &&
+      allowedActions.has("reject")
+    const canCancel =
+      !pendingEmployee &&
+      canCancelOnboardingRequests &&
+      !isCancelled &&
+      !isCompleted &&
+      allowedActions.has("cancel")
+    const canComplete =
+      !pendingEmployee &&
+      canCompleteOnboardingRequests &&
+      !isCancelled &&
+      !isCompleted &&
+      allowedActions.has("complete")
+    const canDelete =
+      !pendingEmployee && canUpdateOnboardingRequests && allowedActions.has("delete")
+
+    return (
+      <div
+        className="flex min-h-8 flex-wrap items-center justify-end gap-1"
+        onClick={(event) => event.stopPropagation()}
+      >
+        {pendingEmployee ? (
+          canCreateOnboardingRequests ? (
+            <Button
+              type="button"
+              size="sm"
+              className="h-7 px-2 text-[11px]"
+              disabled={saving}
+              onClick={() => void startPendingOnboarding(row)}
+            >
+              Start
+            </Button>
+          ) : (
+            <span className="text-[11px] text-muted-foreground">Awaiting request</span>
+          )
+        ) : canSubmit ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 px-2 text-[11px]"
+            title="Submit"
+            aria-label="Submit"
+            disabled={saving}
+            onClick={() => void runRequestAction(requestId, "submit")}
+          >
+            <Send className="h-3.5 w-3.5" />
+            Submit
+          </Button>
+        ) : null}
+        {!pendingEmployee && canApprove ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 px-2 text-[11px]"
+            title="Approve"
+            aria-label="Approve"
+            disabled={saving}
+            onClick={() => void runRequestAction(requestId, "approve")}
+          >
+            <BadgeCheck size={14} animation="path-loop" animateOnHover="path-loop" />
+            Approve
+          </Button>
+        ) : null}
+        {canReject ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 px-2 text-[11px]"
+            title="Reject"
+            aria-label="Reject"
+            disabled={saving}
+            onClick={() => void runRequestAction(requestId, "reject")}
+          >
+            <CircleX size={14} animation="default" animateOnHover="default" />
+            Reject
+          </Button>
+        ) : null}
+        {canCancel ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 px-2 text-[11px]"
+            title="Cancel"
+            aria-label="Cancel"
+            disabled={saving}
+            onClick={() => void runRequestAction(requestId, "cancel")}
+          >
+            <Ban className="h-3.5 w-3.5" />
+            Cancel
+          </Button>
+        ) : null}
+        {canComplete ? (
+          <Button
+            type="button"
+            size="sm"
+            className="h-7 px-2 text-[11px]"
+            title="Complete"
+            aria-label="Complete"
+            disabled={saving}
+            onClick={() => void runRequestAction(requestId, "complete")}
+          >
+            <CheckCheck className="h-3.5 w-3.5" />
+            Complete
+          </Button>
+        ) : null}
+        {canDelete ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 px-2 text-[11px] text-rose-600"
+            title="Delete"
+            aria-label="Delete"
+            disabled={saving}
+            onClick={() => void runRequestAction(requestId, "delete")}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        ) : null}
+        {!pendingEmployee &&
+        !canSubmit &&
+        !canApprove &&
+        !canReject &&
+        !canCancel &&
+        !canComplete &&
+        !canDelete ? (
+          <span className="text-[11px] text-muted-foreground">No actions</span>
+        ) : null}
+      </div>
+    )
+  }
+
+  const onboardingRequestColumns: Column<AdminRecord>[] = [
+    {
+      key: "id",
+      label: "ID",
+      defaultWidth: 90,
+      render: (row) => {
+        const requestId = isPendingOnboardingRow(row) ? null : readNumber(row, ["id", "request_id"])
+        const requestNo = readString(row, ["onboarding_no", "request_no", "request_code"])
+        return (
+          <div className="min-w-0">
+            <p className="truncate text-xs font-medium">{requestId ?? "-"}</p>
+            {requestNo !== "-" ? (
+              <p className="truncate text-[11px] text-muted-foreground">{requestNo}</p>
+            ) : null}
+          </div>
+        )
+      },
+    },
+    {
+      key: "employee",
+      label: "Employee",
+      defaultWidth: 140,
+      render: (row) => requestRowEmployeeLabel(row),
+    },
+    {
+      key: "title",
+      label: "Title",
+      defaultWidth: 180,
+      render: (row) => readString(row, ["title", "name"]),
+    },
+    {
+      key: "status",
+      label: "Status",
+      defaultWidth: 120,
+      render: (row) => {
+        const requestStatus = String(
+          readString(row, ["status", "request_status", "onboarding_status", "workflow_status"])
+        ).toLowerCase()
+        return (
+          <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${statusBadgeClass(requestStatus)}`}>
+            {toTitleCaseWords(readString(row, ["status"]))}
+          </span>
+        )
+      },
+    },
+    {
+      key: "actions",
+      label: "Actions",
+      defaultWidth: 220,
+      sortable: false,
+      render: (row) => renderOnboardingRequestActions(row),
+    },
+  ]
+
+  const onboardingWorkflowColumns: Column<AdminRecord>[] = [
+    {
+      key: "id",
+      label: "ID",
+      defaultWidth: 80,
+      render: (row) => readNumber(row, ["id", "workflow_id"]) ?? "-",
+    },
+    {
+      key: "name",
+      label: "Name",
+      defaultWidth: 160,
+      render: (row) => readString(row, ["name", "title"]),
+    },
+    {
+      key: "description",
+      label: "Description",
+      defaultWidth: 220,
+      render: (row) => (
+        <span className="block max-w-full truncate text-xs text-slate-600" title={readString(row, ["description"])}>
+          {readString(row, ["description"])}
+        </span>
+      ),
+    },
+    {
+      key: "status",
+      label: "Status",
+      defaultWidth: 110,
+      render: (row) => {
+        const workflowStatus = readString(row, ["status"])
+        return (
+          <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${statusBadgeClass(workflowStatus)}`}>
+            {toTitleCaseWords(workflowStatus)}
+          </span>
+        )
+      },
+    },
+    {
+      key: "default",
+      label: "Default",
+      defaultWidth: 80,
+      render: (row) => (asTruthyBoolean(row.is_default ?? row.default) ? "Yes" : "No"),
+    },
+    {
+      key: "actions",
+      label: "Actions",
+      defaultWidth: 140,
+      sortable: false,
+      render: (row) => {
+        const workflowId = readNumber(row, ["id", "workflow_id"])
+        return (
+          <div className="flex items-center justify-end gap-1" onClick={(event) => event.stopPropagation()}>
+            {canUpdateOnboardingWorkflows ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 w-7 px-0"
+                onClick={() => void openEditWorkflowSheet(workflowId, row)}
+                aria-label={`Edit workflow ${workflowId ?? ""}`}
+                title="Edit workflow"
+                disabled={saving}
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </Button>
+            ) : null}
+            {canCreateOnboardingWorkflows ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 px-2 text-[11px]"
+                onClick={() => void cloneWorkflow(workflowId, row)}
+                aria-label={`Clone workflow ${workflowId ?? ""}`}
+                title="Clone workflow"
+                disabled={saving}
+              >
+                Copy
+              </Button>
+            ) : null}
+            {canDeleteOnboardingWorkflows ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 w-7 px-0 text-rose-600"
+                onClick={() => void removeWorkflow(workflowId)}
+                aria-label={`Delete workflow ${workflowId ?? ""}`}
+                title="Delete workflow"
+                disabled={saving}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            ) : null}
+          </div>
+        )
+      },
+    },
+  ]
+
   return (
     <div className="space-y-2 px-4 pb-6 pt-2 lg:px-6">
       <div className="tab-rail-scroll">
@@ -3217,281 +3700,95 @@ export function OnboardingView() {
 
       {activeTab === "requests" && canViewOnboardingRequests ? (
         <div className="space-y-2">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <SearchToggleField
-              className="min-w-0"
-              placeholder="Search name, email, phone, user_no"
-              value={requestSearch}
-              onChange={setRequestSearch}
-            />
-            <select
-              className="h-8 min-w-[8.5rem] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
-              value={requestStatusFilter}
-              onChange={(event) => setRequestStatusFilter(event.target.value)}
-              aria-label="Filter request status"
-            >
-              {requestStatusOptions.map((status) => (
-                <option key={status} value={status}>
-                  {status === "all" ? "All statuses" : toTitleCaseWords(status)}
-                </option>
-              ))}
-            </select>
-            {isEmployeeMode ? null : (
-            <select
-              className="h-8 min-w-[9rem] max-w-[12rem] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
-              value={requestEmployeeFilter}
-              onChange={(event) => setRequestEmployeeFilter(event.target.value)}
-              aria-label="Filter by employee"
-            >
-              <option value="">All employees</option>
-              {employees.map((row, index) => {
-                const employeeId = readNumber(row, ["id", "employee_id", "user_id"])
-                if (employeeId === null) return null
-                return (
-                  <option key={`req-emp-${employeeId}-${index}`} value={String(employeeId)}>
-                    {resolveEmployeeLabel(employeeId)}
-                  </option>
-                )
-              })}
-            </select>
-            )}
-            <div className="ml-auto flex flex-wrap items-center gap-1.5">
-              {canCreateOnboardingRequests && !isEmployeeMode ? (
-                <Button
-                  type="button"
-                  className="h-8 px-2.5 text-xs"
-                  onClick={() => {
-                    void openRequestSheet()
-                  }}
+          <ResizableTable
+            title="Onboarding Requests"
+            data={filteredRequests}
+            columns={onboardingRequestColumns}
+            loading={loading}
+            storageKey="onboarding-requests"
+            enableAnimations
+            itemsPerPage={15}
+            showExport={false}
+            getRowId={(row, index) => {
+              if (isPendingOnboardingRow(row)) {
+                return `pending-${readNumber(row, ["employee_id", "employeeId"]) ?? index}`
+              }
+              return String(readNumber(row, ["id", "request_id"]) ?? index)
+            }}
+            onRowSelect={(_, row) => {
+              if (!row || isPendingOnboardingRow(row)) {
+                return
+              }
+              void openRequestDetails(row)
+            }}
+            toolbarStart={
+              <>
+                <SearchToggleField
+                  className="min-w-0 !w-auto !max-w-[14rem] !flex-none"
+                  placeholder="Search name, email, phone, user_no"
+                  value={requestSearch}
+                  onChange={setRequestSearch}
+                />
+                <select
+                  className="h-8 min-w-[8.5rem] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
+                  value={requestStatusFilter}
+                  onChange={(event) => setRequestStatusFilter(event.target.value)}
+                  aria-label="Filter request status"
                 >
-                  <Plus className="mr-1.5 h-3.5 w-3.5" />
-                  Create Request
-                </Button>
-              ) : null}
-              <button
-                type="button"
-                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-sm disabled:opacity-60"
-                onClick={() => void reloadAll(activeTab, true)}
-                disabled={loading}
-                aria-label="Refresh"
-                title="Refresh"
-              >
-                <RefreshCw className={cn("size-3.5 text-primary", loading ? "animate-spin" : "")} />
-              </button>
-            </div>
-          </div>
-
-          <div className="overflow-hidden rounded-lg border border-slate-200">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>ID</TableHead>
-                <TableHead>Employee</TableHead>
-                <TableHead>Title</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="w-[280px] text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredRequests.map((row, index) => {
-                const pendingEmployee = isPendingOnboardingRow(row)
-                const requestId = pendingEmployee ? null : readNumber(row, ["id", "request_id"])
-                const requestStatus = String(
-                  readString(row, ["status", "request_status", "onboarding_status", "workflow_status"])
-                ).toLowerCase()
-                const isCancelled = requestStatus === "cancelled"
-                const isCompleted = requestStatus === "completed" || requestStatus === "rejected"
-                const isDraft = isOnboardingDraftStatus(requestStatus)
-                const allowedActions = parseAllowedActions(row)
-                const canSubmit =
-                  !pendingEmployee &&
-                  (canCreateOnboardingRequests || canUpdateOnboardingRequests) &&
-                  isDraft &&
-                  !isCancelled &&
-                  allowedActions.has("submit")
-                const canApprove =
-                  !pendingEmployee &&
-                  canApproveOnboardingRequests &&
-                  !isDraft &&
-                  !isCancelled &&
-                  !isCompleted &&
-                  allowedActions.has("approve")
-                const canReject =
-                  !pendingEmployee &&
-                  canApproveOnboardingRequests &&
-                  !isDraft &&
-                  !isCancelled &&
-                  !isCompleted &&
-                  allowedActions.has("reject")
-                const canCancel =
-                  !pendingEmployee &&
-                  canCancelOnboardingRequests &&
-                  !isCancelled &&
-                  !isCompleted &&
-                  allowedActions.has("cancel")
-                const canComplete =
-                  !pendingEmployee &&
-                  canCompleteOnboardingRequests &&
-                  !isCancelled &&
-                  !isCompleted &&
-                  allowedActions.has("complete")
-                const canDelete =
-                  !pendingEmployee && canUpdateOnboardingRequests && allowedActions.has("delete")
-                const pendingEmployeeId = readNumber(row, ["employee_id", "employeeId"])
-                return (
-                  <TableRow
-                    key={requestId ?? `pending-employee-${pendingEmployeeId ?? index}`}
-                    className="cursor-pointer"
+                  {requestStatusOptions.map((status) => (
+                    <option key={status} value={status}>
+                      {status === "all" ? "All statuses" : toTitleCaseWords(status)}
+                    </option>
+                  ))}
+                </select>
+                {isEmployeeMode ? null : (
+                  <select
+                    className="h-8 min-w-[9rem] max-w-[12rem] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
+                    value={requestEmployeeFilter}
+                    onChange={(event) => setRequestEmployeeFilter(event.target.value)}
+                    aria-label="Filter by employee"
+                  >
+                    <option value="">All employees</option>
+                    {employees.map((row, index) => {
+                      const employeeId = readNumber(row, ["id", "employee_id", "user_id"])
+                      if (employeeId === null) return null
+                      return (
+                        <option key={`req-emp-${employeeId}-${index}`} value={String(employeeId)}>
+                          {resolveEmployeeLabel(employeeId)}
+                        </option>
+                      )
+                    })}
+                  </select>
+                )}
+              </>
+            }
+            toolbarActions={
+              <>
+                {canCreateOnboardingRequests && !isEmployeeMode ? (
+                  <Button
+                    type="button"
+                    className="h-8 px-2.5 text-xs"
                     onClick={() => {
-                      if (pendingEmployee) {
-                        return
-                      }
-                      void openRequestDetails(row)
+                      void openRequestSheet()
                     }}
                   >
-                    <TableCell className="text-xs">{requestId ?? "-"}</TableCell>
-                    <TableCell className="text-xs font-medium">{requestRowEmployeeLabel(row)}</TableCell>
-                    <TableCell className="text-xs">{readString(row, ["title", "name"])}</TableCell>
-                    <TableCell>
-                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${statusBadgeClass(requestStatus)}`}>
-                        {toTitleCaseWords(readString(row, ["status"]))}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <div
-                        className="flex min-h-8 flex-wrap items-center justify-end gap-1"
-                        onClick={(event) => event.stopPropagation()}
-                      >
-                        {pendingEmployee ? (
-                          canCreateOnboardingRequests ? (
-                            <Button
-                              type="button"
-                              size="sm"
-                              className="h-7 px-2 text-[11px]"
-                              disabled={saving}
-                              onClick={() => void startPendingOnboarding(row)}
-                            >
-                              Start
-                            </Button>
-                          ) : (
-                            <span className="text-[11px] text-muted-foreground">Awaiting request</span>
-                          )
-                        ) : canSubmit ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="h-7 px-2 text-[11px]"
-                            title="Submit"
-                            aria-label="Submit"
-                            disabled={saving}
-                            onClick={() => void runRequestAction(requestId, "submit")}
-                          >
-                            <Send className="h-3.5 w-3.5" />
-                            Submit
-                          </Button>
-                        ) : null}
-                        {!pendingEmployee && canApprove ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="h-7 px-2 text-[11px]"
-                            title="Approve"
-                            aria-label="Approve"
-                            disabled={saving}
-                            onClick={() => void runRequestAction(requestId, "approve")}
-                          >
-                            <BadgeCheck size={14} animation="path-loop" animateOnHover="path-loop" />
-                            Approve
-                          </Button>
-                        ) : null}
-                        {canReject ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="h-7 px-2 text-[11px]"
-                            title="Reject"
-                            aria-label="Reject"
-                            disabled={saving}
-                            onClick={() => void runRequestAction(requestId, "reject")}
-                          >
-                            <CircleX size={14} animation="default" animateOnHover="default" />
-                            Reject
-                          </Button>
-                        ) : null}
-                        {canCancel ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="h-7 px-2 text-[11px]"
-                            title="Cancel"
-                            aria-label="Cancel"
-                            disabled={saving}
-                            onClick={() => void runRequestAction(requestId, "cancel")}
-                          >
-                            <Ban className="h-3.5 w-3.5" />
-                            Cancel
-                          </Button>
-                        ) : null}
-                        {canComplete ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            className="h-7 px-2 text-[11px]"
-                            title="Complete"
-                            aria-label="Complete"
-                            disabled={saving}
-                            onClick={() => void runRequestAction(requestId, "complete")}
-                          >
-                            <CheckCheck className="h-3.5 w-3.5" />
-                            Complete
-                          </Button>
-                        ) : null}
-                        {canDelete ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="h-7 px-2 text-[11px] text-rose-600"
-                            title="Delete"
-                            aria-label="Delete"
-                            disabled={saving}
-                            onClick={() => void runRequestAction(requestId, "delete")}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        ) : null}
-                        {!pendingEmployee && !canSubmit && !canApprove && !canReject && !canCancel && !canComplete && !canDelete ? (
-                          <span className="text-[11px] text-muted-foreground">No actions</span>
-                        ) : null}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-              {loading && filteredRequests.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="py-10 text-center">
-                    <div className="flex flex-col items-center justify-center gap-2">
-                      <LumaSpin />
-                      <p className="text-xs text-muted-foreground">Loading requests…</p>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ) : null}
-              {!loading && filteredRequests.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center text-xs text-muted-foreground">
-                    No onboarding requests found.
-                  </TableCell>
-                </TableRow>
-              ) : null}
-            </TableBody>
-          </Table>
-          </div>
+                    <Plus className="mr-1.5 h-3.5 w-3.5" />
+                    Create Request
+                  </Button>
+                ) : null}
+                <button
+                  type="button"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-sm disabled:opacity-60"
+                  onClick={() => void reloadAll(activeTab, true)}
+                  disabled={loading}
+                  aria-label="Refresh"
+                  title="Refresh"
+                >
+                  <RefreshCw className={cn("size-3.5 text-primary", loading ? "animate-spin" : "")} />
+                </button>
+              </>
+            }
+          />
 
           <Sheet open={requestSheetOpen} onOpenChange={setRequestSheetOpen}>
             <SheetContent
@@ -5065,158 +5362,71 @@ export function OnboardingView() {
         </div>
       ) : activeTab === "workflows" && canViewOnboardingWorkflows ? (
         <div className="space-y-2">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <SearchToggleField
-              className="min-w-0"
-              placeholder="Search workflows"
-              value={workflowSearch}
-              onChange={setWorkflowSearch}
-            />
-            <select
-              className="h-8 min-w-[8.5rem] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
-              value={workflowStatusFilter}
-              onChange={(event) => setWorkflowStatusFilter(event.target.value)}
-              aria-label="Filter workflow status"
-            >
-              {workflowStatusOptions.map((status) => (
-                <option key={status} value={status}>
-                  {status === "all" ? "All statuses" : toTitleCaseWords(status)}
-                </option>
-              ))}
-            </select>
-            <div className="ml-auto flex flex-wrap items-center gap-1.5">
-              {canCreateOnboardingWorkflows ? (
-                <Button
-                  type="button"
-                  className="h-8 px-2.5 text-xs"
-                  onClick={() => {
-                    void openCreateWorkflowSheet()
-                  }}
+          <ResizableTable
+            title="Onboarding Workflows"
+            data={filteredWorkflows}
+            columns={onboardingWorkflowColumns}
+            loading={loading}
+            storageKey="onboarding-workflows"
+            enableAnimations
+            itemsPerPage={15}
+            showExport={false}
+            getRowId={(row, index) => String(readNumber(row, ["id", "workflow_id"]) ?? index)}
+            onRowSelect={(_, row) => {
+              if (!row || !canUpdateOnboardingWorkflows) {
+                return
+              }
+              void openEditWorkflowSheet(readNumber(row, ["id", "workflow_id"]), row)
+            }}
+            toolbarStart={
+              <>
+                <SearchToggleField
+                  className="min-w-0 !w-auto !max-w-[14rem] !flex-none"
+                  placeholder="Search workflows"
+                  value={workflowSearch}
+                  onChange={setWorkflowSearch}
+                />
+                <select
+                  className="h-8 min-w-[8.5rem] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
+                  value={workflowStatusFilter}
+                  onChange={(event) => setWorkflowStatusFilter(event.target.value)}
+                  aria-label="Filter workflow status"
                 >
-                  <Plus className="mr-1.5 h-3.5 w-3.5" />
-                  Create Workflow
-                </Button>
-              ) : null}
-              <button
-                type="button"
-                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-sm disabled:opacity-60"
-                onClick={() => void reloadAll(activeTab, true)}
-                disabled={loading}
-                aria-label="Refresh"
-                title="Refresh"
-              >
-                <RefreshCw className={cn("size-3.5 text-primary", loading ? "animate-spin" : "")} />
-              </button>
-            </div>
-          </div>
-
-          <div className="overflow-hidden rounded-lg border border-slate-200">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="text-xs">ID</TableHead>
-                <TableHead className="text-xs">Name</TableHead>
-                <TableHead className="text-xs">Description</TableHead>
-                <TableHead className="text-xs">Status</TableHead>
-                <TableHead className="text-xs">Default</TableHead>
-                <TableHead className="w-[100px] text-right text-xs">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredWorkflows.map((row, index) => {
-                const workflowId = readNumber(row, ["id", "workflow_id"])
-                const workflowStatus = readString(row, ["status"])
-                const isDefault = asTruthyBoolean(row.is_default ?? row.default)
-                return (
-                  <TableRow
-                    key={workflowId ?? `workflow-${index}`}
-                    className={canUpdateOnboardingWorkflows ? "cursor-pointer hover:bg-slate-50/80" : undefined}
-                    onClick={
-                      canUpdateOnboardingWorkflows
-                        ? () => void openEditWorkflowSheet(workflowId, row)
-                        : undefined
-                    }
+                  {workflowStatusOptions.map((status) => (
+                    <option key={status} value={status}>
+                      {status === "all" ? "All statuses" : toTitleCaseWords(status)}
+                    </option>
+                  ))}
+                </select>
+              </>
+            }
+            toolbarActions={
+              <>
+                {canCreateOnboardingWorkflows ? (
+                  <Button
+                    type="button"
+                    className="h-8 px-2.5 text-xs"
+                    onClick={() => {
+                      void openCreateWorkflowSheet()
+                    }}
                   >
-                    <TableCell className="text-xs">{workflowId ?? "-"}</TableCell>
-                    <TableCell className="text-xs font-medium">{readString(row, ["name", "title"])}</TableCell>
-                    <TableCell className="max-w-[18rem] truncate text-xs text-slate-600" title={readString(row, ["description"])}>
-                      {readString(row, ["description"])}
-                    </TableCell>
-                    <TableCell>
-                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${statusBadgeClass(workflowStatus)}`}>
-                        {toTitleCaseWords(workflowStatus)}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-xs">{isDefault ? "Yes" : "No"}</TableCell>
-                    <TableCell onClick={(event) => event.stopPropagation()}>
-                      <div className="flex items-center justify-end gap-1">
-                        {canUpdateOnboardingWorkflows ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="h-7 w-7 px-0"
-                            onClick={() => void openEditWorkflowSheet(workflowId, row)}
-                            aria-label={`Edit workflow ${workflowId ?? index + 1}`}
-                            title="Edit workflow"
-                            disabled={saving}
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </Button>
-                        ) : null}
-                        {canCreateOnboardingWorkflows ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="h-7 px-2 text-[11px]"
-                            onClick={() => void cloneWorkflow(workflowId, row)}
-                            aria-label={`Clone workflow ${workflowId ?? index + 1}`}
-                            title="Clone workflow"
-                            disabled={saving}
-                          >
-                            Copy
-                          </Button>
-                        ) : null}
-                        {canDeleteOnboardingWorkflows ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="h-7 w-7 px-0 text-rose-600"
-                            onClick={() => void removeWorkflow(workflowId)}
-                            aria-label={`Delete workflow ${workflowId ?? index + 1}`}
-                            title="Delete workflow"
-                            disabled={saving}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        ) : null}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-              {loading && filteredWorkflows.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="py-10 text-center">
-                    <div className="flex flex-col items-center justify-center gap-2">
-                      <LumaSpin />
-                      <p className="text-xs text-muted-foreground">Loading workflows…</p>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ) : null}
-              {!loading && filteredWorkflows.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center text-xs text-muted-foreground">
-                    No workflows found.
-                  </TableCell>
-                </TableRow>
-              ) : null}
-            </TableBody>
-          </Table>
-          </div>
+                    <Plus className="mr-1.5 h-3.5 w-3.5" />
+                    Create Workflow
+                  </Button>
+                ) : null}
+                <button
+                  type="button"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-sm disabled:opacity-60"
+                  onClick={() => void reloadAll(activeTab, true)}
+                  disabled={loading}
+                  aria-label="Refresh"
+                  title="Refresh"
+                >
+                  <RefreshCw className={cn("size-3.5 text-primary", loading ? "animate-spin" : "")} />
+                </button>
+              </>
+            }
+          />
 
           <Sheet
             open={workflowSheetOpen}
@@ -5498,9 +5708,24 @@ export function OnboardingView() {
                 </div>
                 <div className="grid gap-1">
                   <Select
-                    value={workflowForm.assigned_role_id}
+                    value={workflowForm.assigned_role_id || "none"}
                     onValueChange={(value) =>
-                      setWorkflowForm((prev) => ({ ...prev, assigned_role_id: value ?? "" }))
+                      setWorkflowForm((prev) => {
+                        const nextRole = !value || value === "none" ? "" : value
+                        const nextRoleId = Number(nextRole)
+                        const selectedUserId = Number(prev.assigned_user_id)
+                        const selectedUser = findAssigneeRecord(users, selectedUserId)
+                        const keepUser =
+                          !nextRole ||
+                          !selectedUser ||
+                          Number.isNaN(selectedUserId) ||
+                          recordHasRole(selectedUser, nextRoleId)
+                        return {
+                          ...prev,
+                          assigned_role_id: nextRole,
+                          assigned_user_id: keepUser ? prev.assigned_user_id : "",
+                        }
+                      })
                     }
                   >
                     <SelectTrigger className="h-11 w-full">
@@ -5511,10 +5736,11 @@ export function OnboardingView() {
                               "name",
                               "title",
                             ])
-                          : "Assigned role (optional)"}
+                          : "No role selected"}
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="none">No role selected</SelectItem>
                       {roles.map((row) => {
                         const roleId = readNumber(row, ["id", "role_id"])
                         if (roleId === null) return null
@@ -5527,14 +5753,17 @@ export function OnboardingView() {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    Assign a role if this step should be owned by a role-based queue.
+                    Assign a role if this step should be owned by a role-based queue. Choosing a role filters the user list to people in that role.
                   </p>
                 </div>
                 <div className="grid gap-1">
                   <Select
-                    value={workflowForm.assigned_user_id}
+                    value={workflowForm.assigned_user_id || "none"}
                     onValueChange={(value) =>
-                      setWorkflowForm((prev) => ({ ...prev, assigned_user_id: value ?? "" }))
+                      setWorkflowForm((prev) => ({
+                        ...prev,
+                        assigned_user_id: !value || value === "none" ? "" : value,
+                      }))
                     }
                   >
                     <SelectTrigger className="h-11 w-full">
@@ -5546,28 +5775,45 @@ export function OnboardingView() {
                               ["id", "company_user_id", "user_id"],
                               ["full_name", "name", "email"]
                             )
-                          : "Assigned user (optional)"}
+                          : "No specific user"}
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                      {users.map((row) => {
-                        const userId = readNumber(row, ["id", "company_user_id", "user_id"])
+                      <SelectItem value="none">No specific user</SelectItem>
+                      {roleUsersLoading ? (
+                        <SelectItem value="loading" disabled>
+                          Loading people in this role…
+                        </SelectItem>
+                      ) : null}
+                      {assignableUsers.map((row) => {
+                        const userId = preferredAssigneeId(row)
                         if (userId === null) return null
+                        const label = resolveOptionLabel(
+                          [row, ...users],
+                          userId,
+                          ["id", "company_user_id", "user_id"],
+                          ["full_name", "name", "email"]
+                        )
                         return (
-                          <SelectItem key={userId} value={String(userId)}>
-                            {resolveOptionLabel(
-                              users,
-                              userId,
-                              ["id", "company_user_id", "user_id"],
-                              ["full_name", "name", "email"]
-                            )}
+                          <SelectItem
+                            key={userId}
+                            value={String(userId)}
+                            data-search-text={`${label} ${userId}`}
+                          >
+                            {label}
                           </SelectItem>
                         )
                       })}
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    Assign a user if this step should go directly to a specific person. You can choose a role, a user, or both, but not neither.
+                    {workflowForm.assigned_role_id
+                      ? roleUsersLoading
+                        ? "Loading people assigned to this role…"
+                        : roleUsers.length > 0
+                          ? "Showing people in the selected role. Use search in the list to find someone."
+                          : "Could not load that role’s members. Showing all company users so you can still pick someone."
+                      : "Assign a person if this step should go to someone specific. You can choose a role, a user, or both, but not neither."}
                   </p>
                 </div>
               </div>

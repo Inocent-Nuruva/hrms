@@ -376,6 +376,8 @@ interface ResizableTableProps<T = Record<string, unknown>> {
   itemsPerPage?: number;
   loading?: boolean;
   showCheckboxes?: boolean;
+  selectedRowIds?: string[];
+  onSelectedRowIdsChange?: (rowIds: string[]) => void;
   /**
    * Server-driven pagination: when `onPageChange` is set, the table does not
    * slice `data` client-side. Pass the current page (1-based), total pages,
@@ -444,6 +446,8 @@ export function ResizableTable<T = Record<string, unknown>>({
   itemsPerPage = 10,
   loading = false,
   showCheckboxes = false,
+  selectedRowIds: controlledSelectedRowIds,
+  onSelectedRowIdsChange,
   page: controlledPage,
   totalPages: controlledTotalPages,
   totalItems: controlledTotalItems,
@@ -457,7 +461,8 @@ export function ResizableTable<T = Record<string, unknown>>({
   hiddenColumnKeys = [],
   storageKey
 }: ResizableTableProps<T> = {}) {
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [internalSelectedIds, setInternalSelectedIds] = useState<string[]>([]);
+  const selectedIds = controlledSelectedRowIds ?? internalSelectedIds;
   const [mounted, setMounted] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const isServerPagination = typeof onPageChange === "function";
@@ -675,14 +680,17 @@ export function ResizableTable<T = Record<string, unknown>>({
     );
   }, [getRowId]);
 
+  const handleSelectionToggle = (rowId: string) => {
+    const next = selectedIds.includes(rowId)
+      ? selectedIds.filter((id) => id !== rowId)
+      : [...selectedIds, rowId];
+    if (controlledSelectedRowIds === undefined) {
+      setInternalSelectedIds(next);
+    }
+    onSelectedRowIdsChange?.(next);
+  };
+
   const handleRowSelect = (rowId: string, item?: T) => {
-    setSelectedIds((prev) => {
-      if (prev.includes(rowId)) {
-        return prev.filter((id) => id !== rowId);
-      } else {
-        return [...prev, rowId];
-      }
-    });
     if (onRowSelect) {
       onRowSelect(rowId, item);
     }
@@ -693,14 +701,18 @@ export function ResizableTable<T = Record<string, unknown>>({
 
   const handleSelectAll = () => {
     const pageIds = paginatedData.map((item, idx) => getRowIdentifier(item, idx));
-    if (selectedIds.length === pageIds.length && pageIds.length > 0) {
-      setSelectedIds((prev) => prev.filter((id) => !pageIds.includes(id)));
-    } else {
-      setSelectedIds((prev) => {
-        const others = prev.filter((id) => !pageIds.includes(id));
-        return [...others, ...pageIds];
-      });
+    const allPageRowsSelected =
+      pageIds.length > 0 && pageIds.every((id) => selectedIds.includes(id));
+    const next = allPageRowsSelected
+      ? selectedIds.filter((id) => !pageIds.includes(id))
+      : [
+          ...selectedIds.filter((id) => !pageIds.includes(id)),
+          ...pageIds,
+        ];
+    if (controlledSelectedRowIds === undefined) {
+      setInternalSelectedIds(next);
     }
+    onSelectedRowIdsChange?.(next);
   };
 
   const handleSort = (field: string) => {
@@ -1188,9 +1200,15 @@ export function ResizableTable<T = Record<string, unknown>>({
                 <div className="flex items-center justify-center border-r border-border pr-1.5 flex-shrink-0" style={{ width: getColumnWidth('checkbox') || 36 }}>
                   <input
                     type="checkbox"
+                    aria-label={`Select all ${title.toLowerCase()} on this page`}
                     className="w-4 h-4 rounded border-border/40 cursor-pointer"
                     style={mounted ? { accentColor: isDark ? "rgb(113, 113, 122)" : "rgb(161, 161, 170)" } : {}}
-                    checked={paginatedData.length > 0 && selectedIds.length === paginatedData.length}
+                    checked={
+                      paginatedData.length > 0 &&
+                      paginatedData.every((item, index) =>
+                        selectedIds.includes(getRowIdentifier(item, index)),
+                      )
+                    }
                     onChange={handleSelectAll}
                   />
                 </div>
@@ -1268,12 +1286,13 @@ export function ResizableTable<T = Record<string, unknown>>({
                           <div className="flex items-center justify-center border-r border-border pr-1.5 flex-shrink-0" style={{ width: getColumnWidth('checkbox') || 36 }}>
                             <input
                               type="checkbox"
+                              aria-label={`${isSelected ? "Deselect" : "Select"} ${title.toLowerCase()} row ${index + 1}`}
                               className="w-4 h-4 rounded border-border/40 cursor-pointer"
                               style={mounted ? { accentColor: isDark ? "rgb(113, 113, 122)" : "rgb(161, 161, 170)" } : {}}
                               checked={isSelected}
                               onChange={(e) => {
                                 e.stopPropagation();
-                                handleRowSelect(rowId, item);
+                                handleSelectionToggle(rowId);
                               }}
                               onClick={(e) => e.stopPropagation()}
                             />

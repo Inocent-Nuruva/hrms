@@ -22,6 +22,7 @@ import {
   type EmployeeAccessRemovalTarget,
 } from "@/components/dashboard/employee-access-removal-dialog";
 import {
+  archiveEmployeeProfile,
   buildUserTwoFactorMap,
   disableUserTwoFactor,
   enableUserTwoFactor,
@@ -33,6 +34,10 @@ import {
   type AdminRecord,
   type EmployeesQueryParams,
 } from "@/lib/admin-api";
+import {
+  filterEmployeesByDirectorySearch,
+  mergeEmployeeDirectoryRows,
+} from "@/lib/employee-directory-search";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useRenderDiagnostics } from "@/hooks/use-render-diagnostics";
 import { useDashboardActor } from "@/hooks/use-dashboard-actor";
@@ -188,57 +193,34 @@ function employeeDisplayName(row: AdminRecord) {
   );
 }
 
-function normalizeEmployeeSearchValue(value: string) {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
+function employeeRecordId(row: AdminRecord): number | null {
+  const idRaw = row.id ?? row.employee_id ?? row.employeeId;
+  if (typeof idRaw === "number" && Number.isFinite(idRaw)) {
+    return idRaw;
+  }
+  if (typeof idRaw === "string" && idRaw.trim()) {
+    const parsed = Number(idRaw);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function employeeEmploymentStatus(row: AdminRecord) {
+  return readString(row, [
+    "employment_status",
+    "employmentStatus",
+    "status",
+  ])
     .toLowerCase()
     .trim();
 }
 
-function matchesEmployeeSearch(row: AdminRecord, search: string) {
-  const linkedUser =
-    asRecord(row.company_user) ??
-    asRecord(row.companyUser) ??
-    asRecord(row.user) ??
-    asRecord(row.account);
-  const values = [
-    employeeDisplayName(row),
-    readString(row, ["first_name", "firstName"]),
-    readString(row, ["middle_name", "middleName"]),
-    readString(row, ["last_name", "lastName"]),
-    readString(row, [
-      "preferred_name",
-      "preferredName",
-      "display_name",
-      "displayName",
-    ]),
-    readString(row, [
-      "employee_no",
-      "employeeNo",
-      "employee_number",
-      "employeeNumber",
-    ]),
-    readString(row, [
-      "email",
-      "work_email",
-      "workEmail",
-      "personal_email",
-      "personalEmail",
-    ]),
-    readString(linkedUser ?? {}, ["first_name", "firstName"]),
-    readString(linkedUser ?? {}, ["middle_name", "middleName"]),
-    readString(linkedUser ?? {}, ["last_name", "lastName"]),
-    readString(linkedUser ?? {}, ["username", "user_no", "email"]),
-  ];
-  const haystack = normalizeEmployeeSearchValue(
-    values.filter((value) => value !== "-").join(" "),
-  );
-  const terms = normalizeEmployeeSearchValue(search)
-    .split(/\s+/)
-    .filter(Boolean);
-  return terms.every((term) => haystack.includes(term));
-}
+type EmployeeDirectoryMode = "current" | "inactive";
+
+type EmployeesListViewProps = {
+  directoryMode?: EmployeeDirectoryMode;
+};
+
 
 function employeeProfileHref(employeeNo: string, missingItemKey?: string) {
   const params = new URLSearchParams();
@@ -296,7 +278,9 @@ function writeSnapshot(cacheKey: string, snapshot: EmployeeListSnapshot) {
   } catch {}
 }
 
-export function EmployeesListView() {
+export function EmployeesListView({
+  directoryMode = "current",
+}: EmployeesListViewProps = {}) {
   const router = useRouter();
   const actor = useDashboardActor();
   const [query, setQuery] = React.useState(DEFAULT_QUERY);
@@ -313,6 +297,12 @@ export function EmployeesListView() {
   const [removalOpen, setRemovalOpen] = React.useState(false);
   const [removalTarget, setRemovalTarget] =
     React.useState<EmployeeAccessRemovalTarget | null>(null);
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = React.useState<string[]>([]);
+  const [bulkArchiveOpen, setBulkArchiveOpen] = React.useState(false);
+  const [bulkArchiveBusy, setBulkArchiveBusy] = React.useState(false);
+  const [bulkArchiveResults, setBulkArchiveResults] = React.useState<
+    Array<{ id: number; name: string; success: boolean; message?: string }>
+  >([]);
   const [twoFactorTarget, setTwoFactorTarget] = React.useState<{
     userId: string | number;
     employeeName: string;
@@ -332,10 +322,15 @@ export function EmployeesListView() {
     actor.permissionLabels,
     "users:update",
   );
-  const canRemoveEmployee = canPerformPermission(actor.permissionLabels, {
-    permissions: ["employees:update", "employees:delete"],
-    mode: "any",
-  });
+  const canRemoveEmployee =
+    directoryMode === "current" &&
+    canPerformPermission(actor.permissionLabels, {
+      permissions: ["employees:update", "employees:delete"],
+      mode: "any",
+    });
+  const canArchiveEmployees =
+    directoryMode === "current" &&
+    canPerformPermission(actor.permissionLabels, "employees:delete");
 
   // Defense in depth: never render the company directory for employee shell users.
   React.useEffect(() => {
@@ -364,17 +359,24 @@ export function EmployeesListView() {
     () => ({
       ...query,
       search: debouncedSearch,
-      employment_status: query.employment_status || undefined,
+      employment_status:
+        directoryMode === "inactive"
+          ? ("inactive" as const)
+          : query.employment_status || undefined,
       branch_id: query.branch_id > 0 ? query.branch_id : undefined,
       department_id: query.department_id > 0 ? query.department_id : undefined,
       position_id: query.position_id > 0 ? query.position_id : undefined,
     }),
-    [debouncedSearch, query],
+    [debouncedSearch, directoryMode, query],
   );
   const queryCacheKey = React.useMemo(
     () => JSON.stringify({ ...normalizedQuery, page }),
     [normalizedQuery, page],
   );
+
+  React.useEffect(() => {
+    setSelectedEmployeeIds([]);
+  }, [queryCacheKey]);
 
   React.useLayoutEffect(() => {
     const snapshot = readSnapshot(queryCacheKey);
@@ -418,28 +420,58 @@ export function EmployeesListView() {
           signal: requestController.signal,
           cacheTtlMs: env.NEXT_PUBLIC_LIST_CACHE_TTL_SHORT_MS,
         };
-        const result = search
-          ? await listAllEmployees(token, normalizedQuery, requestOptions).then(
-              (directoryRows) => {
-                const matchingRows = directoryRows.filter((row) =>
-                  matchesEmployeeSearch(row, search),
-                );
-                const start = (page - 1) * normalizedQuery.limit;
-                return {
-                  rows: matchingRows.slice(
-                    start,
-                    start + normalizedQuery.limit,
-                  ),
-                  page,
-                  limit: normalizedQuery.limit,
-                  total: matchingRows.length,
-                  totalPages: Math.max(
-                    1,
-                    Math.ceil(matchingRows.length / normalizedQuery.limit),
-                  ),
-                };
-              },
-            )
+        const needsFullDirectory =
+          Boolean(search) ||
+          (directoryMode === "current" && !normalizedQuery.employment_status);
+        const result = needsFullDirectory
+          ? await Promise.all([
+              listAllEmployees(token, normalizedQuery, requestOptions),
+              search
+                ? listEmployees(
+                    token,
+                    {
+                      ...normalizedQuery,
+                      page: 1,
+                      limit: Math.min(
+                        100,
+                        env.NEXT_PUBLIC_MAX_PAGE_SIZE || 100,
+                      ),
+                      search,
+                    },
+                    requestOptions,
+                  ).catch(() => ({ rows: [] as AdminRecord[] }))
+                : Promise.resolve({ rows: [] as AdminRecord[] }),
+            ]).then(([directoryRows, backendSearch]) => {
+              const combinedRows = search
+                ? mergeEmployeeDirectoryRows([
+                    ...backendSearch.rows,
+                    ...filterEmployeesByDirectorySearch(
+                      directoryRows,
+                      search,
+                    ),
+                  ])
+                : directoryRows;
+              const matchingRows = combinedRows.filter((row) => {
+                const status = employeeEmploymentStatus(row);
+                return directoryMode === "inactive"
+                  ? status === "inactive"
+                  : status !== "inactive";
+              });
+              const start = (page - 1) * normalizedQuery.limit;
+              return {
+                rows: matchingRows.slice(
+                  start,
+                  start + normalizedQuery.limit,
+                ),
+                page,
+                limit: normalizedQuery.limit,
+                total: matchingRows.length,
+                totalPages: Math.max(
+                  1,
+                  Math.ceil(matchingRows.length / normalizedQuery.limit),
+                ),
+              };
+            })
           : await listEmployees(
               token,
               {
@@ -532,7 +564,7 @@ export function EmployeesListView() {
         }
       }
     },
-    [normalizedQuery, page, queryCacheKey],
+    [directoryMode, normalizedQuery, page, queryCacheKey],
   );
 
   React.useEffect(() => {
@@ -584,14 +616,8 @@ export function EmployeesListView() {
   };
 
   const openRemovalDialog = React.useCallback((row: AdminRecord) => {
-    const idRaw = row.id ?? row.employee_id ?? row.employeeId;
-    const employeeId =
-      typeof idRaw === "number" && Number.isFinite(idRaw)
-        ? idRaw
-        : typeof idRaw === "string" && idRaw.trim()
-          ? Number(idRaw)
-          : null;
-    if (employeeId === null || !Number.isFinite(employeeId)) {
+    const employeeId = employeeRecordId(row);
+    if (employeeId === null) {
       return;
     }
     setRemovalTarget({
@@ -607,6 +633,71 @@ export function EmployeesListView() {
     });
     setRemovalOpen(true);
   }, []);
+
+  const selectedEmployees = React.useMemo(
+    () =>
+      rows.flatMap((row) => {
+        const id = employeeRecordId(row);
+        if (id === null || !selectedEmployeeIds.includes(String(id))) {
+          return [];
+        }
+        return [{ id, name: employeeDisplayName(row) }];
+      }),
+    [rows, selectedEmployeeIds],
+  );
+
+  const confirmBulkArchive = React.useCallback(async () => {
+    const token = readStoredToken();
+    if (!token) {
+      toast.error("Authentication required. Please log in again.");
+      return;
+    }
+    if (selectedEmployees.length === 0) {
+      toast.error("Select at least one employee.");
+      return;
+    }
+
+    setBulkArchiveBusy(true);
+    setBulkArchiveResults([]);
+    const results = await Promise.all(
+      selectedEmployees.map(async (employee) => {
+        try {
+          await archiveEmployeeProfile(token, employee.id);
+          return { ...employee, success: true };
+        } catch (errorObject) {
+          return {
+            ...employee,
+            success: false,
+            message:
+              errorObject instanceof Error
+                ? errorObject.message
+                : "Could not archive this employee.",
+          };
+        }
+      }),
+    );
+
+    const succeededIds = new Set(
+      results.filter((result) => result.success).map((result) => String(result.id)),
+    );
+    setBulkArchiveResults(results);
+    setSelectedEmployeeIds((current) =>
+      current.filter((id) => !succeededIds.has(id)),
+    );
+    employeeListSnapshotCache.clear();
+    await fetchEmployees();
+    setBulkArchiveBusy(false);
+
+    const successCount = results.filter((result) => result.success).length;
+    const failureCount = results.length - successCount;
+    if (failureCount === 0) {
+      toast.success(`${successCount} employee${successCount === 1 ? "" : "s"} archived.`);
+    } else if (successCount > 0) {
+      toast.warning(`${successCount} archived; ${failureCount} failed.`);
+    } else {
+      toast.error("No employees were archived.");
+    }
+  }, [fetchEmployees, selectedEmployees]);
 
   const requestTwoFactorChange = React.useCallback(
     (row: AdminRecord) => {
@@ -920,12 +1011,16 @@ export function EmployeesListView() {
       {error ? <p className="text-sm text-rose-600">{error}</p> : null}
 
       <ResizableTable
-        title="Employees"
+        title={directoryMode === "inactive" ? "Inactive Employees" : "Employees"}
         data={rows}
         columns={employeeColumns}
         onRowSelect={(id, row) => {
           if (row) openEmployeeDetails(row as AdminRecord);
         }}
+        getRowId={(row, index) => String(employeeRecordId(row) ?? index)}
+        showCheckboxes={canArchiveEmployees}
+        selectedRowIds={selectedEmployeeIds}
+        onSelectedRowIdsChange={setSelectedEmployeeIds}
         loading={loading}
         storageKey="employees"
         enableAnimations
@@ -938,36 +1033,113 @@ export function EmployeesListView() {
           <>
             <SearchToggleField
               className="min-w-0 !w-auto !max-w-[14rem] !flex-none"
-              placeholder="Search name, email, phone, user_no"
+              placeholder="Search name, email, phone, or employee no"
               value={query.search}
               onChange={(value) => {
                 setPage(1);
                 setQuery((previous) => ({ ...previous, search: value }));
               }}
             />
-            <select
-              className="h-8 w-[8.5rem] shrink-0 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
-              value={query.employment_status}
-              onChange={(event) => {
-                setPage(1);
-                setQuery((previous) => ({
-                  ...previous,
-                  employment_status: event.target
-                    .value as typeof previous.employment_status,
-                }));
-              }}
-              aria-label="Filter employment status"
-            >
-              <option value="">All statuses</option>
-              <option value="onboarding">Onboarding</option>
-              <option value="active">Active</option>
-              <option value="suspended">Suspended</option>
-              <option value="terminated">Terminated</option>
-              <option value="exited">Exited</option>
-            </select>
+            {directoryMode === "current" ? (
+              <select
+                className="h-8 w-[8.5rem] shrink-0 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
+                value={query.employment_status}
+                onChange={(event) => {
+                  setPage(1);
+                  setQuery((previous) => ({
+                    ...previous,
+                    employment_status: event.target
+                      .value as typeof previous.employment_status,
+                  }));
+                }}
+                aria-label="Filter employment status"
+              >
+                <option value="">All statuses</option>
+                <option value="onboarding">Onboarding</option>
+                <option value="active">Active</option>
+                <option value="suspended">Suspended</option>
+                <option value="terminated">Terminated</option>
+                <option value="exited">Exited</option>
+              </select>
+            ) : null}
           </>
         }
+        toolbarActions={
+          canArchiveEmployees && selectedEmployees.length > 0 ? (
+            <button
+              type="button"
+              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-2 text-xs font-medium text-rose-700 hover:bg-rose-100"
+              onClick={() => {
+                setBulkArchiveResults([]);
+                setBulkArchiveOpen(true);
+              }}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Archive selected ({selectedEmployees.length})
+            </button>
+          ) : null
+        }
       />
+
+      <AlertDialog
+        open={bulkArchiveOpen}
+        onOpenChange={(open) => {
+          if (bulkArchiveBusy) return;
+          setBulkArchiveOpen(open);
+          if (!open) setBulkArchiveResults([]);
+        }}
+      >
+        <AlertDialogContent className="max-w-lg">
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {bulkArchiveResults.length > 0 ? "Bulk archive finished" : "Archive selected employees?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {bulkArchiveResults.length > 0
+                ? "Review the result for each selected employee."
+                : `${selectedEmployees.length} employee${selectedEmployees.length === 1 ? "" : "s"} will be archived. Historical records remain available to the backend.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          {bulkArchiveResults.length > 0 ? (
+            <ul className="max-h-64 space-y-1.5 overflow-y-auto text-sm">
+              {bulkArchiveResults.map((result) => (
+                <li
+                  key={result.id}
+                  className={result.success ? "text-emerald-700" : "text-rose-700"}
+                >
+                  {result.success ? "✓" : "✗"} {result.name}
+                  {!result.success && result.message ? `: ${result.message}` : ""}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <ul className="max-h-52 space-y-1 overflow-y-auto text-sm text-foreground">
+              {selectedEmployees.map((employee) => (
+                <li key={employee.id}>{employee.name}</li>
+              ))}
+            </ul>
+          )}
+
+          <AlertDialogFooter>
+            {bulkArchiveResults.length > 0 ? (
+              <AlertDialogCancel>Done</AlertDialogCancel>
+            ) : (
+              <>
+                <AlertDialogCancel disabled={bulkArchiveBusy}>Cancel</AlertDialogCancel>
+                <button
+                  type="button"
+                  className="rounded-md bg-rose-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+                  disabled={bulkArchiveBusy || selectedEmployees.length === 0}
+                  onClick={() => void confirmBulkArchive()}
+                >
+                  {bulkArchiveBusy ? "Archiving…" : "Archive employees"}
+                </button>
+              </>
+            )}
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <EmployeeAccessRemovalDialog
         open={removalOpen}

@@ -12,9 +12,7 @@ import {
 import { toast } from "sonner"
 
 import {
-  createOnboardingRequest,
-  createEmployeeProfile,
-  getOnboardingRequest,
+  createEmployeeInvitation,
   listBranches,
   listDepartmentPositions,
   listDepartments,
@@ -22,8 +20,7 @@ import {
   listOnboardingWorkflows,
   listPositions,
   type AdminRecord,
-  type CreateEmployeePayload,
-  type CreateEmployeeResponse,
+  type CreateEmployeeInvitationPayload,
 } from "@/lib/admin-api"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import { showErrorAlert } from "@/lib/error-alert"
@@ -49,7 +46,6 @@ import {
 } from "@/components/ui/tooltip"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { canPerformPermission } from "@/lib/dashboard-permissions"
-import { notifySubmittedRequestApprovers } from "@/lib/request-notifications"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 
@@ -59,7 +55,7 @@ const GENDER_OPTIONS = [
 ] as const
 
 const EMPLOYMENT_TYPES: ReadonlyArray<{
-  value: NonNullable<CreateEmployeePayload["employment_type"]>
+  value: CreateEmployeeInvitationPayload["employment_type"]
   label: string
 }> = [
   { value: "full_time", label: "Full Time" },
@@ -78,7 +74,9 @@ type LookupOption = {
 }
 
 function asRecord(value: unknown): AdminRecord | null {
-  return typeof value === "object" && value !== null ? (value as AdminRecord) : null
+  return typeof value === "object" && value !== null
+    ? (value as AdminRecord)
+    : null
 }
 
 function readStoredToken(): string {
@@ -88,7 +86,10 @@ function readStoredToken(): string {
   const authTokensRaw = window.localStorage.getItem(AUTH_STORAGE_KEYS.tokens)
   if (!authTokensRaw) return ""
   try {
-    const parsed = JSON.parse(authTokensRaw) as { accessToken?: string; access_token?: string }
+    const parsed = JSON.parse(authTokensRaw) as {
+      accessToken?: string
+      access_token?: string
+    }
     return (parsed.accessToken ?? parsed.access_token ?? "").trim()
   } catch {
     return ""
@@ -96,11 +97,22 @@ function readStoredToken(): string {
 }
 
 function getId(record: AdminRecord): number | null {
-  const candidates = ["id", "value", "request_id", "requestId", "employee_id", "employeeId", "branch_id", "department_id", "position_id"]
-  for (const k of candidates) {
-    const v = record[k]
-    if (typeof v === "number" && Number.isFinite(v)) return v
-    if (typeof v === "string" && v.trim() && !Number.isNaN(Number(v))) return Number(v)
+  const nested =
+    typeof record.employee === "object" && record.employee !== null
+      ? (record.employee as AdminRecord)
+      : null
+  const candidates = [record, nested]
+  const keys = ["id", "employee_id", "employeeId", "request_id", "requestId"]
+  for (const source of candidates) {
+    if (!source) continue
+    for (const k of keys) {
+      const v = source[k]
+      if (typeof v === "number" && Number.isFinite(v) && v > 0) return v
+      if (typeof v === "string" && v.trim() && !Number.isNaN(Number(v))) {
+        const parsed = Number(v)
+        if (parsed > 0) return parsed
+      }
+    }
   }
   return null
 }
@@ -110,7 +122,13 @@ function getName(record: AdminRecord, ...keys: string[]): string {
     const v = record[k]
     if (typeof v === "string" && v.trim()) return v.trim()
   }
-  for (const k of ["fullName", "full_name", "displayName", "display_name", "name"]) {
+  for (const k of [
+    "fullName",
+    "full_name",
+    "displayName",
+    "display_name",
+    "name",
+  ]) {
     const v = record[k]
     if (typeof v === "string" && v.trim()) return v.trim()
   }
@@ -141,7 +159,11 @@ function readNumberish(value: unknown) {
   if (typeof value === "number" && Number.isFinite(value)) {
     return value
   }
-  if (typeof value === "string" && value.trim() && !Number.isNaN(Number(value))) {
+  if (
+    typeof value === "string" &&
+    value.trim() &&
+    !Number.isNaN(Number(value))
+  ) {
     return Number(value)
   }
   return null
@@ -153,7 +175,11 @@ function readRelatedId(record: AdminRecord, keys: string[]) {
     if (typeof direct === "number" && Number.isFinite(direct)) {
       return direct
     }
-    if (typeof direct === "string" && direct.trim() && !Number.isNaN(Number(direct))) {
+    if (
+      typeof direct === "string" &&
+      direct.trim() &&
+      !Number.isNaN(Number(direct))
+    ) {
       return Number(direct)
     }
     if (typeof direct === "object" && direct !== null) {
@@ -179,7 +205,12 @@ function relatedDepartmentIds(record: AdminRecord) {
     if (id !== null) ids.add(id)
   }
 
-  for (const key of ["department", "departmentDetail", "primary_department", "primaryDepartment"]) {
+  for (const key of [
+    "department",
+    "departmentDetail",
+    "primary_department",
+    "primaryDepartment",
+  ]) {
     const nestedId = getId(asRecord(record[key]) ?? {})
     if (nestedId !== null) ids.add(nestedId)
   }
@@ -194,10 +225,15 @@ function relatedDepartmentIds(record: AdminRecord) {
     if (id !== null) ids.add(id)
   }
 
-  const assignments = Array.isArray(record.departments) ? record.departments : []
+  const assignments = Array.isArray(record.departments)
+    ? record.departments
+    : []
   for (const value of assignments) {
     const directAssignmentId = readNumberish(value)
-    if (directAssignmentId !== null && (typeof value === "number" || typeof value === "string")) {
+    if (
+      directAssignmentId !== null &&
+      (typeof value === "number" || typeof value === "string")
+    ) {
       ids.add(directAssignmentId)
       continue
     }
@@ -228,14 +264,19 @@ function relatedBranchId(record: AdminRecord) {
   )
 }
 
-function normalizeDepartmentPositionRows(rows: AdminRecord[], departmentId: number) {
+function normalizeDepartmentPositionRows(
+  rows: AdminRecord[],
+  departmentId: number,
+) {
   return rows.map((row) => {
     const nestedPosition =
       asRecord(row.position) ??
       asRecord(row.positionDetail) ??
       asRecord(row.primary_position) ??
       asRecord(row.primaryPosition)
-    const position = nestedPosition ? ({ ...row, ...nestedPosition } as AdminRecord) : row
+    const position = nestedPosition
+      ? ({ ...row, ...nestedPosition } as AdminRecord)
+      : row
     const existingIds = relatedDepartmentIds(position)
     existingIds.add(departmentId)
     return {
@@ -246,7 +287,11 @@ function normalizeDepartmentPositionRows(rows: AdminRecord[], departmentId: numb
   })
 }
 
-function getSelectedLabel(options: LookupOption[], id: number | null, fallback: string) {
+function getSelectedLabel(
+  options: LookupOption[],
+  id: number | null,
+  fallback: string,
+) {
   if (id === null) return fallback
   return options.find((option) => option.id === id)?.label ?? fallback
 }
@@ -255,11 +300,20 @@ function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
 }
 
+function normalizeInvitationPhone(value: string) {
+  const compact = value.trim().replace(/[()\s-]/g, "")
+  return compact.startsWith("00") ? `+${compact.slice(2)}` : compact
+}
+
+function isValidE164Phone(value: string) {
+  return /^\+[1-9]\d{7,14}$/.test(value)
+}
+
 function toLookupOptions(
   rows: AdminRecord[],
   labelKeys: string[],
   branchKeys: string[],
-  departmentKeys: string[]
+  departmentKeys: string[],
 ): LookupOption[] {
   return rows
     .map<LookupOption | null>((row) => {
@@ -301,7 +355,9 @@ function FieldShell({
 
 function SectionHeader({ title }: { title: string }) {
   return (
-    <h3 className="text-sm font-semibold tracking-tight text-foreground">{title}</h3>
+    <h3 className="text-sm font-semibold tracking-tight text-foreground">
+      {title}
+    </h3>
   )
 }
 
@@ -316,27 +372,33 @@ export function EmployeeInviteView() {
   const [departmentId, setDepartmentId] = React.useState<number | null>(null)
   const [positionId, setPositionId] = React.useState<number | null>(null)
   const [reportsToId, setReportsToId] = React.useState<number | null>(null)
-  const [employmentType, setEmploymentType] = React.useState<string>("full_time")
+  const [employmentType, setEmploymentType] =
+    React.useState<string>("full_time")
   const [hireDate, setHireDate] = React.useState<string>("")
   const [workflowId, setWorkflowId] = React.useState<number | null>(null)
 
   const [branches, setBranches] = React.useState<AdminRecord[]>([])
   const [departments, setDepartments] = React.useState<AdminRecord[]>([])
   const [positions, setPositions] = React.useState<AdminRecord[]>([])
-  const [departmentPositions, setDepartmentPositions] = React.useState<AdminRecord[]>([])
+  const [departmentPositions, setDepartmentPositions] = React.useState<
+    AdminRecord[]
+  >([])
   const [employees, setEmployees] = React.useState<AdminRecord[]>([])
   const [workflows, setWorkflows] = React.useState<AdminRecord[]>([])
 
   const [loading, setLoading] = React.useState(false)
-  const [departmentPositionsLoading, setDepartmentPositionsLoading] = React.useState(false)
-  const [departmentPositionsLoaded, setDepartmentPositionsLoaded] = React.useState(false)
+  const [departmentPositionsLoading, setDepartmentPositionsLoading] =
+    React.useState(false)
+  const [departmentPositionsLoaded, setDepartmentPositionsLoaded] =
+    React.useState(false)
   const [employeesLoading, setEmployeesLoading] = React.useState(false)
   const [submitting, setSubmitting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [token, setToken] = React.useState("")
   const canReadOnboardingWorkflows = React.useMemo(
-    () => canPerformPermission(actor.permissionLabels, "onboarding_workflows:read"),
-    [actor.permissionLabels]
+    () =>
+      canPerformPermission(actor.permissionLabels, "onboarding_workflows:read"),
+    [actor.permissionLabels],
   )
 
   React.useEffect(() => {
@@ -372,9 +434,24 @@ export function EmployeeInviteView() {
               totalPages: 0,
             })
         const [br, de, po, wo] = await Promise.allSettled([
-          listBranches(token, { page: 1, limit: 100, sortBy: "name", sortOrder: "ASC" }),
-          listDepartments(token, { page: 1, limit: 200, sortBy: "name", sortOrder: "ASC" }),
-          listPositions(token, { page: 1, limit: 200, sortBy: "name", sortOrder: "ASC" }),
+          listBranches(token, {
+            page: 1,
+            limit: 100,
+            sortBy: "name",
+            sortOrder: "ASC",
+          }),
+          listDepartments(token, {
+            page: 1,
+            limit: 200,
+            sortBy: "name",
+            sortOrder: "ASC",
+          }),
+          listPositions(token, {
+            page: 1,
+            limit: 200,
+            sortBy: "name",
+            sortOrder: "ASC",
+          }),
           workflowLookup,
         ])
         if (cancelled) return
@@ -414,7 +491,9 @@ export function EmployeeInviteView() {
         setEmployees([])
 
         if (failures.length > 0) {
-          setError(`Some reference data could not be loaded: ${failures.join(", ")}.`)
+          setError(
+            `Some reference data could not be loaded: ${failures.join(", ")}.`,
+          )
         }
       } finally {
         if (!cancelled) setLoading(false)
@@ -427,8 +506,9 @@ export function EmployeeInviteView() {
   }, [actor.ready, canReadOnboardingWorkflows, token])
 
   const branchOptions = React.useMemo(
-    () => toLookupOptions(branches, ["branch_name", "branchName", "name"], [], []),
-    [branches]
+    () =>
+      toLookupOptions(branches, ["branch_name", "branchName", "name"], [], []),
+    [branches],
   )
 
   const allDepartmentOptions = React.useMemo(
@@ -436,10 +516,16 @@ export function EmployeeInviteView() {
       toLookupOptions(
         departments,
         ["department_name", "departmentName", "name"],
-        ["branch_id", "branchId", "primary_branch_id", "primaryBranchId", "branch"],
-        []
+        [
+          "branch_id",
+          "branchId",
+          "primary_branch_id",
+          "primaryBranchId",
+          "branch",
+        ],
+        [],
       ),
-    [departments]
+    [departments],
   )
 
   // Strict cascade: departments only for the selected branch (no “show all” fallback).
@@ -453,10 +539,22 @@ export function EmployeeInviteView() {
       toLookupOptions(
         positions,
         ["position_name", "positionName", "name", "title"],
-        ["branch_id", "branchId", "primary_branch_id", "primaryBranchId", "branch"],
-        ["department_id", "departmentId", "primary_department_id", "primaryDepartmentId", "department"]
+        [
+          "branch_id",
+          "branchId",
+          "primary_branch_id",
+          "primaryBranchId",
+          "branch",
+        ],
+        [
+          "department_id",
+          "departmentId",
+          "primary_department_id",
+          "primaryDepartmentId",
+          "department",
+        ],
       ),
-    [positions]
+    [positions],
   )
 
   const positionOptions = React.useMemo(() => {
@@ -465,8 +563,20 @@ export function EmployeeInviteView() {
       return toLookupOptions(
         departmentPositions,
         ["position_name", "positionName", "name", "title"],
-        ["branch_id", "branchId", "primary_branch_id", "primaryBranchId", "branch"],
-        ["department_id", "departmentId", "primary_department_id", "primaryDepartmentId", "department"]
+        [
+          "branch_id",
+          "branchId",
+          "primary_branch_id",
+          "primaryBranchId",
+          "branch",
+        ],
+        [
+          "department_id",
+          "departmentId",
+          "primary_department_id",
+          "primaryDepartmentId",
+          "department",
+        ],
       )
     }
     const byDepartmentCandidates: Array<LookupOption | null> = positions
@@ -476,19 +586,25 @@ export function EmployeeInviteView() {
         if (id === null) return null
         return {
           id,
-          label: getName(record, "position_name", "positionName", "name", "title"),
+          label: getName(
+            record,
+            "position_name",
+            "positionName",
+            "name",
+            "title",
+          ),
           branchId: relatedBranchId(record),
           departmentId,
         } satisfies LookupOption
       })
     const byDepartment = byDepartmentCandidates.filter(
-      (option): option is LookupOption => option !== null
+      (option): option is LookupOption => option !== null,
     )
     if (byDepartment.length > 0) return byDepartment
     return allPositionOptions.filter(
       (option) =>
         option.departmentId === null &&
-        (option.branchId === null || option.branchId === branchId)
+        (option.branchId === null || option.branchId === branchId),
     )
   }, [
     allPositionOptions,
@@ -504,7 +620,11 @@ export function EmployeeInviteView() {
     const candidates: Array<LookupOption | null> = employees
       .filter((record) => {
         const employeeBranchId = relatedBranchId(record)
-        return branchId === null || employeeBranchId === null || employeeBranchId === branchId
+        return (
+          branchId === null ||
+          employeeBranchId === null ||
+          employeeBranchId === branchId
+        )
       })
       .map<LookupOption | null>((record) => {
         const id = getId(record)
@@ -519,18 +639,26 @@ export function EmployeeInviteView() {
             "display_name",
             "name",
             "firstName",
-            "first_name"
+            "first_name",
           ),
           branchId: relatedBranchId(record),
           departmentId,
         } satisfies LookupOption
       })
-    return candidates.filter((option): option is LookupOption => option !== null)
+    return candidates.filter(
+      (option): option is LookupOption => option !== null,
+    )
   }, [branchId, departmentId, employees])
 
   const workflowOptions = React.useMemo(
-    () => toLookupOptions(workflows, ["name", "title", "workflow_name", "workflowName"], [], []),
-    [workflows]
+    () =>
+      toLookupOptions(
+        workflows,
+        ["name", "title", "workflow_name", "workflowName"],
+        [],
+        [],
+      ),
+    [workflows],
   )
 
   React.useEffect(() => {
@@ -562,7 +690,12 @@ export function EmployeeInviteView() {
       .then(([departmentPositionResult, employeeResult]) => {
         if (cancelled) return
         if (departmentPositionResult.status === "fulfilled") {
-          setDepartmentPositions(normalizeDepartmentPositionRows(departmentPositionResult.value, departmentId))
+          setDepartmentPositions(
+            normalizeDepartmentPositionRows(
+              departmentPositionResult.value,
+              departmentId,
+            ),
+          )
           setDepartmentPositionsLoaded(true)
         } else {
           setDepartmentPositions([])
@@ -587,13 +720,19 @@ export function EmployeeInviteView() {
   }, [departmentId, token])
 
   React.useEffect(() => {
-    if (positionId !== null && !positionOptions.some((option) => option.id === positionId)) {
+    if (
+      positionId !== null &&
+      !positionOptions.some((option) => option.id === positionId)
+    ) {
       setPositionId(null)
     }
   }, [positionId, positionOptions])
 
   React.useEffect(() => {
-    if (reportsToId !== null && !employeeOptions.some((option) => option.id === reportsToId)) {
+    if (
+      reportsToId !== null &&
+      !employeeOptions.some((option) => option.id === reportsToId)
+    ) {
       setReportsToId(null)
     }
   }, [employeeOptions, reportsToId])
@@ -646,7 +785,7 @@ export function EmployeeInviteView() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!token) {
-      toast.error("No auth token")
+      toast.error("Authentication required. Please log in again.")
       return
     }
     if (!firstName.trim() || !lastName.trim()) {
@@ -654,7 +793,7 @@ export function EmployeeInviteView() {
       return
     }
     const normalizedEmail = email.trim().toLowerCase()
-    const normalizedPhone = phone.trim()
+    const normalizedPhone = normalizeInvitationPhone(phone)
     if (!normalizedEmail) {
       toast.error("Email is required.")
       return
@@ -665,6 +804,12 @@ export function EmployeeInviteView() {
     }
     if (!normalizedPhone) {
       toast.error("Phone number is required.")
+      return
+    }
+    if (!isValidE164Phone(normalizedPhone)) {
+      toast.error(
+        "Enter the phone number with country code, for example +255712345678.",
+      )
       return
     }
     if (!gender) {
@@ -688,122 +833,55 @@ export function EmployeeInviteView() {
       return
     }
 
-    const payload: CreateEmployeePayload = {
-      employee_no: undefined,
+    const payload: CreateEmployeeInvitationPayload = {
+      first_name: firstName.trim(),
+      last_name: lastName.trim(),
       gender,
+      email: normalizedEmail,
+      phone: normalizedPhone,
       primary_branch_id: branchId,
       primary_department_id: departmentId,
       primary_position_id: positionId,
-      position_id: positionId,
-      employment_status: "onboarding",
-      employment_type: employmentType as CreateEmployeePayload["employment_type"],
+      employment_type:
+        employmentType as CreateEmployeeInvitationPayload["employment_type"],
       reports_to: reportsToId ?? undefined,
-      first_name: firstName.trim(),
-      last_name: lastName.trim(),
       hire_date: hireDate || undefined,
-      departments: [{ is_primary: true, department_id: departmentId }],
-      contacts: [
-        {
-          contact_type: "work",
-          is_primary: true,
-          email: normalizedEmail,
-          phone_number: normalizedPhone,
-          notes: "Created from recruitment invite.",
-        },
-      ],
-      addresses: [],
-      relatives: [],
-      identifications: [],
-      bank_accounts: [],
-      academic_qualifications: [],
-      professional_qualifications: [],
-      experience_details: [],
-      metadata: {
-        source: "invite",
-        registration_mode: "send_invite",
-        branch_name: getSelectedLabel(branchOptions, branchId, ""),
-        department_name: getSelectedLabel(departmentOptions, departmentId, ""),
-        position_name: getSelectedLabel(positionOptions, positionId, ""),
-      },
+      onboarding_workflow_id: workflowId ?? undefined,
+      channels: ["EMAIL", "SMS"],
     }
 
     setSubmitting(true)
-    let createdEmployee: CreateEmployeeResponse | null = null
     try {
-      createdEmployee = await createEmployeeProfile(token, payload)
-      const employeeId = getId(createdEmployee)
+      const invitation = await createEmployeeInvitation(token, payload)
+      const emailStatus = invitation.delivery?.email?.status?.toLowerCase()
+      const smsStatus = invitation.delivery?.sms?.status?.toLowerCase()
+      const failedChannels = [
+        emailStatus === "failed" ? "email" : null,
+        smsStatus === "failed" ? "SMS" : null,
+      ].filter((channel): channel is string => channel !== null)
 
-      if (employeeId === null) {
-        throw new Error("Employee was created but no employee id was returned for onboarding.")
+      if (failedChannels.length > 0) {
+        const message = `Invitation saved, but ${failedChannels.join(" and ")} delivery failed. You can resend it after checking the channel settings.`
+        showErrorAlert(message)
+        toast.warning(message)
+      } else {
+        showSuccessAlert("Invitation sent by email and SMS.")
       }
-
-      // Recruitment invite starts onboarding through the dedicated onboarding requests API.
-      const onboardingRequest = await createOnboardingRequest(token, {
-        employee_id: employeeId,
-        workflow_id: workflowId ?? undefined,
-        submit: true,
-        title: `Onboarding for ${firstName.trim()} ${lastName.trim()}`.trim(),
-        planned_start_date: hireDate || undefined,
-      })
-      const onboardingRecord =
-        typeof onboardingRequest === "object" && onboardingRequest !== null
-          ? (onboardingRequest as AdminRecord)
-          : null
-      const onboardingRequestId = onboardingRecord ? getId(onboardingRecord) : null
-      void notifySubmittedRequestApprovers({
-        kind: "onboarding_request",
-        token,
-        request: onboardingRequest,
-        requesterName: `${firstName.trim()} ${lastName.trim()}`.trim(),
-        loadRequest:
-          onboardingRequestId === null
-            ? undefined
-            : () => getOnboardingRequest(token, onboardingRequestId),
-      })
-
-      showSuccessAlert("Employee invite created successfully. Onboarding started.")
       resetForm()
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to create employee invite."
       const status =
-        typeof err === "object" && err !== null && "status" in err && typeof err.status === "number"
-          ? err.status
+        typeof err === "object" &&
+        err !== null &&
+        "status" in err &&
+        typeof (err as { status?: unknown }).status === "number"
+          ? (err as { status: number }).status
           : null
-      if (process.env.NODE_ENV !== "production") {
-        const errorPayload =
-          typeof err === "object" && err !== null && "payload" in err
-            ? (err as { payload?: unknown }).payload
-            : undefined
-        console.error(
-          "[recruitment-invite] submit failed",
-          JSON.stringify(
-            {
-              status,
-              message: msg,
-              employeeCreatePayload: payload,
-              onboardingRequestPayload: createdEmployee
-                ? {
-                    employee_id: getId(createdEmployee),
-                    workflow_id: workflowId ?? undefined,
-                    submit: true,
-                    title: `Onboarding for ${firstName.trim()} ${lastName.trim()}`.trim(),
-                    planned_start_date: hireDate || undefined,
-                  }
-                : null,
-              errorPayload,
-            },
-            null,
-            2
-          )
-        )
-      }
-      const message = createdEmployee
-        ? status
-          ? `Employee invite was created, but onboarding could not be started (${status}). ${msg}`
-          : `Employee invite was created, but onboarding could not be started. ${msg}`
-        : status
-          ? `Failed to create employee invite (${status}). ${msg}`
-          : `Failed to create employee invite. ${msg}`
+      const detail =
+        err instanceof Error ? err.message : "The invitation could not be sent."
+      const message =
+        status === 404 || status === 405
+          ? "The backend invitation endpoint is not available yet. Implement POST /api/employee-invitations using the provided backend contract."
+          : `Failed to send the invitation${status ? ` (${status})` : ""}. ${detail}`
       showErrorAlert(message)
       toast.error(message)
     } finally {
@@ -812,7 +890,8 @@ export function EmployeeInviteView() {
   }
 
   const departmentDisabled = branchId === null || loading
-  const positionDisabled = departmentId === null || loading || departmentPositionsLoading
+  const positionDisabled =
+    departmentId === null || loading || departmentPositionsLoading
   const reportsToDisabled = departmentId === null || loading || employeesLoading
 
   return (
@@ -885,11 +964,14 @@ export function EmployeeInviteView() {
                 </div>
               </FieldShell>
               <FieldShell label="Gender" required>
-                <Select value={gender || null} onValueChange={(value) => setGender(value ?? "")}>
+                <Select
+                  value={gender || null}
+                  onValueChange={(value) => setGender(value ?? "")}
+                >
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select gender">
-                      {GENDER_OPTIONS.find((option) => option.value === gender)?.label ??
-                        "Select gender"}
+                      {GENDER_OPTIONS.find((option) => option.value === gender)
+                        ?.label ?? "Select gender"}
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
@@ -921,7 +1003,9 @@ export function EmployeeInviteView() {
                 </SelectTrigger>
                 <SelectContent>
                   {branchOptions.length === 0 ? (
-                    <div className="px-2 py-2 text-xs text-muted-foreground">No branches found</div>
+                    <div className="px-2 py-2 text-xs text-muted-foreground">
+                      No branches found
+                    </div>
                   ) : null}
                   {branchOptions.map((option) => (
                     <SelectItem key={option.id} value={String(option.id)}>
@@ -940,11 +1024,19 @@ export function EmployeeInviteView() {
               >
                 <SelectTrigger className="w-full">
                   <SelectValue
-                    placeholder={branchId === null ? "Select branch first" : "Select department"}
+                    placeholder={
+                      branchId === null
+                        ? "Select branch first"
+                        : "Select department"
+                    }
                   >
                     {branchId === null
                       ? "Select branch first"
-                      : getSelectedLabel(departmentOptions, departmentId, "Select department")}
+                      : getSelectedLabel(
+                          departmentOptions,
+                          departmentId,
+                          "Select department",
+                        )}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
@@ -984,7 +1076,11 @@ export function EmployeeInviteView() {
                       ? "Select department first"
                       : departmentPositionsLoading
                         ? "Loading positions..."
-                      : getSelectedLabel(positionOptions, positionId, "Select position")}
+                        : getSelectedLabel(
+                            positionOptions,
+                            positionId,
+                            "Select position",
+                          )}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
@@ -994,7 +1090,7 @@ export function EmployeeInviteView() {
                         ? "Select a department first"
                         : departmentPositionsLoading
                           ? "Loading positions..."
-                        : "No positions for this department"}
+                          : "No positions for this department"}
                     </div>
                   ) : null}
                   {positionOptions.map((option) => (
@@ -1009,7 +1105,9 @@ export function EmployeeInviteView() {
             <FieldShell label="Reports to">
               <Select
                 value={reportsToId != null ? String(reportsToId) : null}
-                onValueChange={(value) => setReportsToId(value ? Number(value) : null)}
+                onValueChange={(value) =>
+                  setReportsToId(value ? Number(value) : null)
+                }
                 disabled={reportsToDisabled}
               >
                 <SelectTrigger className="w-full">
@@ -1019,14 +1117,18 @@ export function EmployeeInviteView() {
                         ? "Select department first"
                         : employeesLoading
                           ? "Loading managers..."
-                        : "Select manager (optional)"
+                          : "Select manager (optional)"
                     }
                   >
                     {departmentId === null
                       ? "Select department first"
                       : employeesLoading
                         ? "Loading managers..."
-                      : getSelectedLabel(employeeOptions, reportsToId, "Select manager (optional)")}
+                        : getSelectedLabel(
+                            employeeOptions,
+                            reportsToId,
+                            "Select manager (optional)",
+                          )}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
@@ -1036,7 +1138,7 @@ export function EmployeeInviteView() {
                         ? "Select a department first"
                         : employeesLoading
                           ? "Loading managers..."
-                        : "No managers found in this department"}
+                          : "No managers found in this department"}
                     </div>
                   ) : null}
                   {employeeOptions.map((option) => (
@@ -1056,13 +1158,16 @@ export function EmployeeInviteView() {
             <FieldShell label="Employment type" required>
               <Select
                 value={employmentType}
-                onValueChange={(value) => setEmploymentType(value || "full_time")}
+                onValueChange={(value) =>
+                  setEmploymentType(value || "full_time")
+                }
                 disabled={loading}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue>
-                    {EMPLOYMENT_TYPES.find((type) => type.value === employmentType)?.label ??
-                      "Employment type"}
+                    {EMPLOYMENT_TYPES.find(
+                      (type) => type.value === employmentType,
+                    )?.label ?? "Employment type"}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
@@ -1075,10 +1180,15 @@ export function EmployeeInviteView() {
               </Select>
             </FieldShell>
 
-            <FieldShell label="Onboarding workflow" required={canReadOnboardingWorkflows}>
+            <FieldShell
+              label="Onboarding workflow"
+              required={canReadOnboardingWorkflows}
+            >
               <Select
                 value={workflowId != null ? String(workflowId) : null}
-                onValueChange={(value) => setWorkflowId(value ? Number(value) : null)}
+                onValueChange={(value) =>
+                  setWorkflowId(value ? Number(value) : null)
+                }
                 disabled={loading || !canReadOnboardingWorkflows}
               >
                 <SelectTrigger className="w-full">
@@ -1090,7 +1200,11 @@ export function EmployeeInviteView() {
                     }
                   >
                     {canReadOnboardingWorkflows
-                      ? getSelectedLabel(workflowOptions, workflowId, "Select workflow")
+                      ? getSelectedLabel(
+                          workflowOptions,
+                          workflowId,
+                          "Select workflow",
+                        )
                       : "Workflow assigned automatically"}
                   </SelectValue>
                 </SelectTrigger>
@@ -1132,24 +1246,33 @@ export function EmployeeInviteView() {
                 <InfoIcon className="size-4" />
               </TooltipTrigger>
               <TooltipContent side="top" className="max-w-xs text-left">
-                Submitting creates the employee profile and starts the selected onboarding workflow.
+                Sends one secure invitation link through both the configured
+                email and SMS channels.
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
-          <Button type="button" variant="outline" onClick={resetForm} disabled={submitting}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={resetForm}
+            disabled={submitting}
+          >
             <RotateCcwIcon data-icon="inline-start" />
             Reset
           </Button>
           <Button type="submit" size="lg" disabled={submitting || loading}>
             {submitting ? (
               <>
-                <Loader2Icon data-icon="inline-start" className="animate-spin" />
-                Creating…
+                <Loader2Icon
+                  data-icon="inline-start"
+                  className="animate-spin"
+                />
+                Sending…
               </>
             ) : (
               <>
                 <UserPlus2Icon data-icon="inline-start" />
-                Invite & start onboarding
+                Send email & SMS invitation
               </>
             )}
           </Button>

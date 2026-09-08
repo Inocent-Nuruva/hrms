@@ -116,6 +116,117 @@ export function resolvePersonLabel(users: AdminRecord[], id: number | null) {
   )
 }
 
+const ASSIGNEE_ID_KEYS = ["company_user_id", "companyUserId", "id", "user_id", "userId"] as const
+
+export function collectAssigneeIds(row: AdminRecord): number[] {
+  const ids: number[] = []
+  const sources = [
+    row,
+    asRecord(row.user),
+    asRecord(row.company_user),
+    asRecord(row.companyUser),
+    asRecord(row.member),
+    asRecord(row.person),
+  ]
+  for (const source of sources) {
+    if (!source) continue
+    for (const key of ASSIGNEE_ID_KEYS) {
+      const id = readNumber(source, [key])
+      if (id !== null && id > 0 && !ids.includes(id)) {
+        ids.push(id)
+      }
+    }
+  }
+  return ids
+}
+
+export function flattenAssigneeRecord(row: AdminRecord): AdminRecord {
+  const nested =
+    asRecord(row.user) ??
+    asRecord(row.company_user) ??
+    asRecord(row.companyUser) ??
+    asRecord(row.member)
+  if (!nested) {
+    return row
+  }
+  return {
+    ...nested,
+    ...row,
+    id: row.id ?? nested.id,
+    user_id: row.user_id ?? row.userId ?? nested.user_id ?? nested.id,
+    company_user_id:
+      row.company_user_id ?? row.companyUserId ?? nested.company_user_id ?? nested.id,
+    first_name: row.first_name ?? nested.first_name,
+    last_name: row.last_name ?? nested.last_name,
+    full_name: row.full_name ?? nested.full_name,
+    email: row.email ?? nested.email,
+  }
+}
+
+export function preferredAssigneeId(row: AdminRecord): number | null {
+  return collectAssigneeIds(row)[0] ?? null
+}
+
+export function findAssigneeRecord(rows: AdminRecord[], assignedId: number | null) {
+  if (assignedId === null || assignedId <= 0) {
+    return null
+  }
+  return rows.find((row) => collectAssigneeIds(row).includes(assignedId)) ?? null
+}
+
+export function catalogHasRoleMetadata(rows: AdminRecord[]) {
+  return rows.some((row) => {
+    if (readNumber(row, ["role_id", "roleId"]) !== null) return true
+    if (Array.isArray(row.roles) && row.roles.length > 0) return true
+    if (Array.isArray(row.role_ids) && row.role_ids.length > 0) return true
+    if (Array.isArray(row.roleIds) && row.roleIds.length > 0) return true
+    return false
+  })
+}
+
+export function recordHasRole(row: AdminRecord, roleId: number) {
+  if (!roleId || roleId <= 0) return true
+  if (readNumber(row, ["role_id", "roleId", "assigned_role_id"]) === roleId) {
+    return true
+  }
+  const lists = [row.roles, row.role_ids, row.roleIds, row.user_roles, row.userRoles]
+  for (const list of lists) {
+    if (!Array.isArray(list)) continue
+    for (const entry of list) {
+      if (typeof entry === "number" && entry === roleId) return true
+      if (typeof entry === "string" && Number(entry) === roleId) return true
+      const nested = asRecord(entry)
+      if (readNumber(nested, ["id", "role_id", "roleId"]) === roleId) return true
+    }
+  }
+  return false
+}
+
+export function filterAssigneesForStep(
+  rows: AdminRecord[],
+  options: { roleId?: number | null; search?: string; selectedId?: number | null },
+) {
+  const search = options.search?.trim().toLowerCase() ?? ""
+  const roleId = options.roleId && options.roleId > 0 ? options.roleId : null
+  const canFilterByRole = roleId !== null && catalogHasRoleMetadata(rows)
+  return rows.filter((row) => {
+    const ids = collectAssigneeIds(row)
+    const isSelected = options.selectedId != null && ids.includes(options.selectedId)
+    if (canFilterByRole && !recordHasRole(row, roleId) && !isSelected) {
+      return false
+    }
+    if (!search) return true
+    const haystack = [
+      personDisplayName(row),
+      readText(row, ["email", "user_no", "userNo"]),
+      ...ids.map((id) => String(id)),
+    ]
+      .join(" ")
+      .toLowerCase()
+    return haystack.includes(search)
+  })
+}
+
 function nestedParty(record: AdminRecord, keys: string[]) {
   for (const key of keys) {
     const nested = asRecord(record[key])
@@ -392,7 +503,14 @@ export function summarizeOnboardingApprovals(
 
 export function isOnboardingDraftStatus(status: string) {
   const value = status.trim().toLowerCase().replace(/[_-]+/g, " ")
-  return value === "draft" || value === "pending submit" || value === "new" || value === ""
+  return (
+    value === "draft" ||
+    value === "not started" ||
+    value === "pending" ||
+    value === "pending submit" ||
+    value === "new" ||
+    value === ""
+  )
 }
 
 export function isOnboardingActableStatus(status: string) {

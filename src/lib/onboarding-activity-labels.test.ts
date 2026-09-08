@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  filterAssigneesForStep,
   isOnboardingActableStatus,
   isOnboardingDraftStatus,
   mergeAdminRecords,
+  preferredAssigneeId,
+  recordHasRole,
   recordMatchesId,
   resolveApprovalOwnerLabel,
   resolveAuditActorLabel,
@@ -143,6 +146,8 @@ describe("onboarding activity labels", () => {
 
   it("treats draft requests as not yet approvable", () => {
     expect(isOnboardingDraftStatus("draft")).toBe(true)
+    expect(isOnboardingDraftStatus("not_started")).toBe(true)
+    expect(isOnboardingDraftStatus("pending")).toBe(true)
     expect(isOnboardingActableStatus("submitted")).toBe(true)
     expect(isOnboardingActableStatus("in_review")).toBe(true)
     expect(isOnboardingActableStatus("draft")).toBe(false)
@@ -155,5 +160,40 @@ describe("onboarding activity labels", () => {
     )
     expect(merged.length).toBeGreaterThan(0)
     expect(resolvePersonLabel(merged, 146)).toBeTruthy()
+  })
+
+  it("keeps an assigned user visible and filters the rest by role", () => {
+    const hrUser = {
+      id: 62,
+      company_user_id: 62,
+      first_name: "Asha",
+      last_name: "Mwinyi",
+      email: "asha@alliance.co.tz",
+      roles: [{ id: 14, name: "HR" }],
+    }
+    const itUser = {
+      id: 8,
+      first_name: "John",
+      last_name: "IT",
+      roles: [{ id: 11, name: "IT" }],
+    }
+    expect(preferredAssigneeId(hrUser)).toBe(62)
+    expect(
+      preferredAssigneeId({
+        user: { id: 77, first_name: "Nested", last_name: "RoleUser" },
+      }),
+    ).toBe(77)
+    expect(recordHasRole(hrUser, 14)).toBe(true)
+    expect(recordHasRole(itUser, 14)).toBe(false)
+    expect(
+      filterAssigneesForStep([hrUser, itUser], { roleId: 14, selectedId: 8 }).map(
+        (row) => preferredAssigneeId(row),
+      ),
+    ).toEqual([62, 8])
+    expect(
+      filterAssigneesForStep([hrUser, itUser], { roleId: 14, search: "asha" }).map(
+        (row) => preferredAssigneeId(row),
+      ),
+    ).toEqual([62])
   })
 })

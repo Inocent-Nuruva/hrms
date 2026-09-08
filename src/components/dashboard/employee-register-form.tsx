@@ -3053,14 +3053,18 @@ export function EmployeeRegisterForm() {
         ...response,
         onboarding_request: onboardingRequest ?? response.onboarding_request,
       })
+      const createWarning =
+        typeof response.warning === "string" ? response.warning.trim() : ""
       showSuccessAlert(
-        onboardingRequest
-          ? onboardingPayload?.submit
-            ? "Employee created and onboarding started."
-            : "Employee saved. Onboarding is listed as a draft request."
-          : isInviteMode
-            ? "Employee invite saved successfully."
-            : "Employee saved successfully."
+        createWarning
+          ? `Employee saved. ${createWarning}`
+          : onboardingRequest
+            ? onboardingPayload?.submit
+              ? "Employee created and onboarding started."
+              : "Employee saved. Onboarding is listed as a draft request."
+            : isInviteMode
+              ? "Employee invite saved successfully."
+              : "Employee saved successfully."
       )
       clearForm()
     } catch (errorObject) {

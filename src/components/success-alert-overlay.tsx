@@ -27,9 +27,6 @@ export function SuccessAlertOverlay() {
   }, [])
 
   React.useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | null = null
-    const hideTimer: ReturnType<typeof setTimeout> | null = null
-
     const onSuccess = (event: Event) => {
       const custom = event as CustomEvent<SuccessDetail>
       setTitle(custom.detail?.title || "Done")
@@ -37,24 +34,14 @@ export function SuccessAlertOverlay() {
       setOpen(true)
       setExiting(false)
       setVisible(false)
-      if (timer) clearTimeout(timer)
-      if (hideTimer) clearTimeout(hideTimer)
-
-      // trigger enter
-      setTimeout(() => setVisible(true), 12)
-
-      timer = setTimeout(() => {
-        dismiss()
-      }, 2400)
+      window.setTimeout(() => setVisible(true), 12)
     }
 
     window.addEventListener(SUCCESS_ALERT_EVENT, onSuccess as EventListener)
     return () => {
       window.removeEventListener(SUCCESS_ALERT_EVENT, onSuccess as EventListener)
-      if (timer) clearTimeout(timer)
-      if (hideTimer) clearTimeout(hideTimer)
     }
-  }, [dismiss])
+  }, [])
 
   if (!open) {
     return null
@@ -67,9 +54,12 @@ export function SuccessAlertOverlay() {
       : "opacity-0 translate-x-6"
 
   return (
-    <div className={`fixed top-4 right-4 z-[200] w-[280px] max-w-[calc(100vw-2rem)] pointer-events-auto ${animClass}`}>
+    <div
+      className={`fixed top-4 right-4 z-[200] w-[min(26rem,calc(100vw-2rem))] pointer-events-auto ${animClass}`}
+      role="status"
+      aria-live="polite"
+    >
       <div className="relative overflow-hidden rounded-2xl border border-[#303194]/25 bg-white shadow-lg dark:bg-card">
-        {/* subtle accent bar */}
         <div className="absolute left-0 top-0 h-full w-[3px] bg-[#303194]" />
 
         <div className="flex items-start gap-3 p-3.5 pr-2">
@@ -79,7 +69,9 @@ export function SuccessAlertOverlay() {
 
           <div className="min-w-0 flex-1 pt-0.5">
             <div className="text-[13px] font-semibold tracking-[-0.1px] text-foreground">{title}</div>
-            <div className="mt-0.5 text-[11px] leading-tight text-muted-foreground">{message}</div>
+            <div className="mt-1 whitespace-pre-wrap text-[12px] leading-5 text-muted-foreground">
+              {message}
+            </div>
           </div>
 
           <button

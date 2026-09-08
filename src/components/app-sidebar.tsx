@@ -129,6 +129,7 @@ const adminData: SidebarData = {
       matchUrls: [
         "/dashboard/employees",
         "/dashboard/employees/all",
+        "/dashboard/employees/inactive",
         "/dashboard/employees/registration",
         "/dashboard/employees/offboarding",
         "/dashboard/employees/onboarding",
@@ -354,6 +355,7 @@ const platformSearchIndex: SearchItem[] = [
 const adminSearchIndex = [
   { title: "Dashboard", url: "/dashboard", section: "General", keywords: ["home", "overview"] },
   { title: "Employees / All Employees", url: "/dashboard/employees/all", section: "Employees", keywords: ["employee", "directory", "staff"] },
+  { title: "Employees / Inactive Employees", url: "/dashboard/employees/inactive", section: "Employees", keywords: ["employee", "inactive", "archived", "removed"] },
   { title: "Employees / Profile Updates", url: "/dashboard/employees/profile-update-approvals", section: "Employees", keywords: ["employee", "profile", "changes", "approval"] },
   { title: "Employees / Profile Changes", url: "/dashboard/employees/profile-change-requests", section: "Employees", keywords: ["employee", "profile", "change request"] },
   { title: "Employees / Offboarding", url: "/dashboard/employees/offboarding", section: "Employees", keywords: ["employee", "exit"] },

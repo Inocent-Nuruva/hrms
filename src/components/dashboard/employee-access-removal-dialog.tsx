@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/animate-ui/components/base/dialog"
 import {
+  archiveEmployeeProfile,
   listAccessControlResources,
   listAccessGroupEmployees,
   listEmployeeDevices,
@@ -98,6 +99,7 @@ type RemovalChoices = {
   groups: Record<string, boolean>
   disableFingerprintsOnSelectedDevices: boolean
   endShiftAssignments: boolean
+  archiveEmployee: boolean
   suspendEmployee: boolean
   terminateEmployee: boolean
 }
@@ -117,6 +119,7 @@ function emptyChoices(): RemovalChoices {
     groups: {},
     disableFingerprintsOnSelectedDevices: true,
     endShiftAssignments: false,
+    archiveEmployee: true,
     suspendEmployee: false,
     terminateEmployee: false,
   }
@@ -308,6 +311,7 @@ export function EmployeeAccessRemovalDialog({ open, target, onOpenChange, onComp
         groups: groupChoices,
         disableFingerprintsOnSelectedDevices: true,
         endShiftAssignments: nextShifts.length > 0,
+        archiveEmployee: true,
         suspendEmployee: false,
         terminateEmployee: false,
       })
@@ -340,6 +344,7 @@ export function EmployeeAccessRemovalDialog({ open, target, onOpenChange, onComp
     selectedDeviceIds.length > 0 ||
     selectedGroupIds.length > 0 ||
     (choices.endShiftAssignments && shifts.length > 0) ||
+    choices.archiveEmployee ||
     choices.suspendEmployee ||
     choices.terminateEmployee
 
@@ -359,6 +364,9 @@ export function EmployeeAccessRemovalDialog({ open, target, onOpenChange, onComp
     if (choices.endShiftAssignments && shifts.length > 0) {
       lines.push(`End ${shifts.length} shift assignment(s)`)
     }
+    if (choices.archiveEmployee) {
+      lines.push("Archive employee profile")
+    }
     if (choices.suspendEmployee) {
       lines.push("Set employment status to Suspended")
     }
@@ -369,6 +377,7 @@ export function EmployeeAccessRemovalDialog({ open, target, onOpenChange, onComp
   }, [
     choices.disableFingerprintsOnSelectedDevices,
     choices.endShiftAssignments,
+    choices.archiveEmployee,
     choices.suspendEmployee,
     choices.terminateEmployee,
     devices,
@@ -453,7 +462,7 @@ export function EmployeeAccessRemovalDialog({ open, target, onOpenChange, onComp
       }
     }
 
-    if (choices.suspendEmployee || choices.terminateEmployee) {
+    if (!choices.archiveEmployee && (choices.suspendEmployee || choices.terminateEmployee)) {
       const status = choices.terminateEmployee ? "terminated" : "suspended"
       const label =
         status === "terminated" ? "Set status to Terminated" : "Set status to Suspended"
@@ -470,22 +479,13 @@ export function EmployeeAccessRemovalDialog({ open, target, onOpenChange, onComp
           payload.exit_date = new Date().toISOString().slice(0, 10)
           payload.exit_reason = "Removed via access cleanup"
         }
-        // terminated may not be in exited path; try terminated first then exited
-        try {
-          await patchEmployeeStatus(token, target.employeeId, payload)
-        } catch {
-          if (status === "terminated") {
-            await patchEmployeeStatus(token, target.employeeId, {
-              employment_status: "exited",
-              effective_date: new Date().toISOString().slice(0, 10),
-              exit_date: new Date().toISOString().slice(0, 10),
-              exit_reason: "Removed via access cleanup",
-              notes: "Exited via unified removal dialog",
-            })
-          } else {
-            throw new Error("Could not update employment status")
-          }
-        }
+        await patchEmployeeStatus(token, target.employeeId, payload)
+      })
+    }
+
+    if (choices.archiveEmployee) {
+      await runStep("Archive employee profile", async () => {
+        await archiveEmployeeProfile(token, target.employeeId)
       })
     }
 
@@ -650,18 +650,45 @@ export function EmployeeAccessRemovalDialog({ open, target, onOpenChange, onComp
 
               <section className="space-y-2 border-t border-slate-100 pt-3">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Employment status
+                  Employee profile
+                </p>
+                <label className="flex cursor-pointer items-center justify-between gap-3 text-sm text-slate-800">
+                  <span>Archive employee profile</span>
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-[var(--primary)]"
+                    checked={choices.archiveEmployee}
+                    onChange={(event) =>
+                      setChoices((prev) => ({
+                        ...prev,
+                        archiveEmployee: event.target.checked,
+                        suspendEmployee: event.target.checked ? false : prev.suspendEmployee,
+                        terminateEmployee: event.target.checked ? false : prev.terminateEmployee,
+                      }))
+                    }
+                  />
+                </label>
+                <p className="text-xs text-slate-500">
+                  Uses the employee archive endpoint and keeps historical records available to the backend.
+                </p>
+              </section>
+
+              <section className="space-y-2 border-t border-slate-100 pt-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Employment status only
                 </p>
                 <label className="flex cursor-pointer items-center justify-between gap-3 text-sm text-slate-800">
                   <span>Suspend employee</span>
                   <input
                     type="checkbox"
                     className="h-4 w-4 accent-[var(--primary)]"
+                    disabled={choices.archiveEmployee}
                     checked={choices.suspendEmployee}
                     onChange={(event) =>
                       setChoices((prev) => ({
                         ...prev,
                         suspendEmployee: event.target.checked,
+                        archiveEmployee: event.target.checked ? false : prev.archiveEmployee,
                         terminateEmployee: event.target.checked ? false : prev.terminateEmployee,
                       }))
                     }
@@ -672,18 +699,20 @@ export function EmployeeAccessRemovalDialog({ open, target, onOpenChange, onComp
                   <input
                     type="checkbox"
                     className="h-4 w-4 accent-[var(--primary)]"
+                    disabled={choices.archiveEmployee}
                     checked={choices.terminateEmployee}
                     onChange={(event) =>
                       setChoices((prev) => ({
                         ...prev,
                         terminateEmployee: event.target.checked,
+                        archiveEmployee: event.target.checked ? false : prev.archiveEmployee,
                         suspendEmployee: event.target.checked ? false : prev.suspendEmployee,
                       }))
                     }
                   />
                 </label>
                 <p className="text-xs text-slate-500">
-                  Status changes apply company-wide. Leave both off to only clean access.
+                  Lifecycle transitions are validated by the backend. Leave both off to only clean access.
                 </p>
               </section>
             </>

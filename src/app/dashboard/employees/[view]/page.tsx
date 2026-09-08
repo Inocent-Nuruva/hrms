@@ -9,6 +9,7 @@ import { HrProfileChangeRequestsView } from "@/components/dashboard/hr-profile-c
 
 const ALLOWED_VIEWS = new Set([
   "all",
+  "inactive",
   "registration",
   "offboarding",
   "onboarding",
@@ -52,6 +53,10 @@ export default async function EmployeesViewPage({
 
   if (normalized === "all") {
     return <EmployeesListView />
+  }
+
+  if (normalized === "inactive") {
+    return <EmployeesListView directoryMode="inactive" />
   }
 
   if (normalized === "registration") {

@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
   getRoleById,
+  listAllCurrentCompanyUsers,
+  listAllRoleUsers,
   listResource,
   listResourcePage,
   listRolePermissions,
@@ -206,6 +208,99 @@ describe("roles and permissions admin API helpers", () => {
     expect(result.rows).toEqual([expect.objectContaining({ name: "roles:read" })])
     expect(result.total).toBe(477)
     expect(result.totalPages).toBe(24)
+  })
+
+  it("loads every role-member page when the backend caps page size", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          role: { id: 10, name: "EMPLOYEE" },
+          data: [
+            { id: 101, full_name: "First Employee" },
+            { id: 102, full_name: "Second Employee" },
+          ],
+          meta: {
+            totalItems: 3,
+            itemCount: 2,
+            itemsPerPage: 2,
+            totalPages: 2,
+            currentPage: 1,
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          role: { id: 10, name: "EMPLOYEE" },
+          data: [{ id: 103, full_name: "Bosco Semiono" }],
+          meta: {
+            totalItems: 3,
+            itemCount: 1,
+            itemsPerPage: 2,
+            totalPages: 2,
+            currentPage: 2,
+          },
+        }),
+      )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const rows = await listAllRoleUsers("token-role-users-all", 10)
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "http://localhost:8888/api/roles/10/users",
+    )
+    expect(fetchMock.mock.calls[1]?.[0]).toBe(
+      "http://localhost:8888/api/roles/10/users?page=2",
+    )
+    expect(rows.map((row) => row.full_name)).toEqual([
+      "First Employee",
+      "Second Employee",
+      "Bosco Semiono",
+    ])
+  })
+
+  it("keeps paging company users when the backend returns fewer rows than requested", async () => {
+    const firstPage = Array.from({ length: 20 }, (_, index) => ({
+      id: index + 1,
+      full_name: `Employee ${index + 1}`,
+    }))
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: firstPage,
+          meta: {
+            totalItems: 21,
+            itemCount: 20,
+            itemsPerPage: 20,
+            totalPages: 2,
+            currentPage: 1,
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: [{ id: 21, full_name: "Bosco Semiono" }],
+          meta: {
+            totalItems: 21,
+            itemCount: 1,
+            itemsPerPage: 20,
+            totalPages: 2,
+            currentPage: 2,
+          },
+        }),
+      )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const rows = await listAllCurrentCompanyUsers("token-company-users-all")
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock.mock.calls[1]?.[0]).toBe(
+      "http://localhost:8888/api/companies/current/users?page=2&limit=100&sortBy=created_at&sortOrder=ASC",
+    )
+    expect(rows).toHaveLength(21)
+    expect(rows.at(-1)).toEqual(expect.objectContaining({ full_name: "Bosco Semiono" }))
   })
 
   it("loads a role's permissions with a single request", async () => {

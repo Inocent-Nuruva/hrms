@@ -51,6 +51,7 @@ import {
   listEmployeeMovementOperations,
   listEmployeeMovements,
   listEmployeePositions,
+  listAllEmployees,
   listEmployees,
   listPositions,
   patchEmployeeById,
@@ -68,6 +69,10 @@ import {
 import { cn } from "@/lib/utils"
 import { pageBleedClass } from "@/components/dashboard/talent-visuals"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
+import {
+  filterEmployeesByDirectorySearch,
+  getEmployeeDirectoryContactSummary,
+} from "@/lib/employee-directory-search"
 import { AnimatePresence, motion } from "framer-motion"
 import { useDashboardMotion } from "@/lib/dashboard-motion"
 
@@ -1692,7 +1697,21 @@ function resolveProfileSectionItems(employee: AdminRecord, def: (typeof PROFILE_
       employee.companyUser ? [asRecord(employee.companyUser) ?? {}] : []
     )
   }
-  return getProfileSectionItems(employee, def.keys)
+  const items = getProfileSectionItems(employee, def.keys)
+  if (def.title !== "Contacts" || items.length > 0) {
+    return items
+  }
+
+  const accountContact = getEmployeeDirectoryContactSummary(employee)
+  return accountContact
+    ? [
+        {
+          contact_type: "Linked account",
+          ...accountContact,
+          source: "Employee or company-user account",
+        },
+      ]
+    : []
 }
 
 function ProfileSectionsTabs({
@@ -2024,7 +2043,7 @@ function Section({
                         <DownloadIcon className="size-4" />
                       </button>
                     ) : null}
-                    {supportsEdit ? (
+                    {supportsEdit && readNumber(item.id) !== null ? (
                       <button
                         type="button"
                         aria-label={`Edit ${title} record ${index + 1}`}
@@ -2034,7 +2053,7 @@ function Section({
                         <PencilIcon className="size-4" />
                       </button>
                     ) : null}
-                    {supportsDelete ? (
+                    {supportsDelete && readNumber(item.id) !== null ? (
                       <button
                         type="button"
                         aria-label={`Delete ${title} record ${index + 1}`}
@@ -4494,7 +4513,17 @@ export function EmployeeProfilePage({
   const [profileSearchResults, setProfileSearchResults] = React.useState<AdminRecord[]>([])
   const [profileSearchLoading, setProfileSearchLoading] = React.useState(false)
   const [profileSearchError, setProfileSearchError] = React.useState<string | null>(null)
-  const isExitedStatus = statusForm.employment_status === "exited"
+  const currentEmployeeStatus = employee
+    ? normalizeEmployeeStatus(employee.employment_status ?? employee.status)
+    : "active"
+  const supportsExitDetails = ["resigned", "terminated", "retired", "exited"].includes(
+    statusForm.employment_status,
+  )
+  const blocksDirectOnboardingExit =
+    currentEmployeeStatus === "onboarding" &&
+    ["terminated", "exited"].includes(statusForm.employment_status)
+  const activatingFromOnboarding =
+    currentEmployeeStatus === "onboarding" && statusForm.employment_status === "active"
   const requestedSectionTitle = React.useMemo(
     () => routeKeyToSectionTitle(requestedMissingItem),
     [requestedMissingItem]
@@ -4802,7 +4831,17 @@ export function EmployeeProfilePage({
         if (cancelled) {
           return
         }
-        setProfileSearchResults(result.rows)
+        let rows = result.rows
+        const looksLikeEmailOrPhone =
+          trimmedSearch.includes("@") || trimmedSearch.replace(/\D+/g, "").length >= 6
+        if (rows.length === 0 && looksLikeEmailOrPhone) {
+          const directoryRows = await listAllEmployees(token, {}, { pageSize: 100, maxPages: 20 })
+          if (cancelled) {
+            return
+          }
+          rows = filterEmployeesByDirectorySearch(directoryRows, trimmedSearch)
+        }
+        setProfileSearchResults(rows.slice(0, 8))
       } catch (errorObject) {
         if (cancelled) {
           return
@@ -5114,7 +5153,7 @@ export function EmployeeProfilePage({
                 onChange={(event) =>
                   setStatusForm((prev) => {
                     const nextStatus = normalizeEmployeeStatus(event.target.value)
-                    if (nextStatus === "exited") {
+                    if (["resigned", "terminated", "retired", "exited"].includes(nextStatus)) {
                       return { ...prev, employment_status: nextStatus }
                     }
                     return {
@@ -5141,9 +5180,9 @@ export function EmployeeProfilePage({
                 onChange={(value) => setStatusForm((prev) => ({ ...prev, effective_date: value }))}
               />
             </label>
-            <label className={`grid min-w-0 gap-1 ${isExitedStatus ? "" : "opacity-60"}`}>
+            <label className={`grid min-w-0 gap-1 ${supportsExitDetails ? "" : "opacity-60"}`}>
               <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Exit Date</span>
-              {isExitedStatus ? (
+              {supportsExitDetails ? (
                 <DatePickerPresets
                   value={statusForm.exit_date}
                   onChange={(value) => setStatusForm((prev) => ({ ...prev, exit_date: value }))}
@@ -5153,18 +5192,18 @@ export function EmployeeProfilePage({
                   value=""
                   readOnly
                   disabled
-                  placeholder="Only for exited status"
+                  placeholder="For exit or termination statuses"
                   className="h-10 w-full rounded-md border border-slate-300 bg-slate-100 px-3 text-xs text-slate-500"
                 />
               )}
             </label>
-            <label className={`grid min-w-0 gap-1 ${isExitedStatus ? "" : "opacity-60"}`}>
+            <label className={`grid min-w-0 gap-1 ${supportsExitDetails ? "" : "opacity-60"}`}>
               <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Exit Reason</span>
               <input
                 value={statusForm.exit_reason}
                 onChange={(event) => setStatusForm((prev) => ({ ...prev, exit_reason: event.target.value }))}
-                disabled={!isExitedStatus}
-                placeholder={isExitedStatus ? "" : "Only for exited status"}
+                disabled={!supportsExitDetails}
+                placeholder={supportsExitDetails ? "" : "For exit or termination statuses"}
                 className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm disabled:bg-slate-100 disabled:text-xs disabled:text-slate-500"
               />
             </label>
@@ -5177,12 +5216,35 @@ export function EmployeeProfilePage({
               />
             </label>
           </div>
+          {blocksDirectOnboardingExit ? (
+            <div className="border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+              An onboarding employee cannot move directly to {statusForm.employment_status}. Use the
+              employee removal action to archive the profile, or finish/cancel onboarding first.
+            </div>
+          ) : null}
+          {activatingFromOnboarding ? (
+            <div className="space-y-2 border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              <p>Activation requires an attendance assignment. Assign either a shift or a timetable first.</p>
+              <div className="flex flex-wrap gap-3 font-medium">
+                <Link href="/dashboard/attendance/shift-assignments" className="text-primary hover:underline">
+                  Assign a shift
+                </Link>
+                <Link href="/dashboard/attendance/employee-timetables" className="text-primary hover:underline">
+                  Assign a timetable
+                </Link>
+              </div>
+            </div>
+          ) : null}
           {statusError ? <p className="text-sm text-rose-600">{statusError}</p> : null}
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <button
               type="button"
-              disabled={statusSubmitting || readNumber(employee.id) === null}
+              disabled={
+                statusSubmitting ||
+                readNumber(employee.id) === null ||
+                blocksDirectOnboardingExit
+              }
               className="rounded-md bg-primary px-3 py-2 text-sm font-medium !text-white disabled:opacity-50"
               onClick={async () => {
                 const employeeId = readNumber(employee.id)
@@ -5199,8 +5261,8 @@ export function EmployeeProfilePage({
                 const payload: EmployeeStatusPayload = {
                   employment_status: statusForm.employment_status,
                   effective_date: statusForm.effective_date.trim(),
-                  exit_date: isExitedStatus ? statusForm.exit_date.trim() || undefined : undefined,
-                  exit_reason: isExitedStatus ? statusForm.exit_reason.trim() || undefined : undefined,
+                  exit_date: supportsExitDetails ? statusForm.exit_date.trim() || undefined : undefined,
+                  exit_reason: supportsExitDetails ? statusForm.exit_reason.trim() || undefined : undefined,
                   notes: statusForm.notes.trim() || undefined,
                 }
                 setStatusSubmitting(true)
@@ -5214,7 +5276,13 @@ export function EmployeeProfilePage({
                   setStatusDialogOpen(false)
                   await fetchEmployee()
                 } catch (errorObject) {
-                  setStatusError(errorObject instanceof Error ? errorObject.message : "Failed to update status.")
+                  const message =
+                    errorObject instanceof Error ? errorObject.message : "Failed to update status."
+                  setStatusError(
+                    /attendance setup is incomplete/i.test(message)
+                      ? "Attendance setup is incomplete. Assign a shift or timetable, then try activation again."
+                      : message,
+                  )
                 } finally {
                   setStatusSubmitting(false)
                 }
