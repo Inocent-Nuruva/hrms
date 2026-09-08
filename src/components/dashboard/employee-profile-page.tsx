@@ -42,6 +42,7 @@ import {
   EMPLOYEE_STATUS_VALUES,
   fileToBase64UploadDto,
   getEmployeeById,
+  getEmployeeAttendanceAssignmentPresence,
   isEmployeeStatusValue,
   listBranches,
   listCostCenters,
@@ -4501,6 +4502,9 @@ export function EmployeeProfilePage({
   const [statusDialogOpen, setStatusDialogOpen] = React.useState(false)
   const [statusSubmitting, setStatusSubmitting] = React.useState(false)
   const [statusError, setStatusError] = React.useState<string | null>(null)
+  const [attendanceAssignmentCheck, setAttendanceAssignmentCheck] = React.useState<
+    "idle" | "loading" | "found" | "missing" | "unknown"
+  >("idle")
   const [statusForm, setStatusForm] = React.useState<EmployeeStatusFormState>({
     employment_status: "active",
     effective_date: new Date().toISOString().slice(0, 10),
@@ -5032,6 +5036,20 @@ export function EmployeeProfilePage({
               onClick={() => {
                 setStatusForm(readEmployeeStatusForm(employee))
                 setStatusError(null)
+                const employeeId = readNumber(employee.id)
+                const token = readStoredToken()
+                if (employeeId === null || !token) {
+                  setAttendanceAssignmentCheck("unknown")
+                } else {
+                  setAttendanceAssignmentCheck("loading")
+                  void getEmployeeAttendanceAssignmentPresence(token, employeeId)
+                    .then((result) => {
+                      setAttendanceAssignmentCheck(result.hasAssignment ? "found" : "missing")
+                    })
+                    .catch(() => {
+                      setAttendanceAssignmentCheck("unknown")
+                    })
+                }
                 setStatusDialogOpen(true)
               }}
             >
@@ -5223,16 +5241,33 @@ export function EmployeeProfilePage({
             </div>
           ) : null}
           {activatingFromOnboarding ? (
-            <div className="space-y-2 border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-              <p>Activation requires an attendance assignment. Assign either a shift or a timetable first.</p>
-              <div className="flex flex-wrap gap-3 font-medium">
-                <Link href="/dashboard/attendance/shift-assignments" className="text-primary hover:underline">
-                  Assign a shift
-                </Link>
-                <Link href="/dashboard/attendance/employee-timetables" className="text-primary hover:underline">
-                  Assign a timetable
-                </Link>
-              </div>
+            <div
+              className={cn(
+                "space-y-2 border px-3 py-2 text-sm",
+                attendanceAssignmentCheck === "found"
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                  : "border-amber-200 bg-amber-50 text-amber-800"
+              )}
+            >
+              {attendanceAssignmentCheck === "loading" ? (
+                <p>Checking this employee&apos;s attendance assignment...</p>
+              ) : attendanceAssignmentCheck === "found" ? (
+                <p>Attendance assignment found. You can continue with activation.</p>
+              ) : attendanceAssignmentCheck === "unknown" ? (
+                <p>The attendance assignment could not be verified right now. It will be checked when you save.</p>
+              ) : (
+                <>
+                  <p>Activation requires an active shift or timetable assignment.</p>
+                  <div className="flex flex-wrap gap-3 font-medium">
+                    <Link href="/dashboard/attendance/shift-assignments" className="text-primary hover:underline">
+                      Assign a shift
+                    </Link>
+                    <Link href="/dashboard/attendance/employee-timetables" className="text-primary hover:underline">
+                      Assign a timetable
+                    </Link>
+                  </div>
+                </>
+              )}
             </div>
           ) : null}
           {statusError ? <p className="text-sm text-rose-600">{statusError}</p> : null}

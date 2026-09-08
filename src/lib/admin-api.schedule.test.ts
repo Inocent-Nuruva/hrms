@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
+  getEmployeeAttendanceAssignmentPresence,
   getShiftResourceById,
   listShiftResources,
   patchShiftResourceById,
@@ -83,6 +84,40 @@ describe("attendance schedule API helpers", () => {
       minimum_work_minutes: 180,
       is_night_shift: false,
     })
+  })
+
+  it("recognizes a current direct shift assignment for activation", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: [
+            {
+              id: 8,
+              employeeId: 140,
+              shiftId: 17,
+              effectiveFrom: "2026-09-08",
+              effectiveTo: null,
+              status: "ACTIVE",
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ data: [] }))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const result = await getEmployeeAttendanceAssignmentPresence("token", 140)
+
+    expect(result).toEqual({
+      hasShift: true,
+      hasTimetable: false,
+      hasAssignment: true,
+    })
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "http://localhost:8888/api/attendance/assignments/shifts?page=1&limit=100&employee_id=140&status=ACTIVE",
+      expect.objectContaining({ method: "GET" }),
+    )
   })
 
   it("sends only the DTO-shaped fields supplied for a shift update", async () => {

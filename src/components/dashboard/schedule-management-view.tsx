@@ -36,7 +36,7 @@ import {
   listAttendanceHolidayGroups,
   listBranches,
   listDepartments,
-  listEmployees,
+  listAllEmployees,
   listUsers,
   listShiftResources,
   listTimetableResources,
@@ -866,6 +866,12 @@ function buildScheduleLookupLabelMaps(lookups: LookupState, companyName: string 
     department_id: toMap(lookups.departments, ["id", "department_id"], (row, id) => {
       return readStringFromRecord(row, ["name", "department_name", "title"]) ?? `Department ${id}`
     }),
+    employee_id: new Map(
+      lookups.employees
+        .map(resolveEmployeeLookupOption)
+        .filter((option): option is { value: string; label: string } => option !== null)
+        .map((option) => [option.value, option.label] as const)
+    ),
     shift_id: toMap(lookups.shifts, ["id", "shift_id", "shiftId"], (row, id) => {
       return readStringFromRecord(row, ["name", "shift_name", "title"]) ?? `Shift ${id}`
     }),
@@ -1241,6 +1247,41 @@ async function deleteScheduleRow(token: string, section: ScheduleSectionKey, id:
     : deleteTimetableResourceById(token, section as TimetableResourceKey, id)
 }
 
+function resolveEmployeeLookupOption(row: AdminRecord): { value: string; label: string } | null {
+  const directNestedEmployee = readNestedRecord(row, ["employee", "user", "staff", "person"])
+  const nestedEmployee = directNestedEmployee
+    ? readNestedRecord(directNestedEmployee, ["user", "employee"]) ?? directNestedEmployee
+    : null
+  const id =
+    readNumberFromRecord(row, ["id", "employee_id", "employeeId", "user_id", "userId", "staff_id", "staffId", "person_id", "personId"]) ??
+    (nestedEmployee
+      ? readNumberFromRecord(nestedEmployee, ["id", "employee_id", "employeeId", "user_id", "userId", "staff_id", "staffId", "person_id", "personId"])
+      : null)
+  if (id === null) return null
+
+  const nameSource = nestedEmployee ?? row
+  const fallbackName = [
+    readStringFromRecord(nameSource, ["first_name", "firstName"]),
+    readStringFromRecord(nameSource, ["middle_name", "middleName"]),
+    readStringFromRecord(nameSource, ["last_name", "lastName"]),
+  ]
+    .filter((value): value is string => Boolean(value))
+    .join(" ")
+  const fullName =
+    readStringFromRecord(row, ["full_name", "fullName", "display_name", "displayName", "name", "employee_name", "employeeName"]) ??
+    (nestedEmployee
+      ? readStringFromRecord(nestedEmployee, ["full_name", "fullName", "display_name", "displayName", "name", "employee_name", "employeeName"])
+      : null) ??
+    fallbackName
+  const employeeNo =
+    readStringFromRecord(row, ["employee_no", "employeeNo", "employee_number", "employee_code", "user_no", "staff_no", "staffNo", "code"]) ??
+    (nestedEmployee
+      ? readStringFromRecord(nestedEmployee, ["employee_no", "employeeNo", "employee_number", "employee_code", "user_no", "staff_no", "staffNo", "code"])
+      : null)
+  const label = fullName && employeeNo ? `${fullName} (${employeeNo})` : fullName || employeeNo || `Employee ${id}`
+  return { value: String(id), label }
+}
+
 function mapLookupOptions(field: FieldConfig, lookups: LookupState) {
   if (field.options) {
     return field.options
@@ -1273,52 +1314,7 @@ function mapLookupOptions(field: FieldConfig, lookups: LookupState) {
     case "employee_id":
     case "employee_ids":
       return lookups.employees
-        .map((row) => {
-          const directNestedEmployee = readNestedRecord(row, ["employee", "user", "staff", "person"])
-          const nestedEmployee = directNestedEmployee
-            ? readNestedRecord(directNestedEmployee, ["user", "employee"]) ?? directNestedEmployee
-            : null
-          const id =
-            readNumberFromRecord(row, ["id", "employee_id", "employeeId", "user_id", "userId", "staff_id", "staffId", "person_id", "personId"]) ??
-            (nestedEmployee
-              ? readNumberFromRecord(nestedEmployee, ["id", "employee_id", "employeeId", "user_id", "userId", "staff_id", "staffId", "person_id", "personId"])
-              : null)
-          if (id === null) {
-            return null
-          }
-          const topLevelName = [row.first_name, row.firstName, row.middle_name, row.middleName, row.last_name, row.lastName]
-            .filter((value, index) => index % 3 === 0 ? true : true)
-            .filter((value) => typeof value === "string" && value.trim())
-            .join(" ")
-            .trim()
-          const nestedName = nestedEmployee
-            ? [
-                nestedEmployee.first_name,
-                nestedEmployee.firstName,
-                nestedEmployee.middle_name,
-                nestedEmployee.middleName,
-                nestedEmployee.last_name,
-                nestedEmployee.lastName,
-              ]
-            .filter((value) => typeof value === "string" && value.trim())
-            .join(" ")
-            .trim()
-            : ""
-          const fallbackName = topLevelName || nestedName
-          const fullName =
-            readStringFromRecord(row, ["full_name", "fullName", "display_name", "displayName", "name", "employee_name", "employeeName"]) ??
-            (nestedEmployee
-              ? readStringFromRecord(nestedEmployee, ["full_name", "fullName", "display_name", "displayName", "name", "employee_name", "employeeName"])
-              : null) ??
-            fallbackName
-          const employeeNo =
-            readStringFromRecord(row, ["employee_no", "employeeNo", "employee_number", "employee_code", "user_no", "staff_no", "staffNo", "code"]) ??
-            (nestedEmployee
-              ? readStringFromRecord(nestedEmployee, ["employee_no", "employeeNo", "employee_number", "employee_code", "user_no", "staff_no", "staffNo", "code"])
-              : null)
-          const label = fullName && employeeNo ? `${fullName} (${employeeNo})` : fullName || employeeNo || `Employee ${id}`
-          return { value: String(id), label }
-        })
+        .map(resolveEmployeeLookupOption)
         .filter((option): option is { value: string; label: string } => option !== null)
     case "shift_id":
     case "current_shift_id":
@@ -1888,9 +1884,9 @@ export function ScheduleManagementView({ section }: { section: string }) {
             ? listDepartments(token, { page: 1, limit: 100 })
             : Promise.resolve({ rows: [] }),
           needed.has("employee_id")
-            ? listEmployees(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }).then(async (result) => {
-              if (result.rows.length > 0) {
-                return result
+            ? listAllEmployees(token, {}, { pageSize: 100, maxPages: 50 }).then(async (rows) => {
+              if (rows.length > 0) {
+                return { rows }
               }
               const fallback = await listUsers(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" })
               return { rows: fallback.rows }
@@ -2052,7 +2048,7 @@ export function ScheduleManagementView({ section }: { section: string }) {
     () => [
       ...columns.map((column) => ({
         key: column,
-        label: prettifyLabel(column),
+        label: fields.find((field) => field.key === column)?.label ?? prettifyLabel(column),
         defaultWidth: column === "name" ? 180 : column === "status" ? 90 : 150,
         sortable: true,
         render: (row: AdminRecord) => resolveScheduleCellValue(column, row, lookupMaps),
@@ -2093,7 +2089,7 @@ export function ScheduleManagementView({ section }: { section: string }) {
         },
       },
     ],
-    [columns, lookupMaps, openEdit]
+    [columns, fields, lookupMaps, openEdit]
   )
 
   const onCreate = async () => {

@@ -6729,6 +6729,53 @@ export async function getShiftResourceById(
   return record ? normalizeScheduleResourceRecord(record) : null;
 }
 
+export async function getEmployeeAttendanceAssignmentPresence(
+  token: string,
+  employeeId: string | number,
+) {
+  const employeeIdValue = Number(employeeId);
+  if (!Number.isFinite(employeeIdValue) || employeeIdValue < 1) {
+    throw new Error("A valid employee is required.");
+  }
+
+  const query = new URLSearchParams({
+    page: "1",
+    limit: "100",
+    employee_id: String(Math.trunc(employeeIdValue)),
+    status: "ACTIVE",
+  }).toString();
+  const [shiftPayload, timetablePayload] = await Promise.all([
+    adminRequest<unknown>(
+      `${shiftResourcePath("shift-assignments")}?${query}`,
+      { token },
+    ),
+    adminRequest<unknown>(
+      `${timetableResourcePath("employee-timetables")}?${query}`,
+      { token },
+    ),
+  ]);
+  const today = new Date().toISOString().slice(0, 10);
+  const hasCurrentAssignment = (payload: unknown) =>
+    normalizeList(payload)
+      .map(normalizeScheduleResourceRecord)
+      .some((record) => {
+        const effectiveTo = record.effective_to;
+        return (
+          typeof effectiveTo !== "string" ||
+          !effectiveTo.trim() ||
+          effectiveTo.slice(0, 10) >= today
+        );
+      });
+
+  const hasShift = hasCurrentAssignment(shiftPayload);
+  const hasTimetable = hasCurrentAssignment(timetablePayload);
+  return {
+    hasShift,
+    hasTimetable,
+    hasAssignment: hasShift || hasTimetable,
+  };
+}
+
 export async function createShiftResource(
   token: string,
   resource: ShiftResourceKey,
