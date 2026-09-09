@@ -967,6 +967,10 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
     permissions: ["leave_balances:read", "leave-balances.view", "leave-balances.manage"],
     mode: "any",
   },
+  "/dashboard/leave-management/transactions": {
+    permissions: ["leave_balances:read", "leave-balances.view", "leave-balances.manage"],
+    mode: "any",
+  },
   "/dashboard/leave-management/business-trips": ATTENDANCE_BUSINESS_TRIPS_ROUTE_PERMISSION,
   "/dashboard/leave-management/holidays": {
     permissions: ["holidays:read", "attendance_holidays:read"],
