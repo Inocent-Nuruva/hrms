@@ -1045,8 +1045,19 @@ export function OnboardingView() {
     () =>
       actor.ready &&
       !isEmployeeMode &&
-      canPerformPermission(actorPermissions, "employees:create"),
+      canPerformPermission(actorPermissions, {
+        permissions: [
+          "employees:create",
+          "onboarding_requests:read",
+          "onboarding_workflows:read",
+        ],
+        mode: "any",
+      }),
     [actor.ready, actorPermissions, isEmployeeMode],
+  )
+  const canResendPendingInvitations = React.useMemo(
+    () => canPerformPermission(actorPermissions, "employees:create"),
+    [actorPermissions],
   )
   const canCreateOnboardingRequests = React.useMemo(
     () => canPerformPermission(actorPermissions, "onboarding_requests:create"),
@@ -3685,6 +3696,9 @@ export function OnboardingView() {
       render: (row) => {
         const invitationId = readNumber(row, ["id", "invitation_id"])
         const resending = invitationId !== null && resendingInvitationId === invitationId
+        if (!canResendPendingInvitations) {
+          return <span className="text-[11px] text-muted-foreground">View only</span>
+        }
         return (
           <Button
             type="button"
