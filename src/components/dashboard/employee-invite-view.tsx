@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
 import {
   InfoIcon,
   Loader2Icon,
@@ -1013,7 +1014,17 @@ export function EmployeeInviteView() {
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-8">
         <section className="flex flex-col gap-4">
-          <SectionHeader title="Personal details" />
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <SectionHeader title="Personal details" />
+            {canPerformPermission(actor.permissionLabels, "employees:create") ? (
+              <Link
+                href="/dashboard/employees/onboarding?tab=invitations"
+                className="inline-flex h-8 items-center rounded-md border border-input bg-background px-3 text-xs font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+              >
+                View pending invitations
+              </Link>
+            ) : null}
+          </div>
           {loading ? (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               {Array.from({ length: 4 }).map((_, index) => (

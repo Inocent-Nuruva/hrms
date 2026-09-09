@@ -1006,6 +1006,7 @@ export function OnboardingView() {
       "",
     [searchParams]
   )
+  const requestedTab = searchParams?.get("tab") ?? ""
   const actor = useDashboardActor()
   const actorPermissions = actor.permissionLabels
   const isEmployeeMode = actor.ready ? actor.accessMode === "employee" || !actor.isAdmin : false
@@ -1079,7 +1080,9 @@ export function OnboardingView() {
     () => canPerformPermission(actorPermissions, "onboarding_workflows:delete"),
     [actorPermissions]
   )
-  const [activeTab, setActiveTab] = React.useState<OnboardingTab>("requests")
+  const [activeTab, setActiveTab] = React.useState<OnboardingTab>(
+    requestedTab === "invitations" ? "invitations" : "requests",
+  )
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -1195,6 +1198,12 @@ export function OnboardingView() {
   const [workflowSheetOpen, setWorkflowSheetOpen] = React.useState(false)
   const [editingWorkflowId, setEditingWorkflowId] = React.useState<number | null>(null)
   const [requestSheetOpen, setRequestSheetOpen] = React.useState(false)
+
+  React.useEffect(() => {
+    if (requestedTab === "invitations") {
+      setActiveTab("invitations")
+    }
+  }, [requestedTab])
 
   const resolveBranchLabel = React.useCallback(
     (branchId: number | null) =>
