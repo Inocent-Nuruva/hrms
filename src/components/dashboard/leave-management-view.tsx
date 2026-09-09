@@ -9,9 +9,11 @@ import { canSeeHrLeaveRequestsQueue } from "@/lib/dashboard-home"
 import { canPerformPermission } from "@/lib/dashboard-permissions"
 import { ResizableTable } from "@/components/ui/resizable-table"
 import { Textarea } from "@/components/ui/textarea"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import {
   Check,
   Download,
+  Info,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -137,7 +139,7 @@ import {
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 
-type LeaveTab = "types" | "requests" | "balances" | "holidays" | "policies" | "workflows"
+type LeaveTab = "types" | "requests" | "balances" | "transactions" | "holidays" | "policies" | "workflows"
 type LeaveLookupKey = "types" | "employees" | "departments" | "positions" | "branches" | "roles"
 type LeaveManagementViewProps = {
   activeTab?: LeaveTab
@@ -201,10 +203,38 @@ const HOLIDAY_IMPORT_COUNTRIES: Array<{ code: HolidayImportCountryCode; label: s
   { code: "UG", label: "Uganda" },
 ]
 
+const TRANSACTION_TYPE_DESCRIPTIONS: Record<string, string> = {
+  INITIAL_ALLOCATION: "Initial leave days assigned to an employee.",
+  ACCRUAL: "Leave days earned through the configured accrual process.",
+  RECALCULATION: "Balance rebuilt after a policy, holiday, or calculation change.",
+  ADJUSTMENT: "Manual balance increase or decrease recorded by HR.",
+  CARRY_FORWARD: "Unused days moved into a new leave year.",
+  TAKEN: "Days consumed by an approved leave request.",
+  RESERVED: "Days held while a leave request is pending approval.",
+  RESERVATION_RELEASED: "Held days returned after a request is cancelled or rejected.",
+  CANCELLED_REVERSAL: "Previously consumed days restored after cancellation.",
+  EXPIRED: "Days removed because their validity period ended.",
+  MANUAL_CORRECTION: "A direct correction made to resolve a balance discrepancy.",
+  ATTENDANCE_DEDUCTION: "Days deducted by an attendance or absence rule.",
+}
+
+function formatTransactionType(value: string) {
+  if (!value || value === "-") {
+    return "-"
+  }
+
+  return value
+    .toLowerCase()
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ")
+}
+
 const TAB_LOOKUP_REQUIREMENTS: Record<LeaveTab, LeaveLookupKey[]> = {
   types: [],
   requests: ["employees", "types"],
   balances: ["employees", "types"],
+  transactions: ["employees", "types"],
   holidays: [],
   policies: [],
   workflows: [],
@@ -1113,6 +1143,8 @@ export function LeaveManagementView({
   const [requests, setRequests] = React.useState<AdminRecord[]>([])
   const [requestSearch, setRequestSearch] = React.useState("")
   const [requestStatusFilter, setRequestStatusFilter] = React.useState("all")
+  const [transactionSearch, setTransactionSearch] = React.useState("")
+  const [transactionTypeFilter, setTransactionTypeFilter] = React.useState("all")
   const [typeSearch, setTypeSearch] = React.useState("")
   const [typeStatusFilter, setTypeStatusFilter] = React.useState("all")
   const [workflowSearch, setWorkflowSearch] = React.useState("")
@@ -1267,6 +1299,7 @@ export function LeaveManagementView({
         { key: "types" as LeaveTab, label: "Leave Types", visible: canReadTypes },
         { key: "requests" as LeaveTab, label: "Leave Requests", visible: canReadRequests },
         { key: "balances" as LeaveTab, label: "Leave Balances", visible: canReadBalances },
+        { key: "transactions" as LeaveTab, label: "Balance Transactions", visible: canReadBalances },
         { key: "holidays" as LeaveTab, label: "Holidays", visible: canReadHolidays },
         { key: "policies" as LeaveTab, label: "Leave Policies", visible: canReadPolicies },
         { key: "workflows" as LeaveTab, label: "Leave Workflows", visible: canReadWorkflows },
@@ -1464,11 +1497,12 @@ export function LeaveManagementView({
             { cacheTtlMs: force ? 0 : undefined },
           )
           setBalances(result.rows)
-          const [adjustments, transactions] = await Promise.all([
-            listLeaveBalanceAdjustments(token, { limit: 50 }).catch(() => []),
-            listLeaveBalanceTransactions(token, { limit: 50 }).catch(() => []),
-          ])
+          const adjustments = await listLeaveBalanceAdjustments(token, { limit: 50 }).catch(() => [])
           setBalanceAdjustments(adjustments)
+          break
+        }
+        case "transactions": {
+          const transactions = await listLeaveBalanceTransactions(token, { limit: 50 }).catch(() => [])
           setBalanceTransactions(transactions)
           break
         }
@@ -1863,8 +1897,8 @@ export function LeaveManagementView({
       },
       {
         key: "types",
-        label: "Types",
-        defaultWidth: 60,
+        label: "Leave Types",
+        defaultWidth: 85,
         sortValue: (group: LeaveBalanceEmployeeGroup) => group.typeCount,
         render: (group: LeaveBalanceEmployeeGroup) => String(group.typeCount),
       },
@@ -2013,6 +2047,35 @@ export function LeaveManagementView({
     const dateRange = `${readString(row, ["start_date"])} ${readString(row, ["end_date"])}`.toLowerCase()
     return employee.includes(query) || leaveType.includes(query) || reason.includes(query) || dateRange.includes(query)
   })
+
+  const transactionTypes = React.useMemo(
+    () => Array.from(
+      new Set(
+        balanceTransactions
+          .map((row) => readString(row, ["transaction_type", "type"]))
+          .filter((value) => value && value !== "-"),
+      ),
+    ).sort(),
+    [balanceTransactions],
+  )
+
+  const filteredBalanceTransactions = React.useMemo(() => {
+    const query = transactionSearch.trim().toLowerCase()
+    return balanceTransactions.filter((row) => {
+      const type = readString(row, ["transaction_type", "type"])
+      if (transactionTypeFilter !== "all" && type !== transactionTypeFilter) {
+        return false
+      }
+      if (!query) return true
+      return [
+        employeeLabelFromRow(row),
+        type,
+        formatTransactionType(type),
+        readString(row, ["amount_days", "days", "amount"]),
+        readString(row, ["reason", "description"]),
+      ].join(" ").toLowerCase().includes(query)
+    })
+  }, [balanceTransactions, transactionSearch, transactionTypeFilter])
 
   async function importCountryHolidays() {
     const token = readStoredToken()
@@ -3810,6 +3873,9 @@ export function LeaveManagementView({
               title="Leave Requests"
               toolbarStart={
                 <>
+                  <span className="mr-1 shrink-0 text-xs font-semibold text-foreground">
+                    Leave Requests
+                  </span>
                   <SearchToggleField
                     className="min-w-0 !w-auto !max-w-[12rem] !flex-none"
                     placeholder="Search leave requests"
@@ -5057,6 +5123,20 @@ export function LeaveManagementView({
                 Adjust Leave Balance
               </button>
             ) : null}
+            {canCreateRequests ? (
+              <button
+                type="button"
+                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-xs font-medium text-foreground"
+                onClick={() => {
+                  setRequestImportFile(null)
+                  setRequestImportResult(null)
+                  setRequestImportOpen(true)
+                }}
+              >
+                <Download className="h-3.5 w-3.5" />
+                Import leaves
+              </button>
+            ) : null}
             {refreshButton}
               </>
             }
@@ -5075,6 +5155,11 @@ export function LeaveManagementView({
           {balanceAdjustments.length > 0 ? (
           <ResizableTable
             title="Balance adjustments"
+            toolbarStart={
+              <span className="text-xs font-semibold text-foreground">
+                Balance adjustments
+              </span>
+            }
             data={balanceAdjustments}
             columns={[
               { key: "employee", label: "Employee", render: (r) => employeeLabelFromRow(r) },
@@ -5087,22 +5172,88 @@ export function LeaveManagementView({
             storageKey="leave-balance-adjustments"
           />
           ) : null}
-          {balanceTransactions.length > 0 ? (
-          <ResizableTable
-            title="Balance transactions"
-            data={balanceTransactions}
-            columns={[
-              { key: "employee", label: "Employee", render: (r) => employeeLabelFromRow(r) },
-              { key: "type", label: "Type", render: (r) => readString(r, ["transaction_type", "type"]) },
-              { key: "days", label: "Days", render: (r) => readString(r, ["days", "amount"]) },
-            ]}
-            itemsPerPage={10}
-            loading={false}
-            showExport={false}
-            storageKey="leave-balance-transactions"
-          />
-          ) : null}
         </div>
+      ) : null}
+
+      {tab === "transactions" ? (
+        <ResizableTable
+          title="Balance transactions"
+          toolbarStart={
+            <>
+              <span className="mr-1 shrink-0 text-xs font-semibold text-foreground">
+                Balance transaction history
+              </span>
+              <SearchToggleField
+                className="min-w-0 !w-auto !max-w-[13rem] !flex-none"
+                placeholder="Search transactions"
+                value={transactionSearch}
+                onChange={setTransactionSearch}
+              />
+              <select
+                className="h-8 w-[11rem] shrink-0 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
+                value={transactionTypeFilter}
+                onChange={(event) => setTransactionTypeFilter(event.target.value)}
+                aria-label="Filter balance transaction type"
+              >
+                <option value="all">All transaction types</option>
+                {transactionTypes.map((type) => (
+                  <option key={type} value={type}>{formatTransactionType(type)}</option>
+                ))}
+              </select>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <button
+                      type="button"
+                      className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-background text-muted-foreground hover:bg-muted hover:text-primary"
+                      aria-label="Transaction type descriptions"
+                    />
+                  }
+                >
+                  <Info className="size-3.5" />
+                </TooltipTrigger>
+                <TooltipContent
+                  side="bottom"
+                  align="start"
+                  className="w-[min(24rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] flex-col items-stretch gap-0 rounded-lg border border-primary/25 bg-background p-3 text-left text-foreground shadow-xl"
+                >
+                  <div className="mb-2 border-b border-border pb-2 text-xs font-semibold text-primary">
+                    Transaction type descriptions
+                  </div>
+                  <div className="space-y-2.5">
+                    {Object.entries(TRANSACTION_TYPE_DESCRIPTIONS).map(([type, description]) => (
+                      <div key={type} className="space-y-0.5">
+                        <div className="text-xs font-bold text-primary">{formatTransactionType(type)}</div>
+                        <div className="text-xs leading-relaxed text-muted-foreground">{description}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-3 border-t border-border pt-2 text-[11px] leading-relaxed text-muted-foreground">
+                    <span className="font-bold text-primary">-</span> means no value was recorded or the field does not apply to that transaction.
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            </>
+          }
+          data={filteredBalanceTransactions}
+          columns={[
+            { key: "employee", label: "Employee", render: (r) => employeeLabelFromRow(r) },
+            {
+              key: "type",
+              label: "Type",
+              render: (r) => formatTransactionType(readString(r, ["transaction_type", "type"])),
+            },
+            {
+              key: "days",
+              label: "Days",
+              render: (r) => readString(r, ["amount_days", "days", "amount"]),
+            },
+          ]}
+          itemsPerPage={10}
+          loading={loading}
+          showExport={false}
+          storageKey="leave-balance-transactions"
+        />
       ) : null}
 
       {tab === "holidays" ? (

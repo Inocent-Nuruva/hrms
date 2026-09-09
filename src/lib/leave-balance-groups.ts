@@ -62,6 +62,23 @@ export function readBalanceFiscalYear(row: LeaveBalanceRow): string {
   return readString(row, ["fiscal_year", "fiscalYear"])
 }
 
+function readBalanceTypeKey(row: LeaveBalanceRow, index: number): string {
+  const typeId = readNumber(row, ["leave_type_id", "leaveTypeId", "type_id", "typeId"])
+  if (typeId !== null) {
+    return `id:${typeId}`
+  }
+
+  const nestedType = asRecord(row.leave_type) ?? asRecord(row.leaveType) ?? asRecord(row.type)
+  const typeName =
+    readString(row, ["leave_type_name", "leaveTypeName", "type_name", "typeName"]) ||
+    (nestedType ? readString(nestedType, ["name", "code", "title"]) : "")
+  return typeName ? `name:${typeName.toLowerCase()}` : `row:${index}`
+}
+
+function countLeaveTypes(rows: LeaveBalanceRow[]): number {
+  return new Set(rows.map((row, index) => readBalanceTypeKey(row, index))).size
+}
+
 export function readBalanceEmployeeId(row: LeaveBalanceRow): number | null {
   const direct = readNumber(row, ["employee_id", "employeeId"])
   if (direct !== null) {
@@ -150,7 +167,7 @@ function mergeBalanceGroups(
     employeeId: left.employeeId ?? right.employeeId,
     employeeName: left.employeeName || right.employeeName,
     fiscalYears: Array.from(fiscalYears).sort(compareText),
-    typeCount: left.rows.length + right.rows.length,
+    typeCount: countLeaveTypes([...left.rows, ...right.rows]),
     allocatedDays: left.allocatedDays + right.allocatedDays,
     usedDays: left.usedDays + right.usedDays,
     remainingDays: left.remainingDays + right.remainingDays,
@@ -220,7 +237,7 @@ export function groupLeaveBalancesByEmployee(
       employeeId: existing?.employeeId ?? employeeId,
       employeeName: existing?.employeeName ?? employeeName,
       fiscalYears: Array.from(fiscalYears).sort(compareText),
-      typeCount: nextRows.length,
+      typeCount: countLeaveTypes(nextRows),
       allocatedDays:
         (existing?.allocatedDays ?? 0) +
         readBalanceDays(row, ["allocated_days", "allocated", "allocatedDays"]),

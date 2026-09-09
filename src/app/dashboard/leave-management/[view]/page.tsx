@@ -7,13 +7,14 @@ const ALLOWED_VIEWS = new Set([
   "types",
   "requests",
   "balances",
+  "transactions",
   "business-trips",
   "holidays",
   "policies",
   "workflows",
 ])
 
-type LeaveView = "types" | "requests" | "balances" | "holidays" | "policies" | "workflows"
+type LeaveView = "types" | "requests" | "balances" | "transactions" | "holidays" | "policies" | "workflows"
 
 interface LeaveManagementViewPageProps {
   params: Promise<{

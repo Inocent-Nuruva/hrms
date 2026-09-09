@@ -4343,11 +4343,27 @@ export async function listAllLeaveBalances(
     }
   }
 
+  const rows = collected.flatMap((row) => {
+    const nestedBalances = asArray(row.leave_balances ?? row.leaveBalances);
+    if (!nestedBalances) {
+      return [row];
+    }
+
+    const employee = asRecord(row.employee) ?? asRecord(row.Employee);
+    const employeeId = readNumberFromRecord(employee, ["id", "employee_id", "employeeId"]);
+
+    return nestedBalances.map((balance) => ({
+      ...balance,
+      ...(balance.employee === undefined && employee ? { employee } : {}),
+      ...(balance.employee_id === undefined && employeeId !== null ? { employee_id: employeeId } : {}),
+    }));
+  });
+
   return {
-    rows: collected,
+    rows,
     page: 1,
-    limit: collected.length || pageSize,
-    total: total ?? collected.length,
+    limit: rows.length || pageSize,
+    total: rows.length,
     totalPages: 1,
   };
 }
