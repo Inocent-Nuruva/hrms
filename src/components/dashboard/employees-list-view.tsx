@@ -35,8 +35,10 @@ import {
   type EmployeesQueryParams,
 } from "@/lib/admin-api";
 import {
+  employeeBelongsToDirectory,
   filterEmployeesByDirectorySearch,
   mergeEmployeeDirectoryRows,
+  type EmployeeDirectoryMode,
 } from "@/lib/employee-directory-search";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useRenderDiagnostics } from "@/hooks/use-render-diagnostics";
@@ -215,8 +217,6 @@ function employeeEmploymentStatus(row: AdminRecord) {
     .trim();
 }
 
-type EmployeeDirectoryMode = "current" | "inactive";
-
 type EmployeesListViewProps = {
   directoryMode?: EmployeeDirectoryMode;
 };
@@ -361,7 +361,7 @@ export function EmployeesListView({
       search: debouncedSearch,
       employment_status:
         directoryMode === "inactive"
-          ? ("inactive" as const)
+          ? undefined
           : query.employment_status || undefined,
       branch_id: query.branch_id > 0 ? query.branch_id : undefined,
       department_id: query.department_id > 0 ? query.department_id : undefined,
@@ -370,8 +370,8 @@ export function EmployeesListView({
     [debouncedSearch, directoryMode, query],
   );
   const queryCacheKey = React.useMemo(
-    () => JSON.stringify({ ...normalizedQuery, page }),
-    [normalizedQuery, page],
+    () => JSON.stringify({ directoryMode, ...normalizedQuery, page }),
+    [directoryMode, normalizedQuery, page],
   );
 
   React.useEffect(() => {
@@ -421,8 +421,7 @@ export function EmployeesListView({
           cacheTtlMs: env.NEXT_PUBLIC_LIST_CACHE_TTL_SHORT_MS,
         };
         const needsFullDirectory =
-          Boolean(search) ||
-          (directoryMode === "current" && !normalizedQuery.employment_status);
+          Boolean(search) || !normalizedQuery.employment_status;
         const result = needsFullDirectory
           ? await Promise.all([
               listAllEmployees(token, normalizedQuery, requestOptions),
@@ -453,9 +452,7 @@ export function EmployeesListView({
                 : directoryRows;
               const matchingRows = combinedRows.filter((row) => {
                 const status = employeeEmploymentStatus(row);
-                return directoryMode === "inactive"
-                  ? status === "inactive"
-                  : status !== "inactive";
+                return employeeBelongsToDirectory(status, directoryMode);
               });
               const start = (page - 1) * normalizedQuery.limit;
               return {
@@ -1058,8 +1055,6 @@ export function EmployeesListView({
                 <option value="onboarding">Onboarding</option>
                 <option value="active">Active</option>
                 <option value="suspended">Suspended</option>
-                <option value="terminated">Terminated</option>
-                <option value="exited">Exited</option>
               </select>
             ) : null}
           </>

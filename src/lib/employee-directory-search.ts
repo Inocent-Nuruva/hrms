@@ -1,5 +1,30 @@
 export type EmployeeDirectoryRecord = Record<string, unknown>
 
+export type EmployeeDirectoryMode = "current" | "inactive"
+
+const HISTORICAL_EMPLOYEE_STATUSES = new Set([
+  "inactive",
+  "resigned",
+  "terminated",
+  "retired",
+  "exited",
+])
+
+export function isHistoricalEmployeeStatus(status: unknown): boolean {
+  return (
+    typeof status === "string" &&
+    HISTORICAL_EMPLOYEE_STATUSES.has(status.trim().toLowerCase())
+  )
+}
+
+export function employeeBelongsToDirectory(
+  status: unknown,
+  mode: EmployeeDirectoryMode,
+): boolean {
+  const historical = isHistoricalEmployeeStatus(status)
+  return mode === "inactive" ? historical : !historical
+}
+
 const EMAIL_KEYS = [
   "email",
   "work_email",

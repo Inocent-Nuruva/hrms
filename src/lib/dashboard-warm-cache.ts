@@ -1,7 +1,7 @@
 import {
   listAttendanceDailySummariesPage,
+  listAllEmployees,
   listDepartments,
-  listEmployees,
   listLeaveRequests,
   listOffboardingRequests,
   listOnboardingRequests,
@@ -97,7 +97,9 @@ export async function prefetchDashboardWarmCache(token: string): Promise<void> {
   const emptyPage = { rows: [] as AdminRecord[], total: null as number | null }
 
   const [empRes, deptRes, leaveRes, attRes, onboardRes, offboardRes] = await Promise.all([
-    listEmployees(token, { page: 1, limit: 200 }, listOpts).catch(() => emptyPage),
+    listAllEmployees(token, {}, listOpts)
+      .then((rows) => ({ rows, total: rows.length }))
+      .catch(() => emptyPage),
     listDepartments(token, { page: 1, limit: 100 }, listOpts).catch(() => emptyPage),
     listLeaveRequests(token, leaveParams).catch(() => emptyPage),
     listAttendanceDailySummariesPage(token, attParams, listOpts).catch(() => emptyPage),

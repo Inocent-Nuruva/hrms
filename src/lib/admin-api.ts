@@ -13892,6 +13892,32 @@ export async function archiveEmployeeProfile(
   });
 }
 
+export async function unlinkEmployeeCompanyUser(
+  token: string,
+  employeeId: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/employees/${employeeId}/company-user`,
+    {
+      method: "DELETE",
+      token,
+    },
+  );
+}
+
+export async function removeEmployeeLinkedAccount(
+  token: string,
+  employeeId: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/employees/${employeeId}/company-user/account`,
+    {
+      method: "DELETE",
+      token,
+    },
+  );
+}
+
 export async function patchEmployeeAssignment(
   token: string,
   employeeId: string | number,

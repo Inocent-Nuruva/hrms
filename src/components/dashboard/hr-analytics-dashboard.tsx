@@ -25,7 +25,7 @@ import {
   getAnalyticsDashboard,
   getAnalyticsFreshness,
   getHrDashboard,
-  listEmployees,
+  listAllEmployees,
   listDepartments,
   listLeaveRequests,
   listAttendanceDailySummariesPage,
@@ -33,6 +33,7 @@ import {
   listOffboardingRequests,
   type AdminRecord,
 } from "@/lib/admin-api"
+import { isHistoricalEmployeeStatus } from "@/lib/employee-directory-search"
 import {
   clearDashboardFromLoginFlag,
   consumeDashboardWarmCache,
@@ -888,9 +889,6 @@ export default function HrAnalyticsDashboard({
   const [toDate, setToDate] = React.useState(warm?.toDate ?? formatInputDate(new Date()))
 
   const [employees, setEmployees] = React.useState<AdminRecord[]>(warm?.employees ?? [])
-  const [employeesTotal, setEmployeesTotal] = React.useState<number | null>(
-    warm?.employeesTotal ?? null
-  )
   const [departments, setDepartments] = React.useState<AdminRecord[]>(warm?.departments ?? [])
   const [departmentHeadcounts, setDepartmentHeadcounts] = React.useState<Array<[string, number]>>(
     warm ? buildDepartmentHeadcounts(warm.departments, warm.employees) : []
@@ -1000,7 +998,6 @@ export default function HrAnalyticsDashboard({
       setAttendanceSummaries([])
       setOnboardingRequests([])
       setOffboardingRequests([])
-      setEmployeesTotal(null)
       setDepartmentHeadcounts([])
       setSliceReady(readySliceState())
       setLoading(false)
@@ -1051,12 +1048,10 @@ export default function HrAnalyticsDashboard({
           setAnalyticsFreshness(freshnessRows)
         }),
 
-      listEmployees(token, { page: 1, limit: 200 }, listOpts)
-        .catch((): PagedRowsResult => ({ rows: [], total: null }))
-        .then((empRes) => {
-          const empRows = empRes.rows ?? []
+      listAllEmployees(token, {}, listOpts)
+        .catch((): AdminRecord[] => [])
+        .then((empRows) => {
           setEmployees(empRows)
-          setEmployeesTotal(empRes.total ?? empRows.length)
           setDepartmentHeadcounts(buildDepartmentHeadcounts(departmentsRef.current, empRows))
           markReady("employees")
         }),
@@ -1136,30 +1131,25 @@ export default function HrAnalyticsDashboard({
   }, [employees])
 
   const resolvedStatusCounts =
-    Object.keys(analyticsStatusCounts).length > 0 ? analyticsStatusCounts : statusCounts
+    Object.keys(statusCounts).length > 0 ? statusCounts : analyticsStatusCounts
+
+  const currentEmployees = React.useMemo(
+    () =>
+      employees.filter(
+        (employee) => !isHistoricalEmployeeStatus(getEmploymentStatus(employee)),
+      ),
+    [employees],
+  )
 
   // Derived metrics
-  const totalHeadcount =
-    readNumberDeep(analyticsSummary, [
-      "period_end_headcount",
-      "headcount",
-      "employee_count",
-      "employees_total",
-      "total_headcount",
-    ]) ??
-    employeesTotal ??
-    employees.length
+  const totalHeadcount = currentEmployees.length
 
-  const activeCount =
-    readNumberDeep(analyticsSummary, [
-      "active_headcount",
-      "active_employees",
-      "active_count",
-      "period_end_headcount",
-    ]) ??
-    resolvedStatusCounts["active"] ??
-    0
+  const activeCount = statusCounts["active"] ?? 0
   const activePct = totalHeadcount > 0 ? Math.round((activeCount / totalHeadcount) * 100) : 0
+  const statusBreakdownTotal = Math.max(
+    0,
+    Object.values(resolvedStatusCounts).reduce((sum, count) => sum + count, 0),
+  )
 
   // Always derive from latest employees + departments so the chart cannot go stale
   // when one list request finishes before the other.
@@ -1167,8 +1157,8 @@ export default function HrAnalyticsDashboard({
     const analyticsRows = extractDepartmentHeadcountsFromAnalytics(analyticsSummary)
     return analyticsRows.length > 0
       ? analyticsRows
-      : buildDepartmentHeadcounts(departments, employees)
-  }, [analyticsSummary, departments, employees])
+      : buildDepartmentHeadcounts(departments, currentEmployees)
+  }, [analyticsSummary, currentEmployees, departments])
 
   const maxDeptCount = React.useMemo(() => {
     return Math.max(1, ...resolvedDepartmentHeadcounts.map(([, c]) => c), 0)
@@ -1228,14 +1218,14 @@ export default function HrAnalyticsDashboard({
   }, [analyticsSummary, attendanceSummaries])
 
   const recentEmployees = React.useMemo(() => {
-    return [...employees]
+    return [...currentEmployees]
       .sort((a, b) => {
         const da = String(a.created_at || a.hire_date || a.joined_at || "")
         const db = String(b.created_at || b.hire_date || b.joined_at || "")
         return db.localeCompare(da)
       })
       .slice(0, 5)
-  }, [employees])
+  }, [currentEmployees])
 
   // Surface more: hires within the chosen date range (client-side on the loaded sample)
   const hiresInRange = React.useMemo(() => {
@@ -1755,7 +1745,9 @@ export default function HrAnalyticsDashboard({
                     .map((status) => {
                       const count = resolvedStatusCounts[status] || 0
                       const pct =
-                        totalHeadcount > 0 ? Math.round((count / totalHeadcount) * 100) : 0
+                        statusBreakdownTotal > 0
+                          ? Math.round((count / statusBreakdownTotal) * 100)
+                          : 0
                       return {
                         status,
                         label: formatStatusLabel(status),

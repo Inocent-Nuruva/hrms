@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  employeeBelongsToDirectory,
   employeeOwnsEmail,
   employeeOwnsPhone,
   filterEmployeesByDirectorySearch,
@@ -37,6 +38,20 @@ const john = {
 }
 
 describe("employee directory search", () => {
+  it("routes historical statuses to the inactive directory", () => {
+    for (const status of ["inactive", "resigned", "terminated", "retired", "exited"]) {
+      expect(employeeBelongsToDirectory(status, "inactive")).toBe(true)
+      expect(employeeBelongsToDirectory(status, "current")).toBe(false)
+    }
+
+    for (const status of ["onboarding", "pending", "active", "suspended", "offboarding"]) {
+      expect(employeeBelongsToDirectory(status, "current")).toBe(true)
+      expect(employeeBelongsToDirectory(status, "inactive")).toBe(false)
+    }
+
+    expect(employeeBelongsToDirectory(" Terminated ", "inactive")).toBe(true)
+  })
+
   it("matches name and employee number", () => {
     expect(matchesEmployeeDirectorySearch(jane, "Jane")).toBe(true)
     expect(matchesEmployeeDirectorySearch(jane, "AICL/00012")).toBe(true)

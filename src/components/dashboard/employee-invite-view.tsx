@@ -863,7 +863,6 @@ export function EmployeeInviteView() {
       if (failedChannels.length > 0) {
         const message = `Invitation saved, but ${failedChannels.join(" and ")} delivery failed. You can resend it after checking the channel settings.`
         showErrorAlert(message)
-        toast.warning(message)
       } else {
         showSuccessAlert("Invitation sent by email and SMS.")
       }
@@ -883,7 +882,6 @@ export function EmployeeInviteView() {
           ? "The backend invitation endpoint is not available yet. Implement POST /api/employee-invitations using the provided backend contract."
           : `Failed to send the invitation${status ? ` (${status})` : ""}. ${detail}`
       showErrorAlert(message)
-      toast.error(message)
     } finally {
       setSubmitting(false)
     }

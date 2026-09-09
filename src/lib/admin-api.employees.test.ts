@@ -8,6 +8,8 @@ import {
   getPublicEmployeeInvitation,
   listEmployees,
   patchEmployeeStatus,
+  removeEmployeeLinkedAccount,
+  unlinkEmployeeCompanyUser,
 } from "./admin-api"
 
 function jsonResponse(payload: unknown, init?: ResponseInit) {
@@ -27,7 +29,9 @@ describe("employee admin API helpers", () => {
   })
 
   it("archives an employee through the documented DELETE endpoint", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(new Response("", { status: 200 }))
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(() => Promise.resolve(new Response("", { status: 200 })))
     vi.stubGlobal("fetch", fetchMock)
 
     await archiveEmployeeProfile("token", 156)
@@ -40,6 +44,27 @@ describe("employee admin API helpers", () => {
           Authorization: "Bearer token",
         }),
       }),
+    )
+  })
+
+  it("supports unlinking and removing linked employee account access", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(() => Promise.resolve(new Response("", { status: 200 })))
+    vi.stubGlobal("fetch", fetchMock)
+
+    await unlinkEmployeeCompanyUser("token", 156)
+    await removeEmployeeLinkedAccount("token", 157)
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "http://localhost:8888/api/employees/156/company-user",
+      expect.objectContaining({ method: "DELETE" }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "http://localhost:8888/api/employees/157/company-user/account",
+      expect.objectContaining({ method: "DELETE" }),
     )
   })
 

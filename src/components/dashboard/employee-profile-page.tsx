@@ -11,7 +11,9 @@ import {
   PlusIcon,
   SearchIcon,
   Trash2Icon,
+  UnlinkIcon,
   UploadIcon,
+  UserRoundXIcon,
 } from "lucide-react"
 import { getCountryCallingCode } from "libphonenumber-js"
 import { countries as countryCodes } from "country-flag-icons"
@@ -60,7 +62,9 @@ import {
   patchEmployeePosition,
   patchEmployeeStatus,
   patchEmployeeSectionItem,
+  removeEmployeeLinkedAccount,
   submitEmployeeMovement,
+  unlinkEmployeeCompanyUser,
   updateUserById,
   type AdminRecord,
   type EmployeeAssignmentPayload,
@@ -73,6 +77,7 @@ import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import {
   filterEmployeesByDirectorySearch,
   getEmployeeDirectoryContactSummary,
+  isHistoricalEmployeeStatus,
 } from "@/lib/employee-directory-search"
 import { AnimatePresence, motion } from "framer-motion"
 import { useDashboardMotion } from "@/lib/dashboard-motion"
@@ -475,7 +480,7 @@ function renderRecordFields(record: AdminRecord, sectionTitle: string) {
   }
 
   for (const [key, rawValue] of Object.entries(record)) {
-    if (key === "id" || key.endsWith("_id")) {
+    if (key === "id" || key.endsWith("_id") || key.startsWith("__")) {
       continue
     }
     if (rawValue === null || rawValue === undefined) {
@@ -1704,12 +1709,19 @@ function resolveProfileSectionItems(employee: AdminRecord, def: (typeof PROFILE_
   }
 
   const accountContact = getEmployeeDirectoryContactSummary(employee)
-  return accountContact
+  const companyUserId = readNumber(
+    employee.company_user_id ?? employee.companyUserId,
+  )
+  return accountContact && companyUserId !== null
     ? [
         {
           contact_type: "Linked account",
           ...accountContact,
           source: "Employee or company-user account",
+          __linked_account: true,
+          __can_manage_linked_account: isHistoricalEmployeeStatus(
+            employee.employment_status ?? employee.employmentStatus,
+          ),
         },
       ]
     : []
@@ -1882,6 +1894,7 @@ function Section({
   const sectionRef = React.useRef<HTMLDivElement | null>(null)
   const [editingRecord, setEditingRecord] = React.useState<{ item: AdminRecord; index: number } | null>(null)
   const [deletingRecord, setDeletingRecord] = React.useState<{ item: AdminRecord; index: number } | null>(null)
+  const [linkedAccountAction, setLinkedAccountAction] = React.useState<"unlink" | "remove" | null>(null)
   const [addingRecord, setAddingRecord] = React.useState(false)
   const [editForm, setEditForm] = React.useState<Record<string, string>>({})
   const [addForm, setAddForm] = React.useState<Record<string, string>>({})
@@ -2009,6 +2022,29 @@ function Section({
                     ) : null}
                   </div>
                   <div className="flex items-center gap-1">
+                    {item.__linked_account === true &&
+                    item.__can_manage_linked_account === true &&
+                    employeeId &&
+                    token ? (
+                      <>
+                        <button
+                          type="button"
+                          aria-label="Unlink user account from employee"
+                          className="inline-flex h-8 items-center gap-1 px-2 text-xs font-medium text-muted-foreground hover:text-foreground"
+                          onClick={() => setLinkedAccountAction("unlink")}
+                        >
+                          <UnlinkIcon className="size-4" /> Unlink
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="Delete linked account access"
+                          className="inline-flex h-8 items-center gap-1 px-2 text-xs font-medium text-rose-600 hover:text-rose-700"
+                          onClick={() => setLinkedAccountAction("remove")}
+                        >
+                          <UserRoundXIcon className="size-4" /> Delete access
+                        </button>
+                      </>
+                    ) : null}
                     {isDocumentsSection && employeeId && token ? (
                       <button
                         type="button"
@@ -2168,6 +2204,75 @@ function Section({
               }}
             >
               {submitting ? "Saving..." : "Save"}
+            </button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={linkedAccountAction !== null}
+        onOpenChange={(open) => {
+          if (!open && !submitting) {
+            setLinkedAccountAction(null)
+            setMutationError(null)
+          }
+        }}
+      >
+        <AlertDialogContent className="max-w-xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {linkedAccountAction === "remove"
+                ? "Delete linked account access?"
+                : "Unlink this user account?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {linkedAccountAction === "remove"
+                ? "The login will be detached from this employee and its company access will be deactivated. The employee profile and audit history will be retained."
+                : "The login will be detached from this employee. The user account will remain available as a separate company account."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {mutationError ? (
+            <p className="text-sm text-rose-600">{mutationError}</p>
+          ) : null}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={submitting}>Cancel</AlertDialogCancel>
+            <button
+              type="button"
+              disabled={submitting || !employeeId || !token}
+              className={cn(
+                "rounded-md px-3 py-2 text-sm font-medium text-white disabled:opacity-50",
+                linkedAccountAction === "remove"
+                  ? "bg-rose-600 hover:bg-rose-700"
+                  : "bg-primary",
+              )}
+              onClick={async () => {
+                if (!linkedAccountAction || !employeeId || !token) return
+                setSubmitting(true)
+                setMutationError(null)
+                try {
+                  if (linkedAccountAction === "remove") {
+                    await removeEmployeeLinkedAccount(token, employeeId)
+                  } else {
+                    await unlinkEmployeeCompanyUser(token, employeeId)
+                  }
+                  setLinkedAccountAction(null)
+                  await onMutated()
+                } catch (errorObject) {
+                  setMutationError(
+                    errorObject instanceof Error
+                      ? errorObject.message
+                      : "Failed to update the linked account.",
+                  )
+                } finally {
+                  setSubmitting(false)
+                }
+              }}
+            >
+              {submitting
+                ? "Working..."
+                : linkedAccountAction === "remove"
+                  ? "Delete access"
+                  : "Unlink account"}
             </button>
           </AlertDialogFooter>
         </AlertDialogContent>
