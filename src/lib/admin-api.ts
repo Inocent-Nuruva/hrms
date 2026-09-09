@@ -11566,6 +11566,27 @@ export async function createEmployeeInvitation(
   return normalizeSingle(payload) as EmployeeInvitationResponse;
 }
 
+export async function listPendingEmployeeInvitations(token: string) {
+  const payload = await adminRequest<unknown>("/api/employee-invitations", {
+    token,
+  });
+  return normalizeList(payload) as EmployeeInvitationResponse[];
+}
+
+export async function resendEmployeeInvitation(
+  token: string,
+  invitationId: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/employee-invitations/${invitationId}/resend`,
+    {
+      method: "POST",
+      token,
+    },
+  );
+  return normalizeSingle(payload) as EmployeeInvitationResponse;
+}
+
 export async function getPublicEmployeeInvitation(token: string) {
   const payload = await adminRequest<unknown>(
     `/api/employee-invitations/accept/${encodeURIComponent(token)}`,

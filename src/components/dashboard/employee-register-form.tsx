@@ -1122,6 +1122,26 @@ function resolveInitializedRoleId(
 
 const REGISTER_DRAFT_STORAGE_KEY = "hrms.employee.register.draft.v2"
 
+type StoredRegisterDraft = {
+  currentStep?: RegisterStep
+  isInviteMode?: boolean
+  form?: RegisterFormState
+  dob?: string | null
+  hireDate?: string | null
+  probationEndDate?: string | null
+  inviteContact?: InviteContactFormState
+  contacts?: ContactFormState[]
+  addresses?: AddressFormState[]
+  relatives?: RelativeFormState[]
+  identifications?: IdentificationFormState[]
+  bankAccounts?: BankAccountFormState[]
+  academicQualifications?: AcademicQualificationFormState[]
+  professionalQualifications?: ProfessionalQualificationFormState[]
+  experienceDetails?: ExperienceDetailFormState[]
+  onboarding?: OnboardingFormState
+  savedAt?: string
+}
+
 function countryNameFromIso(isoCode: string) {
   try {
     const regionNames = new Intl.DisplayNames(["en"], { type: "region" })
@@ -1373,6 +1393,8 @@ export function EmployeeRegisterForm() {
   )
   const [registrationContextResolved, setRegistrationContextResolved] = React.useState(false)
   const [selfRegistrationStatus, setSelfRegistrationStatus] = React.useState("")
+  const [savedRegisterDraft, setSavedRegisterDraft] = React.useState<StoredRegisterDraft | null>(null)
+  const [registerDraftReady, setRegisterDraftReady] = React.useState(false)
 
   const lockedFields = React.useMemo(
     () => ({
@@ -2593,101 +2615,46 @@ export function EmployeeRegisterForm() {
   }, [actor.ready, isRegisteringOthers, roles])
 
   React.useEffect(() => {
-    if (isInviteMode) {
-      setIsInviteMode(false)
-    }
-  }, [isInviteMode])
-
-  React.useEffect(() => {
     if (typeof window === "undefined") return
     try {
       const raw = window.localStorage.getItem(REGISTER_DRAFT_STORAGE_KEY)
-      if (!raw) return
-      const parsed = JSON.parse(raw) as {
-        currentStep?: RegisterStep
-        isInviteMode?: boolean
-        form?: RegisterFormState
-        dob?: string | null
-        inviteContact?: InviteContactFormState
-        contacts?: ContactFormState[]
-        addresses?: AddressFormState[]
-        relatives?: RelativeFormState[]
-        identifications?: IdentificationFormState[]
-        bankAccounts?: BankAccountFormState[]
-        onboarding?: OnboardingFormState
-      }
-      if (parsed.currentStep && REGISTER_STEP_ORDER.includes(parsed.currentStep)) {
-        setCurrentStep(parsed.currentStep)
-      }
-      if (parsed.form) {
-        const { employeeNo: draftEmployeeNo, ...restForm } = parsed.form
-        setForm((previous) => ({
-          ...previous,
-          ...restForm,
-          employeeNo: isRegisteringOthers ? "" : (draftEmployeeNo ?? previous.employeeNo),
-        }))
-      }
-      if (parsed.inviteContact) {
-        setInviteContact((previous) => ({ ...previous, ...parsed.inviteContact }))
-      }
-      if (parsed.dob) {
-        const nextDob = new Date(parsed.dob)
-        if (!Number.isNaN(nextDob.getTime())) {
-          setDob(nextDob)
+      if (raw) {
+        const parsed = JSON.parse(raw) as StoredRegisterDraft
+        if (parsed.form || parsed.inviteContact || parsed.contacts?.length || parsed.addresses?.length) {
+          setSavedRegisterDraft(parsed)
         }
-      }
-      if (Array.isArray(parsed.contacts)) setContacts(parsed.contacts)
-      if (Array.isArray(parsed.addresses)) setAddresses(parsed.addresses)
-      if (Array.isArray(parsed.relatives)) setRelatives(parsed.relatives)
-      if (Array.isArray(parsed.identifications)) setIdentifications(parsed.identifications)
-      if (Array.isArray(parsed.bankAccounts)) setBankAccounts(parsed.bankAccounts)
-      const draftOnboarding = parsed.onboarding
-      if (draftOnboarding) {
-        setOnboarding((previous) => ({
-          ...previous,
-          ...draftOnboarding,
-          shiftAssignment: {
-            ...EMPTY_ONBOARDING_SHIFT_ASSIGNMENT,
-            ...draftOnboarding.shiftAssignment,
-          },
-          timetableAssignment: {
-            ...EMPTY_ONBOARDING_TIMETABLE_ASSIGNMENT,
-            ...draftOnboarding.timetableAssignment,
-          },
-          deviceAssignment: {
-            ...EMPTY_ONBOARDING_DEVICE_ASSIGNMENT,
-            ...draftOnboarding.deviceAssignment,
-            employeeNo: isRegisteringOthers
-              ? ""
-              : (draftOnboarding.deviceAssignment?.employeeNo ?? ""),
-            deviceIds: Array.isArray(draftOnboarding.deviceAssignment?.deviceIds)
-              ? draftOnboarding.deviceAssignment.deviceIds
-              : [],
-          },
-        }))
       }
     } catch {
       // ignore corrupted draft
+      window.localStorage.removeItem(REGISTER_DRAFT_STORAGE_KEY)
+    } finally {
+      setRegisterDraftReady(true)
     }
   }, [isRegisteringOthers])
 
   React.useEffect(() => {
-    if (typeof window === "undefined") return
+    if (typeof window === "undefined" || !registerDraftReady || savedRegisterDraft) return
     const payload = {
       currentStep,
       isInviteMode,
       form,
       dob: dob ? dob.toISOString() : null,
+      hireDate: hireDate ? hireDate.toISOString() : null,
+      probationEndDate: probationEndDate ? probationEndDate.toISOString() : null,
       inviteContact,
       contacts,
       addresses,
       relatives,
       identifications,
       bankAccounts,
+      academicQualifications,
+      professionalQualifications,
+      experienceDetails,
       onboarding,
+      savedAt: new Date().toISOString(),
     }
     window.localStorage.setItem(REGISTER_DRAFT_STORAGE_KEY, JSON.stringify(payload))
-  }, [currentStep, isInviteMode, form, dob, hireDate, probationEndDate, inviteContact, contacts, addresses, relatives, identifications, bankAccounts, academicQualifications, professionalQualifications, experienceDetails, onboarding])
+  }, [registerDraftReady, savedRegisterDraft, currentStep, isInviteMode, form, dob, hireDate, probationEndDate, inviteContact, contacts, addresses, relatives, identifications, bankAccounts, academicQualifications, professionalQualifications, experienceDetails, onboarding])
 
   const submitRegistration = async () => {
     if (isSubmitting) {
@@ -3129,10 +3096,76 @@ export function EmployeeRegisterForm() {
     setPendingDelete(null)
     setSubmitError(null)
     setEmployeeNoTouched(false)
+    setSavedRegisterDraft(null)
     if (typeof window !== "undefined") {
       window.localStorage.removeItem(REGISTER_DRAFT_STORAGE_KEY)
     }
     toast.message("Form reset.")
+  }
+
+  const resumeRegisterDraft = () => {
+    const draft = savedRegisterDraft
+    if (!draft) return
+
+    if (draft.currentStep && REGISTER_STEP_ORDER.includes(draft.currentStep)) {
+      setCurrentStep(draft.currentStep)
+    }
+    if (draft.isInviteMode !== undefined) {
+      setIsInviteMode(draft.isInviteMode)
+    }
+    if (draft.form) {
+      const { employeeNo: draftEmployeeNo, ...restForm } = draft.form
+      setForm((previous) => ({
+        ...previous,
+        ...restForm,
+        employeeNo: isRegisteringOthers ? "" : (draftEmployeeNo ?? previous.employeeNo),
+      }))
+    }
+    if (draft.inviteContact) {
+      setInviteContact((previous) => ({ ...previous, ...draft.inviteContact }))
+    }
+
+    const restoreDate = (value: string | null | undefined, setter: (date: Date | undefined) => void) => {
+      if (!value) return
+      const date = new Date(value)
+      if (!Number.isNaN(date.getTime())) setter(date)
+    }
+    restoreDate(draft.dob, setDob)
+    restoreDate(draft.hireDate, setHireDate)
+    restoreDate(draft.probationEndDate, setProbationEndDate)
+    if (Array.isArray(draft.contacts)) setContacts(draft.contacts)
+    if (Array.isArray(draft.addresses)) setAddresses(draft.addresses)
+    if (Array.isArray(draft.relatives)) setRelatives(draft.relatives)
+    if (Array.isArray(draft.identifications)) setIdentifications(draft.identifications)
+    if (Array.isArray(draft.bankAccounts)) setBankAccounts(draft.bankAccounts)
+    if (Array.isArray(draft.academicQualifications)) setAcademicQualifications(draft.academicQualifications)
+    if (Array.isArray(draft.professionalQualifications)) setProfessionalQualifications(draft.professionalQualifications)
+    if (Array.isArray(draft.experienceDetails)) setExperienceDetails(draft.experienceDetails)
+    const draftOnboarding = draft.onboarding
+    if (draftOnboarding) {
+      setOnboarding((previous) => ({
+        ...previous,
+        ...draftOnboarding,
+        shiftAssignment: { ...EMPTY_ONBOARDING_SHIFT_ASSIGNMENT, ...draftOnboarding.shiftAssignment },
+        timetableAssignment: { ...EMPTY_ONBOARDING_TIMETABLE_ASSIGNMENT, ...draftOnboarding.timetableAssignment },
+        deviceAssignment: {
+          ...EMPTY_ONBOARDING_DEVICE_ASSIGNMENT,
+          ...draftOnboarding.deviceAssignment,
+          employeeNo: isRegisteringOthers ? "" : (draftOnboarding.deviceAssignment?.employeeNo ?? ""),
+          deviceIds: Array.isArray(draftOnboarding.deviceAssignment?.deviceIds)
+            ? draftOnboarding.deviceAssignment.deviceIds
+            : [],
+        },
+      }))
+    }
+    setSavedRegisterDraft(null)
+  }
+
+  const discardRegisterDraft = () => {
+    setSavedRegisterDraft(null)
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(REGISTER_DRAFT_STORAGE_KEY)
+    }
   }
 
   if (!registrationContextResolved) {
@@ -3165,6 +3198,29 @@ export function EmployeeRegisterForm() {
 
   return (
     <div className="space-y-2">
+      {savedRegisterDraft ? (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Continue where you left off?</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-0">
+            <p className="text-xs text-muted-foreground">
+              {savedRegisterDraft.form?.firstName || savedRegisterDraft.form?.lastName
+                ? `You have an unfinished registration for ${[savedRegisterDraft.form.firstName, savedRegisterDraft.form.lastName].filter(Boolean).join(" ")}.`
+                : "You have an unfinished employee registration."}
+              {savedRegisterDraft.savedAt ? ` Saved ${new Date(savedRegisterDraft.savedAt).toLocaleString()}.` : ""}
+            </p>
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={discardRegisterDraft}>
+                Start fresh
+              </Button>
+              <Button type="button" size="sm" onClick={resumeRegisterDraft}>
+                Continue
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
       {submitError ? (
         <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {submitError}

@@ -7,8 +7,10 @@ import {
   createEmployeeProfile,
   getPublicEmployeeInvitation,
   listEmployees,
+  listPendingEmployeeInvitations,
   patchEmployeeStatus,
   removeEmployeeLinkedAccount,
+  resendEmployeeInvitation,
   unlinkEmployeeCompanyUser,
 } from "./admin-api"
 
@@ -109,6 +111,35 @@ describe("employee admin API helpers", () => {
           channels: ["EMAIL", "SMS"],
         }),
       }),
+    )
+  })
+
+  it("lists and resends pending employee invitations", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({ data: [{ id: 44, status: "pending" }] }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ data: { id: 44, status: "pending" } }),
+      )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const invitations = await listPendingEmployeeInvitations("token")
+    await resendEmployeeInvitation("token", 44)
+
+    expect(invitations).toEqual([
+      expect.objectContaining({ id: 44, status: "pending" }),
+    ])
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "http://localhost:8888/api/employee-invitations",
+      expect.objectContaining({ method: "GET" }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "http://localhost:8888/api/employee-invitations/44/resend",
+      expect.objectContaining({ method: "POST" }),
     )
   })
 

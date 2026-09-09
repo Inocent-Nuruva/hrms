@@ -43,6 +43,7 @@ import {
   listBranches,
   listDepartments,
   listEmployees,
+  listPendingEmployeeInvitations,
   listMyOnboardingRequests,
   listOnboardingDocuments,
   listOnboardingRequests,
@@ -56,6 +57,7 @@ import {
   patchOnboardingWorkflow,
   patchOnboardingWorkflowStep,
   rejectOnboardingRequest,
+  resendEmployeeInvitation,
   submitOnboardingRequest,
   uploadOnboardingDocument,
   verifyOnboardingDocument,
@@ -127,7 +129,7 @@ import {
 import { notifySubmittedRequestApprovers } from "@/lib/request-notifications"
 import { matchesEmployeeDirectorySearch } from "@/lib/employee-directory-search"
 
-type OnboardingTab = "requests" | "workflows"
+type OnboardingTab = "invitations" | "requests" | "workflows"
 type OnboardingLookupKey =
   | "employees"
   | "workflows"
@@ -203,6 +205,26 @@ function toRecord(value: unknown): AdminRecord | null {
     return null
   }
   return value as AdminRecord
+}
+
+function formatInvitationDate(value: unknown) {
+  if (typeof value !== "string" || !value.trim()) {
+    return "-"
+  }
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date)
+}
+
+function invitationDeliveryStatus(row: AdminRecord, channel: "email" | "sms") {
+  const delivery = toRecord(row.delivery)
+  const channelDelivery = toRecord(delivery?.[channel])
+  return channelDelivery ? readString(channelDelivery, ["status"]) : "-"
 }
 
 function getEmployeeDisplayName(row: AdminRecord) {
@@ -1018,6 +1040,13 @@ export function OnboardingView() {
       }),
     [actor.ready, actorPermissions],
   )
+  const canViewPendingInvitations = React.useMemo(
+    () =>
+      actor.ready &&
+      !isEmployeeMode &&
+      canPerformPermission(actorPermissions, "employees:create"),
+    [actor.ready, actorPermissions, isEmployeeMode],
+  )
   const canCreateOnboardingRequests = React.useMemo(
     () => canPerformPermission(actorPermissions, "onboarding_requests:create"),
     [actorPermissions]
@@ -1067,6 +1096,8 @@ export function OnboardingView() {
   const [accessOrganizations, setAccessOrganizations] = React.useState<AdminRecord[]>([])
   const [attendanceDevices, setAttendanceDevices] = React.useState<AdminRecord[]>([])
   const [requests, setRequests] = React.useState<AdminRecord[]>([])
+  const [invitations, setInvitations] = React.useState<AdminRecord[]>([])
+  const [invitationSearch, setInvitationSearch] = React.useState("")
   const [requestSearch, setRequestSearch] = React.useState("")
   const [requestStatusFilter, setRequestStatusFilter] = React.useState("all")
   const [requestEmployeeFilter, setRequestEmployeeFilter] = React.useState("")
@@ -1076,9 +1107,11 @@ export function OnboardingView() {
   const debouncedRequestSearch = useDebouncedValue(requestSearch, 350)
   const debouncedWorkflowSearch = useDebouncedValue(workflowSearch, 350)
   const [, setLoadedTabs] = React.useState<Record<OnboardingTab, boolean>>({
+    invitations: false,
     requests: false,
     workflows: false,
   })
+  const invitationsFetchKeyRef = React.useRef<string | null>(null)
   const requestsFetchKeyRef = React.useRef<string | null>(null)
   const workflowsFetchKeyRef = React.useRef<string | null>(null)
   const [loadedLookups, setLoadedLookups] = React.useState<Record<OnboardingLookupKey, boolean>>({
@@ -1096,6 +1129,7 @@ export function OnboardingView() {
     attendanceDevices: false,
   })
   const [requestDetailsOpen, setRequestDetailsOpen] = React.useState(false)
+  const [resendingInvitationId, setResendingInvitationId] = React.useState<number | null>(null)
   const [requestDetailsLoading, setRequestDetailsLoading] = React.useState(false)
   const [selectedRequestRow, setSelectedRequestRow] = React.useState<AdminRecord | null>(null)
   const [selectedRequestDetails, setSelectedRequestDetails] = React.useState<AdminRecord | null>(null)
@@ -1479,12 +1513,19 @@ export function OnboardingView() {
     }
 
     const fetchKey =
-      targetTab === "requests"
+      targetTab === "invitations"
+        ? "invitations:pending"
+        : targetTab === "requests"
         ? `requests:${JSON.stringify(requestQuery)}`
         : `workflows:${JSON.stringify(workflowQuery)}`
 
     if (!force) {
-      const lastKey = targetTab === "requests" ? requestsFetchKeyRef.current : workflowsFetchKeyRef.current
+      const lastKey =
+        targetTab === "invitations"
+          ? invitationsFetchKeyRef.current
+          : targetTab === "requests"
+            ? requestsFetchKeyRef.current
+            : workflowsFetchKeyRef.current
       if (lastKey === fetchKey) {
         return
       }
@@ -1493,7 +1534,11 @@ export function OnboardingView() {
     setLoading(true)
     setError(null)
     try {
-      if (targetTab === "requests") {
+      if (targetTab === "invitations") {
+        const invitationRows = await listPendingEmployeeInvitations(token)
+        setInvitations(invitationRows)
+        invitationsFetchKeyRef.current = fetchKey
+      } else if (targetTab === "requests") {
         if (isEmployeeMode) {
           const mine = await listMyOnboardingRequests(token)
           setRequests(mine)
@@ -1600,22 +1645,27 @@ export function OnboardingView() {
 
   React.useEffect(() => {
     if (!actor.ready) return
+    if (activeTab === "invitations" && canViewPendingInvitations) return
     if (activeTab === "requests" && canViewOnboardingRequests) return
     if (activeTab === "workflows" && canViewOnboardingWorkflows) return
     if (canViewOnboardingRequests) {
       setActiveTab("requests")
     } else if (canViewOnboardingWorkflows) {
       setActiveTab("workflows")
+    } else if (canViewPendingInvitations) {
+      setActiveTab("invitations")
     }
   }, [
     activeTab,
     actor.ready,
     canViewOnboardingRequests,
     canViewOnboardingWorkflows,
+    canViewPendingInvitations,
   ])
 
   React.useEffect(() => {
     if (!actor.ready) return
+    if (activeTab === "invitations" && !canViewPendingInvitations) return
     if (activeTab === "requests" && !canViewOnboardingRequests) return
     if (activeTab === "workflows" && !canViewOnboardingWorkflows) return
     void reloadAll(activeTab)
@@ -1624,6 +1674,7 @@ export function OnboardingView() {
     actor.ready,
     canViewOnboardingRequests,
     canViewOnboardingWorkflows,
+    canViewPendingInvitations,
     debouncedRequestSearch,
     debouncedWorkflowSearch,
     requestEmployeeFilter,
@@ -1667,6 +1718,54 @@ export function OnboardingView() {
     })
     return Array.from(statuses)
   }, [requests])
+
+  const filteredInvitations = React.useMemo(() => {
+    const searchValue = invitationSearch.trim().toLowerCase()
+    if (!searchValue) {
+      return invitations
+    }
+    return invitations.filter((row) =>
+      [
+        row.id,
+        row.first_name,
+        row.last_name,
+        row.email,
+        row.phone,
+        row.status,
+        invitationDeliveryStatus(row, "email"),
+        invitationDeliveryStatus(row, "sms"),
+      ].some((value) =>
+        String(value ?? "")
+          .toLowerCase()
+          .includes(searchValue)
+      )
+    )
+  }, [invitationSearch, invitations])
+
+  const resendPendingInvitation = React.useCallback(async (row: AdminRecord) => {
+    const invitationId = readNumber(row, ["id", "invitation_id"])
+    const token = readStoredToken()
+    if (invitationId === null || !token) {
+      showErrorAlert("Unable to resend this invitation.")
+      return
+    }
+
+    setResendingInvitationId(invitationId)
+    try {
+      await resendEmployeeInvitation(token, invitationId)
+      invitationsFetchKeyRef.current = null
+      await reloadAll("invitations", true)
+      showSuccessAlert("Invitation resent by email and SMS.")
+    } catch (errorObject) {
+      showErrorAlert(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to resend the invitation."
+      )
+    } finally {
+      setResendingInvitationId(null)
+    }
+  }, [reloadAll])
 
   const selectableEmployees = React.useMemo(
     () => employees.filter(isOnboardingEligibleEmployee),
@@ -3508,6 +3607,92 @@ export function OnboardingView() {
     )
   }
 
+  const invitationColumns: Column<AdminRecord>[] = [
+    {
+      key: "name",
+      label: "Invitee",
+      defaultWidth: 170,
+      render: (row) => {
+        const name = [row.first_name, row.last_name]
+          .map((value) => String(value ?? "").trim())
+          .filter(Boolean)
+          .join(" ")
+        return name || "-"
+      },
+    },
+    {
+      key: "email",
+      label: "Email",
+      defaultWidth: 210,
+      render: (row) => readString(row, ["email"]),
+    },
+    {
+      key: "phone",
+      label: "Phone",
+      defaultWidth: 145,
+      render: (row) => readString(row, ["phone"]),
+    },
+    {
+      key: "delivery",
+      label: "Delivery",
+      defaultWidth: 170,
+      sortable: false,
+      render: (row) => (
+        <div className="flex flex-wrap gap-1">
+          {(["email", "sms"] as const).map((channel) => {
+            const status = invitationDeliveryStatus(row, channel)
+            return (
+              <span
+                key={channel}
+                className={cn(
+                  "inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium",
+                  statusBadgeClass(status)
+                )}
+              >
+                {channel.toUpperCase()}: {toTitleCaseWords(status)}
+              </span>
+            )
+          })}
+        </div>
+      ),
+    },
+    {
+      key: "created_at",
+      label: "Sent",
+      defaultWidth: 155,
+      render: (row) => formatInvitationDate(row.created_at ?? row.createdAt),
+    },
+    {
+      key: "expires_at",
+      label: "Expires",
+      defaultWidth: 155,
+      render: (row) => formatInvitationDate(row.expires_at ?? row.expiresAt),
+    },
+    {
+      key: "actions",
+      label: "Actions",
+      defaultWidth: 110,
+      sortable: false,
+      render: (row) => {
+        const invitationId = readNumber(row, ["id", "invitation_id"])
+        const resending = invitationId !== null && resendingInvitationId === invitationId
+        return (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 px-2 text-[11px]"
+            disabled={invitationId === null || resending}
+            onClick={() => void resendPendingInvitation(row)}
+          >
+            <Send className={cn("mr-1.5 h-3.5 w-3.5", resending ? "animate-pulse" : "")} />
+            {resending ? "Sending..." : "Resend"}
+          </Button>
+        )
+      },
+    },
+  ]
+
   const onboardingRequestColumns: Column<AdminRecord>[] = [
     {
       key: "id",
@@ -3665,6 +3850,21 @@ export function OnboardingView() {
     <div className="space-y-2 px-4 pb-6 pt-2 lg:px-6">
       <div className="tab-rail-scroll">
         <div className="inline-flex min-w-full items-center gap-1 border-b border-border/80">
+          {canViewPendingInvitations ? (
+            <button
+              type="button"
+              onClick={() => setActiveTab("invitations")}
+              className={cn(
+                "shrink-0 border-b-2 px-1.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors duration-200",
+                activeTab === "invitations"
+                  ? "border-[var(--primary)] text-[var(--primary)]"
+                  : "border-transparent text-slate-600 hover:text-slate-900"
+              )}
+            >
+              Pending Invitations
+              {invitations.length > 0 ? ` (${invitations.length})` : ""}
+            </button>
+          ) : null}
           {canViewOnboardingRequests ? (
             <button
               type="button"
@@ -3698,7 +3898,43 @@ export function OnboardingView() {
 
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
-      {activeTab === "requests" && canViewOnboardingRequests ? (
+      {activeTab === "invitations" && canViewPendingInvitations ? (
+        <div className="space-y-2">
+          <ResizableTable
+            title="Pending Employee Invitations"
+            data={filteredInvitations}
+            columns={invitationColumns}
+            loading={loading}
+            storageKey="pending-employee-invitations"
+            enableAnimations
+            itemsPerPage={15}
+            showExport={false}
+            getRowId={(row, index) =>
+              String(readNumber(row, ["id", "invitation_id"]) ?? index)
+            }
+            toolbarStart={
+              <SearchToggleField
+                className="min-w-0 !w-auto !max-w-[14rem] !flex-none"
+                placeholder="Search name, email or phone"
+                value={invitationSearch}
+                onChange={setInvitationSearch}
+              />
+            }
+            toolbarActions={
+              <button
+                type="button"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-sm disabled:opacity-60"
+                onClick={() => void reloadAll("invitations", true)}
+                disabled={loading}
+                aria-label="Refresh pending invitations"
+                title="Refresh"
+              >
+                <RefreshCw className={cn("size-3.5 text-primary", loading ? "animate-spin" : "")} />
+              </button>
+            }
+          />
+        </div>
+      ) : activeTab === "requests" && canViewOnboardingRequests ? (
         <div className="space-y-2">
           <ResizableTable
             title="Onboarding Requests"

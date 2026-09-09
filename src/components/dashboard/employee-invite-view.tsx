@@ -48,6 +48,23 @@ import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { canPerformPermission } from "@/lib/dashboard-permissions"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
+const INVITE_DRAFT_STORAGE_KEY = "hrms.employee.invite.draft.v1"
+
+type StoredInviteDraft = {
+  firstName?: string
+  lastName?: string
+  gender?: string
+  email?: string
+  phone?: string
+  branchId?: number | null
+  departmentId?: number | null
+  positionId?: number | null
+  reportsToId?: number | null
+  employmentType?: string
+  hireDate?: string
+  workflowId?: number | null
+  savedAt?: string
+}
 
 const GENDER_OPTIONS = [
   { value: "male", label: "Male" },
@@ -395,6 +412,8 @@ export function EmployeeInviteView() {
   const [submitting, setSubmitting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [token, setToken] = React.useState("")
+  const [savedInviteDraft, setSavedInviteDraft] = React.useState<StoredInviteDraft | null>(null)
+  const [inviteDraftReady, setInviteDraftReady] = React.useState(false)
   const canReadOnboardingWorkflows = React.useMemo(
     () =>
       canPerformPermission(actor.permissionLabels, "onboarding_workflows:read"),
@@ -404,6 +423,45 @@ export function EmployeeInviteView() {
   React.useEffect(() => {
     setToken(readStoredToken())
   }, [])
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") return
+    try {
+      const raw = window.localStorage.getItem(INVITE_DRAFT_STORAGE_KEY)
+      if (raw) {
+        const parsed = JSON.parse(raw) as StoredInviteDraft
+        if (parsed.firstName || parsed.lastName || parsed.email || parsed.phone) {
+          setSavedInviteDraft(parsed)
+        }
+      }
+    } catch {
+      window.localStorage.removeItem(INVITE_DRAFT_STORAGE_KEY)
+    } finally {
+      setInviteDraftReady(true)
+    }
+  }, [])
+
+  React.useEffect(() => {
+    if (typeof window === "undefined" || !inviteDraftReady || savedInviteDraft) return
+    window.localStorage.setItem(
+      INVITE_DRAFT_STORAGE_KEY,
+      JSON.stringify({
+        firstName,
+        lastName,
+        gender,
+        email,
+        phone,
+        branchId,
+        departmentId,
+        positionId,
+        reportsToId,
+        employmentType,
+        hireDate,
+        workflowId,
+        savedAt: new Date().toISOString(),
+      } satisfies StoredInviteDraft),
+    )
+  }, [inviteDraftReady, savedInviteDraft, firstName, lastName, gender, email, phone, branchId, departmentId, positionId, reportsToId, employmentType, hireDate, workflowId])
 
   React.useEffect(() => {
     if (!token) {
@@ -780,6 +838,35 @@ export function EmployeeInviteView() {
     setEmploymentType("full_time")
     setHireDate("")
     setWorkflowId(null)
+    setSavedInviteDraft(null)
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(INVITE_DRAFT_STORAGE_KEY)
+    }
+  }
+
+  const resumeInviteDraft = () => {
+    const draft = savedInviteDraft
+    if (!draft) return
+    setFirstName(draft.firstName ?? "")
+    setLastName(draft.lastName ?? "")
+    setGender(draft.gender ?? "")
+    setEmail(draft.email ?? "")
+    setPhone(draft.phone ?? "")
+    setBranchId(draft.branchId ?? null)
+    setDepartmentId(draft.departmentId ?? null)
+    setPositionId(draft.positionId ?? null)
+    setReportsToId(draft.reportsToId ?? null)
+    setEmploymentType(draft.employmentType ?? "full_time")
+    setHireDate(draft.hireDate ?? "")
+    setWorkflowId(draft.workflowId ?? null)
+    setSavedInviteDraft(null)
+  }
+
+  const discardInviteDraft = () => {
+    setSavedInviteDraft(null)
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(INVITE_DRAFT_STORAGE_KEY)
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -894,6 +981,30 @@ export function EmployeeInviteView() {
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 pb-8">
+      {savedInviteDraft ? (
+        <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold">Continue where you left off?</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                You have an unfinished invitation
+                {savedInviteDraft.firstName || savedInviteDraft.lastName
+                  ? ` for ${[savedInviteDraft.firstName, savedInviteDraft.lastName].filter(Boolean).join(" ")}`
+                  : ""}.
+                {savedInviteDraft.savedAt ? ` Saved ${new Date(savedInviteDraft.savedAt).toLocaleString()}.` : ""}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={discardInviteDraft}>
+                Start fresh
+              </Button>
+              <Button type="button" size="sm" onClick={resumeInviteDraft}>
+                Continue
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {error ? (
         <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           {error}
