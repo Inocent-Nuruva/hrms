@@ -40,6 +40,7 @@ import {
   deleteLeaveWorkflowStep,
   downloadLeaveRequestDocument,
   downloadLeaveRequestPdf,
+  downloadLeaveImportTemplate,
   fileToBase64UploadDto,
   getCurrentAdmin,
   getLeaveRequest,
@@ -49,6 +50,7 @@ import {
   listDepartments,
   listAllEmployees,
   generateLeaveBalances,
+  importLeaveRequests,
   listLeaveBalanceAdjustments,
   listLeaveBalanceTransactions,
   listAllLeaveBalances,
@@ -69,6 +71,7 @@ import {
   submitLeaveRequest,
   patchLeaveWorkflowStep,
   type AdminRecord,
+  type LeaveImportResult,
 } from "@/lib/admin-api"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import {
@@ -1135,6 +1138,11 @@ export function LeaveManagementView({
   const [pendingWorkflowDelete, setPendingWorkflowDelete] = React.useState<AdminRecord | null>(null)
   const [typeDialogOpen, setTypeDialogOpen] = React.useState(false)
   const [requestDialogOpen, setRequestDialogOpen] = React.useState(false)
+  const [requestImportOpen, setRequestImportOpen] = React.useState(false)
+  const [requestImportFile, setRequestImportFile] = React.useState<File | null>(null)
+  const [requestImportResult, setRequestImportResult] = React.useState<LeaveImportResult | null>(null)
+  const [requestImportBusy, setRequestImportBusy] = React.useState(false)
+  const [requestTemplateBusy, setRequestTemplateBusy] = React.useState(false)
   const [balanceDialogOpen, setBalanceDialogOpen] = React.useState(false)
   const [holidayDialogOpen, setHolidayDialogOpen] = React.useState(false)
   const [holidayImportDialogOpen, setHolidayImportDialogOpen] = React.useState(false)
@@ -2290,6 +2298,39 @@ export function LeaveManagementView({
       showErrorAlert(message)
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function downloadRequestImportTemplate() {
+    const token = readStoredToken()
+    if (!token) return
+    setRequestTemplateBusy(true)
+    try {
+      const result = await downloadLeaveImportTemplate(token)
+      downloadBlob(result.blob, result.filename)
+    } catch (errorObject) {
+      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Template download failed.")
+    } finally {
+      setRequestTemplateBusy(false)
+    }
+  }
+
+  async function uploadRequestImport() {
+    const token = readStoredToken()
+    if (!token || !requestImportFile) return
+    setRequestImportBusy(true)
+    setRequestImportResult(null)
+    try {
+      const result = await importLeaveRequests(token, requestImportFile)
+      setRequestImportResult(result)
+      if (result.created > 0) await reloadAll("requests", true)
+      if (result.failed === 0) {
+        showSuccessAlert(`${result.created} leave request${result.created === 1 ? "" : "s"} imported.`)
+      }
+    } catch (errorObject) {
+      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Leave import failed.")
+    } finally {
+      setRequestImportBusy(false)
     }
   }
 
@@ -3643,14 +3684,28 @@ export function LeaveManagementView({
             </div>
             <div className="flex shrink-0 items-center gap-1.5">
               {canCreateRequests ? (
-                <button
-                  type="button"
-                  className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white"
-                  onClick={() => void openRequestDialog()}
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  Create Leave Request
-                </button>
+                <>
+                  <button
+                    type="button"
+                    className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-semibold"
+                    onClick={() => {
+                      setRequestImportFile(null)
+                      setRequestImportResult(null)
+                      setRequestImportOpen(true)
+                    }}
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    Import
+                  </button>
+                  <button
+                    type="button"
+                    className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white"
+                    onClick={() => void openRequestDialog()}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Create Leave Request
+                  </button>
+                </>
               ) : null}
               {refreshButton}
             </div>
@@ -3781,14 +3836,28 @@ export function LeaveManagementView({
               toolbarActions={
                 <>
                   {canCreateRequests ? (
-                    <button
-                      type="button"
-                      className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white"
-                      onClick={() => void openRequestDialog()}
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                      Create Leave Request
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-semibold"
+                        onClick={() => {
+                          setRequestImportFile(null)
+                          setRequestImportResult(null)
+                          setRequestImportOpen(true)
+                        }}
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        Import Excel
+                      </button>
+                      <button
+                        type="button"
+                        className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white"
+                        onClick={() => void openRequestDialog()}
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        Create Leave Request
+                      </button>
+                    </>
                   ) : null}
                   {refreshButton}
                 </>
@@ -4261,6 +4330,82 @@ export function LeaveManagementView({
           </Dialog>
         </div>
       ) : null}
+
+      <Dialog
+        open={requestImportOpen}
+        onOpenChange={(open) => {
+          if (!requestImportBusy) setRequestImportOpen(open)
+        }}
+      >
+        <DialogPopup from="bottom" className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Import Leave Requests</DialogTitle>
+            <DialogDescription>
+              Download the company template, fill one leave request per row, then upload the completed Excel file. Normal leave rules, balances, overlaps, and approvals still apply.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <button
+              type="button"
+              className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-3 text-sm font-medium hover:bg-muted disabled:opacity-60"
+              disabled={requestTemplateBusy}
+              onClick={() => void downloadRequestImportTemplate()}
+            >
+              <Download className="size-4" />
+              {requestTemplateBusy ? "Preparing template…" : "Download Excel template"}
+            </button>
+            <label className="block space-y-1.5 text-sm font-medium text-foreground">
+              Completed Excel file
+              <input
+                type="file"
+                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                className="block w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                disabled={requestImportBusy}
+                onChange={(event) => {
+                  setRequestImportFile(event.target.files?.[0] ?? null)
+                  setRequestImportResult(null)
+                }}
+              />
+            </label>
+            {requestImportResult ? (
+              <div className="rounded-md border border-border bg-muted/30 p-3 text-sm">
+                <p className="font-medium">
+                  {requestImportResult.created} created · {requestImportResult.failed} failed · {requestImportResult.total} total
+                </p>
+                {requestImportResult.failed > 0 ? (
+                  <div className="mt-2 max-h-40 space-y-1 overflow-y-auto text-xs text-rose-700">
+                    {requestImportResult.results
+                      .filter((row) => row.status === "failed")
+                      .map((row) => (
+                        <p key={`${row.row}-${row.employee_no}`}>
+                          Row {row.row} ({row.employee_no || "no employee"}): {row.message || "Import failed"}
+                        </p>
+                      ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <button
+              type="button"
+              className="rounded-md border border-border px-4 py-2 text-sm"
+              disabled={requestImportBusy}
+              onClick={() => setRequestImportOpen(false)}
+            >
+              Close
+            </button>
+            <button
+              type="button"
+              className="rounded-md bg-primary px-4 py-2 text-sm font-medium !text-white disabled:opacity-60"
+              disabled={!requestImportFile || requestImportBusy}
+              onClick={() => void uploadRequestImport()}
+            >
+              {requestImportBusy ? "Importing…" : "Import leave requests"}
+            </button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
 
       <Dialog open={requestDialogOpen} onOpenChange={setRequestDialogOpen}>
         <DialogPopup from="bottom" className="sm:max-w-3xl">

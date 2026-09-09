@@ -23,6 +23,7 @@ import {
   HelpCircle,
   Kanban,
   LayoutDashboard,
+  Mail,
   MapPin,
   Route,
   Search,
@@ -54,6 +55,7 @@ const IField = <MapPin />
 const IActivities = <LayoutDashboard />
 const IMovements = <Route />
 const ISms = <Bell />
+const IMail = <Mail />
 const ITeam = <Users />
 const IStructure = <Kanban />
 const IInsights = <LayoutDashboard />
@@ -280,6 +282,11 @@ const adminData: SidebarData = {
       icon: ISms,
     },
     {
+      title: "SMTP",
+      url: "/dashboard/smtp",
+      icon: IMail,
+    },
+    {
       title: "Insights",
       url: "/dashboard/insights",
       matchUrls: [
@@ -425,6 +432,7 @@ const adminSearchIndex = [
   { title: "SMS / Overview", url: "/dashboard/sms/overview", section: "SMS", keywords: ["sms", "text", "message"] },
   { title: "SMS / Registry", url: "/dashboard/sms/registry", section: "SMS", keywords: ["sms", "template", "registry"] },
   { title: "SMS / Logs", url: "/dashboard/sms/logs", section: "SMS", keywords: ["sms", "log", "retry"] },
+  { title: "SMTP Settings", url: "/dashboard/smtp", section: "Delivery", keywords: ["smtp", "email", "mail", "invitation", "reports"] },
   { title: "Structure / Cost centers", url: "/dashboard/structure/cost-centers", section: "Structure", keywords: ["cost center", "grade"] },
   { title: "Structure / Grades", url: "/dashboard/structure/grades", section: "Structure", keywords: ["grade", "level"] },
   { title: "Insights / HR", url: "/dashboard/insights/hr", section: "Insights", keywords: ["dashboard", "hr", "analytics"] },

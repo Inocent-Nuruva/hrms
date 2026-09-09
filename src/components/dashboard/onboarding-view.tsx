@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { HorizontalScrollContainer } from "@/components/common/horizontal-scroll-container"
 import { SearchToggleField } from "@/components/common/search-toggle-field"
@@ -166,14 +167,14 @@ function readStoredToken() {
   return window.localStorage.getItem(TOKEN_STORAGE_KEY)?.trim() ?? ""
 }
 
-function readString(row: AdminRecord, keys: string[]) {
+function readString(row: AdminRecord, keys: string[], fallback = "-") {
   for (const key of keys) {
     const value = row[key]
     if (typeof value === "string" && value.trim()) {
       return value
     }
   }
-  return "-"
+  return fallback
 }
 
 function readNumber(row: AdminRecord, keys: string[]) {
@@ -225,6 +226,25 @@ function invitationDeliveryStatus(row: AdminRecord, channel: "email" | "sms") {
   const delivery = toRecord(row.delivery)
   const channelDelivery = toRecord(delivery?.[channel])
   return channelDelivery ? readString(channelDelivery, ["status"]) : "-"
+}
+
+function invitationDeliveryValue(
+  row: AdminRecord,
+  channel: "email" | "sms",
+  keys: string[]
+) {
+  const delivery = toRecord(row.delivery)
+  const channelDelivery = toRecord(delivery?.[channel])
+  return channelDelivery ? readString(channelDelivery, keys) : "-"
+}
+
+function invitationDisplayName(row: AdminRecord | null) {
+  if (!row) return "Invitation"
+  const name = [row.first_name, row.last_name]
+    .map((value) => String(value ?? "").trim())
+    .filter(Boolean)
+    .join(" ")
+  return name || readString(row, ["email"], "Invitation")
 }
 
 function getEmployeeDisplayName(row: AdminRecord) {
@@ -1044,7 +1064,6 @@ export function OnboardingView() {
   const canViewPendingInvitations = React.useMemo(
     () =>
       actor.ready &&
-      !isEmployeeMode &&
       canPerformPermission(actorPermissions, {
         permissions: [
           "employees:create",
@@ -1053,7 +1072,7 @@ export function OnboardingView() {
         ],
         mode: "any",
       }),
-    [actor.ready, actorPermissions, isEmployeeMode],
+    [actor.ready, actorPermissions],
   )
   const canResendPendingInvitations = React.useMemo(
     () => canPerformPermission(actorPermissions, "employees:create"),
@@ -1209,6 +1228,7 @@ export function OnboardingView() {
   const [workflowSheetOpen, setWorkflowSheetOpen] = React.useState(false)
   const [editingWorkflowId, setEditingWorkflowId] = React.useState<number | null>(null)
   const [requestSheetOpen, setRequestSheetOpen] = React.useState(false)
+  const [selectedInvitation, setSelectedInvitation] = React.useState<AdminRecord | null>(null)
 
   React.useEffect(() => {
     if (requestedTab === "invitations") {
@@ -3632,13 +3652,7 @@ export function OnboardingView() {
       key: "name",
       label: "Invitee",
       defaultWidth: 170,
-      render: (row) => {
-        const name = [row.first_name, row.last_name]
-          .map((value) => String(value ?? "").trim())
-          .filter(Boolean)
-          .join(" ")
-        return name || "-"
-      },
+      render: (row) => invitationDisplayName(row),
     },
     {
       key: "email",
@@ -3935,6 +3949,7 @@ export function OnboardingView() {
             getRowId={(row, index) =>
               String(readNumber(row, ["id", "invitation_id"]) ?? index)
             }
+            onRowSelect={(_, row) => setSelectedInvitation(row ?? null)}
             toolbarStart={
               <SearchToggleField
                 className="min-w-0 !w-auto !max-w-[14rem] !flex-none"
@@ -3956,6 +3971,128 @@ export function OnboardingView() {
               </button>
             }
           />
+          <Sheet
+            open={selectedInvitation !== null}
+            onOpenChange={(open) => {
+              if (!open) setSelectedInvitation(null)
+            }}
+          >
+            <SheetContent
+              side="right"
+              className="w-full overflow-y-auto data-[side=right]:w-full sm:data-[side=right]:w-[32rem] data-[side=right]:sm:max-w-none"
+            >
+              <SheetHeader>
+                <SheetTitle>{invitationDisplayName(selectedInvitation)}</SheetTitle>
+                <SheetDescription>
+                  Invitation details and the latest result returned by each delivery channel.
+                </SheetDescription>
+              </SheetHeader>
+
+              {selectedInvitation ? (
+                <div className="space-y-5 px-4 pb-6">
+                  <div className="grid gap-3 rounded-lg border border-border p-3 sm:grid-cols-2">
+                    {[
+                      ["Status", toTitleCaseWords(readString(selectedInvitation, ["status"]))],
+                      ["Email", readString(selectedInvitation, ["email"])],
+                      ["Phone", readString(selectedInvitation, ["phone"])],
+                      ["Employment type", toTitleCaseWords(readString(selectedInvitation, ["employment_type"]))],
+                      ["Sent", formatInvitationDate(selectedInvitation.created_at ?? selectedInvitation.createdAt)],
+                      ["Expires", formatInvitationDate(selectedInvitation.expires_at ?? selectedInvitation.expiresAt)],
+                    ].map(([label, value]) => (
+                      <div key={label} className="min-w-0">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                          {label}
+                        </p>
+                        <p className="mt-0.5 break-words text-sm text-foreground">{value}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {(["email", "sms"] as const).map((channel) => {
+                    const status = invitationDeliveryStatus(selectedInvitation, channel)
+                    const lastError = invitationDeliveryValue(selectedInvitation, channel, ["last_error", "lastError"])
+                    const messageId = invitationDeliveryValue(selectedInvitation, channel, ["message_id", "messageId"])
+                    const transport = invitationDeliveryValue(selectedInvitation, channel, ["transport"])
+                    const deliveryService =
+                      transport === "system_smtp" || (transport === "-" && channel === "email")
+                        ? "Platform SMTP (MAIL_*)"
+                        : transport === "sms_gateway" || (transport === "-" && channel === "sms")
+                          ? "SMS gateway"
+                          : transport
+                    const failureReason =
+                      lastError !== "-"
+                        ? lastError
+                        : status.toLowerCase() === "failed"
+                          ? "The current backend did not return the stored failure reason. Deploy the backend update, then resend to capture the latest provider error."
+                          : "No failure recorded."
+                    return (
+                      <section key={channel} className="space-y-2 rounded-lg border border-border p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <h3 className="text-sm font-semibold text-foreground">
+                            {channel === "email" ? "Email delivery" : "SMS delivery"}
+                          </h3>
+                          <span
+                            className={cn(
+                              "inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium",
+                              statusBadgeClass(status)
+                            )}
+                          >
+                            {toTitleCaseWords(status)}
+                          </span>
+                        </div>
+                        <dl className="grid gap-2 text-xs">
+                          <div>
+                            <dt className="font-medium text-muted-foreground">Delivery service</dt>
+                            <dd className="mt-0.5 text-foreground">{deliveryService}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-medium text-muted-foreground">Provider reference</dt>
+                            <dd className="mt-0.5 break-all text-foreground">{messageId}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-medium text-muted-foreground">Failure reason</dt>
+                            <dd
+                              className={cn(
+                                "mt-0.5 whitespace-pre-wrap break-words",
+                                status.toLowerCase() === "failed" ? "text-destructive" : "text-foreground"
+                              )}
+                            >
+                              {failureReason}
+                            </dd>
+                          </div>
+                        </dl>
+                      </section>
+                    )
+                  })}
+
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+                    Invitation emails use the platform SMTP connection, not a company report SMTP profile. You can test both from the dedicated{" "}
+                    <Link href="/dashboard/smtp" className="font-semibold underline underline-offset-2">
+                      SMTP page
+                    </Link>
+                    .
+                  </div>
+
+                  {canResendPendingInvitations ? (
+                    <div className="flex justify-end">
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={
+                          readNumber(selectedInvitation, ["id", "invitation_id"]) === null ||
+                          resendingInvitationId === readNumber(selectedInvitation, ["id", "invitation_id"])
+                        }
+                        onClick={() => void resendPendingInvitation(selectedInvitation)}
+                      >
+                        <Send className="mr-1.5 h-3.5 w-3.5" />
+                        Resend invitation
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </SheetContent>
+          </Sheet>
         </div>
       ) : activeTab === "requests" && canViewOnboardingRequests ? (
         <div className="space-y-2">

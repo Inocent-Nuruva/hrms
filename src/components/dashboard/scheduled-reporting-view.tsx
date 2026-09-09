@@ -1,9 +1,7 @@
 "use client"
 
-/* Setters in useCallback deps trip react-hooks/preserve-manual-memoization. */
-/* eslint-disable react-hooks/preserve-manual-memoization */
-
 import * as React from "react"
+import Link from "next/link"
 import {
   DownloadIcon,
   Loader2Icon,
@@ -631,7 +629,7 @@ const selectClass = inputClass
 const textareaClass =
   "min-h-20 w-full rounded-md border border-border bg-background px-2.5 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
 
-export function ScheduledReportingView() {
+export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolean }) {
   const actor = useDashboardActor()
   const canMutateReports =
     !actor.ready ||
@@ -639,7 +637,7 @@ export function ScheduledReportingView() {
   const canManageSmtp =
     !actor.ready ||
     canPerformPermission(actor.permissionLabels, SCHEDULED_REPORTING_SMTP_PERMISSION)
-  const [tab, setTab] = React.useState<ReportingTab>("templates")
+  const [tab, setTab] = React.useState<ReportingTab>(smtpOnly ? "smtp" : "templates")
   const [rows, setRows] = React.useState<AdminRecord[]>([])
   const [definitions, setDefinitions] = React.useState<AdminRecord[]>([])
   const [templates, setTemplates] = React.useState<AdminRecord[]>([])
@@ -693,6 +691,10 @@ export function ScheduledReportingView() {
   const [smtpDraftTestRecipient, setSmtpDraftTestRecipient] = React.useState("")
   const [testingDraftSmtp, setTestingDraftSmtp] = React.useState(false)
   const loadRequestIdRef = React.useRef(0)
+
+  React.useEffect(() => {
+    if (smtpOnly && tab !== "smtp") setTab("smtp")
+  }, [smtpOnly, tab])
 
   const loadLookups = React.useCallback(async (token: string) => {
     const [defsResult, tmplResult, scheduleResult, smtpResult] = await Promise.allSettled([
@@ -2026,7 +2028,7 @@ export function ScheduledReportingView() {
           value={form.smtpConfigurationId}
           onChange={(e) => setForm((c) => ({ ...c, smtpConfigurationId: e.target.value }))}
         >
-          <option value="">Use system/default SMTP</option>
+          <option value="">Select company SMTP</option>
           {smtpConfigs.map((row, index) => {
             const id = smtpConfigId(row)
             if (id === null) return null
@@ -2041,23 +2043,22 @@ export function ScheduledReportingView() {
         </select>
         {smtpConfigs.length === 0 ? (
           <span className="text-[11px] text-muted-foreground">
-            No company SMTP settings are available. The system/default SMTP will be used. You can{" "}
-            <button
-              type="button"
+            No company SMTP settings are available. Active scheduled reports require one. You can{" "}
+            <Link
+              href="/dashboard/smtp"
               className="font-semibold text-foreground underline underline-offset-2"
               onClick={() => {
                 setCreateOpen(false)
                 setEditOpen(false)
-                setTab("smtp")
               }}
             >
-              open the SMTP tab
-            </button>{" "}
+              open SMTP settings
+            </Link>{" "}
             to add a company-specific server.
           </span>
         ) : !form.smtpConfigurationId ? (
           <span className="text-[11px] text-muted-foreground">
-            Leave blank to use the system/default SMTP server.
+            Select a tested company SMTP profile before activating this report template.
           </span>
         ) : null}
       </Field>
@@ -2564,17 +2565,22 @@ export function ScheduledReportingView() {
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div className="min-w-0">
           <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-            Reports
+            {smtpOnly ? "Email delivery" : "Reports"}
           </p>
-          <h1 className="text-xl font-semibold tracking-tight text-foreground">Scheduled Reporting</h1>
+          <h1 className="text-xl font-semibold tracking-tight text-foreground">
+            {smtpOnly ? "SMTP Settings" : "Scheduled Reporting"}
+          </h1>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            Review available report definitions, then configure templates, schedules, SMTP delivery, and execution history.
+            {smtpOnly
+              ? "Manage the company SMTP used by employee invitations and scheduled reports."
+              : "Review available report definitions, then configure templates, schedules, and execution history."}
           </p>
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-1 border-b border-border/80">
-        {TABS.filter((entry) => entry.id !== "smtp" || canManageSmtp).map((entry) => {
+      {!smtpOnly ? (
+        <div className="flex flex-wrap items-center gap-1 border-b border-border/80">
+        {TABS.filter((entry) => entry.id !== "smtp").map((entry) => {
           const active = tab === entry.id
           return (
             <button
@@ -2592,7 +2598,8 @@ export function ScheduledReportingView() {
             </button>
           )
         })}
-      </div>
+        </div>
+      ) : null}
 
       {error ? (
         <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300">
@@ -2611,7 +2618,7 @@ export function ScheduledReportingView() {
         toolbarStart={
           <div className="min-w-0 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
             <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-              Scheduled Reporting
+              {smtpOnly ? "Company email" : "Scheduled Reporting"}
             </span>
             <h2 className="truncate text-lg font-semibold tracking-tight text-foreground sm:text-xl">
               {sectionTitle}

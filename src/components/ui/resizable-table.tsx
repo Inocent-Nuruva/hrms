@@ -634,6 +634,20 @@ export function ResizableTable<T = Record<string, unknown>>({
     return displayWidths[key] ?? columnWidths[key] ?? (typeof col === 'string' ? 36 : col.defaultWidth ?? 105);
   };
 
+  const tableContentWidth = useMemo(() => {
+    const checkboxWidth = showCheckboxes ? (displayWidths.checkbox ?? columnWidths.checkbox ?? 36) : 0;
+    const columnsWidth = visibleTableColumns.reduce(
+      (total, column) =>
+        total +
+        (displayWidths[column.key] ??
+          columnWidths[column.key] ??
+          column.defaultWidth ??
+          105),
+      0,
+    );
+    return Math.ceil(checkboxWidth + columnsWidth);
+  }, [columnWidths, displayWidths, showCheckboxes, visibleTableColumns]);
+
   const visibleColumnSignature = useMemo(
     () =>
       `${showCheckboxes ? "cb|" : ""}${visibleTableColumns
@@ -1193,7 +1207,10 @@ export function ResizableTable<T = Record<string, unknown>>({
           className="max-w-full overflow-x-auto overflow-y-clip overscroll-x-contain"
           ref={overflowRef}
         >
-          <div className="min-w-full align-top">
+          <div
+            className="min-w-full align-top"
+            style={{ width: tableContentWidth > 0 ? tableContentWidth : undefined }}
+          >
             {/* Header */}
             <div className="flex py-1 text-base font-bold text-foreground bg-muted/5 border-b border-border w-full">
               {showCheckboxes && (

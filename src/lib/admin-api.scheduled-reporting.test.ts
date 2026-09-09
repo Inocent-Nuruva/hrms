@@ -9,6 +9,7 @@ import {
   retryScheduledReportExecution,
   runScheduledReportTemplate,
   testScheduledReportSmtpConfigurationDraft,
+  testSystemSmtpConfiguration,
 } from "./admin-api"
 
 function jsonResponse(payload: unknown, init?: ResponseInit) {
@@ -343,6 +344,21 @@ describe("scheduled reporting admin API helpers", () => {
           toEmail: "hr@example.com",
           sendTestEmail: true,
         }),
+      })
+    )
+  })
+
+  it("tests the platform SMTP used by invitations", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ status: "success" }))
+    vi.stubGlobal("fetch", fetchMock)
+
+    await testSystemSmtpConfiguration("token", "hr@example.com")
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8888/api/scheduled-reporting/smtp-configurations/test-system",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ testRecipientEmail: "hr@example.com" }),
       })
     )
   })

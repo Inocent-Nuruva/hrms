@@ -686,8 +686,18 @@ export type EmployeeInvitationResponse = AdminRecord & {
   expires_at?: string;
   expiresAt?: string;
   delivery?: {
-    email?: { status?: string; message_id?: string };
-    sms?: { status?: string; message_id?: string };
+    email?: {
+      status?: string;
+      message_id?: string | null;
+      last_error?: string | null;
+      transport?: "system_smtp";
+    };
+    sms?: {
+      status?: string;
+      message_id?: string | null;
+      last_error?: string | null;
+      transport?: "sms_gateway";
+    };
   };
 };
 
@@ -7824,6 +7834,65 @@ export async function createLeaveRequest(token: string, data: AdminRecord) {
   });
 }
 
+export type LeaveImportRowResult = {
+  row: number;
+  employee_no: string;
+  leave_type_code: string;
+  status: "created" | "failed";
+  leave_request_id?: number | null;
+  leave_no?: string | null;
+  message?: string;
+};
+
+export type LeaveImportResult = {
+  total: number;
+  created: number;
+  failed: number;
+  results: LeaveImportRowResult[];
+};
+
+export async function downloadLeaveImportTemplate(
+  token: string,
+): Promise<{ blob: Blob; filename: string }> {
+  const response = await fetch(buildUrl("/api/leave/requests/import/template"), {
+    headers: { accept: "*/*", Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(
+      extractMessage(
+        parseResponseBodyText(text, response.headers.get("content-type")),
+        response.status,
+      ),
+    );
+  }
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const match = disposition.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i);
+  return {
+    blob: await response.blob(),
+    filename: decodeURIComponent(match?.[1] ?? match?.[2] ?? "leave-import-template.xlsx"),
+  };
+}
+
+export async function importLeaveRequests(
+  token: string,
+  file: File,
+): Promise<LeaveImportResult> {
+  const body = new FormData();
+  body.set("file", file, file.name || "leave-import.xlsx");
+  const response = await fetch(buildUrl("/api/leave/requests/import"), {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body,
+    cache: "no-store",
+  });
+  const text = await response.text();
+  const payload = parseResponseBodyText(text, response.headers.get("content-type"));
+  if (!response.ok) throw new Error(extractMessage(payload, response.status));
+  return payload as LeaveImportResult;
+}
+
 export async function createMyLeaveRequest(token: string, data: AdminRecord) {
   return adminRequest<unknown>("/api/me/leave/requests", {
     method: "POST",
@@ -14550,6 +14619,21 @@ export async function testScheduledReportSmtpConfiguration(
       method: "POST",
       token,
       body: data,
+    },
+  );
+}
+
+/** Test the platform MAIL_* transport used by invitations and notifications. */
+export async function testSystemSmtpConfiguration(
+  token: string,
+  testRecipientEmail: string,
+) {
+  return adminRequest<unknown>(
+    "/api/scheduled-reporting/smtp-configurations/test-system",
+    {
+      method: "POST",
+      token,
+      body: { testRecipientEmail },
     },
   );
 }

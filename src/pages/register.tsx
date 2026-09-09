@@ -37,9 +37,10 @@ export default function InvitationRegistrationPage() {
   const [complete, setComplete] = React.useState(false)
   const [error, setError] = React.useState("")
 
+  const invitationTokenQuery = router.query.token ?? router.query.invitation_token
   const token =
-    typeof router.query.invitation_token === "string"
-      ? router.query.invitation_token.trim()
+    typeof invitationTokenQuery === "string"
+      ? invitationTokenQuery.trim()
       : ""
 
   React.useEffect(() => {
