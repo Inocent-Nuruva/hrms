@@ -252,7 +252,9 @@ function readNotificationPreferenceChannel(
 function readNotificationPreferenceEnabled(
   preference: NotificationPreference | null | undefined
 ) {
-  if (!preference) return false
+  // The backend treats a missing row as enabled. Reflect that default in the
+  // UI instead of making new accounts look opted out of every channel.
+  if (!preference) return true
   if (typeof preference.is_enabled === "boolean") return preference.is_enabled
   if (typeof preference.isEnabled === "boolean") return preference.isEnabled
   return false
@@ -854,25 +856,16 @@ function AccountSettingsPanelContent({
           <CardTitle>Security & Authentication</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="relative grid grid-cols-2 gap-2 rounded-lg border p-1 sm:grid-cols-4">
-            <div
-              className="absolute top-1 bottom-1 left-1 hidden rounded-md bg-muted transition-all duration-300 ease-out sm:block"
-              style={{
-                width: "calc((100% - 1.25rem) / 4)",
-                transform:
-                  activeTab === "reset-password"
-                    ? "translateX(0%)"
-                    : activeTab === "two-factor"
-                      ? "translateX(100%)"
-                      : activeTab === "devices"
-                        ? "translateX(200%)"
-                        : "translateX(300%)",
-              }}
-            />
+          <div className="grid grid-cols-2 gap-2 rounded-lg border bg-muted/20 p-1 sm:grid-cols-4">
             <Button
               type="button"
               variant="ghost"
-              className="relative z-10 justify-center gap-2 px-2 text-xs sm:text-sm"
+              aria-pressed={activeTab === "reset-password"}
+              className={`justify-center gap-2 border px-2 text-xs transition-colors sm:text-sm ${
+                activeTab === "reset-password"
+                  ? "border-blue-500/40 bg-blue-500/15 text-blue-700 shadow-sm hover:bg-blue-500/20 dark:text-blue-300"
+                  : "border-transparent"
+              }`}
               onClick={() => handleTabChange("reset-password")}
             >
               <KeyRound
@@ -887,7 +880,12 @@ function AccountSettingsPanelContent({
             <Button
               type="button"
               variant="ghost"
-              className="relative z-10 justify-center gap-2 px-2 text-xs sm:text-sm"
+              aria-pressed={activeTab === "two-factor"}
+              className={`justify-center gap-2 border px-2 text-xs transition-colors sm:text-sm ${
+                activeTab === "two-factor"
+                  ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-700 shadow-sm hover:bg-emerald-500/20 dark:text-emerald-300"
+                  : "border-transparent"
+              }`}
               onClick={() => handleTabChange("two-factor")}
               disabled={requiresPasswordChange}
             >
@@ -903,7 +901,12 @@ function AccountSettingsPanelContent({
             <Button
               type="button"
               variant="ghost"
-              className="relative z-10 justify-center gap-2 px-2 text-xs sm:text-sm"
+              aria-pressed={activeTab === "devices"}
+              className={`justify-center gap-2 border px-2 text-xs transition-colors sm:text-sm ${
+                activeTab === "devices"
+                  ? "border-violet-500/40 bg-violet-500/15 text-violet-700 shadow-sm hover:bg-violet-500/20 dark:text-violet-300"
+                  : "border-transparent"
+              }`}
               onClick={() => handleTabChange("devices")}
               disabled={requiresPasswordChange}
             >
@@ -919,7 +922,12 @@ function AccountSettingsPanelContent({
             <Button
               type="button"
               variant="ghost"
-              className="relative z-10 justify-center gap-2 px-2 text-xs sm:text-sm"
+              aria-pressed={activeTab === "email"}
+              className={`justify-center gap-2 border px-2 text-xs transition-colors sm:text-sm ${
+                activeTab === "email"
+                  ? "border-amber-500/40 bg-amber-500/15 text-amber-800 shadow-sm hover:bg-amber-500/20 dark:text-amber-300"
+                  : "border-transparent"
+              }`}
               onClick={() => handleTabChange("email")}
               disabled={requiresPasswordChange}
             >
@@ -1381,7 +1389,7 @@ function AccountSettingsPanelContent({
                     Choose which channels should alert you for leave, onboarding, offboarding, attendance, and system events.
                   </p>
                   <p>
-                    Rows marked as default still follow the usual company setting until you change them here.
+                    Rows marked “Default on” are enabled unless you turn them off or an administrator disables delivery system-wide.
                   </p>
                 </TooltipContent>
               </Tooltip>
@@ -1476,7 +1484,7 @@ function AccountSettingsPanelContent({
                                           ? readNotificationPreferenceEnabled(preference)
                                             ? "On"
                                             : "Off"
-                                          : "Default"}
+                                          : "Default on"}
                                     </span>
                                   </div>
                                 </td>

@@ -4081,6 +4081,26 @@ export function EmployeeSelfServiceProfileView() {
           result = await uploadMyProfilePhoto(token, selectedProfilePhotoFile)
         }
 
+        const submittedForApproval = Boolean(selectedProfilePhotoFile) || usedUploadFallback
+        if (submittedForApproval) {
+          try {
+            const profileUpdatesResult = await listMyProfileUpdateRequests(token, {
+              page: 1,
+              limit: 20,
+            })
+            setProfileUpdateRequests(profileUpdatesResult.rows)
+          } catch {
+            // Submission succeeded; refreshing the request list is best-effort.
+          }
+          setSectionEditor(null)
+          setSelectedProfilePhotoFile(null)
+          setSelectedDefaultAvatarId(null)
+          setProfilePhotoFileName("")
+          setProfilePhotoPreviewUrl("")
+          setMessage("Profile picture submitted for HR approval.")
+          return
+        }
+
         const rawResultUrl =
           readString(result, ["profile_photo_url", "photo_url", "url", "avatar_url"], "") ||
           readString(asRecord(result?.user), ["profile_photo_url", "photo_url", "url", "avatar_url"], "") ||
@@ -4125,9 +4145,7 @@ export function EmployeeSelfServiceProfileView() {
         setProfilePhotoPreviewUrl("")
         setMessage(
           hasDefaultAvatar
-            ? usedUploadFallback
-              ? "Avatar applied (uploaded as profile photo)."
-              : "Default avatar applied."
+            ? "Default avatar applied."
             : "Profile picture updated."
         )
         try {
