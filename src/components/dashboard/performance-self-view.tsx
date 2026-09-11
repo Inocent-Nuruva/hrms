@@ -40,8 +40,11 @@ import {
 } from "@/components/animate-ui/components/base/dialog"
 import {
   acknowledgeMyPerformanceImprovementPlan,
+  createManagerActivityTask,
   getManagerPerformanceSummary,
   getMyPerformanceSummary,
+  listManagerActivityCategories,
+  listManagerTeam,
   listManagerTeamAchievements,
   listMyPerformanceAchievements,
   listMyPerformanceAssignments,
@@ -63,6 +66,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 export type PerformanceSelfTab =
   | "overview"
   | "assignments"
+  | "assign-tasks"
   | "reviews"
   | "achievements"
   | "improvement"
@@ -217,6 +221,8 @@ export function PerformanceSelfView({
   const [summary, setSummary] = React.useState<AdminRecord | null>(null)
   const [managerSummary, setManagerSummary] = React.useState<AdminRecord | null>(null)
   const [assignments, setAssignments] = React.useState<AdminRecord[]>([])
+  const [taskEmployees, setTaskEmployees] = React.useState<AdminRecord[]>([])
+  const [taskCategories, setTaskCategories] = React.useState<AdminRecord[]>([])
   const [reviews, setReviews] = React.useState<AdminRecord[]>([])
   const [achievements, setAchievements] = React.useState<AdminRecord[]>([])
   const [pips, setPips] = React.useState<AdminRecord[]>([])
@@ -233,6 +239,11 @@ export function PerformanceSelfView({
   const [formError, setFormError] = React.useState<string | null>(null)
   const [saving, setSaving] = React.useState(false)
   const [busyId, setBusyId] = React.useState("")
+  const [taskForm, setTaskForm] = React.useState<Record<string, string>>({
+    activity_date: new Date().toISOString().slice(0, 10),
+  })
+  const [taskError, setTaskError] = React.useState<string | null>(null)
+  const [taskSaving, setTaskSaving] = React.useState(false)
 
   const load = React.useCallback(async () => {
     const token = readStoredToken()
@@ -244,13 +255,16 @@ export function PerformanceSelfView({
     setLoading(true)
     setError(null)
     try {
-      const tasks: Array<Promise<unknown>> = [
-        getMyPerformanceSummary(token).then(setSummary),
-        listMyPerformanceAssignments(token).then(setAssignments),
-        listMyPerformanceReviews(token).then(setReviews),
-        listMyPerformanceAchievements(token).then(setAchievements),
-        listMyPerformanceImprovementPlans(token).then(setPips),
-      ]
+      const tasks: Array<Promise<unknown>> = []
+      if (activeTab !== "assign-tasks") {
+        tasks.push(
+          getMyPerformanceSummary(token).then(setSummary),
+          listMyPerformanceAssignments(token).then(setAssignments),
+          listMyPerformanceReviews(token).then(setReviews),
+          listMyPerformanceAchievements(token).then(setAchievements),
+          listMyPerformanceImprovementPlans(token).then(setPips),
+        )
+      }
       if (activeTab === "team") {
         tasks.push(
           getManagerPerformanceSummary(token)
@@ -271,6 +285,16 @@ export function PerformanceSelfView({
             .catch(() => setTeamAchievements([])),
         )
       }
+      if (activeTab === "assign-tasks") {
+        tasks.push(
+          listManagerTeam(token, { limit: 100, direct_reports_only: true })
+            .then(setTaskEmployees)
+            .catch(() => setTaskEmployees([])),
+          listManagerActivityCategories(token)
+            .then(setTaskCategories)
+            .catch(() => setTaskCategories([])),
+        )
+      }
       const results = await Promise.allSettled(tasks)
       const firstError = results.find((result) => result.status === "rejected")
       if (firstError && firstError.status === "rejected" && activeTab !== "team") {
@@ -287,6 +311,7 @@ export function PerformanceSelfView({
     forgetForbiddenRoute("/dashboard/me/performance")
     forgetForbiddenRoute("/dashboard/me/performance/overview")
     forgetForbiddenRoute("/dashboard/me/performance/assignments")
+    forgetForbiddenRoute("/dashboard/me/performance/assign-tasks")
     forgetForbiddenRoute("/dashboard/me/performance/reviews")
     forgetForbiddenRoute("/dashboard/me/performance/achievements")
     forgetForbiddenRoute("/dashboard/me/performance/improvement")
@@ -316,6 +341,45 @@ export function PerformanceSelfView({
           : activeTab === "improvement"
             ? pips
             : teamAchievements
+
+  async function saveManagerTask() {
+    const token = readStoredToken()
+    if (!token) return
+    if (
+      !taskForm.employee_id ||
+      !taskForm.activity_category_id ||
+      !taskForm.activity_date ||
+      !taskForm.title?.trim() ||
+      !taskForm.description?.trim()
+    ) {
+      setTaskError("Employee, category, date, title, and description are required.")
+      return
+    }
+    setTaskSaving(true)
+    setTaskError(null)
+    try {
+      await createManagerActivityTask(token, {
+        employee_id: Number(taskForm.employee_id),
+        activity_category_id: Number(taskForm.activity_category_id),
+        activity_date: taskForm.activity_date,
+        title: taskForm.title.trim(),
+        description: taskForm.description.trim(),
+        planned_start_time: taskForm.planned_start_time
+          ? `${taskForm.planned_start_time}:00`
+          : undefined,
+        planned_end_time: taskForm.planned_end_time
+          ? `${taskForm.planned_end_time}:00`
+          : undefined,
+      })
+      toast.success("Task assigned.")
+      setTaskForm({ activity_date: new Date().toISOString().slice(0, 10) })
+      await load()
+    } catch (errorObject) {
+      setTaskError(errorObject instanceof Error ? errorObject.message : "Could not assign task.")
+    } finally {
+      setTaskSaving(false)
+    }
+  }
 
   function openAction(mode: ActionMode, row: AdminRecord) {
     setActionMode(mode)
@@ -644,12 +708,18 @@ export function PerformanceSelfView({
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-xl font-semibold tracking-tight">
-              {activeTab === "team" ? "Team performance" : prettify(activeTab)}
+              {activeTab === "team"
+                ? "Team performance"
+                : activeTab === "assign-tasks"
+                  ? "Assign tasks"
+                  : prettify(activeTab)}
             </h1>
             <p className="text-sm text-muted-foreground">
               {activeTab === "team"
                 ? "Validate team achievements and submit manager reviews."
-                : "Work that belongs to your current review cycle."}
+                : activeTab === "assign-tasks"
+                  ? "Create a task for a direct report and track the handover in daily activities."
+                  : "Work that belongs to your current review cycle."}
             </p>
           </div>
           <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
@@ -676,7 +746,61 @@ export function PerformanceSelfView({
         </div>
       ) : null}
 
-      {activeTab !== "overview" ? (
+      {activeTab === "assign-tasks" ? (
+        <div className="rounded-xl border border-border bg-card p-4 sm:p-5">
+          <div className="mb-4 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-800 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-200">
+            Assign work to a direct report. The selected employee will see it in their daily activities and can mark it as completed.
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="grid gap-1.5 text-sm">
+              <span className="font-medium">Employee</span>
+              <select className={inputClass} value={taskForm.employee_id ?? ""} onChange={(event) => setTaskForm((current) => ({ ...current, employee_id: event.target.value }))}>
+                <option value="">Select employee</option>
+                {taskEmployees.map((employee) => (
+                  <option key={rowId(employee)} value={rowId(employee)}>
+                    {readString(employee, ["full_name", "fullName", "name"], employeeLabel(employee))}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="grid gap-1.5 text-sm">
+              <span className="font-medium">Activity category</span>
+              <select className={inputClass} value={taskForm.activity_category_id ?? ""} onChange={(event) => setTaskForm((current) => ({ ...current, activity_category_id: event.target.value }))}>
+                <option value="">Select category</option>
+                {taskCategories.map((category) => (
+                  <option key={rowId(category)} value={rowId(category)}>{optionLabel(category)}</option>
+                ))}
+              </select>
+            </label>
+            <label className="grid gap-1.5 text-sm">
+              <span className="font-medium">Activity date</span>
+              <input type="date" className={inputClass} value={taskForm.activity_date ?? ""} onChange={(event) => setTaskForm((current) => ({ ...current, activity_date: event.target.value }))} />
+            </label>
+            <label className="grid gap-1.5 text-sm">
+              <span className="font-medium">Task title</span>
+              <input className={inputClass} placeholder="e.g. Issue access badge" value={taskForm.title ?? ""} onChange={(event) => setTaskForm((current) => ({ ...current, title: event.target.value }))} />
+            </label>
+            <label className="grid gap-1.5 text-sm sm:col-span-2">
+              <span className="font-medium">Instructions</span>
+              <textarea className={textareaClass} placeholder="Describe what should be done and any handover details." value={taskForm.description ?? ""} onChange={(event) => setTaskForm((current) => ({ ...current, description: event.target.value }))} />
+            </label>
+            <label className="grid gap-1.5 text-sm">
+              <span className="font-medium">Planned start (optional)</span>
+              <input type="datetime-local" className={inputClass} value={taskForm.planned_start_time ?? ""} onChange={(event) => setTaskForm((current) => ({ ...current, planned_start_time: event.target.value }))} />
+            </label>
+            <label className="grid gap-1.5 text-sm">
+              <span className="font-medium">Planned end (optional)</span>
+              <input type="datetime-local" className={inputClass} value={taskForm.planned_end_time ?? ""} onChange={(event) => setTaskForm((current) => ({ ...current, planned_end_time: event.target.value }))} />
+            </label>
+          </div>
+          {taskError ? <p className="mt-3 text-sm text-rose-600">{taskError}</p> : null}
+          <div className="mt-4 flex justify-end">
+            <button type="button" className={primaryButtonClass} onClick={() => void saveManagerTask()} disabled={taskSaving}>
+              {taskSaving ? <Loader2Icon className="size-4 animate-spin" /> : "Assign task"}
+            </button>
+          </div>
+        </div>
+      ) : activeTab !== "overview" ? (
         <div className="overflow-hidden rounded-xl border border-border bg-card">
           {managerError && activeTab === "team" ? (
             <div className="border-b border-border px-4 py-3 text-sm text-muted-foreground">{managerError}</div>

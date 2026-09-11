@@ -8,6 +8,7 @@ import {
   deactivateAttendanceGeofence,
   deactivateAttendanceWifiNetwork,
   getAccessControlDoorDeviceConfig,
+  getHrProfileChangeRequest,
   getHikvisionSyncJob,
   listAccessDeviceAuditLogs,
   listAccessDeviceScopedCommandLogs,
@@ -277,5 +278,36 @@ describe("live control and leftover documented API helpers", () => {
     )
     expect(myFile.filename).toBe("pending.jpg")
     expect(hrFile.contentType).toBe("image/jpeg")
+  })
+
+  it("preserves the complete profile-change request when metadata is empty", async () => {
+    const fetchMock = vi.fn().mockImplementation(() =>
+      jsonResponse({
+        id: 3,
+        reference_number: "PCR-000003",
+        request_type: "PROFILE_PHOTO",
+        metadata: {},
+        employee: {
+          id: 157,
+          first_name: "Emmy",
+          last_name: "Malekela",
+        },
+        items: [{ id: 8, field_name: "profile_photo_file" }],
+        files: [{ id: 9, original_file_name: "portrait.jpg" }],
+      }),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const request = await getHrProfileChangeRequest("token", 3)
+
+    expect(request).toMatchObject({
+      id: 3,
+      request_type: "PROFILE_PHOTO",
+      employee: {
+        first_name: "Emmy",
+        last_name: "Malekela",
+      },
+      files: [{ id: 9, original_file_name: "portrait.jpg" }],
+    })
   })
 })

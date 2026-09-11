@@ -830,6 +830,10 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/me/performance": null,
   "/dashboard/me/performance/overview": null,
   "/dashboard/me/performance/assignments": null,
+  "/dashboard/me/performance/assign-tasks": {
+    permissions: ["work_activities:manager:review"],
+    mode: "any",
+  },
   "/dashboard/me/performance/reviews": null,
   "/dashboard/me/performance/achievements": null,
   "/dashboard/me/performance/improvement": null,

@@ -8,6 +8,7 @@ import {
 const ALLOWED_VIEWS = new Set<PerformanceSelfTab>([
   "overview",
   "assignments",
+  "assign-tasks",
   "reviews",
   "achievements",
   "improvement",

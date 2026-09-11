@@ -3283,6 +3283,10 @@ export function OnboardingView() {
       showErrorAlert("Task title is required.")
       return
     }
+    if (taskForm.task_type === "asset" && !taskForm.assigned_company_user_id) {
+      showErrorAlert("Select the provider who is allowed to mark this item as given.")
+      return
+    }
 
     setSaving(true)
     try {
@@ -5414,31 +5418,47 @@ export function OnboardingView() {
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <p className="text-sm font-semibold text-slate-900">Tasks</p>
                       {canUpdateOnboardingRequests ? (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="h-8 px-3 text-xs"
-                          onClick={() => {
-                            void ensureLookups(["users", "departments"])
-                            resetTaskForm()
-                            setShowTaskComposer((current) => !current)
-                          }}
-                          disabled={saving}
-                        >
-                          {showTaskComposer ? "Hide task form" : "Create task"}
-                        </Button>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-8 px-3 text-xs"
+                            onClick={() => {
+                              void ensureLookups(["users", "departments"])
+                              resetTaskForm()
+                              setShowTaskComposer((current) => !current)
+                            }}
+                            disabled={saving}
+                          >
+                            {showTaskComposer ? "Hide task form" : "Create task"}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-8 border-amber-200 px-3 text-xs text-amber-700 hover:bg-amber-50"
+                            onClick={() => {
+                              void ensureLookups(["users", "departments"])
+                              resetTaskForm()
+                              setTaskForm((current) => ({ ...current, task_type: "asset" }))
+                              setShowTaskComposer(true)
+                            }}
+                            disabled={saving}
+                          >
+                            Add item to provide
+                          </Button>
+                        </div>
                       ) : null}
                     </div>
 
                     {showTaskComposer ? (
                       <div className="grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 md:grid-cols-2">
                         <label className="grid gap-1 text-xs font-medium text-slate-700">
-                          Title
+                          {taskForm.task_type === "asset" ? "Item to provide" : "Title"}
                           <Input
                             className="h-9 bg-white text-slate-900"
                             value={taskForm.title}
                             onChange={(event) => setTaskForm((prev) => ({ ...prev, title: event.target.value }))}
-                            placeholder="Task title"
+                            placeholder={taskForm.task_type === "asset" ? "e.g. Laptop, ID card, access badge" : "Task title"}
                           />
                         </label>
                         <label className="grid gap-1 text-xs font-medium text-slate-700">
@@ -5456,7 +5476,7 @@ export function OnboardingView() {
                           </select>
                         </label>
                         <label className="grid gap-1 text-xs font-medium text-slate-700">
-                          Assigned user
+                          {taskForm.task_type === "asset" ? "Provider (allowed to mark as given)" : "Assigned user"}
                           <select
                             className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
                             value={taskForm.assigned_company_user_id}
@@ -5464,7 +5484,7 @@ export function OnboardingView() {
                               setTaskForm((prev) => ({ ...prev, assigned_company_user_id: event.target.value }))
                             }
                           >
-                            <option value="">Optional user</option>
+                            <option value="">{taskForm.task_type === "asset" ? "Select provider" : "Optional user"}</option>
                             {users.map((row, index) => {
                               const userId = readNumber(row, ["id", "company_user_id", "user_id"])
                               if (userId === null) return null
@@ -5533,7 +5553,7 @@ export function OnboardingView() {
                             onClick={() => void submitRequestTask()}
                             disabled={saving}
                           >
-                            {saving ? "Creating..." : "Create task"}
+                            {saving ? "Creating..." : taskForm.task_type === "asset" ? "Add item" : "Create task"}
                           </Button>
                         </div>
                       </div>
@@ -5558,7 +5578,7 @@ export function OnboardingView() {
                                     {readString(taskRow, ["title", "name", "task_title"])}
                                   </p>
                                   <p className="text-xs text-slate-500">
-                                    {toTitleCaseWords(readString(taskRow, ["task_type", "type"]))} •{" "}
+                                    {readString(taskRow, ["task_type", "type"]).toLowerCase() === "asset" ? "Item handover" : toTitleCaseWords(readString(taskRow, ["task_type", "type"]))} •{" "}
                                     {taskStatus !== "-" ? toTitleCaseWords(taskStatus) : "Pending"}
                                   </p>
                                 </div>
@@ -5570,13 +5590,15 @@ export function OnboardingView() {
                                     onClick={() => void completeRequestTask(taskRow)}
                                     disabled={saving}
                                   >
-                                    Complete task
+                                    {readString(taskRow, ["task_type", "type"]).toLowerCase() === "asset" ? "Mark as given" : "Complete task"}
                                   </Button>
                                 ) : null}
                               </div>
                               <div className="mt-2 grid gap-2 md:grid-cols-3">
                                 <div>
-                                  <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Owner</p>
+                                  <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                                    {readString(taskRow, ["task_type", "type"]).toLowerCase() === "asset" ? "Provider" : "Owner"}
+                                  </p>
                                   <p className="text-sm text-slate-900">{resolveRequestTaskOwner(taskRow)}</p>
                                 </div>
                                 <div>

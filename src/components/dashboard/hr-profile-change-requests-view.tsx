@@ -1,6 +1,8 @@
 "use client"
 
 import * as React from "react"
+import Image from "next/image"
+import { useSearchParams } from "next/navigation"
 import { InfoIcon, Loader2Icon, RefreshCwIcon } from "lucide-react"
 import { motion } from "framer-motion"
 import { toast } from "sonner"
@@ -12,6 +14,7 @@ import {
   StatusChip,
   TalentDoodleSprites,
   actionButtonClass,
+  asRecord,
   employeeLabel,
   formatDate,
   optionLabel,
@@ -105,9 +108,9 @@ function downloadBlob(blob: Blob, filename: string) {
 }
 
 function profileChangeFiles(row: AdminRecord | null) {
-  if (!row) return [] as Array<{ id: string; name: string }>
+  if (!row) return [] as Array<{ id: string; name: string; mimeType: string }>
   const candidates = [row.files, row.pendingFiles, row.pending_files, row.attachments, row.file]
-  const files: Array<{ id: string; name: string }> = []
+  const files: Array<{ id: string; name: string; mimeType: string }> = []
   for (const candidate of candidates) {
     const list = Array.isArray(candidate) ? candidate : candidate ? [candidate] : []
     for (const item of list) {
@@ -117,14 +120,68 @@ function profileChangeFiles(row: AdminRecord | null) {
       if (!id) continue
       files.push({
         id,
-        name: readString(record, ["fileName", "file_name", "name", "originalName"], `File ${id}`),
+        name: readString(
+          record,
+          ["original_file_name", "originalFileName", "fileName", "file_name", "name", "originalName"],
+          `File ${id}`,
+        ),
+        mimeType: readString(record, ["mime_type", "mimeType", "content_type", "contentType"]),
       })
     }
   }
   return files
 }
 
+function profileChangeEmployeeName(row: AdminRecord | null) {
+  const employee = asRecord(row?.employee)
+  const directName = readString(row, ["employee_name", "employeeName", "full_name", "fullName"])
+  if (directName) return directName
+
+  const firstName = readString(employee, ["first_name", "firstName"])
+  const lastName = readString(employee, ["last_name", "lastName"])
+  const fullName = [firstName, lastName].filter(Boolean).join(" ").trim()
+  return fullName || employeeLabel(row)
+}
+
+function profileChangeRequesterName(row: AdminRecord | null) {
+  const requester = asRecord(row?.requested_by_user)
+  const firstName = readString(requester, ["first_name", "firstName"])
+  const lastName = readString(requester, ["last_name", "lastName"])
+  const name = [firstName, lastName].filter(Boolean).join(" ").trim()
+  const email = readString(requester, ["email"])
+  return (
+    name ||
+    readString(row, ["requested_by_name", "requestedByName", "requester_name", "requesterName"]) ||
+    email ||
+    "Unknown requester"
+  )
+}
+
+function profileChangeStatusClass(status: string) {
+  switch (status.toUpperCase()) {
+    case "APPROVED":
+      return "border-emerald-200 bg-emerald-50 text-emerald-700"
+    case "REJECTED":
+      return "border-rose-200 bg-rose-50 text-rose-700"
+    case "UNDER_REVIEW":
+      return "border-amber-200 bg-amber-50 text-amber-700"
+    case "PENDING_REVIEW":
+      return "border-sky-200 bg-sky-50 text-sky-700"
+    case "SUPERSEDED":
+      return "border-slate-200 bg-slate-100 text-slate-600"
+    default:
+      return "border-violet-200 bg-violet-50 text-violet-700"
+  }
+}
+
 export function HrProfileChangeRequestsView() {
+  const searchParams = useSearchParams()
+  const highlightedRequestId = (
+    searchParams?.get("highlight") ??
+    searchParams?.get("requestId") ??
+    searchParams?.get("request_id") ??
+    ""
+  ).trim()
   const actor = useDashboardActor()
   const canAccess =
     actor.ready &&
@@ -145,6 +202,10 @@ export function HrProfileChangeRequestsView() {
   const [historyOpen, setHistoryOpen] = React.useState(false)
   const [historyRows, setHistoryRows] = React.useState<AdminRecord[]>([])
   const [historyLoading, setHistoryLoading] = React.useState(false)
+  const [photoPreview, setPhotoPreview] = React.useState<{ url: string; name: string } | null>(null)
+  const [photoPreviewLoading, setPhotoPreviewLoading] = React.useState(false)
+  const [photoPreviewError, setPhotoPreviewError] = React.useState<string | null>(null)
+  const openedHighlightedRequestRef = React.useRef("")
 
   const load = React.useCallback(async () => {
     const token = readStoredToken()
@@ -174,6 +235,129 @@ export function HrProfileChangeRequestsView() {
     void load()
   }, [canAccess, load])
 
+  const openRequestDetails = React.useCallback((row: AdminRecord) => {
+    setDetail(row)
+    const token = readStoredToken()
+    const id = rowId(row)
+    if (!token || !id) return
+    void getHrProfileChangeRequest(token, id)
+      .then((record) => {
+        if (record) setDetail(record)
+      })
+      .catch((errorObject) =>
+        toast.error(errorObject instanceof Error ? errorObject.message : "Could not load request details."),
+      )
+  }, [])
+
+  React.useEffect(() => {
+    if (!canAccess || !highlightedRequestId) return
+    if (openedHighlightedRequestRef.current === highlightedRequestId) return
+    openedHighlightedRequestRef.current = highlightedRequestId
+    const listedRow = rows.find((row) => rowId(row) === highlightedRequestId)
+    openRequestDetails(listedRow ?? { id: highlightedRequestId })
+  }, [canAccess, highlightedRequestId, openRequestDetails, rows])
+
+  const detailId = rowId(detail)
+  const previewFile = profileChangeFiles(detail).find(
+    (file) => file.mimeType.startsWith("image/") || readString(detail, ["request_type", "requestType"]).toUpperCase() === "PROFILE_PHOTO",
+  )
+
+  const detailEmployee = asRecord(detail?.employee)
+  const detailItems = Array.isArray(detail?.items)
+    ? detail.items.filter((item): item is AdminRecord => Boolean(asRecord(item))).map((item) => asRecord(item) as AdminRecord)
+    : []
+  const detailStatus = readString(detail, ["status"], "PENDING_REVIEW").toUpperCase()
+  const detailContent = detail ? (
+    <div className="max-h-[68vh] space-y-4 overflow-y-auto pr-1">
+      <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-primary/15 bg-primary/[0.04] p-3">
+        <div className="min-w-0">
+          <p className="text-base font-semibold text-foreground">{profileChangeEmployeeName(detail)}</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {readString(detail, ["reference_number", "referenceNumber"], "Profile change request")}
+          </p>
+        </div>
+        <span className={`inline-flex shrink-0 items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${profileChangeStatusClass(detailStatus)}`}>
+          {prettify(detailStatus)}
+        </span>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {[
+          ["Employee no", readString(detailEmployee, ["employee_no", "employeeNo"], "—")],
+          ["First name", readString(detailEmployee, ["first_name", "firstName"], "—")],
+          ["Last name", readString(detailEmployee, ["last_name", "lastName"], "—")],
+          ["Requested by", profileChangeRequesterName(detail)],
+          ["Request type", prettify(readString(detail, ["request_type", "requestType"], "Change"))],
+          ["Submitted", formatDate(detail.submitted_at ?? detail.submittedAt ?? detail.created_at ?? detail.createdAt)],
+        ].map(([label, value]) => (
+          <div key={label} className="min-w-0 rounded-xl border border-border bg-card px-3 py-2.5">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-primary/70">{label}</p>
+            <p className="mt-1 break-words text-sm font-medium text-foreground">{value}</p>
+          </div>
+        ))}
+      </div>
+      {readString(detail, ["reason"]) !== "-" ? (
+        <div className="rounded-xl border border-border bg-card px-3 py-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-primary/70">Reason</p>
+          <p className="mt-1 whitespace-pre-wrap break-words text-sm text-foreground">{readString(detail, ["reason"])}</p>
+        </div>
+      ) : null}
+      <div className="rounded-xl border border-border bg-card p-3">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-primary/70">Requested items</p>
+        {detailItems.length ? (
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            {detailItems.map((item, index) => (
+              <div key={rowId(item) || index} className="min-w-0 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                <p className="break-words text-sm font-medium text-slate-900">{readString(item, ["field_label", "field_name"], "Profile field")}</p>
+                <p className="mt-1 break-words text-xs text-slate-600">{readString(item, ["new_value", "newValue"], "No value")}</p>
+              </div>
+            ))}
+          </div>
+        ) : <p className="mt-2 text-sm text-muted-foreground">No field changes recorded.</p>}
+      </div>
+    </div>
+  ) : undefined
+
+  React.useEffect(() => {
+    setPhotoPreview(null)
+    setPhotoPreviewError(null)
+    if (!detailId || !previewFile) {
+      setPhotoPreviewLoading(false)
+      return
+    }
+
+    const token = readStoredToken()
+    if (!token) {
+      setPhotoPreviewError("Authentication required to preview this photo.")
+      return
+    }
+
+    let active = true
+    let objectUrl = ""
+    setPhotoPreviewLoading(true)
+    void previewHrProfileChangeRequestFile(token, detailId, previewFile.id)
+      .then((result) => {
+        objectUrl = URL.createObjectURL(result.blob)
+        if (!active) {
+          URL.revokeObjectURL(objectUrl)
+          return
+        }
+        setPhotoPreview({ url: objectUrl, name: result.filename || previewFile.name })
+      })
+      .catch((errorObject) => {
+        if (active) {
+          setPhotoPreviewError(errorObject instanceof Error ? errorObject.message : "Could not preview this photo.")
+        }
+      })
+      .finally(() => {
+        if (active) setPhotoPreviewLoading(false)
+      })
+
+    return () => {
+      active = false
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
+  }, [detailId, previewFile?.id, previewFile?.name])
+
   const visible = rows.filter((row) => !search || JSON.stringify(row).toLowerCase().includes(search.toLowerCase()))
 
   async function onDecide() {
@@ -182,7 +366,7 @@ export function HrProfileChangeRequestsView() {
     setSaving(true)
     setFormError(null)
     try {
-      if (form.mode === "approve") await approveHrProfileChangeRequest(token, form.id, { comment: form.comment || undefined })
+      if (form.mode === "approve") await approveHrProfileChangeRequest(token, form.id)
       else if (form.mode === "reject") {
         if (!form.rejection_reason) throw new Error("Rejection reason is required.")
         await rejectHrProfileChangeRequest(token, form.id, {
@@ -212,7 +396,7 @@ export function HrProfileChangeRequestsView() {
       label: "Request",
       render: (row) => (
         <div className="space-y-0.5">
-          <p className="font-medium">{employeeLabel(row)}</p>
+          <p className="font-medium">{profileChangeEmployeeName(row)}</p>
           <p className="text-xs text-muted-foreground">{prettify(readString(row, ["requestType", "request_type"], "Change"))}</p>
         </div>
       ),
@@ -325,45 +509,65 @@ export function HrProfileChangeRequestsView() {
           storageKey="hr-profile-change-requests"
           onRowSelect={(_, row) => {
             if (!row) return
-            setDetail(row)
-            const token = readStoredToken()
-            const id = rowId(row)
-            if (token && id) {
-              void getHrProfileChangeRequest(token, id).then((record) => record && setDetail(record)).catch(() => undefined)
-            }
+            openRequestDetails(row)
           }}
         />
       </div>
       <RecordDetailsDialog
         open={Boolean(detail)}
         onOpenChange={(open) => !open && setDetail(null)}
-        title={optionLabel(detail)}
+        title={profileChangeEmployeeName(detail)}
+        description={readString(detail, ["reference_number", "referenceNumber"], optionLabel(detail))}
         row={detail}
+        content={detailContent}
+        popupClassName="w-[min(96vw,56rem)] max-w-4xl"
         footer={
           profileChangeFiles(detail).length ? (
-            <div className="flex flex-wrap gap-2">
-              {profileChangeFiles(detail).map((fileItem) => (
-                <button
-                  key={fileItem.id}
-                  type="button"
-                  className={actionButtonClass}
-                  disabled={busyId === `file-${fileItem.id}`}
-                  onClick={() => {
-                    const token = readStoredToken()
-                    const id = detail ? rowId(detail) : ""
-                    if (!token || !id) return
-                    setBusyId(`file-${fileItem.id}`)
-                    void previewHrProfileChangeRequestFile(token, id, fileItem.id)
-                      .then((result) => downloadBlob(result.blob, result.filename))
-                      .catch((errorObject) =>
-                        toast.error(errorObject instanceof Error ? errorObject.message : "Could not open file."),
-                      )
-                      .finally(() => setBusyId(""))
-                  }}
-                >
-                  Preview {fileItem.name}
-                </button>
-              ))}
+            <div className="w-full space-y-3">
+              {photoPreviewLoading ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2Icon className="size-4 animate-spin" />
+                  Loading submitted photo…
+                </div>
+              ) : null}
+              {photoPreview ? (
+                <div className="overflow-hidden rounded-xl border border-border bg-muted/20 p-2">
+                  <Image
+                    src={photoPreview.url}
+                    alt={`Submitted profile photo for ${profileChangeEmployeeName(detail)}`}
+                    width={640}
+                    height={640}
+                    unoptimized
+                    className="mx-auto max-h-80 w-auto rounded-lg object-contain"
+                  />
+                  <p className="mt-2 text-center text-xs text-muted-foreground">{photoPreview.name}</p>
+                </div>
+              ) : null}
+              {photoPreviewError ? <p className="text-sm text-rose-600">{photoPreviewError}</p> : null}
+              <div className="flex flex-wrap gap-2">
+                {profileChangeFiles(detail).map((fileItem) => (
+                  <button
+                    key={fileItem.id}
+                    type="button"
+                    className={actionButtonClass}
+                    disabled={busyId === `file-${fileItem.id}`}
+                    onClick={() => {
+                      const token = readStoredToken()
+                      const id = detail ? rowId(detail) : ""
+                      if (!token || !id) return
+                      setBusyId(`file-${fileItem.id}`)
+                      void previewHrProfileChangeRequestFile(token, id, fileItem.id)
+                        .then((result) => downloadBlob(result.blob, result.filename))
+                        .catch((errorObject) =>
+                          toast.error(errorObject instanceof Error ? errorObject.message : "Could not open file."),
+                        )
+                        .finally(() => setBusyId(""))
+                    }}
+                  >
+                    Download {fileItem.name}
+                  </button>
+                ))}
+              </div>
             </div>
           ) : undefined
         }
@@ -416,7 +620,9 @@ export function HrProfileChangeRequestsView() {
             {form.mode === "correct" ? (
               <label className="grid gap-1.5 text-sm"><span className="font-medium">Correction instructions</span><textarea className={textareaClass} value={form.correction_instructions ?? ""} onChange={(event) => setForm((current) => ({ ...current, correction_instructions: event.target.value }))} /></label>
             ) : null}
-            <label className="grid gap-1.5 text-sm"><span className="font-medium">Comment</span><textarea className={textareaClass} value={form.comment ?? ""} onChange={(event) => setForm((current) => ({ ...current, comment: event.target.value }))} /></label>
+            {form.mode !== "approve" ? (
+              <label className="grid gap-1.5 text-sm"><span className="font-medium">Comment</span><textarea className={textareaClass} value={form.comment ?? ""} onChange={(event) => setForm((current) => ({ ...current, comment: event.target.value }))} /></label>
+            ) : null}
             {formError ? <p className="text-sm text-rose-600">{formError}</p> : null}
           </div>
           <DialogFooter>

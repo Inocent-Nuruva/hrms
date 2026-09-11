@@ -7867,6 +7867,42 @@ export type LeaveImportResult = {
   results: LeaveImportRowResult[];
 };
 
+export type LeaveBalanceImportRowResult = {
+  row: number;
+  employee_no: string;
+  leave_type_code: string;
+  status: "created" | "failed";
+  message?: string;
+};
+
+export type LeaveBalanceImportResult = {
+  total: number;
+  created: number;
+  failed: number;
+  results: LeaveBalanceImportRowResult[];
+};
+
+export async function downloadLeaveBalanceImportTemplate(
+  token: string,
+): Promise<{ blob: Blob; filename: string }> {
+  const response = await fetch(buildUrl("/api/leave/balances/import/template"), {
+    headers: { accept: "*/*", Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error(await response.text() || "Could not download leave balance template.");
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const match = disposition.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i);
+  return { blob: await response.blob(), filename: decodeURIComponent(match?.[1] ?? match?.[2] ?? "leave-balance-import-template.xlsx") };
+}
+
+export async function importLeaveBalances(token: string, file: File): Promise<LeaveBalanceImportResult> {
+  const body = new FormData();
+  body.set("file", file, file.name || "leave-balance-import.xlsx");
+  const response = await fetch(buildUrl("/api/leave/balances/import"), { method: "POST", headers: { Authorization: `Bearer ${token}` }, body });
+  if (!response.ok) throw new Error(await response.text() || "Leave balance import failed.");
+  return (await response.json()) as LeaveBalanceImportResult;
+}
+
 export async function downloadLeaveImportTemplate(
   token: string,
 ): Promise<{ blob: Blob; filename: string }> {
@@ -8063,6 +8099,43 @@ export async function submitMyResignation(token: string, data: AdminRecord) {
   });
 }
 
+function looksLikeProfileChangeRequest(
+  value: AdminRecord | null,
+): value is AdminRecord {
+  if (!value) return false;
+  return (
+    "request_type" in value ||
+    "requestType" in value ||
+    "reference_number" in value ||
+    "referenceNumber" in value ||
+    "items" in value ||
+    "files" in value
+  );
+}
+
+/** Keep the request root instead of peeling it down to metadata/employee. */
+function normalizeProfileChangeRequestDetail(
+  payload: unknown,
+): AdminRecord | null {
+  const root = asRecord(payload);
+  if (!root) return normalizeSingle(payload);
+
+  const candidates = [
+    root,
+    asRecord(root.data),
+    asRecord(root.result),
+    asRecord(root.item),
+    asRecord(root.request),
+    asRecord(root.profile_change_request),
+    asRecord(root.profileChangeRequest),
+  ];
+  for (const candidate of candidates) {
+    if (looksLikeProfileChangeRequest(candidate)) return candidate;
+  }
+
+  return normalizeSingle(payload) ?? root;
+}
+
 export async function listMyProfileChangeRequests(
   token: string,
   params: Record<string, string | number | undefined> = {},
@@ -8104,7 +8177,7 @@ export async function getMyProfileChangeRequest(
     `/api/me/profile-change-requests/${id}`,
     { token },
   );
-  return normalizeSingle(payload) ?? asRecord(payload);
+  return normalizeProfileChangeRequestDetail(payload);
 }
 
 export async function updateMyProfileChangeRequest(
@@ -8228,7 +8301,7 @@ export async function getHrProfileChangeRequest(
     `/api/hr/profile-change-requests/${id}`,
     { token },
   );
-  return normalizeSingle(payload) ?? asRecord(payload);
+  return normalizeProfileChangeRequestDetail(payload);
 }
 
 export async function startHrProfileChangeReview(
@@ -8245,14 +8318,12 @@ export async function startHrProfileChangeReview(
 export async function approveHrProfileChangeRequest(
   token: string,
   id: string | number,
-  data: AdminRecord = {},
 ) {
   return adminRequest<unknown>(
     `/api/hr/profile-change-requests/${id}/approve`,
     {
       method: "POST",
       token,
-      body: data,
     },
   );
 }
@@ -15549,6 +15620,22 @@ export async function listManagerTeamAchievements(token: string) {
     { token },
   );
   return normalizeList(payload);
+}
+
+export async function createManagerActivityTask(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/manager/activities/tasks", {
+    method: "POST",
+    token,
+    body: data,
+  })
+}
+
+export async function listManagerActivityCategories(token: string) {
+  const payload = await adminRequest<unknown>(
+    "/api/manager/activities/categories",
+    { token },
+  )
+  return normalizeList(payload)
 }
 
 export async function validateManagerAchievement(

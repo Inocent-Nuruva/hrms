@@ -43,7 +43,7 @@ describe("leftover documented API helpers", () => {
       request_type: "CONTACT_INFORMATION",
       changes: { phone: "0700" },
     })
-    await approveHrProfileChangeRequest("token", 9, { comment: "OK" })
+    await approveHrProfileChangeRequest("token", 9)
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
