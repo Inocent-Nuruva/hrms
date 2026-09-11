@@ -12,6 +12,12 @@ export type HomeDashboardKind =
   | "sales-field"
   | "company"
 
+export function showsPersonalRoutesAlongsideWorkRoutes(
+  kind: HomeDashboardKind | null | undefined,
+) {
+  return kind === "hr" || kind === "manager"
+}
+
 type UnknownRecord = Record<string, unknown>
 
 function asUnknownRecord(value: unknown): UnknownRecord | null {

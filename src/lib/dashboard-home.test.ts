@@ -5,6 +5,7 @@ import {
   canSeeHrLeaveRequestsQueue,
   isHumanResourcesEmployeeRecord,
   resolveHomeDashboardKind,
+  showsPersonalRoutesAlongsideWorkRoutes,
 } from "./dashboard-home"
 
 describe("isHumanResourcesEmployeeRecord", () => {
@@ -190,5 +191,16 @@ describe("canSeeHrLeaveRequestsQueue", () => {
         roleNames: ["COMPANY_USER"],
       }),
     ).toBe(true)
+  })
+})
+
+describe("showsPersonalRoutesAlongsideWorkRoutes", () => {
+  it("keeps personal routes available to HR and managers", () => {
+    expect(showsPersonalRoutesAlongsideWorkRoutes("hr")).toBe(true)
+    expect(showsPersonalRoutesAlongsideWorkRoutes("manager")).toBe(true)
+  })
+
+  it("does not add the personal group to company operations", () => {
+    expect(showsPersonalRoutesAlongsideWorkRoutes("company")).toBe(false)
   })
 })

@@ -1769,8 +1769,8 @@ export default function HrAnalyticsDashboard({
                               nameKey="label"
                               cx="50%"
                               cy="50%"
-                              innerRadius={52}
-                              outerRadius={78}
+                              innerRadius={63}
+                              outerRadius={76}
                               paddingAngle={chartRows.length > 1 ? 2 : 0}
                               stroke="none"
                               isAnimationActive

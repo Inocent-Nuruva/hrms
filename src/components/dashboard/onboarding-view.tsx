@@ -1061,6 +1061,30 @@ export function OnboardingView() {
       }),
     [actor.ready, actorPermissions],
   )
+  const canReadEmployeeDirectory = React.useMemo(
+    () => canPerformPermission(actorPermissions, "employees:read"),
+    [actorPermissions],
+  )
+  const canReadOnboardingDocuments = React.useMemo(
+    () => canPerformPermission(actorPermissions, "onboarding_documents:read"),
+    [actorPermissions],
+  )
+  const canReadOnboardingTasks = React.useMemo(
+    () => canPerformPermission(actorPermissions, "onboarding_tasks:read"),
+    [actorPermissions],
+  )
+  const canReadRoles = React.useMemo(
+    () => canPerformPermission(actorPermissions, "roles:read"),
+    [actorPermissions],
+  )
+  const canReadCompanyUsers = React.useMemo(
+    () =>
+      canPerformPermission(actorPermissions, {
+        permissions: ["company_users:read", "users:read"],
+        mode: "any",
+      }),
+    [actorPermissions],
+  )
   const canViewPendingInvitations = React.useMemo(
     () =>
       actor.ready &&
@@ -1586,32 +1610,51 @@ export function OnboardingView() {
         } else {
           const [requestRowsResult, employeesResult, recentEmployeesResult, workflowsResult] =
             await Promise.all([
-            listOnboardingRequestsIncludingDrafts(token, requestQuery),
-            listEmployees(token, {
-              page: 1,
-              limit: 200,
-              sortBy: "created_at",
-              sortOrder: "DESC",
-              employment_status: "onboarding",
-            }),
-            listEmployees(token, {
-              page: 1,
-              limit: 100,
-              sortBy: "created_at",
-              sortOrder: "DESC",
-            }),
-            listOnboardingWorkflows(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
-          ])
+              listOnboardingRequestsIncludingDrafts(token, requestQuery),
+              canReadEmployeeDirectory
+                ? listEmployees(token, {
+                    page: 1,
+                    limit: 200,
+                    sortBy: "created_at",
+                    sortOrder: "DESC",
+                    employment_status: "onboarding",
+                  })
+                : Promise.resolve(null),
+              canReadEmployeeDirectory
+                ? listEmployees(token, {
+                    page: 1,
+                    limit: 100,
+                    sortBy: "created_at",
+                    sortOrder: "DESC",
+                  })
+                : Promise.resolve(null),
+              canViewOnboardingWorkflows
+                ? listOnboardingWorkflows(token, {
+                    page: 1,
+                    limit: 100,
+                    sortBy: "created_at",
+                    sortOrder: "DESC",
+                  })
+                : Promise.resolve(null),
+            ])
           const onboardingEmployees = mergeEmployeeRows(
-            employeesResult.rows,
-            recentEmployeesResult.rows,
+            employeesResult?.rows ?? [],
+            recentEmployeesResult?.rows ?? [],
           ).filter(isOnboardingEligibleEmployee)
-          setEmployees(onboardingEmployees)
-          setWorkflows(workflowsResult.rows)
-          setLoadedLookups((current) => ({ ...current, employees: true, workflows: true }))
+          if (employeesResult || recentEmployeesResult) {
+            setEmployees(onboardingEmployees)
+          }
+          if (workflowsResult) {
+            setWorkflows(workflowsResult.rows)
+          }
+          setLoadedLookups((current) => ({
+            ...current,
+            ...(employeesResult || recentEmployeesResult ? { employees: true } : {}),
+            ...(workflowsResult ? { workflows: true } : {}),
+          }))
 
           let requestRows = requestRowsResult
-          const defaultWorkflowId = defaultOnboardingWorkflowId(workflowsResult.rows)
+          const defaultWorkflowId = defaultOnboardingWorkflowId(workflowsResult?.rows ?? [])
           const missingEmployees = onboardingEmployees.filter((employee) => {
             const employeeId = readNumber(employee, ["id", "employee_id", "employeeId"])
             return employeeId !== null && !collectRequestEmployeeIds(requestRows).has(employeeId)
@@ -1677,7 +1720,9 @@ export function OnboardingView() {
     debouncedWorkflowSearch,
     loadLookups,
     isEmployeeMode,
+    canReadEmployeeDirectory,
     canCreateOnboardingRequests,
+    canViewOnboardingWorkflows,
     requestEmployeeFilter,
     requestStatusFilter,
     workflowStatusFilter,
@@ -3428,13 +3473,21 @@ export function OnboardingView() {
     resetTaskForm()
 
     try {
-      const lookupsPromise = loadLookups(token, ["roles", "users"])
+      const lookupKeys: OnboardingLookupKey[] = []
+      if (canReadRoles) lookupKeys.push("roles")
+      if (canReadCompanyUsers) lookupKeys.push("users")
+      const lookupsPromise =
+        lookupKeys.length > 0 ? loadLookups(token, lookupKeys) : Promise.resolve()
       const [detail, progress, auditLogs, documents, tasks] = await Promise.all([
         getOnboardingRequest(token, requestId),
         getOnboardingProgress(token, requestId),
         getOnboardingAuditLogs(token, requestId),
-        listOnboardingDocuments(token, requestId),
-        listOnboardingTasks(token, requestId),
+        canReadOnboardingDocuments
+          ? listOnboardingDocuments(token, requestId)
+          : Promise.resolve([]),
+        canReadOnboardingTasks
+          ? listOnboardingTasks(token, requestId)
+          : Promise.resolve([]),
       ])
       await lookupsPromise
       setSelectedRequestDetails(detail)
@@ -3450,7 +3503,7 @@ export function OnboardingView() {
         (detail ? readNumber(detail, ["workflow_id", "onboarding_workflow_id"]) : null) ??
         readNumber(row, ["workflow_id", "onboarding_workflow_id"]) ??
         (assignedWorkflow ? readNumber(assignedWorkflow, ["id", "workflow_id"]) : null)
-      if (workflowId !== null) {
+      if (workflowId !== null && canViewOnboardingWorkflows) {
         const workflow = await getOnboardingWorkflow(token, workflowId)
         if (workflow) {
           const workflowSteps = toRecordList(

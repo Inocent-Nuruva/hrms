@@ -38,7 +38,10 @@ import {
   normalizePermissionLabels,
 } from "@/lib/dashboard-permissions"
 import { mergeUniqueNavItems } from "@/lib/dashboard-nav"
-import type { HomeDashboardKind } from "@/lib/dashboard-home"
+import {
+  showsPersonalRoutesAlongsideWorkRoutes,
+  type HomeDashboardKind,
+} from "@/lib/dashboard-home"
 import { canSeeDashboardPage } from "@/lib/forbidden-routes"
 import {
   useForbiddenPrefixes,
@@ -488,6 +491,7 @@ const selfServiceNavMain: SidebarNavItem[] = [
         "/dashboard/me/performance",
         "/dashboard/me/performance/overview",
         "/dashboard/me/performance/assignments",
+        "/dashboard/me/performance/assign-tasks",
         "/dashboard/me/performance/reviews",
         "/dashboard/me/performance/achievements",
         "/dashboard/me/performance/improvement",
@@ -801,10 +805,11 @@ export function AppSidebar({
         navSecondary: secondary,
       }
     }
+    const showPersonalRoutes = showsPersonalRoutesAlongsideWorkRoutes(homeDashboardKind)
     const selfService = filterNavByPermissions(
       selfServiceNavMain,
       normalizedPermissions,
-      homeDashboardKind === "hr" ? "employee" : resolvedAccessMode,
+      showPersonalRoutes ? "employee" : resolvedAccessMode,
       homeDashboardKind,
     )
     const adminItems = filterNavByPermissions(
@@ -813,10 +818,10 @@ export function AppSidebar({
       resolvedAccessMode,
       homeDashboardKind,
     )
-    if (homeDashboardKind === "hr") {
+    if (showPersonalRoutes) {
       return {
-        // HR operational routes are the work surface. Personal employee routes
-        // remain available, but no longer displace HR work from the main rail.
+        // Operational routes remain the primary work surface for HR and
+        // managers, while their own employee routes stay available together.
         navMain: [
           ...adminItems,
           ...(selfService.length > 0
