@@ -30,18 +30,17 @@ import {
   Settings,
   ShieldCheck,
   Users,
-  XCircle,
 } from "lucide-react"
 import type { AdminResourceKey } from "@/lib/admin-api"
 import type { AuthScope } from "@/types"
 import {
   normalizePermissionLabels,
 } from "@/lib/dashboard-permissions"
-import { mergeUniqueNavItems } from "@/lib/dashboard-nav"
 import {
-  showsPersonalRoutesAlongsideWorkRoutes,
-  type HomeDashboardKind,
-} from "@/lib/dashboard-home"
+  isSelfServiceDashboardRoute,
+  mergeUniqueNavItems,
+} from "@/lib/dashboard-nav"
+import type { HomeDashboardKind } from "@/lib/dashboard-home"
 import { canSeeDashboardPage } from "@/lib/forbidden-routes"
 import {
   useForbiddenPrefixes,
@@ -50,7 +49,6 @@ import {
 
 const IUsers = <Users />
 const ILeave = <Route />
-const IOffboarding = <XCircle />
 const IAttendance = <BarChart3 />
 const IPerformance = <BarChart3 />
 const IProbation = <BadgeCheck />
@@ -59,7 +57,6 @@ const IActivities = <LayoutDashboard />
 const IMovements = <Route />
 const ISms = <Bell />
 const IMail = <Mail />
-const ITeam = <Users />
 const IStructure = <Kanban />
 const IInsights = <LayoutDashboard />
 const IDepartments = <Kanban />
@@ -111,6 +108,13 @@ const adminData: SidebarData = {
     {
       title: "Attendance",
       url: "/dashboard/attendance",
+      matchUrls: [
+        "/dashboard/attendance/today",
+        "/dashboard/attendance/punch-action",
+        "/dashboard/attendance/attendance-history",
+        "/dashboard/attendance/schedule-preview",
+        "/dashboard/attendance/corrections",
+      ],
       icon: IAttendance,
     },
     {
@@ -140,6 +144,22 @@ const adminData: SidebarData = {
         "/dashboard/employees/onboarding",
         "/dashboard/employees/profile-update-approvals",
         "/dashboard/employees/profile-change-requests",
+        "/dashboard/me/profile",
+        "/dashboard/me/organization",
+        "/dashboard/me/promotion",
+        "/dashboard/me/requests",
+        "/dashboard/me/requests/actions",
+        "/dashboard/me/requests/timeline",
+        "/dashboard/me/requests/documents",
+        "/dashboard/me/requests/profile-changes",
+        "/dashboard/me/requests/resignation",
+        "/dashboard/me/onboarding",
+        "/dashboard/me/offboarding",
+        "/dashboard/me/team",
+        "/dashboard/me/team/overview",
+        "/dashboard/me/team/members",
+        "/dashboard/me/team/attendance",
+        "/dashboard/me/team/actions",
       ],
       icon: IUsers,
     },
@@ -156,6 +176,11 @@ const adminData: SidebarData = {
         "/dashboard/leave-management/holidays",
         "/dashboard/leave-management/policies",
         "/dashboard/leave-management/workflows",
+        "/dashboard/me/leave",
+        "/dashboard/me/leave/requests",
+        "/dashboard/me/leave/balances",
+        "/dashboard/me/leave/holidays",
+        "/dashboard/me/leave/policies",
       ],
       icon: ILeave,
     },
@@ -169,6 +194,14 @@ const adminData: SidebarData = {
         "/dashboard/performance/plans",
         "/dashboard/performance/reviews",
         "/dashboard/performance/improvement",
+        "/dashboard/me/performance",
+        "/dashboard/me/performance/overview",
+        "/dashboard/me/performance/assignments",
+        "/dashboard/me/performance/assign-tasks",
+        "/dashboard/me/performance/reviews",
+        "/dashboard/me/performance/achievements",
+        "/dashboard/me/performance/improvement",
+        "/dashboard/me/performance/team",
       ],
       icon: IPerformance,
     },
@@ -181,6 +214,7 @@ const adminData: SidebarData = {
         "/dashboard/probation/policies",
         "/dashboard/probation/cases",
         "/dashboard/probation/team",
+        "/dashboard/me/probation",
       ],
       icon: IProbation,
     },
@@ -194,6 +228,10 @@ const adminData: SidebarData = {
         "/dashboard/field/map",
         "/dashboard/field/parties",
         "/dashboard/field/setup",
+        "/dashboard/me/field",
+        "/dashboard/me/field/visits",
+        "/dashboard/me/field/plans",
+        "/dashboard/me/field/follow-ups",
       ],
       icon: IField,
     },
@@ -206,6 +244,10 @@ const adminData: SidebarData = {
         "/dashboard/finance/products",
         "/dashboard/finance/applications",
         "/dashboard/finance/accounts",
+        "/dashboard/me/finance",
+        "/dashboard/me/finance/applications",
+        "/dashboard/me/finance/payroll",
+        "/dashboard/me/payroll",
       ],
       icon: IUsers,
     },
@@ -216,9 +258,13 @@ const adminData: SidebarData = {
         "/dashboard/activities",
         "/dashboard/activities/overview",
         "/dashboard/activities/reports",
+        "/dashboard/activities/team",
         "/dashboard/activities/reviews",
         "/dashboard/activities/exceptions",
         "/dashboard/activities/setup",
+        "/dashboard/me/activities",
+        "/dashboard/me/activities/today",
+        "/dashboard/me/activities/reports",
       ],
       icon: IActivities,
     },
@@ -230,6 +276,7 @@ const adminData: SidebarData = {
         "/dashboard/movements/overview",
         "/dashboard/movements/cases",
         "/dashboard/movements/operations",
+        "/dashboard/me/movements",
       ],
       icon: IMovements,
     },
@@ -464,132 +511,8 @@ const adminSearchIndex = [
   },
 ]
 
-const selfServiceNavMain: SidebarNavItem[] = [
-    {
-      title: "My Attendance",
-      icon: IAttendance,
-      url: "/dashboard/attendance/today",
-      matchUrls: [
-        "/dashboard/attendance/today",
-        "/dashboard/attendance/punch-action",
-        "/dashboard/attendance/attendance-history",
-        "/dashboard/attendance/schedule-preview",
-        "/dashboard/attendance/corrections",
-      ],
-    },
-    {
-      title: "My Info",
-      icon: IUsers,
-      url: "/dashboard/me/profile",
-      matchUrls: ["/dashboard/me/profile", "/dashboard/me/organization", "/dashboard/me/promotion"],
-    },
-    {
-      title: "My Performance",
-      icon: IPerformance,
-      url: "/dashboard/me/performance/overview",
-      matchUrls: [
-        "/dashboard/me/performance",
-        "/dashboard/me/performance/overview",
-        "/dashboard/me/performance/assignments",
-        "/dashboard/me/performance/assign-tasks",
-        "/dashboard/me/performance/reviews",
-        "/dashboard/me/performance/achievements",
-        "/dashboard/me/performance/improvement",
-        "/dashboard/me/performance/team",
-      ],
-    },
-    {
-      title: "My Probation",
-      icon: IProbation,
-      url: "/dashboard/me/probation",
-    },
-    {
-      title: "My Field",
-      icon: IField,
-      url: "/dashboard/me/field/visits",
-      matchUrls: [
-        "/dashboard/me/field",
-        "/dashboard/me/field/visits",
-        "/dashboard/me/field/plans",
-        "/dashboard/me/field/follow-ups",
-      ],
-    },
-    {
-      title: "My Finance",
-      icon: IUsers,
-      url: "/dashboard/me/finance/payroll",
-      matchUrls: [
-        "/dashboard/me/finance",
-        "/dashboard/me/finance/applications",
-        "/dashboard/me/finance/payroll",
-        "/dashboard/me/payroll",
-      ],
-    },
-    {
-      title: "My Activities",
-      icon: IActivities,
-      url: "/dashboard/me/activities/today",
-      matchUrls: [
-        "/dashboard/me/activities",
-        "/dashboard/me/activities/today",
-        "/dashboard/me/activities/reports",
-      ],
-    },
-    {
-      title: "My Movements",
-      icon: IMovements,
-      url: "/dashboard/me/movements",
-    },
-    {
-      title: "My Team",
-      icon: ITeam,
-      url: "/dashboard/me/team/overview",
-      matchUrls: [
-        "/dashboard/me/team",
-        "/dashboard/me/team/overview",
-        "/dashboard/me/team/members",
-        "/dashboard/me/team/attendance",
-        "/dashboard/me/team/actions",
-      ],
-    },
-    {
-      title: "My Requests",
-      icon: ILeave,
-      url: "/dashboard/me/requests/actions",
-      matchUrls: [
-        "/dashboard/me/requests",
-        "/dashboard/me/requests/actions",
-        "/dashboard/me/requests/timeline",
-        "/dashboard/me/requests/documents",
-        "/dashboard/me/requests/profile-changes",
-        "/dashboard/me/requests/resignation",
-      ],
-    },
-    {
-      title: "My Leave",
-      icon: ILeave,
-      url: "/dashboard/me/leave/requests",
-      matchUrls: [
-        "/dashboard/me/leave/requests",
-        "/dashboard/me/leave/balances",
-        "/dashboard/me/leave/holidays",
-        "/dashboard/me/leave/policies",
-      ],
-    },
-    {
-      title: "My Onboarding",
-      icon: IUsers,
-      url: "/dashboard/me/onboarding",
-    },
-    {
-      title: "My Offboarding",
-      icon: IOffboarding,
-      url: "/dashboard/me/offboarding",
-    },
-]
-
 const employeeData: SidebarData = {
-  navMain: selfServiceNavMain,
+  navMain: adminData.navMain,
   navSecondary: [
     {
       title: "Get Help",
@@ -637,6 +560,7 @@ const employeeSearchIndex = [
   { title: "Field", url: "/dashboard/field/overview", section: "Field", keywords: ["field", "visit"] },
   { title: "Finance", url: "/dashboard/finance/overview", section: "Finance", keywords: ["finance", "loan", "advance"] },
   { title: "Activities", url: "/dashboard/activities/overview", section: "Activities", keywords: ["activity", "report"] },
+  { title: "Team Activities", url: "/dashboard/activities/team", section: "Activities", keywords: ["activity", "assign", "tasks", "manager"] },
   { title: "Movements", url: "/dashboard/movements/overview", section: "Movements", keywords: ["movement", "transfer"] },
   { title: "Onboarding", url: "/dashboard/me/onboarding", section: "Employees", keywords: ["employee", "onboarding", "acknowledge"] },
   { title: "Offboarding", url: "/dashboard/me/offboarding", section: "Employees", keywords: ["employee", "exit"] },
@@ -669,7 +593,13 @@ function firstAccessibleNavUrl(
     ...(url ? [url] : []),
     ...(Array.isArray(matchUrls) ? matchUrls : []),
   ]
-  return candidates.find((candidate) =>
+  const orderedCandidates = accessMode === "employee"
+    ? [
+        ...candidates.filter(isSelfServiceDashboardRoute),
+        ...candidates.filter((candidate) => !isSelfServiceDashboardRoute(candidate)),
+      ]
+    : candidates
+  return orderedCandidates.find((candidate) =>
     canSeeDashboardPage(candidate, normalizedPermissions, accessMode, { homeDashboardKind }),
   )
 }
@@ -805,51 +735,12 @@ export function AppSidebar({
         navSecondary: secondary,
       }
     }
-    const showPersonalRoutes = showsPersonalRoutesAlongsideWorkRoutes(homeDashboardKind)
-    const selfService = filterNavByPermissions(
-      selfServiceNavMain,
-      normalizedPermissions,
-      showPersonalRoutes ? "employee" : resolvedAccessMode,
-      homeDashboardKind,
-    )
     const adminItems = filterNavByPermissions(
       adminData.navMain,
       normalizedPermissions,
       resolvedAccessMode,
       homeDashboardKind,
     )
-    if (showPersonalRoutes) {
-      return {
-        // Operational routes remain the primary work surface for HR and
-        // managers, while their own employee routes stay available together.
-        navMain: [
-          ...adminItems,
-          ...(selfService.length > 0
-            ? [
-                {
-                  title: "Additional Access",
-                  items: selfService,
-                },
-              ]
-            : []),
-        ],
-        navSecondary: secondary,
-      }
-    }
-    if (resolvedAccessMode === "employee") {
-      return {
-        navMain: adminItems.length > 0
-          ? [
-              ...selfService,
-              {
-                title: "Additional Access",
-                items: adminItems,
-              },
-            ]
-          : selfService,
-        navSecondary: secondary,
-      }
-    }
     return {
       navMain: adminItems,
       navSecondary: secondary,

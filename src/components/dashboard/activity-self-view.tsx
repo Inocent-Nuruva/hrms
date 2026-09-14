@@ -191,11 +191,12 @@ export function ActivitySelfView({ activeTab }: { activeTab: ActivitySelfTab }) 
       const date = String(row.activityDate ?? row.activity_date ?? "").slice(0, 10)
       return date === todayDate()
     }) ?? today
-  const activeReport = activeTab === "today" ? today : selected
+  const todayReport = today ?? listedToday
+  const activeReport = activeTab === "today" ? todayReport : selected
   const entries = reportEntries(activeReport)
   const todayDateLabel = (() => {
-    if (!today) return "Today"
-    const dated = formatDate(today.activityDate ?? today.activity_date)
+    if (!todayReport) return "Today"
+    const dated = formatDate(todayReport.activityDate ?? todayReport.activity_date)
     return dated === "—" ? "Today" : dated
   })()
   const todayStatus = listedToday
@@ -207,8 +208,8 @@ export function ActivitySelfView({ activeTab }: { activeTab: ActivitySelfTab }) 
       <TalentDoodleSprites />
       <HeroBand
         eyebrow="My activities"
-        title={activeTab === "today" ? "Today's report" : "My daily reports"}
-        description="Log work, add entries, and submit the report your manager reviews."
+        title={activeTab === "today" ? "Today's work" : "Report history"}
+        description="Track your own work and manager-assigned tasks, then submit the day for review."
         actions={
           <button
             type="button"
@@ -230,7 +231,7 @@ export function ActivitySelfView({ activeTab }: { activeTab: ActivitySelfTab }) 
         items={[
           { label: "Reports", value: loading ? "…" : String(reports.length) },
           { label: "Today", value: loading ? "…" : todayStatus },
-          { label: "Entries today", value: loading ? "…" : String(reportEntries(today).length) },
+          { label: "Entries today", value: loading ? "…" : String(reportEntries(todayReport).length) },
         ]}
       />
       <div className="flex justify-end">
@@ -238,29 +239,35 @@ export function ActivitySelfView({ activeTab }: { activeTab: ActivitySelfTab }) 
           type="button"
           className={primaryButtonClass}
           onClick={() => {
-            setCreateMode("report")
-            setForm({ activity_date: todayDate() })
+            if (activeTab === "today" && todayReport) {
+              setCreateMode("entry")
+              setForm({ id: rowId(todayReport), status: "COMPLETED" })
+            } else {
+              setCreateMode("report")
+              setForm({ activity_date: todayDate() })
+            }
             setCreateOpen(true)
           }}
         >
-          <PlusIcon className="size-4" /> New report
+          <PlusIcon className="size-4" />
+          {activeTab === "today" && todayReport ? "Add work item" : "New report"}
         </button>
       </div>
 
       {activeTab === "today" ? (
         <div className="overflow-hidden rounded-xl border border-border bg-card">
-          {loading && !today ? (
+          {loading && !todayReport ? (
             <div className="flex items-center justify-center gap-2 px-3 py-10 text-sm text-muted-foreground">
               <Loader2Icon className="size-4 animate-spin" />
               Loading today&apos;s report...
             </div>
-          ) : today ? (
+          ) : todayReport ? (
             <>
               <div className="flex flex-col gap-3 px-4 py-4 lg:flex-row lg:items-start lg:justify-between">
                 <div className="min-w-0 space-y-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="text-sm font-semibold text-foreground">{todayDateLabel}</p>
-                    <StatusChip value={readString(today, ["status"], "DRAFT")} />
+                    <StatusChip value={readString(todayReport, ["status"], "DRAFT")} />
                   </div>
                   <p className="text-sm text-muted-foreground">
                     {entries.length === 0
@@ -274,7 +281,7 @@ export function ActivitySelfView({ activeTab }: { activeTab: ActivitySelfTab }) 
                     className={actionButtonClass}
                     onClick={() => {
                       setCreateMode("entry")
-                      setForm({ id: rowId(today), status: "COMPLETED" })
+                      setForm({ id: rowId(todayReport), status: "COMPLETED" })
                       setCreateOpen(true)
                     }}
                   >
@@ -285,7 +292,7 @@ export function ActivitySelfView({ activeTab }: { activeTab: ActivitySelfTab }) 
                     className={actionButtonClass}
                     onClick={() => {
                       setCreateMode("submit")
-                      setForm({ id: rowId(today), employee_summary: "" })
+                      setForm({ id: rowId(todayReport), employee_summary: "" })
                       setCreateOpen(true)
                     }}
                   >
@@ -297,10 +304,19 @@ export function ActivitySelfView({ activeTab }: { activeTab: ActivitySelfTab }) 
                 <ul className="divide-y divide-border/70 border-t border-border/70">
                   {entries.map((entry) => {
                     const id = rowId(entry)
+                    const managerAssigned =
+                      readString(entry, ["taskReference", "task_reference", "externalReferenceType", "external_reference_type"])
+                        .toUpperCase()
+                        .includes("MANAGER")
                     return (
                       <li key={id || readString(entry, ["title"])} className="flex flex-wrap items-start justify-between gap-2 px-4 py-3">
                         <div className="min-w-0">
-                          <p className="text-sm font-medium text-foreground">{readString(entry, ["title"], "Entry")}</p>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-sm font-medium text-foreground">{readString(entry, ["title"], "Work item")}</p>
+                            <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-700 dark:bg-sky-950/40 dark:text-sky-300">
+                              {managerAssigned ? "Assigned by manager" : "My work"}
+                            </span>
+                          </div>
                           <p className="text-xs text-muted-foreground">{readString(entry, ["description"], "")}</p>
                         </div>
                         <div className="flex items-center gap-2">
@@ -311,7 +327,7 @@ export function ActivitySelfView({ activeTab }: { activeTab: ActivitySelfTab }) 
                             disabled={busyId === `del-${id}`}
                             onClick={() => {
                               const token = readStoredToken()
-                              const reportId = rowId(today)
+                              const reportId = rowId(todayReport)
                               if (!token || !reportId || !id) return
                               setBusyId(`del-${id}`)
                               void deleteMyActivityEntry(token, reportId, id)
@@ -331,7 +347,7 @@ export function ActivitySelfView({ activeTab }: { activeTab: ActivitySelfTab }) 
             </>
           ) : (
             <div className="px-4 py-10 text-center text-sm text-muted-foreground">
-              No report for today yet. Create one to start logging work.
+              Today&apos;s report could not be loaded. Refresh the page to try again.
             </div>
           )}
         </div>
@@ -422,8 +438,14 @@ export function ActivitySelfView({ activeTab }: { activeTab: ActivitySelfTab }) 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogPopup className="max-w-xl">
           <DialogHeader>
-            <DialogTitle>{createMode === "report" ? "New daily report" : createMode === "entry" ? "Add activity" : "Submit report"}</DialogTitle>
-            <DialogDescription>Log the work you did so your manager can review it.</DialogDescription>
+            <DialogTitle>{createMode === "report" ? "Start a daily report" : createMode === "entry" ? "Add a work item" : "Submit report"}</DialogTitle>
+            <DialogDescription>
+              {createMode === "report"
+                ? "Choose the work date. The report stays private to you and your authorized reviewers."
+                : createMode === "entry"
+                  ? "Add work you completed or plan to complete for this day."
+                  : "Summarize the day and send it to your manager for review."}
+            </DialogDescription>
           </DialogHeader>
           <div className="grid gap-3">
             {createMode === "report" ? (

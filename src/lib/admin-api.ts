@@ -16481,6 +16481,21 @@ export async function getMyFinanceAccountStatement(
   return normalizeSingle(payload) ?? asRecord(payload);
 }
 
+function normalizeActivityReport(payload: unknown) {
+  const direct = asRecord(payload);
+  if (
+    direct &&
+    ("activityDate" in direct ||
+      "activity_date" in direct ||
+      "employeeId" in direct ||
+      "employee_id" in direct)
+  ) {
+    return direct;
+  }
+
+  return normalizeSingle(payload) ?? direct;
+}
+
 export async function listMyActivities(
   token: string,
   params: Record<string, string | number | undefined> = {},
@@ -16496,7 +16511,30 @@ export async function getMyActivitiesToday(token: string) {
   const payload = await adminRequest<unknown>("/api/me/activities/today", {
     token,
   });
-  return normalizeSingle(payload) ?? asRecord(payload);
+  return normalizeActivityReport(payload);
+}
+
+export async function listMyActivityTasks(
+  token: string,
+  params: Record<string, string | number | undefined> = {},
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/me/activities/tasks${buildRecordQuery(params)}`,
+    { token },
+  )
+  return normalizeList(payload)
+}
+
+export async function addMyActivityComment(
+  token: string,
+  entryId: string | number,
+  body: string,
+) {
+  return adminRequest<unknown>(`/api/me/activities/entries/${entryId}/comments`, {
+    method: "POST",
+    token,
+    body: { body },
+  })
 }
 
 export async function createMyActivityReport(token: string, data: AdminRecord) {
@@ -16512,7 +16550,7 @@ export async function getMyActivityReport(token: string, id: string | number) {
     `/api/me/activities/reports/${id}`,
     { token },
   );
-  return normalizeSingle(payload) ?? asRecord(payload);
+  return normalizeActivityReport(payload);
 }
 
 export async function addMyActivityEntry(
@@ -16610,6 +16648,34 @@ export async function listManagerTeamActivities(
     { token },
   );
   return normalizeList(payload);
+}
+
+export async function listManagerActivityTasks(
+  token: string,
+  params: Record<string, string | number | undefined> = {},
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/manager/activities/tasks${buildRecordQuery(params)}`,
+    { token },
+  )
+  return normalizeList(payload)
+}
+
+export async function listManagerActivityAssignees(token: string) {
+  const payload = await adminRequest<unknown>("/api/manager/activities/assignees", { token })
+  return normalizeList(payload)
+}
+
+export async function addManagerActivityComment(
+  token: string,
+  entryId: string | number,
+  body: string,
+) {
+  return adminRequest<unknown>(`/api/manager/activities/entries/${entryId}/comments`, {
+    method: "POST",
+    token,
+    body: { body },
+  })
 }
 
 export async function getManagerActivityReport(

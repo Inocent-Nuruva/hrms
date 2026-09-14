@@ -1,5 +1,5 @@
 import { DashboardSectionTabs } from "@/components/dashboard/dashboard-section-tabs"
-import { selfRequestSectionTabGroups } from "@/lib/dashboard-sections"
+import { employeeSectionTabGroups } from "@/lib/dashboard-sections"
 
 export default function SelfRequestsLayout({
   children,
@@ -8,7 +8,7 @@ export default function SelfRequestsLayout({
 }) {
   return (
     <div className="flex flex-col gap-0">
-      <DashboardSectionTabs groups={selfRequestSectionTabGroups} />
+      <DashboardSectionTabs groups={employeeSectionTabGroups} />
       <div className="min-w-0">{children}</div>
     </div>
   )

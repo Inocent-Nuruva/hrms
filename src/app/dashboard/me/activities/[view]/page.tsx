@@ -1,9 +1,9 @@
 import { redirect } from "next/navigation"
 
 import {
-  ActivitySelfView,
   type ActivitySelfTab,
 } from "@/components/dashboard/activity-self-view"
+import { ActivityTaskWorkspace } from "@/components/dashboard/activity-task-workspace"
 
 const ALLOWED_VIEWS = new Set<ActivitySelfTab>(["today", "reports"])
 
@@ -19,5 +19,5 @@ export default async function SelfActivitiesViewPage({ params }: SelfActivitiesV
   if (!ALLOWED_VIEWS.has(normalized)) {
     redirect("/dashboard/me/activities/today")
   }
-  return <ActivitySelfView activeTab={normalized} />
+  return <ActivityTaskWorkspace mode="self" />
 }

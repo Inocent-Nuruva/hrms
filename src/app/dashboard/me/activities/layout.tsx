@@ -1,5 +1,5 @@
 import { DashboardSectionTabs } from "@/components/dashboard/dashboard-section-tabs"
-import { selfActivitySectionTabGroups } from "@/lib/dashboard-sections"
+import { activitySectionTabGroups } from "@/lib/dashboard-sections"
 
 export default function SelfActivitiesLayout({
   children,
@@ -8,7 +8,7 @@ export default function SelfActivitiesLayout({
 }) {
   return (
     <div className="flex flex-col gap-0">
-      <DashboardSectionTabs groups={selfActivitySectionTabGroups} />
+      <DashboardSectionTabs groups={activitySectionTabGroups} />
       <div className="min-w-0">{children}</div>
     </div>
   )

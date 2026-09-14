@@ -1,5 +1,5 @@
 import { DashboardSectionTabs } from "@/components/dashboard/dashboard-section-tabs"
-import { selfFieldSectionTabGroups } from "@/lib/dashboard-sections"
+import { fieldSectionTabGroups } from "@/lib/dashboard-sections"
 
 export default function SelfFieldLayout({
   children,
@@ -8,7 +8,7 @@ export default function SelfFieldLayout({
 }) {
   return (
     <div className="flex flex-col gap-0">
-      <DashboardSectionTabs groups={selfFieldSectionTabGroups} />
+      <DashboardSectionTabs groups={fieldSectionTabGroups} />
       <div className="min-w-0">{children}</div>
     </div>
   )

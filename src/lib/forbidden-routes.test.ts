@@ -111,6 +111,30 @@ describe("forbidden route memory", () => {
     expect(canSeeDashboardPage("/dashboard/attendance/today", [], "admin")).toBe(false)
   })
 
+  it("shows self-service tabs in the admin shell when the actor is a manager", () => {
+    const options = {
+      homeDashboardKind: "manager" as const,
+      roleNames: ["DEPARTMENT_MANAGER"],
+      scope: "company" as const,
+    }
+    expect(
+      canSeeDashboardPage(
+        "/dashboard/me/activities/today",
+        ["work_activities:self-service:read"],
+        "admin",
+        options,
+      ),
+    ).toBe(true)
+    expect(
+      canSeeDashboardPage(
+        "/dashboard/me/activities/reports",
+        ["manager_team:read"],
+        "admin",
+        options,
+      ),
+    ).toBe(true)
+  })
+
   it("keeps employee-mode performance and probation redirects inside the My shell", () => {
     expect(canAccessDashboardRoute("/dashboard/performance/overview", ["performance:read"], "employee")).toBe(false)
     expect(canSeeDashboardPage("/dashboard/performance/overview", ["performance:read"], "employee")).toBe(false)

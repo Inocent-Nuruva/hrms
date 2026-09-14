@@ -5,13 +5,17 @@ import {
   addMyActivityEvidence,
   applyEmployeeMovement,
   approveEmployeeMovement,
+  createManagerActivityTask,
   createMyActivityReport,
   deleteMyActivityEntry,
   getManagerActivitiesDashboard,
+  getMyActivityReport,
   getMyActivitiesToday,
   listHrActivities,
+  listManagerActivityAssignees,
   listManagerPendingActivityReviews,
   listMyActivities,
+  listMyActivityTasks,
   rejectEmployeeMovement,
   retryEmployeeMovementOperation,
   returnEmployeeMovement,
@@ -67,6 +71,72 @@ describe("daily activities and employee movement API helpers", () => {
     expect(hr).toEqual([expect.objectContaining({ id: 9 })])
     expect(mine).toEqual([expect.objectContaining({ id: 4 })])
     expect(today).toEqual(expect.objectContaining({ id: 4 }))
+  })
+
+  it("keeps a direct daily report response instead of unwrapping its snapshots", async () => {
+    const directReport = {
+      id: 4,
+      activityDate: "2026-08-17",
+      status: "DRAFT",
+      employeeSnapshot: { id: 157, first_name: "Alliance" },
+      policySnapshot: { reminder_time: "16:00" },
+      entries: [{ id: 11, title: "Client follow-up" }],
+    }
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(directReport))
+      .mockResolvedValueOnce(jsonResponse(directReport))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const today = await getMyActivitiesToday("token")
+    const detail = await getMyActivityReport("token", 4)
+
+    expect(today).toEqual(directReport)
+    expect(detail).toEqual(directReport)
+  })
+
+  it("loads assigned work and creates manager tasks without a category", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ data: [{ id: 81, title: "Prepare report" }] }))
+      .mockResolvedValueOnce(jsonResponse({ data: [{ id: 42, full_name: "Inocent Nuruva" }] }))
+      .mockResolvedValueOnce(jsonResponse({ data: { id: 12 } }, { status: 201 }))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const tasks = await listMyActivityTasks("token", { limit: 100 })
+    const assignees = await listManagerActivityAssignees("token")
+    await createManagerActivityTask("token", {
+      employee_id: 42,
+      activity_date: "2026-09-14",
+      title: "Prepare report",
+      description: "Prepare and submit the monthly report.",
+    })
+
+    expect(tasks).toEqual([expect.objectContaining({ id: 81 })])
+    expect(assignees).toEqual([expect.objectContaining({ full_name: "Inocent Nuruva" })])
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "http://localhost:8888/api/me/activities/tasks?limit=100",
+      expect.objectContaining({ method: "GET" }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "http://localhost:8888/api/manager/activities/assignees",
+      expect.objectContaining({ method: "GET" }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "http://localhost:8888/api/manager/activities/tasks",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          employee_id: 42,
+          activity_date: "2026-09-14",
+          title: "Prepare report",
+          description: "Prepare and submit the monthly report.",
+        }),
+      }),
+    )
   })
 
   it("creates, fills, submits, and reviews a daily activity report", async () => {

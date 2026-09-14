@@ -122,6 +122,26 @@ describe("resolveHomeDashboardKind", () => {
     ).toBe("sales-field")
   })
 
+  it("recognizes a manager from manager permissions when role names are unavailable", () => {
+    expect(
+      resolveHomeDashboardKind({
+        accessMode: "admin",
+        permissionLabels: ["view_company_dashboard", "manager_self_service:read"],
+        roleNames: [],
+      }),
+    ).toBe("manager")
+  })
+
+  it("recognizes a department-scoped manager without relying on a role label", () => {
+    expect(
+      resolveHomeDashboardKind({
+        accessMode: "admin",
+        permissionLabels: ["view_company_dashboard", "data_scope:department"],
+        roleNames: [],
+      }),
+    ).toBe("manager")
+  })
+
   it("reads role names from the user record and JWT-shaped payload", () => {
     expect(
       readRoleNamesFromUnknown({
@@ -198,6 +218,12 @@ describe("showsPersonalRoutesAlongsideWorkRoutes", () => {
   it("keeps personal routes available to HR and managers", () => {
     expect(showsPersonalRoutesAlongsideWorkRoutes("hr")).toBe(true)
     expect(showsPersonalRoutesAlongsideWorkRoutes("manager")).toBe(true)
+  })
+
+  it("keeps personal routes when the identity only exposes manager permissions", () => {
+    expect(
+      showsPersonalRoutesAlongsideWorkRoutes("company", ["manager_team:read"]),
+    ).toBe(true)
   })
 
   it("does not add the personal group to company operations", () => {

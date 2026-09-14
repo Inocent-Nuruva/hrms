@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
-  attendanceSectionTabGroups,
+  attendanceWorkspaceSectionTabGroups,
   employeeAttendanceSectionTabGroups,
   resolveAttendanceSectionTabGroups,
 } from "@/lib/dashboard-sections"
@@ -14,7 +14,7 @@ describe("attendance section selection", () => {
         "employee",
         false,
       ),
-    ).toBe(attendanceSectionTabGroups)
+    ).toBe(attendanceWorkspaceSectionTabGroups)
   })
 
   it("keeps ordinary employees in My Attendance", () => {
@@ -25,7 +25,7 @@ describe("attendance section selection", () => {
 
   it("preserves the attendance operations workspace for administrators", () => {
     expect(resolveAttendanceSectionTabGroups([], "admin", true)).toBe(
-      attendanceSectionTabGroups,
+      attendanceWorkspaceSectionTabGroups,
     )
   })
 })

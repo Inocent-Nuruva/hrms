@@ -1,5 +1,5 @@
 import { DashboardSectionTabs } from "@/components/dashboard/dashboard-section-tabs"
-import { selfLeaveSectionTabGroups } from "@/lib/dashboard-sections"
+import { leaveManagementSectionTabGroups } from "@/lib/dashboard-sections"
 
 export default function SelfLeaveLayout({
   children,
@@ -8,7 +8,7 @@ export default function SelfLeaveLayout({
 }) {
   return (
     <div className="flex flex-col gap-0">
-      <DashboardSectionTabs groups={selfLeaveSectionTabGroups} />
+      <DashboardSectionTabs groups={leaveManagementSectionTabGroups} />
       <div className="min-w-0">{children}</div>
     </div>
   )

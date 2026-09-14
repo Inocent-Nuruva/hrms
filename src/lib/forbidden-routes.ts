@@ -3,6 +3,7 @@ import type { DashboardAccessMode } from "@/lib/dashboard-permissions"
 import {
   canSeeHrLeaveRequestsQueue,
   isCompanyLeaveRequestsPath,
+  showsPersonalRoutesAlongsideWorkRoutes,
   type HomeDashboardKind,
 } from "@/lib/dashboard-home"
 import {
@@ -299,7 +300,16 @@ export function canSeeDashboardPage(
     homeDashboardKind?: HomeDashboardKind | null
   },
 ) {
-  if (!canShowDashboardRouteInNavigation(url, accessMode)) {
+  const managerCanSeeSelfService =
+    isSelfServiceDashboardRoute(url) &&
+    showsPersonalRoutesAlongsideWorkRoutes(
+      options?.homeDashboardKind,
+      permissionLabels,
+    )
+  if (
+    !canShowDashboardRouteInNavigation(url, accessMode) &&
+    !managerCanSeeSelfService
+  ) {
     return false
   }
   if (!isDashboardRouteEnabledForCompanyModules(url, readPublishedCompanyModules())) {

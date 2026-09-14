@@ -43,13 +43,13 @@ import {
   createManagerActivityTask,
   getManagerPerformanceSummary,
   getMyPerformanceSummary,
-  listManagerActivityCategories,
-  listManagerTeam,
+  listManagerActivityAssignees,
   listManagerTeamAchievements,
   listMyPerformanceAchievements,
   listMyPerformanceAssignments,
   listMyPerformanceImprovementPlans,
   listMyPerformanceReviews,
+  listMyActivityTasks,
   submitManagerPerformanceReview,
   submitMyPerformanceAppeal,
   submitMyPerformanceSelfReview,
@@ -222,7 +222,7 @@ export function PerformanceSelfView({
   const [managerSummary, setManagerSummary] = React.useState<AdminRecord | null>(null)
   const [assignments, setAssignments] = React.useState<AdminRecord[]>([])
   const [taskEmployees, setTaskEmployees] = React.useState<AdminRecord[]>([])
-  const [taskCategories, setTaskCategories] = React.useState<AdminRecord[]>([])
+  const [activityTasks, setActivityTasks] = React.useState<AdminRecord[]>([])
   const [reviews, setReviews] = React.useState<AdminRecord[]>([])
   const [achievements, setAchievements] = React.useState<AdminRecord[]>([])
   const [pips, setPips] = React.useState<AdminRecord[]>([])
@@ -265,6 +265,13 @@ export function PerformanceSelfView({
           listMyPerformanceImprovementPlans(token).then(setPips),
         )
       }
+      if (activeTab === "overview") {
+        tasks.push(
+          listMyActivityTasks(token, { limit: 100 })
+            .then(setActivityTasks)
+            .catch(() => setActivityTasks([])),
+        )
+      }
       if (activeTab === "team") {
         tasks.push(
           getManagerPerformanceSummary(token)
@@ -287,12 +294,9 @@ export function PerformanceSelfView({
       }
       if (activeTab === "assign-tasks") {
         tasks.push(
-          listManagerTeam(token, { limit: 100, direct_reports_only: true })
+          listManagerActivityAssignees(token)
             .then(setTaskEmployees)
             .catch(() => setTaskEmployees([])),
-          listManagerActivityCategories(token)
-            .then(setTaskCategories)
-            .catch(() => setTaskCategories([])),
         )
       }
       const results = await Promise.allSettled(tasks)
@@ -347,12 +351,11 @@ export function PerformanceSelfView({
     if (!token) return
     if (
       !taskForm.employee_id ||
-      !taskForm.activity_category_id ||
       !taskForm.activity_date ||
       !taskForm.title?.trim() ||
       !taskForm.description?.trim()
     ) {
-      setTaskError("Employee, category, date, title, and description are required.")
+      setTaskError("Employee, date, title, and description are required.")
       return
     }
     setTaskSaving(true)
@@ -360,7 +363,6 @@ export function PerformanceSelfView({
     try {
       await createManagerActivityTask(token, {
         employee_id: Number(taskForm.employee_id),
-        activity_category_id: Number(taskForm.activity_category_id),
         activity_date: taskForm.activity_date,
         title: taskForm.title.trim(),
         description: taskForm.description.trim(),
@@ -671,7 +673,8 @@ export function PerformanceSelfView({
             }
             fields={[
               { label: "Score", value: score === null || score === undefined ? "—" : String(score) },
-              { label: "Assignments", value: String(assignments.length) },
+              { label: "Review assignments", value: String(assignments.length) },
+              { label: "Assigned work", value: String(activityTasks.length) },
               { label: "Reviews", value: String(reviews.length) },
               { label: "Achievements", value: String(achievements.length) },
               { label: "Improvement", value: String(pips.length) },
@@ -683,6 +686,15 @@ export function PerformanceSelfView({
             </div>
           ) : null}
           <div className="grid gap-4 xl:grid-cols-2">
+            <PerformancePrimaryCard
+              tone="plain"
+              title="Assigned work"
+              fields={statusChartItems(activityTasks).map((item) => ({
+                label: item.label,
+                value: String(item.value),
+              }))}
+              emptyMessage="No assigned activity tasks yet."
+            />
             <PerformancePrimaryCard
               tone="plain"
               title="Review"
@@ -760,15 +772,6 @@ export function PerformanceSelfView({
                   <option key={rowId(employee)} value={rowId(employee)}>
                     {readString(employee, ["full_name", "fullName", "name"], employeeLabel(employee))}
                   </option>
-                ))}
-              </select>
-            </label>
-            <label className="grid gap-1.5 text-sm">
-              <span className="font-medium">Activity category</span>
-              <select className={inputClass} value={taskForm.activity_category_id ?? ""} onChange={(event) => setTaskForm((current) => ({ ...current, activity_category_id: event.target.value }))}>
-                <option value="">Select category</option>
-                {taskCategories.map((category) => (
-                  <option key={rowId(category)} value={rowId(category)}>{optionLabel(category)}</option>
                 ))}
               </select>
             </label>

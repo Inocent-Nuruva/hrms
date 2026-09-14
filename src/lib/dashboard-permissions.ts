@@ -287,6 +287,8 @@ const ACTIVITY_MODULE_WIDE = [
   "manage_activities",
   "view_daily_activities",
   "manage_daily_activities",
+  "work_activities:manager:read",
+  "work_activities:manager:review",
 ]
 
 export const ACTIVITY_ROUTE_PERMISSION: PermissionRequirement = {
@@ -1015,6 +1017,10 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/activities": ACTIVITY_ROUTE_PERMISSION,
   "/dashboard/activities/overview": ACTIVITY_ROUTE_PERMISSION,
   "/dashboard/activities/reports": ACTIVITY_ROUTE_PERMISSION,
+  "/dashboard/activities/team": {
+    permissions: ["work_activities:manager:read", "work_activities:manager:review"],
+    mode: "any",
+  },
   "/dashboard/activities/reviews": ACTIVITY_REVIEWS_PERMISSION,
   "/dashboard/activities/exceptions": ACTIVITY_ROUTE_PERMISSION,
   "/dashboard/activities/setup": ACTIVITY_SETUP_PERMISSION,

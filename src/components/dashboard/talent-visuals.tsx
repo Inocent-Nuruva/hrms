@@ -127,7 +127,7 @@ export function clampScore(value: number | null | undefined, max = 100) {
 
 export function employeeLabel(row: AdminRecord | null | undefined) {
   if (!row) return "—"
-  const nested = asRecord(row.employee)
+  const nested = asRecord(row.employee ?? row.employeeSnapshot ?? row.employee_snapshot)
   return (
     readString(row, ["employee_name", "employeeName", "full_name", "fullName", "name"]) ||
     readString(nested, ["full_name", "fullName", "name"]) ||

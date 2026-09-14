@@ -14,8 +14,24 @@ export type HomeDashboardKind =
 
 export function showsPersonalRoutesAlongsideWorkRoutes(
   kind: HomeDashboardKind | null | undefined,
+  permissionLabels: string[] = [],
 ) {
-  return kind === "hr" || kind === "manager"
+  return (
+    kind === "hr" ||
+    kind === "manager" ||
+    hasPermission(permissionLabels, {
+      permissions: [
+        "manager_self_service:read",
+        "manager_team:read",
+        "view_manager_dashboard",
+        "manager_dashboards:read",
+        "data_scope:department",
+        "data_scope:branch",
+        "data_scope:team",
+      ],
+      mode: "any",
+    })
+  )
 }
 
 type UnknownRecord = Record<string, unknown>
@@ -197,7 +213,15 @@ function kindFromSpecificPermissions(permissionLabels: string[]): HomeDashboardK
   }
   if (
     hasPermission(permissionLabels, {
-      permissions: ["view_manager_dashboard", "manager_dashboards:read"],
+      permissions: [
+        "view_manager_dashboard",
+        "manager_dashboards:read",
+        "manager_self_service:read",
+        "manager_team:read",
+        "data_scope:department",
+        "data_scope:branch",
+        "data_scope:team",
+      ],
       mode: "any",
     })
   ) {
