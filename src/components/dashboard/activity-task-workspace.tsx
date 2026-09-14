@@ -227,6 +227,62 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
     setChecklistDraft("")
   }
 
+  function checklistPayload() {
+    return checklistItems.map((title, index) => ({
+      id: `item-${index + 1}`,
+      title,
+      completed: false,
+    }))
+  }
+
+  function renderChecklistComposer(className = "grid content-start gap-1.5 text-sm") {
+    return (
+      <div className={className}>
+        <span className="font-medium">Checklist <span className="font-normal text-muted-foreground">(optional)</span></span>
+        <div className="flex min-w-0 gap-2">
+          <input
+            className={`${inputClass} min-w-0 flex-1`}
+            value={checklistDraft}
+            onChange={(event) => setChecklistDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter") return
+              event.preventDefault()
+              addChecklistItem()
+            }}
+            placeholder="Add a checklist item"
+            aria-label="Checklist item"
+          />
+          <button
+            type="button"
+            className={`${secondaryButtonClass} shrink-0`}
+            onClick={addChecklistItem}
+            disabled={!checklistDraft.trim()}
+          >
+            <PlusIcon className="size-4" /> Add
+          </button>
+        </div>
+        {checklistItems.length > 0 ? (
+          <div className="mt-1 grid gap-1.5">
+            {checklistItems.map((item, index) => (
+              <div key={`${item}-${index}`} className="flex min-w-0 items-center gap-2 rounded-md border border-border/80 bg-muted/25 px-2.5 py-2">
+                <CheckCircle2Icon className="size-4 shrink-0 text-muted-foreground" />
+                <span className="min-w-0 flex-1 truncate">{item}</span>
+                <button
+                  type="button"
+                  className="rounded p-1 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                  onClick={() => setChecklistItems((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+                  aria-label={`Remove ${item}`}
+                >
+                  <XIcon className="size-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    )
+  }
+
   React.useEffect(() => {
     if (actor.ready) void load()
   }, [actor.ready, load])
@@ -340,11 +396,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
           description: form.description,
           planned_end_time: form.due_date ? `${form.due_date}T17:00:00.000Z` : undefined,
           priority: form.priority || "MEDIUM",
-          checklist: checklistItems.map((title, index) => ({
-            id: `item-${index + 1}`,
-            title,
-            completed: false,
-          })),
+          checklist: checklistPayload(),
         }
         if (managerTaskAudience === "employee") {
           await createManagerActivityTask(accessToken, {
@@ -366,6 +418,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
           description: form.description,
           status: "COMPLETED",
           priority: form.priority || "MEDIUM",
+          checklist: checklistPayload(),
         })
         toast.success("Work added to your report.")
       }
@@ -469,55 +522,13 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
             <label className="grid gap-1.5 text-sm"><span className="font-medium">Due date</span><input className={inputClass} type="date" value={form.due_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, due_date: event.target.value }))} /></label>
             <label className="grid gap-1.5 text-sm md:col-span-2"><span className="font-medium">Description</span><textarea className={`${inputClass} min-h-24`} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} placeholder="What outcome should be delivered?" /></label>
             <label className="grid gap-1.5 text-sm"><span className="font-medium">Priority</span><select className={inputClass} value={form.priority ?? "MEDIUM"} onChange={(event) => setForm((current) => ({ ...current, priority: event.target.value }))}><option value="LOW">Low</option><option value="MEDIUM">Medium</option><option value="HIGH">High</option><option value="URGENT">Urgent</option></select></label>
-            <div className="grid content-start gap-1.5 text-sm">
-              <span className="font-medium">Checklist <span className="font-normal text-muted-foreground">(optional)</span></span>
-              <div className="flex min-w-0 gap-2">
-                <input
-                  className={`${inputClass} min-w-0 flex-1`}
-                  value={checklistDraft}
-                  onChange={(event) => setChecklistDraft(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key !== "Enter") return
-                    event.preventDefault()
-                    addChecklistItem()
-                  }}
-                  placeholder="Add a checklist item"
-                  aria-label="Checklist item"
-                />
-                <button
-                  type="button"
-                  className={`${secondaryButtonClass} shrink-0`}
-                  onClick={addChecklistItem}
-                  disabled={!checklistDraft.trim()}
-                >
-                  <PlusIcon className="size-4" /> Add
-                </button>
-              </div>
-              {checklistItems.length > 0 ? (
-                <div className="mt-1 grid gap-1.5">
-                  {checklistItems.map((item, index) => (
-                    <div key={`${item}-${index}`} className="flex min-w-0 items-center gap-2 rounded-md border border-border/80 bg-muted/25 px-2.5 py-2">
-                      <CheckCircle2Icon className="size-4 shrink-0 text-muted-foreground" />
-                      <span className="min-w-0 flex-1 truncate">{item}</span>
-                      <button
-                        type="button"
-                        className="rounded p-1 text-muted-foreground transition hover:bg-muted hover:text-foreground"
-                        onClick={() => setChecklistItems((current) => current.filter((_, itemIndex) => itemIndex !== index))}
-                        aria-label={`Remove ${item}`}
-                      >
-                        <XIcon className="size-3.5" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-            </div>
+            {renderChecklistComposer()}
           </div>
           <div className="mt-5 flex justify-end pr-16"><button type="button" className={primaryButtonClass} onClick={() => void saveTask()} disabled={saving}>{saving ? <Loader2Icon className="size-4 animate-spin" /> : <SendIcon className="size-4" />} {managerTaskAudience === "employee" ? "Assign task" : "Create my task"}</button></div>
         </div>
       ) : (
         <>
-          {mode === "self" && selfCreateOpen ? <div className="rounded-xl border border-primary/20 bg-primary/[0.03] p-5 shadow-sm"><div className="mb-4 flex items-start justify-between"><div><h2 className="font-semibold">Add work to your report</h2><p className="text-sm text-muted-foreground">Capture a work item so it can be included in today&apos;s submission.</p></div><button type="button" className="rounded-md p-2 text-muted-foreground hover:bg-muted" onClick={() => setSelfCreateOpen(false)}><XIcon className="size-4" /></button></div><div className="grid gap-4 md:grid-cols-2"><label className="grid gap-1.5 text-sm"><span className="font-medium">Activity category</span><select className={inputClass} value={form.activity_category_id ?? ""} onChange={(event) => setForm((current) => ({ ...current, activity_category_id: event.target.value }))}><option value="">Choose category</option>{categories.map((category) => <option key={rowId(category)} value={rowId(category)}>{optionLabel(category)}</option>)}</select></label><label className="grid gap-1.5 text-sm"><span className="font-medium">Priority</span><select className={inputClass} value={form.priority ?? "MEDIUM"} onChange={(event) => setForm((current) => ({ ...current, priority: event.target.value }))}><option value="LOW">Low</option><option value="MEDIUM">Medium</option><option value="HIGH">High</option><option value="URGENT">Urgent</option></select></label><label className="grid gap-1.5 text-sm md:col-span-2"><span className="font-medium">Work item</span><input className={inputClass} value={form.title ?? ""} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} placeholder="What did you work on?" /></label><label className="grid gap-1.5 text-sm md:col-span-2"><span className="font-medium">Description</span><textarea className={`${inputClass} min-h-24`} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} placeholder="Add enough context for your manager." /></label></div><div className="mt-4 flex justify-end"><button type="button" className={primaryButtonClass} onClick={() => void saveTask()} disabled={saving}>{saving ? <Loader2Icon className="size-4 animate-spin" /> : <PlusIcon className="size-4" />} Add work</button></div></div> : null}
+          {mode === "self" && selfCreateOpen ? <div className="rounded-xl border border-primary/20 bg-primary/[0.03] p-5 shadow-sm"><div className="mb-4 flex items-start justify-between"><div><h2 className="font-semibold">Add work to your report</h2><p className="text-sm text-muted-foreground">Capture a work item so it can be included in today&apos;s submission.</p></div><button type="button" className="rounded-md p-2 text-muted-foreground hover:bg-muted" onClick={() => setSelfCreateOpen(false)}><XIcon className="size-4" /></button></div><div className="grid gap-4 md:grid-cols-2"><label className="grid gap-1.5 text-sm"><span className="font-medium">Activity category</span><select className={inputClass} value={form.activity_category_id ?? ""} onChange={(event) => setForm((current) => ({ ...current, activity_category_id: event.target.value }))}><option value="">Choose category</option>{categories.map((category) => <option key={rowId(category)} value={rowId(category)}>{optionLabel(category)}</option>)}</select></label><label className="grid gap-1.5 text-sm"><span className="font-medium">Priority</span><select className={inputClass} value={form.priority ?? "MEDIUM"} onChange={(event) => setForm((current) => ({ ...current, priority: event.target.value }))}><option value="LOW">Low</option><option value="MEDIUM">Medium</option><option value="HIGH">High</option><option value="URGENT">Urgent</option></select></label><label className="grid gap-1.5 text-sm md:col-span-2"><span className="font-medium">Work item</span><input className={inputClass} value={form.title ?? ""} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} placeholder="What did you work on?" /></label><label className="grid gap-1.5 text-sm md:col-span-2"><span className="font-medium">Description</span><textarea className={`${inputClass} min-h-24`} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} placeholder="Add enough context for your manager." /></label>{renderChecklistComposer("grid content-start gap-1.5 text-sm md:col-span-2")}</div><div className="mt-4 flex justify-end"><button type="button" className={primaryButtonClass} onClick={() => void saveTask()} disabled={saving}>{saving ? <Loader2Icon className="size-4 animate-spin" /> : <PlusIcon className="size-4" />} Add work</button></div></div> : null}
           <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-3 shadow-sm">
             <div className="relative min-w-[220px] flex-1"><SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><input className={`${inputClass} pl-9`} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search tasks, people, or reports" /></div>
             <div className="flex items-center gap-2"><FilterIcon className="size-4 text-muted-foreground" /><select className={`${inputClass} w-auto min-w-36`} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="ALL">All statuses</option><option value="PLANNED">Not started</option><option value="IN_PROGRESS">In progress</option><option value="COMPLETED">Completed</option><option value="DEFERRED">Deferred</option></select></div>
