@@ -212,7 +212,6 @@ export const selfPerformanceSectionTabGroups: DashboardSectionTabGroup[] = [
     items: [
       { title: "Overview", url: "/dashboard/me/performance/overview" },
       { title: "Assignments", url: "/dashboard/me/performance/assignments" },
-      { title: "Assign tasks", url: "/dashboard/me/performance/assign-tasks" },
       { title: "Reviews", url: "/dashboard/me/performance/reviews" },
       { title: "Achievements", url: "/dashboard/me/performance/achievements" },
       { title: "Improvement", url: "/dashboard/me/performance/improvement" },

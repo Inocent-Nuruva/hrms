@@ -27,6 +27,10 @@ export default async function SelfPerformanceViewPage({
   const { view } = await params
   const normalized = view?.toLowerCase() as PerformanceSelfTab
 
+  if (normalized === "assign-tasks") {
+    redirect("/dashboard/me/activities/today?create=1")
+  }
+
   if (!ALLOWED_VIEWS.has(normalized)) {
     redirect("/dashboard/me/performance/overview")
   }
