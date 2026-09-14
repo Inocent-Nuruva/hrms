@@ -613,10 +613,10 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
             )
           })}
         </div>
-        <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-2">
-          <div className="relative min-w-[140px] flex-1">
+        <div className="flex min-w-0 flex-nowrap items-center gap-2">
+          <div className="relative w-44 shrink-0">
             <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <input className={`${inputClass} h-9 rounded-md pl-9`} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search tasks..." />
+            <input className="h-9 w-full rounded-md border border-slate-300 bg-white pl-9 pr-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40 dark:border-border dark:bg-background" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search tasks..." />
           </div>
           <select
             className="h-9 w-24 max-w-24 shrink-0 rounded-md border border-slate-300 bg-white px-2 text-sm text-foreground outline-none [field-sizing:fixed] focus-visible:ring-2 focus-visible:ring-ring/40 dark:border-border dark:bg-background"
