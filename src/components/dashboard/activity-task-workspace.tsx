@@ -618,14 +618,22 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
             <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <input className={`${inputClass} h-9 rounded-md pl-9`} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search tasks..." />
           </div>
-          <select className={`${inputClass} h-9 w-[8.5rem] shrink-0 rounded-md px-2`} value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value)}>
+          <select
+            className="h-9 w-24 max-w-24 shrink-0 rounded-md border border-slate-300 bg-white px-2 text-sm text-foreground outline-none [field-sizing:fixed] focus-visible:ring-2 focus-visible:ring-ring/40 dark:border-border dark:bg-background"
+            value={priorityFilter}
+            onChange={(event) => setPriorityFilter(event.target.value)}
+          >
             <option value="ALL">Priority</option>
             <option value="URGENT">Urgent</option>
             <option value="HIGH">High</option>
             <option value="MEDIUM">Medium</option>
             <option value="LOW">Low</option>
           </select>
-          <select className={`${inputClass} h-9 w-[8.5rem] shrink-0 rounded-md px-2`} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+          <select
+            className="h-9 w-24 max-w-24 shrink-0 rounded-md border border-slate-300 bg-white px-2 text-sm text-foreground outline-none [field-sizing:fixed] focus-visible:ring-2 focus-visible:ring-ring/40 dark:border-border dark:bg-background"
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value)}
+          >
             <option value="ALL">Status</option>
             <option value="PLANNED">Not started</option>
             <option value="IN_PROGRESS">In progress</option>
