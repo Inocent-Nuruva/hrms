@@ -22,6 +22,7 @@ import {
   asRecordArray,
   formatDate,
   HeroBand,
+  heroGhostButtonClass,
   inputClass,
   optionLabel,
   primaryButtonClass,
@@ -30,6 +31,7 @@ import {
   secondaryButtonClass,
   TalentDoodleSprites,
 } from "@/components/dashboard/talent-visuals"
+import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 import { cn } from "@/lib/utils"
 import {
   addManagerActivityComment,
@@ -564,10 +566,18 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
           ? "Create tasks for your team, follow progress, and keep delivery in one place."
           : "View and manage work assigned to you, track your progress, and submit your daily work."}
         actions={
-          <button type="button" className="inline-flex h-9 items-center gap-2 rounded-md border border-white/30 bg-white/10 px-3 text-sm font-medium text-white hover:bg-white/20" onClick={() => void load()}>
-            <Loader2Icon className={loading ? "size-4 animate-spin" : "hidden"} />
-            <CircleDotIcon className={loading ? "hidden" : "size-4"} /> Refresh
-          </button>
+          <>
+            {mode === "self" ? (
+              <button type="button" className={heroGhostButtonClass} onClick={() => void submitTodayReport()} disabled={submitting}>
+                {submitting ? <Loader2Icon className="size-4 animate-spin" /> : <FileTextIcon className="size-4" />}
+                Prepare daily report
+              </button>
+            ) : null}
+            <button type="button" className={heroGhostButtonClass} onClick={() => void load()}>
+              <Loader2Icon className={loading ? "size-4 animate-spin" : "hidden"} />
+              <CircleDotIcon className={loading ? "hidden" : "size-4"} /> Refresh
+            </button>
+          </>
         }
       />
 
@@ -609,24 +619,19 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
             <option value="COMPLETED">Completed</option>
           </select>
         </div>
-        <div className="ml-auto flex shrink-0 items-center gap-2">
-          {mode === "self" ? (
-            <button type="button" className={secondaryButtonClass} onClick={() => void submitTodayReport()} disabled={submitting}>
-              {submitting ? <Loader2Icon className="size-4 animate-spin" /> : <FileTextIcon className="size-4" />}
-              Prepare daily report
-            </button>
-          ) : null}
-          <button
-            type="button"
-            className={primaryButtonClass}
-            onClick={() => {
-              setAudience(mode === "manager" && canAssign ? "employee" : "self")
-              setCreateOpen(true)
-            }}
-          >
-            <PlusIcon className="size-4" /> Create task
-          </button>
-        </div>
+      </div>
+
+      <div className="flex justify-end">
+        <button
+          type="button"
+          className={primaryButtonClass}
+          onClick={() => {
+            setAudience(mode === "manager" ? "employee" : "self")
+            setCreateOpen(true)
+          }}
+        >
+          <PlusIcon className="size-4" /> Create task
+        </button>
       </div>
 
       {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div> : null}
@@ -719,18 +724,16 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
               </div>
               <button type="button" className="rounded-md p-2 text-slate-500 hover:bg-slate-100" onClick={() => setCreateOpen(false)}><XIcon className="size-5" /></button>
             </div>
-            {canAssign ? (
-              <div className="mb-4 flex w-full rounded-lg bg-slate-100 p-1" role="tablist" aria-label="Task owner">
-                <button type="button" className={cn("flex-1 rounded-md px-3 py-2 text-sm font-medium", audience === "employee" ? "bg-white text-sky-700 shadow-sm" : "text-slate-500")} onClick={() => setAudience("employee")}>Assign to employee</button>
-                <button type="button" className={cn("flex-1 rounded-md px-3 py-2 text-sm font-medium", audience === "self" ? "bg-white text-sky-700 shadow-sm" : "text-slate-500")} onClick={() => setAudience("self")}>Create for myself</button>
-              </div>
-            ) : null}
+            <div className="mb-4 flex w-full rounded-lg bg-slate-100 p-1" role="tablist" aria-label="Task owner">
+              <button type="button" className={cn("flex-1 rounded-md px-3 py-2 text-sm font-medium", audience === "self" ? "bg-white text-sky-700 shadow-sm" : "text-slate-500")} onClick={() => setAudience("self")}>Yourself</button>
+              <button type="button" className={cn("flex-1 rounded-md px-3 py-2 text-sm font-medium", audience === "employee" ? "bg-white text-sky-700 shadow-sm" : "text-slate-500")} onClick={() => setAudience("employee")}>Assign to employees</button>
+            </div>
             <div className="grid gap-4 md:grid-cols-2">
               {audience === "employee" ? (
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Assign to</span>
-                  <select className={inputClass} value={form.employee_id ?? ""} onChange={(event) => setForm((current) => ({ ...current, employee_id: event.target.value }))}>
-                    <option value="">Choose employee</option>
+                  <select className={inputClass} value={form.employee_id ?? ""} onChange={(event) => setForm((current) => ({ ...current, employee_id: event.target.value }))} disabled={!canAssign}>
+                    <option value="">{canAssign ? "Choose employee" : "No employees in your reporting scope"}</option>
                     {team.map((member) => <option key={rowId(member)} value={rowId(member)}>{personName(member, optionLabel(member))}</option>)}
                   </select>
                 </label>
@@ -743,11 +746,11 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
               </label>
               <label className="grid gap-1.5 text-sm">
                 <span className="font-medium">Start date</span>
-                <input className={inputClass} type="date" value={form.activity_date ?? today()} onChange={(event) => setForm((current) => ({ ...current, activity_date: event.target.value }))} />
+                <DatePickerPresets value={form.activity_date ?? today()} onChange={(value) => setForm((current) => ({ ...current, activity_date: value }))} placeholder="Select start date" />
               </label>
               <label className="grid gap-1.5 text-sm">
                 <span className="font-medium">Due date</span>
-                <input className={inputClass} type="date" value={form.due_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, due_date: event.target.value }))} />
+                <DatePickerPresets value={form.due_date ?? ""} onChange={(value) => setForm((current) => ({ ...current, due_date: value }))} placeholder="Select due date" />
               </label>
               <label className="grid gap-1.5 text-sm">
                 <span className="font-medium">Priority</span>
