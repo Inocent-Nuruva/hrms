@@ -16,7 +16,7 @@ interface SelfActivitiesViewPageProps {
 export default async function SelfActivitiesViewPage({ params }: SelfActivitiesViewPageProps) {
   const { view } = await params
   const normalized = view?.toLowerCase() as ActivitySelfTab
-  if (!ALLOWED_VIEWS.has(normalized)) {
+  if (normalized === "reports" || !ALLOWED_VIEWS.has(normalized)) {
     redirect("/dashboard/me/activities/today")
   }
   return <ActivityTaskWorkspace mode="self" />

@@ -38,6 +38,8 @@ import {
   addMyActivityComment,
   addMyActivityEntry,
   createManagerActivityTask,
+  createMyActivityTask,
+  getManagerActivityReport,
   getMyActivityReport,
   listActivityCategories,
   listManagerActivityAssignees,
@@ -116,6 +118,35 @@ function taskDate(task: AdminRecord) {
   return task.plannedEndTime ?? task.planned_end_time ?? task.activity_date ?? task.activityDate
 }
 
+function isDraftReportStatus(status: string) {
+  const value = status.toUpperCase()
+  return value === "DRAFT" || value === "RETURNED_FOR_CORRECTION"
+}
+
+function checklistProgress(task: AdminRecord) {
+  const items = asRecordArray(task.checklist)
+  if (!items.length) return null
+  const done = items.filter((item) => item.completed === true).length
+  return `${done}/${items.length}`
+}
+
+function asReportRow(report: AdminRecord): AdminRecord {
+  const entries = asRecordArray(report.entries ?? report.items ?? report.activities)
+  const dated = formatDate(report.activityDate ?? report.activity_date)
+  return {
+    ...report,
+    report_id: rowId(report),
+    title: dated && dated !== "—" ? `Daily report · ${dated}` : "Daily report",
+    description: entries.length
+      ? `${entries.length} work item${entries.length === 1 ? "" : "s"}`
+      : "No work items yet",
+    report_status: readString(report, ["status"], "DRAFT"),
+    status: readString(report, ["status"], "DRAFT"),
+    is_report_row: true,
+    entries,
+  }
+}
+
 export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
   const actor = useDashboardActor()
   const leaveIfForbidden = useLeaveIfForbidden()
@@ -138,6 +169,9 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
   const [commenting, setCommenting] = React.useState(false)
   const [selfCreateOpen, setSelfCreateOpen] = React.useState(false)
   const [taskEditStatus, setTaskEditStatus] = React.useState("PLANNED")
+  const [managerTaskAudience, setManagerTaskAudience] = React.useState<"employee" | "self">("employee")
+  const [updatingChecklistId, setUpdatingChecklistId] = React.useState<string | null>(null)
+  const openedFocusRef = React.useRef<string | null>(null)
 
   const load = React.useCallback(async () => {
     const accessToken = token()
@@ -155,7 +189,19 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
           listMyActivities(accessToken, { limit: 100 }),
           listActivityCategories(accessToken).catch(() => []),
         ])
-        setTasks(taskRows.length ? taskRows : entriesFromReports(reportRows))
+        const fromReports = entriesFromReports(reportRows)
+        const reportEntryById = new Map(fromReports.map((entry) => [rowId(entry), entry]))
+        const mergedTasks = (taskRows.length ? taskRows : fromReports).map((task) => {
+          const nested = reportEntryById.get(rowId(task))
+          return {
+            ...nested,
+            ...task,
+            report_id: task.report_id ?? task.reportId ?? nested?.report_id,
+            report_status: task.report_status ?? task.reportStatus ?? nested?.report_status,
+            checklist: asRecordArray(task.checklist).length ? task.checklist : nested?.checklist,
+          }
+        })
+        setTasks(mergedTasks)
         setReports(reportRows)
         setCategories(categoryRows)
       } else {
@@ -187,20 +233,26 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
 
   const visibleTasks = React.useMemo(() => {
     const lower = query.trim().toLowerCase()
+    const matchesQuery = (row: AdminRecord) => !lower || JSON.stringify(row).toLowerCase().includes(lower)
+    if (mode === "self" && (selfTab === "drafts" || selfTab === "submitted")) {
+      return reports
+        .filter((report) => {
+          const draft = isDraftReportStatus(readString(report, ["status"], "DRAFT"))
+          return selfTab === "drafts" ? draft : !draft
+        })
+        .map(asReportRow)
+        .filter(matchesQuery)
+    }
     return tasks.filter((task) => {
       const managerAssigned = isManagerAssigned(task)
-      const reportStatus = readString(task, ["report_status", "reportStatus"], "DRAFT").toUpperCase()
       if (mode === "self") {
         if (selfTab === "assigned" && !managerAssigned) return false
         if (selfTab === "my-work" && managerAssigned) return false
-        if (selfTab === "drafts" && reportStatus !== "DRAFT" && reportStatus !== "RETURNED_FOR_CORRECTION") return false
-        if (selfTab === "submitted" && reportStatus === "DRAFT") return false
       }
       if (statusFilter !== "ALL" && taskStatus(task) !== statusFilter) return false
-      if (!lower) return true
-      return JSON.stringify(task).toLowerCase().includes(lower)
+      return matchesQuery(task)
     })
-  }, [mode, query, selfTab, statusFilter, tasks])
+  }, [mode, query, reports, selfTab, statusFilter, tasks])
 
   const reportCounts = React.useMemo(() => ({
     drafts: reports.filter((report) => ["DRAFT", "RETURNED_FOR_CORRECTION"].includes(readString(report, ["status"], "DRAFT").toUpperCase())).length,
@@ -210,9 +262,15 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
   async function openTask(task: AdminRecord) {
     const accessToken = token()
     const reportId = rowId(task, ["report_id", "reportId"])
-    if (mode === "self" && accessToken && reportId) {
+    if (accessToken && reportId) {
       try {
-        const report = await getMyActivityReport(accessToken, reportId)
+        const report = mode === "self"
+          ? await getMyActivityReport(accessToken, reportId)
+          : await getManagerActivityReport(accessToken, reportId)
+        if (task.is_report_row) {
+          setSelected(asReportRow((report ?? task) as AdminRecord))
+          return
+        }
         const entry = asRecordArray(report?.entries).find((candidate) => rowId(candidate) === rowId(task))
         const detail = entry ? { ...report, ...entry, report_id: reportId } : task
         setSelected(detail)
@@ -226,17 +284,57 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
     setTaskEditStatus(taskStatus(task))
   }
 
+  React.useEffect(() => {
+    if (loading || typeof window === "undefined") return
+    const params = new URLSearchParams(window.location.search)
+    const focusId = params.get("task") || params.get("highlight")
+    if (!focusId || openedFocusRef.current === focusId) return
+    const match = tasks.find((task) => rowId(task) === focusId)
+    if (!match) return
+    openedFocusRef.current = focusId
+    if (mode === "manager") setManagerTab("team-work")
+    void openTask(match)
+  }, [loading, mode, tasks])
+
+  async function toggleChecklistItem(itemId: string) {
+    const accessToken = token()
+    const reportId = rowId(selected, ["report_id", "reportId"])
+    const entryId = rowId(selected)
+    if (!accessToken || !reportId || !entryId || mode !== "self" || !selected) return
+
+    const previousChecklist = asRecordArray(selected.checklist)
+    const nextChecklist = previousChecklist.map((item) => (
+      String(item.id ?? item.title) === itemId
+        ? { ...item, completed: item.completed !== true }
+        : item
+    ))
+    const changedItem = nextChecklist.find((item) => String(item.id ?? item.title) === itemId)
+    setSelected((current) => current ? { ...current, checklist: nextChecklist } : current)
+    setUpdatingChecklistId(itemId)
+
+    try {
+      await updateMyActivityEntry(accessToken, reportId, entryId, { checklist: nextChecklist })
+      toast.success(changedItem?.completed === true ? "Checklist item completed." : "Checklist item reopened.")
+      await load()
+      await openTask({ ...selected, checklist: nextChecklist, report_id: reportId })
+    } catch (errorObject) {
+      setSelected((current) => current ? { ...current, checklist: previousChecklist } : current)
+      toast.error(errorObject instanceof Error ? errorObject.message : "Could not update checklist.")
+    } finally {
+      setUpdatingChecklistId(null)
+    }
+  }
+
   async function saveTask() {
     const accessToken = token()
     if (!accessToken) return
     setSaving(true)
     try {
       if (mode === "manager") {
-        if (!form.employee_id || !form.title || !form.description) {
-          throw new Error("Employee, title, and description are required.")
+        if ((managerTaskAudience === "employee" && !form.employee_id) || !form.title || !form.description) {
+          throw new Error(`${managerTaskAudience === "employee" ? "Employee, " : ""}title, and description are required.`)
         }
-        await createManagerActivityTask(accessToken, {
-          employee_id: Number(form.employee_id),
+        const taskPayload = {
           activity_date: form.activity_date || today(),
           title: form.title,
           description: form.description,
@@ -247,8 +345,17 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
             title,
             completed: false,
           })),
-        })
-        toast.success("Task assigned.")
+        }
+        if (managerTaskAudience === "employee") {
+          await createManagerActivityTask(accessToken, {
+            ...taskPayload,
+            employee_id: Number(form.employee_id),
+          })
+          toast.success("Task assigned.")
+        } else {
+          await createMyActivityTask(accessToken, taskPayload)
+          toast.success("Task added to your work.")
+        }
       } else {
         if (!form.report_id || !form.activity_category_id || !form.title || !form.description) {
           throw new Error("Report, category, title, and description are required.")
@@ -315,7 +422,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
     ? [
         ["assigned", "Assigned to me"],
         ["my-work", "My work"],
-        ["drafts", `Draft reports (${reportCounts.drafts})`],
+        ["drafts", `Drafts (${reportCounts.drafts})`],
         ["submitted", `Submitted (${reportCounts.submitted})`],
       ] as Array<[SelfTab, string]>
     : [["team-work", "Team work"], ["assign", "Assign tasks"]] as Array<[ManagerTab, string]>
@@ -354,10 +461,11 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
       {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div> : null}
       {mode === "manager" && managerTab === "assign" ? (
         <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
-          <div className="mb-5 flex items-start gap-3"><div className="rounded-lg bg-primary/10 p-2 text-primary"><SendIcon className="size-5" /></div><div><h2 className="font-semibold">Assign planned work</h2><p className="text-sm text-muted-foreground">Choose a person in your reporting scope. Their task will appear in My Activities and can be included in their daily report.</p></div></div>
+          <div className="mb-4 flex w-full max-w-md rounded-lg bg-muted p-1" role="tablist" aria-label="Task owner"><button type="button" role="tab" aria-selected={managerTaskAudience === "employee"} className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition ${managerTaskAudience === "employee" ? "bg-background text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"}`} onClick={() => setManagerTaskAudience("employee")}>Assign to employee</button><button type="button" role="tab" aria-selected={managerTaskAudience === "self"} className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition ${managerTaskAudience === "self" ? "bg-background text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"}`} onClick={() => setManagerTaskAudience("self")}>Create for myself</button></div>
+          <div className="mb-5 flex items-start gap-3"><div className="rounded-lg bg-primary/10 p-2 text-primary"><SendIcon className="size-5" /></div><div><h2 className="font-semibold">{managerTaskAudience === "employee" ? "Assign planned work" : "Create a personal task"}</h2><p className="text-sm text-muted-foreground">{managerTaskAudience === "employee" ? "Choose a person in your reporting scope. Their task will appear in My Activities and can be included in their daily report." : "The task will appear in your own My Activities workspace."}</p></div></div>
           <div className="grid gap-4 md:grid-cols-2">
-            <label className="grid gap-1.5 text-sm"><span className="font-medium">Assign to</span><select className={inputClass} value={form.employee_id ?? ""} onChange={(event) => setForm((current) => ({ ...current, employee_id: event.target.value }))}><option value="">Choose employee</option>{team.map((member) => <option key={rowId(member)} value={rowId(member)}>{personName(member, optionLabel(member))}</option>)}</select></label>
-            <label className="grid gap-1.5 text-sm"><span className="font-medium">Task name</span><input className={inputClass} value={form.title ?? ""} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} placeholder="e.g. Prepare renewal pipeline" /></label>
+             {managerTaskAudience === "employee" ? <label className="grid gap-1.5 text-sm"><span className="font-medium">Assign to</span><select className={inputClass} value={form.employee_id ?? ""} onChange={(event) => setForm((current) => ({ ...current, employee_id: event.target.value }))}><option value="">Choose employee</option>{team.map((member) => <option key={rowId(member)} value={rowId(member)}>{personName(member, optionLabel(member))}</option>)}</select></label> : <div className="flex items-center gap-2 self-end rounded-md border border-border bg-muted/25 px-3 py-2 text-sm"><UserRoundIcon className="size-4 text-primary" /> Assigned to you</div>}
+             <label className="grid gap-1.5 text-sm"><span className="font-medium">Task name</span><input className={inputClass} value={form.title ?? ""} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} placeholder="e.g. Prepare renewal pipeline" /></label>
             <label className="grid gap-1.5 text-sm"><span className="font-medium">Due date</span><input className={inputClass} type="date" value={form.due_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, due_date: event.target.value }))} /></label>
             <label className="grid gap-1.5 text-sm md:col-span-2"><span className="font-medium">Description</span><textarea className={`${inputClass} min-h-24`} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} placeholder="What outcome should be delivered?" /></label>
             <label className="grid gap-1.5 text-sm"><span className="font-medium">Priority</span><select className={inputClass} value={form.priority ?? "MEDIUM"} onChange={(event) => setForm((current) => ({ ...current, priority: event.target.value }))}><option value="LOW">Low</option><option value="MEDIUM">Medium</option><option value="HIGH">High</option><option value="URGENT">Urgent</option></select></label>
@@ -405,7 +513,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
               ) : null}
             </div>
           </div>
-          <div className="mt-5 flex justify-end pr-16"><button type="button" className={primaryButtonClass} onClick={() => void saveTask()} disabled={saving}>{saving ? <Loader2Icon className="size-4 animate-spin" /> : <SendIcon className="size-4" />} Assign task</button></div>
+          <div className="mt-5 flex justify-end pr-16"><button type="button" className={primaryButtonClass} onClick={() => void saveTask()} disabled={saving}>{saving ? <Loader2Icon className="size-4 animate-spin" /> : <SendIcon className="size-4" />} {managerTaskAudience === "employee" ? "Assign task" : "Create my task"}</button></div>
         </div>
       ) : (
         <>
@@ -417,12 +525,12 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
           </div>
           <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
             <div className="hidden grid-cols-[28px_minmax(220px,1fr)_minmax(140px,0.75fr)_120px_100px_130px_28px] gap-3 border-b border-border bg-muted/30 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground lg:grid"><span /><span>Task</span><span>{mode === "manager" ? "Assigned to" : "Assigned by"}</span><span>Due</span><span>Priority</span><span>Status</span><span /></div>
-            {loading ? <div className="flex items-center justify-center gap-2 px-4 py-14 text-sm text-muted-foreground"><Loader2Icon className="size-4 animate-spin" /> Loading activities...</div> : visibleTasks.length === 0 ? <div className="flex flex-col items-center justify-center gap-2 px-4 py-16 text-center"><ClipboardListIcon className="size-8 text-muted-foreground/60" /><p className="font-medium">No work items in this view</p><p className="text-sm text-muted-foreground">Assigned tasks and your report items will appear here.</p></div> : <div className="divide-y divide-border/70">{visibleTasks.map((task) => { const status = taskStatus(task); const priority = taskPriority(task); const employee = asRecord(task.employee); const assignedBy = task.assignedBySnapshot ?? task.assigned_by_snapshot; return <button type="button" key={rowId(task) || `${readString(task, ["title"])}-${readString(task, ["activity_date"])}`} onClick={() => void openTask(task)} className="grid w-full grid-cols-[28px_minmax(0,1fr)] gap-3 px-4 py-4 text-left transition hover:bg-muted/30 lg:grid-cols-[28px_minmax(220px,1fr)_minmax(140px,0.75fr)_120px_100px_130px_28px] lg:items-center"><span className="mt-1 flex size-4 items-center justify-center rounded border border-border text-primary"><CheckCircle2Icon className={status === "COMPLETED" ? "size-3.5" : "hidden"} /></span><span className="min-w-0"><span className="flex flex-wrap items-center gap-2"><span className="truncate font-medium text-foreground">{readString(task, ["title"], "Untitled task")}</span><span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground lg:hidden">{statusLabel[status] ?? status}</span></span><span className="mt-1 block truncate text-xs text-muted-foreground">{readString(task, ["description"], "No description")}</span><span className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground lg:hidden"><span>{mode === "manager" ? personName(employee) : personName(assignedBy, isManagerAssigned(task) ? "Manager" : "My work")}</span><span>•</span><span>{formatDate(taskDate(task))}</span></span></span><span className="hidden truncate text-sm text-muted-foreground lg:block">{mode === "manager" ? personName(employee) : personName(assignedBy, isManagerAssigned(task) ? "Manager" : "My work")}</span><span className="hidden text-sm text-muted-foreground lg:block">{formatDate(taskDate(task))}</span><span className={`hidden w-fit rounded-full px-2 py-1 text-[11px] font-semibold lg:block ${priorityClasses[priority] ?? priorityClasses.MEDIUM}`}>{priority}</span><span className="hidden lg:block"><StatusChip value={statusLabel[status] ?? status} /></span><ChevronRightIcon className="size-4 text-muted-foreground" /></button> })}</div>}
+            {loading ? <div className="flex items-center justify-center gap-2 px-4 py-14 text-sm text-muted-foreground"><Loader2Icon className="size-4 animate-spin" /> Loading activities...</div> : visibleTasks.length === 0 ? <div className="flex flex-col items-center justify-center gap-2 px-4 py-16 text-center"><ClipboardListIcon className="size-8 text-muted-foreground/60" /><p className="font-medium">{mode === "self" && selfTab === "drafts" ? "No draft reports" : mode === "self" && selfTab === "submitted" ? "No submitted reports" : "No work items in this view"}</p><p className="text-sm text-muted-foreground">{mode === "self" && selfTab === "drafts" ? "A draft appears here even before work items are added. Use Add my work to fill it." : "Assigned tasks and your report items will appear here."}</p></div> : <div className="divide-y divide-border/70">{visibleTasks.map((task) => { const status = taskStatus(task); const priority = taskPriority(task); const employee = asRecord(task.employee); const assignedBy = task.assignedBySnapshot ?? task.assigned_by_snapshot; return <button type="button" key={rowId(task) || `${readString(task, ["title"])}-${readString(task, ["activity_date"])}`} onClick={() => void openTask(task)} className="grid w-full grid-cols-[28px_minmax(0,1fr)] gap-3 px-4 py-4 text-left transition hover:bg-muted/30 lg:grid-cols-[28px_minmax(220px,1fr)_minmax(140px,0.75fr)_120px_100px_130px_28px] lg:items-center"><span className="mt-1 flex size-4 items-center justify-center rounded border border-border text-primary"><CheckCircle2Icon className={status === "COMPLETED" ? "size-3.5" : "hidden"} /></span><span className="min-w-0"><span className="flex flex-wrap items-center gap-2"><span className="truncate font-medium text-foreground">{readString(task, ["title"], "Untitled task")}</span>{checklistProgress(task) ? <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{checklistProgress(task)} done</span> : null}<span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground lg:hidden">{statusLabel[status] ?? status}</span></span><span className="mt-1 block truncate text-xs text-muted-foreground">{readString(task, ["description"], "No description")}</span><span className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground lg:hidden"><span>{mode === "manager" ? personName(employee) : personName(assignedBy, isManagerAssigned(task) ? "Manager" : "My work")}</span><span>•</span><span>{formatDate(taskDate(task))}</span></span></span><span className="hidden truncate text-sm text-muted-foreground lg:block">{mode === "manager" ? personName(employee) : personName(assignedBy, isManagerAssigned(task) ? "Manager" : "My work")}</span><span className="hidden text-sm text-muted-foreground lg:block">{formatDate(taskDate(task))}</span><span className={`hidden w-fit rounded-full px-2 py-1 text-[11px] font-semibold lg:block ${priorityClasses[priority] ?? priorityClasses.MEDIUM}`}>{priority}</span><span className="hidden lg:block"><StatusChip value={statusLabel[status] ?? status} /></span><ChevronRightIcon className="size-4 text-muted-foreground" /></button> })}</div>}
           </div>
         </>
       )}
-      {mode === "self" && selfTab !== "assigned" && selfTab !== "my-work" ? <div className="rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground">Use the task rows above to open the report they belong to. Draft reports can be completed and submitted from the report detail drawer.</div> : null}
-      {selected ? <div className="fixed inset-0 z-50 flex justify-end bg-black/20" onClick={() => setSelected(null)}><aside className="flex h-full w-full max-w-xl flex-col overflow-y-auto border-l border-border bg-background shadow-2xl" onClick={(event) => event.stopPropagation()}><div className="flex items-center justify-between border-b border-border px-5 py-4"><div className="flex items-center gap-2"><span className="rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-primary">{isManagerAssigned(selected) ? "Assigned task" : "Work item"}</span><StatusChip value={statusLabel[taskStatus(selected)] ?? taskStatus(selected)} /></div><button type="button" className="rounded-md p-2 text-muted-foreground hover:bg-muted" onClick={() => setSelected(null)}><XIcon className="size-5" /></button></div><div className="space-y-6 px-5 py-6"><div><p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">{mode === "manager" ? "Team task" : "Task details"}</p><h2 className="mt-2 text-2xl font-semibold tracking-tight">{readString(selected, ["title"], "Untitled task")}</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">{readString(selected, ["description"], "No description")}</p></div><div className="grid grid-cols-2 gap-3"><div className="rounded-lg border border-border p-3"><p className="text-xs text-muted-foreground">{mode === "manager" ? "Assigned to" : "Assigned by"}</p><p className="mt-1 flex items-center gap-1.5 text-sm font-medium"><UserRoundIcon className="size-4 text-primary" />{mode === "manager" ? personName(selected.employee) : personName(selected.assignedBySnapshot ?? selected.assigned_by_snapshot, isManagerAssigned(selected) ? "Manager" : "You")}</p></div><div className="rounded-lg border border-border p-3"><p className="text-xs text-muted-foreground">Due date</p><p className="mt-1 flex items-center gap-1.5 text-sm font-medium"><CalendarDaysIcon className="size-4 text-primary" />{formatDate(taskDate(selected))}</p></div><div className="rounded-lg border border-border p-3"><p className="text-xs text-muted-foreground">Priority</p><p className={`mt-1 inline-flex rounded-full px-2 py-1 text-xs font-semibold ${priorityClasses[taskPriority(selected)] ?? priorityClasses.MEDIUM}`}>{taskPriority(selected)}</p></div><div className="rounded-lg border border-border p-3"><p className="text-xs text-muted-foreground">Report date</p><p className="mt-1 text-sm font-medium">{formatDate(selected.activity_date ?? selected.activityDate)}</p></div></div>{mode === "self" && selected.report_id ? <div className="rounded-lg border border-border p-4"><div className="flex items-center justify-between gap-3"><div><h3 className="font-semibold">Progress</h3><p className="text-xs text-muted-foreground">Update this item before submitting your report.</p></div><select className={`${inputClass} w-auto`} value={taskEditStatus} onChange={(event) => setTaskEditStatus(event.target.value)}><option value="PLANNED">Not started</option><option value="IN_PROGRESS">In progress</option><option value="COMPLETED">Completed</option><option value="DEFERRED">Deferred</option></select></div><button type="button" className={`${secondaryButtonClass} mt-3`} onClick={() => void updateTaskStatus()}>Save progress</button></div> : null}<div><div className="mb-2 flex items-center justify-between"><h3 className="font-semibold">Checklist</h3><span className="text-xs text-muted-foreground">{asRecordArray(selected.checklist).filter((item) => item.completed).length}/{asRecordArray(selected.checklist).length} complete</span></div>{asRecordArray(selected.checklist).length ? <div className="space-y-2">{asRecordArray(selected.checklist).map((item) => <div key={rowId(item) || readString(item, ["id", "title"])} className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm"><CheckCircle2Icon className={item.completed ? "size-4 text-emerald-600" : "size-4 text-muted-foreground"} />{readString(item, ["title"], "Checklist item")}</div>)}</div> : <p className="text-sm text-muted-foreground">No checklist items.</p>}</div><div><h3 className="mb-2 flex items-center gap-2 font-semibold"><MessageSquareIcon className="size-4 text-primary" /> Activity</h3><div className="space-y-2">{asRecordArray(selected.comments).length ? asRecordArray(selected.comments).map((item) => <div key={rowId(item)} className="rounded-lg bg-muted/40 px-3 py-2 text-sm"><p>{readString(item, ["body"], "")}</p><p className="mt-1 text-xs text-muted-foreground">{personName(item.authorSnapshot ?? item.author_snapshot, "Team member")} · {formatDate(item.createdAt ?? item.created_at)}</p></div>) : <p className="text-sm text-muted-foreground">No comments yet.</p>}</div><div className="mt-3 flex gap-2"><input className={inputClass} value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Add an update" /><button type="button" className={primaryButtonClass} onClick={() => void addComment()} disabled={commenting || !comment.trim()}>{commenting ? <Loader2Icon className="size-4 animate-spin" /> : <MessageSquareIcon className="size-4" />}</button></div></div>{mode === "self" && selected.report_id ? <button type="button" className={primaryButtonClass} onClick={async () => { const accessToken = token(); if (!accessToken) return; await submitMyActivityReport(accessToken, selected.report_id as string, { employee_summary: "Submitted from activities workspace", client_request_id: globalThis.crypto?.randomUUID?.() ?? `req-${Date.now()}` }); toast.success("Report submitted."); setSelected(null); await load() }}>Submit report</button> : null}</div></aside></div> : null}
+      {mode === "self" && selfTab === "drafts" && visibleTasks.length > 0 ? <p className="text-sm text-muted-foreground">Open a draft to add work, tick checklist items, and submit the report.</p> : null}
+      {selected ? <div className="fixed inset-0 z-50 flex justify-end bg-black/20" onClick={() => setSelected(null)}><aside className="flex h-full w-full max-w-xl flex-col overflow-y-auto border-l border-border bg-background shadow-2xl" onClick={(event) => event.stopPropagation()}><div className="flex items-center justify-between border-b border-border px-5 py-4"><div className="flex items-center gap-2"><span className="rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-primary">{selected.is_report_row ? "Daily report" : isManagerAssigned(selected) ? "Assigned task" : "Work item"}</span><StatusChip value={statusLabel[taskStatus(selected)] ?? taskStatus(selected)} /></div><button type="button" className="rounded-md p-2 text-muted-foreground hover:bg-muted" onClick={() => setSelected(null)}><XIcon className="size-5" /></button></div><div className="space-y-6 px-5 py-6"><div><p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">{mode === "manager" ? "Team task" : "Task details"}</p><h2 className="mt-2 text-2xl font-semibold tracking-tight">{readString(selected, ["title"], "Untitled task")}</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">{readString(selected, ["description"], "No description")}</p></div>{selected.is_report_row ? <div><h3 className="mb-2 font-semibold">Work items</h3>{asRecordArray(selected.entries).length ? <div className="space-y-2">{asRecordArray(selected.entries).map((entry) => { const progress = checklistProgress(entry); return <button type="button" key={rowId(entry)} className="flex w-full items-center justify-between gap-3 rounded-lg border border-border px-3 py-2 text-left text-sm hover:bg-muted/40" onClick={() => void openTask({ ...entry, report_id: selected.report_id })}><span className="min-w-0 truncate font-medium">{readString(entry, ["title"], "Untitled task")}</span><span className="shrink-0 text-xs text-muted-foreground">{progress ? `${progress} done` : statusLabel[taskStatus(entry)] ?? taskStatus(entry)}</span></button> })}</div> : <p className="text-sm text-muted-foreground">No work items yet. Use Add my work to fill this report.</p>}</div> : null}<div className="grid grid-cols-2 gap-3"><div className="rounded-lg border border-border p-3"><p className="text-xs text-muted-foreground">{mode === "manager" ? "Assigned to" : "Assigned by"}</p><p className="mt-1 flex items-center gap-1.5 text-sm font-medium"><UserRoundIcon className="size-4 text-primary" />{mode === "manager" ? personName(selected.employee) : personName(selected.assignedBySnapshot ?? selected.assigned_by_snapshot, isManagerAssigned(selected) ? "Manager" : "You")}</p></div><div className="rounded-lg border border-border p-3"><p className="text-xs text-muted-foreground">Due date</p><p className="mt-1 flex items-center gap-1.5 text-sm font-medium"><CalendarDaysIcon className="size-4 text-primary" />{formatDate(taskDate(selected))}</p></div><div className="rounded-lg border border-border p-3"><p className="text-xs text-muted-foreground">Priority</p><p className={`mt-1 inline-flex rounded-full px-2 py-1 text-xs font-semibold ${priorityClasses[taskPriority(selected)] ?? priorityClasses.MEDIUM}`}>{taskPriority(selected)}</p></div><div className="rounded-lg border border-border p-3"><p className="text-xs text-muted-foreground">Report date</p><p className="mt-1 text-sm font-medium">{formatDate(selected.activity_date ?? selected.activityDate)}</p></div></div>{mode === "self" && selected.report_id && !selected.is_report_row ? <div className="rounded-lg border border-border p-4"><div className="flex items-center justify-between gap-3"><div><h3 className="font-semibold">Progress</h3><p className="text-xs text-muted-foreground">Update this item before submitting your report.</p></div><select className={`${inputClass} w-auto`} value={taskEditStatus} onChange={(event) => setTaskEditStatus(event.target.value)}><option value="PLANNED">Not started</option><option value="IN_PROGRESS">In progress</option><option value="COMPLETED">Completed</option><option value="DEFERRED">Deferred</option></select></div><button type="button" className={`${secondaryButtonClass} mt-3`} onClick={() => void updateTaskStatus()}>Save progress</button></div> : null}{selected.is_report_row ? null : <div><div className="mb-2 flex items-center justify-between"><h3 className="font-semibold">Checklist</h3><span className="text-xs text-muted-foreground">{asRecordArray(selected.checklist).filter((item) => item.completed).length}/{asRecordArray(selected.checklist).length} complete</span></div>{asRecordArray(selected.checklist).length ? <div className="space-y-2">{asRecordArray(selected.checklist).map((item) => { const itemKey = String(item.id ?? item.title); return <div key={rowId(item) || itemKey} className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm">{mode === "self" ? <input type="checkbox" checked={item.completed === true} disabled={Boolean(updatingChecklistId)} onChange={() => void toggleChecklistItem(itemKey)} aria-label={`Mark ${readString(item, ["title"], "checklist item")} complete`} className="size-4 accent-primary" /> : <CheckCircle2Icon className={item.completed ? "size-4 text-emerald-600" : "size-4 text-muted-foreground"} />}<span className={item.completed ? "text-muted-foreground line-through" : ""}>{readString(item, ["title"], "Checklist item")}</span>{updatingChecklistId === itemKey ? <Loader2Icon className="ml-auto size-4 animate-spin text-primary" /> : null}</div> })}</div> : <p className="text-sm text-muted-foreground">No checklist items.</p>}</div>}{selected.is_report_row ? null : <div><h3 className="mb-2 flex items-center gap-2 font-semibold"><MessageSquareIcon className="size-4 text-primary" /> Activity</h3><div className="space-y-2">{asRecordArray(selected.comments).length ? asRecordArray(selected.comments).map((item) => <div key={rowId(item)} className="rounded-lg bg-muted/40 px-3 py-2 text-sm"><p>{readString(item, ["body"], "")}</p><p className="mt-1 text-xs text-muted-foreground">{personName(item.authorSnapshot ?? item.author_snapshot, "Team member")} · {formatDate(item.createdAt ?? item.created_at)}</p></div>) : <p className="text-sm text-muted-foreground">No comments yet.</p>}</div><div className="mt-3 flex gap-2"><input className={inputClass} value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Add an update" /><button type="button" className={primaryButtonClass} onClick={() => void addComment()} disabled={commenting || !comment.trim()}>{commenting ? <Loader2Icon className="size-4 animate-spin" /> : <MessageSquareIcon className="size-4" />}</button></div></div>}{mode === "self" && selected.report_id ? <button type="button" className={primaryButtonClass} onClick={async () => { const accessToken = token(); if (!accessToken) return; await submitMyActivityReport(accessToken, selected.report_id as string, { employee_summary: "Submitted from activities workspace", client_request_id: globalThis.crypto?.randomUUID?.() ?? `req-${Date.now()}` }); toast.success("Report submitted."); setSelected(null); await load() }}>Submit report</button> : null}</div></aside></div> : null}
     </section>
   )
 }

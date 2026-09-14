@@ -16525,6 +16525,14 @@ export async function listMyActivityTasks(
   return normalizeList(payload)
 }
 
+export async function createMyActivityTask(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/me/activities/tasks", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
 export async function addMyActivityComment(
   token: string,
   entryId: string | number,

@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { InfoIcon, Loader2Icon, RefreshCwIcon } from "lucide-react"
+import { CheckCircle2Icon, InfoIcon, Loader2Icon, PlusIcon, RefreshCwIcon, UserRoundIcon, XIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared"
@@ -41,6 +41,7 @@ import {
 import {
   acknowledgeMyPerformanceImprovementPlan,
   createManagerActivityTask,
+  createMyActivityTask,
   getManagerPerformanceSummary,
   getMyPerformanceSummary,
   listManagerActivityAssignees,
@@ -244,6 +245,9 @@ export function PerformanceSelfView({
   })
   const [taskError, setTaskError] = React.useState<string | null>(null)
   const [taskSaving, setTaskSaving] = React.useState(false)
+  const [taskAudience, setTaskAudience] = React.useState<"employee" | "self">("employee")
+  const [taskChecklistDraft, setTaskChecklistDraft] = React.useState("")
+  const [taskChecklist, setTaskChecklist] = React.useState<string[]>([])
 
   const load = React.useCallback(async () => {
     const token = readStoredToken()
@@ -346,35 +350,58 @@ export function PerformanceSelfView({
             ? pips
             : teamAchievements
 
+  function addTaskChecklistItem() {
+    const item = taskChecklistDraft.trim()
+    if (!item) return
+    setTaskChecklist((current) => [...current, item])
+    setTaskChecklistDraft("")
+  }
+
   async function saveManagerTask() {
     const token = readStoredToken()
     if (!token) return
     if (
-      !taskForm.employee_id ||
+      (taskAudience === "employee" && !taskForm.employee_id) ||
       !taskForm.activity_date ||
       !taskForm.title?.trim() ||
       !taskForm.description?.trim()
     ) {
-      setTaskError("Employee, date, title, and description are required.")
+      setTaskError(`${taskAudience === "employee" ? "Employee, " : ""}date, title, and notes are required.`)
       return
     }
     setTaskSaving(true)
     setTaskError(null)
     try {
-      await createManagerActivityTask(token, {
-        employee_id: Number(taskForm.employee_id),
+      const taskPayload = {
         activity_date: taskForm.activity_date,
         title: taskForm.title.trim(),
         description: taskForm.description.trim(),
         planned_start_time: taskForm.planned_start_time
-          ? `${taskForm.planned_start_time}:00`
+          ? `${taskForm.planned_start_time}T09:00:00.000Z`
           : undefined,
         planned_end_time: taskForm.planned_end_time
-          ? `${taskForm.planned_end_time}:00`
+          ? `${taskForm.planned_end_time}T17:00:00.000Z`
           : undefined,
-      })
-      toast.success("Task assigned.")
+        priority: taskForm.priority || "MEDIUM",
+        checklist: taskChecklist.map((title, index) => ({
+          id: `item-${index + 1}`,
+          title,
+          completed: false,
+        })),
+      }
+      if (taskAudience === "employee") {
+        await createManagerActivityTask(token, {
+          ...taskPayload,
+          employee_id: Number(taskForm.employee_id),
+        })
+        toast.success("Task assigned.")
+      } else {
+        await createMyActivityTask(token, taskPayload)
+        toast.success("Task added to your work.")
+      }
       setTaskForm({ activity_date: new Date().toISOString().slice(0, 10) })
+      setTaskChecklist([])
+      setTaskChecklistDraft("")
       await load()
     } catch (errorObject) {
       setTaskError(errorObject instanceof Error ? errorObject.message : "Could not assign task.")
@@ -759,47 +786,85 @@ export function PerformanceSelfView({
       ) : null}
 
       {activeTab === "assign-tasks" ? (
-        <div className="rounded-xl border border-border bg-card p-4 sm:p-5">
-          <div className="mb-4 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-800 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-200">
-            Assign work to a direct report. The selected employee will see it in their daily activities and can mark it as completed.
+        <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+          <div className="border-b border-border px-4 pt-4 sm:px-6 sm:pt-5">
+            <div className="flex w-full max-w-md rounded-lg bg-muted p-1" role="tablist" aria-label="Task owner">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={taskAudience === "employee"}
+                className={cn("flex-1 rounded-md px-3 py-2 text-sm font-medium transition", taskAudience === "employee" ? "bg-background text-primary shadow-sm" : "text-muted-foreground hover:text-foreground")}
+                onClick={() => setTaskAudience("employee")}
+              >
+                Assign to employee
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={taskAudience === "self"}
+                className={cn("flex-1 rounded-md px-3 py-2 text-sm font-medium transition", taskAudience === "self" ? "bg-background text-primary shadow-sm" : "text-muted-foreground hover:text-foreground")}
+                onClick={() => setTaskAudience("self")}
+              >
+                Create for myself
+              </button>
+            </div>
           </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <label className="grid gap-1.5 text-sm">
-              <span className="font-medium">Employee</span>
-              <select className={inputClass} value={taskForm.employee_id ?? ""} onChange={(event) => setTaskForm((current) => ({ ...current, employee_id: event.target.value }))}>
-                <option value="">Select employee</option>
-                {taskEmployees.map((employee) => (
-                  <option key={rowId(employee)} value={rowId(employee)}>
-                    {readString(employee, ["full_name", "fullName", "name"], employeeLabel(employee))}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="grid gap-1.5 text-sm">
-              <span className="font-medium">Activity date</span>
-              <input type="date" className={inputClass} value={taskForm.activity_date ?? ""} onChange={(event) => setTaskForm((current) => ({ ...current, activity_date: event.target.value }))} />
-            </label>
+          <div className="space-y-6 p-4 sm:p-6">
+            <div className="flex items-start gap-3">
+              <div className="mt-1 rounded-full border border-border p-2 text-primary"><UserRoundIcon className="size-4" /></div>
+              <div>
+                <h2 className="font-semibold">{taskAudience === "employee" ? "Assign planned work" : "Create a personal task"}</h2>
+                <p className="text-sm text-muted-foreground">{taskAudience === "employee" ? "The employee will see this in My Activities and can update its progress." : "This task will appear in your own My Activities workspace."}</p>
+              </div>
+            </div>
+
             <label className="grid gap-1.5 text-sm">
               <span className="font-medium">Task title</span>
-              <input className={inputClass} placeholder="e.g. Issue access badge" value={taskForm.title ?? ""} onChange={(event) => setTaskForm((current) => ({ ...current, title: event.target.value }))} />
+              <input className={inputClass} placeholder="e.g. Prepare the monthly report" value={taskForm.title ?? ""} onChange={(event) => setTaskForm((current) => ({ ...current, title: event.target.value }))} />
             </label>
-            <label className="grid gap-1.5 text-sm sm:col-span-2">
-              <span className="font-medium">Instructions</span>
-              <textarea className={textareaClass} placeholder="Describe what should be done and any handover details." value={taskForm.description ?? ""} onChange={(event) => setTaskForm((current) => ({ ...current, description: event.target.value }))} />
-            </label>
-            <label className="grid gap-1.5 text-sm">
-              <span className="font-medium">Planned start (optional)</span>
-              <input type="datetime-local" className={inputClass} value={taskForm.planned_start_time ?? ""} onChange={(event) => setTaskForm((current) => ({ ...current, planned_start_time: event.target.value }))} />
-            </label>
-            <label className="grid gap-1.5 text-sm">
-              <span className="font-medium">Planned end (optional)</span>
-              <input type="datetime-local" className={inputClass} value={taskForm.planned_end_time ?? ""} onChange={(event) => setTaskForm((current) => ({ ...current, planned_end_time: event.target.value }))} />
-            </label>
+
+            {taskAudience === "employee" ? (
+              <label className="grid gap-1.5 text-sm">
+                <span className="font-medium">Assigned to</span>
+                <select className={inputClass} value={taskForm.employee_id ?? ""} onChange={(event) => setTaskForm((current) => ({ ...current, employee_id: event.target.value }))}>
+                  <option value="">Select employee</option>
+                  {taskEmployees.map((employee) => (
+                    <option key={rowId(employee)} value={rowId(employee)}>{readString(employee, ["full_name", "fullName", "name"], employeeLabel(employee))}</option>
+                  ))}
+                </select>
+              </label>
+            ) : (
+              <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/25 px-3 py-2.5 text-sm">
+                <UserRoundIcon className="size-4 text-primary" /> Assigned to you
+              </div>
+            )}
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="grid gap-1.5 text-sm"><span className="font-medium">Status</span><select className={inputClass} value="PLANNED" disabled><option value="PLANNED">Not started</option></select></label>
+              <label className="grid gap-1.5 text-sm"><span className="font-medium">Priority</span><select className={inputClass} value={taskForm.priority ?? "MEDIUM"} onChange={(event) => setTaskForm((current) => ({ ...current, priority: event.target.value }))}><option value="LOW">Low</option><option value="MEDIUM">Medium</option><option value="HIGH">High</option><option value="URGENT">Urgent</option></select></label>
+              <label className="grid gap-1.5 text-sm"><span className="font-medium">Start date</span><input type="date" className={inputClass} value={taskForm.activity_date ?? ""} onChange={(event) => setTaskForm((current) => ({ ...current, activity_date: event.target.value, planned_start_time: event.target.value }))} /></label>
+              <label className="grid gap-1.5 text-sm"><span className="font-medium">Due date <span className="font-normal text-muted-foreground">(optional)</span></span><input type="date" className={inputClass} value={taskForm.planned_end_time ?? ""} onChange={(event) => setTaskForm((current) => ({ ...current, planned_end_time: event.target.value }))} /></label>
+            </div>
+
+            <div className="space-y-2">
+              <div><h3 className="text-sm font-semibold">Checklist</h3><p className="text-xs text-muted-foreground">Add the steps needed to complete this task.</p></div>
+              <div className="flex gap-2">
+                <input className={`${inputClass} min-w-0 flex-1`} value={taskChecklistDraft} onChange={(event) => setTaskChecklistDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addTaskChecklistItem() } }} placeholder="Add a checklist item" aria-label="Checklist item" />
+                <button type="button" className={secondaryButtonClass} disabled={!taskChecklistDraft.trim()} onClick={addTaskChecklistItem}><PlusIcon className="size-4" /> Add</button>
+              </div>
+              {taskChecklist.map((item, index) => (
+                <div key={`${item}-${index}`} className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm"><CheckCircle2Icon className="size-4 text-muted-foreground" /><span className="min-w-0 flex-1">{item}</span><button type="button" className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => setTaskChecklist((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label={`Remove ${item}`}><XIcon className="size-3.5" /></button></div>
+              ))}
+            </div>
+
+            <label className="grid gap-1.5 text-sm"><span className="font-medium">Notes</span><textarea className={`${textareaClass} min-h-28`} placeholder="Describe the expected outcome and any handover details." value={taskForm.description ?? ""} onChange={(event) => setTaskForm((current) => ({ ...current, description: event.target.value }))} /></label>
+            <p className="text-xs text-muted-foreground">After creation, open the task from Activities to update progress, complete the checklist, and continue the conversation.</p>
           </div>
-          {taskError ? <p className="mt-3 text-sm text-rose-600">{taskError}</p> : null}
-          <div className="mt-4 flex justify-end">
+          {taskError ? <p className="mx-4 mb-3 text-sm text-rose-600 sm:mx-6">{taskError}</p> : null}
+          <div className="flex justify-end border-t border-border px-4 py-4 sm:px-6">
             <button type="button" className={primaryButtonClass} onClick={() => void saveManagerTask()} disabled={taskSaving}>
-              {taskSaving ? <Loader2Icon className="size-4 animate-spin" /> : "Assign task"}
+              {taskSaving ? <Loader2Icon className="size-4 animate-spin" /> : null}
+              {taskAudience === "employee" ? "Assign task" : "Create my task"}
             </button>
           </div>
         </div>

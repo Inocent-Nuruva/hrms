@@ -6,6 +6,7 @@ import {
   applyEmployeeMovement,
   approveEmployeeMovement,
   createManagerActivityTask,
+  createMyActivityTask,
   createMyActivityReport,
   deleteMyActivityEntry,
   getManagerActivitiesDashboard,
@@ -101,6 +102,7 @@ describe("daily activities and employee movement API helpers", () => {
       .mockResolvedValueOnce(jsonResponse({ data: [{ id: 81, title: "Prepare report" }] }))
       .mockResolvedValueOnce(jsonResponse({ data: [{ id: 42, full_name: "Inocent Nuruva" }] }))
       .mockResolvedValueOnce(jsonResponse({ data: { id: 12 } }, { status: 201 }))
+      .mockResolvedValueOnce(jsonResponse({ data: { id: 13 } }, { status: 201 }))
     vi.stubGlobal("fetch", fetchMock)
 
     const tasks = await listMyActivityTasks("token", { limit: 100 })
@@ -110,6 +112,11 @@ describe("daily activities and employee movement API helpers", () => {
       activity_date: "2026-09-14",
       title: "Prepare report",
       description: "Prepare and submit the monthly report.",
+    })
+    await createMyActivityTask("token", {
+      activity_date: "2026-09-14",
+      title: "Plan tomorrow",
+      description: "Prepare tomorrow's priorities.",
     })
 
     expect(tasks).toEqual([expect.objectContaining({ id: 81 })])
@@ -136,6 +143,11 @@ describe("daily activities and employee movement API helpers", () => {
           description: "Prepare and submit the monthly report.",
         }),
       }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
+      "http://localhost:8888/api/me/activities/tasks",
+      expect.objectContaining({ method: "POST" }),
     )
   })
 

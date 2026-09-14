@@ -320,8 +320,7 @@ export const selfActivitySectionTabGroups: DashboardSectionTabGroup[] = [
   {
     title: "My activities",
     items: [
-      { title: "Today", url: "/dashboard/me/activities/today" },
-      { title: "Reports", url: "/dashboard/me/activities/reports" },
+      { title: "My activities", url: "/dashboard/me/activities/today" },
     ],
   },
 ]
