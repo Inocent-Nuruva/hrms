@@ -7,7 +7,6 @@ import {
   CircleDotIcon,
   ClipboardListIcon,
   FileTextIcon,
-  FilterIcon,
   Loader2Icon,
   MessageSquareIcon,
   PlusIcon,
@@ -581,7 +580,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
               type="button"
               onClick={() => setTab(value)}
               className={cn(
-                "rounded-full px-3.5 py-1.5 text-sm font-medium transition",
+                "h-9 shrink-0 rounded-full px-3.5 text-sm font-medium transition",
                 active ? "bg-sky-100 text-sky-800" : "bg-slate-100 text-slate-600 hover:bg-slate-200",
               )}
             >
@@ -589,28 +588,24 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
             </button>
           )
         })}
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-[200px] flex-1">
+        <div className="relative min-w-[160px] flex-1">
           <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <input className={`${inputClass} h-9 rounded-full pl-9`} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search tasks..." />
         </div>
-        <select className={`${inputClass} h-9 w-auto min-w-36 rounded-full`} value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value)}>
+        <select className={`${inputClass} h-9 w-auto min-w-32 shrink-0 rounded-full`} value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value)}>
           <option value="ALL">All priorities</option>
           <option value="URGENT">Urgent</option>
           <option value="HIGH">High</option>
           <option value="MEDIUM">Medium</option>
           <option value="LOW">Low</option>
         </select>
-        <select className={`${inputClass} h-9 w-auto min-w-36 rounded-full`} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+        <select className={`${inputClass} h-9 w-auto min-w-32 shrink-0 rounded-full`} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
           <option value="ALL">All statuses</option>
           <option value="PLANNED">Not started</option>
           <option value="IN_PROGRESS">In progress</option>
           <option value="COMPLETED">Completed</option>
         </select>
-        <FilterIcon className="size-4 text-muted-foreground" />
-        <div className="ml-auto flex flex-wrap gap-2">
+        <div className="ml-auto flex flex-wrap items-center gap-2">
           {mode === "self" ? (
             <button type="button" className={secondaryButtonClass} onClick={() => void submitTodayReport()} disabled={submitting}>
               {submitting ? <Loader2Icon className="size-4 animate-spin" /> : <FileTextIcon className="size-4" />}
