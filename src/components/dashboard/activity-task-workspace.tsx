@@ -49,6 +49,7 @@ import {
   type AdminRecord,
 } from "@/lib/admin-api"
 import { useMyProfilePhoto } from "@/lib/my-profile-photo"
+import { resolveBackendMediaUrl } from "@/lib/backend-media-url"
 import { readStoredSessionTokens } from "@/lib/session-client"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
@@ -192,7 +193,7 @@ function Avatar({ name, photoUrl, className }: { name: string; photoUrl?: string
 }
 
 function photoFromRecord(value: unknown) {
-  return extractProfilePhotoUrl(value)
+  return resolveBackendMediaUrl(extractProfilePhotoUrl(value))
 }
 
 function PriorityDot({ priority }: { priority: string }) {
@@ -578,7 +579,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
   }
 
   const photoForAssignee = (task: AdminRecord, who: string) => {
-    if (who === "You") return myPhotoUrl
+    if (who === "You") return resolveBackendMediaUrl(myPhotoUrl) || myPhotoUrl
     if (mode === "manager") {
       return photoFromRecord(task.employee) || photoFromRecord(task.employeeSnapshot ?? task.employee_snapshot)
     }

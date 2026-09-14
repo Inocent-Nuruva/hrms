@@ -4063,7 +4063,7 @@ export function EmployeeSelfServiceProfileView() {
                 "status" in selectError
                   ? Number((selectError as { status?: number }).status)
                   : null
-              if (status !== 500 && status !== 502 && status !== 503) {
+              if (status !== 404 && status !== 500 && status !== 502 && status !== 503) {
                 throw selectError
               }
               if (!profilePhotoPreviewUrl) {
