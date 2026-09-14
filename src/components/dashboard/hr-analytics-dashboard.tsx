@@ -1371,14 +1371,20 @@ export default function HrAnalyticsDashboard({
   const hrAnalyticsGroups = React.useMemo(() => {
     if (!analyticsSummary) return []
 
-    const number = (keys: string[]) => readNumberDeep(analyticsSummary, keys) ?? 0
-    const decimal = (value: number) =>
-      new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(value)
-    const percent = (keys: string[]) => `${decimal(number(keys))}%`
-    const hours = Math.round((number(["work_minutes"]) / 60) * 10) / 10
+    const number = (keys: string[]) => readNumberDeep(analyticsSummary, keys)
+    const decimal = (value: number | null) =>
+      value === null
+        ? "—"
+        : new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(value)
+    const percent = (keys: string[]) => {
+      const value = number(keys)
+      return value === null ? "—" : `${decimal(value)}%`
+    }
+    const workMinutes = number(["work_minutes"])
+    const hours = workMinutes === null ? null : Math.round((workMinutes / 60) * 10) / 10
     const risks = Array.isArray(analyticsSummary.risk_indicators)
       ? analyticsSummary.risk_indicators.length
-      : 0
+      : null
 
     return [
       {
