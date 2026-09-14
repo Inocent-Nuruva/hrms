@@ -223,6 +223,8 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
   const [comment, setComment] = React.useState("")
   const [commenting, setCommenting] = React.useState(false)
   const [createOpen, setCreateOpen] = React.useState(false)
+  const [previewReport, setPreviewReport] = React.useState<AdminRecord | null>(null)
+  const [previewSummary, setPreviewSummary] = React.useState("")
   const [taskEditStatus, setTaskEditStatus] = React.useState("PLANNED")
   const [audience, setAudience] = React.useState<"employee" | "self">(mode === "manager" ? "employee" : "self")
   const [updatingChecklistId, setUpdatingChecklistId] = React.useState<string | null>(null)
@@ -501,26 +503,37 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
     }
   }
 
-  async function submitReport(report: AdminRecord) {
-    const accessToken = token()
+  function workItemsForReport(report: AdminRecord) {
     const reportId = reportIdOf(report) || rowId(report)
-    if (!accessToken || !reportId) return
     const entries = asRecordArray(report.entries ?? report.items ?? report.activities)
     const fromTasks = tasks.filter((task) => reportIdOf(task) === reportId)
-    const work = entries.length ? entries : fromTasks
+    return entries.length ? entries : fromTasks
+  }
+
+  function openReportPreview(report: AdminRecord) {
+    const work = workItemsForReport(report)
     const completed = work.filter((entry) => taskStatus(entry) === "COMPLETED")
     if (completed.length < 1) {
       toast.error("Mark at least one task as completed before submitting this report.")
       return
     }
+    setPreviewSummary("")
+    setPreviewReport({ ...report, entries: work })
+  }
+
+  async function submitReport(report: AdminRecord) {
+    const accessToken = token()
+    const reportId = reportIdOf(report) || rowId(report)
+    if (!accessToken || !reportId) return
     setSubmitting(true)
     try {
       await submitMyActivityReport(accessToken, reportId, {
-        employee_summary: "Submitted from activities workspace",
+        employee_summary: previewSummary.trim() || "Submitted from activities workspace",
         client_request_id: globalThis.crypto?.randomUUID?.() ?? `req-${Date.now()}`,
       })
       toast.success("Daily report submitted.")
       setSelected(null)
+      setPreviewReport(null)
       await load()
     } catch (errorObject) {
       toast.error(errorObject instanceof Error ? errorObject.message : "Could not submit the report.")
@@ -529,7 +542,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
     }
   }
 
-  async function submitTodayReport() {
+  function submitTodayReport() {
     const draft = reports.find((report) => {
       const dated = String(report.activityDate ?? report.activity_date).slice(0, 10)
       return isDraftReportStatus(readString(report, ["status"], "DRAFT")) && dated === today()
@@ -538,7 +551,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
       toast.error("There is no draft report to submit yet. Create a task first.")
       return
     }
-    await submitReport(draft)
+    openReportPreview(draft)
   }
 
   const assignedBy = (task: AdminRecord) => {
@@ -591,7 +604,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                 type="button"
                 onClick={() => setTab(value)}
                 className={cn(
-                  "h-9 shrink-0 rounded-full px-3.5 text-sm font-medium transition",
+                  "h-9 shrink-0 rounded-md px-3 text-sm font-medium transition",
                   active ? "bg-sky-100 text-sky-800" : "bg-slate-100 text-slate-600 hover:bg-slate-200",
                 )}
               >
@@ -603,17 +616,17 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
         <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-2">
           <div className="relative min-w-[140px] flex-1">
             <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <input className={`${inputClass} h-9 rounded-full pl-9`} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search tasks..." />
+            <input className={`${inputClass} h-9 rounded-md pl-9`} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search tasks..." />
           </div>
-          <select className={`${inputClass} h-9 w-auto min-w-32 shrink-0 rounded-full`} value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value)}>
-            <option value="ALL">All priorities</option>
+          <select className={`${inputClass} h-9 w-[8.5rem] shrink-0 rounded-md px-2`} value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value)}>
+            <option value="ALL">Priority</option>
             <option value="URGENT">Urgent</option>
             <option value="HIGH">High</option>
             <option value="MEDIUM">Medium</option>
             <option value="LOW">Low</option>
           </select>
-          <select className={`${inputClass} h-9 w-auto min-w-32 shrink-0 rounded-full`} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-            <option value="ALL">All statuses</option>
+          <select className={`${inputClass} h-9 w-[8.5rem] shrink-0 rounded-md px-2`} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+            <option value="ALL">Status</option>
             <option value="PLANNED">Not started</option>
             <option value="IN_PROGRESS">In progress</option>
             <option value="COMPLETED">Completed</option>
@@ -806,6 +819,53 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
         </div>
       ) : null}
 
+      {previewReport ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/30 p-4" onClick={() => setPreviewReport(null)}>
+          <div className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-start justify-between border-b border-slate-200 px-5 py-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-sky-700">Preview daily report</p>
+                <h2 className="mt-1 text-xl font-semibold text-slate-900">{formatDate(previewReport.activityDate ?? previewReport.activity_date)}</h2>
+                <p className="mt-1 text-sm text-slate-500">Review the work below, then submit. This cannot be edited after submission.</p>
+              </div>
+              <button type="button" className="rounded-md p-2 text-slate-500 hover:bg-slate-100" onClick={() => setPreviewReport(null)}><XIcon className="size-5" /></button>
+            </div>
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+              <div className="flex flex-wrap gap-2 text-sm">
+                <StatusPill value={readString(previewReport, ["status"], "DRAFT")} />
+                <span className="text-slate-500">{asRecordArray(previewReport.entries).filter((entry) => taskStatus(entry) === "COMPLETED").length} of {asRecordArray(previewReport.entries).length} completed</span>
+              </div>
+              <div className="divide-y divide-slate-100 rounded-lg border border-slate-200">
+                {asRecordArray(previewReport.entries).map((entry) => {
+                  const progress = checklistProgress(entry)
+                  return (
+                    <div key={entryIdOf(entry) || rowId(entry)} className="flex items-start justify-between gap-3 px-3 py-2.5">
+                      <div className="min-w-0">
+                        <p className="truncate font-medium text-slate-900">{readString(entry, ["title"], "Untitled task")}</p>
+                        <p className="mt-0.5 line-clamp-2 text-xs text-slate-500">{readString(entry, ["description"], "No notes")}</p>
+                        {progress ? <p className="mt-1 text-xs text-slate-500">Checklist {progress.label}</p> : null}
+                      </div>
+                      <StatusPill value={taskStatus(entry)} />
+                    </div>
+                  )
+                })}
+              </div>
+              <label className="grid gap-1.5 text-sm">
+                <span className="font-medium">Summary for your manager <span className="font-normal text-slate-500">(optional)</span></span>
+                <textarea className={`${inputClass} min-h-20 py-2`} value={previewSummary} onChange={(event) => setPreviewSummary(event.target.value)} placeholder="What should your manager know about today?" />
+              </label>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">
+              <button type="button" className={secondaryButtonClass} onClick={() => setPreviewReport(null)}>Back</button>
+              <button type="button" className={primaryButtonClass} onClick={() => void submitReport(previewReport)} disabled={submitting}>
+                {submitting ? <Loader2Icon className="size-4 animate-spin" /> : <SendIcon className="size-4" />}
+                Submit report
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {selected ? (
         <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/20" onClick={() => setSelected(null)}>
           <aside className="flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-slate-200 bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
@@ -846,7 +906,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                     <p className="text-sm text-slate-500">No work items yet. Create a task to fill this report.</p>
                   )}
                   {mode === "self" ? (
-                    <button type="button" className={`${primaryButtonClass} mt-4`} onClick={() => void submitReport(selected)} disabled={submitting}>
+                    <button type="button" className={`${primaryButtonClass} mt-4`} onClick={() => openReportPreview(selected)} disabled={submitting}>
                       {submitting ? <Loader2Icon className="size-4 animate-spin" /> : <FileTextIcon className="size-4" />}
                       Submit report
                     </button>
