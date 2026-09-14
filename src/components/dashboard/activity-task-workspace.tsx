@@ -142,7 +142,7 @@ function dueMeta(value: unknown) {
   return { label: formatDate(value), tone: "muted" as const }
 }
 
-function entriesFromReports(reports: AdminRecord[]) {
+function entriesFromReports(reports: AdminRecord[]): AdminRecord[] {
   return reports.flatMap((report) =>
     asRecordArray(report.entries ?? report.items ?? report.activities).map((entry) => ({
       ...entry,
@@ -255,7 +255,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
             ...nested,
             ...task,
             report_id: reportIdOf(task) || reportIdOf(nested),
-            report_status: task.report_status ?? task.reportStatus ?? nested?.report_status,
+            report_status: readString(task, ["report_status", "reportStatus"]) || readString(nested, ["report_status", "reportStatus"]),
             checklist: asRecordArray(task.checklist).length ? task.checklist : nested?.checklist,
           }
         })
