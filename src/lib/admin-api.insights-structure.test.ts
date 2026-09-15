@@ -76,6 +76,29 @@ describe("insights, readiness, and payroll report API helpers", () => {
     expect(events).toEqual([expect.objectContaining({ id: 7 })])
   })
 
+  it("preserves every section in a raw manager dashboard response", async () => {
+    const managerDashboard = {
+      generated_at: "2026-09-15T06:44:31.807Z",
+      period: { date_from: "2026-09-15", date_to: "2026-09-15" },
+      team: { total_members: 1, employees_on_leave: 0 },
+      attendance: { total_records: 1, present: 1, absent: 0 },
+      approvals: { open_action_items: 0, pending_attendance_corrections: 0 },
+      performance: { pending_team_validations: 0, published_team_reviews: 0 },
+      work_activities: { pending_activity_reviews: 1, approved_reports: 0 },
+      capabilities: { activity_review: { available: true } },
+    }
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(managerDashboard)))
+
+    const dashboard = await getHrDashboard("token", "manager")
+
+    expect(dashboard).toEqual(managerDashboard)
+    expect(dashboard?.team).toEqual({ total_members: 1, employees_on_leave: 0 })
+    expect(dashboard?.work_activities).toEqual({
+      pending_activity_reviews: 1,
+      approved_reports: 0,
+    })
+  })
+
   it("preserves the full employee dashboard payload shape when the endpoint returns a dashboard object", async () => {
     const dashboardPayload = {
       generated_at: "2026-08-24T07:26:33.896Z",

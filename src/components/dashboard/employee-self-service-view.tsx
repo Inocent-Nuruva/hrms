@@ -64,18 +64,13 @@ import {
   submitMyLeaveRequest,
   uploadMyProfilePhoto,
   selectMyProfileAvatar,
-  selectMyUserAvatar,
-  listDefaultAvatars,
   listSelectableAvatarsForMe,
   listMyPayslips,
   extractDefaultAvatarImageUrl,
-  fetchImageUrlAsAvatarFile,
-  isSelectableDefaultAvatar,
   downloadMyPayslip,
   readDefaultAvatarId,
   resolveBackendMediaUrl,
   type AdminRecord,
-  type DefaultAvatarGender,
 } from "@/lib/admin-api"
 import {
   ensureMyProfilePhotoUrl,
@@ -1702,14 +1697,14 @@ function resolveProfilePhotoUrl(
 ) {
   const preferred = typeof preferredUrl === "string" ? preferredUrl.trim() : ""
   if (preferred) {
-    return preferred
+    return resolveBackendMediaUrl(preferred) || preferred
   }
-  return (
+  const candidate =
     readString(employee, ["profile_photo_url"], "") ||
     readString(asRecord(employee?.company_user), ["profile_photo_url"], "") ||
     readString(asRecord(asRecord(employee?.company_user)?.user), ["profile_photo_url"], "") ||
     readString(currentUser, ["profile_photo_url"], "")
-  )
+  return resolveBackendMediaUrl(candidate) || candidate
 }
 
 function resolveManagerDisplay(employee: AdminRecord | null) {
@@ -3857,64 +3852,10 @@ export function EmployeeSelfServiceProfileView() {
     }
     let cancelled = false
     setDefaultAvatarsLoading(true)
-    const genderRaw = readString(employee, ["gender", "sex"], "").toLowerCase()
-    const genderCategory: DefaultAvatarGender | undefined =
-      genderRaw.includes("female") || genderRaw === "f"
-        ? "female"
-        : genderRaw.includes("male") || genderRaw === "m"
-          ? "male"
-          : undefined
 
     void listSelectableAvatarsForMe(token)
-      .then(async (selfServiceRows) => {
-        if (cancelled) return
-        if (selfServiceRows.length > 0) {
-          setDefaultAvatars(selfServiceRows)
-          return
-        }
-
-        const matched = await listDefaultAvatars(token, {
-          status: "active",
-          // Prefer matching gender when known; still load neutrals by omitting filter if needed.
-          gender_category: genderCategory,
-        })
-        if (cancelled) return
-        // Also pull neutrals so users always have options.
-        let neutrals: AdminRecord[] = []
-        try {
-          neutrals = await listDefaultAvatars(token, {
-            status: "active",
-            gender_category: "neutral",
-          })
-        } catch {
-          neutrals = []
-        }
-        if (cancelled) return
-        const byId = new Map<string, AdminRecord>()
-        for (const row of [...matched, ...neutrals]) {
-          // Skip inactive / missing-id / missing-image rows (often 500 on select).
-          if (!isSelectableDefaultAvatar(row)) continue
-          const id = readDefaultAvatarId(row)
-          if (id == null) continue
-          byId.set(String(id), row)
-        }
-        // If gender-filtered list was empty, fall back to all active.
-        if (byId.size === 0) {
-          try {
-            const all = await listDefaultAvatars(token, { status: "active" })
-            for (const row of all) {
-              if (!isSelectableDefaultAvatar(row)) continue
-              const id = readDefaultAvatarId(row)
-              if (id == null) continue
-              byId.set(String(id), row)
-            }
-          } catch {
-            // ignore
-          }
-        }
-        if (!cancelled) {
-          setDefaultAvatars(Array.from(byId.values()))
-        }
+      .then((rows) => {
+        if (!cancelled) setDefaultAvatars(rows)
       })
       .catch(() => {
         if (!cancelled) setDefaultAvatars([])
@@ -4034,7 +3975,6 @@ export function EmployeeSelfServiceProfileView() {
       setSectionErrorLines([])
       try {
         let result: AdminRecord | null = null
-        let usedUploadFallback = false
 
         if (hasDefaultAvatar) {
           const avatarId =
@@ -4044,44 +3984,12 @@ export function EmployeeSelfServiceProfileView() {
           if (!Number.isFinite(avatarId)) {
             throw new Error("Invalid default avatar id.")
           }
-          try {
-            result = await selectMyProfileAvatar(token, avatarId)
-          } catch (selectError) {
-            try {
-              const userAvatar = await selectMyUserAvatar(token, avatarId)
-              result = (userAvatar as AdminRecord | null) ?? null
-            } catch {
-              // Documented /api/users/me/avatar path also failed.
-            }
-
-            if (!result) {
-              // Some gallery rows 500 on the backend (missing storage file / bad media).
-              // Fall back to uploading the preview image as a normal profile photo.
-              const status =
-                typeof selectError === "object" &&
-                selectError !== null &&
-                "status" in selectError
-                  ? Number((selectError as { status?: number }).status)
-                  : null
-              if (status !== 404 && status !== 500 && status !== 502 && status !== 503) {
-                throw selectError
-              }
-              if (!profilePhotoPreviewUrl) {
-                throw selectError
-              }
-              const fallbackFile = await fetchImageUrlAsAvatarFile(
-                profilePhotoPreviewUrl,
-                profilePhotoFileName || "avatar.png"
-              )
-              result = await uploadMyProfilePhoto(token, fallbackFile)
-              usedUploadFallback = true
-            }
-          }
+          result = await selectMyProfileAvatar(token, avatarId)
         } else if (selectedProfilePhotoFile) {
           result = await uploadMyProfilePhoto(token, selectedProfilePhotoFile)
         }
 
-        const submittedForApproval = Boolean(selectedProfilePhotoFile) || usedUploadFallback
+        const submittedForApproval = Boolean(selectedProfilePhotoFile)
         if (submittedForApproval) {
           try {
             const profileUpdatesResult = await listMyProfileUpdateRequests(token, {

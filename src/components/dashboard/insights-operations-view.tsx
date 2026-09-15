@@ -1,12 +1,12 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
 import { InfoIcon, Loader2Icon, RefreshCwIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { SearchToggleField } from "@/components/common/search-toggle-field"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
-import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared"
 import { DashboardIdentitySummary } from "@/components/dashboard/dashboard-identity"
 import {
   HeroBand,
@@ -17,10 +17,12 @@ import {
   employeeLabel,
   formatDate,
   formatDateTime,
+  heroGhostButtonClass,
   inputClass,
   optionLabel,
   prettify,
   primaryButtonClass,
+  readBoolean,
   readNumber,
   readString,
   rowId,
@@ -33,6 +35,7 @@ import {
   exportAnalyticsReport,
   getAnalyticsDashboard,
   getHrDashboard,
+  getManagerDashboard,
   getHrLaunchReadiness,
   getHrLaunchReadinessEmployees,
   getSystemHealth,
@@ -179,6 +182,256 @@ function metricEntries(record: AdminRecord | null) {
   return entries.slice(0, 8)
 }
 
+function managerMetric(record: AdminRecord | null, keys: string[]) {
+  return readNumber(record, keys) ?? "—"
+}
+
+function managerAttentionClass(value: string | number) {
+  const numericValue = typeof value === "number" ? value : Number(value)
+  if (!Number.isFinite(numericValue)) return "text-muted-foreground"
+  return numericValue === 0
+    ? "text-emerald-600 dark:text-emerald-400"
+    : "text-primary"
+}
+
+function ManagerStatList({
+  title,
+  items,
+}: {
+  title: string
+  items: Array<{ label: string; value: string | number }>
+}) {
+  return (
+    <div className="rounded-xl border border-border bg-card p-4">
+      <h2 className="text-sm font-semibold text-foreground">{title}</h2>
+      <dl className="mt-3 divide-y divide-border/70">
+        {items.map((item) => (
+          <div
+            key={item.label}
+            className="flex items-center justify-between gap-4 py-2 first:pt-0 last:pb-0"
+          >
+            <dt className="text-sm text-muted-foreground">{item.label}</dt>
+            <dd className="text-sm font-semibold tabular-nums text-foreground">{item.value}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  )
+}
+
+function ManagerDashboardPanels({ dashboard }: { dashboard: AdminRecord | null }) {
+  const team = asRecord(dashboard?.team)
+  const attendance = asRecord(dashboard?.attendance)
+  const approvals = asRecord(dashboard?.approvals)
+  const performance = asRecord(dashboard?.performance)
+  const activities = asRecord(dashboard?.work_activities ?? dashboard?.workActivities)
+  const capabilities = asRecord(dashboard?.capabilities)
+  const capabilityItems = [
+    {
+      label: "Activity report reviews",
+      record: asRecord(capabilities?.activity_review ?? capabilities?.activityReview),
+      href: "/dashboard/activities/reviews",
+      linkLabel: "Open activity reviews",
+      stats: [
+        {
+          label: "Pending",
+          keys: ["pending_activity_reviews", "pendingActivityReviews"],
+        },
+      ],
+    },
+    {
+      label: "KPI reviews",
+      record: asRecord(capabilities?.kpi_review ?? capabilities?.kpiReview),
+      href: "/dashboard/performance/reviews",
+      linkLabel: "Open performance reviews",
+      stats: [
+        {
+          label: "Pending validations",
+          keys: ["pending_team_validations", "pendingTeamValidations"],
+        },
+        {
+          label: "Published reviews",
+          keys: ["published_team_reviews", "publishedTeamReviews"],
+        },
+      ],
+    },
+    {
+      label: "Probation recommendations",
+      record: asRecord(
+        capabilities?.probation_recommendation ?? capabilities?.probationRecommendation,
+      ),
+      href: "/dashboard/probation/team",
+      linkLabel: "Open team probation",
+      stats: [],
+    },
+  ]
+  const availableCapabilityItems = capabilityItems.filter((item) => Boolean(item.record))
+  const summaryItems = [
+    {
+      label: "Team members",
+      value: managerMetric(team, ["total_members", "totalMembers"]),
+      hintValue: managerMetric(team, ["employees_on_leave", "employeesOnLeave"]),
+      hintLabel: "currently on leave",
+    },
+    {
+      label: "Present today",
+      value: managerMetric(attendance, ["present"]),
+      hintValue: managerMetric(attendance, ["total_records", "totalRecords"]),
+      hintLabel: "attendance records",
+    },
+    {
+      label: "Open action items",
+      value: managerMetric(approvals, ["open_action_items", "openActionItems"]),
+      hintValue: managerMetric(approvals, ["pending_attendance_corrections", "pendingAttendanceCorrections"]),
+      hintLabel: "attendance corrections",
+    },
+    {
+      label: "Activity reviews",
+      value: managerMetric(activities, ["pending_activity_reviews", "pendingActivityReviews"]),
+      hintValue: managerMetric(activities, ["approved_reports", "approvedReports"]),
+      hintLabel: "approved reports",
+    },
+  ]
+
+  return (
+    <>
+      <div className="overflow-hidden rounded-xl border border-border bg-card">
+        <dl className="grid sm:grid-cols-2 xl:grid-cols-4">
+          {summaryItems.map((item, index) => (
+            <div
+              key={item.label}
+              className={`min-w-0 px-4 py-3 ${index === 1 || index === 3 ? "sm:border-l sm:border-border/70" : ""} ${index === 2 ? "xl:border-l xl:border-border/70" : ""}`}
+            >
+              <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                {item.label}
+              </dt>
+              <dd className={`mt-1 text-2xl font-semibold tracking-tight ${managerAttentionClass(item.value)}`}>
+                {item.value}
+              </dd>
+              <p className="mt-1 text-xs text-muted-foreground">
+                <span className={`font-semibold tabular-nums ${managerAttentionClass(item.hintValue)}`}>
+                  {item.hintValue}
+                </span>{" "}
+                {item.hintLabel}
+              </p>
+            </div>
+          ))}
+        </dl>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <ManagerStatList
+          title="Attendance"
+          items={[
+            { label: "Present", value: managerMetric(attendance, ["present"]) },
+            { label: "Absent", value: managerMetric(attendance, ["absent"]) },
+            { label: "Late", value: managerMetric(attendance, ["late"]) },
+            {
+              label: "Early departure",
+              value: managerMetric(attendance, ["early_departure", "earlyDeparture"]),
+            },
+          ]}
+        />
+        <ManagerStatList
+          title="Work activities"
+          items={[
+            {
+              label: "Pending report reviews",
+              value: managerMetric(activities, ["pending_activity_reviews", "pendingActivityReviews"]),
+            },
+            {
+              label: "Pending visit reviews",
+              value: managerMetric(activities, ["pending_visit_reviews", "pendingVisitReviews"]),
+            },
+            {
+              label: "Approved reports",
+              value: managerMetric(activities, ["approved_reports", "approvedReports"]),
+            },
+            {
+              label: "Reviewed visits",
+              value: managerMetric(activities, ["reviewed_visits", "reviewedVisits"]),
+            },
+          ]}
+        />
+        <ManagerStatList
+          title="Performance and approvals"
+          items={[
+            {
+              label: "Team validations",
+              value: managerMetric(performance, ["pending_team_validations", "pendingTeamValidations"]),
+            },
+            {
+              label: "Published reviews",
+              value: managerMetric(performance, ["published_team_reviews", "publishedTeamReviews"]),
+            },
+            {
+              label: "Open action items",
+              value: managerMetric(approvals, ["open_action_items", "openActionItems"]),
+            },
+            {
+              label: "Attendance corrections",
+              value: managerMetric(approvals, ["pending_attendance_corrections", "pendingAttendanceCorrections"]),
+            },
+          ]}
+        />
+      </div>
+
+      {availableCapabilityItems.length > 0 ? (
+        <div className="rounded-xl border border-border bg-card p-4">
+          <h2 className="text-sm font-semibold text-foreground">Available manager actions</h2>
+          <div className="mt-3 grid gap-4 md:grid-cols-3 md:gap-0">
+            {availableCapabilityItems.map(({ label, record: candidate, href, linkLabel, stats }, index) => {
+              const record = candidate as AdminRecord
+              const available = readBoolean(record, ["available"])
+              const reason = readString(record, ["reason"])
+              return (
+                <Link
+                  key={label}
+                  href={href}
+                  className={`relative flex min-h-36 flex-col py-1 !no-underline transition-transform duration-200 ease-out hover:z-10 hover:scale-[1.025] hover:!no-underline focus:!no-underline focus-visible:!no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/50 motion-reduce:transform-none md:px-4 ${index > 0 ? "md:border-l md:border-border/70" : ""}`}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-medium text-foreground">{label}</p>
+                    <span
+                      className={
+                        available
+                          ? "rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300"
+                          : "rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                      }
+                    >
+                      {available ? "Available" : "Unavailable"}
+                    </span>
+                  </div>
+                  {stats.length > 0 ? (
+                    <dl className="mt-3 flex divide-x divide-border/70">
+                      {stats.map((stat, statIndex) => (
+                        <div key={stat.label} className={statIndex > 0 ? "min-w-0 flex-1 pl-3" : "min-w-0 flex-1 pr-3"}>
+                          <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                            {stat.label}
+                          </dt>
+                          <dd className={`mt-0.5 text-lg font-semibold tabular-nums ${managerAttentionClass(managerMetric(record, stat.keys))}`}>
+                            {managerMetric(record, stat.keys)}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                  ) : null}
+                  {reason ? (
+                    <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{reason}</p>
+                  ) : null}
+                  <span className="mt-auto pt-3 text-xs font-semibold text-primary">
+                    {linkLabel} →
+                  </span>
+                </Link>
+              )
+            })}
+          </div>
+        </div>
+      ) : null}
+    </>
+  )
+}
+
 export function InsightsOperationsView({
   activeTab,
   embedded = false,
@@ -211,11 +464,12 @@ export function InsightsOperationsView({
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [search, setSearch] = React.useState("")
-  const [detail, setDetail] = React.useState<AdminRecord | null>(null)
   const [eventDetail, setEventDetail] = React.useState<AdminRecord | null>(null)
   const [readinessDetail, setReadinessDetail] = React.useState<AdminRecord | null>(null)
   const [dateFrom, setDateFrom] = React.useState(() => defaultScheduleRange().from)
-  const [dateTo, setDateTo] = React.useState(() => defaultScheduleRange().to)
+  const [dateTo, setDateTo] = React.useState(() =>
+    activeTab === "manager" ? localDateString(new Date()) : defaultScheduleRange().to,
+  )
   const [policyName, setPolicyName] = React.useState("")
   const [clockInDialogOpen, setClockInDialogOpen] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
@@ -241,7 +495,9 @@ export function InsightsOperationsView({
       tasks.push(
         (activeTab === "sales-field"
           ? getAnalyticsDashboard(token, "sales-field", query)
-          : getHrDashboard(token, activeTab, query)
+          : activeTab === "manager"
+            ? getManagerDashboard(token, query)
+            : getHrDashboard(token, activeTab, query)
         ).then(setDashboard).catch((errorObject) => {
           setDashboard(null)
           throw errorObject
@@ -488,49 +744,67 @@ export function InsightsOperationsView({
             />
           </>
         }
+        description={
+          activeTab === "manager"
+            ? "Team attendance, approvals, performance, and work requiring your attention."
+            : undefined
+        }
         actions={
-          <>
+          <div className="flex w-full flex-wrap items-end gap-2 lg:w-auto">
             {activeTab !== "readiness" ? (
-              <button type="button" className={secondaryButtonClass} onClick={() => void onExport()} disabled={exporting}>
+              <div className="grid w-full grid-cols-2 gap-2 sm:w-auto">
+                <label className="space-y-1">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-white/75">
+                    From
+                  </span>
+                  <DatePickerPresets
+                    value={dateFrom}
+                    onChange={setDateFrom}
+                    placeholder="Start date"
+                    appearance="onPrimary"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-white/75">
+                    To
+                  </span>
+                  <DatePickerPresets
+                    value={dateTo}
+                    onChange={setDateTo}
+                    placeholder="End date"
+                    appearance="onPrimary"
+                  />
+                </label>
+              </div>
+            ) : null}
+            {activeTab !== "readiness" && activeTab !== "manager" ? (
+              <button type="button" className={`${heroGhostButtonClass} h-10`} onClick={() => void onExport()} disabled={exporting}>
                 {exporting ? <Loader2Icon className="size-4 animate-spin" /> : null}
                 Export CSV
               </button>
             ) : null}
-            <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
+            <button type="button" className={`${heroGhostButtonClass} h-10`} onClick={() => void load()} disabled={loading}>
               {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
               Refresh
             </button>
-          </>
+          </div>
         }
       />
       {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div> : null}
 
       {activeTab !== "readiness" ? (
         <>
-          <div className="flex flex-wrap items-end gap-2">
-            <label className="space-y-1">
-              <span className="text-xs text-slate-500">From</span>
-              <DatePickerPresets value={dateFrom} onChange={setDateFrom} placeholder="Pick a date" />
-            </label>
-            <label className="space-y-1">
-              <span className="text-xs text-slate-500">To</span>
-              <DatePickerPresets value={dateTo} onChange={setDateTo} placeholder="Pick a date" />
-            </label>
-          </div>
-          <motion.div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" variants={motionPreset.fast}>
-            {metrics.length > 0 ? metrics.map((item) => (
-              <MetricTile key={item.label} label={item.label} value={item.value} />
-            )) : (
-              <MetricTile label="Records" value={dashboard ? "Loaded" : "—"} hint="No numeric tiles in this payload." />
-            )}
-          </motion.div>
-          {dashboard ? (
-            <div className="rounded-xl border border-border bg-card p-4">
-              <button type="button" className="text-sm font-semibold underline-offset-2 hover:underline" onClick={() => setDetail(dashboard)}>
-                Open full dashboard payload
-              </button>
-            </div>
-          ) : null}
+          {activeTab === "manager" ? (
+            <ManagerDashboardPanels dashboard={dashboard} />
+          ) : (
+            <motion.div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" variants={motionPreset.fast}>
+              {metrics.length > 0 ? metrics.map((item) => (
+                <MetricTile key={item.label} label={item.label} value={item.value} />
+              )) : (
+                <MetricTile label="Records" value={dashboard ? "Loaded" : "—"} hint="No numeric tiles in this payload." />
+              )}
+            </motion.div>
+          )}
         </>
       ) : (
         <>
@@ -710,8 +984,6 @@ export function InsightsOperationsView({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      <RecordDetailsDialog open={Boolean(detail)} onOpenChange={(open) => !open && setDetail(null)} title={optionLabel(detail) || "Details"} row={detail} />
 
       <Dialog open={Boolean(schedulePreview)} onOpenChange={(open) => !open && setSchedulePreview(null)}>
         <DialogPopup from="bottom" className="sm:max-w-md">

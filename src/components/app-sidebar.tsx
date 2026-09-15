@@ -29,6 +29,7 @@ import {
   Search,
   Settings,
   ShieldCheck,
+  TrendingUp,
   Users,
 } from "lucide-react"
 import type { AdminResourceKey } from "@/lib/admin-api"
@@ -65,6 +66,7 @@ const IHelp = <HelpCircle />
 const ISearch = <Search />
 const ICompanies = <Building2 />
 const IGovernance = <ShieldCheck />
+const IPromotion = <TrendingUp />
 
 type AppSidebarAccessMode = "admin" | "employee"
 
@@ -146,7 +148,6 @@ const adminData: SidebarData = {
         "/dashboard/employees/profile-change-requests",
         "/dashboard/me/profile",
         "/dashboard/me/organization",
-        "/dashboard/me/promotion",
         "/dashboard/me/requests",
         "/dashboard/me/requests/actions",
         "/dashboard/me/requests/timeline",
@@ -162,6 +163,11 @@ const adminData: SidebarData = {
         "/dashboard/me/team/actions",
       ],
       icon: IUsers,
+    },
+    {
+      title: "Promotion",
+      url: "/dashboard/me/promotion",
+      icon: IPromotion,
     },
     {
       title: "Leave Management",
@@ -535,6 +541,7 @@ const employeeData: SidebarData = {
 const employeeSearchIndex = [
   { title: "Dashboard", url: "/dashboard", section: "General", keywords: ["home", "overview"] },
   { title: "My Info", url: "/dashboard/me/profile", section: "Employees", keywords: ["profile", "my info", "account"] },
+  { title: "Promotion", url: "/dashboard/me/promotion", section: "Promotion", keywords: ["promotion", "career", "movement", "progression"] },
   { title: "My Attendance / Overview", url: "/dashboard/attendance/today", section: "Employees", keywords: ["attendance", "timesheet"] },
   { title: "My Attendance / Today", url: "/dashboard/attendance/today", section: "Employee Attendance", keywords: ["attendance", "today", "state"] },
   { title: "My Attendance / Attendance History", url: "/dashboard/attendance/attendance-history", section: "Employee Attendance", keywords: ["attendance", "history", "punch"] },
