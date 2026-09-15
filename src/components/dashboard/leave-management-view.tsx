@@ -5,6 +5,16 @@ import { useRouter, useSearchParams } from "next/navigation"
 
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { useDashboardIdentity } from "@/components/dashboard/dashboard-identity"
+import {
+  LeaveWorkflowEditorSheet,
+  type LeaveWorkflowEditorStep,
+} from "@/components/dashboard/leave-workflow-editor-sheet"
+import {
+  LeavePolicyEditorSheet,
+  emptyLeavePolicyForm,
+  emptyLeavePolicyTypeAssignment,
+} from "@/components/dashboard/leave-policy-editor-sheet"
+import { LeaveWorkflowStepDialog } from "@/components/dashboard/leave-workflow-step-dialog"
 import { canSeeHrLeaveRequestsQueue } from "@/lib/dashboard-home"
 import { canPerformPermission } from "@/lib/dashboard-permissions"
 import { ResizableTable } from "@/components/ui/resizable-table"
@@ -51,6 +61,7 @@ import {
   leaveRequestApprovalAction,
   listBranches,
   listDepartments,
+  listEmployeeGrades,
   listAllEmployees,
   generateLeaveBalances,
   importLeaveRequests,
@@ -141,9 +152,42 @@ import {
 } from "@/lib/request-notifications"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
+const WORKFLOW_CREATE_DRAFT_KEY = "hrms.leaveWorkflow.createDraft.v1"
+
+type WorkflowCreateDraft = {
+  form: {
+    name: string
+    leave_type_id: string
+    status: string
+    is_default: string
+  }
+  steps: AdminRecord[]
+  stage: "details" | "path"
+}
+
+function readWorkflowCreateDraft(): WorkflowCreateDraft | null {
+  if (typeof window === "undefined") return null
+  try {
+    const raw = window.localStorage.getItem(WORKFLOW_CREATE_DRAFT_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as WorkflowCreateDraft
+    if (!parsed?.form) return null
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+function writeWorkflowCreateDraft(draft: WorkflowCreateDraft) {
+  window.localStorage.setItem(WORKFLOW_CREATE_DRAFT_KEY, JSON.stringify(draft))
+}
+
+function clearWorkflowCreateDraft() {
+  window.localStorage.removeItem(WORKFLOW_CREATE_DRAFT_KEY)
+}
 
 type LeaveTab = "types" | "requests" | "balances" | "transactions" | "holidays" | "policies" | "workflows"
-type LeaveLookupKey = "types" | "employees" | "departments" | "positions" | "branches" | "roles"
+type LeaveLookupKey = "types" | "employees" | "departments" | "positions" | "branches" | "roles" | "grades"
 type LeaveManagementViewProps = {
   activeTab?: LeaveTab
   showTabButtons?: boolean
@@ -575,16 +619,6 @@ function buildWorkflowStepPayload(form: {
   }
 }
 
-function getWorkflowStepFieldHint(approverType: string) {
-  if (approverType === "position") {
-    return "Use Position to choose who approves this step. Role and Company User are ignored for this step."
-  }
-  if (approverType === "company_user") {
-    return "Use Company User to assign a specific approver. Role and Position are ignored for this step."
-  }
-  return "Use Role to route this step by role. Position and Company User are ignored for this step."
-}
-
 function leaveRequestLabel(row: AdminRecord) {
   const title = readString(row, ["leave_no", "request_no", "title", "reason"])
   if (title !== "-") return title
@@ -597,48 +631,6 @@ function leaveRequestLabel(row: AdminRecord) {
 type SearchableOption = {
   value: string
   label: string
-}
-
-function SearchableSelect({
-  value,
-  options,
-  placeholder,
-  onValueChange,
-  id,
-}: {
-  value: string
-  options: SearchableOption[]
-  placeholder: string
-  onValueChange: (value: string) => void
-  id: string
-}) {
-  const selectedLabel = options.find((option) => option.value === value)?.label ?? ""
-
-  return (
-    <div className="space-y-1">
-      <input
-        list={id}
-        className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
-        placeholder={placeholder}
-        value={selectedLabel}
-        onChange={(event) => {
-          const nextLabel = event.target.value
-          const exact = options.find((option) => option.label.toLowerCase() === nextLabel.toLowerCase())
-          if (exact) {
-            onValueChange(exact.value)
-            return
-          }
-          const contains = options.find((option) => option.label.toLowerCase().includes(nextLabel.toLowerCase()))
-          onValueChange(contains?.value ?? "")
-        }}
-      />
-      <datalist id={id}>
-        {options.map((option) => (
-          <option key={option.value} value={option.label} />
-        ))}
-      </datalist>
-    </div>
-  )
 }
 
 function StatusIndicator({ status }: { status: string }) {
@@ -1163,6 +1155,7 @@ export function LeaveManagementView({
   const [positions, setPositions] = React.useState<AdminRecord[]>([])
   const [branches, setBranches] = React.useState<AdminRecord[]>([])
   const [roles, setRoles] = React.useState<AdminRecord[]>([])
+  const [grades, setGrades] = React.useState<AdminRecord[]>([])
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -1202,6 +1195,8 @@ export function LeaveManagementView({
   const [balanceBulkYear, setBalanceBulkYear] = React.useState(String(new Date().getFullYear()))
   const [workflowSteps, setWorkflowSteps] = React.useState<AdminRecord[]>([])
   const [workflowSheetOpen, setWorkflowSheetOpen] = React.useState(false)
+  const [workflowStartStage, setWorkflowStartStage] = React.useState<"details" | "path">("details")
+  const [workflowDraft, setWorkflowDraft] = React.useState<WorkflowCreateDraft | null>(null)
   const [stepDialogOpen, setStepDialogOpen] = React.useState(false)
   const [editingWorkflowId, setEditingWorkflowId] = React.useState<number | null>(null)
   const [editingWorkflowStepId, setEditingWorkflowStepId] = React.useState<number | null>(null)
@@ -1244,6 +1239,7 @@ export function LeaveManagementView({
     positions: false,
     branches: false,
     roles: false,
+    grades: false,
   })
 
   const [typeForm, setTypeForm] = React.useState(createEmptyLeaveTypeForm)
@@ -1265,22 +1261,7 @@ export function LeaveManagementView({
     is_recurring: "false",
   })
 
-  const [policyForm, setPolicyForm] = React.useState({
-    name: "",
-    description: "",
-    accrual_method: "yearly",
-    accrual_rate: "0",
-    allow_negative_balance: "false",
-    status: "active",
-    applicable_department_id: "",
-    applicable_position_id: "",
-    max_consecutive_days: "1",
-    min_service_months: "0",
-    leave_type_id: "",
-    annual_quota_days: "0",
-    max_per_request_days: "0",
-    requires_approval: "true",
-  })
+  const [policyForm, setPolicyForm] = React.useState(emptyLeavePolicyForm)
 
   const [workflowForm, setWorkflowForm] = React.useState({
     name: "",
@@ -1321,6 +1302,10 @@ export function LeaveManagementView({
       canReadWorkflows,
     ],
   )
+
+  React.useEffect(() => {
+    setWorkflowDraft(readWorkflowCreateDraft())
+  }, [])
 
   React.useEffect(() => {
     if (!actor.ready || activeTab !== "requests" || canReadRequests) {
@@ -1402,6 +1387,13 @@ export function LeaveManagementView({
                 totalPages: 1,
               })),
             }
+          case "grades":
+            return {
+              key,
+              result: {
+                rows: await listEmployeeGrades(token),
+              },
+            }
         }
       })
     )
@@ -1428,6 +1420,9 @@ export function LeaveManagementView({
           break
         case "roles":
           setRoles(entry.result.rows)
+          break
+        case "grades":
+          setGrades(entry.result.rows)
           break
       }
     })
@@ -1984,9 +1979,26 @@ export function LeaveManagementView({
 
   const leaveTypeOptions: SearchableOption[] = types
     .map((type) => {
-      const id = readNumber(type, ["id"])
+      const id = readNumber(type, ["id", "leave_type_id", "leaveTypeId"])
       if (id === null) return null
-      return { value: String(id), label: readString(type, ["name"]) }
+      const label = readString(type, ["name", "leave_type_name", "leaveTypeName", "title", "code"])
+      return { value: String(id), label: label && label !== "-" ? label : `Leave type ${id}` }
+    })
+    .filter((option): option is SearchableOption => Boolean(option))
+
+  const gradeOptions: SearchableOption[] = grades
+    .map((row) => {
+      const id = readNumber(row, ["id", "grade_id"])
+      if (id === null) return null
+      return { value: String(id), label: readString(row, ["name", "title", "grade_name"]) }
+    })
+    .filter((option): option is SearchableOption => Boolean(option))
+
+  const policyBranchOptions: SearchableOption[] = branches
+    .map((row) => {
+      const id = readNumber(row, ["id", "branch_id"])
+      if (id === null) return null
+      return { value: String(id), label: readString(row, ["name", "title"]) }
     })
     .filter((option): option is SearchableOption => Boolean(option))
 
@@ -1997,6 +2009,68 @@ export function LeaveManagementView({
       return { value: String(id), label: readString(row, ["name", "title"]) }
     })
     .filter((option): option is SearchableOption => Boolean(option))
+
+  const workflowRoleOptions: SearchableOption[] = roles
+    .map((row) => {
+      const id = readNumber(row, ["id", "role_id"])
+      if (id === null) return null
+      return { value: String(id), label: readString(row, ["display_name", "name", "title"]) }
+    })
+    .filter((option): option is SearchableOption => Boolean(option))
+
+  const workflowBranchOptions: SearchableOption[] = branches
+    .map((row) => {
+      const id = readNumber(row, ["id", "branch_id"])
+      if (id === null) return null
+      return { value: String(id), label: readString(row, ["name", "title"]) }
+    })
+    .filter((option): option is SearchableOption => Boolean(option))
+
+  const workflowDepartmentOptions: SearchableOption[] = departments
+    .map((row) => {
+      const id = readNumber(row, ["id", "department_id"])
+      if (id === null) return null
+      return { value: String(id), label: readString(row, ["name", "title"]) }
+    })
+    .filter((option): option is SearchableOption => Boolean(option))
+
+  const workflowEditorSteps: LeaveWorkflowEditorStep[] = workflowSteps.map((row, index) => {
+    const stepId = readNumber(row, ["id", "step_id"])
+    const approverTypeValue = readString(row, ["approver_type"])
+    const approverType = approverTypeValue === "-" ? "role" : approverTypeValue
+    const approverId =
+      approverType === "position"
+        ? readNumber(row, ["position_id"])
+        : approverType === "company_user"
+          ? readNumber(row, ["company_user_id"])
+          : readNumber(row, ["role_id"])
+    const directApproverLabel =
+      approverType === "position"
+        ? readString(row, ["position_name", "approver_name"])
+        : approverType === "company_user"
+          ? readString(row, ["company_user_name", "approver_name", "user_name"])
+          : readString(row, ["role_name", "approver_name"])
+    const resolvedApproverLabel =
+      approverType === "position"
+        ? optionLabel(positions, approverId)
+        : approverType === "company_user"
+          ? employeeOptions.find((option) => option.value === String(approverId ?? ""))?.label ??
+            (approverId === null ? "Approver not selected" : `User #${approverId}`)
+          : optionLabel(roles, approverId, ["display_name", "name", "title"])
+    const branchId = readNumber(row, ["assigned_branch_id"])
+    const departmentId = readNumber(row, ["assigned_department_id"])
+
+    return {
+      key: `workflow-editor-step-${stepId ?? index}`,
+      level: String(readNumber(row, ["approval_level"]) ?? "—"),
+      action: readString(row, ["action_type"]) === "-" ? "recommend" : readString(row, ["action_type"]),
+      approverType,
+      approverLabel: directApproverLabel !== "-" ? directApproverLabel : resolvedApproverLabel,
+      branchLabel: branchId === null ? "All branches" : optionLabel(branches, branchId),
+      departmentLabel: departmentId === null ? "All departments" : optionLabel(departments, departmentId),
+      isRequired: readBoolean(row, ["is_required"]),
+    }
+  })
 
   const filteredWorkflows = workflows.filter((row) => {
     const status = readString(row, ["status"]).toLowerCase()
@@ -2012,6 +2086,31 @@ export function LeaveManagementView({
       readString(row, ["status"]),
       readString(row, ["leave_type_name", "leaveTypeName"]),
     ]
+      .join(" ")
+      .toLowerCase()
+      .includes(query)
+  })
+  const workflowDraftRow: AdminRecord | null = workflowDraft
+    ? {
+        id: "local-draft",
+        name: workflowDraft.form.name.trim() || "Untitled workflow",
+        status: "draft",
+        is_default: false,
+        leave_type_id: workflowDraft.form.leave_type_id,
+        leave_type_name:
+          leaveTypeOptions.find((option) => option.value === workflowDraft.form.leave_type_id)?.label ?? "",
+        _isLocalDraft: true,
+      }
+    : null
+  const visibleWorkflows = [
+    ...(workflowDraftRow && (workflowStatusFilter === "all" || workflowStatusFilter === "draft")
+      ? [workflowDraftRow]
+      : []),
+    ...filteredWorkflows,
+  ].filter((row) => {
+    const query = workflowSearch.trim().toLowerCase()
+    if (!query || !readBoolean(row, ["_isLocalDraft"])) return true
+    return [readString(row, ["name"]), readString(row, ["leave_type_name"]), "draft"]
       .join(" ")
       .toLowerCase()
       .includes(query)
@@ -2680,40 +2779,79 @@ export function LeaveManagementView({
       return
     }
 
+    const assignments = policyForm.leave_types.filter((row) => Number(row.leave_type_id) > 0)
+    if (assignments.length === 0) {
+      const message = "Add at least one leave type quota to this policy."
+      setError(message)
+      showErrorAlert(message)
+      return
+    }
+
+    const optionalId = (value: string) => {
+      const parsed = Number(value)
+      return value && Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
+    }
+    const optionalNumber = (value: string) => {
+      if (!value.trim()) return undefined
+      const parsed = Number(value)
+      return Number.isFinite(parsed) ? parsed : undefined
+    }
+
     setSaving(true)
     setError(null)
     try {
       const payload = {
         name: policyForm.name.trim(),
-        description: policyForm.description.trim(),
-        accrual_method: policyForm.accrual_method,
-        accrual_rate: Number(policyForm.accrual_rate),
-        allow_negative_balance: policyForm.allow_negative_balance === "true",
+        description: policyForm.description.trim() || undefined,
         status: policyForm.status,
-        applicable_department_id: policyForm.applicable_department_id ? Number(policyForm.applicable_department_id) : undefined,
-        applicable_position_id: policyForm.applicable_position_id ? Number(policyForm.applicable_position_id) : undefined,
-        max_consecutive_days: Number(policyForm.max_consecutive_days),
-        min_service_months: Number(policyForm.min_service_months),
-        leave_types: [
-          {
-            leave_type_id: Number(policyForm.leave_type_id),
-            annual_quota_days: Number(policyForm.annual_quota_days),
-            max_per_request_days: Number(policyForm.max_per_request_days),
-            requires_approval: policyForm.requires_approval === "true",
-          },
-        ],
+        accrual_method: policyForm.accrual_method,
+        accrual_rate: optionalNumber(policyForm.accrual_rate),
+        priority: optionalNumber(policyForm.priority) ?? 0,
+        applicable_branch_id: optionalId(policyForm.applicable_branch_id),
+        applicable_department_id: optionalId(policyForm.applicable_department_id),
+        applicable_position_id: optionalId(policyForm.applicable_position_id),
+        applicable_grade_id: optionalId(policyForm.applicable_grade_id),
+        applicable_employment_type: policyForm.applicable_employment_type || undefined,
+        applicable_confirmation_status: policyForm.applicable_confirmation_status || undefined,
+        max_consecutive_days: optionalNumber(policyForm.max_consecutive_days),
+        min_service_months: optionalNumber(policyForm.min_service_months) ?? 0,
+        allow_during_probation: policyForm.allow_during_probation === "true",
+        allow_negative_balance: policyForm.allow_negative_balance === "true",
+        weekly_off_treatment: policyForm.weekly_off_treatment,
+        holiday_treatment: policyForm.holiday_treatment,
+        allow_half_day: policyForm.allow_half_day === "true",
+        allow_short_leave: policyForm.allow_short_leave === "true",
+        minimum_short_leave_minutes:
+          policyForm.allow_short_leave === "true" ? optionalNumber(policyForm.minimum_short_leave_minutes) : undefined,
+        maximum_short_leave_minutes:
+          policyForm.allow_short_leave === "true" ? optionalNumber(policyForm.maximum_short_leave_minutes) : undefined,
+        minimum_notice_days: optionalNumber(policyForm.minimum_notice_days),
+        maximum_backdate_days: optionalNumber(policyForm.maximum_backdate_days) ?? 0,
+        cancellation_requires_approval: policyForm.cancellation_requires_approval === "true",
+        cancellation_cutoff_days: optionalNumber(policyForm.cancellation_cutoff_days) ?? 0,
+        maximum_accumulation_days: optionalNumber(policyForm.maximum_accumulation_days),
+        attendance_balance_deduction_enabled: policyForm.attendance_balance_deduction_enabled === "true",
+        absent_day_deduction_days: optionalNumber(policyForm.absent_day_deduction_days),
+        unpaid_leave_day_deduction_days: optionalNumber(policyForm.unpaid_leave_day_deduction_days),
+        half_day_deduction_days: optionalNumber(policyForm.half_day_deduction_days),
+        leave_types: assignments.map((row) => ({
+          leave_type_id: Number(row.leave_type_id),
+          annual_quota_days: Number(row.annual_quota_days) || 0,
+          max_per_request_days: optionalNumber(row.max_per_request_days),
+          requires_approval: row.requires_approval === "true",
+          encashment_enabled: row.encashment_enabled === "true",
+          maximum_encashment_days: optionalNumber(row.maximum_encashment_days),
+          minimum_balance_after_encashment: optionalNumber(row.minimum_balance_after_encashment),
+          encashment_requires_approval: row.encashment_requires_approval === "true",
+          maximum_accumulation_days: optionalNumber(row.maximum_accumulation_days),
+        })),
       }
       if (editingPolicyId === null) {
         await createLeavePolicy(token, payload)
       } else {
         await patchLeavePolicy(token, editingPolicyId, payload)
       }
-      setPolicyForm((prev) => ({
-        ...prev,
-        name: "",
-        description: "",
-        leave_type_id: "",
-      }))
+      setPolicyForm(emptyLeavePolicyForm())
       setEditingPolicyId(null)
       setPolicySheetOpen(false)
       await reloadAll(tab, true)
@@ -2779,49 +2917,73 @@ export function LeaveManagementView({
     if (!canUpdatePolicies) {
       return
     }
+    void ensureLookups(["types", "departments", "positions", "branches", "grades"])
     const policyId = readNumber(row, ["id", "policy_id"])
     const rawLeaveTypes = Array.isArray(row.leave_types) ? row.leave_types : []
-    const firstLeaveType = rawLeaveTypes[0]
-    const leaveTypeRecord =
-      firstLeaveType && typeof firstLeaveType === "object"
-        ? (firstLeaveType as AdminRecord)
-        : null
-
-    const readPolicyNumber = (keys: string[]) => {
+    const readPolicyNumber = (keys: string[], fallback = "0") => {
       const value = readNumber(row, keys)
-      return value !== null ? String(value) : "0"
+      return value !== null ? String(value) : fallback
+    }
+    const readOptionalId = (keys: string[]) => {
+      const value = readNumber(row, keys)
+      return value !== null ? String(value) : ""
+    }
+    const readText = (keys: string[]) => {
+      const value = readString(row, keys)
+      return !value || value === "-" ? "" : value
     }
 
     setPolicyForm({
-      name: readString(row, ["name", "title"]) === "-" ? "" : readString(row, ["name", "title"]),
-      description: readString(row, ["description"]) === "-" ? "" : readString(row, ["description"]),
-      accrual_method: readString(row, ["accrual_method"]) === "-" ? "yearly" : readString(row, ["accrual_method"]),
-      accrual_rate: readPolicyNumber(["accrual_rate"]),
-      allow_negative_balance: readBoolean(row, ["allow_negative_balance"]) ? "true" : "false",
+      ...emptyLeavePolicyForm(),
+      name: readText(["name", "title"]),
+      description: readText(["description"]),
       status: readString(row, ["status"]).toLowerCase() === "inactive" ? "inactive" : "active",
-      applicable_department_id: String(readNumber(row, ["applicable_department_id"]) ?? ""),
-      applicable_position_id: String(readNumber(row, ["applicable_position_id"]) ?? ""),
-      max_consecutive_days: readPolicyNumber(["max_consecutive_days"]),
+      accrual_method: readText(["accrual_method"]) || "yearly",
+      accrual_rate: readPolicyNumber(["accrual_rate"]),
+      priority: readPolicyNumber(["priority"]),
+      applicable_branch_id: readOptionalId(["applicable_branch_id"]),
+      applicable_department_id: readOptionalId(["applicable_department_id"]),
+      applicable_position_id: readOptionalId(["applicable_position_id"]),
+      applicable_grade_id: readOptionalId(["applicable_grade_id"]),
+      applicable_employment_type: readText(["applicable_employment_type"]),
+      applicable_confirmation_status: readText(["applicable_confirmation_status"]),
+      max_consecutive_days: readPolicyNumber(["max_consecutive_days"], "1"),
       min_service_months: readPolicyNumber(["min_service_months"]),
-      leave_type_id: String(
-        readNumber(row, ["leave_type_id"]) ??
-          (leaveTypeRecord ? readNumber(leaveTypeRecord, ["leave_type_id", "id"]) : null) ??
-          ""
-      ),
-      annual_quota_days: String(
-        readNumber(row, ["annual_quota_days"]) ??
-          (leaveTypeRecord ? readNumber(leaveTypeRecord, ["annual_quota_days"]) : null) ??
-          "0"
-      ),
-      max_per_request_days: String(
-        readNumber(row, ["max_per_request_days"]) ??
-          (leaveTypeRecord ? readNumber(leaveTypeRecord, ["max_per_request_days"]) : null) ??
-          "0"
-      ),
-      requires_approval: String(
-        readBoolean(row, ["requires_approval"]) ||
-          (leaveTypeRecord ? readBoolean(leaveTypeRecord, ["requires_approval"]) : false)
-      ),
+      allow_during_probation: readBoolean(row, ["allow_during_probation"]) ? "true" : "false",
+      allow_negative_balance: readBoolean(row, ["allow_negative_balance"]) ? "true" : "false",
+      weekly_off_treatment: readText(["weekly_off_treatment"]) || "EMPLOYEE_SCHEDULE",
+      holiday_treatment: readText(["holiday_treatment"]) || "EXCLUDE",
+      allow_half_day: readBoolean(row, ["allow_half_day"]) ? "true" : "false",
+      allow_short_leave: readBoolean(row, ["allow_short_leave"]) ? "true" : "false",
+      minimum_short_leave_minutes: readPolicyNumber(["minimum_short_leave_minutes"], "30"),
+      maximum_short_leave_minutes: readPolicyNumber(["maximum_short_leave_minutes"], "240"),
+      minimum_notice_days: readPolicyNumber(["minimum_notice_days"]),
+      maximum_backdate_days: readPolicyNumber(["maximum_backdate_days"]),
+      cancellation_requires_approval: readBoolean(row, ["cancellation_requires_approval"]) ? "true" : "false",
+      cancellation_cutoff_days: readPolicyNumber(["cancellation_cutoff_days"]),
+      maximum_accumulation_days: readPolicyNumber(["maximum_accumulation_days"]),
+      attendance_balance_deduction_enabled: readBoolean(row, ["attendance_balance_deduction_enabled"]) ? "true" : "false",
+      absent_day_deduction_days: readPolicyNumber(["absent_day_deduction_days"], "1"),
+      unpaid_leave_day_deduction_days: readPolicyNumber(["unpaid_leave_day_deduction_days"], "1"),
+      half_day_deduction_days: readPolicyNumber(["half_day_deduction_days"], "0.5"),
+      leave_types: rawLeaveTypes.length
+        ? rawLeaveTypes.map((entry) => {
+            const record = asRecord(entry) ?? {}
+            const typeId = readNumber(record, ["leave_type_id", "id"])
+            return {
+              ...emptyLeavePolicyTypeAssignment(),
+              leave_type_id: typeId !== null ? String(typeId) : "",
+              annual_quota_days: String(readNumber(record, ["annual_quota_days"]) ?? 0),
+              max_per_request_days: String(readNumber(record, ["max_per_request_days"]) ?? 0),
+              requires_approval: readBoolean(record, ["requires_approval"]) ? "true" : "false",
+              encashment_enabled: readBoolean(record, ["encashment_enabled"]) ? "true" : "false",
+              maximum_encashment_days: String(readNumber(record, ["maximum_encashment_days"]) ?? 0),
+              minimum_balance_after_encashment: String(readNumber(record, ["minimum_balance_after_encashment"]) ?? 0),
+              encashment_requires_approval: readBoolean(record, ["encashment_requires_approval"]) ? "true" : "false",
+              maximum_accumulation_days: String(readNumber(record, ["maximum_accumulation_days"]) ?? 0),
+            }
+          })
+        : [emptyLeavePolicyTypeAssignment()],
     })
     setEditingPolicyId(policyId)
     setPolicySheetOpen(true)
@@ -2837,27 +2999,12 @@ export function LeaveManagementView({
       return
     }
     void (async () => {
-      const loaded = await ensureLookups(["types", "departments", "positions"])
+      const loaded = await ensureLookups(["types", "departments", "positions", "branches", "grades"])
       if (!loaded) {
         return
       }
       setEditingPolicyId(null)
-      setPolicyForm({
-        name: "",
-        description: "",
-        accrual_method: "yearly",
-        accrual_rate: "0",
-        allow_negative_balance: "false",
-        status: "active",
-        applicable_department_id: "",
-        applicable_position_id: "",
-        max_consecutive_days: "1",
-        min_service_months: "0",
-        leave_type_id: "",
-        annual_quota_days: "0",
-        max_per_request_days: "0",
-        requires_approval: "true",
-      })
+      setPolicyForm(emptyLeavePolicyForm())
       setPolicySheetOpen(true)
     })()
   }
@@ -2917,6 +3064,9 @@ export function LeaveManagementView({
       setEditingWorkflowId(null)
       setSelectedWorkflowId("")
       setWorkflowSteps([])
+      setWorkflowStartStage("details")
+      clearWorkflowCreateDraft()
+      setWorkflowDraft(null)
       setWorkflowSheetOpen(false)
       await reloadAll(tab, true)
     } catch (errorObject) {
@@ -2939,13 +3089,26 @@ export function LeaveManagementView({
       }
       setEditingWorkflowId(null)
       setSelectedWorkflowId("")
-      setWorkflowSteps([])
-      setWorkflowForm({
-        name: "",
-        leave_type_id: "",
-        status: "active",
-        is_default: "false",
-      })
+      const draft = readWorkflowCreateDraft()
+      if (draft) {
+        setWorkflowForm({
+          name: draft.form.name ?? "",
+          leave_type_id: draft.form.leave_type_id ?? "",
+          status: draft.form.status === "inactive" ? "inactive" : "active",
+          is_default: draft.form.is_default === "true" ? "true" : "false",
+        })
+        setWorkflowSteps(Array.isArray(draft.steps) ? draft.steps : [])
+        setWorkflowStartStage(draft.stage === "path" ? "path" : "details")
+      } else {
+        setWorkflowSteps([])
+        setWorkflowForm({
+          name: "",
+          leave_type_id: "",
+          status: "active",
+          is_default: "false",
+        })
+        setWorkflowStartStage("details")
+      }
       setWorkflowSheetOpen(true)
     })()
   }
@@ -2970,6 +3133,7 @@ export function LeaveManagementView({
       is_default: readBoolean(row, ["is_default"]) ? "true" : "false",
     })
     setSelectedWorkflowId(String(workflowId))
+    setWorkflowStartStage("path")
     await loadWorkflowSteps(String(workflowId))
     setWorkflowSheetOpen(true)
   }
@@ -5521,105 +5685,24 @@ export function LeaveManagementView({
             ]}
           />
 
-          <Sheet open={policySheetOpen} onOpenChange={setPolicySheetOpen}>
-            <SheetContent side="right" className="w-full overflow-y-auto data-[side=right]:w-full sm:data-[side=right]:w-1/2 data-[side=right]:sm:max-w-none">
-              <SheetHeader>
-                <SheetTitle>{editingPolicyId === null ? "Create Leave Policy" : "Edit Leave Policy"}</SheetTitle>
-                <SheetDescription>
-                  Fill in policy details, limits, and applicability settings.
-                </SheetDescription>
-              </SheetHeader>
-              <div className="mt-4 grid gap-3 px-4 pb-4 md:grid-cols-2">
-                <input className="h-10 rounded-md border border-slate-300 px-3 text-sm" placeholder="Policy name" value={policyForm.name} onChange={(event) => setPolicyForm((prev) => ({ ...prev, name: event.target.value }))} />
-                <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={policyForm.accrual_method} onChange={(event) => setPolicyForm((prev) => ({ ...prev, accrual_method: event.target.value }))}>
-                  <option value="monthly">monthly</option>
-                  <option value="yearly">yearly</option>
-                  <option value="manual">manual</option>
-                </select>
-                <input type="number" min={0} className="h-10 rounded-md border border-slate-300 px-3 text-sm" placeholder="Accrual rate" value={policyForm.accrual_rate} onChange={(event) => setPolicyForm((prev) => ({ ...prev, accrual_rate: event.target.value }))} />
-                <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={policyForm.status} onChange={(event) => setPolicyForm((prev) => ({ ...prev, status: event.target.value }))}>
-                  <option value="active">active</option>
-                  <option value="inactive">inactive</option>
-                </select>
-
-                <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={policyForm.leave_type_id} onChange={(event) => setPolicyForm((prev) => ({ ...prev, leave_type_id: event.target.value }))}>
-                  <option value="">Select leave type</option>
-                  {types.map((type, index) => {
-                    const id = readNumber(type, ["id"])
-                    if (id === null) return null
-                    return <option key={`policy-type-${id}-${index}`} value={String(id)}>{readString(type, ["name"])}</option>
-                  })}
-                </select>
-                <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={policyForm.applicable_department_id} onChange={(event) => setPolicyForm((prev) => ({ ...prev, applicable_department_id: event.target.value }))}>
-                  <option value="">Department (optional)</option>
-                  {departments.map((row, index) => {
-                    const id = readNumber(row, ["id", "department_id"])
-                    if (id === null) return null
-                    return <option key={`policy-dept-${id}-${index}`} value={String(id)}>{readString(row, ["name", "title"])}</option>
-                  })}
-                </select>
-                <SearchableSelect
-                  id="leave-policy-position-options"
-                  value={policyForm.applicable_position_id}
-                  options={positionOptions}
-                  placeholder="Search position (optional)"
-                  onValueChange={(value) => setPolicyForm((prev) => ({ ...prev, applicable_position_id: value }))}
-                />
-                <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={policyForm.allow_negative_balance} onChange={(event) => setPolicyForm((prev) => ({ ...prev, allow_negative_balance: event.target.value }))}>
-                  <option value="false">No negative balance</option>
-                  <option value="true">Allow negative balance</option>
-                </select>
-
-                <div className="space-y-1">
-                  <p className="text-xs text-slate-500">Longest continuous leave this policy allows.</p>
-                  <input type="number" min={1} className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm" placeholder="Max consecutive days" value={policyForm.max_consecutive_days} onChange={(event) => setPolicyForm((prev) => ({ ...prev, max_consecutive_days: event.target.value }))} />
-                </div>
-                <div className="space-y-1">
-                  <p className="text-xs text-slate-500">Minimum months in service before eligibility.</p>
-                  <input type="number" min={0} className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm" placeholder="Min service months" value={policyForm.min_service_months} onChange={(event) => setPolicyForm((prev) => ({ ...prev, min_service_months: event.target.value }))} />
-                </div>
-                <div className="space-y-1">
-                  <p className="text-xs text-slate-500">Total days allocated per year for this leave type.</p>
-                  <input type="number" min={0} className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm" placeholder="Annual quota days" value={policyForm.annual_quota_days} onChange={(event) => setPolicyForm((prev) => ({ ...prev, annual_quota_days: event.target.value }))} />
-                </div>
-                <div className="space-y-1">
-                  <p className="text-xs text-slate-500">Maximum days allowed in a single request.</p>
-                  <input type="number" min={0} className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm" placeholder="Max/request days" value={policyForm.max_per_request_days} onChange={(event) => setPolicyForm((prev) => ({ ...prev, max_per_request_days: event.target.value }))} />
-                </div>
-                <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={policyForm.requires_approval} onChange={(event) => setPolicyForm((prev) => ({ ...prev, requires_approval: event.target.value }))}>
-                  <option value="true">Requires approval</option>
-                  <option value="false">No approval</option>
-                </select>
-                <Textarea
-                  containerClassName="md:col-span-2"
-                  className="min-h-24 rounded-md border border-slate-300 px-3 py-2 text-sm"
-                  placeholder="Description"
-                  value={policyForm.description}
-                  onChange={(event) => setPolicyForm((prev) => ({ ...prev, description: event.target.value }))}
-                />
-              </div>
-              <SheetFooter className="mt-4">
-                <button
-                  type="button"
-                  className="rounded-md border border-slate-300 px-4 py-2 text-sm"
-                  onClick={() => {
-                    setEditingPolicyId(null)
-                    setPolicySheetOpen(false)
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="rounded-md bg-primary px-4 py-2 text-sm font-medium !text-white"
-                  disabled={saving || !canSubmitPolicyChanges}
-                  onClick={() => void submitPolicyForm()}
-                >
-                  {saving ? "Saving..." : editingPolicyId === null ? "Create Policy" : "Save Changes"}
-                </button>
-              </SheetFooter>
-            </SheetContent>
-          </Sheet>
+          <LeavePolicyEditorSheet
+            open={policySheetOpen}
+            mode={editingPolicyId === null ? "create" : "edit"}
+            value={policyForm}
+            leaveTypeOptions={leaveTypeOptions}
+            branchOptions={policyBranchOptions}
+            departmentOptions={workflowDepartmentOptions}
+            positionOptions={positionOptions}
+            gradeOptions={gradeOptions}
+            saving={saving}
+            canSubmit={canSubmitPolicyChanges}
+            onOpenChange={(open) => {
+              setPolicySheetOpen(open)
+              if (!open) setEditingPolicyId(null)
+            }}
+            onValueChange={(patch) => setPolicyForm((prev) => ({ ...prev, ...patch }))}
+            onSubmit={submitPolicyForm}
+          />
 
           <Dialog open={policyPreviewOpen} onOpenChange={setPolicyPreviewOpen}>
             <DialogPopup from="bottom" className="sm:max-w-2xl">
@@ -5664,6 +5747,41 @@ export function LeaveManagementView({
 
       {tab === "workflows" ? (
         <div className="space-y-2">
+            {workflowDraft ? (
+              <div className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-amber-950">
+                    Draft: {workflowDraft.form.name.trim() || "Untitled workflow"}
+                  </p>
+                  <p className="mt-0.5 text-xs text-amber-800">
+                    {(leaveTypeOptions.find((option) => option.value === workflowDraft.form.leave_type_id)?.label || "No leave type")}
+                    {" · "}
+                    {workflowDraft.steps.length} {workflowDraft.steps.length === 1 ? "step" : "steps"}
+                    {" · "}
+                    Continue where you left off
+                  </p>
+                </div>
+                <div className="flex shrink-0 gap-2">
+                  <button
+                    type="button"
+                    className="inline-flex h-8 items-center rounded-md border border-amber-200 bg-white px-2.5 text-xs font-medium text-amber-900 transition hover:bg-amber-100"
+                    onClick={() => {
+                      clearWorkflowCreateDraft()
+                      setWorkflowDraft(null)
+                    }}
+                  >
+                    Clear
+                  </button>
+                  <button
+                    type="button"
+                    className="inline-flex h-8 items-center rounded-md bg-primary px-2.5 text-xs font-semibold text-white transition hover:brightness-95"
+                    onClick={openCreateWorkflowSheet}
+                  >
+                    Continue draft
+                  </button>
+                </div>
+              </div>
+            ) : null}
             <ResizableTable
               title="Leave Workflows"
               toolbarStart={
@@ -5681,6 +5799,7 @@ export function LeaveManagementView({
                     aria-label="Filter workflow status"
                   >
                     <option value="all">All statuses</option>
+                    <option value="draft">Draft</option>
                     <option value="active">Active</option>
                     <option value="inactive">Inactive</option>
                   </select>
@@ -5701,18 +5820,39 @@ export function LeaveManagementView({
                   {refreshButton}
                 </>
               }
-              data={filteredWorkflows}
+              data={visibleWorkflows}
               itemsPerPage={15}
               loading={loading}
               storageKey="leave-workflows"
               onRowSelect={(_, row) => {
-                if (row && canUpdateWorkflows) void openEditWorkflowSheet(row)
+                if (!row) return
+                if (readBoolean(row, ["_isLocalDraft"])) {
+                  openCreateWorkflowSheet()
+                  return
+                }
+                if (canUpdateWorkflows) void openEditWorkflowSheet(row)
               }}
               columns={[
                 { key: "name", label: "Name", defaultWidth: 140, sortable: true },
-                { key: "status", label: "Status", defaultWidth: 80, sortable: true },
+                {
+                  key: "status",
+                  label: "Status",
+                  defaultWidth: 80,
+                  sortable: true,
+                  render: (row: AdminRecord) => {
+                    const status = readString(row, ["status"]).toLowerCase()
+                    if (status === "draft") {
+                      return (
+                        <span className="inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+                          Draft
+                        </span>
+                      )
+                    }
+                    return <span className="text-sm capitalize">{status || "—"}</span>
+                  },
+                },
                 { key: "is_default", label: "Default", defaultWidth: 70, sortable: true },
-                ...((canUpdateWorkflows || canDeleteWorkflows)
+                ...((canUpdateWorkflows || canDeleteWorkflows || canCreateWorkflows)
                   ? [{
                       key: "actions",
                       label: "Actions",
@@ -5720,37 +5860,63 @@ export function LeaveManagementView({
                       sortable: false,
                       render: (row: AdminRecord) => (
                         <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-                          {canUpdateWorkflows ? (
+                          {readBoolean(row, ["_isLocalDraft"]) ? (
                             <>
                               <button
                                 type="button"
                                 className="admin-table-icon-button"
-                                aria-label="Edit"
-                                onClick={() => void openEditWorkflowSheet(row)}
+                                aria-label="Continue draft"
+                                onClick={openCreateWorkflowSheet}
                               >
                                 <Pencil className="h-3.5 w-3.5" />
                               </button>
                               <button
                                 type="button"
-                                className="admin-table-icon-button"
-                                aria-label="Toggle status"
-                                disabled={saving}
-                                onClick={() => void toggleWorkflowStatus(row)}
+                                className="admin-table-icon-button text-rose-600"
+                                aria-label="Clear draft"
+                                onClick={() => {
+                                  clearWorkflowCreateDraft()
+                                  setWorkflowDraft(null)
+                                }}
                               >
-                                <RefreshCw className="h-3.5 w-3.5" />
+                                <Trash2 className="h-3.5 w-3.5" />
                               </button>
                             </>
-                          ) : null}
-                          {canDeleteWorkflows ? (
-                            <button
-                              type="button"
-                              className="admin-table-icon-button text-rose-600"
-                              aria-label="Delete"
-                              onClick={() => setPendingWorkflowDelete(row)}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          ) : null}
+                          ) : (
+                            <>
+                              {canUpdateWorkflows ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    className="admin-table-icon-button"
+                                    aria-label="Edit"
+                                    onClick={() => void openEditWorkflowSheet(row)}
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="admin-table-icon-button"
+                                    aria-label="Toggle status"
+                                    disabled={saving}
+                                    onClick={() => void toggleWorkflowStatus(row)}
+                                  >
+                                    <RefreshCw className="h-3.5 w-3.5" />
+                                  </button>
+                                </>
+                              ) : null}
+                              {canDeleteWorkflows ? (
+                                <button
+                                  type="button"
+                                  className="admin-table-icon-button text-rose-600"
+                                  aria-label="Delete"
+                                  onClick={() => setPendingWorkflowDelete(row)}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              ) : null}
+                            </>
+                          )}
                         </div>
                       ),
                     }]
@@ -5758,198 +5924,78 @@ export function LeaveManagementView({
               ]}
             />
 
-          <Sheet open={workflowSheetOpen} onOpenChange={setWorkflowSheetOpen}>
-            <SheetContent side="right" className="w-full overflow-y-auto data-[side=right]:w-1/2 sm:max-w-none">
-              <SheetHeader>
-                <SheetTitle>{editingWorkflowId === null ? "Create Leave Workflow" : "Edit Leave Workflow"}</SheetTitle>
-                <SheetDescription>
-                  Configure workflow details. Add approval steps using the step dialog and manage them here.
-                </SheetDescription>
-              </SheetHeader>
-              <div className="space-y-4 px-4 pb-4">
-                <div className="grid gap-3 md:grid-cols-2">
-                  <input className="h-10 rounded-md border border-slate-300 px-3 text-sm" placeholder="Workflow name" value={workflowForm.name} onChange={(event) => setWorkflowForm((prev) => ({ ...prev, name: event.target.value }))} />
-                  <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={workflowForm.leave_type_id} onChange={(event) => setWorkflowForm((prev) => ({ ...prev, leave_type_id: event.target.value }))}>
-                    <option value="">Select leave type</option>
-                    {leaveTypeOptions.map((type) => (
-                      <option key={`sheet-type-${type.value}`} value={type.value}>{type.label}</option>
-                    ))}
-                  </select>
-                  <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={workflowForm.status} onChange={(event) => setWorkflowForm((prev) => ({ ...prev, status: event.target.value }))}>
-                    <option value="active">active</option>
-                    <option value="inactive">inactive</option>
-                  </select>
-                  <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={workflowForm.is_default} onChange={(event) => setWorkflowForm((prev) => ({ ...prev, is_default: event.target.value }))}>
-                    <option value="false">Not default</option>
-                    <option value="true">Default workflow</option>
-                  </select>
-                </div>
-                <div className="rounded-md border border-slate-200 p-3">
-                  <div className="mb-3 flex items-center justify-between">
-                    <p className="text-sm font-semibold text-slate-800">Workflow Steps Summary ({workflowSteps.length})</p>
-                    <button
-                      type="button"
-                      className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium"
-                      disabled={saving || !canManageWorkflowSteps}
-                      onClick={openCreateStepDialog}
-                    >
-                      Add Workflow Step
-                    </button>
-                  </div>
-                  {workflowSteps.length === 0 ? (
-                    <p className="text-sm text-slate-500">
-                      No steps yet. Use Add Workflow Step to stage approval steps here, then save the workflow once the flow looks right.
-                    </p>
-                  ) : (
-                    <div className="space-y-2">
-                      {workflowSteps.map((row, index) => {
-                        const stepId = readNumber(row, ["id", "step_id"])
-                        return (
-                          <div key={`sheet-step-${stepId ?? index}`} className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-2">
-                            <div className="text-sm">
-                              <p className="font-medium text-slate-800">
-                                Level {String(readNumber(row, ["approval_level"]) ?? "-")} · {readString(row, ["action_type"])}
-                              </p>
-                              <p className="text-xs text-slate-500">
-                                Approver: {readString(row, ["approver_type"])} · Required: {readBoolean(row, ["is_required"]) ? "Yes" : "No"}
-                              </p>
-                            </div>
-                            {(canManageWorkflowSteps || canDeleteWorkflows) ? (
-                              <div className="inline-flex items-center gap-2">
-                                {canManageWorkflowSteps ? (
-                                  <button
-                                    type="button"
-                                    className="rounded-md border border-slate-300 p-2 text-slate-700 hover:bg-slate-100"
-                                    onClick={() => openEditStepDialog(row)}
-                                    aria-label="Edit step"
-                                  >
-                                    <Pencil className="h-4 w-4" />
-                                  </button>
-                                ) : null}
-                                {canDeleteWorkflows || !selectedWorkflowId ? (
-                                  <button
-                                    type="button"
-                                    className="rounded-md border border-rose-300 p-2 text-rose-700 hover:bg-rose-50"
-                                    onClick={() => void removeWorkflowStep(row)}
-                                    aria-label="Delete step"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </button>
-                                ) : null}
-                              </div>
-                            ) : null}
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-              <SheetFooter className="sm:flex-row sm:justify-end">
-                <button type="button" className="rounded-md border border-slate-300 px-3 py-2 text-sm" onClick={() => setWorkflowSheetOpen(false)}>Cancel</button>
-                <button type="button" className="rounded-md bg-primary px-3 py-2 text-sm font-medium !text-white" disabled={saving || !canSubmitWorkflowChanges} onClick={() => void submitWorkflowForm()}>
-                  {editingWorkflowId === null ? "Create Workflow" : "Save Workflow"}
-                </button>
-              </SheetFooter>
-            </SheetContent>
-          </Sheet>
+          <LeaveWorkflowEditorSheet
+            open={workflowSheetOpen}
+            mode={editingWorkflowId === null ? "create" : "edit"}
+            value={workflowForm}
+            leaveTypeOptions={leaveTypeOptions}
+            steps={workflowEditorSteps}
+            saving={saving}
+            canSubmit={canSubmitWorkflowChanges}
+            canManageSteps={canManageWorkflowSteps}
+            canDeleteSteps={canDeleteWorkflows || !selectedWorkflowId}
+            startStage={workflowStartStage}
+            onOpenChange={setWorkflowSheetOpen}
+            onValueChange={(patch) => setWorkflowForm((prev) => ({ ...prev, ...patch }))}
+            onSaveDraft={(stage) => {
+              const draft = {
+                form: workflowForm,
+                steps: workflowSteps,
+                stage,
+              }
+              writeWorkflowCreateDraft(draft)
+              setWorkflowDraft(draft)
+              showSuccessAlert("Draft saved. Continue it from Leave Workflows.")
+            }}
+            onDiscard={() => {
+              clearWorkflowCreateDraft()
+              setWorkflowDraft(null)
+              setWorkflowForm({
+                name: "",
+                leave_type_id: "",
+                status: "active",
+                is_default: "false",
+              })
+              setWorkflowSteps([])
+              setWorkflowStartStage("details")
+            }}
+            onAddStep={openCreateStepDialog}
+            onEditStep={(index) => {
+              const step = workflowSteps[index]
+              if (step) {
+                openEditStepDialog(step)
+              }
+            }}
+            onDeleteStep={(index) => {
+              const step = workflowSteps[index]
+              if (step) {
+                void removeWorkflowStep(step)
+              }
+            }}
+            onSubmit={submitWorkflowForm}
+          />
 
-          <Dialog open={stepDialogOpen} onOpenChange={setStepDialogOpen}>
-            <DialogPopup from="bottom" className="sm:max-w-[900px]">
-              <DialogHeader>
-                <DialogTitle>{editingWorkflowStepId === null ? "Add Workflow Step" : "Edit Workflow Step"}</DialogTitle>
-                <DialogDescription>Define approver, level, and assignment for this step.</DialogDescription>
-              </DialogHeader>
-              <div className="space-y-3">
-                <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                  <p className="font-semibold text-slate-700">Step guide</p>
-                  <p>
-                    1. Set the approval level order. 2. Choose what the step does. 3. Choose how the approver is assigned. 4. Optionally narrow the step by branch or department.
-                  </p>
-                  <p className="mt-1">{getWorkflowStepFieldHint(workflowStepForm.approver_type)}</p>
-                </div>
-                <div className="grid gap-3 md:grid-cols-3">
-                  <label className="grid gap-1 text-sm font-medium text-slate-700">
-                    <span>Approval level</span>
-                    <input type="number" min={1} className="h-10 rounded-md border border-slate-300 px-3 text-sm font-normal" placeholder="Approval level" value={workflowStepForm.approval_level} onChange={(event) => setWorkflowStepForm((prev) => ({ ...prev, approval_level: event.target.value }))} />
-                  </label>
-                  <label className="grid gap-1 text-sm font-medium text-slate-700">
-                    <span>Step action</span>
-                    <select className="h-10 rounded-md border border-slate-300 px-3 text-sm font-normal" value={workflowStepForm.action_type} onChange={(event) => setWorkflowStepForm((prev) => ({ ...prev, action_type: event.target.value }))}>
-                      <option value="recommend">recommend</option><option value="verify">verify</option><option value="approve">approve</option>
-                    </select>
-                  </label>
-                  <label className="grid gap-1 text-sm font-medium text-slate-700">
-                    <span>Approver assignment type</span>
-                    <select
-                      className="h-10 rounded-md border border-slate-300 px-3 text-sm font-normal"
-                      value={workflowStepForm.approver_type}
-                      onChange={(event) => {
-                        const nextType = event.target.value
-                        setWorkflowStepForm((prev) => ({
-                          ...prev,
-                          approver_type: nextType,
-                          role_id: nextType === "role" ? prev.role_id : "",
-                          position_id: nextType === "position" ? prev.position_id : "",
-                          company_user_id: nextType === "company_user" ? prev.company_user_id : "",
-                        }))
-                      }}
-                    >
-                      <option value="role">role</option><option value="position">position</option><option value="company_user">company user</option>
-                    </select>
-                  </label>
-                  <label className="grid gap-1 text-sm font-medium text-slate-700">
-                    <span>Role</span>
-                    <select disabled={workflowStepForm.approver_type !== "role"} className="h-10 rounded-md border border-slate-300 px-3 text-sm font-normal disabled:cursor-not-allowed disabled:bg-slate-100" value={workflowStepForm.role_id} onChange={(event) => setWorkflowStepForm((prev) => ({ ...prev, role_id: event.target.value }))}>
-                      <option value="">Role (optional)</option>{roles.map((row, index) => { const id = readNumber(row, ["id", "role_id"]); if (id === null) return null; return <option key={`dlg-role-${id}-${index}`} value={String(id)}>{readString(row, ["display_name", "name"])}</option> })}
-                    </select>
-                  </label>
-                  <label className="grid gap-1 text-sm font-medium text-slate-700">
-                    <span>Position</span>
-                    <select disabled={workflowStepForm.approver_type !== "position"} className="h-10 rounded-md border border-slate-300 px-3 text-sm font-normal disabled:cursor-not-allowed disabled:bg-slate-100" value={workflowStepForm.position_id} onChange={(event) => setWorkflowStepForm((prev) => ({ ...prev, position_id: event.target.value }))}>
-                      <option value="">Position (optional)</option>{positions.map((row, index) => { const id = readNumber(row, ["id", "position_id"]); if (id === null) return null; return <option key={`dlg-pos-${id}-${index}`} value={String(id)}>{readString(row, ["name", "title"])}</option> })}
-                    </select>
-                  </label>
-                  <label className="grid gap-1 text-sm font-medium text-slate-700">
-                    <span>Company user</span>
-                    <select disabled={workflowStepForm.approver_type !== "company_user"} className="h-10 rounded-md border border-slate-300 px-3 text-sm font-normal disabled:cursor-not-allowed disabled:bg-slate-100" value={workflowStepForm.company_user_id} onChange={(event) => setWorkflowStepForm((prev) => ({ ...prev, company_user_id: event.target.value }))}>
-                      <option value="">Company user (optional)</option>{employeeOptions.map((option) => <option key={`dlg-user-${option.value}`} value={option.value}>{option.label}</option>)}
-                    </select>
-                  </label>
-                  <label className="grid gap-1 text-sm font-medium text-slate-700">
-                    <span>Assigned branch</span>
-                    <select className="h-10 rounded-md border border-slate-300 px-3 text-sm font-normal" value={workflowStepForm.assigned_branch_id} onChange={(event) => setWorkflowStepForm((prev) => ({ ...prev, assigned_branch_id: event.target.value }))}>
-                      <option value="">Assigned branch (optional)</option>{branches.map((row, index) => { const id = readNumber(row, ["id", "branch_id"]); if (id === null) return null; return <option key={`dlg-branch-${id}-${index}`} value={String(id)}>{readString(row, ["name", "title"])}</option> })}
-                    </select>
-                  </label>
-                  <label className="grid gap-1 text-sm font-medium text-slate-700">
-                    <span>Assigned department</span>
-                    <select className="h-10 rounded-md border border-slate-300 px-3 text-sm font-normal" value={workflowStepForm.assigned_department_id} onChange={(event) => setWorkflowStepForm((prev) => ({ ...prev, assigned_department_id: event.target.value }))}>
-                      <option value="">Assigned department (optional)</option>{departments.map((row, index) => { const id = readNumber(row, ["id", "department_id"]); if (id === null) return null; return <option key={`dlg-dept-${id}-${index}`} value={String(id)}>{readString(row, ["name", "title"])}</option> })}
-                    </select>
-                  </label>
-                  <label className="grid gap-1 text-sm font-medium text-slate-700">
-                    <span>Requirement</span>
-                    <select className="h-10 rounded-md border border-slate-300 px-3 text-sm font-normal" value={workflowStepForm.is_required} onChange={(event) => setWorkflowStepForm((prev) => ({ ...prev, is_required: event.target.value }))}>
-                      <option value="true">Required</option><option value="false">Optional</option>
-                    </select>
-                  </label>
-                </div>
-              </div>
-              <DialogFooter>
-                <button type="button" className="rounded-md border border-slate-300 px-3 py-2 text-sm" onClick={() => setStepDialogOpen(false)}>Cancel</button>
-                <button type="button" className="rounded-md bg-primary px-3 py-2 text-sm font-medium !text-white" disabled={saving || !canManageWorkflowSteps} onClick={async () => {
-                  const targetWorkflowId = selectedWorkflowId || (editingWorkflowId !== null ? String(editingWorkflowId) : "")
-                  if (targetWorkflowId) {
-                    setSelectedWorkflowId(targetWorkflowId)
-                  }
-                  await submitWorkflowStepForm(targetWorkflowId || undefined)
-                }}>
-                  {editingWorkflowStepId === null ? "Add Step" : "Save Step"}
-                </button>
-              </DialogFooter>
-            </DialogPopup>
-          </Dialog>
+          <LeaveWorkflowStepDialog
+            open={stepDialogOpen}
+            mode={editingWorkflowStepId === null ? "create" : "edit"}
+            value={workflowStepForm}
+            roleOptions={workflowRoleOptions}
+            positionOptions={positionOptions}
+            companyUserOptions={employeeOptions}
+            branchOptions={workflowBranchOptions}
+            departmentOptions={workflowDepartmentOptions}
+            saving={saving}
+            canSubmit={canManageWorkflowSteps}
+            onOpenChange={setStepDialogOpen}
+            onValueChange={(patch) => setWorkflowStepForm((prev) => ({ ...prev, ...patch }))}
+            onSubmit={async () => {
+              const targetWorkflowId = selectedWorkflowId || (editingWorkflowId !== null ? String(editingWorkflowId) : "")
+              if (targetWorkflowId) {
+                setSelectedWorkflowId(targetWorkflowId)
+              }
+              await submitWorkflowStepForm(targetWorkflowId || undefined)
+            }}
+          />
 
         </div>
       ) : null}

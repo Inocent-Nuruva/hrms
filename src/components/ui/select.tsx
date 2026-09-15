@@ -4,7 +4,7 @@ import * as React from "react"
 import { Select as SelectPrimitive } from "@base-ui/react/select"
 
 import { cn } from "@/lib/utils"
-import { ChevronDownIcon, CheckIcon, ChevronUpIcon } from "lucide-react"
+import { ChevronDownIcon, CheckIcon, ChevronUpIcon, SearchIcon } from "lucide-react"
 
 const Select = SelectPrimitive.Root
 
@@ -41,7 +41,16 @@ function SelectTrigger({
       data-slot="select-trigger"
       data-size={size}
       className={cn(
-        "flex w-full min-w-0 items-center justify-between gap-1 rounded-lg border border-input bg-card px-3 py-2 text-sm text-foreground whitespace-nowrap transition-colors outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 data-placeholder:text-muted-foreground data-[size=default]:h-9 data-[size=sm]:h-8 data-[size=sm]:rounded-[min(var(--radius-md),10px)] *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-1.5 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "flex w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm whitespace-nowrap outline-none transition select-none",
+        "hover:border-slate-300 focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20",
+        "data-placeholder:font-medium data-placeholder:text-slate-400",
+        "not-data-placeholder:border-primary/50 not-data-placeholder:bg-primary/5 not-data-placeholder:font-semibold not-data-placeholder:text-primary",
+        "data-popup-open:border-primary data-popup-open:ring-2 data-popup-open:ring-primary/20",
+        "disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive",
+        "data-[size=default]:h-9 data-[size=sm]:h-8",
+        "*:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:min-w-0 *:data-[slot=select-value]:items-center",
+        "dark:border-border dark:bg-background dark:hover:bg-muted/40",
+        "[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg]:text-primary [&_svg:not([class*='size-'])]:size-4",
         className
       )}
       {...props}
@@ -49,7 +58,7 @@ function SelectTrigger({
       {children}
       <SelectPrimitive.Icon
         render={
-          <ChevronDownIcon className="pointer-events-none size-4 text-muted-foreground" />
+          <ChevronDownIcon className="pointer-events-none size-4 text-primary" />
         }
       />
     </SelectPrimitive.Trigger>
@@ -122,38 +131,40 @@ function SelectContent({
           data-slot="select-content"
           data-align-trigger={alignItemWithTrigger}
           className={cn(
-            "relative isolate z-[300] max-h-(--available-height) w-(--anchor-width) min-w-[min(100vw-2rem,18rem)] origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-lg border border-border bg-popover text-popover-foreground shadow-lg ring-1 ring-foreground/10 duration-200 ease-out data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+            "relative isolate z-[300] max-h-(--available-height) w-(--anchor-width) min-w-[min(100vw-2rem,16rem)] max-w-[calc(100vw-1.25rem)] origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-xl border border-slate-200 bg-popover text-popover-foreground shadow-xl duration-200 ease-out data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
             className
           )}
           {...props}
         >
           <div
-            className="sticky top-0 z-20 border-b border-border bg-popover p-2"
+            className="sticky top-0 z-20 border-b border-slate-100 bg-popover p-2"
             onKeyDown={(event) => event.stopPropagation()}
             onKeyUp={(event) => event.stopPropagation()}
             onPointerDown={(event) => event.stopPropagation()}
           >
-            <input
-              ref={searchInputRef}
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              onKeyDown={(event) => {
-                // Keep typing in the search box instead of select typeahead/close.
-                event.stopPropagation()
-                if (event.key === "Escape") {
-                  return
-                }
-                event.nativeEvent.stopImmediatePropagation?.()
-              }}
-              onKeyUp={(event) => event.stopPropagation()}
-              onPointerDown={(event) => event.stopPropagation()}
-              onClick={(event) => event.stopPropagation()}
-              placeholder="Search..."
-              autoComplete="off"
-              autoCorrect="off"
-              spellCheck={false}
-              className="h-8 w-full rounded-md border border-input bg-card px-2 text-xs text-foreground outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
-            />
+            <div className="relative">
+              <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-slate-400" />
+              <input
+                ref={searchInputRef}
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  event.stopPropagation()
+                  if (event.key === "Escape") {
+                    return
+                  }
+                  event.nativeEvent.stopImmediatePropagation?.()
+                }}
+                onKeyUp={(event) => event.stopPropagation()}
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => event.stopPropagation()}
+                placeholder="Search"
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
+                className="h-9 w-full rounded-md bg-slate-50 pr-3 pl-8 text-sm text-slate-900 outline-none ring-1 ring-slate-200 placeholder:text-slate-400 focus:bg-white focus:ring-primary/35"
+              />
+            </div>
           </div>
           <SelectScrollUpButton />
           <SelectPrimitive.List className="p-1 text-popover-foreground">
@@ -211,23 +222,23 @@ function SelectItem({
       data-slot="select-item"
       data-search-text={resolvedSearchText}
       className={cn(
-        "relative flex w-full cursor-default items-center gap-1.5 rounded-md py-2 pr-8 pl-2.5 text-sm font-medium text-popover-foreground outline-hidden select-none",
-        "hover:bg-accent hover:text-accent-foreground",
-        "data-highlighted:bg-accent data-highlighted:text-accent-foreground",
-        "focus:bg-accent focus:text-accent-foreground",
+        "relative flex min-h-10 w-full cursor-default items-center gap-1.5 rounded-lg py-2 pr-8 pl-3 text-sm font-medium outline-hidden select-none",
+        "text-slate-800 hover:bg-slate-100",
+        "data-highlighted:bg-slate-100 data-highlighted:text-slate-900",
+        "data-selected:bg-primary data-selected:font-semibold data-selected:text-white",
+        "data-selected:data-highlighted:bg-primary data-selected:data-highlighted:text-white",
         "data-disabled:pointer-events-none data-disabled:opacity-50",
         "[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className
       )}
-      style={{ color: "inherit" }}
       {...itemProps}
     >
-      <SelectPrimitive.ItemText className="block w-full overflow-hidden text-ellipsis whitespace-nowrap text-left text-sm font-medium text-popover-foreground">
-        <span className="text-popover-foreground">{children}</span>
+      <SelectPrimitive.ItemText className="block w-full overflow-hidden text-ellipsis whitespace-nowrap text-left text-sm font-medium">
+        {children}
       </SelectPrimitive.ItemText>
       <SelectPrimitive.ItemIndicator
         render={
-          <span className="pointer-events-none absolute right-2 flex size-4 items-center justify-center text-muted-foreground" />
+          <span className="pointer-events-none absolute right-2 flex size-4 items-center justify-center" />
         }
       >
         <CheckIcon className="pointer-events-none size-4" />

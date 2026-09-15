@@ -317,17 +317,17 @@ export function RecordDetailsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogPopup className={cn("sm:max-w-2xl", popupClassName)}>
-        <DialogHeader>
+      <DialogPopup className={cn("flex max-h-[min(90dvh,calc(100vh-1.5rem))] w-[calc(100%-1.5rem)] flex-col overflow-hidden sm:max-w-2xl", popupClassName)}>
+        <DialogHeader className="shrink-0">
           <DialogTitle>{title}</DialogTitle>
           {description ? <DialogDescription>{description}</DialogDescription> : null}
         </DialogHeader>
         {content ? (
-          content
+          <div className="min-h-0 flex-1 overflow-y-auto pr-1">{content}</div>
         ) : !sections || (sections.fields.length === 0 && sections.lists.length === 0 && sections.lead.length === 0) ? (
           <p className="text-sm text-muted-foreground">No details available for this record.</p>
         ) : (
-          <div className="max-h-[65vh] space-y-4 overflow-auto pr-1">
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
             {sections.lead.map((paragraph) => (
               <p key={paragraph} className="text-sm leading-6 text-muted-foreground">
                 {paragraph}
@@ -366,7 +366,7 @@ export function RecordDetailsDialog({
             ))}
           </div>
         )}
-        {footer ? <DialogFooter>{footer}</DialogFooter> : null}
+        {footer ? <DialogFooter className="shrink-0">{footer}</DialogFooter> : null}
       </DialogPopup>
     </Dialog>
   )

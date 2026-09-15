@@ -16156,6 +16156,33 @@ export async function completeMyFieldFollowUp(
   );
 }
 
+export async function createMyFieldFollowUp(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/me/field-visits/follow-ups", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function updateMyFieldFollowUp(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/me/field-visits/follow-ups/${id}`, {
+    method: "PATCH",
+    token,
+    body: data,
+  });
+}
+
+export async function cancelMyFieldFollowUp(token: string, id: string | number) {
+  return adminRequest<unknown>(`/api/me/field-visits/follow-ups/${id}`, {
+    method: "DELETE",
+    token,
+  });
+}
+
 export const listMyFieldVisitFollowUps = listMyFieldFollowUps;
 export const completeMyFieldVisitFollowUp = completeMyFieldFollowUp;
 

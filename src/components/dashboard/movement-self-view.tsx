@@ -23,8 +23,11 @@ import {
   listMyMovements,
   type AdminRecord,
 } from "@/lib/admin-api"
+import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
+import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
 import { readStoredSessionTokens } from "@/lib/session-client"
+import Link from "next/link"
 
 function readStoredToken() {
   return readStoredSessionTokens().accessToken.trim()
@@ -43,6 +46,10 @@ function acknowledgementLabel(row: AdminRecord) {
 }
 
 export function MovementSelfView() {
+  const actor = useDashboardActor()
+  const canRecordMovements =
+    actor.ready &&
+    canAccessDashboardRoute("/dashboard/movements/cases", actor.permissionLabels, actor.accessMode)
   const leaveIfForbidden = useLeaveIfForbidden()
   const [rows, setRows] = React.useState<AdminRecord[]>([])
   const [detail, setDetail] = React.useState<AdminRecord | null>(null)
@@ -118,7 +125,11 @@ export function MovementSelfView() {
       <HeroBand
         eyebrow="My movements"
         title="Assignment changes"
-        description="Review transfers and promotions recorded for your profile, then acknowledge the ones that need it."
+        description={
+          canRecordMovements
+            ? "Your own promotions and transfers. Record changes for other employees from Movement operations."
+            : "Review transfers and promotions recorded for your profile, then acknowledge the ones that need it."
+        }
         actions={
           <button
             type="button"
@@ -150,8 +161,21 @@ export function MovementSelfView() {
             Loading your movements...
           </div>
         ) : rows.length === 0 ? (
-          <div className="px-4 py-10 text-center text-sm text-muted-foreground">
-            No assignment changes have been recorded for you yet.
+          <div className="px-4 py-12 text-center">
+            <p className="text-sm font-semibold text-foreground">No movements yet</p>
+            <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
+              {canRecordMovements
+                ? "Nothing on your own record yet. Create a promotion, transfer, or reporting change from Movement operations."
+                : "When HR records a promotion, transfer, or reporting change for you, it will show up here."}
+            </p>
+            {canRecordMovements ? (
+              <Link
+                href="/dashboard/movements/cases"
+                className="mt-3 inline-flex h-8 items-center rounded-md bg-sky-50 px-2.5 text-xs font-semibold text-sky-800 transition hover:bg-sky-100"
+              >
+                Open movement operations
+              </Link>
+            ) : null}
           </div>
         ) : (
           <div className="divide-y divide-border/70">

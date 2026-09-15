@@ -31,15 +31,18 @@ import {
 import {
   addMyFieldVisitEvidence,
   addMyFieldVisitExpense,
+  cancelMyFieldFollowUp,
   checkInMyFieldVisit,
   checkOutMyFieldVisit,
   completeMyFieldFollowUp,
+  createMyFieldFollowUp,
   createMyFieldVisitPlan,
   createMyUnplannedFieldVisit,
   listFieldParties,
   listMyFieldFollowUps,
   listMyFieldVisitPlans,
   listMyFieldVisits,
+  updateMyFieldFollowUp,
   submitMyFieldVisitPlan,
   syncMyFieldWork,
   type AdminRecord,
@@ -89,7 +92,7 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [createOpen, setCreateOpen] = React.useState(false)
-  const [createMode, setCreateMode] = React.useState<"plan" | "unplanned" | "expense" | "checkout" | "evidence">("plan")
+  const [createMode, setCreateMode] = React.useState<"plan" | "unplanned" | "expense" | "checkout" | "evidence" | "follow-up" | "complete-follow-up">("plan")
   const [form, setForm] = React.useState<Record<string, string>>({})
   const [saving, setSaving] = React.useState(false)
   const [formError, setFormError] = React.useState<string | null>(null)
@@ -200,6 +203,7 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
         })
       } else if (createMode === "checkout") {
         if (!form.id || !form.discussion_notes || !form.outcome) throw new Error("Notes and outcome are required.")
+        if (form.follow_up_required === "true" && !form.next_follow_up_date) throw new Error("Follow-up due date is required.")
         const position = await currentPosition()
         await checkOutMyFieldVisit(token, form.id, {
           client_request_id: newRequestId(),
@@ -209,6 +213,28 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
           discussion_notes: form.discussion_notes,
           outcome: form.outcome,
           follow_up_required: form.follow_up_required === "true",
+          next_follow_up_date: form.follow_up_required === "true" ? form.next_follow_up_date || undefined : undefined,
+        })
+      } else if (createMode === "follow-up") {
+        if (!form.field_visit_id || !form.due_date || !form.action?.trim()) {
+          throw new Error("Visit, due date, and action are required.")
+        }
+        if (form.id) {
+          await updateMyFieldFollowUp(token, form.id, {
+            due_date: form.due_date,
+            action: form.action.trim(),
+          })
+        } else {
+          await createMyFieldFollowUp(token, {
+            field_visit_id: Number(form.field_visit_id),
+            due_date: form.due_date,
+            action: form.action.trim(),
+          })
+        }
+      } else if (createMode === "complete-follow-up") {
+        if (!form.id) throw new Error("Follow-up is required.")
+        await completeMyFieldFollowUp(token, form.id, {
+          completion_note: form.completion_note?.trim() || undefined,
         })
       }
       toast.success("Saved.")
@@ -225,24 +251,68 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
   const columns = React.useMemo<Column<AdminRecord>[]>(() => {
     if (activeTab === "follow-ups") {
       return [
-        { key: "follow", label: "Follow-up", render: (row) => readString(row, ["title", "note", "description"], `Follow-up #${rowId(row)}`) },
+        { key: "follow", label: "Follow-up", render: (row) => readString(row, ["action", "title", "note", "description"], `Follow-up #${rowId(row)}`) },
+        { key: "due", label: "Due", render: (row) => formatDate(row.dueDate ?? row.due_date) },
+        { key: "visit", label: "Visit", render: (row) => readString(row, ["fieldVisitId", "field_visit_id"], "—") },
         { key: "status", label: "Status", render: (row) => <StatusChip value={readString(row, ["status"], "OPEN")} /> },
         {
           key: "actions",
           label: "Actions",
           render: (row) => {
             const id = rowId(row)
+            const open = readString(row, ["status"], "OPEN").toUpperCase() === "OPEN"
+            if (!open) return <span className="text-xs text-muted-foreground">—</span>
             return (
-              <button type="button" className={actionButtonClass} disabled={busyId === id} onClick={(event) => {
-                event.stopPropagation()
-                const token = readStoredToken()
-                if (!token || !id) return
-                setBusyId(id)
-                void completeMyFieldFollowUp(token, id, { completion_note: "Completed from dashboard." })
-                  .then(() => { toast.success("Follow-up completed."); return load() })
-                  .catch((errorObject) => toast.error(errorObject instanceof Error ? errorObject.message : "Could not complete."))
-                  .finally(() => setBusyId(""))
-              }}>{busyId === id ? <Loader2Icon className="size-3.5 animate-spin" /> : "Complete"}</button>
+              <div className="flex flex-wrap gap-1">
+                <button
+                  type="button"
+                  className={actionButtonClass}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    setCreateMode("complete-follow-up")
+                    setForm({ id, completion_note: "" })
+                    setFormError(null)
+                    setCreateOpen(true)
+                  }}
+                >
+                  Complete
+                </button>
+                <button
+                  type="button"
+                  className={actionButtonClass}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    setCreateMode("follow-up")
+                    setForm({
+                      id,
+                      field_visit_id: readString(row, ["fieldVisitId", "field_visit_id"]),
+                      due_date: String(row.dueDate ?? row.due_date ?? "").slice(0, 10),
+                      action: readString(row, ["action"]),
+                    })
+                    setFormError(null)
+                    setCreateOpen(true)
+                  }}
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  className={actionButtonClass}
+                  disabled={busyId === `cancel-${id}`}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    const token = readStoredToken()
+                    if (!token || !id) return
+                    setBusyId(`cancel-${id}`)
+                    void cancelMyFieldFollowUp(token, id)
+                      .then(() => { toast.success("Follow-up cancelled."); return load() })
+                      .catch((errorObject) => toast.error(errorObject instanceof Error ? errorObject.message : "Could not cancel."))
+                      .finally(() => setBusyId(""))
+                  }}
+                >
+                  {busyId === `cancel-${id}` ? <Loader2Icon className="size-3.5 animate-spin" /> : "Cancel"}
+                </button>
+              </div>
             )
           },
         },
@@ -344,7 +414,7 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
           <div>
             <h1 className="text-xl font-semibold tracking-tight">{activeTab === "plans" ? "Visit plans" : "Follow-ups"}</h1>
             <p className="text-sm text-muted-foreground">
-              {activeTab === "plans" ? "Plan the day and submit it for review." : "Close the follow-ups left from earlier visits."}
+              {activeTab === "plans" ? "Plan the day and submit it for review." : "Create, update, complete, or cancel follow-ups from your visits."}
             </p>
           </div>
           <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
@@ -373,6 +443,20 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
             <PlusIcon className="size-4" /> New plan
           </button>
         ) : null}
+        {activeTab === "follow-ups" ? (
+          <button type="button" className={primaryButtonClass} onClick={() => {
+            setCreateMode("follow-up")
+            setForm({
+              due_date: new Date().toISOString().slice(0, 10),
+              field_visit_id: visits[0] ? rowId(visits[0]) : "",
+              action: "",
+            })
+            setFormError(null)
+            setCreateOpen(true)
+          }}>
+            <PlusIcon className="size-4" /> New follow-up
+          </button>
+        ) : null}
       </div>
 
       {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div> : null}
@@ -393,7 +477,7 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
         <DialogPopup className="max-w-xl">
           <DialogHeader>
             <DialogTitle>
-              {createMode === "plan" ? "New visit plan" : createMode === "unplanned" ? "Unplanned visit" : createMode === "expense" ? "Visit expense" : createMode === "evidence" ? "Visit evidence" : "Check out"}
+              {createMode === "plan" ? "New visit plan" : createMode === "unplanned" ? "Unplanned visit" : createMode === "expense" ? "Visit expense" : createMode === "evidence" ? "Visit evidence" : createMode === "follow-up" ? (form.id ? "Edit follow-up" : "New follow-up") : createMode === "complete-follow-up" ? "Complete follow-up" : "Check out"}
             </DialogTitle>
             <DialogDescription>Add or update this field visit.</DialogDescription>
           </DialogHeader>
@@ -443,7 +527,34 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
               <>
                 <label className="grid gap-1.5 text-sm"><span className="font-medium">Discussion notes</span><textarea className={textareaClass} value={form.discussion_notes ?? ""} onChange={(event) => setForm((current) => ({ ...current, discussion_notes: event.target.value }))} /></label>
                 <label className="grid gap-1.5 text-sm"><span className="font-medium">Outcome</span><input className={inputClass} value={form.outcome ?? ""} onChange={(event) => setForm((current) => ({ ...current, outcome: event.target.value }))} /></label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" className="size-4 accent-sky-700" checked={form.follow_up_required === "true"} onChange={(event) => setForm((current) => ({ ...current, follow_up_required: event.target.checked ? "true" : "false" }))} />
+                  <span>Create a follow-up from this visit</span>
+                </label>
+                {form.follow_up_required === "true" ? (
+                  <label className="grid gap-1.5 text-sm"><span className="font-medium">Follow-up due date</span><input type="date" className={inputClass} value={form.next_follow_up_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, next_follow_up_date: event.target.value }))} /></label>
+                ) : null}
               </>
+            ) : null}
+            {createMode === "follow-up" ? (
+              <>
+                <label className="grid gap-1.5 text-sm">
+                  <span className="font-medium">Linked visit</span>
+                  <select className={inputClass} value={form.field_visit_id ?? ""} onChange={(event) => setForm((current) => ({ ...current, field_visit_id: event.target.value }))} disabled={Boolean(form.id)}>
+                    <option value="">Choose a visit</option>
+                    {visits.map((visit) => (
+                      <option key={rowId(visit)} value={rowId(visit)}>
+                        {prettify(readString(visit, ["visitType", "visit_type", "purpose"], `Visit #${rowId(visit)}`))} · {formatDate(visit.visitDate ?? visit.visit_date)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="grid gap-1.5 text-sm"><span className="font-medium">Due date</span><input type="date" className={inputClass} value={form.due_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, due_date: event.target.value }))} /></label>
+                <label className="grid gap-1.5 text-sm"><span className="font-medium">Action</span><textarea className={textareaClass} value={form.action ?? ""} onChange={(event) => setForm((current) => ({ ...current, action: event.target.value }))} placeholder="What needs to happen next?" /></label>
+              </>
+            ) : null}
+            {createMode === "complete-follow-up" ? (
+              <label className="grid gap-1.5 text-sm"><span className="font-medium">Completion note</span><textarea className={textareaClass} value={form.completion_note ?? ""} onChange={(event) => setForm((current) => ({ ...current, completion_note: event.target.value }))} placeholder="What was done?" /></label>
             ) : null}
             {formError ? <p className="text-sm text-rose-600">{formError}</p> : null}
           </div>
