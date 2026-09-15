@@ -34,7 +34,6 @@ export const employeeSelfSectionTabGroups: DashboardSectionTabGroup[] = [
     items: [
       { title: "Profile", url: "/dashboard/me/profile" },
       { title: "Organization", url: "/dashboard/me/organization" },
-      { title: "Promotion", url: "/dashboard/me/promotion" },
     ],
   },
   {

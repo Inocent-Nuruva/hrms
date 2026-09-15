@@ -12,7 +12,6 @@ import {
   PlusIcon,
   SearchIcon,
   SendIcon,
-  UserRoundIcon,
   XIcon,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -46,8 +45,11 @@ import {
   listMyActivityTasks,
   submitMyActivityReport,
   updateMyActivityEntry,
+  extractProfilePhotoUrl,
   type AdminRecord,
 } from "@/lib/admin-api"
+import { useMyProfilePhoto } from "@/lib/my-profile-photo"
+import { resolveBackendMediaUrl } from "@/lib/backend-media-url"
 import { readStoredSessionTokens } from "@/lib/session-client"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
@@ -142,7 +144,7 @@ function dueMeta(value: unknown) {
   return { label: formatDate(value), tone: "muted" as const }
 }
 
-function entriesFromReports(reports: AdminRecord[]) {
+function entriesFromReports(reports: AdminRecord[]): AdminRecord[] {
   return reports.flatMap((report) =>
     asRecordArray(report.entries ?? report.items ?? report.activities).map((entry) => ({
       ...entry,
@@ -172,12 +174,26 @@ function asReportRow(report: AdminRecord): AdminRecord {
   }
 }
 
-function Avatar({ name, className }: { name: string; className?: string }) {
+function Avatar({ name, photoUrl, className }: { name: string; photoUrl?: string | null; className?: string }) {
+  const [failed, setFailed] = React.useState(false)
+  React.useEffect(() => {
+    setFailed(false)
+  }, [photoUrl])
+  const showPhoto = Boolean(photoUrl) && !failed
   return (
-    <span className={cn("inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-sky-100 text-[11px] font-semibold text-sky-800", className)}>
-      {initials(name)}
+    <span className={cn("relative inline-flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-sky-100 text-[11px] font-semibold text-sky-800 ring-1 ring-slate-200", className)}>
+      {showPhoto ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={photoUrl ?? ""} alt="" className="size-full object-cover" onError={() => setFailed(true)} />
+      ) : (
+        initials(name)
+      )}
     </span>
   )
+}
+
+function photoFromRecord(value: unknown) {
+  return resolveBackendMediaUrl(extractProfilePhotoUrl(value))
 }
 
 function PriorityDot({ priority }: { priority: string }) {
@@ -205,6 +221,7 @@ function StatusPill({ value }: { value: string }) {
 export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
   const actor = useDashboardActor()
   const leaveIfForbidden = useLeaveIfForbidden()
+  const { url: myPhotoUrl } = useMyProfilePhoto()
   const [tab, setTab] = React.useState<ListTab>("tasks")
   const [tasks, setTasks] = React.useState<AdminRecord[]>([])
   const [reports, setReports] = React.useState<AdminRecord[]>([])
@@ -255,7 +272,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
             ...nested,
             ...task,
             report_id: reportIdOf(task) || reportIdOf(nested),
-            report_status: task.report_status ?? task.reportStatus ?? nested?.report_status,
+            report_status: readString(task, ["report_status", "reportStatus"]) || readString(nested, ["report_status", "reportStatus"]),
             checklist: asRecordArray(task.checklist).length ? task.checklist : nested?.checklist,
           }
         })
@@ -561,6 +578,14 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
     return "You"
   }
 
+  const photoForAssignee = (task: AdminRecord, who: string) => {
+    if (who === "You") return resolveBackendMediaUrl(myPhotoUrl) || myPhotoUrl
+    if (mode === "manager") {
+      return photoFromRecord(task.employee) || photoFromRecord(task.employeeSnapshot ?? task.employee_snapshot)
+    }
+    return photoFromRecord(task.assignedBySnapshot ?? task.assigned_by_snapshot)
+  }
+
   const tabs: Array<[ListTab, string]> = mode === "self"
     ? [
         ["tasks", "My tasks"],
@@ -613,19 +638,27 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
             )
           })}
         </div>
-        <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-2">
-          <div className="relative min-w-[140px] flex-1">
+        <div className="flex min-w-0 flex-nowrap items-center gap-2">
+          <div className="relative w-44 shrink-0">
             <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <input className={`${inputClass} h-9 rounded-md pl-9`} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search tasks..." />
+            <input className="h-9 w-full rounded-md border border-slate-300 bg-white pl-9 pr-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40 dark:border-border dark:bg-background" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search tasks..." />
           </div>
-          <select className={`${inputClass} h-9 w-[8.5rem] shrink-0 rounded-md px-2`} value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value)}>
+          <select
+            className="h-9 w-24 max-w-24 shrink-0 rounded-md border border-slate-300 bg-white px-2 text-sm text-foreground outline-none [field-sizing:fixed] focus-visible:ring-2 focus-visible:ring-ring/40 dark:border-border dark:bg-background"
+            value={priorityFilter}
+            onChange={(event) => setPriorityFilter(event.target.value)}
+          >
             <option value="ALL">Priority</option>
             <option value="URGENT">Urgent</option>
             <option value="HIGH">High</option>
             <option value="MEDIUM">Medium</option>
             <option value="LOW">Low</option>
           </select>
-          <select className={`${inputClass} h-9 w-[8.5rem] shrink-0 rounded-md px-2`} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+          <select
+            className="h-9 w-24 max-w-24 shrink-0 rounded-md border border-slate-300 bg-white px-2 text-sm text-foreground outline-none [field-sizing:fixed] focus-visible:ring-2 focus-visible:ring-ring/40 dark:border-border dark:bg-background"
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value)}
+          >
             <option value="ALL">Status</option>
             <option value="PLANNED">Not started</option>
             <option value="IN_PROGRESS">In progress</option>
@@ -706,7 +739,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                     <span className="mt-1 block truncate text-xs text-slate-500 lg:hidden">{who} · {due.label}</span>
                   </button>
                   <button type="button" className="hidden items-center gap-2 truncate text-sm text-slate-600 lg:flex" onClick={() => void openTask(task)}>
-                    {who === "You" ? <UserRoundIcon className="size-4 text-slate-400" /> : <Avatar name={who} />}
+                    <Avatar name={who} photoUrl={photoForAssignee(task, who)} />
                     <span className="min-w-0 truncate">{who}</span>
                   </button>
                   <button type="button" className="hidden text-left text-sm lg:block" onClick={() => void openTask(task)}>
@@ -751,7 +784,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                   </select>
                 </label>
               ) : (
-                <div className="flex items-center gap-2 self-end rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm"><UserRoundIcon className="size-4 text-sky-700" /> Assigned to you</div>
+                <div className="flex items-center gap-2 self-end rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm"><Avatar name="You" photoUrl={myPhotoUrl} /> Assigned to you</div>
               )}
               <label className="grid gap-1.5 text-sm">
                 <span className="font-medium">Task name</span>
@@ -879,7 +912,10 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
               <div>
                 <h2 className="text-2xl font-semibold tracking-tight text-slate-900">{readString(selected, ["title"], "Untitled task")}</h2>
                 <div className="mt-3 flex items-center gap-2 text-sm text-slate-600">
-                  {mode === "manager" ? <Avatar name={personName(selected.employee)} /> : isManagerAssigned(selected) ? <Avatar name={assignedBy(selected)} /> : <UserRoundIcon className="size-4 text-slate-400" />}
+                  <Avatar
+                    name={mode === "manager" ? personName(selected.employee) : assignedBy(selected)}
+                    photoUrl={photoForAssignee(selected, mode === "manager" ? personName(selected.employee) : assignedBy(selected))}
+                  />
                   <div>
                     <p className="font-medium">{mode === "manager" ? personName(selected.employee) : assignedBy(selected)}</p>
                     <p className="text-xs text-slate-500">{formatDate(selected.activity_date ?? selected.activityDate)} · {formatDate(taskDate(selected))}</p>
@@ -982,9 +1018,10 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                     <div className="space-y-3">
                       {asRecordArray(selected.comments).length ? asRecordArray(selected.comments).map((item) => {
                         const author = personName(item.authorSnapshot ?? item.author_snapshot, "Team member")
+                        const authorPhoto = author === "You" ? myPhotoUrl : photoFromRecord(item.authorSnapshot ?? item.author_snapshot)
                         return (
                           <div key={rowId(item)} className="flex gap-2 text-sm">
-                            <Avatar name={author} />
+                            <Avatar name={author} photoUrl={authorPhoto} />
                             <div>
                               <p><span className="font-medium">{author}</span> <span className="text-xs text-slate-500">{formatDate(item.createdAt ?? item.created_at)}</span></p>
                               <p className="text-slate-600">{readString(item, ["body"], "")}</p>

@@ -106,7 +106,7 @@ describe("sms and manager self-service API helpers", () => {
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
-      "http://localhost:8888/api/manager/dashboard?date_from=2026-08-01",
+      "http://localhost:8888/api/dashboards/manager?date_from=2026-08-01",
       expect.objectContaining({ method: "GET" }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(

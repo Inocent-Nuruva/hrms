@@ -1,3 +1,3 @@
-import { EmployeeWorkspaceLayout } from "@/components/dashboard/employee-workspace-layout"
-
-export default EmployeeWorkspaceLayout
+export default function PromotionLayout({ children }: { children: React.ReactNode }) {
+  return <>{children}</>
+}

@@ -16713,11 +16713,7 @@ export async function getManagerDashboard(
   token: string,
   params: Record<string, string | number | undefined> = {},
 ) {
-  const payload = await adminRequest<unknown>(
-    `/api/manager/dashboard${buildRecordQuery(params)}`,
-    { token },
-  );
-  return normalizeSingle(payload) ?? asRecord(payload);
+  return getHrDashboard(token, "manager", params);
 }
 
 export async function listManagerActionItems(
@@ -16969,6 +16965,45 @@ function buildAnalyticsQuery(params: AnalyticsQueryParams = {}) {
 export type HrDashboardKind =
   "employee" | "hr" | "management" | "manager" | "sales-field";
 
+function looksLikeRoleDashboardRecord(record: AdminRecord) {
+  return [
+    "generated_at",
+    "generatedAt",
+    "period",
+    "team",
+    "attendance",
+    "approvals",
+    "performance",
+    "work_activities",
+    "workActivities",
+    "capabilities",
+    "headcount",
+    "workforce",
+  ].some((key) => key in record);
+}
+
+/** Preserve nested dashboard sections instead of treating the first one as the response. */
+function unwrapRoleDashboardPayload(payload: unknown) {
+  const queue: unknown[] = [payload];
+  const seen = new Set<unknown>();
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (current == null || seen.has(current)) continue;
+    seen.add(current);
+
+    const record = asRecord(current);
+    if (!record) continue;
+    if (looksLikeRoleDashboardRecord(record)) return record;
+
+    for (const key of ["data", "result", "payload", "dashboard", "item"]) {
+      if (key in record) queue.push(record[key]);
+    }
+  }
+
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
 export async function getHrDashboard(
   token: string,
   kind: HrDashboardKind,
@@ -16978,7 +17013,7 @@ export async function getHrDashboard(
     `/api/dashboards/${kind}${kind === "employee" ? "" : buildRecordQuery(params)}`,
     { token },
   );
-  return normalizeSingle(payload) ?? asRecord(payload);
+  return unwrapRoleDashboardPayload(payload);
 }
 
 export async function getSystemHealth(token?: string) {

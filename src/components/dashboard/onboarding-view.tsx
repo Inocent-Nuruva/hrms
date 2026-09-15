@@ -1034,17 +1034,7 @@ export function OnboardingView() {
     () =>
       actor.ready &&
       (isEmployeeMode ||
-        canPerformPermission(actorPermissions, {
-          permissions: [
-            "onboarding_requests:read",
-            "onboarding_requests:create",
-            "onboarding_requests:update",
-            "onboarding_requests:approve",
-            "onboarding_requests:cancel",
-            "onboarding_requests:complete",
-          ],
-          mode: "any",
-        })),
+        canPerformPermission(actorPermissions, "onboarding_requests:read")),
     [actor.ready, actorPermissions, isEmployeeMode],
   )
   const canViewOnboardingWorkflows = React.useMemo(

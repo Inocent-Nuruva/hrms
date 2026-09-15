@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   extractBackupCodes,
+  extractDefaultAvatarImageUrl,
+  extractProfilePhotoUrl,
   listMyAvailableAvatars,
   listMyAvailableAvatarsLegacy,
   listMyProfileAvatarOptions,
@@ -9,6 +11,7 @@ import {
   readForceTwoFactor,
   regenerateMyTwoFactorBackupCodes,
   resetUserPassword,
+  selectMyProfileAvatar,
   selectMyUserAvatar,
   setUserForceTwoFactor,
   withNormalizedTwoFactorFields,
@@ -165,6 +168,47 @@ describe("documented auth and avatar leftovers", () => {
 
     expect(rows).toEqual([expect.objectContaining({ id: 8, name: "Staff" })]);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("selects an employee avatar through the self-service endpoint", async () => {
+    const fetchMock = vi.fn().mockImplementation(() =>
+      jsonResponse({
+        employee: {
+          default_avatar_id: 8,
+          profile_photo_url: "/uploads/default-avatars/company-7/staff.png",
+        },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await selectMyProfileAvatar("token", 8);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8888/api/me/profile/avatar",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ default_avatar_id: 8 }),
+      }),
+    );
+    expect(result?.profile_photo_url).toBe(
+      "http://localhost:8888/uploads/default-avatars/company-7/staff.png",
+    );
+  });
+
+  it("resolves relative profile and default-avatar media paths", () => {
+    expect(
+      extractProfilePhotoUrl({
+        employee: {
+          profile_photo_url: "/uploads/profile-photos/company-7/employee-15.png",
+        },
+      }),
+    ).toBe("http://localhost:8888/uploads/profile-photos/company-7/employee-15.png");
+    expect(
+      extractDefaultAvatarImageUrl({
+        id: 8,
+        image_path: "/uploads/default-avatars/company-7/staff.svg",
+      }),
+    ).toBe("http://localhost:8888/uploads/default-avatars/company-7/staff.svg");
   });
 
   it("normalizes force_two_factor onto user rows", () => {
