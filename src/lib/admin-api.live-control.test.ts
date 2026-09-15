@@ -4,7 +4,9 @@ import {
   activateAttendanceGeofence,
   activateAttendanceWifiNetwork,
   commandAccessControlDoor,
+  cancelMyFieldFollowUp,
   completeMyFieldFollowUp,
+  createMyFieldFollowUp,
   deactivateAttendanceGeofence,
   deactivateAttendanceWifiNetwork,
   getAccessControlDoorDeviceConfig,
@@ -15,6 +17,7 @@ import {
   listAccessEmployeeAuditLogs,
   listHrProfileChangeRequestHistory,
   listMyFieldFollowUps,
+  updateMyFieldFollowUp,
   listMyProfileChangeRequestHistory,
   manageHikvisionDevice,
   previewHrProfileChangeRequestFile,
@@ -236,7 +239,10 @@ describe("live control and leftover documented API helpers", () => {
       new File(["photo"], "face.jpg", { type: "image/jpeg" }),
     )
     await listMyFieldFollowUps("token", { status: "OPEN", limit: 20 })
+    await createMyFieldFollowUp("token", { field_visit_id: 9, due_date: "2026-09-20", action: "Call the client" })
+    await updateMyFieldFollowUp("token", 7, { due_date: "2026-09-21", action: "Send quote" })
     await completeMyFieldFollowUp("token", 7, { completion_note: "Done" })
+    await cancelMyFieldFollowUp("token", 8)
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
@@ -270,11 +276,32 @@ describe("live control and leftover documented API helpers", () => {
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       7,
+      "http://localhost:8888/api/me/field-visits/follow-ups",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ field_visit_id: 9, due_date: "2026-09-20", action: "Call the client" }),
+      }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      8,
+      "http://localhost:8888/api/me/field-visits/follow-ups/7",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ due_date: "2026-09-21", action: "Send quote" }),
+      }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      9,
       "http://localhost:8888/api/me/field-visits/follow-ups/7/complete",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({ completion_note: "Done" }),
       }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      10,
+      "http://localhost:8888/api/me/field-visits/follow-ups/8",
+      expect.objectContaining({ method: "DELETE" }),
     )
     expect(myFile.filename).toBe("pending.jpg")
     expect(hrFile.contentType).toBe("image/jpeg")

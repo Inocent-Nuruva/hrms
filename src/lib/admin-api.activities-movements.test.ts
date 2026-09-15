@@ -109,6 +109,7 @@ describe("daily activities and employee movement API helpers", () => {
     const assignees = await listManagerActivityAssignees("token")
     await createManagerActivityTask("token", {
       employee_id: 42,
+      employee_ids: [42, 43],
       activity_date: "2026-09-14",
       title: "Prepare report",
       description: "Prepare and submit the monthly report.",
@@ -138,6 +139,7 @@ describe("daily activities and employee movement API helpers", () => {
         method: "POST",
         body: JSON.stringify({
           employee_id: 42,
+          employee_ids: [42, 43],
           activity_date: "2026-09-14",
           title: "Prepare report",
           description: "Prepare and submit the monthly report.",

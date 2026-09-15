@@ -11,6 +11,7 @@ type SearchToggleFieldProps = {
   placeholder: string
   label?: string
   className?: string
+  active?: boolean
   onKeyDown?: React.KeyboardEventHandler<HTMLInputElement>
 }
 
@@ -20,6 +21,7 @@ export function SearchToggleField({
   placeholder,
   label = "Search",
   className,
+  active,
   onKeyDown,
 }: SearchToggleFieldProps) {
   const [isOpen, setIsOpen] = React.useState(Boolean(value))
@@ -48,6 +50,8 @@ export function SearchToggleField({
     setIsOpen(false)
   }
 
+  const highlighted = Boolean(active ?? value.trim())
+
   if (!isOpen) {
     return (
       <div className={cn("flex shrink-0 items-center", className)}>
@@ -55,7 +59,12 @@ export function SearchToggleField({
           type="button"
           aria-label={`Open ${label.toLowerCase()}`}
           title={label}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          className={cn(
+            "inline-flex h-8 w-8 items-center justify-center rounded-md border transition-colors",
+            highlighted
+              ? "border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100"
+              : "border-sky-200/80 bg-sky-50/70 text-sky-700 hover:bg-sky-100 hover:text-sky-800",
+          )}
           onClick={() => setIsOpen(true)}
         >
           <SearchIcon className="size-3.5" />
@@ -71,8 +80,8 @@ export function SearchToggleField({
         className
       )}
     >
-      <div className="flex h-8 w-full min-w-0 items-center gap-1.5 rounded-md border border-border bg-background px-2 text-xs text-foreground transition-all duration-200">
-        <SearchIcon className="size-3.5 shrink-0 text-muted-foreground" />
+      <div className="flex h-8 w-full min-w-0 items-center gap-1.5 rounded-md border border-sky-200 bg-sky-50/80 px-2 text-xs text-foreground transition-all duration-200">
+        <SearchIcon className="size-3.5 shrink-0 text-sky-700" />
         <input
           ref={inputRef}
           aria-label={label}

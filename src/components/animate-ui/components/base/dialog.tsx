@@ -65,7 +65,7 @@ function DialogPopup({
       <DialogPrimitive.Popup
         data-slot="dialog-popup"
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-xl border bg-popover p-5 text-popover-foreground shadow-xl transition duration-200 ease-out data-ending-style:opacity-0 data-starting-style:opacity-0",
+          "fixed top-1/2 left-1/2 z-50 grid max-h-[min(90dvh,calc(100vh-1.5rem))] w-[calc(100%-1.5rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl border bg-popover p-4 text-popover-foreground shadow-xl transition duration-200 ease-out data-ending-style:opacity-0 data-starting-style:opacity-0 sm:w-[calc(100%-2rem)] sm:p-5",
           fromClassName[from],
           className
         )}
@@ -105,7 +105,7 @@ function DialogFooter({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="dialog-footer"
-      className={cn("mt-5 flex justify-end gap-2", className)}
+      className={cn("mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:justify-end", className)}
       {...props}
     />
   )

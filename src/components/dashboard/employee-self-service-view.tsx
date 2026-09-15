@@ -4,6 +4,7 @@ import * as React from "react"
 import { motion } from "framer-motion"
 import {
   ArrowLeft,
+  ArrowRightIcon,
   CheckCircle2,
   BriefcaseIcon,
   Building2Icon,
@@ -25,7 +26,7 @@ import { Sparkles } from "@/components/animate-ui/icons/sparkles"
 import { LumaSpin } from "@/components/ui/luma-spin"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Textarea } from "@/components/ui/textarea"
-import { CompactStatStrip, HeroBand, TalentDoodleSprites, heroPanelClass, pageBleedClass } from "@/components/dashboard/talent-visuals"
+import { CompactStatStrip, HeroBand, TalentDoodleSprites, heroGhostButtonClass, heroPanelClass, pageBleedClass } from "@/components/dashboard/talent-visuals"
 
 import {
   acknowledgeMyMovement,
@@ -97,6 +98,8 @@ import {
 } from "@/components/animate-ui/components/base/dialog"
 import { LeaveWorkflowDialog } from "@/components/leave/leave-workflow-progress"
 import { notifySubmittedRequestApprovers } from "@/lib/request-notifications"
+import { useDashboardActor } from "@/hooks/use-dashboard-actor"
+import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 
@@ -877,6 +880,23 @@ function formatMovementLabel(value: string) {
     .replace(/[_-]+/g, " ")
     .toLowerCase()
     .replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
+
+function movementStatusClass(status: string) {
+  const normalized = status.trim().toLowerCase().replace(/[\s-]+/g, "_")
+  if (normalized === "approved" || normalized === "applied") {
+    return "border-emerald-200 bg-emerald-50 text-emerald-700"
+  }
+  if (normalized === "rejected" || normalized === "application_failed") {
+    return "border-rose-200 bg-rose-50 text-rose-700"
+  }
+  if (["submitted", "pending_approval", "returned_for_correction", "scheduled", "applying"].includes(normalized)) {
+    return "border-amber-200 bg-amber-50 text-amber-800"
+  }
+  if (normalized === "cancelled" || normalized === "draft") {
+    return "border-slate-200 bg-slate-100 text-slate-600"
+  }
+  return "border-sky-200 bg-sky-50 text-sky-700"
 }
 
 function readPayslipId(row: AdminRecord | null | undefined) {
@@ -4636,6 +4656,10 @@ export function EmployeeOrganizationView() {
 
 export function EmployeePromotionView() {
   const { loading, error, token, employee } = useSelfEmployeeData()
+  const actor = useDashboardActor()
+  const canRecordMovements =
+    actor.ready &&
+    canAccessDashboardRoute("/dashboard/movements/cases", actor.permissionLabels, actor.accessMode)
   const [movementsLoading, setMovementsLoading] = React.useState(false)
   const [movementsError, setMovementsError] = React.useState<string | null>(null)
   const [movements, setMovements] = React.useState<AdminRecord[]>([])
@@ -4644,6 +4668,7 @@ export function EmployeePromotionView() {
   const [selectedMovement, setSelectedMovement] = React.useState<AdminRecord | null>(null)
   const [acknowledgingId, setAcknowledgingId] = React.useState<number | null>(null)
   const [message, setMessage] = React.useState<string | null>(null)
+  const [statusFilter, setStatusFilter] = React.useState<"all" | "awaiting" | "applied">("all")
 
   const loadMovements = React.useCallback(async () => {
     if (!token) {
@@ -4756,292 +4781,279 @@ export function EmployeePromotionView() {
     }
   }, [movements])
 
+  const visibleMovements = React.useMemo(() => {
+    return movements.filter((movement) => {
+      if (statusFilter === "awaiting") return needsMovementAcknowledgement(movement)
+      if (statusFilter === "applied") {
+        const status = readString(movement, ["status"], "").toLowerCase()
+        return status === "approved" || status === "applied"
+      }
+      return true
+    })
+  }, [movements, statusFilter])
+
   const employeeName = readString(employee, ["full_name", "name", "first_name"], "You")
   const detailChanges = Array.isArray(selectedMovement?.changes)
     ? selectedMovement?.changes.filter((entry): entry is AdminRecord => Boolean(asRecord(entry)))
     : []
+  const detailStatus = readString(selectedMovement, ["status"], "")
+  const detailStatusMeta = resolveMovementStatusMeta(detailStatus)
+  const listLoading = loading || movementsLoading
 
   return (
-    <section className="w-full min-w-0 space-y-4">
-      <DoodleSprites />
-      {loading ? (
-        <div className="flex flex-col items-center justify-center py-10">
-          <LumaSpin />
-          <p className="text-sm text-muted-foreground">Loading promotion context...</p>
-        </div>
-      ) : error ? (
-        <p className="text-sm text-red-600">{error}</p>
-      ) : (
-        <>
-          <div className="grid gap-4 md:grid-cols-3">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardDescription>Total movements</CardDescription>
-                <CardTitle>{movementSummary.total}</CardTitle>
-              </CardHeader>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardDescription>Awaiting your acknowledgement</CardDescription>
-                <CardTitle>{movementSummary.awaitingAcknowledgement}</CardTitle>
-              </CardHeader>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardDescription>Approved or applied</CardDescription>
-                <CardTitle>{movementSummary.approvedOrApplied}</CardTitle>
-              </CardHeader>
-            </Card>
-          </div>
-
-          <Card>
-            <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div className="space-y-1">
-                <CardTitle>My Promotions & Movements</CardTitle>
-                <CardDescription>
-                  Review department transfers, promotions, reporting-line changes, and other HR movements assigned to {employeeName}.
-                </CardDescription>
-              </div>
-              <Button type="button" variant="outline" onClick={() => void loadMovements()} disabled={movementsLoading || !token}>
-                {movementsLoading ? <Loader2 className="size-4 animate-spin" /> : <ClockIcon className="size-4" />}
-                Refresh
-              </Button>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {message ? (
-                <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300">
-                  {message}
-                </div>
-              ) : null}
-
-              {movementsError ? (
-                <div className="rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-xs text-rose-700 dark:text-rose-300">
-                  {movementsError}
-                </div>
-              ) : null}
-
-              {movementsLoading ? (
-                <div className="flex items-center gap-2 rounded-lg border bg-muted/20 px-3 py-4 text-sm text-muted-foreground">
-                  <Loader2 className="size-4 animate-spin" />
-                  Loading your movement history...
-                </div>
-              ) : movements.length === 0 ? (
-                <div className="mx-auto max-w-xl">
-                  <div className="relative overflow-hidden rounded-2xl p-6 text-white flex flex-col items-center justify-center min-h-[180px]" style={{ backgroundColor: "var(--primary)" }}>
-                    <Doodle name="doodle-circles" />
-                    <div className="relative z-10 flex flex-col items-center">
-                      <h3 className="text-xl font-semibold tracking-tight text-center">
-                        No HR movements yet
-                      </h3>
-                      <p className="mt-2 text-sm text-white/70 text-center">
-                        When HR records a promotion, transfer, reporting manager change, or salary revision for you, it will appear here.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="grid gap-3">
-                  {movements.map((movement) => {
-                    const id = readMovementId(movement) ?? 0
-                    const statusMeta = resolveMovementStatusMeta(readString(movement, ["status"], ""))
-                    const movementType = readMovementType(movement)
-                    const requiresAcknowledgement = needsMovementAcknowledgement(movement)
-                    const isAcknowledging = acknowledgingId === id
-
-                    return (
-                      <div key={id} className="rounded-xl border bg-background p-4 shadow-sm">
-                        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                          <div className="space-y-2">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <p className="text-sm font-semibold text-foreground">
-                                {readString(movement, ["title"], formatMovementLabel(movementType))}
-                              </p>
-                              <AssignmentBadge tone={statusMeta.badgeTone}>{statusMeta.label}</AssignmentBadge>
-                              {requiresAcknowledgement ? (
-                                <AssignmentBadge tone="amber">Needs acknowledgement</AssignmentBadge>
-                              ) : null}
-                            </div>
-                            <p className="text-sm text-muted-foreground">
-                              {readString(movement, ["reason"], "No reason provided by HR.")}
-                            </p>
-                            <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
-                              <div className="flex items-center gap-1.5">
-                                <BriefcaseIcon className="size-3.5" />
-                                <span>{formatMovementLabel(movementType)}</span>
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                <CalendarIcon className="size-3.5" />
-                                <span>Effective {formatDate(movement.effectiveDate ?? movement.effective_date)}</span>
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                <ClockIcon className="size-3.5" />
-                                <span>Updated {formatDate(movement.updatedAt ?? movement.updated_at)}</span>
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                <UserIcon className="size-3.5" />
-                                <span>{Array.isArray(movement.changes) ? movement.changes.length : 0} change(s)</span>
-                              </div>
-                            </div>
-                            {statusMeta.helperText ? (
-                              <p className="text-xs text-muted-foreground">{statusMeta.helperText}</p>
-                            ) : null}
-                          </div>
-
-                          <div className="flex flex-wrap gap-2">
-                            <Button type="button" variant="outline" onClick={() => void openMovementDetail(movement)}>
-                              Details
-                            </Button>
-                            {requiresAcknowledgement ? (
-                              <Button
-                                type="button"
-                                onClick={() => void handleAcknowledgeMovement(movement)}
-                                disabled={isAcknowledging}
-                              >
-                                {isAcknowledging ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
-                                Acknowledge
-                              </Button>
-                            ) : null}
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <Dialog
-            open={detailOpen}
-            onOpenChange={(open) => {
-              setDetailOpen(open)
-              if (!open) {
-                setDetailLoading(false)
-              }
-            }}
+    <section className="space-y-4">
+      <HeroBand
+        eyebrow="My movements"
+        title="Promotions & movements"
+        description={
+          canRecordMovements
+            ? "Your own promotions and transfers. Record changes for other employees from Movement operations."
+            : "Transfers, promotions, reporting-line changes, and other HR updates assigned to you."
+        }
+        actions={
+          <button
+            type="button"
+            className={heroGhostButtonClass}
+            onClick={() => void loadMovements()}
+            disabled={listLoading || !token}
           >
-            <DialogPopup className="max-w-3xl">
-              <DialogHeader>
-                <DialogTitle>
-                  {readString(selectedMovement, ["title"], "Movement details")}
-                </DialogTitle>
-                <DialogDescription>
-                  Review the movement HR recorded for your profile, the proposed change set, and whether your acknowledgement is still needed.
-                </DialogDescription>
-              </DialogHeader>
-
-              {detailLoading ? (
-                <div className="flex items-center gap-2 rounded-lg border bg-muted/20 px-3 py-4 text-sm text-muted-foreground">
-                  <Loader2 className="size-4 animate-spin" />
-                  Loading movement details...
-                </div>
-              ) : selectedMovement ? (
-                <div className="space-y-4">
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <Card>
-                      <CardContent className="grid gap-3 p-4">
-                        <AssignmentField label="Movement No" value={readString(selectedMovement, ["movementNo", "movement_no"])} />
-                        <AssignmentField label="Type" value={formatMovementLabel(readMovementType(selectedMovement))} />
-                        <AssignmentField label="Status" value={<AssignmentBadge tone={resolveMovementStatusMeta(readString(selectedMovement, ["status"], "")).badgeTone}>{resolveMovementStatusMeta(readString(selectedMovement, ["status"], "")).label}</AssignmentBadge>} />
-                        <AssignmentField label="Effective Date" value={formatDate(selectedMovement.effectiveDate ?? selectedMovement.effective_date)} />
-                        <AssignmentField label="Submitted" value={formatDate(selectedMovement.submittedAt ?? selectedMovement.submitted_at)} />
-                        <AssignmentField label="Approved" value={formatDate(selectedMovement.approvedAt ?? selectedMovement.approved_at)} />
-                        <AssignmentField label="Applied" value={formatDate(selectedMovement.appliedAt ?? selectedMovement.applied_at)} />
-                        <AssignmentField label="Acknowledged" value={formatDate(selectedMovement.employeeAcknowledgedAt ?? selectedMovement.employee_acknowledged_at)} />
-                      </CardContent>
-                    </Card>
-
-                    <Card>
-                      <CardContent className="grid gap-3 p-4">
-                        <AssignmentField label="Employee" value={readString(asRecord(selectedMovement.employee), ["full_name", "name"], employeeName)} />
-                        <AssignmentField label="Requested By" value={readString(asRecord(selectedMovement.requestedBy), ["full_name", "name", "email"], "HR")} />
-                        <AssignmentField label="Changes" value={String(detailChanges.length)} />
-                        <AssignmentField label="Version" value={readString(selectedMovement, ["version"], "—")} />
-                        <AssignmentField label="Created" value={formatDate(selectedMovement.createdAt ?? selectedMovement.created_at)} />
-                        <AssignmentField label="Last Updated" value={formatDate(selectedMovement.updatedAt ?? selectedMovement.updated_at)} />
-                      </CardContent>
-                    </Card>
-                  </div>
-
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-base">Reason</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-sm text-muted-foreground">
-                        {readString(selectedMovement, ["reason"], "No reason was provided by HR.")}
+            {listLoading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+            Refresh
+          </button>
+        }
+      />
+      {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      <div className="overflow-hidden rounded-xl border border-border bg-card">
+        <div className="grid grid-cols-3">
+          {([
+            { key: "all", label: "All", value: movementSummary.total, valueClass: "text-slate-800", activeClass: "bg-slate-50" },
+            { key: "awaiting", label: "Awaiting you", value: movementSummary.awaitingAcknowledgement, valueClass: "text-amber-600", activeClass: "bg-amber-50/80" },
+            { key: "applied", label: "Applied", value: movementSummary.approvedOrApplied, valueClass: "text-emerald-600", activeClass: "bg-emerald-50/80" },
+          ] as const).map((item, index) => {
+            const active = statusFilter === item.key
+            return (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => setStatusFilter(item.key)}
+                aria-pressed={active}
+                className={cn(
+                  "relative min-w-0 px-3 py-2 text-left transition-colors",
+                  active ? item.activeClass : "hover:bg-muted/40",
+                )}
+              >
+                {index > 0 ? <span className="absolute top-2 bottom-2 left-0 w-px bg-border" aria-hidden /> : null}
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{item.label}</p>
+                <p className={cn("mt-0.5 text-lg font-semibold tabular-nums leading-tight tracking-tight", item.valueClass)}>
+                  {item.value}
+                </p>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+      {message ? (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+          {message}
+        </div>
+      ) : null}
+      {movementsError ? (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+          {movementsError}
+        </div>
+      ) : null}
+      <div className="overflow-hidden rounded-xl border border-border bg-card">
+        {listLoading ? (
+          <div className="flex items-center justify-center gap-2 px-3 py-10 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" />
+            Loading your movements…
+          </div>
+        ) : visibleMovements.length === 0 ? (
+          <div className="px-4 py-12 text-center">
+            <p className="text-sm font-semibold text-foreground">
+              {statusFilter === "awaiting"
+                ? "Nothing waiting on you"
+                : statusFilter === "applied"
+                  ? "No applied movements"
+                  : "No movements yet"}
+            </p>
+            <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
+              {statusFilter === "all"
+                ? canRecordMovements
+                  ? "Nothing on your own record yet. Create a promotion, transfer, or reporting change from Movement operations."
+                  : "When HR records a promotion, transfer, or reporting change for you, it will show up here."
+                : "Try All to see the rest of your movement history."}
+            </p>
+            {statusFilter === "all" && canRecordMovements ? (
+              <Link
+                href="/dashboard/movements/cases"
+                className="mt-3 inline-flex h-8 items-center rounded-md bg-sky-50 px-2.5 text-xs font-semibold text-sky-800 transition hover:bg-sky-100"
+              >
+                Open movement operations
+              </Link>
+            ) : null}
+          </div>
+        ) : (
+          <div className="divide-y divide-border/70">
+            {visibleMovements.map((movement) => {
+              const id = readMovementId(movement) ?? 0
+              const status = readString(movement, ["status"], "")
+              const statusMeta = resolveMovementStatusMeta(status)
+              const movementType = readMovementType(movement)
+              const requiresAcknowledgement = needsMovementAcknowledgement(movement)
+              const isAcknowledging = acknowledgingId === id
+              const reason = readString(movement, ["reason"], "")
+              const changeCount = Array.isArray(movement.changes) ? movement.changes.length : 0
+              return (
+                <div key={id} className="flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="truncate text-sm font-semibold text-slate-900">
+                        {readString(movement, ["title"], formatMovementLabel(movementType))}
                       </p>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-base">Changes</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      {detailChanges.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">
-                          No field-level change rows were returned for this movement.
-                        </p>
-                      ) : (
-                        <div className="space-y-3">
-                          {detailChanges.map((change, index) => (
-                            <div key={`${readMovementId(selectedMovement)}-change-${index}`} className="rounded-lg border bg-muted/10 p-3">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <AssignmentBadge tone="primary">
-                                  {formatMovementLabel(readString(change, ["field"], "Change"))}
-                                </AssignmentBadge>
-                              </div>
-                              <div className="mt-3 grid gap-3 md:grid-cols-2">
-                                <div className="rounded-md border border-dashed p-3">
-                                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                    Previous
-                                  </p>
-                                  <p className="mt-1 text-sm text-foreground">
-                                    {stringifyMovementValue(change.oldValue ?? change.old_value)}
-                                  </p>
-                                </div>
-                                <div className="rounded-md border border-dashed p-3">
-                                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                    New
-                                  </p>
-                                  <p className="mt-1 text-sm text-foreground">
-                                    {stringifyMovementValue(change.newValue ?? change.new_value)}
-                                  </p>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
+                      <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${movementStatusClass(status)}`}>
+                        {statusMeta.label}
+                      </span>
+                      {requiresAcknowledgement ? (
+                        <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+                          Needs you
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="mt-1 truncate text-xs text-slate-500">
+                      {[
+                        formatMovementLabel(movementType),
+                        `Effective ${formatDate(movement.effectiveDate ?? movement.effective_date)}`,
+                        changeCount ? `${changeCount} change${changeCount === 1 ? "" : "s"}` : "",
+                      ].filter(Boolean).join(" · ")}
+                    </p>
+                    {reason && reason !== "-" ? (
+                      <p className="mt-1 line-clamp-1 text-sm text-slate-600">{reason}</p>
+                    ) : null}
+                  </div>
+                  <div className="flex shrink-0 flex-wrap gap-2">
+                    {requiresAcknowledgement ? (
+                      <button
+                        type="button"
+                        className="inline-flex h-8 items-center gap-1.5 rounded-md bg-emerald-600 px-2.5 text-xs font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-60"
+                        onClick={() => void handleAcknowledgeMovement(movement)}
+                        disabled={isAcknowledging}
+                      >
+                        {isAcknowledging ? <Loader2 className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />}
+                        Acknowledge
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="inline-flex h-8 items-center rounded-md bg-sky-50 px-2.5 text-xs font-semibold text-sky-800 transition hover:bg-sky-100"
+                      onClick={() => void openMovementDetail(movement)}
+                    >
+                      View
+                    </button>
+                  </div>
                 </div>
-              ) : null}
-
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setDetailOpen(false)}>
-                  Close
-                </Button>
-                {selectedMovement && needsMovementAcknowledgement(selectedMovement) ? (
-                  <Button
-                    type="button"
-                    onClick={() => void handleAcknowledgeMovement(selectedMovement)}
-                    disabled={acknowledgingId === readMovementId(selectedMovement)}
-                  >
-                    {acknowledgingId === readMovementId(selectedMovement) ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <CheckCircle2 className="size-4" />
-                    )}
-                    Acknowledge movement
-                  </Button>
+              )
+            })}
+          </div>
+        )}
+      </div>
+      <Dialog
+        open={detailOpen}
+        onOpenChange={(open) => {
+          setDetailOpen(open)
+          if (!open) setDetailLoading(false)
+        }}
+      >
+        <DialogPopup className="flex max-h-[min(90dvh,calc(100vh-1.5rem))] w-[calc(100%-1.5rem)] flex-col overflow-hidden sm:max-w-2xl">
+          <DialogHeader className="shrink-0">
+            <DialogTitle>
+              {readString(selectedMovement, ["title"], formatMovementLabel(readMovementType(selectedMovement)))}
+            </DialogTitle>
+            <DialogDescription>
+              {[
+                readString(selectedMovement, ["movementNo", "movement_no"], ""),
+                formatMovementLabel(readMovementType(selectedMovement)),
+                formatDate(selectedMovement?.effectiveDate ?? selectedMovement?.effective_date),
+              ].filter((part) => part && part !== "-").join(" · ")}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+            {detailLoading ? (
+              <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
+                <Loader2 className="size-4 animate-spin" />
+                Loading movement details…
+              </div>
+            ) : selectedMovement ? (
+              <div className="space-y-6">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 space-y-1 text-sm">
+                    <p className="text-slate-600">
+                      Recorded by{" "}
+                      <span className="font-medium text-slate-900">
+                        {readString(asRecord(selectedMovement.requestedBy ?? selectedMovement.requested_by), ["full_name", "name", "email"], "HR")}
+                      </span>
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {[
+                        readString(asRecord(selectedMovement.employee), ["full_name", "name"], employeeName),
+                        formatDate(selectedMovement.submittedAt ?? selectedMovement.submitted_at ?? selectedMovement.createdAt ?? selectedMovement.created_at),
+                      ].filter((part) => part && part !== "-").join(" · ")}
+                    </p>
+                  </div>
+                  <span className={`inline-flex shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${movementStatusClass(detailStatus)}`}>
+                    {detailStatusMeta.label}
+                  </span>
+                </div>
+                {readString(selectedMovement, ["reason"], "") && readString(selectedMovement, ["reason"], "") !== "-" ? (
+                  <p className="text-sm text-slate-600">{readString(selectedMovement, ["reason"])}</p>
                 ) : null}
-              </DialogFooter>
-            </DialogPopup>
-          </Dialog>
-        </>
-      )}
+                {detailChanges.length ? (
+                  <div className="space-y-4">
+                    {detailChanges.map((change, index) => (
+                      <div key={`${readMovementId(selectedMovement)}-change-${index}`} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-baseline">
+                        <p className="text-xs font-medium text-slate-500 sm:col-span-3">
+                          {formatMovementLabel(readString(change, ["field", "field_name", "fieldName"], "Change"))}
+                        </p>
+                        <p className="min-w-0 break-words text-sm text-slate-500">
+                          {stringifyMovementValue(change.oldValue ?? change.old_value)}
+                        </p>
+                        <ArrowRightIcon className="hidden size-4 text-slate-300 sm:block" />
+                        <p className="min-w-0 break-words text-sm font-medium text-slate-900">
+                          {stringifyMovementValue(change.newValue ?? change.new_value)}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No field changes were recorded.</p>
+                )}
+                {needsMovementAcknowledgement(selectedMovement) ? (
+                  <div className="flex justify-center">
+                    <button
+                      type="button"
+                      className="inline-flex h-9 items-center gap-1.5 rounded-md bg-emerald-600 px-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-60"
+                      onClick={() => void handleAcknowledgeMovement(selectedMovement)}
+                      disabled={acknowledgingId === readMovementId(selectedMovement)}
+                    >
+                      {acknowledgingId === readMovementId(selectedMovement) ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <CheckCircle2 className="size-4" />
+                      )}
+                      Acknowledge
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+          <DialogFooter className="shrink-0">
+            <Button type="button" variant="outline" onClick={() => setDetailOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
     </section>
   )
 }

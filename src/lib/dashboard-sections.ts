@@ -300,23 +300,8 @@ export const financeSectionTabGroups: DashboardSectionTabGroup[] = [
   ...financeOperationsSectionTabGroups,
 ]
 
-const activityOperationsSectionTabGroups: DashboardSectionTabGroup[] = [
-  {
-    title: "Team activities",
-    items: [
-      { title: "Overview", url: "/dashboard/activities/overview" },
-      { title: "Reports", url: "/dashboard/activities/reports" },
-      { title: "Team work", url: "/dashboard/activities/team" },
-      { title: "Reviews", url: "/dashboard/activities/reviews" },
-      { title: "Exceptions", url: "/dashboard/activities/exceptions" },
-      { title: "Setup", url: "/dashboard/activities/setup" },
-    ],
-  },
-]
-
 export const selfActivitySectionTabGroups: DashboardSectionTabGroup[] = [
   {
-    title: "My activities",
     items: [
       { title: "My activities", url: "/dashboard/me/activities/today" },
     ],
@@ -324,8 +309,17 @@ export const selfActivitySectionTabGroups: DashboardSectionTabGroup[] = [
 ]
 
 export const activitySectionTabGroups: DashboardSectionTabGroup[] = [
-  ...selfActivitySectionTabGroups,
-  ...activityOperationsSectionTabGroups,
+  {
+    items: [
+      { title: "My activities", url: "/dashboard/me/activities/today" },
+      { title: "Team work", url: "/dashboard/activities/team" },
+      { title: "Overview", url: "/dashboard/activities/overview" },
+      { title: "Reports", url: "/dashboard/activities/reports" },
+      { title: "Reviews", url: "/dashboard/activities/reviews" },
+      { title: "Exceptions", url: "/dashboard/activities/exceptions" },
+      { title: "Setup", url: "/dashboard/activities/setup" },
+    ],
+  },
 ]
 
 const movementOperationsSectionTabGroups: DashboardSectionTabGroup[] = [

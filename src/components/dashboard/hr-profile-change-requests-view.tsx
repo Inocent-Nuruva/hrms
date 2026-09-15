@@ -1,9 +1,19 @@
 "use client"
 
 import * as React from "react"
-import Image from "next/image"
 import { useSearchParams } from "next/navigation"
-import { InfoIcon, Loader2Icon, RefreshCwIcon } from "lucide-react"
+import {
+  ArrowRightIcon,
+  CheckIcon,
+  FilterIcon,
+  HistoryIcon,
+  InfoIcon,
+  Loader2Icon,
+  RefreshCwIcon,
+  RotateCcwIcon,
+  UserRoundIcon,
+  XIcon,
+} from "lucide-react"
 import { motion } from "framer-motion"
 import { toast } from "sonner"
 
@@ -11,15 +21,12 @@ import { SearchToggleField } from "@/components/common/search-toggle-field"
 import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared"
 import {
   HeroBand,
-  StatusChip,
   TalentDoodleSprites,
   actionButtonClass,
   asRecord,
-  employeeLabel,
   formatDate,
-  optionLabel,
   prettify,
-  primaryButtonClass,
+  heroGhostButtonClass,
   readString,
   rowId,
   secondaryButtonClass,
@@ -36,6 +43,7 @@ import {
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import {
   approveHrProfileChangeRequest,
+  extractProfilePhotoUrl,
   getHrProfileChangeRequest,
   listHrProfileChangeRequestHistory,
   listHrProfileChangeRequests,
@@ -45,8 +53,15 @@ import {
   startHrProfileChangeReview,
   type AdminRecord,
 } from "@/lib/admin-api"
+import { cn } from "@/lib/utils"
 import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
 import { useDashboardMotion } from "@/lib/dashboard-motion"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useForbiddenRouteGuard, useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
 import { readStoredSessionTokens } from "@/lib/session-client"
@@ -132,15 +147,50 @@ function profileChangeFiles(row: AdminRecord | null) {
   return files
 }
 
+function personName(...records: Array<AdminRecord | null | undefined>) {
+  for (const record of records) {
+    const firstName = readString(record, ["first_name", "firstName"])
+    const lastName = readString(record, ["last_name", "lastName"])
+    const fullName = [firstName, lastName].filter(Boolean).join(" ").trim()
+    if (fullName) return fullName
+    const named = readString(record, ["full_name", "fullName", "employee_name", "employeeName"])
+    if (named) return named
+  }
+  return ""
+}
+
 function profileChangeEmployeeName(row: AdminRecord | null) {
   const employee = asRecord(row?.employee)
-  const directName = readString(row, ["employee_name", "employeeName", "full_name", "fullName"])
-  if (directName) return directName
+  const user = asRecord(employee?.user) ?? asRecord(asRecord(employee?.company_user)?.user)
+  return (
+    personName(employee, user) ||
+    readString(row, ["employee_name", "employeeName"]) ||
+    personName(asRecord(row?.requested_by_user)) ||
+    readString(employee, ["employee_no", "employeeNo"]) ||
+    "Employee"
+  )
+}
 
-  const firstName = readString(employee, ["first_name", "firstName"])
-  const lastName = readString(employee, ["last_name", "lastName"])
-  const fullName = [firstName, lastName].filter(Boolean).join(" ").trim()
-  return fullName || employeeLabel(row)
+function profileChangeEmployeeNo(row: AdminRecord | null) {
+  return readString(asRecord(row?.employee), ["employee_no", "employeeNo"])
+}
+
+function requestReference(row: AdminRecord | null) {
+  return readString(row, ["reference_number", "referenceNumber"])
+}
+
+function requestWhen(row: AdminRecord | null) {
+  if (!row) return "—"
+  return formatDate(
+    row.submitted_at ?? row.submittedAt ?? row.created_at ?? row.createdAt ?? row.approved_at ?? row.reviewed_at,
+  )
+}
+
+function initialsFromName(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (!parts.length) return "?"
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase()
 }
 
 function profileChangeRequesterName(row: AdminRecord | null) {
@@ -156,6 +206,122 @@ function profileChangeRequesterName(row: AdminRecord | null) {
     "Unknown requester"
   )
 }
+
+function requestStatus(row: AdminRecord | null) {
+  return readString(row, ["status"], "PENDING_REVIEW").toUpperCase()
+}
+
+function isOpenRequest(row: AdminRecord | null) {
+  return !["APPROVED", "REJECTED", "CANCELLED", "SUPERSEDED"].includes(requestStatus(row))
+}
+
+function looksLikeFilePath(value: string) {
+  const text = value.trim()
+  if (!text) return false
+  return /[/\\]/.test(text) && /(\.png|\.jpe?g|\.webp|\.gif|\.svg|uploads|private-uploads|profile-photo)/i.test(text)
+}
+
+function isPhotoChange(row: AdminRecord | null, item?: AdminRecord | null) {
+  const type = readString(row, ["request_type", "requestType"]).toUpperCase()
+  const field = readString(item, ["field_name", "fieldName", "field_label", "fieldLabel"]).toLowerCase()
+  const next = readString(item, ["new_value", "newValue"])
+  return type === "PROFILE_PHOTO" || field.includes("photo") || field.includes("avatar") || looksLikeFilePath(next)
+}
+
+function publicPhotoUrl(value: string | null | undefined) {
+  const text = value?.trim() ?? ""
+  if (!text || text === "—" || /private-uploads/i.test(text)) return null
+  return extractProfilePhotoUrl(text)
+}
+
+function employeeAvatarUrl(row: AdminRecord | null) {
+  const employee = asRecord(row?.employee)
+  const picture = asRecord(employee?.profile_picture)
+  const candidates = [
+    readString(employee, [
+      "profile_photo_url",
+      "profilePhotoUrl",
+      "uploaded_profile_photo_url",
+      "uploadedProfilePhotoUrl",
+    ]),
+    readString(picture, ["url", "src", "path"]),
+    extractProfilePhotoUrl(employee),
+  ]
+  for (const candidate of candidates) {
+    const resolved = publicPhotoUrl(candidate)
+    if (resolved) return resolved
+  }
+  return null
+}
+
+function PersonAvatar({ name, src }: { name: string; src?: string | null }) {
+  const [failed, setFailed] = React.useState(false)
+  React.useEffect(() => {
+    setFailed(false)
+  }, [src])
+  const showPhoto = Boolean(src) && !failed
+  return (
+    <div className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-[11px] font-semibold tracking-wide text-slate-600">
+      {showPhoto ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={src ?? ""} alt="" className="size-full object-cover" onError={() => setFailed(true)} />
+      ) : (
+        initialsFromName(name)
+      )}
+    </div>
+  )
+}
+
+function requestChangeSummary(row: AdminRecord) {
+  if (isPhotoChange(row, asRecord(Array.isArray(row.items) ? row.items[0] : null))) {
+    return "Profile photo"
+  }
+  const items = Array.isArray(row.items) ? row.items : []
+  const first = items.map((item) => asRecord(item)).find(Boolean)
+  if (!first) return prettify(readString(row, ["request_type", "requestType"], "Profile change"))
+  const label = readString(first, ["field_label", "field_name", "fieldName"], "Profile field")
+  const next = readString(first, ["new_value", "newValue"], "")
+  if (looksLikeFilePath(next)) return label
+  return next ? `${label} → ${next}` : label
+}
+
+function PhotoFrame({
+  src,
+  label,
+  loading,
+  empty,
+}: {
+  src?: string | null
+  label: string
+  loading?: boolean
+  empty?: string
+}) {
+  return (
+    <figure className="flex min-w-0 flex-col items-center text-center">
+      <div className="flex size-36 items-center justify-center overflow-hidden rounded-full bg-slate-100 sm:size-40">
+        {loading ? (
+          <Loader2Icon className="size-5 animate-spin text-slate-400" />
+        ) : src ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={src} alt="" className="size-full object-cover" />
+        ) : (
+          <div className="flex flex-col items-center gap-1 px-3 text-slate-400">
+            <UserRoundIcon className="size-8" />
+            <span className="text-[11px] leading-tight">{empty ?? "No photo"}</span>
+          </div>
+        )}
+      </div>
+      <figcaption className="mt-3 text-sm font-medium text-slate-600">{label}</figcaption>
+    </figure>
+  )
+}
+
+const approveButtonClass =
+  "inline-flex h-9 items-center gap-1.5 rounded-md bg-emerald-600 px-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-60"
+const declineButtonClass =
+  "inline-flex h-9 items-center gap-1.5 rounded-md border border-rose-200 bg-rose-50 px-3 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 disabled:opacity-60"
+const returnButtonClass =
+  "inline-flex h-9 items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-3 text-sm font-semibold text-amber-800 transition hover:bg-amber-100 disabled:opacity-60"
 
 function profileChangeStatusClass(status: string) {
   switch (status.toUpperCase()) {
@@ -193,6 +359,7 @@ export function HrProfileChangeRequestsView() {
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [search, setSearch] = React.useState("")
+  const [statusFilter, setStatusFilter] = React.useState<"open" | "all" | "approved" | "rejected">("all")
   const [detail, setDetail] = React.useState<AdminRecord | null>(null)
   const [formOpen, setFormOpen] = React.useState(false)
   const [form, setForm] = React.useState<Record<string, string>>({})
@@ -262,58 +429,77 @@ export function HrProfileChangeRequestsView() {
     (file) => file.mimeType.startsWith("image/") || readString(detail, ["request_type", "requestType"]).toUpperCase() === "PROFILE_PHOTO",
   )
 
-  const detailEmployee = asRecord(detail?.employee)
   const detailItems = Array.isArray(detail?.items)
     ? detail.items.filter((item): item is AdminRecord => Boolean(asRecord(item))).map((item) => asRecord(item) as AdminRecord)
     : []
-  const detailStatus = readString(detail, ["status"], "PENDING_REVIEW").toUpperCase()
+  const photoChangeItems = detailItems.filter((item) => isPhotoChange(detail, item))
+  const textChangeItems = detailItems.filter((item) => !isPhotoChange(detail, item))
+  const showPhotoComparison = photoChangeItems.length > 0 || isPhotoChange(detail)
+  const currentPhotoSrc =
+    publicPhotoUrl(
+      readString(photoChangeItems[0], ["old_value", "oldValue", "current_value", "currentValue"]),
+    ) || employeeAvatarUrl(detail)
+  const detailStatus = requestStatus(detail)
+  const detailIsOpen = isOpenRequest(detail)
+  const detailReason = readString(detail, ["reason"])
+  const detailType = prettify(readString(detail, ["request_type", "requestType"], "Profile change"))
+  const detailWhen = requestWhen(detail)
   const detailContent = detail ? (
-    <div className="max-h-[68vh] space-y-4 overflow-y-auto pr-1">
-      <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-primary/15 bg-primary/[0.04] p-3">
+    <div className="space-y-6">
+      <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-base font-semibold text-foreground">{profileChangeEmployeeName(detail)}</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {readString(detail, ["reference_number", "referenceNumber"], "Profile change request")}
+          <p className="text-sm font-semibold text-slate-900">{detailType}</p>
+          <p className="mt-1 text-xs text-slate-500">
+            {[requestReference(detail), detailWhen !== "—" ? detailWhen : ""].filter(Boolean).join(" · ")}
           </p>
         </div>
-        <span className={`inline-flex shrink-0 items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${profileChangeStatusClass(detailStatus)}`}>
+        <span className={`inline-flex shrink-0 items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${profileChangeStatusClass(detailStatus)}`}>
           {prettify(detailStatus)}
         </span>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2">
-        {[
-          ["Employee no", readString(detailEmployee, ["employee_no", "employeeNo"], "—")],
-          ["First name", readString(detailEmployee, ["first_name", "firstName"], "—")],
-          ["Last name", readString(detailEmployee, ["last_name", "lastName"], "—")],
-          ["Requested by", profileChangeRequesterName(detail)],
-          ["Request type", prettify(readString(detail, ["request_type", "requestType"], "Change"))],
-          ["Submitted", formatDate(detail.submitted_at ?? detail.submittedAt ?? detail.created_at ?? detail.createdAt)],
-        ].map(([label, value]) => (
-          <div key={label} className="min-w-0 rounded-xl border border-border bg-card px-3 py-2.5">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-primary/70">{label}</p>
-            <p className="mt-1 break-words text-sm font-medium text-foreground">{value}</p>
-          </div>
-        ))}
+      <div className="space-y-1 text-sm">
+        <p className="text-slate-600">
+          Requested by <span className="font-medium text-slate-900">{profileChangeRequesterName(detail)}</span>
+        </p>
+        {detailReason && detailReason !== "-" ? (
+          <p className="text-slate-500">{detailReason}</p>
+        ) : null}
       </div>
-      {readString(detail, ["reason"]) !== "-" ? (
-        <div className="rounded-xl border border-border bg-card px-3 py-3">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-primary/70">Reason</p>
-          <p className="mt-1 whitespace-pre-wrap break-words text-sm text-foreground">{readString(detail, ["reason"])}</p>
+      {showPhotoComparison ? (
+        <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-start justify-items-center gap-x-4 pt-1 sm:gap-x-8">
+          <PhotoFrame src={currentPhotoSrc} label="Current" empty="No current photo" />
+          <div className="flex h-36 items-center sm:h-40">
+            <ArrowRightIcon className="size-5 text-slate-300" />
+          </div>
+          <PhotoFrame
+            src={photoPreview?.url}
+            label="Requested"
+            loading={photoPreviewLoading}
+            empty={photoPreviewError ?? "Photo not available"}
+          />
         </div>
       ) : null}
-      <div className="rounded-xl border border-border bg-card p-3">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-primary/70">Requested items</p>
-        {detailItems.length ? (
-          <div className="mt-2 grid gap-2 sm:grid-cols-2">
-            {detailItems.map((item, index) => (
-              <div key={rowId(item) || index} className="min-w-0 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                <p className="break-words text-sm font-medium text-slate-900">{readString(item, ["field_label", "field_name"], "Profile field")}</p>
-                <p className="mt-1 break-words text-xs text-slate-600">{readString(item, ["new_value", "newValue"], "No value")}</p>
+      {textChangeItems.length ? (
+        <div className="space-y-4">
+          {textChangeItems.map((item, index) => {
+            const previous = readString(item, ["old_value", "oldValue", "current_value", "currentValue"], "—")
+            const next = readString(item, ["new_value", "newValue"], "—")
+            return (
+              <div key={rowId(item) || index} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-baseline">
+                <p className="text-xs font-medium text-slate-500 sm:col-span-3">
+                  {readString(item, ["field_label", "field_name", "fieldName"], "Requested")}
+                </p>
+                <p className="min-w-0 break-words text-sm text-slate-500">{previous || "—"}</p>
+                <ArrowRightIcon className="hidden size-4 text-slate-300 sm:block" />
+                <p className="min-w-0 break-words text-sm font-medium text-slate-900">{next}</p>
               </div>
-            ))}
-          </div>
-        ) : <p className="mt-2 text-sm text-muted-foreground">No field changes recorded.</p>}
-      </div>
+            )
+          })}
+        </div>
+      ) : null}
+      {!showPhotoComparison && textChangeItems.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No field changes recorded.</p>
+      ) : null}
     </div>
   ) : undefined
 
@@ -358,7 +544,48 @@ export function HrProfileChangeRequestsView() {
     }
   }, [detailId, previewFile?.id, previewFile?.name])
 
-  const visible = rows.filter((row) => !search || JSON.stringify(row).toLowerCase().includes(search.toLowerCase()))
+  const counts = React.useMemo(() => ({
+    all: rows.length,
+    open: rows.filter((row) => isOpenRequest(row)).length,
+    approved: rows.filter((row) => requestStatus(row) === "APPROVED").length,
+    rejected: rows.filter((row) => requestStatus(row) === "REJECTED").length,
+  }), [rows])
+
+  const visible = rows.filter((row) => {
+    const status = requestStatus(row)
+    if (statusFilter === "open" && !isOpenRequest(row)) return false
+    if (statusFilter === "approved" && status !== "APPROVED") return false
+    if (statusFilter === "rejected" && status !== "REJECTED") return false
+    if (search && !JSON.stringify(row).toLowerCase().includes(search.toLowerCase())) return false
+    return true
+  })
+
+  function openDecision(row: AdminRecord, mode: "approve" | "reject" | "correct") {
+    const id = rowId(row)
+    if (!id) return
+    setForm({ id, mode })
+    setFormError(null)
+    setFormOpen(true)
+  }
+
+  function openHistory(row: AdminRecord) {
+    const token = readStoredToken()
+    const id = rowId(row)
+    if (!token || !id) return
+    setBusyId(`hist-${id}`)
+    setHistoryOpen(true)
+    setHistoryLoading(true)
+    void listHrProfileChangeRequestHistory(token, id)
+      .then(setHistoryRows)
+      .catch((errorObject) => {
+        setHistoryRows([])
+        toast.error(errorObject instanceof Error ? errorObject.message : "Could not load history.")
+      })
+      .finally(() => {
+        setHistoryLoading(false)
+        setBusyId("")
+      })
+  }
 
   async function onDecide() {
     const token = readStoredToken()
@@ -380,8 +607,9 @@ export function HrProfileChangeRequestsView() {
           comment: form.comment || undefined,
         })
       }
-      toast.success("Saved.")
+      toast.success(form.mode === "approve" ? "Request approved." : form.mode === "reject" ? "Request declined." : "Sent back for correction.")
       setFormOpen(false)
+      setDetail(null)
       await load()
     } catch (errorObject) {
       setFormError(errorObject instanceof Error ? errorObject.message : "Could not save.")
@@ -392,65 +620,68 @@ export function HrProfileChangeRequestsView() {
 
   const columns = React.useMemo<Column<AdminRecord>[]>(() => [
     {
-      key: "req",
-      label: "Request",
-      render: (row) => (
-        <div className="space-y-0.5">
-          <p className="font-medium">{profileChangeEmployeeName(row)}</p>
-          <p className="text-xs text-muted-foreground">{prettify(readString(row, ["requestType", "request_type"], "Change"))}</p>
-        </div>
-      ),
-    },
-    { key: "status", label: "Status", render: (row) => <StatusChip value={readString(row, ["status"], "SUBMITTED")} /> },
-    { key: "when", label: "Submitted", render: (row) => formatDate(row.submittedAt ?? row.submitted_at ?? row.createdAt) },
-    {
-      key: "actions",
-      label: "Actions",
+      key: "employee",
+      label: "Employee",
+      defaultWidth: 260,
       render: (row) => {
-        const id = rowId(row)
+        const name = profileChangeEmployeeName(row)
         return (
-          <div className="flex flex-wrap gap-1">
-            <button type="button" className={actionButtonClass} disabled={busyId === `rev-${id}`} onClick={() => {
-              const token = readStoredToken()
-              if (!token || !id) return
-              setBusyId(`rev-${id}`)
-              void startHrProfileChangeReview(token, id, {})
-                .then(() => { toast.success("Review started."); return load() })
-                .catch((errorObject) => toast.error(errorObject instanceof Error ? errorObject.message : "Could not start review."))
-                .finally(() => setBusyId(""))
-            }}>Start review</button>
-            <button type="button" className={actionButtonClass} onClick={() => { setForm({ id, mode: "approve" }); setFormOpen(true) }}>Approve</button>
-            <button type="button" className={actionButtonClass} onClick={() => { setForm({ id, mode: "correct" }); setFormOpen(true) }}>Return</button>
-            <button type="button" className={actionButtonClass} onClick={() => { setForm({ id, mode: "reject" }); setFormOpen(true) }}>Reject</button>
-            <button
-              type="button"
-              className={actionButtonClass}
-              disabled={busyId === `hist-${id}`}
-              onClick={() => {
-                const token = readStoredToken()
-                if (!token || !id) return
-                setBusyId(`hist-${id}`)
-                setHistoryOpen(true)
-                setHistoryLoading(true)
-                void listHrProfileChangeRequestHistory(token, id)
-                  .then(setHistoryRows)
-                  .catch((errorObject) => {
-                    setHistoryRows([])
-                    toast.error(errorObject instanceof Error ? errorObject.message : "Could not load history.")
-                  })
-                  .finally(() => {
-                    setHistoryLoading(false)
-                    setBusyId("")
-                  })
-              }}
-            >
-              History
-            </button>
+          <div className="flex min-w-0 items-center gap-3">
+            <PersonAvatar name={name} src={employeeAvatarUrl(row)} />
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-slate-900">{name}</p>
+              <p className="truncate text-xs text-slate-500">
+                {[profileChangeEmployeeNo(row), requestReference(row)].filter(Boolean).join(" · ")}
+              </p>
+            </div>
           </div>
         )
       },
     },
-  ], [busyId, load])
+    {
+      key: "change",
+      label: "Change",
+      defaultWidth: 140,
+      render: (row) => (
+        <span className="inline-flex max-w-full truncate rounded-md bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-800">
+          {requestChangeSummary(row)}
+        </span>
+      ),
+    },
+    {
+      key: "status",
+      label: "Status",
+      defaultWidth: 120,
+      render: (row) => (
+        <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${profileChangeStatusClass(requestStatus(row))}`}>
+          {prettify(requestStatus(row))}
+        </span>
+      ),
+    },
+    {
+      key: "when",
+      label: "Submitted",
+      defaultWidth: 120,
+      render: (row) => <span className="text-sm font-medium text-slate-800">{requestWhen(row)}</span>,
+    },
+    {
+      key: "actions",
+      label: "",
+      defaultWidth: 88,
+      render: (row) => (
+        <button
+          type="button"
+          className="inline-flex h-8 items-center rounded-md bg-sky-50 px-2.5 text-xs font-semibold text-sky-800 transition hover:bg-sky-100"
+          onClick={(event) => {
+            event.stopPropagation()
+            openRequestDetails(row)
+          }}
+        >
+          {isOpenRequest(row) ? "Review" : "View"}
+        </button>
+      ),
+    },
+  ], [openRequestDetails])
 
   if (!canAccess) return null
 
@@ -461,42 +692,92 @@ export function HrProfileChangeRequestsView() {
         eyebrow="Employees"
         title={
           <>
-            Requests
+            Profile requests
             <TipIcon
               variant="onPrimary"
-              text="Review employee requests to change name, phone, address, or emergency contact. This is separate from older profile-update approvals."
+              text="Review employee requests to change name, phone, address, photo, or emergency contact."
             />
           </>
         }
+        description="Open a request to see what changed, then approve, send it back, or decline."
         actions={
-          <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
+          <button type="button" className={heroGhostButtonClass} onClick={() => void load()} disabled={loading}>
             {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
             Refresh
           </button>
         }
       />
-      <div className="flex flex-wrap items-end gap-6">
-        {[
-          { label: "Requests", value: rows.length },
-          {
-            label: "Open",
-            value: rows.filter(
-              (row) =>
-                !["APPROVED", "REJECTED", "CANCELLED"].includes(readString(row, ["status"]).toUpperCase()),
-            ).length,
-          },
-          {
-            label: "Approved",
-            value: rows.filter((row) => readString(row, ["status"]).toUpperCase() === "APPROVED").length,
-          },
-        ].map((item) => (
-          <div key={item.label}>
-            <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">{item.label}</p>
-            <p className="text-lg font-semibold tabular-nums leading-none text-primary">{item.value}</p>
-          </div>
-        ))}
+      <div className="overflow-hidden rounded-xl border border-border bg-card">
+        <div className="grid grid-cols-4">
+          {([
+            { key: "all", label: "All", value: counts.all, valueClass: "text-slate-800", activeClass: "bg-slate-50" },
+            { key: "open", label: "Open", value: counts.open, valueClass: "text-sky-600", activeClass: "bg-sky-50/90" },
+            { key: "approved", label: "Approved", value: counts.approved, valueClass: "text-emerald-600", activeClass: "bg-emerald-50/80" },
+            { key: "rejected", label: "Declined", value: counts.rejected, valueClass: "text-rose-600", activeClass: "bg-rose-50/80" },
+          ] as const).map((item, index) => {
+            const active = statusFilter === item.key
+            return (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => setStatusFilter(item.key)}
+                aria-pressed={active}
+                className={cn(
+                  "relative min-w-0 px-3 py-2 text-left transition-colors",
+                  active ? item.activeClass : "hover:bg-muted/40",
+                )}
+              >
+                {index > 0 ? <span className="absolute top-2 bottom-2 left-0 w-px bg-border" aria-hidden /> : null}
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  {item.label}
+                </p>
+                <p className={cn("mt-0.5 text-lg font-semibold tabular-nums leading-tight tracking-tight", item.valueClass)}>
+                  {item.value}
+                </p>
+              </button>
+            )
+          })}
+        </div>
       </div>
-      <SearchToggleField value={search} onChange={setSearch} placeholder="Search" />
+      <div className="flex items-center justify-end gap-2">
+        <SearchToggleField value={search} onChange={setSearch} placeholder="Search employee or change" active={Boolean(search.trim())} />
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <button
+                type="button"
+                aria-label="Filter requests"
+                title="Filter"
+                className={cn(
+                  "inline-flex h-8 w-8 items-center justify-center rounded-md border transition-colors",
+                  statusFilter === "all"
+                    ? "border-sky-200/80 bg-sky-50/70 text-sky-700 hover:bg-sky-100 hover:text-sky-800"
+                    : "border-sky-200 bg-sky-50 text-sky-800 hover:bg-sky-100",
+                )}
+              />
+            }
+          >
+            <FilterIcon className="size-3.5" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-44">
+            {([
+              ["all", "All"],
+              ["open", `Open (${counts.open})`],
+              ["approved", "Approved"],
+              ["rejected", "Declined"],
+            ] as const).map(([value, label]) => (
+              <DropdownMenuItem
+                key={value}
+                className="justify-between gap-2 text-xs"
+                onClick={() => setStatusFilter(value)}
+              >
+                <span>{label}</span>
+                {statusFilter === value ? <CheckIcon className="size-3.5 text-[var(--primary)]" /> : null}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
       {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div> : null}
       <div className="overflow-hidden rounded-xl border border-border bg-card">
         <ResizableTable
@@ -517,57 +798,87 @@ export function HrProfileChangeRequestsView() {
         open={Boolean(detail)}
         onOpenChange={(open) => !open && setDetail(null)}
         title={profileChangeEmployeeName(detail)}
-        description={readString(detail, ["reference_number", "referenceNumber"], optionLabel(detail))}
+        description={profileChangeEmployeeNo(detail)}
         row={detail}
-        content={detailContent}
-        popupClassName="w-[min(96vw,56rem)] max-w-4xl"
-        footer={
-          profileChangeFiles(detail).length ? (
-            <div className="w-full space-y-3">
-              {photoPreviewLoading ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2Icon className="size-4 animate-spin" />
-                  Loading submitted photo…
-                </div>
-              ) : null}
-              {photoPreview ? (
-                <div className="overflow-hidden rounded-xl border border-border bg-muted/20 p-2">
-                  <Image
-                    src={photoPreview.url}
-                    alt={`Submitted profile photo for ${profileChangeEmployeeName(detail)}`}
-                    width={640}
-                    height={640}
-                    unoptimized
-                    className="mx-auto max-h-80 w-auto rounded-lg object-contain"
-                  />
-                  <p className="mt-2 text-center text-xs text-muted-foreground">{photoPreview.name}</p>
-                </div>
-              ) : null}
-              {photoPreviewError ? <p className="text-sm text-rose-600">{photoPreviewError}</p> : null}
-              <div className="flex flex-wrap gap-2">
-                {profileChangeFiles(detail).map((fileItem) => (
-                  <button
-                    key={fileItem.id}
-                    type="button"
-                    className={actionButtonClass}
-                    disabled={busyId === `file-${fileItem.id}`}
-                    onClick={() => {
-                      const token = readStoredToken()
-                      const id = detail ? rowId(detail) : ""
-                      if (!token || !id) return
-                      setBusyId(`file-${fileItem.id}`)
-                      void previewHrProfileChangeRequestFile(token, id, fileItem.id)
-                        .then((result) => downloadBlob(result.blob, result.filename))
-                        .catch((errorObject) =>
-                          toast.error(errorObject instanceof Error ? errorObject.message : "Could not open file."),
-                        )
-                        .finally(() => setBusyId(""))
-                    }}
-                  >
-                    Download {fileItem.name}
+        content={
+          detail ? (
+            <div className="space-y-6">
+              {detailContent}
+              {detailIsOpen ? (
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <button type="button" className={declineButtonClass} onClick={() => openDecision(detail, "reject")}>
+                    <XIcon className="size-4" /> Decline
                   </button>
-                ))}
-              </div>
+                  <button type="button" className={returnButtonClass} onClick={() => openDecision(detail, "correct")}>
+                    <RotateCcwIcon className="size-4" /> Return
+                  </button>
+                  <button type="button" className={approveButtonClass} onClick={() => openDecision(detail, "approve")}>
+                    <CheckIcon className="size-4" /> Approve
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : undefined
+        }
+        popupClassName="w-[calc(100%-1rem)] max-w-2xl"
+        footer={
+          detail ? (
+            <div className="flex w-full flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className={actionButtonClass}
+                disabled={busyId === `hist-${detailId}`}
+                onClick={() => openHistory(detail)}
+              >
+                <HistoryIcon className="size-3.5" /> History
+              </button>
+              {profileChangeFiles(detail).map((fileItem) => (
+                <button
+                  key={fileItem.id}
+                  type="button"
+                  className={actionButtonClass}
+                  disabled={busyId === `file-${fileItem.id}`}
+                  onClick={() => {
+                    const token = readStoredToken()
+                    if (!token || !detailId) return
+                    setBusyId(`file-${fileItem.id}`)
+                    void previewHrProfileChangeRequestFile(token, detailId, fileItem.id)
+                      .then((result) => downloadBlob(result.blob, result.filename))
+                      .catch((errorObject) =>
+                        toast.error(errorObject instanceof Error ? errorObject.message : "Could not open file."),
+                      )
+                      .finally(() => setBusyId(""))
+                  }}
+                >
+                  Download {fileItem.mimeType.startsWith("image/") ? "photo" : fileItem.name}
+                </button>
+              ))}
+              {detailIsOpen && detailStatus === "PENDING_REVIEW" ? (
+                <button
+                  type="button"
+                  className={actionButtonClass}
+                  disabled={busyId === `rev-${detailId}`}
+                  onClick={() => {
+                    const token = readStoredToken()
+                    if (!token || !detailId) return
+                    setBusyId(`rev-${detailId}`)
+                    void startHrProfileChangeReview(token, detailId, {})
+                      .then(() => {
+                        toast.success("Review started.")
+                        return getHrProfileChangeRequest(token, detailId)
+                      })
+                      .then((record) => {
+                        if (record) setDetail(record)
+                        return load()
+                      })
+                      .catch((errorObject) => toast.error(errorObject instanceof Error ? errorObject.message : "Could not start review."))
+                      .finally(() => setBusyId(""))
+                  }}
+                >
+                  {busyId === `rev-${detailId}` ? <Loader2Icon className="size-3.5 animate-spin" /> : null}
+                  Start review
+                </button>
+              ) : null}
             </div>
           ) : undefined
         }
@@ -627,7 +938,15 @@ export function HrProfileChangeRequestsView() {
           </div>
           <DialogFooter>
             <button type="button" className={secondaryButtonClass} onClick={() => setFormOpen(false)}>Cancel</button>
-            <button type="button" className={primaryButtonClass} onClick={() => void onDecide()} disabled={saving}>{saving ? <Loader2Icon className="size-4 animate-spin" /> : "Save"}</button>
+            <button
+              type="button"
+              className={form.mode === "approve" ? approveButtonClass : form.mode === "reject" ? declineButtonClass : returnButtonClass}
+              onClick={() => void onDecide()}
+              disabled={saving}
+            >
+              {saving ? <Loader2Icon className="size-4 animate-spin" /> : null}
+              {form.mode === "approve" ? "Approve request" : form.mode === "reject" ? "Decline request" : "Send back"}
+            </button>
           </DialogFooter>
         </DialogPopup>
       </Dialog>
