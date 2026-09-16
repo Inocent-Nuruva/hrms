@@ -8687,6 +8687,92 @@ export async function createLeavePolicy(token: string, data: AdminRecord) {
   });
 }
 
+function looksLikeLeavePolicy(record: AdminRecord | null): boolean {
+  if (!record) {
+    return false;
+  }
+  const hasName = "name" in record || "title" in record;
+  if (!hasName) {
+    return false;
+  }
+  return (
+    "accrual_method" in record ||
+    "accrualMethod" in record ||
+    "leave_types" in record ||
+    "leaveTypes" in record ||
+    "max_consecutive_days" in record ||
+    "maxConsecutiveDays" in record ||
+    "allow_during_probation" in record ||
+    "allowDuringProbation" in record ||
+    "applicable_department_id" in record ||
+    "applicableDepartmentId" in record
+  );
+}
+
+function unwrapLeavePolicy(payload: unknown): AdminRecord | null {
+  const root = asRecord(payload);
+  if (!root) {
+    const list = asArray(payload);
+    return list?.[0] ?? null;
+  }
+  if (looksLikeLeavePolicy(root)) {
+    return root;
+  }
+
+  const wrappers = [
+    asRecord(root.data),
+    asRecord(root.result),
+    asRecord(root.item),
+    asRecord(root.payload),
+    asRecord(root.policy),
+    asRecord(root.leave_policy),
+    asRecord(root.leavePolicy),
+  ];
+
+  for (const wrapper of wrappers) {
+    if (looksLikeLeavePolicy(wrapper)) {
+      return wrapper;
+    }
+    const nested =
+      asRecord(wrapper?.policy) ??
+      asRecord(wrapper?.leave_policy) ??
+      asRecord(wrapper?.leavePolicy) ??
+      asRecord(wrapper?.data);
+    if (looksLikeLeavePolicy(nested)) {
+      return nested;
+    }
+  }
+
+  return null;
+}
+
+export async function getLeavePolicy(token: string, id: string | number) {
+  const payload = await adminRequest<unknown>(`/api/leave/policies/${id}`, {
+    token,
+  });
+  const root = asRecord(payload);
+  const wrapper =
+    asRecord(root?.data) ?? asRecord(root?.result) ?? asRecord(root?.item);
+  const source =
+    unwrapLeavePolicy(payload) ?? normalizeSingle(payload) ?? wrapper ?? root;
+  if (!source) {
+    return null;
+  }
+
+  const leaveTypes =
+    source.leave_types ??
+    source.leaveTypes ??
+    wrapper?.leave_types ??
+    wrapper?.leaveTypes ??
+    root?.leave_types ??
+    root?.leaveTypes;
+
+  if (leaveTypes !== undefined && source.leave_types === undefined) {
+    return { ...source, leave_types: leaveTypes };
+  }
+  return source;
+}
+
 export async function patchLeavePolicy(
   token: string,
   id: string | number,
