@@ -19,7 +19,6 @@ export function Card({ children, style }: CardProps) {
         {
           backgroundColor: isDark ? COLORS.surfaceDark : COLORS.surface,
           borderColor: isDark ? COLORS.outlineDark : COLORS.outline,
-          shadowColor: isDark ? '#000000' : '#0f172a',
         },
         style,
       ]}
@@ -31,12 +30,8 @@ export function Card({ children, style }: CardProps) {
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 14,
+    borderRadius: 8,
     borderWidth: 1,
-    padding: 18,
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.08,
-    shadowRadius: 24,
-    elevation: 3,
+    padding: 16,
   },
 });

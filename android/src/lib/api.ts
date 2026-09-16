@@ -324,6 +324,18 @@ export const api = {
     });
   },
 
+  async forgotPassword(email: string) {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) {
+      throw new Error('Email is required.');
+    }
+    return request<void>('/api/auth/forgot-password', {
+      method: 'POST',
+      body: { email: normalizedEmail },
+      retryOnUnauthorized: false,
+    });
+  },
+
   async verifyOtp(tempToken: string, code: string) {
     // Matches the Complete2FALoginDto expected by the backend per OpenAPI
     return request<unknown>('/api/auth/2fa/complete-login', {

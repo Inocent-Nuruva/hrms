@@ -19,111 +19,40 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import {
+  assignmentDefaultsFromLeaveType,
+  attachedLeavePolicyTypes,
+  emptyLeavePolicyTypeAssignment,
+  hasPolicyAdvancedRules,
+  hasPolicyCoverageLimits,
+  LEAVE_POLICY_CONFIRMATION_OPTIONS,
+  LEAVE_POLICY_DAY_TREATMENT_OPTIONS,
+  LEAVE_POLICY_EMPLOYMENT_TYPE_OPTIONS,
+  leavePolicyCoverageParts,
+  leavePolicyTypeLabel,
+  type LeavePolicyFormValue,
+  type LeavePolicyTypeAssignment,
+} from "@/lib/leave-policy-form"
 import { cn } from "@/lib/utils"
 
-export type LeavePolicyTypeAssignment = {
-  leave_type_id: string
-  annual_quota_days: string
-  max_per_request_days: string
-  requires_approval: string
-  encashment_enabled: string
-  maximum_encashment_days: string
-  minimum_balance_after_encashment: string
-  encashment_requires_approval: string
-  maximum_accumulation_days: string
-}
+export {
+  emptyLeavePolicyForm,
+  emptyLeavePolicyTypeAssignment,
+  type LeavePolicyFormValue,
+  type LeavePolicyTypeAssignment,
+} from "@/lib/leave-policy-form"
 
-export type LeavePolicyFormValue = {
-  name: string
-  description: string
-  status: string
-  accrual_method: string
-  accrual_rate: string
-  priority: string
-  applicable_branch_id: string
-  applicable_department_id: string
-  applicable_position_id: string
-  applicable_grade_id: string
-  applicable_employment_type: string
-  applicable_confirmation_status: string
-  max_consecutive_days: string
-  min_service_months: string
-  allow_during_probation: string
-  allow_negative_balance: string
-  weekly_off_treatment: string
-  holiday_treatment: string
-  allow_half_day: string
-  allow_short_leave: string
-  minimum_short_leave_minutes: string
-  maximum_short_leave_minutes: string
-  minimum_notice_days: string
-  maximum_backdate_days: string
-  cancellation_requires_approval: string
-  cancellation_cutoff_days: string
-  maximum_accumulation_days: string
-  attendance_balance_deduction_enabled: string
-  absent_day_deduction_days: string
-  unpaid_leave_day_deduction_days: string
-  half_day_deduction_days: string
-  leave_types: LeavePolicyTypeAssignment[]
-}
-
-export function emptyLeavePolicyTypeAssignment(): LeavePolicyTypeAssignment {
-  return {
-    leave_type_id: "",
-    annual_quota_days: "0",
-    max_per_request_days: "0",
-    requires_approval: "true",
-    encashment_enabled: "false",
-    maximum_encashment_days: "0",
-    minimum_balance_after_encashment: "0",
-    encashment_requires_approval: "true",
-    maximum_accumulation_days: "0",
-  }
-}
-
-export function emptyLeavePolicyForm(): LeavePolicyFormValue {
-  return {
-    name: "",
-    description: "",
-    status: "active",
-    accrual_method: "yearly",
-    accrual_rate: "0",
-    priority: "0",
-    applicable_branch_id: "",
-    applicable_department_id: "",
-    applicable_position_id: "",
-    applicable_grade_id: "",
-    applicable_employment_type: "",
-    applicable_confirmation_status: "",
-    max_consecutive_days: "1",
-    min_service_months: "0",
-    allow_during_probation: "true",
-    allow_negative_balance: "false",
-    weekly_off_treatment: "EMPLOYEE_SCHEDULE",
-    holiday_treatment: "EXCLUDE",
-    allow_half_day: "false",
-    allow_short_leave: "false",
-    minimum_short_leave_minutes: "30",
-    maximum_short_leave_minutes: "240",
-    minimum_notice_days: "0",
-    maximum_backdate_days: "0",
-    cancellation_requires_approval: "false",
-    cancellation_cutoff_days: "0",
-    maximum_accumulation_days: "0",
-    attendance_balance_deduction_enabled: "false",
-    absent_day_deduction_days: "1",
-    unpaid_leave_day_deduction_days: "1",
-    half_day_deduction_days: "0.5",
-    leave_types: [emptyLeavePolicyTypeAssignment()],
-  }
+type PolicyLeaveTypeOption = WorkflowOption & {
+  maxDaysPerYear?: string
+  maxCarryForwardDays?: string
+  carryForwardAllowed?: boolean
 }
 
 type LeavePolicyEditorSheetProps = {
   open: boolean
   mode: "create" | "edit"
   value: LeavePolicyFormValue
-  leaveTypeOptions: WorkflowOption[]
+  leaveTypeOptions: PolicyLeaveTypeOption[]
   branchOptions: WorkflowOption[]
   departmentOptions: WorkflowOption[]
   positionOptions: WorkflowOption[]
@@ -135,29 +64,9 @@ type LeavePolicyEditorSheetProps = {
   onSubmit: () => void | Promise<void>
 }
 
-const EMPLOYMENT_TYPE_OPTIONS: WorkflowOption[] = [
-  { value: "full_time", label: "Full time" },
-  { value: "part_time", label: "Part time" },
-  { value: "contract", label: "Contract" },
-  { value: "intern", label: "Intern" },
-  { value: "consultant", label: "Consultant" },
-  { value: "temporary", label: "Temporary" },
-]
-
-const CONFIRMATION_OPTIONS: WorkflowOption[] = [
-  { value: "CONFIRMED", label: "Confirmed" },
-  { value: "PROBATION", label: "Probation" },
-  { value: "CONFIRMATION_DUE", label: "Confirmation due" },
-  { value: "PROBATION_EXTENDED", label: "Probation extended" },
-  { value: "NOT_CONFIRMED", label: "Not confirmed" },
-  { value: "NOT_APPLICABLE", label: "Not applicable" },
-]
-
-const DAY_TREATMENT_OPTIONS: WorkflowOption[] = [
-  { value: "EMPLOYEE_SCHEDULE", label: "Follow schedule" },
-  { value: "EXCLUDE", label: "Exclude" },
-  { value: "INCLUDE", label: "Include" },
-]
+const EMPLOYMENT_TYPE_OPTIONS = LEAVE_POLICY_EMPLOYMENT_TYPE_OPTIONS
+const CONFIRMATION_OPTIONS = LEAVE_POLICY_CONFIRMATION_OPTIONS
+const DAY_TREATMENT_OPTIONS = LEAVE_POLICY_DAY_TREATMENT_OPTIONS
 
 function HintIcon({ text }: { text: string }) {
   return (
@@ -166,7 +75,7 @@ function HintIcon({ text }: { text: string }) {
         render={
           <button
             type="button"
-            className="inline-flex size-4 items-center justify-center rounded-full text-slate-400 transition hover:text-primary"
+            className="inline-flex size-7 items-center justify-center rounded-full text-slate-400 transition hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
             aria-label={text}
           />
         }
@@ -253,29 +162,16 @@ function BoolPair({
 const inputClass =
   "h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-xs text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-border dark:bg-background dark:text-white"
 
-type PolicyStage = "policy" | "who" | "rules"
+type PolicyStage = "basics" | "entitlements" | "who" | "rules"
 
 const STAGES: Array<{ key: PolicyStage; number: string; label: string }> = [
-  { key: "policy", number: "01", label: "Policy & types" },
-  { key: "who", number: "02", label: "Who it covers" },
-  { key: "rules", number: "03", label: "Day rules" },
+  { key: "basics", number: "01", label: "Basics" },
+  { key: "entitlements", number: "02", label: "Entitlements" },
+  { key: "who", number: "03", label: "Eligibility" },
+  { key: "rules", number: "04", label: "Day rules" },
 ]
 
-function optionLabel(options: WorkflowOption[], value: string, fallback: string) {
-  if (!value) return fallback
-  return options.find((option) => option.value === value)?.label ?? fallback
-}
 
-function hasCoverageLimits(value: LeavePolicyFormValue) {
-  return Boolean(
-    value.applicable_branch_id ||
-      value.applicable_department_id ||
-      value.applicable_position_id ||
-      value.applicable_grade_id ||
-      value.applicable_employment_type ||
-      value.applicable_confirmation_status,
-  )
-}
 
 export function LeavePolicyEditorSheet({
   open,
@@ -293,7 +189,7 @@ export function LeavePolicyEditorSheet({
   onSubmit,
 }: LeavePolicyEditorSheetProps) {
   const { reduce } = useDashboardMotion()
-  const [stage, setStage] = React.useState<PolicyStage>("policy")
+  const [stage, setStage] = React.useState<PolicyStage>("basics")
   const [narrowCoverage, setNarrowCoverage] = React.useState(false)
   const [showAdvancedRules, setShowAdvancedRules] = React.useState(false)
   const [openTypeIndex, setOpenTypeIndex] = React.useState<number | null>(0)
@@ -301,53 +197,54 @@ export function LeavePolicyEditorSheet({
 
   React.useEffect(() => {
     if (open && !wasOpen.current) {
-      setStage("policy")
-      setNarrowCoverage(hasCoverageLimits(value))
-      setShowAdvancedRules(false)
+      setStage("basics")
+      setNarrowCoverage(hasPolicyCoverageLimits(value))
+      setShowAdvancedRules(hasPolicyAdvancedRules(value))
       setOpenTypeIndex(0)
+    } else if (open) {
+      setNarrowCoverage((current) => current || hasPolicyCoverageLimits(value))
+      setShowAdvancedRules((current) => current || hasPolicyAdvancedRules(value))
     }
     wasOpen.current = open
   }, [open, value])
 
-  const attachedTypes = value.leave_types.filter((row) => row.leave_type_id)
-  const usedTypeIds = new Set(attachedTypes.map((row) => row.leave_type_id))
+  const attachedTypes = attachedLeavePolicyTypes(value)
+  const usedTypeIds = new Set(attachedTypes.map((row) => row.leave_type_id).filter(Boolean))
   const remainingTypes = leaveTypeOptions.filter((option) => !usedTypeIds.has(option.value))
   const hasName = Boolean(value.name.trim())
   const hasTypes = attachedTypes.length > 0
   const canLeavePolicyStage = hasName && hasTypes
   const isEdit = mode === "edit"
-  const coverageParts = [
-    optionLabel(branchOptions, value.applicable_branch_id, ""),
-    optionLabel(departmentOptions, value.applicable_department_id, ""),
-    optionLabel(positionOptions, value.applicable_position_id, ""),
-    optionLabel(gradeOptions, value.applicable_grade_id, ""),
-    optionLabel(EMPLOYMENT_TYPE_OPTIONS, value.applicable_employment_type, ""),
-    optionLabel(CONFIRMATION_OPTIONS, value.applicable_confirmation_status, ""),
-  ].filter(Boolean)
+  const coverageParts = leavePolicyCoverageParts(value, {
+    branches: branchOptions,
+    departments: departmentOptions,
+    positions: positionOptions,
+    grades: gradeOptions,
+  })
   const coverageSummary = coverageParts.length ? coverageParts.join(" · ") : "Everyone"
   const typeSummary =
     attachedTypes.length === 0
       ? "No leave types yet"
       : attachedTypes
-          .map((row) => {
-            const label = leaveTypeOptions.find((option) => option.value === row.leave_type_id)?.label ?? "Leave type"
-            return `${label} ${row.annual_quota_days || "0"}d`
-          })
+          .map((row) => `${leavePolicyTypeLabel(row, leaveTypeOptions)} ${row.annual_quota_days || "0"}d`)
           .join(" · ")
 
   const stageUnlocked: Record<PolicyStage, boolean> = {
-    policy: true,
+    basics: true,
+    entitlements: hasName || isEdit,
     who: canLeavePolicyStage || isEdit,
     rules: canLeavePolicyStage || isEdit,
   }
 
   const readinessMessage =
-    stage === "policy"
+    stage === "basics"
       ? !hasName
         ? "Name the policy to continue."
-        : !hasTypes
-          ? "Tap a leave type to attach it."
-          : "Continue to who this policy covers."
+        : "Continue to define the leave entitlements."
+      : stage === "entitlements"
+        ? !hasTypes
+          ? "Attach at least one existing leave type."
+          : "Entitlements are ready. Continue to eligibility."
       : stage === "who"
         ? narrowCoverage
           ? `Limited to ${coverageSummary}.`
@@ -360,15 +257,26 @@ export function LeavePolicyEditorSheet({
     })
   }
 
+  const defaultsForLeaveType = (leaveTypeId: string) => {
+    const option = leaveTypeOptions.find((item) => item.value === leaveTypeId)
+    return assignmentDefaultsFromLeaveType(leaveTypeId, {
+      name: option?.label,
+      maxDaysPerYear: option?.maxDaysPerYear,
+      maxCarryForwardDays: option?.maxCarryForwardDays,
+      carryForwardAllowed: option?.carryForwardAllowed,
+    })
+  }
+
   const attachLeaveType = (leaveTypeId: string) => {
+    const seeded = defaultsForLeaveType(leaveTypeId)
     const emptyIndex = value.leave_types.findIndex((row) => !row.leave_type_id)
     if (emptyIndex >= 0) {
-      updateAssignment(emptyIndex, { leave_type_id: leaveTypeId })
+      updateAssignment(emptyIndex, seeded)
       setOpenTypeIndex(emptyIndex)
       return
     }
     onValueChange({
-      leave_types: [...value.leave_types, { ...emptyLeavePolicyTypeAssignment(), leave_type_id: leaveTypeId }],
+      leave_types: [...value.leave_types, seeded],
     })
     setOpenTypeIndex(value.leave_types.length)
   }
@@ -413,21 +321,25 @@ export function LeavePolicyEditorSheet({
         side="right"
         className="relative inset-0 h-dvh w-full max-w-none gap-0 overflow-hidden rounded-none border-0 p-0 shadow-none data-[side=right]:inset-0 data-[side=right]:left-0 data-[side=right]:h-dvh data-[side=right]:w-full data-[side=right]:max-w-none data-[side=right]:border-0 data-[side=right]:sm:max-w-none data-[side=right]:data-starting-style:translate-x-0 data-[side=right]:data-ending-style:translate-x-0"
       >
-        <header className="shrink-0 border-b border-border px-4 py-3 pr-12 sm:px-6">
+        <header className="shrink-0 border-b border-border bg-gradient-to-r from-primary/10 via-white to-white px-4 py-3 pr-12 sm:px-6 dark:from-primary/20 dark:via-background dark:to-background">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0">
               <SheetTitle className="text-base font-semibold tracking-tight text-slate-900 dark:text-white">
                 {mode === "create" ? "Create leave policy" : "Edit leave policy"}
               </SheetTitle>
               <SheetDescription className="mt-1 text-sm text-slate-500">
-                {stage === "policy"
-                  ? "Name it, then tap the leave types this policy should carry."
-                  : stage === "who"
-                    ? "Keep it company-wide, or limit it to a group."
-                    : "Set how days are counted. Extra rules stay folded away."}
+                {isEdit
+                  ? [value.name.trim() || "Untitled policy", typeSummary, coverageSummary].join(" · ")
+                  : stage === "basics"
+                    ? "Name the policy and set its status."
+                    : stage === "entitlements"
+                      ? "Attach existing leave types and define what employees receive."
+                    : stage === "who"
+                      ? "Keep it company-wide, or limit it to a group."
+                      : "Set how days are counted. Extra rules stay folded away."}
               </SheetDescription>
             </div>
-            <nav className="flex items-center gap-1" aria-label="Policy steps">
+            <nav className="flex w-full items-center gap-1 overflow-x-auto pb-1 sm:w-auto sm:pb-0" aria-label="Policy steps">
               {STAGES.map((item, index) => {
                 const active = item.key === stage
                 const done = currentIndex > index
@@ -438,8 +350,10 @@ export function LeavePolicyEditorSheet({
                       type="button"
                       disabled={!unlocked}
                       onClick={() => goToStage(item.key)}
+                      aria-current={active ? "step" : undefined}
+                      aria-label={`${item.number} ${item.label}`}
                       className={cn(
-                        "relative flex h-8 items-center gap-1.5 rounded-full px-2.5 text-[11px] font-semibold transition",
+                        "relative flex h-9 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
                         active
                           ? "bg-primary text-white"
                           : done
@@ -450,7 +364,7 @@ export function LeavePolicyEditorSheet({
                       )}
                     >
                       <span className="tabular-nums">{done && !active ? "✓" : item.number}</span>
-                      <span className="hidden sm:inline">{item.label}</span>
+                      <span className="hidden min-[480px]:inline">{item.label}</span>
                     </button>
                     {index < STAGES.length - 1 ? (
                       <span className={cn("h-px w-4 sm:w-6", currentIndex > index ? "bg-primary" : "bg-slate-200")} />
@@ -464,121 +378,136 @@ export function LeavePolicyEditorSheet({
 
         <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
           <AnimatePresence mode="wait">
-            {stage === "policy" ? (
+            {stage === "basics" || stage === "entitlements" ? (
               <motion.div
-                key="policy-stage"
+                key={`${stage}-stage`}
                 className="flex h-full min-h-0 justify-center overflow-y-auto px-4 py-6 sm:px-6 sm:py-10"
                 {...stageMotion("forward")}
                 transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
               >
                 <div className="w-full max-w-2xl space-y-5">
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <Field label="Policy name" hint="The name HR will see in the policy list. Keep it specific, e.g. Staff annual rules.">
-                      <input
-                        autoFocus
-                        className={inputClass}
-                        placeholder="e.g. Staff leave rules"
-                        value={value.name}
-                        onChange={(event) => onValueChange({ name: event.target.value })}
-                      />
-                    </Field>
-                    <div className="min-w-0">
-                      <FieldLabel label="Status" hint="Active policies can be used. Inactive stays unused." />
-                      <div className="mt-1 grid grid-cols-2 gap-1.5">
-                        {[
-                          ["active", "Active"],
-                          ["inactive", "Inactive"],
-                        ].map(([optionValue, label]) => {
-                          const active = value.status === optionValue
-                          return (
-                            <WorkflowChoiceCard
-                              key={optionValue}
-                              active={active}
-                              layoutId="policy-status-choice"
-                              onClick={() => onValueChange({ status: optionValue })}
-                            >
-                              <span className={cn("block text-xs font-semibold", active ? "text-white" : "text-slate-900")}>
-                                {label}
-                              </span>
-                            </WorkflowChoiceCard>
-                          )
-                        })}
-                      </div>
-                    </div>
-                    <div className="min-w-0 sm:col-span-2">
-                      <FieldLabel label="Accrual" hint="How often days are added. Manual means HR adds them." />
-                      <div className="mt-1 grid grid-cols-3 gap-1.5">
-                        {[
-                          ["yearly", "Yearly"],
-                          ["monthly", "Monthly"],
-                          ["manual", "Manual"],
-                        ].map(([optionValue, label]) => {
-                          const active = value.accrual_method === optionValue
-                          return (
-                            <WorkflowChoiceCard
-                              key={optionValue}
-                              active={active}
-                              layoutId="policy-accrual-choice"
-                              onClick={() => onValueChange({ accrual_method: optionValue })}
-                            >
-                              <span className={cn("block text-xs font-semibold", active ? "text-white" : "text-slate-900")}>
-                                {label}
-                              </span>
-                            </WorkflowChoiceCard>
-                          )
-                        })}
-                      </div>
-                    </div>
-                    {value.accrual_method !== "manual" ? (
-                      <Field label="Days each period" hint="Days added each accrual period.">
+                  {stage === "basics" ? (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <Field label="Policy name" hint="The name shown in the policy list. Example: Staff leave rules.">
                         <input
-                          type="number"
-                          min={0}
+                          autoFocus
                           className={inputClass}
-                          value={value.accrual_rate}
-                          onChange={(event) => onValueChange({ accrual_rate: event.target.value })}
+                          placeholder="e.g. Staff leave rules"
+                          value={value.name}
+                          onChange={(event) => onValueChange({ name: event.target.value })}
                         />
                       </Field>
-                    ) : null}
-                    <Field label="Notes" hint="Optional notes for HR about this policy.">
-                      <input
-                        className={inputClass}
-                        placeholder="Optional"
-                        value={value.description}
-                        onChange={(event) => onValueChange({ description: event.target.value })}
-                      />
-                    </Field>
-                  </div>
+                      <div className="min-w-0">
+                        <FieldLabel label="Status" hint="Active means staff can use it. Inactive means it is turned off." />
+                        <div className="mt-1 grid grid-cols-2 gap-1.5">
+                          {[
+                            ["active", "Active"],
+                            ["inactive", "Inactive"],
+                          ].map(([optionValue, label]) => {
+                            const active = value.status === optionValue
+                            return (
+                              <WorkflowChoiceCard
+                                key={optionValue}
+                                active={active}
+                                layoutId="policy-status-choice"
+                                onClick={() => onValueChange({ status: optionValue })}
+                              >
+                                <span className={cn("block text-xs font-semibold", active ? "text-white" : "text-slate-900")}>
+                                  {label}
+                                </span>
+                              </WorkflowChoiceCard>
+                            )
+                          })}
+                        </div>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <Field label="Notes" hint="Add any extra details. You can leave this blank.">
+                          <input
+                            className={inputClass}
+                            placeholder="Optional"
+                            value={value.description}
+                            onChange={(event) => onValueChange({ description: event.target.value })}
+                          />
+                        </Field>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <section className="space-y-3 rounded-lg border border-slate-200 bg-slate-50/70 p-3 dark:border-border dark:bg-muted/30">
+                        <div>
+                          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Shared accrual schedule</h3>
+                          <p className="mt-0.5 text-xs leading-relaxed text-slate-500">
+                            This schedule applies to the leave types attached below. Each type keeps its own yearly allowance and limits.
+                          </p>
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div className="min-w-0 sm:col-span-2">
+                            <FieldLabel label="Accrual schedule" hint="Choose when leave days are added: yearly, monthly, or by HR." />
+                            <div className="mt-1 grid grid-cols-3 gap-1.5">
+                              {[
+                                ["yearly", "Yearly"],
+                                ["monthly", "Monthly"],
+                                ["manual", "Manual"],
+                              ].map(([optionValue, label]) => {
+                                const active = value.accrual_method === optionValue
+                                return (
+                                  <WorkflowChoiceCard
+                                    key={optionValue}
+                                    active={active}
+                                    layoutId="policy-accrual-choice"
+                                    onClick={() => onValueChange({ accrual_method: optionValue })}
+                                  >
+                                    <span className={cn("block text-xs font-semibold", active ? "text-white" : "text-slate-900")}>
+                                      {label}
+                                    </span>
+                                  </WorkflowChoiceCard>
+                                )
+                              })}
+                            </div>
+                          </div>
+                          {value.accrual_method !== "manual" ? (
+                            <Field label="Days added each period" hint="How many leave days are added each time.">
+                              <input
+                                type="number"
+                                min={0}
+                                className={inputClass}
+                                value={value.accrual_rate}
+                                onChange={(event) => onValueChange({ accrual_rate: event.target.value })}
+                              />
+                            </Field>
+                          ) : null}
+                        </div>
+                      </section>
 
-                  <div className="space-y-2">
+                      <section className="space-y-2" aria-labelledby="policy-entitlements-heading">
                     <div className="flex items-center justify-between gap-2">
-                      <FieldLabel
-                        label="Leave types on this policy"
-                        hint="Tap a type to attach it. Set the yearly quota on the row. Open a row for encashment and caps."
-                      />
+                      <div>
+                        <h3 id="policy-entitlements-heading" className="text-sm font-semibold text-slate-900 dark:text-white">
+                          Leave entitlements
+                        </h3>
+                        <p className="mt-0.5 text-xs text-slate-500">Choose from existing leave types; this does not create or change a leave type.</p>
+                      </div>
                       <span className="text-[11px] font-medium text-primary">
                         {attachedTypes.length} attached
                       </span>
                     </div>
 
                     {attachedTypes.length === 0 ? (
-                      <div className="rounded-lg border border-dashed border-slate-300 px-4 py-6 text-center">
-                        <p className="text-sm font-semibold text-slate-900 dark:text-white">No types yet</p>
-                        <p className="mt-1 text-xs text-slate-500">Tap a leave type below to put it on this policy.</p>
+                      <div className="rounded-md border border-dashed border-slate-300 px-3 py-4 text-center">
+                        <p className="text-sm font-semibold text-slate-900 dark:text-white">No entitlements yet</p>
+                        <p className="mt-1 text-xs text-slate-500">Choose an existing leave type below to configure its allowance.</p>
                       </div>
                     ) : (
-                      <div className="space-y-2">
+                      <div className="space-y-1.5">
                         {value.leave_types.map((assignment, index) => {
-                          if (!assignment.leave_type_id) return null
-                          const typeName =
-                            leaveTypeOptions.find((option) => option.value === assignment.leave_type_id)?.label ??
-                            "Leave type"
+                          if (!assignment.leave_type_id && !assignment.leave_type_name) return null
+                          const typeName = leavePolicyTypeLabel(assignment, leaveTypeOptions)
                           const expanded = openTypeIndex === index
                           return (
                             <div
                               key={`policy-type-${assignment.leave_type_id}-${index}`}
                               className={cn(
-                                "overflow-hidden rounded-lg border transition",
+                                "overflow-hidden rounded-md border transition",
                                 expanded ? "border-primary bg-primary/5" : "border-slate-200 bg-white",
                               )}
                             >
@@ -591,32 +520,38 @@ export function LeavePolicyEditorSheet({
                                   <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">
                                     {typeName}
                                   </p>
-                                  <p className="text-[11px] text-slate-500">
+                                  <p className="text-xs text-slate-500">
                                     {assignment.requires_approval === "true" ? "Approval required" : "No approval"}
                                     {assignment.encashment_enabled === "true" ? " · Encashment on" : ""}
                                   </p>
                                 </button>
-                                <label className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500">
+                                <label className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
                                   <input
                                     type="number"
                                     min={0}
-                                    className="h-8 w-16 rounded-md border border-slate-200 bg-white px-2 text-center text-xs font-semibold text-primary outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                                    className="h-9 w-16 rounded-md border border-slate-200 bg-white px-2 text-center text-xs font-semibold text-primary outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                                     value={assignment.annual_quota_days}
-                                    onChange={(event) =>
-                                      updateAssignment(index, { annual_quota_days: event.target.value })
-                                    }
-                                    aria-label={`${typeName} annual quota`}
+                                    onChange={(event) => {
+                                      const next = event.target.value
+                                      const keepMaxInSync =
+                                        assignment.max_per_request_days === assignment.annual_quota_days
+                                      updateAssignment(index, {
+                                        annual_quota_days: next,
+                                        ...(keepMaxInSync ? { max_per_request_days: next } : {}),
+                                      })
+                                    }}
+                                    aria-label={`${typeName} yearly allowance in this policy`}
                                   />
                                   <span className="inline-flex items-center gap-1">
                                     days / year
-                                    <HintIcon text="Yearly quota for this leave type under this policy. This is the balance employees start with each year." />
+                                    <HintIcon text="How many days of this leave an employee gets each year." />
                                   </span>
                                 </label>
                                 <span className="inline-flex items-center gap-1">
                                   <button
                                     type="button"
                                     className={cn(
-                                      "inline-flex h-7 items-center rounded-full px-2 text-[11px] font-semibold transition",
+                                      "inline-flex h-9 items-center rounded-full px-3 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
                                       assignment.requires_approval === "true"
                                         ? "bg-primary text-white"
                                         : "bg-slate-100 text-slate-600 hover:bg-slate-200",
@@ -629,11 +564,11 @@ export function LeavePolicyEditorSheet({
                                   >
                                     {assignment.requires_approval === "true" ? "Approval" : "No approval"}
                                   </button>
-                                  <HintIcon text="On means requests of this type wait for a manager or HR. Off submits without that step." />
+                                  <HintIcon text="Turn this on if a manager or HR must approve requests." />
                                 </span>
                                 <button
                                   type="button"
-                                  className="inline-flex size-7 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                                  className="inline-flex size-9 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                                   onClick={() => setOpenTypeIndex(expanded ? null : index)}
                                   aria-expanded={expanded}
                                   aria-label={expanded ? "Hide extra type rules" : "Show extra type rules"}
@@ -642,11 +577,11 @@ export function LeavePolicyEditorSheet({
                                 </button>
                                 <button
                                   type="button"
-                                  className="inline-flex size-7 items-center justify-center rounded-md text-rose-400 transition hover:bg-rose-50 hover:text-rose-600"
+                                  className="inline-flex size-9 items-center justify-center rounded-md text-rose-400 transition hover:bg-rose-50 hover:text-rose-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300"
                                   onClick={() => removeLeaveType(index)}
                                   aria-label={`Remove ${typeName}`}
                                 >
-                                  <Trash2 className="size-3.5" />
+                                  <Trash2 className="size-4" />
                                 </button>
                               </div>
                               <AnimatePresence initial={false}>
@@ -661,7 +596,7 @@ export function LeavePolicyEditorSheet({
                                     <div className="grid gap-3 border-t border-primary/20 px-3 py-3 sm:grid-cols-2">
                                       <Field
                                         label="Max per request"
-                                        hint="Most days an employee can ask for in one request of this type. 0 means no extra cap beyond the yearly quota."
+                                        hint="Filled from this leave type's yearly maximum. You can lower it for this policy. Enter 0 for no extra cap."
                                       >
                                         <input
                                           type="number"
@@ -674,8 +609,8 @@ export function LeavePolicyEditorSheet({
                                         />
                                       </Field>
                                       <Field
-                                        label="Type accumulation cap"
-                                        hint="Most unused days of this type that can carry into the next period. 0 means this type has no extra carry-over cap."
+                                        label="Entitlement carry-over cap"
+                                        hint="The most unused days that can move to the next year. Enter 0 for no limit."
                                       >
                                         <input
                                           type="number"
@@ -689,7 +624,7 @@ export function LeavePolicyEditorSheet({
                                       </Field>
                                       <BoolPair
                                         label="Encashment"
-                                        hint="Allowed lets employees convert unused days of this type into pay. Not allowed keeps them as leave days only."
+                                        hint="Choose whether employees can receive money for unused leave days."
                                         value={assignment.encashment_enabled}
                                         layoutId={`policy-type-encash-${index}`}
                                         trueLabel="Allowed"
@@ -700,7 +635,7 @@ export function LeavePolicyEditorSheet({
                                         <>
                                           <Field
                                             label="Max encashment days"
-                                            hint="Most days of this type that can be cashed in at once."
+                                            hint="The most unused days an employee can exchange for money at one time."
                                           >
                                             <input
                                               type="number"
@@ -714,7 +649,7 @@ export function LeavePolicyEditorSheet({
                                           </Field>
                                           <Field
                                             label="Min balance after"
-                                            hint="Days that must remain after encashment so the employee is not left with nothing."
+                                            hint="How many leave days must remain after days are exchanged for money."
                                           >
                                             <input
                                               type="number"
@@ -730,7 +665,7 @@ export function LeavePolicyEditorSheet({
                                           </Field>
                                           <BoolPair
                                             label="Encashment approval"
-                                            hint="Required means a manager or HR must approve the cash-out. Not required pays it without a review step."
+                                            hint="Choose whether a manager or HR must approve this payment."
                                             value={assignment.encashment_requires_approval}
                                             layoutId={`policy-type-encash-approval-${index}`}
                                             trueLabel="Required"
@@ -753,12 +688,12 @@ export function LeavePolicyEditorSheet({
 
                     {remainingTypes.length > 0 ? (
                       <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                        <span className="text-[11px] font-medium text-slate-400">Add</span>
+                        <span className="text-xs font-medium text-slate-500">Attach existing type</span>
                         {remainingTypes.map((option) => (
                           <button
                             key={option.value}
                             type="button"
-                            className="inline-flex h-7 items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 text-[11px] font-semibold text-slate-700 transition hover:border-primary hover:bg-primary/5 hover:text-primary"
+                            className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:border-primary hover:bg-primary/5 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                             onClick={() => attachLeaveType(option.value)}
                           >
                             <Plus className="size-3" />
@@ -769,7 +704,9 @@ export function LeavePolicyEditorSheet({
                     ) : leaveTypeOptions.length === 0 ? (
                       <p className="text-xs text-amber-700">Create a leave type first, then come back to this policy.</p>
                     ) : null}
-                  </div>
+                      </section>
+                    </>
+                  )}
                 </div>
               </motion.div>
             ) : stage === "who" ? (
@@ -848,7 +785,7 @@ export function LeavePolicyEditorSheet({
                             <div className="mb-1">
                               <FieldLabel
                                 label="Branch"
-                                hint="Leave on All branches unless this policy is only for one site."
+                                hint="Use All branches for everyone, or choose one branch."
                               />
                             </div>
                             <WorkflowSelect
@@ -863,7 +800,7 @@ export function LeavePolicyEditorSheet({
                             <div className="mb-1">
                               <FieldLabel
                                 label="Department"
-                                hint="Leave on All departments unless this policy is only for one team."
+                                hint="Use All departments for everyone, or choose one department."
                               />
                             </div>
                             <WorkflowSelect
@@ -878,7 +815,7 @@ export function LeavePolicyEditorSheet({
                             <div className="mb-1">
                               <FieldLabel
                                 label="Position"
-                                hint="Leave on All positions unless this policy is only for one job title."
+                                hint="Use All positions for everyone, or choose one position."
                               />
                             </div>
                             <WorkflowSelect
@@ -893,7 +830,7 @@ export function LeavePolicyEditorSheet({
                             <div className="mb-1">
                               <FieldLabel
                                 label="Grade"
-                                hint="Leave on All grades unless this policy is only for one pay grade."
+                                hint="Use All grades for everyone, or choose one grade."
                               />
                             </div>
                             <WorkflowSelect
@@ -908,7 +845,7 @@ export function LeavePolicyEditorSheet({
                             <div className="mb-1">
                               <FieldLabel
                                 label="Employment type"
-                                hint="Leave on All types unless this policy is only for full time, contract, intern, or similar."
+                                hint="Use All types for everyone, or choose one employment type."
                               />
                             </div>
                             <WorkflowSelect
@@ -923,7 +860,7 @@ export function LeavePolicyEditorSheet({
                             <div className="mb-1">
                               <FieldLabel
                                 label="Confirmation"
-                                hint="Leave on All statuses unless this policy is only for confirmed or probation staff."
+                                hint="Use All statuses for everyone, or choose one staff status."
                               />
                             </div>
                             <WorkflowSelect
@@ -957,7 +894,7 @@ export function LeavePolicyEditorSheet({
                   </p>
 
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                    <Field label="Longest stretch" hint="Longest continuous leave this policy allows.">
+                    <Field label="Longest stretch" hint="The most leave days an employee can take in a row.">
                       <input
                         type="number"
                         min={1}
@@ -968,7 +905,7 @@ export function LeavePolicyEditorSheet({
                     </Field>
                     <div className="min-w-0">
                       <div className="mb-1">
-                        <FieldLabel label="Weekly offs" hint="Whether weekly offs count as leave days." />
+                        <FieldLabel label="Weekly offs" hint="Choose if weekends or scheduled days off count as leave." />
                       </div>
                       <WorkflowSelect
                         value={value.weekly_off_treatment}
@@ -979,7 +916,7 @@ export function LeavePolicyEditorSheet({
                     </div>
                     <div className="min-w-0">
                       <div className="mb-1">
-                        <FieldLabel label="Holidays" hint="Whether public holidays count as leave days." />
+                        <FieldLabel label="Holidays" hint="Choose if public holidays count as leave days." />
                       </div>
                       <WorkflowSelect
                         value={value.holiday_treatment}
@@ -990,14 +927,14 @@ export function LeavePolicyEditorSheet({
                     </div>
                     <BoolPair
                       label="During probation"
-                      hint="Can employees on probation use this policy?"
+                      hint="Choose whether staff on probation can use this policy."
                       value={value.allow_during_probation}
                       layoutId="policy-probation-choice"
                       onChange={(next) => onValueChange({ allow_during_probation: next })}
                     />
                     <BoolPair
                       label="Half day"
-                      hint="Allowed lets employees request a morning or afternoon instead of a full day."
+                      hint="Choose whether employees can request half a day."
                       value={value.allow_half_day}
                       layoutId="policy-halfday-choice"
                       trueLabel="Allowed"
@@ -1006,7 +943,7 @@ export function LeavePolicyEditorSheet({
                     />
                     <BoolPair
                       label="Short leave"
-                      hint="Allowed lets employees step out for a few hours without taking a full day."
+                      hint="Choose whether employees can request a few hours instead of a full day."
                       value={value.allow_short_leave}
                       layoutId="policy-shortleave-choice"
                       trueLabel="Allowed"
@@ -1026,7 +963,7 @@ export function LeavePolicyEditorSheet({
                         <div className="grid gap-3 sm:grid-cols-2">
                           <Field
                             label="Min short leave (min)"
-                            hint="Shortest short-leave window, in minutes. Requests shorter than this are rejected."
+                            hint="The fewest minutes an employee can request."
                           >
                             <input
                               type="number"
@@ -1038,7 +975,7 @@ export function LeavePolicyEditorSheet({
                           </Field>
                           <Field
                             label="Max short leave (min)"
-                            hint="Longest short-leave window, in minutes. Longer absences should be a half day or full day."
+                            hint="The most minutes an employee can request as short leave."
                           >
                             <input
                               type="number"
@@ -1073,7 +1010,7 @@ export function LeavePolicyEditorSheet({
                         className="overflow-hidden"
                       >
                         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                          <Field label="Service months" hint="Minimum months in service before eligibility.">
+                          <Field label="Service months" hint="How many months an employee must work before using this policy.">
                             <input
                               type="number"
                               min={0}
@@ -1082,7 +1019,7 @@ export function LeavePolicyEditorSheet({
                               onChange={(event) => onValueChange({ min_service_months: event.target.value })}
                             />
                           </Field>
-                          <Field label="Notice days" hint="Minimum days of notice before leave starts.">
+                          <Field label="Notice days" hint="How many days early an employee must request leave.">
                             <input
                               type="number"
                               min={0}
@@ -1091,7 +1028,7 @@ export function LeavePolicyEditorSheet({
                               onChange={(event) => onValueChange({ minimum_notice_days: event.target.value })}
                             />
                           </Field>
-                          <Field label="Backdate days" hint="How far back a request may be dated.">
+                          <Field label="Backdate days" hint="How many days in the past an employee can date a request.">
                             <input
                               type="number"
                               min={0}
@@ -1102,7 +1039,7 @@ export function LeavePolicyEditorSheet({
                           </Field>
                           <BoolPair
                             label="Negative balance"
-                            hint="Can employees request more days than they currently have?"
+                            hint="Choose whether employees can request leave when they have no days left."
                             value={value.allow_negative_balance}
                             layoutId="policy-negative-choice"
                             trueLabel="Allowed"
@@ -1111,12 +1048,12 @@ export function LeavePolicyEditorSheet({
                           />
                           <BoolPair
                             label="Cancel needs approval"
-                            hint="Yes means cancelling an already-approved request must be reviewed again."
+                            hint="Choose whether a manager or HR must approve a cancellation."
                             value={value.cancellation_requires_approval}
                             layoutId="policy-cancel-choice"
                             onChange={(next) => onValueChange({ cancellation_requires_approval: next })}
                           />
-                          <Field label="Cancel cutoff days" hint="Days before leave when cancellation still needs a check.">
+                          <Field label="Cancel cutoff days" hint="How many days before leave a cancellation still needs approval.">
                             <input
                               type="number"
                               min={0}
@@ -1125,7 +1062,7 @@ export function LeavePolicyEditorSheet({
                               onChange={(event) => onValueChange({ cancellation_cutoff_days: event.target.value })}
                             />
                           </Field>
-                          <Field label="Max accumulation" hint="Cap on unused days that can be carried.">
+                          <Field label="Overall carry-over cap" hint="The total unused days an employee can keep. Enter 0 for no limit.">
                             <input
                               type="number"
                               min={0}
@@ -1134,7 +1071,7 @@ export function LeavePolicyEditorSheet({
                               onChange={(event) => onValueChange({ maximum_accumulation_days: event.target.value })}
                             />
                           </Field>
-                          <Field label="Priority" hint="Higher numbers win when more than one policy could apply.">
+                          <Field label="Priority" hint="If two policies apply, the one with the higher number is used.">
                             <input
                               type="number"
                               className={inputClass}
@@ -1144,7 +1081,7 @@ export function LeavePolicyEditorSheet({
                           </Field>
                           <BoolPair
                             label="Deduct from attendance"
-                            hint="Yes takes days off the leave balance when attendance marks someone absent or on unpaid leave."
+                            hint="Turn this on to remove leave days when attendance shows an absence or unpaid leave."
                             value={value.attendance_balance_deduction_enabled}
                             layoutId="policy-attendance-choice"
                             onChange={(next) => onValueChange({ attendance_balance_deduction_enabled: next })}
@@ -1153,7 +1090,7 @@ export function LeavePolicyEditorSheet({
                             <>
                               <Field
                                 label="Absent day"
-                                hint="Leave days to deduct for one unmarked absent day. Use 1 for a full day."
+                                hint="Days to remove for one full day marked absent. Usually 1."
                               >
                                 <input
                                   type="number"
@@ -1166,7 +1103,7 @@ export function LeavePolicyEditorSheet({
                               </Field>
                               <Field
                                 label="Unpaid day"
-                                hint="Leave days to deduct for one unpaid leave day on the attendance record."
+                                hint="Days to remove for one unpaid leave day. Usually 1."
                               >
                                 <input
                                   type="number"
@@ -1181,7 +1118,7 @@ export function LeavePolicyEditorSheet({
                               </Field>
                               <Field
                                 label="Half-day deduction"
-                                hint="Leave days to deduct for a half-day attendance exception. 0.5 is a typical value."
+                                hint="Days to remove for a half-day absence. Usually 0.5."
                               >
                                 <input
                                   type="number"
@@ -1208,8 +1145,12 @@ export function LeavePolicyEditorSheet({
           <p
             className={cn(
               "text-xs",
-              stage === "policy"
-                ? canLeavePolicyStage
+              stage === "basics"
+                ? hasName
+                  ? "text-emerald-700"
+                  : "text-amber-700"
+                : stage === "entitlements"
+                  ? canLeavePolicyStage
                   ? "text-emerald-700"
                   : "text-amber-700"
                 : "text-emerald-700",
@@ -1218,11 +1159,13 @@ export function LeavePolicyEditorSheet({
             {readinessMessage}
           </p>
           <div className="flex flex-wrap gap-2">
-            {stage !== "policy" ? (
+            {stage !== "basics" ? (
               <button
                 type="button"
                 className="inline-flex h-9 items-center rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-border dark:bg-background dark:text-foreground"
-                onClick={() => setStage(stage === "rules" ? "who" : "policy")}
+                onClick={() =>
+                  setStage(stage === "rules" ? "who" : stage === "who" ? "entitlements" : "basics")
+                }
               >
                 Back
               </button>
@@ -1234,7 +1177,16 @@ export function LeavePolicyEditorSheet({
             >
               Cancel
             </button>
-            {stage === "policy" ? (
+            {stage === "basics" ? (
+              <button
+                type="button"
+                className="inline-flex h-9 items-center rounded-md bg-primary px-3 text-sm font-semibold text-white transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={!hasName}
+                onClick={() => setStage("entitlements")}
+              >
+                Next
+              </button>
+            ) : stage === "entitlements" ? (
               <button
                 type="button"
                 className="inline-flex h-9 items-center rounded-md bg-primary px-3 text-sm font-semibold text-white transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-50"

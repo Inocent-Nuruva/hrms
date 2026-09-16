@@ -3,46 +3,69 @@ import {
   View,
   StyleSheet,
   KeyboardAvoidingView,
+  Image,
   Platform,
   ScrollView,
   Pressable,
-  Text,
-  ActivityIndicator,
-  useColorScheme,
+  Modal,
   useWindowDimensions,
 } from 'react-native';
 import { TouchableScale } from '../components/ui/touchable-scale';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Eye, EyeOff, Fingerprint, ShieldCheck } from 'lucide-react-native';
+import { Check, ChevronDown, Eye, EyeOff, Fingerprint, Mail, MoonStar, ShieldCheck, SunMedium, X } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
 
 import { COLORS } from '../lib/config';
 import { Button } from '../components/ui/button';
-import { Card } from '../components/ui/card';
 import { Input } from '../components/ui/input';
 import { useToast } from '../hooks/useToast';
+import { useThemePreference } from '../hooks/useThemePreference';
 import type { UseAuthReturn } from '../hooks/useAuth';
+import allianceLogo from '../../assets/images/alliance-logo-wide.png';
+import { Text } from '../components/ui/text';
+import { getRememberedEmails, rememberSuccessfulEmail } from '../lib/remembered-emails';
 
 interface LoginScreenProps {
   auth: UseAuthReturn;
 }
 
 export function LoginScreen({ auth }: LoginScreenProps) {
-  const isDark = useColorScheme() === 'dark';
+  const router = useRouter();
+  const { isDark, toggleTheme } = useThemePreference();
   const { height: windowHeight } = useWindowDimensions();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [otp, setOtp] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberedEmails, setRememberedEmails] = useState<string[]>([]);
+  const [showRememberedEmails, setShowRememberedEmails] = useState(false);
 
   const toast = useToast();
 
   const backgroundColor = isDark ? COLORS.backgroundDark : COLORS.background;
   const mutedColor = isDark ? COLORS.onSurfaceVariantDark : COLORS.onSurfaceVariant;
   const textColor = isDark ? COLORS.onSurfaceDark : COLORS.onSurface;
-  const subtlePanel = isDark ? COLORS.surfaceVariantDark : '#f5f5f5';
+  const subtlePanel = isDark ? COLORS.surfaceVariantDark : COLORS.surfaceVariant;
+  const linkColor = isDark ? '#BFC2FF' : COLORS.primary;
 
   const showOtp = auth.requiresOtp;
   const showBiometricLogin = auth.biometricEnabled && auth.hasStoredSession && !showOtp;
+
+  React.useEffect(() => {
+    let active = true;
+    void getRememberedEmails().then((storedEmails) => {
+      if (active) setRememberedEmails(storedEmails);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const saveCurrentEmail = async () => {
+    const updated = await rememberSuccessfulEmail(email);
+    setRememberedEmails(updated);
+  };
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
@@ -50,7 +73,10 @@ export function LoginScreen({ auth }: LoginScreenProps) {
       return;
     }
     try {
-      await auth.login(email.trim(), password);
+      const result = await auth.login(email.trim(), password);
+      if (!result.requiresOtp) {
+        await saveCurrentEmail();
+      }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Login failed. Please try again.';
       toast.error(msg, {
@@ -72,6 +98,7 @@ export function LoginScreen({ auth }: LoginScreenProps) {
     }
     try {
       await auth.verifyOtp(otp.trim());
+      await saveCurrentEmail();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Invalid code. Please try again.';
       toast.error(msg, {
@@ -87,9 +114,14 @@ export function LoginScreen({ auth }: LoginScreenProps) {
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor }]}>
-      <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-        <View style={[styles.orbOne, { backgroundColor: isDark ? '#1f2937' : '#e5e7eb' }]} />
-        <View style={[styles.orbTwo, { backgroundColor: isDark ? '#27272a' : '#f5f5f5' }]} />
+      <View style={styles.topActions}>
+        <Pressable
+          accessibilityLabel={isDark ? 'Use light theme' : 'Use dark theme'}
+          onPress={toggleTheme}
+          style={[styles.themeButton, { borderColor: isDark ? COLORS.outlineDark : COLORS.outline }]}
+        >
+          {isDark ? <SunMedium size={18} color={textColor} /> : <MoonStar size={18} color={textColor} />}
+        </Pressable>
       </View>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -100,41 +132,48 @@ export function LoginScreen({ auth }: LoginScreenProps) {
           contentContainerStyle={[
             styles.scrollContent,
             {
-              minHeight: windowHeight,
-              justifyContent: windowHeight < 760 ? 'flex-start' : 'center',
+              minHeight: Math.max(windowHeight - 52, 0),
+              justifyContent: windowHeight < 620 ? 'flex-start' : 'center',
             },
           ]}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.heroBlock}>
+          <View style={styles.authShell}>
+            <View style={styles.brandBlock}>
+              <Image
+                accessibilityLabel="Alliance Insurance"
+                alt="Alliance Insurance"
+                resizeMode="contain"
+                source={allianceLogo}
+                style={styles.logo}
+              />
+            </View>
+
             <Text style={[styles.headline, { color: textColor }]}>
               {showOtp ? 'Complete secure sign in' : 'Welcome back'}
             </Text>
-            <Text style={[styles.supportingCopy, { color: mutedColor }]}>
-              {showOtp ? 'Confirm the one-time code to finish your login securely.' : ''}
-            </Text>
-          </View>
+            {showOtp ? (
+              <Text style={[styles.supportingCopy, { color: mutedColor }]}>
+                Enter the verification code sent to your account.
+              </Text>
+            ) : null}
 
-          <Card style={styles.authCard}>
-            <View style={styles.cardHeader}>
-              <View>
-                <Text style={[styles.cardEyebrow, { color: mutedColor }]}>
-                  {showOtp ? 'Step 2 of 2' : 'Sign in'}
-                </Text>
-                {showOtp && (
+          <View style={styles.authForm}>
+            {showOtp ? (
+              <View style={styles.cardHeader}>
+                <View>
+                  <Text style={[styles.cardEyebrow, { color: mutedColor }]}>Step 2 of 2</Text>
                   <Text style={[styles.cardTitle, { color: textColor }]}>
                     Verify your account
                   </Text>
-                )}
-              </View>
-              {showOtp && (
+                </View>
                 <View style={[styles.iconBadge, { backgroundColor: subtlePanel }]}>
                   <ShieldCheck size={18} color={textColor} />
                 </View>
-              )}
-            </View>
+              </View>
+            ) : null}
 
             {!showOtp ? (
               <>
@@ -146,6 +185,16 @@ export function LoginScreen({ auth }: LoginScreenProps) {
                   keyboardType="email-address"
                   placeholder="you@company.com"
                 />
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Select stored emails"
+                  onPress={() => setShowRememberedEmails(true)}
+                  style={styles.storedEmailTrigger}
+                >
+                  <Mail size={15} color={linkColor} />
+                  <Text style={[styles.storedEmailTriggerText, { color: linkColor }]}>Select stored emails</Text>
+                  <ChevronDown size={15} color={linkColor} />
+                </Pressable>
                 <View style={styles.passwordWrap}>
                   <Input
                     label="Password"
@@ -156,6 +205,7 @@ export function LoginScreen({ auth }: LoginScreenProps) {
                     placeholder="Enter your password"
                   />
                   <Pressable
+                    accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
                     onPress={() => setShowPassword((current) => !current)}
                     style={styles.eyeButton}
                   >
@@ -166,6 +216,18 @@ export function LoginScreen({ auth }: LoginScreenProps) {
                     )}
                   </Pressable>
                 </View>
+                <Pressable
+                  accessibilityRole="link"
+                  onPress={() => {
+                    router.push({
+                      pathname: '/forgot-password',
+                      params: { email: email.trim().toLowerCase() },
+                    });
+                  }}
+                  style={styles.forgotLink}
+                >
+                  <Text style={[styles.forgotLinkText, { color: linkColor }]}>Forgot password?</Text>
+                </Pressable>
               </>
             ) : (
               <>
@@ -201,12 +263,13 @@ export function LoginScreen({ auth }: LoginScreenProps) {
               </Button>
               {!showOtp && showBiometricLogin && (
                 <TouchableScale
+                  accessibilityLabel={`Sign in with ${auth.biometricTypeLabel || 'biometrics'}`}
                   onPress={() => {
                     void auth.authenticateWithBiometricLogin();
                   }}
-                  style={[styles.biometricIcon, { backgroundColor: COLORS.accent }]}
+                  style={[styles.biometricIcon, { borderColor: isDark ? COLORS.outlineDark : COLORS.outline }]}
                 >
-                  <Fingerprint size={20} color="#ffffff" />
+                  <Fingerprint size={20} color={COLORS.primary} />
                 </TouchableScale>
               )}
             </View>
@@ -222,11 +285,90 @@ export function LoginScreen({ auth }: LoginScreenProps) {
                 Back to sign in
               </Button>
             ) : null}
-          </Card>
+          </View>
 
-          {auth.isLoading ? <ActivityIndicator style={styles.loader} color={COLORS.primary} /> : null}
+          <Text style={[styles.footerText, { color: mutedColor }]}>© {new Date().getFullYear()} Alliance Insurance Corporation Ltd</Text>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <Modal
+        animationType="fade"
+        onRequestClose={() => setShowRememberedEmails(false)}
+        transparent
+        visible={showRememberedEmails}
+      >
+        <View style={styles.modalBackdrop}>
+          <Pressable
+            accessibilityLabel="Close stored emails"
+            onPress={() => setShowRememberedEmails(false)}
+            style={StyleSheet.absoluteFill}
+          />
+          <View
+            style={[
+              styles.emailSheet,
+              {
+                backgroundColor: isDark ? COLORS.surfaceDark : COLORS.surface,
+                borderColor: isDark ? COLORS.outlineDark : COLORS.outline,
+              },
+            ]}
+          >
+            <View style={styles.emailSheetHeader}>
+              <View style={styles.emailSheetHeading}>
+                <Text style={[styles.emailSheetTitle, { color: textColor }]}>Stored emails</Text>
+                <Text style={[styles.emailSheetHelp, { color: mutedColor }]}>Choose an account used successfully on this device.</Text>
+              </View>
+              <Pressable
+                accessibilityLabel="Close stored emails"
+                onPress={() => setShowRememberedEmails(false)}
+                style={[styles.sheetCloseButton, { borderColor: isDark ? COLORS.outlineDark : COLORS.outline }]}
+              >
+                <X size={17} color={textColor} />
+              </Pressable>
+            </View>
+
+            {rememberedEmails.length ? (
+              rememberedEmails.map((storedEmail) => {
+                const isSelected = storedEmail === email.trim().toLowerCase();
+                return (
+                  <Pressable
+                    accessibilityRole="button"
+                    key={storedEmail}
+                    onPress={() => {
+                      setEmail(storedEmail);
+                      setPassword('');
+                      setShowRememberedEmails(false);
+                    }}
+                    style={[
+                      styles.emailOption,
+                      {
+                        backgroundColor: isSelected
+                          ? isDark
+                            ? COLORS.surfaceVariantDark
+                            : '#F0F1FF'
+                          : 'transparent',
+                        borderColor: isDark ? COLORS.outlineDark : COLORS.outline,
+                      },
+                    ]}
+                  >
+                    <Mail size={17} color={isSelected ? linkColor : mutedColor} />
+                    <Text numberOfLines={1} style={[styles.emailOptionText, { color: textColor }]}>
+                      {storedEmail}
+                    </Text>
+                    {isSelected ? <Check size={17} color={linkColor} /> : null}
+                  </Pressable>
+                );
+              })
+            ) : (
+              <View style={[styles.emptyEmailState, { borderColor: isDark ? COLORS.outlineDark : COLORS.outline }]}>
+                <Mail size={20} color={mutedColor} />
+                <Text style={[styles.emptyEmailTitle, { color: textColor }]}>No stored emails yet</Text>
+                <Text style={[styles.emptyEmailText, { color: mutedColor }]}>An email appears here after it signs in successfully.</Text>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -240,64 +382,114 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    paddingHorizontal: 22,
-    paddingTop: 20,
-    paddingBottom: 120,
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    paddingBottom: 32,
     alignItems: 'center',
   },
-  heroBlock: {
-    marginBottom: 18,
-    gap: 14,
-    width: '100%',
+  topActions: {
+    position: 'absolute',
+    top: 12,
+    right: 16,
+    zIndex: 2,
+  },
+  themeButton: {
+    width: 40,
+    height: 40,
+    borderWidth: 1,
+    borderRadius: 8,
     alignItems: 'center',
+    justifyContent: 'center',
+  },
+  authShell: {
+    width: '100%',
+    maxWidth: 360,
+    alignItems: 'center',
+  },
+  brandBlock: {
+    height: 88,
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  logo: {
+    width: 220,
+    height: 88,
   },
   headline: {
-    fontSize: 28,
-    fontWeight: '800',
-    letterSpacing: -0.8,
-    lineHeight: 32,
+    fontSize: 20,
+    fontWeight: '700',
+    fontFamily: 'Comfortaa_700Bold',
+    letterSpacing: -0.3,
+    lineHeight: 26,
     textAlign: 'center',
   },
   supportingCopy: {
-    fontSize: 15,
-    lineHeight: 22,
-    maxWidth: 520,
+    marginTop: 6,
+    fontSize: 13,
+    fontFamily: 'Comfortaa_400Regular',
+    lineHeight: 19,
     textAlign: 'center',
   },
-  authCard: {
-    paddingTop: 20,
-    paddingBottom: 16,
+  authForm: {
+    marginTop: 24,
     width: '100%',
-    maxWidth: 520,
   },
 
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    marginBottom: 12,
+    marginBottom: 14,
   },
   cardEyebrow: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '700',
+    fontFamily: 'Comfortaa_700Bold',
     letterSpacing: 0.4,
-    textTransform: 'uppercase',
     marginBottom: 4,
   },
   cardTitle: {
     fontSize: 21,
     fontWeight: '700',
+    fontFamily: 'Comfortaa_700Bold',
     letterSpacing: -0.3,
   },
   iconBadge: {
     width: 40,
     height: 40,
-    borderRadius: 14,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
   passwordWrap: {
     position: 'relative',
+  },
+  storedEmailTrigger: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    minHeight: 32,
+    marginTop: -8,
+    marginBottom: 8,
+    paddingVertical: 5,
+    paddingHorizontal: 2,
+  },
+  storedEmailTriggerText: {
+    fontSize: 12,
+    fontWeight: '600',
+    fontFamily: 'Comfortaa_600SemiBold',
+  },
+  forgotLink: {
+    alignSelf: 'flex-end',
+    paddingVertical: 2,
+    marginTop: -4,
+    marginBottom: 12,
+  },
+  forgotLinkText: {
+    fontSize: 12,
+    fontWeight: '600',
+    fontFamily: 'Comfortaa_600SemiBold',
   },
   eyeButton: {
     position: 'absolute',
@@ -305,14 +497,13 @@ const styles = StyleSheet.create({
     top: 35,
     width: 32,
     height: 32,
-    borderRadius: 10,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
 
   submitButton: {
-    marginTop: 4,
-    marginBottom: 4,
+    marginTop: 2,
   },
   actionRow: {
     flexDirection: 'row',
@@ -320,45 +511,108 @@ const styles = StyleSheet.create({
     gap: 12,
     width: '100%',
     marginTop: 4,
-    marginBottom: 4,
+    marginBottom: 0,
   },
   biometricIcon: {
-    width: 48,
-    height: 46,
-    borderRadius: 14,
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
   backLink: {
     fontSize: 13,
     fontWeight: '600',
+    fontFamily: 'Comfortaa_600SemiBold',
     marginBottom: 8,
   },
   footerText: {
-    marginTop: 16,
+    marginTop: 32,
     textAlign: 'center',
-    fontSize: 12,
-    lineHeight: 18,
+    fontSize: 10,
+    fontFamily: 'Comfortaa_400Regular',
+    lineHeight: 15,
   },
-  loader: {
-    marginTop: 12,
+  modalBackdrop: {
+    flex: 1,
+    justifyContent: 'center',
+    padding: 24,
+    backgroundColor: 'rgba(0, 0, 0, 0.48)',
   },
-  orbOne: {
-    position: 'absolute',
-    width: 240,
-    height: 240,
-    borderRadius: 120,
-    top: -40,
-    right: -80,
-    opacity: 0.35,
+  emailSheet: {
+    width: '100%',
+    maxWidth: 420,
+    alignSelf: 'center',
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 18,
   },
-  orbTwo: {
-    position: 'absolute',
-    width: 220,
-    height: 220,
-    borderRadius: 110,
-    bottom: 0,
-    left: -70,
-    opacity: 0.45,
+  emailSheetHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 16,
+    marginBottom: 16,
+  },
+  emailSheetHeading: {
+    flex: 1,
+    minWidth: 0,
+  },
+  emailSheetTitle: {
+    fontSize: 17,
+    lineHeight: 22,
+    fontWeight: '700',
+    fontFamily: 'Comfortaa_700Bold',
+  },
+  emailSheetHelp: {
+    marginTop: 4,
+    fontSize: 11,
+    lineHeight: 17,
+  },
+  sheetCloseButton: {
+    width: 34,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderRadius: 8,
+  },
+  emailOption: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderRadius: 10,
+    marginTop: 8,
+  },
+  emailOptionText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+    fontFamily: 'Comfortaa_600SemiBold',
+  },
+  emptyEmailState: {
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 12,
+    borderStyle: 'dashed',
+    paddingHorizontal: 20,
+    paddingVertical: 24,
+  },
+  emptyEmailTitle: {
+    marginTop: 10,
+    fontSize: 13,
+    fontWeight: '700',
+    fontFamily: 'Comfortaa_700Bold',
+  },
+  emptyEmailText: {
+    marginTop: 5,
+    fontSize: 11,
+    lineHeight: 17,
+    textAlign: 'center',
   },
 });

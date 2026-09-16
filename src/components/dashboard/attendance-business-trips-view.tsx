@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Loader2, Pencil, Plus, RefreshCw } from "lucide-react"
+import { Check, Loader2, Pencil } from "lucide-react"
 
 import {
   Dialog,
@@ -11,11 +11,10 @@ import {
   DialogPopup,
   DialogTitle,
 } from "@/components/animate-ui/components/base/dialog"
+import { LeaveCatalogFrame } from "@/components/dashboard/leave-catalog-frame"
+import { WorkflowChoiceCard, WorkflowSelect } from "@/components/dashboard/leave-workflow-ui"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
-import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 import { Textarea } from "@/components/ui/textarea"
-import { SearchToggleField } from "@/components/common/search-toggle-field"
-import { TalentDoodle, TalentDoodleSprites } from "@/components/dashboard/talent-visuals"
 import {
   approveAttendanceBusinessTrip,
   cancelAttendanceBusinessTrip,
@@ -54,6 +53,13 @@ type TripFormState = {
 
 type TripActionKind = "submit" | "approve" | "reject" | "cancel"
 type TripStatus = "draft" | "submitted" | "approved" | "rejected" | "cancelled"
+type TripWizardStep = "who" | "when" | "review"
+
+const TRIP_WIZARD_STEPS: Array<{ key: TripWizardStep; number: string; label: string }> = [
+  { key: "who", number: "01", label: "Who" },
+  { key: "when", number: "02", label: "Dates" },
+  { key: "review", number: "03", label: "Review" },
+]
 
 const EMPTY_FORM: TripFormState = {
   employeeId: null,
@@ -257,7 +263,6 @@ export function AttendanceBusinessTripsView() {
   const [dateFrom, setDateFrom] = React.useState("")
   const [dateTo, setDateTo] = React.useState("")
   const [searchInput, setSearchInput] = React.useState("")
-  const [search, setSearch] = React.useState("")
   const [employeeFilterId, setEmployeeFilterId] = React.useState<number | null>(null)
 
   const [loading, setLoading] = React.useState(false)
@@ -265,6 +270,7 @@ export function AttendanceBusinessTripsView() {
   const [error, setError] = React.useState<string | null>(null)
 
   const [dialogOpen, setDialogOpen] = React.useState(false)
+  const [dialogStep, setDialogStep] = React.useState<TripWizardStep>("who")
   const [editingTripId, setEditingTripId] = React.useState<string | null>(null)
   const [form, setForm] = React.useState<TripFormState>(EMPTY_FORM)
   const [actionDialogOpen, setActionDialogOpen] = React.useState(false)
@@ -295,12 +301,11 @@ export function AttendanceBusinessTripsView() {
     "attendance_business_trips:cancel",
   )
 
-  React.useEffect(() => {
-    const timer = window.setTimeout(() => setSearch(searchInput.trim()), 300)
-    return () => window.clearTimeout(timer)
-  }, [searchInput])
-
   const employeeOptions = React.useMemo(() => buildEmployeeOptions(employees), [employees])
+  const employeeSelectOptions = React.useMemo(
+    () => employeeOptions.map((option) => ({ value: String(option.id), label: option.label })),
+    [employeeOptions],
+  )
 
   const statusCounts = React.useMemo(() => {
     return {
@@ -309,6 +314,41 @@ export function AttendanceBusinessTripsView() {
       approved: trips.filter((row) => getTripStatus(row) === "approved").length,
     }
   }, [trips])
+
+  const visibleTrips = React.useMemo(() => {
+    const query = searchInput.trim().toLowerCase()
+    return trips.filter((row) => {
+      const status = getTripStatus(row)
+      if (statusFilter !== "all" && status !== statusFilter) return false
+      if (employeeFilterId != null) {
+        const nestedEmployee = asRecord(row.employee)
+        const id =
+          readNumber(row, ["employee_id", "employeeId"]) ??
+          readNumber(nestedEmployee, ["id", "employee_id"])
+        if (id !== employeeFilterId) return false
+      }
+      const start = readString(row, ["start_date", "startDate", "from_date"], "").slice(0, 10)
+      const end = readString(row, ["end_date", "endDate", "to_date"], "").slice(0, 10)
+      if (dateFrom && end && end < dateFrom) return false
+      if (dateTo && start && start > dateTo) return false
+      if (!query) return true
+      return [
+        getEmployeeLabel(row),
+        readString(row, ["reason", "notes", "description"], ""),
+        status,
+        tripDateRange(row),
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(query)
+    })
+  }, [dateFrom, dateTo, employeeFilterId, searchInput, statusFilter, trips])
+
+  const dialogStepIndex = TRIP_WIZARD_STEPS.findIndex((item) => item.key === dialogStep)
+  const canContinueWho = form.employeeId != null
+  const canContinueWhen = Boolean(form.startDate && form.endDate && form.endDate >= form.startDate)
+  const selectedEmployeeLabel =
+    employeeOptions.find((option) => option.id === form.employeeId)?.label || "Not selected"
 
   const loadTrips = React.useCallback(async () => {
     const token = readStoredToken()
@@ -325,11 +365,6 @@ export function AttendanceBusinessTripsView() {
       const result = await listAllAttendanceBusinessTrips(token, {
         page: 1,
         limit: 100,
-        search: search || undefined,
-        status: statusFilter === "all" ? undefined : statusFilter,
-        from_date: dateFrom || undefined,
-        to_date: dateTo || undefined,
-        employee_id: employeeFilterId ?? undefined,
       })
       setTrips(result.rows)
       setSelectedTrip((current) => {
@@ -346,7 +381,7 @@ export function AttendanceBusinessTripsView() {
     } finally {
       setLoading(false)
     }
-  }, [dateFrom, dateTo, employeeFilterId, search, statusFilter])
+  }, [])
 
   React.useEffect(() => {
     if (!canView) {
@@ -385,6 +420,7 @@ export function AttendanceBusinessTripsView() {
   function openCreateDialog() {
     setEditingTripId(null)
     setForm(EMPTY_FORM)
+    setDialogStep("who")
     setDialogOpen(true)
   }
 
@@ -405,6 +441,7 @@ export function AttendanceBusinessTripsView() {
       reason: readString(row, ["reason", "notes", "description"], ""),
       submit: getTripStatus(row) !== "draft",
     })
+    setDialogStep("who")
     setDetailsOpen(false)
     setDialogOpen(true)
   }
@@ -451,6 +488,7 @@ export function AttendanceBusinessTripsView() {
       }
       setDialogOpen(false)
       setForm(EMPTY_FORM)
+      setDialogStep("who")
       setEditingTripId(null)
       await loadTrips()
     } catch (errorObject) {
@@ -512,72 +550,8 @@ export function AttendanceBusinessTripsView() {
     }
   }
 
-  const columns = React.useMemo<Array<Column<AdminRecord>>>(
-    () => [
-      {
-        key: "employee",
-        label: "Employee",
-        defaultWidth: 160,
-        sortValue: (row) => getEmployeeLabel(row),
-        render: (row) => getEmployeeLabel(row),
-      },
-      {
-        key: "dates",
-        label: "Travel dates",
-        defaultWidth: 150,
-        sortValue: (row) => String(row.start_date ?? row.startDate ?? ""),
-        render: (row) => tripDateRange(row),
-      },
-      {
-        key: "reason",
-        label: "Purpose",
-        defaultWidth: 180,
-        sortValue: (row) => readString(row, ["reason", "notes", "description"], ""),
-        render: (row) => (
-          <span className="line-clamp-1">{readString(row, ["reason", "notes", "description"], "—")}</span>
-        ),
-      },
-      {
-        key: "status",
-        label: "Status",
-        defaultWidth: 110,
-        sortValue: (row) => getTripStatus(row),
-        render: (row) => {
-          const meta = getStatusMeta(row.status)
-          return <span className={cn("font-medium", meta.className)}>{meta.label}</span>
-        },
-      },
-      {
-        key: "actions",
-        label: "Act",
-        defaultWidth: 50,
-        sortable: false,
-        render: (row) => {
-          const status = getTripStatus(row)
-          const editable = canUpdate && (status === "draft" || status === "submitted")
-          if (!editable) {
-            return null
-          }
-          return (
-            <div className="flex justify-end" onClick={(event) => event.stopPropagation()}>
-              <button
-                type="button"
-                className="admin-table-icon-button"
-                title="Edit trip"
-                onClick={() => openEditDialog(row)}
-              >
-                <Pencil className="size-4" />
-              </button>
-            </div>
-          )
-        },
-      },
-    ],
-    [canUpdate]
-  )
-
   const selectedStatus = getTripStatus(selectedTrip)
-  const selectedMeta = getStatusMeta(selectedTrip?.status)
+  const selectedMeta = getStatusMeta(selectedStatus || selectedTrip?.status)
 
   if (!actor.ready || !canView) {
     return (
@@ -589,107 +563,112 @@ export function AttendanceBusinessTripsView() {
 
   return (
     <div className="space-y-2">
-      <TalentDoodleSprites />
-      <div className="grid grid-cols-3 gap-2">
-        {[
-          { label: "Drafts", value: statusCounts.draft },
-          { label: "Awaiting approval", value: statusCounts.submitted },
-          { label: "Approved", value: statusCounts.approved },
-        ].map((item) => (
-          <div
-            key={item.label}
-            className="relative overflow-hidden rounded-2xl p-3 text-white"
-            style={{ backgroundColor: "var(--primary)" }}
-          >
-            <TalentDoodle />
-            <div className="relative z-10">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-white/70">{item.label}</p>
-              <p className="mt-1 text-lg font-semibold tabular-nums leading-none">{item.value}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-
       {error ? <p className="text-sm text-rose-600">{error}</p> : null}
 
-      <ResizableTable
+      <LeaveCatalogFrame
         title="Business trips"
-        toolbarStart={
-          <>
-            <SearchToggleField
-              className="min-w-0 !w-auto !max-w-[12rem] !flex-none"
-              placeholder="Search trips"
-              value={searchInput}
-              onChange={setSearchInput}
-            />
-            <select
-              className="h-8 w-[9.5rem] shrink-0 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value)}
-              aria-label="Filter trip status"
-            >
-              <option value="all">All statuses</option>
-              <option value="draft">Draft</option>
-              <option value="submitted">Awaiting approval</option>
-              <option value="approved">Approved</option>
-              <option value="rejected">Rejected</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
-            <select
-              className="h-8 max-w-[12rem] shrink-0 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
-              value={employeeFilterId != null ? String(employeeFilterId) : "all"}
-              onChange={(event) =>
-                setEmployeeFilterId(event.target.value === "all" ? null : Number(event.target.value))
-              }
-              aria-label="Filter employee"
-            >
-              <option value="all">All employees</option>
-              {employeeOptions.map((option) => (
-                <option key={option.id} value={String(option.id)}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <DatePickerPresets value={dateFrom} onChange={setDateFrom} placeholder="From" />
-            <DatePickerPresets value={dateTo} onChange={setDateTo} placeholder="To" />
-          </>
+        subtitle={`${trips.length} ${trips.length === 1 ? "trip" : "trips"}${
+          trips.length
+            ? ` · ${statusCounts.submitted} awaiting · ${statusCounts.approved} approved`
+            : ""
+        }`}
+        search={searchInput}
+        onSearchChange={setSearchInput}
+        searchPlaceholder="Search trips"
+        searchAriaLabel="Search business trips"
+        filterAriaLabel="Filter business trips"
+        filtersActive={
+          statusFilter !== "all" || employeeFilterId != null || Boolean(dateFrom) || Boolean(dateTo)
         }
-        toolbarActions={
-          <>
-            {canCreate ? (
-              <button
-                type="button"
-                className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white"
-                onClick={openCreateDialog}
-              >
-                <Plus className="h-3.5 w-3.5" />
-                New trip
-              </button>
-            ) : null}
-            <button
-              type="button"
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-slate-300 bg-white"
-              onClick={() => void loadTrips()}
-              disabled={loading}
-              aria-label="Refresh"
-              title="Refresh"
-            >
-              <RefreshCw className={cn("h-3.5 w-3.5 text-primary", loading ? "animate-spin" : "")} />
-            </button>
-          </>
+        filterGroups={[
+          {
+            key: "status",
+            label: "Status",
+            value: statusFilter,
+            options: [
+              { value: "all", label: "All" },
+              { value: "draft", label: "Draft" },
+              { value: "submitted", label: "Awaiting" },
+              { value: "approved", label: "Approved" },
+              { value: "rejected", label: "Rejected" },
+              { value: "cancelled", label: "Cancelled" },
+            ],
+          },
+        ]}
+        onFilterChange={(_, value) => setStatusFilter(value)}
+        filterExtra={
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <p className="text-[11px] font-semibold text-slate-500">Employee</p>
+              <WorkflowSelect
+                value={employeeFilterId != null ? String(employeeFilterId) : ""}
+                options={employeeSelectOptions}
+                placeholder="All employees"
+                allLabel="All employees"
+                onValueChange={(next) => setEmployeeFilterId(next ? Number(next) : null)}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <p className="text-[11px] font-semibold text-slate-500">From</p>
+                <DatePickerPresets value={dateFrom} onChange={setDateFrom} placeholder="From" />
+              </div>
+              <div className="space-y-1">
+                <p className="text-[11px] font-semibold text-slate-500">To</p>
+                <DatePickerPresets value={dateTo} onChange={setDateTo} placeholder="To" />
+              </div>
+            </div>
+          </div>
         }
-        data={trips}
-        columns={columns}
-        itemsPerPage={20}
+        onRefresh={() => void loadTrips()}
         loading={loading}
-        storageKey="leave-business-trips-v3"
-        getRowId={(row) => getTripId(row)}
-        onRowSelect={(_, row) => {
-          if (row) {
-            openDetails(row)
-          }
-        }}
-      />
+        createLabel="New trip"
+        onCreate={openCreateDialog}
+        canCreate={canCreate}
+        emptyTitle="No business trips"
+        emptyDescription={
+          trips.length === 0 ? "Create a trip for official travel." : "Nothing matches these filters."
+        }
+        isEmpty={visibleTrips.length === 0}
+        showSkeleton={loading && trips.length === 0}
+      >
+        <ul className="divide-y divide-slate-100 dark:divide-border">
+          {visibleTrips.map((row) => {
+            const status = getTripStatus(row)
+            const meta = getStatusMeta(status || row.status)
+            const editable = canUpdate && (status === "draft" || status === "submitted")
+            return (
+              <li key={getTripId(row) || getEmployeeLabel(row)}>
+                <div className="flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-muted/40">
+                  <button type="button" className="min-w-0 flex-1 text-left" onClick={() => openDetails(row)}>
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="truncate text-sm font-semibold text-slate-900 dark:text-white">
+                        {getEmployeeLabel(row)}
+                      </span>
+                      <span className={cn("shrink-0 text-[11px] font-semibold", meta.className)}>{meta.label}</span>
+                    </span>
+                    <span className="mt-0.5 block truncate text-[11px] text-slate-500">
+                      {[tripDateRange(row), readString(row, ["reason", "notes", "description"], "") || "No purpose"]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </span>
+                  </button>
+                  {editable ? (
+                    <button
+                      type="button"
+                      className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-slate-400 hover:bg-white hover:text-slate-700"
+                      onClick={() => openEditDialog(row)}
+                      aria-label={`Edit trip for ${getEmployeeLabel(row)}`}
+                    >
+                      <Pencil className="size-3.5" />
+                    </button>
+                  ) : null}
+                </div>
+              </li>
+            )
+          })}
+        </ul>
+      </LeaveCatalogFrame>
 
       <Dialog
         open={detailsOpen}
@@ -795,80 +774,201 @@ export function AttendanceBusinessTripsView() {
         </DialogPopup>
       </Dialog>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogPopup from="bottom" className="sm:max-w-lg">
+      <Dialog
+        open={dialogOpen}
+        onOpenChange={(open) => {
+          setDialogOpen(open)
+          if (!open) {
+            setForm(EMPTY_FORM)
+            setDialogStep("who")
+            setEditingTripId(null)
+          }
+        }}
+      >
+        <DialogPopup
+          from="bottom"
+          className="grid-rows-[auto_auto_minmax(0,1fr)_auto] overflow-hidden sm:max-w-3xl"
+        >
           <DialogHeader>
-            <DialogTitle>{editingTripId ? "Edit trip" : "New business trip"}</DialogTitle>
+            <DialogTitle>{editingTripId ? "Edit business trip" : "New business trip"}</DialogTitle>
             <DialogDescription>
-              {editingTripId
-                ? "Update the travel dates or purpose."
-                : "Record official travel so those days are treated as a business trip."}
+              {dialogStep === "who"
+                ? "Choose who is travelling."
+                : dialogStep === "when"
+                  ? "Set the travel dates."
+                  : "Add the purpose, then send for approval or save a draft."}
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-3">
-            <label className="space-y-1">
-              <span className="text-xs text-slate-500">Employee</span>
-              <select
-                className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
-                value={form.employeeId != null ? String(form.employeeId) : ""}
-                onChange={(event) =>
-                  setForm((prev) => ({
-                    ...prev,
-                    employeeId: event.target.value ? Number(event.target.value) : null,
-                  }))
-                }
+          <nav className="grid grid-cols-3 gap-2" aria-label="Business trip steps">
+            {TRIP_WIZARD_STEPS.map((item, index) => {
+              const active = item.key === dialogStep
+              const done = dialogStepIndex > index
+              const unlocked =
+                item.key === "who" ||
+                (item.key === "when" && canContinueWho) ||
+                (item.key === "review" && canContinueWho && canContinueWhen)
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  disabled={!unlocked || saving}
+                  aria-current={active ? "step" : undefined}
+                  onClick={() => unlocked && setDialogStep(item.key)}
+                  className={cn(
+                    "flex min-w-0 items-center gap-2 rounded-lg border px-2.5 py-2 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
+                    active
+                      ? "border-primary bg-primary text-white"
+                      : done
+                        ? "border-primary/20 bg-primary/5 text-primary"
+                        : unlocked
+                          ? "border-slate-200 bg-white text-slate-600 hover:border-primary/40"
+                          : "cursor-not-allowed border-slate-100 bg-slate-50 text-slate-400",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "flex size-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold",
+                      active ? "bg-white/20" : done ? "bg-primary text-white" : "bg-slate-100",
+                    )}
+                  >
+                    {done ? <Check className="size-3.5" strokeWidth={3} /> : item.number}
+                  </span>
+                  <span className="min-w-0 truncate text-xs font-semibold">{item.label}</span>
+                </button>
+              )
+            })}
+          </nav>
+          <div className="min-h-0 space-y-5 overflow-y-auto pr-1">
+            {dialogStep === "who" ? (
+              <section className="space-y-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Who is travelling?</h3>
+                  <p className="mt-0.5 text-xs text-slate-500">Official travel is recorded against this employee.</p>
+                </div>
+                <div className="max-w-lg">
+                  <p className="mb-1 text-sm font-semibold text-slate-800">Employee</p>
+                  <WorkflowSelect
+                    value={form.employeeId != null ? String(form.employeeId) : ""}
+                    options={employeeSelectOptions}
+                    placeholder="Select employee"
+                    onValueChange={(next) =>
+                      setForm((prev) => ({ ...prev, employeeId: next ? Number(next) : null }))
+                    }
+                  />
+                </div>
+              </section>
+            ) : null}
+
+            {dialogStep === "when" ? (
+              <section className="space-y-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-white">When is the trip?</h3>
+                  <p className="mt-0.5 text-xs text-slate-500">{selectedEmployeeLabel}</p>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold text-slate-800">Start date</p>
+                    <DatePickerPresets
+                      value={form.startDate}
+                      onChange={(value) => setForm((prev) => ({ ...prev, startDate: value }))}
+                      placeholder="Start date"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold text-slate-800">End date</p>
+                    <DatePickerPresets
+                      value={form.endDate}
+                      onChange={(value) => setForm((prev) => ({ ...prev, endDate: value }))}
+                      placeholder="End date"
+                    />
+                  </div>
+                </div>
+                {form.startDate && form.endDate && form.endDate < form.startDate ? (
+                  <p className="text-xs text-rose-600">End date must be on or after the start date.</p>
+                ) : null}
+              </section>
+            ) : null}
+
+            {dialogStep === "review" ? (
+              <section className="space-y-4">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {[
+                    { label: "Employee", value: selectedEmployeeLabel },
+                    { label: "Start", value: formatDateOnly(form.startDate) },
+                    { label: "End", value: formatDateOnly(form.endDate) },
+                    {
+                      label: "Action",
+                      value: editingTripId
+                        ? "Save changes"
+                        : form.submit
+                          ? "Send for approval"
+                          : "Save as draft",
+                    },
+                  ].map((item) => (
+                    <div
+                      key={item.label}
+                      className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 dark:border-border dark:bg-muted/30"
+                    >
+                      <p className="text-xs font-medium text-slate-500">{item.label}</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{item.value}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-slate-800">Purpose</p>
+                  <Textarea
+                    className="min-h-24 rounded-md border border-slate-300 px-3 py-2 text-sm"
+                    placeholder="e.g. Client visit in Arusha"
+                    value={form.reason}
+                    onChange={(event) => setForm((prev) => ({ ...prev, reason: event.target.value }))}
+                    disabled={saving}
+                  />
+                </div>
+                {editingTripId ? null : (
+                  <div className="space-y-1.5">
+                    <p className="text-sm font-semibold text-slate-800">What should happen next?</p>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <WorkflowChoiceCard
+                        active={form.submit}
+                        layoutId="business-trip-submit-choice"
+                        onClick={() => setForm((prev) => ({ ...prev, submit: true }))}
+                      >
+                        <span className={cn("block text-sm font-semibold", form.submit ? "text-white" : "text-slate-900")}>
+                          Send for approval
+                        </span>
+                        <span className={cn("mt-0.5 block text-xs", form.submit ? "text-white/80" : "text-slate-500")}>
+                          Move the trip into the approval path.
+                        </span>
+                      </WorkflowChoiceCard>
+                      <WorkflowChoiceCard
+                        active={!form.submit}
+                        layoutId="business-trip-submit-choice"
+                        onClick={() => setForm((prev) => ({ ...prev, submit: false }))}
+                      >
+                        <span className={cn("block text-sm font-semibold", !form.submit ? "text-white" : "text-slate-900")}>
+                          Save as draft
+                        </span>
+                        <span className={cn("mt-0.5 block text-xs", !form.submit ? "text-white/80" : "text-slate-500")}>
+                          Keep it until you are ready to send.
+                        </span>
+                      </WorkflowChoiceCard>
+                    </div>
+                  </div>
+                )}
+              </section>
+            ) : null}
+          </div>
+          <DialogFooter className="border-t border-slate-200 pt-3 dark:border-border">
+            {dialogStep !== "who" ? (
+              <button
+                type="button"
+                className="rounded-md border border-slate-300 px-4 py-2 text-sm"
+                onClick={() => setDialogStep(dialogStep === "review" ? "when" : "who")}
                 disabled={saving}
               >
-                <option value="">Select employee</option>
-                {employeeOptions.map((option) => (
-                  <option key={option.id} value={String(option.id)}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="space-y-1">
-                <span className="text-xs text-slate-500">Start</span>
-                <DatePickerPresets
-                  value={form.startDate}
-                  onChange={(value) => setForm((prev) => ({ ...prev, startDate: value }))}
-                  placeholder="Start date"
-                />
-              </label>
-              <label className="space-y-1">
-                <span className="text-xs text-slate-500">End</span>
-                <DatePickerPresets
-                  value={form.endDate}
-                  onChange={(value) => setForm((prev) => ({ ...prev, endDate: value }))}
-                  placeholder="End date"
-                />
-              </label>
-            </div>
-            <label className="space-y-1">
-              <span className="text-xs text-slate-500">Purpose</span>
-              <Textarea
-                className="min-h-20 rounded-md border border-slate-300 px-3 py-2 text-sm"
-                placeholder="e.g. Client visit in Arusha"
-                value={form.reason}
-                onChange={(event) => setForm((prev) => ({ ...prev, reason: event.target.value }))}
-                disabled={saving}
-              />
-            </label>
-            {editingTripId ? null : (
-              <label className="flex items-center gap-2 text-xs text-slate-700">
-                <input
-                  type="checkbox"
-                  className="size-3.5 rounded border-slate-300"
-                  checked={form.submit}
-                  onChange={(event) => setForm((prev) => ({ ...prev, submit: event.target.checked }))}
-                  disabled={saving}
-                />
-                Send for approval now
-              </label>
-            )}
-          </div>
-          <DialogFooter>
+                Back
+              </button>
+            ) : null}
             <button
               type="button"
               className="rounded-md border border-slate-300 px-4 py-2 text-sm"
@@ -877,14 +977,40 @@ export function AttendanceBusinessTripsView() {
             >
               Cancel
             </button>
-            <button
-              type="button"
-              className="rounded-md bg-primary px-4 py-2 text-sm font-medium !text-white disabled:opacity-60"
-              onClick={() => void handleSave()}
-              disabled={saving}
-            >
-              {saving ? "Saving..." : editingTripId ? "Save" : form.submit ? "Create and send" : "Save draft"}
-            </button>
+            {dialogStep === "who" ? (
+              <button
+                type="button"
+                className="rounded-md bg-primary px-4 py-2 text-sm font-medium !text-white disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={!canContinueWho || saving}
+                onClick={() => setDialogStep("when")}
+              >
+                Next: Dates
+              </button>
+            ) : dialogStep === "when" ? (
+              <button
+                type="button"
+                className="rounded-md bg-primary px-4 py-2 text-sm font-medium !text-white disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={!canContinueWhen || saving}
+                onClick={() => setDialogStep("review")}
+              >
+                Next: Review
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="rounded-md bg-primary px-4 py-2 text-sm font-medium !text-white disabled:opacity-60"
+                onClick={() => void handleSave()}
+                disabled={saving}
+              >
+                {saving
+                  ? "Saving..."
+                  : editingTripId
+                    ? "Save changes"
+                    : form.submit
+                      ? "Create and send"
+                      : "Save draft"}
+              </button>
+            )}
           </DialogFooter>
         </DialogPopup>
       </Dialog>

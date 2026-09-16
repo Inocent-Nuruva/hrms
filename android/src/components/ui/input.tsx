@@ -1,8 +1,9 @@
 import React from 'react';
-import { TextInput, StyleSheet, TextInputProps, View, Text } from 'react-native';
+import { TextInput, StyleSheet, TextInputProps, View } from 'react-native';
 
 import { COLORS } from '../../lib/config';
 import { useThemePreference } from '../../hooks/useThemePreference';
+import { Text } from './text';
 
 interface InputProps extends TextInputProps {
   label?: string;
@@ -19,9 +20,9 @@ export function Input({ label, hint, style, ...props }: InputProps) {
         style={[
           styles.input,
           {
-            backgroundColor: isDark ? COLORS.surfaceVariantDark : '#fafafa',
-            borderColor: isDark ? COLORS.outlineDark : '#d4d4d8',
-            color: isDark ? COLORS.onSurfaceDark : '#18181b',
+            backgroundColor: isDark ? COLORS.surfaceDark : COLORS.surface,
+            borderColor: isDark ? COLORS.outlineDark : COLORS.outline,
+            color: isDark ? COLORS.onSurfaceDark : COLORS.onSurface,
           },
           style,
         ]}
@@ -40,19 +41,22 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 13,
     fontWeight: '600',
+    fontFamily: 'Comfortaa_600SemiBold',
     letterSpacing: 0.2,
     marginBottom: 6,
   },
   input: {
     borderWidth: 1,
-    borderRadius: 14,
+    borderRadius: 8,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 15,
+    fontFamily: 'Comfortaa_400Regular',
     minHeight: 48,
   },
   hint: {
     marginTop: 6,
     fontSize: 12,
+    fontFamily: 'Comfortaa_400Regular',
   },
 });

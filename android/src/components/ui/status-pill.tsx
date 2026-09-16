@@ -1,6 +1,7 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { COLORS } from '../../lib/config';
+import { Text } from './text';
 
 type Tone = 'neutral' | 'success' | 'warning' | 'danger' | 'info';
 

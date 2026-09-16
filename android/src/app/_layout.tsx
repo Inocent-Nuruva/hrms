@@ -6,6 +6,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as Notifications from 'expo-notifications';
+import {
+  Comfortaa_400Regular,
+  Comfortaa_500Medium,
+  Comfortaa_600SemiBold,
+  Comfortaa_700Bold,
+  useFonts,
+} from '@expo-google-fonts/comfortaa';
 
 import { COLORS } from '../lib/config';
 import { AuthProvider, useAuth } from '../hooks/useAuth';
@@ -69,6 +76,21 @@ function createAppTheme(colorScheme: 'light' | 'dark' | null | 'unspecified' | u
 }
 
 export default function RootLayout() {
+  const [fontsLoaded, fontError] = useFonts({
+    Comfortaa_400Regular,
+    Comfortaa_500Medium,
+    Comfortaa_600SemiBold,
+    Comfortaa_700Bold,
+  });
+
+  if (!fontsLoaded && !fontError) {
+    return (
+      <View style={styles.fontLoader}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+      </View>
+    );
+  }
+
   return (
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
@@ -105,6 +127,7 @@ function RootNavigator({ backgroundColor }: { backgroundColor: string }) {
     <>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="login" />
+        <Stack.Screen name="forgot-password" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="index" />
         <Stack.Screen name="promotions" />
@@ -126,7 +149,13 @@ function RootNavigator({ backgroundColor }: { backgroundColor: string }) {
   );
 }
 
-const styles = StyleSheet.create<{ loadingOverlay: ViewStyle }>({
+const styles = StyleSheet.create<{ fontLoader: ViewStyle; loadingOverlay: ViewStyle }>({
+  fontLoader: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.background,
+  },
   loadingOverlay: {
     ...StyleSheet.absoluteFill,
     alignItems: 'center',

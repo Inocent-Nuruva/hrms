@@ -6,16 +6,19 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
   useWindowDimensions,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Portal } from 'react-native-paper';
 import {
   Bell,
+  ChartNoAxesCombined,
   ChevronLeft,
   Clock,
+  FileText,
+  FolderOpen,
+  ListChecks,
+  MapPin,
   Menu,
   MoonStar,
   PanelLeftClose,
@@ -31,6 +34,7 @@ import { TouchableScale } from '../ui/touchable-scale';
 import type { UseAuthReturn } from '../../hooks/useAuth';
 import { useNotifications } from '../../hooks/useNotifications';
 import { useThemePreference } from '../../hooks/useThemePreference';
+import { Text } from '../ui/text';
 
 interface Props {
   auth: UseAuthReturn;
@@ -54,18 +58,9 @@ export function MobileTopBar({
   const router = useRouter();
   const { isDark, toggleTheme } = useThemePreference();
   const notifications = useNotifications();
-  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+  const { width: screenWidth } = useWindowDimensions();
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [notificationsOpen, setNotificationsOpen] = React.useState(false);
-
-  const themeToggleRef = React.useRef<View>(null);
-  const [themeTransition, setThemeTransition] = React.useState<null | {
-    x: number;
-    y: number;
-    bg: string;
-  }>(null);
-  const [themeAnim] = React.useState(() => new Animated.Value(0));
-  const [themeOpacity] = React.useState(() => new Animated.Value(1));
 
   const [slideAnim] = React.useState(() => new Animated.Value(-400));
 
@@ -113,99 +108,26 @@ export function MobileTopBar({
     .toUpperCase();
 
   const drawerItems = [
+    { label: 'Attendance history', route: '/my-attendance', icon: ListChecks },
     { label: 'Promotions', route: '/promotions', icon: Trophy },
     { label: 'Shift', route: '/shift', icon: Clock },
     { label: 'Payroll', route: '/payroll', icon: Wallet },
+    { label: 'Field work', route: '/field', icon: MapPin },
+    { label: 'Finance', route: '/finance', icon: FileText },
+    { label: 'Performance', route: '/performance', icon: ChartNoAxesCombined },
+    { label: 'Documents', route: '/documents', icon: FolderOpen },
   ];
 
   const headerTitle = title || employeeName;
   const headerSubtitle = subtitle || readGreeting();
-  const barBackground = isDark ? COLORS.backgroundDark : COLORS.background;
+  const barBackground = isDark ? COLORS.surfaceDark : COLORS.surface;
   const primaryTextColor = isDark ? COLORS.onSurfaceDark : COLORS.onSurface;
-  const actionIconBg = COLORS.primary;
-  const actionIconColor = '#ffffff';
+  const actionIconBg = isDark ? COLORS.surfaceVariantDark : COLORS.surface;
+  const actionIconColor = primaryTextColor;
   const secondaryTextColor = isDark ? COLORS.onSurfaceVariantDark : COLORS.onSurfaceVariant;
   const avatarBackground = isDark ? COLORS.surfaceVariantDark : COLORS.surface;
-  const avatarBorder = isDark ? 'rgba(255,255,255,0.08)' : '#c5cde0';
+  const avatarBorder = isDark ? COLORS.outlineDark : COLORS.outline;
   const avatarTextColor = isDark ? COLORS.onSurfaceDark : COLORS.primary;
-
-  const handleThemeToggle = () => {
-    const nextIsDark = !isDark;
-    const targetBg = nextIsDark ? COLORS.backgroundDark : COLORS.background;
-
-    // Toggle immediately so the actual UI (cards, text, backgrounds) switches to the new theme right away.
-    // The circle is only a visual "origin" cue from the tap point.
-    toggleTheme();
-
-    if (themeToggleRef.current) {
-      themeToggleRef.current.measureInWindow((x, y, width, height) => {
-        const centerX = x + width / 2;
-        const centerY = y + height / 2;
-
-        setThemeTransition({ x: centerX, y: centerY, bg: targetBg });
-
-        const maxDist = Math.hypot(
-          Math.max(centerX, screenWidth - centerX),
-          Math.max(centerY, screenHeight - centerY)
-        );
-
-        const baseSize = 44;
-        const targetScale = (maxDist * 2.8) / baseSize;
-
-        themeAnim.setValue(0.1);
-        themeOpacity.setValue(0.65); // semi-transparent so the new themed content is still visible underneath the spreading color
-
-        Animated.timing(themeAnim, {
-          toValue: targetScale,
-          duration: 650,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }).start(() => {
-          Animated.timing(themeOpacity, {
-            toValue: 0,
-            duration: 220,
-            useNativeDriver: true,
-          }).start(() => {
-            setThemeTransition(null);
-            themeAnim.setValue(0);
-            themeOpacity.setValue(1);
-          });
-        });
-      });
-    } else {
-      // Fallback
-      const centerX = screenWidth - 50;
-      const centerY = 55;
-      setThemeTransition({ x: centerX, y: centerY, bg: targetBg });
-
-      const maxDist = Math.hypot(
-        Math.max(centerX, screenWidth - centerX),
-        Math.max(centerY, screenHeight - centerY)
-      );
-      const baseSize = 44;
-      const targetScale = (maxDist * 2.8) / baseSize;
-
-      themeAnim.setValue(0.1);
-      themeOpacity.setValue(0.65);
-
-      Animated.timing(themeAnim, {
-        toValue: targetScale,
-        duration: 650,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }).start(() => {
-        Animated.timing(themeOpacity, {
-          toValue: 0,
-          duration: 220,
-          useNativeDriver: true,
-        }).start(() => {
-          setThemeTransition(null);
-          themeAnim.setValue(0);
-          themeOpacity.setValue(1);
-        });
-      });
-    }
-  };
 
   return (
     <>
@@ -228,7 +150,7 @@ export function MobileTopBar({
             <View style={styles.leadingActionRow}>
               {showBackButton ? (
                 <TouchableScale
-                  style={[styles.iconButton, { backgroundColor: actionIconBg }]}
+                  style={[styles.iconButton, { backgroundColor: actionIconBg, borderColor: isDark ? COLORS.outlineDark : COLORS.outline }]}
                   pressedScale={0.92}
                   onPress={onBackPress}
                 >
@@ -236,7 +158,7 @@ export function MobileTopBar({
                 </TouchableScale>
               ) : (
                 <TouchableScale
-                  style={[styles.iconButton, { backgroundColor: actionIconBg }]}
+                  style={[styles.iconButton, { backgroundColor: actionIconBg, borderColor: isDark ? COLORS.outlineDark : COLORS.outline }]}
                   pressedScale={0.92}
                   onPress={openMenu}
                 >
@@ -253,11 +175,11 @@ export function MobileTopBar({
 
             <View style={styles.topRightActions}>
               <TouchableScale
-                style={[styles.iconButton, { backgroundColor: actionIconBg }]}
+                style={[styles.iconButton, { backgroundColor: actionIconBg, borderColor: isDark ? COLORS.outlineDark : COLORS.outline }]}
                 pressedScale={0.92}
-                onPress={handleThemeToggle}
+                onPress={toggleTheme}
               >
-                <View ref={themeToggleRef} style={{ alignItems: 'center', justifyContent: 'center' }}>
+                <View style={{ alignItems: 'center', justifyContent: 'center' }}>
                   {isDark ? (
                     <SunMedium size={20} color={actionIconColor} />
                   ) : (
@@ -267,7 +189,7 @@ export function MobileTopBar({
               </TouchableScale>
 
               <TouchableScale
-                style={[styles.iconButton, { backgroundColor: COLORS.accent }]}
+                style={[styles.iconButton, { backgroundColor: actionIconBg, borderColor: isDark ? COLORS.outlineDark : COLORS.outline }]}
                 pressedScale={0.92}
                 onPress={() => setNotificationsOpen(true)}
               >
@@ -360,7 +282,7 @@ export function MobileTopBar({
                             : COLORS.surface
                           : isDark
                             ? COLORS.surfaceVariantDark
-                            : '#e0e5f5',
+                            : COLORS.surfaceVariant,
                         borderColor: isDark ? COLORS.outlineDark : COLORS.outline,
                       },
                     ]}
@@ -388,31 +310,6 @@ export function MobileTopBar({
         </View>
       </Modal>
 
-      {/* Telegram-like circular theme transition overlay */}
-      {themeTransition && (
-        <Portal>
-          <View
-            style={[
-              StyleSheet.absoluteFill,
-              { zIndex: 99999, backgroundColor: 'transparent' },
-            ]}
-            pointerEvents="none"
-          >
-            <Animated.View
-              style={[
-                styles.themeTransitionCircle,
-                {
-                  backgroundColor: themeTransition.bg,
-                  left: themeTransition.x - 22,
-                  top: themeTransition.y - 22,
-                  opacity: themeOpacity,
-                  transform: [{ scale: themeAnim }],
-                },
-              ]}
-            />
-          </View>
-        </Portal>
-      )}
     </>
   );
 }
@@ -426,12 +323,12 @@ function readGreeting() {
 
 const styles = StyleSheet.create({
   shell: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     backgroundColor: 'transparent',
   },
   shellDashboard: {
     paddingTop: 8,
-    paddingBottom: 14,
+    paddingBottom: 12,
     minHeight: 56,
   },
   shellCompact: {
@@ -464,9 +361,11 @@ const styles = StyleSheet.create({
   iconButton: {
     width: 40,
     height: 40,
-    borderRadius: 20,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.outline,
   },
   notificationBadge: {
     position: 'absolute',
@@ -492,15 +391,15 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   avatarShell: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
+    borderWidth: 1,
   },
   avatarText: {
-    fontSize: 20,
+    fontSize: 17,
     fontWeight: '800',
   },
   identityName: {
@@ -537,12 +436,12 @@ const styles = StyleSheet.create({
     paddingTop: 18,
     paddingHorizontal: 16,
     paddingBottom: 18,
-    borderRadius: 22,
+    borderRadius: 8,
     shadowColor: '#000000',
     shadowOpacity: 0.16,
     shadowOffset: { width: 0, height: 10 },
-    shadowRadius: 24,
-    elevation: 10,
+    shadowRadius: 12,
+    elevation: 5,
   },
   notificationsPanel: {
     position: 'absolute',
@@ -553,12 +452,12 @@ const styles = StyleSheet.create({
     paddingTop: 18,
     paddingHorizontal: 16,
     paddingBottom: 18,
-    borderRadius: 22,
+    borderRadius: 8,
     shadowColor: '#000000',
     shadowOpacity: 0.16,
     shadowOffset: { width: 0, height: 10 },
-    shadowRadius: 24,
-    elevation: 10,
+    shadowRadius: 12,
+    elevation: 5,
   },
   drawerHeader: {
     flexDirection: 'row',
@@ -573,7 +472,7 @@ const styles = StyleSheet.create({
   drawerCloseButton: {
     width: 38,
     height: 38,
-    borderRadius: 19,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -612,7 +511,7 @@ const styles = StyleSheet.create({
   },
   notificationItem: {
     borderWidth: 1,
-    borderRadius: 14,
+    borderRadius: 8,
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
@@ -627,13 +526,6 @@ const styles = StyleSheet.create({
   },
   emptyNotifications: {
     paddingVertical: 16,
-  },
-  themeTransitionCircle: {
-    position: 'absolute',
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    // Will be scaled from center point via transform
   },
 });
 
@@ -659,7 +551,7 @@ function MenuContent({
         <Text style={[styles.drawerTitle, { color: primaryTextColor }]}>Menu</Text>
         {closeLabelIcon ? (
           <TouchableScale
-            style={[styles.drawerCloseButton, { backgroundColor: isDark ? COLORS.surfaceVariantDark : '#e8ebf5' }]}
+            style={[styles.drawerCloseButton, { backgroundColor: isDark ? COLORS.surfaceVariantDark : COLORS.surfaceVariant }]}
             onPress={closeMenu}
             pressedScale={0.92}
           >

@@ -3,7 +3,6 @@ import {
   RefreshControl,
   ScrollView,
   StyleSheet,
-  Text,
   View,
   TouchableOpacity,
 } from 'react-native';
@@ -18,6 +17,7 @@ import { COLORS } from '../lib/config';
 import { MobileTopBar } from '../components/layout/MobileTopBar';
 import type { UseAuthReturn } from '../hooks/useAuth';
 import { useThemePreference } from '../hooks/useThemePreference';
+import { Text } from '../components/ui/text';
 
 type MobileRecord = Record<string, unknown>;
 

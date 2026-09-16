@@ -24,36 +24,35 @@ export const QUERY_STALE_TIME = 1000 * 60 * 2; // 2 minutes
 export const QUERY_CACHE_TIME = 1000 * 60 * 10; // 10 minutes
 
 // Shared mobile palette aligned with the web self-service portal.
-// Using company brand colors: #2e3d8a (blue), #dd3740 (red)
 export const COLORS = {
   // Brand
-  primary: '#2e3d8a',
-  primaryDark: '#1f2a5e',
+  primary: '#303194',
+  primaryDark: '#24256f',
   onPrimary: '#ffffff',
-  accent: '#dd3740',
+  accent: '#303194',
   onAccent: '#ffffff',
 
-  // Light - branded with blue tints
-  background: '#f4f6fa',       // light blue-gray
+  // Light
+  background: '#FFFFFF',
   surface: '#ffffff',
-  surfaceVariant: '#e8ebf5',   // blue-tinted
-  onSurface: '#1a1f2e',        // dark blue-ish text
-  onSurfaceVariant: '#3f4759', // blue-gray
-  outline: '#c5cde0',          // blue-tinted outline
+  surfaceVariant: '#f7f7f7',
+  onSurface: '#111111',
+  onSurfaceVariant: '#4b5563',
+  outline: '#e4e4e7',
 
-  // Dark - branded with blue tints
-  backgroundDark: '#0d1426',   // dark blue
-  surfaceDark: '#141a2e',      // blue-tinted dark
-  surfaceVariantDark: '#1f2740',
-  onSurfaceDark: '#e0e5f5',
-  onSurfaceVariantDark: '#a8b3d0',
-  outlineDark: '#3a4666',
+  // Dark
+  backgroundDark: '#1A1C1F',
+  surfaceDark: '#18181b',
+  surfaceVariantDark: '#27272a',
+  onSurfaceDark: '#fafafa',
+  onSurfaceVariantDark: '#a1a1aa',
+  outlineDark: '#3f3f46',
 
   // Semantic
-  success: '#15803d',
-  error: '#dd3740',
-  warning: '#a16207',
-  info: '#2e3d8a',
+  success: '#059669',
+  error: '#b91c1c',
+  warning: '#b45309',
+  info: '#303194',
 } as const;
 
 export type ColorKey = keyof typeof COLORS;

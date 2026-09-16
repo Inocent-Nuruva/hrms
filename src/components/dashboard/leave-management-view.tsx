@@ -12,16 +12,23 @@ import {
 import {
   LeavePolicyEditorSheet,
   emptyLeavePolicyForm,
-  emptyLeavePolicyTypeAssignment,
 } from "@/components/dashboard/leave-policy-editor-sheet"
+import { LeavePolicyPreviewSheet } from "@/components/dashboard/leave-policy-preview-sheet"
+import { LeaveTypesCatalog } from "@/components/dashboard/leave-types-catalog"
+import { LeavePoliciesCatalog } from "@/components/dashboard/leave-policies-catalog"
+import { LeaveWorkflowsCatalog } from "@/components/dashboard/leave-workflows-catalog"
 import { LeaveWorkflowStepDialog } from "@/components/dashboard/leave-workflow-step-dialog"
 import { canSeeHrLeaveRequestsQueue } from "@/lib/dashboard-home"
 import { canPerformPermission } from "@/lib/dashboard-permissions"
 import { ResizableTable } from "@/components/ui/resizable-table"
 import { Textarea } from "@/components/ui/textarea"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import {
+  ArrowRight,
   Check,
+  ChevronRight,
+  Clock3,
   Download,
   Info,
   MoreHorizontal,
@@ -56,6 +63,7 @@ import {
   downloadLeaveBalanceImportTemplate,
   fileToBase64UploadDto,
   getCurrentAdmin,
+  getLeavePolicy,
   getLeaveRequest,
   getLeaveWorkflow,
   leaveRequestApprovalAction,
@@ -101,6 +109,10 @@ import {
   type LeaveBalanceEmployeeGroup,
 } from "@/lib/leave-balance-groups"
 import { isMedicalLeaveRequest } from "@/lib/leave-request-kind"
+import {
+  leavePolicyRecordToForm,
+  type LeavePolicyFormValue,
+} from "@/lib/leave-policy-form"
 import { cn } from "@/lib/utils"
 import { Switch } from "@/components/ui/switch"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
@@ -140,6 +152,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { WorkflowChoiceCard, WorkflowSelect } from "@/components/dashboard/leave-workflow-ui"
+import { MarkCheckbox } from "@/components/ui/mark-checkbox"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -191,6 +205,83 @@ type LeaveLookupKey = "types" | "employees" | "departments" | "positions" | "bra
 type LeaveManagementViewProps = {
   activeTab?: LeaveTab
   showTabButtons?: boolean
+}
+
+type LeaveTypeWizardStep = "details" | "rules" | "review"
+
+const LEAVE_TYPE_WIZARD_STEPS: Array<{ key: LeaveTypeWizardStep; number: string; label: string }> = [
+  { key: "details", number: "01", label: "Basic details" },
+  { key: "rules", number: "02", label: "Usage rules" },
+  { key: "review", number: "03", label: "Review" },
+]
+
+type LeaveRequestWizardStep = "who" | "when" | "review"
+
+const LEAVE_REQUEST_WIZARD_STEPS: Array<{ key: LeaveRequestWizardStep; number: string; label: string }> = [
+  { key: "who", number: "01", label: "Who & type" },
+  { key: "when", number: "02", label: "Dates" },
+  { key: "review", number: "03", label: "Review" },
+]
+
+function emptyLeaveRequestForm() {
+  return {
+    employee_id: "",
+    leave_type_id: "",
+    start_date: "",
+    end_date: "",
+    reason: "",
+    submit: "true",
+  }
+}
+
+function LeaveTypeField({
+  label,
+  help,
+  className,
+  children,
+}: {
+  label: string
+  help: string
+  className?: string
+  children: React.ReactElement<{ id?: string }>
+}) {
+  const generatedId = React.useId()
+  const controlId = children.props.id ?? generatedId
+
+  return (
+    <div className={cn("grid min-w-0 gap-1", className)}>
+      <span className="inline-flex items-center gap-1 text-sm font-semibold text-slate-800 dark:text-slate-100">
+        <label htmlFor={controlId}>{label}</label>
+        <Popover>
+          <PopoverTrigger
+            className="inline-flex size-7 items-center justify-center rounded-full text-slate-400 transition hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+            aria-label={`${label}: ${help}`}
+          >
+            <Info className="size-3.5" />
+          </PopoverTrigger>
+          <PopoverContent side="top" align="start" className="w-64 p-3 text-left text-xs font-normal leading-relaxed">
+            {help}
+          </PopoverContent>
+        </Popover>
+      </span>
+      {React.cloneElement(children, { id: controlId })}
+    </div>
+  )
+}
+
+const leaveTypeControlClass =
+  "mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-border dark:bg-background dark:text-foreground"
+
+function deriveLeaveTypeCode(name: string): string {
+  return name
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .split(/[^A-Z0-9]+/)
+    .filter((part) => part && part !== "LEAVE")
+    .join("_")
+    .slice(0, 48)
+    .replace(/_+$/, "")
 }
 
 function createEmptyLeaveTypeForm() {
@@ -283,7 +374,7 @@ const TAB_LOOKUP_REQUIREMENTS: Record<LeaveTab, LeaveLookupKey[]> = {
   balances: ["employees", "types"],
   transactions: ["employees", "types"],
   holidays: [],
-  policies: [],
+  policies: ["types", "departments", "positions", "branches", "grades"],
   workflows: [],
 }
 
@@ -323,82 +414,6 @@ function decodeJwtPayload(token: string) {
   } catch {
     return null
   }
-}
-
-function readSessionCompanyName() {
-  if (typeof window === "undefined") {
-    return ""
-  }
-
-  const tryRecord = (record: AdminRecord | null) => {
-    if (!record) {
-      return ""
-    }
-    const direct = readString(record, [
-      "companyName",
-      "company_name",
-      "organization_name",
-      "tenant_name",
-      "display_name",
-    ])
-    if (direct !== "-") {
-      return direct
-    }
-    const nested =
-      asRecord(record.company) ?? asRecord(record.organization) ?? asRecord(record.tenant)
-    if (nested) {
-      const nestedName = readString(nested, ["name", "companyName", "company_name", "display_name"])
-      if (nestedName !== "-") {
-        return nestedName
-      }
-    }
-    return ""
-  }
-
-  try {
-    const rawUser = window.localStorage.getItem(AUTH_STORAGE_KEYS.user)
-    if (rawUser) {
-      const fromUser = tryRecord(asRecord(JSON.parse(rawUser)))
-      if (fromUser) {
-        return fromUser
-      }
-    }
-  } catch {
-    // ignore malformed user payload
-  }
-
-  const token = readStoredToken()
-  if (token) {
-    const fromToken = tryRecord(decodeJwtPayload(token))
-    if (fromToken) {
-      return fromToken
-    }
-  }
-
-  return ""
-}
-
-function resolveLeaveTypeCompanyName(row: AdminRecord) {
-  const fromRow = readString(row, [
-    "company_name",
-    "companyName",
-    "organization_name",
-    "company",
-  ])
-  if (fromRow !== "-" && !/^\d+$/.test(fromRow)) {
-    return fromRow
-  }
-
-  const nested =
-    asRecord(row.company) ?? asRecord(row.organization) ?? asRecord(row.tenant)
-  if (nested) {
-    const nestedName = readString(nested, ["name", "company_name", "companyName", "display_name"])
-    if (nestedName !== "-") {
-      return nestedName
-    }
-  }
-
-  return readSessionCompanyName() || fromRow
 }
 
 function readString(row: AdminRecord, keys: string[]) {
@@ -496,19 +511,7 @@ function formatLeaveDateTime(value: string) {
   })
 }
 
-function formatLeaveDays(value: string) {
-  if (!value || value === "-") {
-    return "-"
-  }
-  const parsed = Number(value)
-  if (!Number.isFinite(parsed)) {
-    return value
-  }
-  if (parsed === 0) {
-    return "0 (not fixed)"
-  }
-  return Number.isInteger(parsed) ? String(parsed) : parsed.toFixed(2)
-}
+
 
 function leaveTypeIdFromRow(row: AdminRecord) {
   const direct = readNumber(row, ["leave_type_id", "leaveTypeId", "type_id", "typeId"])
@@ -550,16 +553,7 @@ function formFromBalanceRow(row: AdminRecord) {
   }
 }
 
-function formatGenderRestriction(value: string) {
-  if (!value || value === "-") {
-    return "Any"
-  }
-  const normalized = value.trim().toLowerCase()
-  if (normalized === "any") return "Any"
-  if (normalized === "female") return "Female"
-  if (normalized === "male") return "Male"
-  return value
-}
+
 
 function normalizeHolidayValue(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, " ")
@@ -871,6 +865,7 @@ function isLeaveRequestApprovalOpenStatus(status: string) {
 
 function getLeaveRequestPermissions(row: AdminRecord, actor: LeaveActor | null) {
   const status = readString(row, ["status"]).toLowerCase()
+  const normalizedStatus = normalizeLeaveStatusLabel(status)
   const isTerminal = isLeaveRequestTerminalStatus(status)
   const approvals = getLeaveApprovals(row)
   const currentLevel =
@@ -910,8 +905,19 @@ function getLeaveRequestPermissions(row: AdminRecord, actor: LeaveActor | null) 
     (isOwner || Boolean(actor?.isCompanyAdmin))
 
   const pendingNames = pendingAtCurrent.map((approval) => approval.name).filter(Boolean)
-  const waitingLabel =
-    pendingNames.length === 0
+  const waitingLabel = isTerminal
+    ? normalizedStatus === "approved"
+      ? "All approvals completed"
+      : normalizedStatus === "rejected"
+        ? currentLevel > 0
+          ? `Rejected at level ${currentLevel}`
+          : "Request rejected"
+        : normalizedStatus === "completed"
+          ? "Leave completed"
+          : normalizedStatus === "cancelled" || normalizedStatus === "canceled"
+            ? "Request cancelled"
+            : "Request closed"
+    : pendingNames.length === 0
       ? currentLevel > 0
         ? `Waiting at level ${currentLevel}`
         : "No active approver"
@@ -942,6 +948,30 @@ function getLeaveRequestPermissions(row: AdminRecord, actor: LeaveActor | null) 
         ? "This request is already closed."
         : "Only the requester or a company admin can cancel this request.",
   }
+}
+
+function formatLeaveRequestCardDate(value: string) {
+  if (!value || value === "-") return "Not set"
+  const dateOnly = value.slice(0, 10)
+  const parsed = new Date(`${dateOnly}T00:00:00`)
+  if (Number.isNaN(parsed.getTime())) return value
+  return parsed.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  })
+}
+
+function leaveRequestDuration(row: AdminRecord) {
+  const start = readString(row, ["start_date"])
+  const end = readString(row, ["end_date"])
+  if (!start || !end || start === "-" || end === "-") return ""
+  const startDate = new Date(`${start.slice(0, 10)}T00:00:00`)
+  const endDate = new Date(`${end.slice(0, 10)}T00:00:00`)
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return ""
+  const days = Math.floor((endDate.getTime() - startDate.getTime()) / 86_400_000) + 1
+  if (days < 1) return ""
+  return `${days} ${days === 1 ? "day" : "days"}`
 }
 
 function ApprovalChain({
@@ -980,7 +1010,8 @@ function ApprovalChain({
       <ol className="relative flex flex-col gap-0 border-l border-border/80 pl-4">
         {levels.map((level) => {
           const items = permissions.approvals.filter((item) => item.level === level)
-          const isCurrent = permissions.currentLevel > 0 && level === permissions.currentLevel
+          const isCurrent =
+            !permissions.isTerminal && permissions.currentLevel > 0 && level === permissions.currentLevel
           const levelDone = items.length > 0 && items.every((item) => item.status === "approved")
           const levelRejected = items.some((item) => item.status === "rejected")
 
@@ -1140,10 +1171,7 @@ export function LeaveManagementView({
   const [requestStatusFilter, setRequestStatusFilter] = React.useState("all")
   const [transactionSearch, setTransactionSearch] = React.useState("")
   const [transactionTypeFilter, setTransactionTypeFilter] = React.useState("all")
-  const [typeSearch, setTypeSearch] = React.useState("")
-  const [typeStatusFilter, setTypeStatusFilter] = React.useState("all")
-  const [workflowSearch, setWorkflowSearch] = React.useState("")
-  const [workflowStatusFilter, setWorkflowStatusFilter] = React.useState("all")
+
   const [balances, setBalances] = React.useState<AdminRecord[]>([])
   const [balanceAdjustments, setBalanceAdjustments] = React.useState<AdminRecord[]>([])
   const [balanceTransactions, setBalanceTransactions] = React.useState<AdminRecord[]>([])
@@ -1165,7 +1193,10 @@ export function LeaveManagementView({
   const [pendingPolicyDelete, setPendingPolicyDelete] = React.useState<AdminRecord | null>(null)
   const [pendingWorkflowDelete, setPendingWorkflowDelete] = React.useState<AdminRecord | null>(null)
   const [typeDialogOpen, setTypeDialogOpen] = React.useState(false)
+  const [typeDialogStep, setTypeDialogStep] = React.useState<LeaveTypeWizardStep>("details")
+  const [typeCodeManuallyEdited, setTypeCodeManuallyEdited] = React.useState(false)
   const [requestDialogOpen, setRequestDialogOpen] = React.useState(false)
+  const [requestDialogStep, setRequestDialogStep] = React.useState<LeaveRequestWizardStep>("who")
   const [requestImportOpen, setRequestImportOpen] = React.useState(false)
   const [requestImportFile, setRequestImportFile] = React.useState<File | null>(null)
   const [requestImportResult, setRequestImportResult] = React.useState<LeaveImportResult | null>(null)
@@ -1183,6 +1214,9 @@ export function LeaveManagementView({
   const [policySheetOpen, setPolicySheetOpen] = React.useState(false)
   const [editingPolicyId, setEditingPolicyId] = React.useState<number | null>(null)
   const [policyPreviewOpen, setPolicyPreviewOpen] = React.useState(false)
+  const [policyPreviewLoading, setPolicyPreviewLoading] = React.useState(false)
+  const [policyPreviewForm, setPolicyPreviewForm] = React.useState<LeavePolicyFormValue | null>(null)
+  const policyPreviewRequestRef = React.useRef(0)
   const [selectedPolicyRow, setSelectedPolicyRow] = React.useState<AdminRecord | null>(null)
   const [selectedBalanceRow, setSelectedBalanceRow] = React.useState<AdminRecord | null>(null)
   const [selectedBalanceGroup, setSelectedBalanceGroup] = React.useState<LeaveBalanceEmployeeGroup | null>(null)
@@ -1200,9 +1234,7 @@ export function LeaveManagementView({
   const [stepDialogOpen, setStepDialogOpen] = React.useState(false)
   const [editingWorkflowId, setEditingWorkflowId] = React.useState<number | null>(null)
   const [editingWorkflowStepId, setEditingWorkflowStepId] = React.useState<number | null>(null)
-  const [selectedLeaveTypeRow, setSelectedLeaveTypeRow] = React.useState<AdminRecord | null>(null)
   const [editingLeaveTypeRow, setEditingLeaveTypeRow] = React.useState<AdminRecord | null>(null)
-  const [leaveTypeDetailsOpen, setLeaveTypeDetailsOpen] = React.useState(false)
   const [selectedLeaveRequestRow, setSelectedLeaveRequestRow] = React.useState<AdminRecord | null>(null)
   const [leaveRequestDetailsOpen, setLeaveRequestDetailsOpen] = React.useState(false)
   const [currentActor, setCurrentActor] = React.useState<LeaveActor | null>(null)
@@ -1244,14 +1276,7 @@ export function LeaveManagementView({
 
   const [typeForm, setTypeForm] = React.useState(createEmptyLeaveTypeForm)
 
-  const [requestForm, setRequestForm] = React.useState({
-    employee_id: "",
-    leave_type_id: "",
-    start_date: "",
-    end_date: "",
-    reason: "",
-    submit: "true",
-  })
+  const [requestForm, setRequestForm] = React.useState(emptyLeaveRequestForm)
 
   const [balanceForm, setBalanceForm] = React.useState(emptyBalanceForm)
 
@@ -1453,6 +1478,11 @@ export function LeaveManagementView({
       return true
     }
 
+    const missingKeys = force ? lookupKeys : lookupKeys.filter((key) => !loadedLookupsRef.current[key])
+    if (missingKeys.length === 0) {
+      return true
+    }
+
     setLoading(true)
     setError(null)
     try {
@@ -1558,27 +1588,11 @@ export function LeaveManagementView({
     void reloadAll(tab, false)
   }, [reloadAll, tab])
 
-  React.useEffect(() => {
-    if (tab !== "types") {
-      setLeaveTypeDetailsOpen(false)
-      return
-    }
-    setSelectedLeaveTypeRow((current) => {
-      if (!current) {
-        return null
-      }
-      if (types.length === 0) {
-        return null
-      }
-      const currentId = readLeaveTypeId(current)
-      const refreshed = types.find((row) => readLeaveTypeId(row) === currentId)
-      return refreshed ?? null
-    })
-  }, [tab, types])
-
   const resetTypeForm = React.useCallback(() => {
     setTypeForm(createEmptyLeaveTypeForm())
     setEditingLeaveTypeRow(null)
+    setTypeDialogStep("details")
+    setTypeCodeManuallyEdited(false)
   }, [])
 
   const openTypeDialogForCreate = React.useCallback(() => {
@@ -1587,6 +1601,8 @@ export function LeaveManagementView({
   }, [resetTypeForm])
 
   const openTypeDialogForEdit = React.useCallback((row: AdminRecord) => {
+    setTypeDialogStep("details")
+    setTypeCodeManuallyEdited(true)
     setEditingLeaveTypeRow(row)
     setTypeForm({
       name: readString(row, ["name"]) === "-" ? "" : readString(row, ["name"]),
@@ -1616,11 +1632,6 @@ export function LeaveManagementView({
     })
     setTypeDialogOpen(true)
   }, [])
-
-  function openLeaveTypeDetails(row: AdminRecord) {
-    setSelectedLeaveTypeRow(row)
-    setLeaveTypeDetailsOpen(true)
-  }
 
   const openLeaveRequestDetails = React.useCallback(async (row: AdminRecord) => {
     setSelectedLeaveRequestRow(row)
@@ -1977,14 +1988,22 @@ export function LeaveManagementView({
     })
     .filter((option): option is SearchableOption => Boolean(option))
 
-  const leaveTypeOptions: SearchableOption[] = types
+  const leaveTypeOptions = types
     .map((type) => {
       const id = readNumber(type, ["id", "leave_type_id", "leaveTypeId"])
       if (id === null) return null
       const label = readString(type, ["name", "leave_type_name", "leaveTypeName", "title", "code"])
-      return { value: String(id), label: label && label !== "-" ? label : `Leave type ${id}` }
+      const yearlyMax = readDisplayValue(type, ["max_days_per_year", "maxDaysPerYear"])
+      const carryMax = readDisplayValue(type, ["max_carry_forward_days", "maxCarryForwardDays"])
+      return {
+        value: String(id),
+        label: label && label !== "-" ? label : `Leave type ${id}`,
+        maxDaysPerYear: yearlyMax === "-" ? "0" : yearlyMax,
+        maxCarryForwardDays: carryMax === "-" ? "0" : carryMax,
+        carryForwardAllowed: readBoolean(type, ["is_carry_forward_allowed", "isCarryForwardAllowed"]),
+      }
     })
-    .filter((option): option is SearchableOption => Boolean(option))
+    .filter((option): option is NonNullable<typeof option> => Boolean(option))
 
   const gradeOptions: SearchableOption[] = grades
     .map((row) => {
@@ -2072,24 +2091,6 @@ export function LeaveManagementView({
     }
   })
 
-  const filteredWorkflows = workflows.filter((row) => {
-    const status = readString(row, ["status"]).toLowerCase()
-    if (workflowStatusFilter !== "all" && status !== workflowStatusFilter) {
-      return false
-    }
-    const query = workflowSearch.trim().toLowerCase()
-    if (!query) {
-      return true
-    }
-    return [
-      readString(row, ["name"]),
-      readString(row, ["status"]),
-      readString(row, ["leave_type_name", "leaveTypeName"]),
-    ]
-      .join(" ")
-      .toLowerCase()
-      .includes(query)
-  })
   const workflowDraftRow: AdminRecord | null = workflowDraft
     ? {
         id: "local-draft",
@@ -2102,42 +2103,9 @@ export function LeaveManagementView({
         _isLocalDraft: true,
       }
     : null
-  const visibleWorkflows = [
-    ...(workflowDraftRow && (workflowStatusFilter === "all" || workflowStatusFilter === "draft")
-      ? [workflowDraftRow]
-      : []),
-    ...filteredWorkflows,
-  ].filter((row) => {
-    const query = workflowSearch.trim().toLowerCase()
-    if (!query || !readBoolean(row, ["_isLocalDraft"])) return true
-    return [readString(row, ["name"]), readString(row, ["leave_type_name"]), "draft"]
-      .join(" ")
-      .toLowerCase()
-      .includes(query)
-  })
   const canSubmitPolicyChanges = editingPolicyId === null ? canCreatePolicies : canUpdatePolicies
   const canSubmitWorkflowChanges = editingWorkflowId === null ? canCreateWorkflows : canUpdateWorkflows
   const canManageWorkflowSteps = editingWorkflowId === null ? canCreateWorkflows : canUpdateWorkflows
-
-  const filteredTypes = types.filter((row) => {
-    const status = readString(row, ["status"]).toLowerCase()
-    if (typeStatusFilter !== "all" && status !== typeStatusFilter) {
-      return false
-    }
-    const query = typeSearch.trim().toLowerCase()
-    if (!query) {
-      return true
-    }
-    return [
-      readString(row, ["name"]),
-      readString(row, ["code"]),
-      readString(row, ["description"]),
-      readString(row, ["gender_restriction"]),
-    ]
-      .join(" ")
-      .toLowerCase()
-      .includes(query)
-  })
 
   const filteredRequests = requests.filter((row) => {
     const status = readString(row, ["status"]).toLowerCase()
@@ -2355,7 +2323,6 @@ export function LeaveManagementView({
 
       resetTypeForm()
       setTypeDialogOpen(false)
-      setLeaveTypeDetailsOpen(false)
       await reloadAll(tab, true)
     } catch (errorObject) {
       const message = errorObject instanceof Error
@@ -2452,14 +2419,8 @@ export function LeaveManagementView({
               : undefined,
         })
       }
-      setRequestForm({
-        employee_id: "",
-        leave_type_id: "",
-        start_date: "",
-        end_date: "",
-        reason: "",
-        submit: "true",
-      })
+      setRequestForm(emptyLeaveRequestForm())
+      setRequestDialogStep("who")
       setRequestDialogOpen(false)
       await reloadAll(tab, true)
     } catch (errorObject) {
@@ -2540,6 +2501,8 @@ export function LeaveManagementView({
     if (!loaded) {
       return
     }
+    setRequestForm(emptyLeaveRequestForm())
+    setRequestDialogStep("who")
     setRequestDialogOpen(true)
   }
 
@@ -2913,85 +2876,51 @@ export function LeaveManagementView({
     }
   }
 
-  function loadPolicyIntoForm(row: AdminRecord) {
+  async function resolvePolicyRecord(row: AdminRecord): Promise<AdminRecord> {
+    const token = readStoredToken()
+    const policyId = readNumber(row, ["id", "policy_id"])
+    if (!token || policyId === null) {
+      return row
+    }
+    try {
+      const detailed = await getLeavePolicy(token, policyId)
+      return detailed ? { ...row, ...detailed } : row
+    } catch {
+      return row
+    }
+  }
+
+  async function loadPolicyIntoForm(row: AdminRecord) {
     if (!canUpdatePolicies) {
       return
     }
-    void ensureLookups(["types", "departments", "positions", "branches", "grades"])
+    const loaded = await ensureLookups(["types", "departments", "positions", "branches", "grades"])
+    if (!loaded) {
+      return
+    }
     const policyId = readNumber(row, ["id", "policy_id"])
-    const rawLeaveTypes = Array.isArray(row.leave_types) ? row.leave_types : []
-    const readPolicyNumber = (keys: string[], fallback = "0") => {
-      const value = readNumber(row, keys)
-      return value !== null ? String(value) : fallback
-    }
-    const readOptionalId = (keys: string[]) => {
-      const value = readNumber(row, keys)
-      return value !== null ? String(value) : ""
-    }
-    const readText = (keys: string[]) => {
-      const value = readString(row, keys)
-      return !value || value === "-" ? "" : value
-    }
-
-    setPolicyForm({
-      ...emptyLeavePolicyForm(),
-      name: readText(["name", "title"]),
-      description: readText(["description"]),
-      status: readString(row, ["status"]).toLowerCase() === "inactive" ? "inactive" : "active",
-      accrual_method: readText(["accrual_method"]) || "yearly",
-      accrual_rate: readPolicyNumber(["accrual_rate"]),
-      priority: readPolicyNumber(["priority"]),
-      applicable_branch_id: readOptionalId(["applicable_branch_id"]),
-      applicable_department_id: readOptionalId(["applicable_department_id"]),
-      applicable_position_id: readOptionalId(["applicable_position_id"]),
-      applicable_grade_id: readOptionalId(["applicable_grade_id"]),
-      applicable_employment_type: readText(["applicable_employment_type"]),
-      applicable_confirmation_status: readText(["applicable_confirmation_status"]),
-      max_consecutive_days: readPolicyNumber(["max_consecutive_days"], "1"),
-      min_service_months: readPolicyNumber(["min_service_months"]),
-      allow_during_probation: readBoolean(row, ["allow_during_probation"]) ? "true" : "false",
-      allow_negative_balance: readBoolean(row, ["allow_negative_balance"]) ? "true" : "false",
-      weekly_off_treatment: readText(["weekly_off_treatment"]) || "EMPLOYEE_SCHEDULE",
-      holiday_treatment: readText(["holiday_treatment"]) || "EXCLUDE",
-      allow_half_day: readBoolean(row, ["allow_half_day"]) ? "true" : "false",
-      allow_short_leave: readBoolean(row, ["allow_short_leave"]) ? "true" : "false",
-      minimum_short_leave_minutes: readPolicyNumber(["minimum_short_leave_minutes"], "30"),
-      maximum_short_leave_minutes: readPolicyNumber(["maximum_short_leave_minutes"], "240"),
-      minimum_notice_days: readPolicyNumber(["minimum_notice_days"]),
-      maximum_backdate_days: readPolicyNumber(["maximum_backdate_days"]),
-      cancellation_requires_approval: readBoolean(row, ["cancellation_requires_approval"]) ? "true" : "false",
-      cancellation_cutoff_days: readPolicyNumber(["cancellation_cutoff_days"]),
-      maximum_accumulation_days: readPolicyNumber(["maximum_accumulation_days"]),
-      attendance_balance_deduction_enabled: readBoolean(row, ["attendance_balance_deduction_enabled"]) ? "true" : "false",
-      absent_day_deduction_days: readPolicyNumber(["absent_day_deduction_days"], "1"),
-      unpaid_leave_day_deduction_days: readPolicyNumber(["unpaid_leave_day_deduction_days"], "1"),
-      half_day_deduction_days: readPolicyNumber(["half_day_deduction_days"], "0.5"),
-      leave_types: rawLeaveTypes.length
-        ? rawLeaveTypes.map((entry) => {
-            const record = asRecord(entry) ?? {}
-            const typeId = readNumber(record, ["leave_type_id", "id"])
-            return {
-              ...emptyLeavePolicyTypeAssignment(),
-              leave_type_id: typeId !== null ? String(typeId) : "",
-              annual_quota_days: String(readNumber(record, ["annual_quota_days"]) ?? 0),
-              max_per_request_days: String(readNumber(record, ["max_per_request_days"]) ?? 0),
-              requires_approval: readBoolean(record, ["requires_approval"]) ? "true" : "false",
-              encashment_enabled: readBoolean(record, ["encashment_enabled"]) ? "true" : "false",
-              maximum_encashment_days: String(readNumber(record, ["maximum_encashment_days"]) ?? 0),
-              minimum_balance_after_encashment: String(readNumber(record, ["minimum_balance_after_encashment"]) ?? 0),
-              encashment_requires_approval: readBoolean(record, ["encashment_requires_approval"]) ? "true" : "false",
-              maximum_accumulation_days: String(readNumber(record, ["maximum_accumulation_days"]) ?? 0),
-            }
-          })
-        : [emptyLeavePolicyTypeAssignment()],
-    })
+    const detailed = await resolvePolicyRecord(row)
+    setPolicyForm(leavePolicyRecordToForm(detailed))
     setEditingPolicyId(policyId)
     setPolicySheetOpen(true)
   }
 
   function openPolicyPreview(row: AdminRecord) {
+    const requestId = ++policyPreviewRequestRef.current
     setSelectedPolicyRow(row)
+    setPolicyPreviewForm(leavePolicyRecordToForm(row))
     setPolicyPreviewOpen(true)
+    setPolicyPreviewLoading(true)
+    void (async () => {
+      await ensureLookups(["types", "departments", "positions", "branches", "grades"])
+      const detailed = await resolvePolicyRecord(row)
+      if (policyPreviewRequestRef.current !== requestId) {
+        return
+      }
+      setSelectedPolicyRow(detailed)
+      setPolicyPreviewForm(leavePolicyRecordToForm(detailed))
+      setPolicyPreviewLoading(false)
+    })()
   }
 
   function openCreatePolicySheet() {
@@ -3682,6 +3611,59 @@ export function LeaveManagementView({
     </button>
   )
 
+  const canContinueLeaveTypeWizard = Boolean(typeForm.name.trim() && typeForm.code.trim())
+  const leaveTypeWizardIndex = LEAVE_TYPE_WIZARD_STEPS.findIndex((item) => item.key === typeDialogStep)
+  const leaveRequestWizardIndex = LEAVE_REQUEST_WIZARD_STEPS.findIndex((item) => item.key === requestDialogStep)
+  const canContinueRequestWho = Boolean(requestForm.employee_id && requestForm.leave_type_id)
+  const canContinueRequestWhen = Boolean(
+    requestForm.start_date &&
+      requestForm.end_date &&
+      new Date(requestForm.start_date).getTime() <= new Date(requestForm.end_date).getTime(),
+  )
+  const requestEmployeeLabel =
+    employeeOptions.find((option) => option.value === requestForm.employee_id)?.label || "Not selected"
+  const requestLeaveTypeLabel =
+    leaveTypeOptions.find((option) => option.value === requestForm.leave_type_id)?.label || "Not selected"
+  const formatRequestDate = (value: string) => {
+    if (!value) return "Not set"
+    const parsed = new Date(`${value}T00:00:00`)
+    if (Number.isNaN(parsed.getTime())) return value
+    return parsed.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })
+  }
+  const leaveRequestReviewItems = [
+    { label: "Employee", value: requestEmployeeLabel },
+    { label: "Leave type", value: requestLeaveTypeLabel },
+    { label: "Start", value: formatRequestDate(requestForm.start_date) },
+    { label: "End", value: formatRequestDate(requestForm.end_date) },
+    { label: "Action", value: requestForm.submit === "true" ? "Submit now" : "Save as draft" },
+  ]
+  const leaveTypeReviewItems = [
+    { label: "Leave type", value: `${typeForm.name.trim() || "Not named"} · ${typeForm.code.trim() || "No code"}` },
+    { label: "Availability", value: typeForm.status === "active" ? "Active" : "Inactive" },
+    { label: "Pay", value: typeForm.is_paid === "true" ? "Paid leave" : "Unpaid leave" },
+    { label: "Document", value: typeForm.requires_attachment === "true" ? "Required" : "Optional" },
+    {
+      label: "Unused days",
+      value:
+        typeForm.is_carry_forward_allowed === "true"
+          ? `Move to next year · up to ${Number(typeForm.max_carry_forward_days) || 0} days`
+          : "Expire at year end",
+    },
+    {
+      label: "Yearly maximum",
+      value: Number(typeForm.max_days_per_year) > 0 ? `${typeForm.max_days_per_year} days` : "No limit",
+    },
+    {
+      label: "Who can use it",
+      value:
+        typeForm.gender_restriction === "male"
+          ? "Male employees only"
+          : typeForm.gender_restriction === "female"
+            ? "Female employees only"
+            : "Everyone",
+    },
+  ]
+
   return (
     <div className="space-y-2">
       {showTabButtons ? (
@@ -3708,218 +3690,17 @@ export function LeaveManagementView({
       {error ? <p className="text-sm text-rose-600">{error}</p> : null}
 
       {tab === "types" ? (
-        <div className="space-y-2">
-          <ResizableTable
-            title="Leave Types"
-            toolbarStart={
-              <>
-                <SearchToggleField
-                  className="min-w-0 !w-auto !max-w-[12rem] !flex-none"
-                  placeholder="Search leave types"
-                  value={typeSearch}
-                  onChange={setTypeSearch}
-                />
-                <select
-                  className="h-8 w-[8.5rem] shrink-0 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
-                  value={typeStatusFilter}
-                  onChange={(event) => setTypeStatusFilter(event.target.value)}
-                  aria-label="Filter leave type status"
-                >
-                  <option value="all">All statuses</option>
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                </select>
-              </>
-            }
-            toolbarActions={
-              <>
-                {canCreateTypes ? (
-                  <button
-                    type="button"
-                    className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white"
-                    onClick={() => openTypeDialogForCreate()}
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    Create Leave Type
-                  </button>
-                ) : null}
-                {refreshButton}
-              </>
-            }
-            data={filteredTypes}
-            onRowSelect={(_, row) => {
-              if (row) {
-                openLeaveTypeDetails(row)
-              }
-            }}
-            columns={[
-              { key: "name", label: "Name", defaultWidth: 110, sortable: true, render: (r) => readString(r, ["name"]) },
-              { key: "code", label: "Code", defaultWidth: 55, sortable: true, render: (r) => readString(r, ["code"]) },
-              {
-                key: "status",
-                label: "Status",
-                defaultWidth: 55,
-                sortable: true,
-                render: (r) => <StatusIndicator status={readString(r, ["status"])} />,
-              },
-              { key: "is_paid", label: "Paid", defaultWidth: 45, render: (r) => readBoolean(r, ["is_paid"]) ? "Y" : "N" },
-              { key: "actions", label: "Actions", defaultWidth: 80, sortable: false, render: (row) => {
-                  const isActive = readString(row, ["status"]) === "active";
-                  return (
-                    <div className="flex items-center justify-end gap-1.5" onClick={e => e.stopPropagation()}>
-                      {canCreateTypes ? (
-                        <Switch
-                          size="sm"
-                          checked={isActive}
-                          onCheckedChange={() => void toggleTypeStatus(row)}
-                          aria-label="Toggle Status"
-                          className="scale-90"
-                        />
-                      ) : null}
-                      {canCreateTypes ? (
-                        <button
-                          type="button"
-                          className="group rounded-md border border-sky-200 p-1.5 text-sky-600 transition-all duration-300 hover:-translate-y-0.5 hover:scale-110 hover:bg-sky-50 hover:shadow-sm active:scale-95"
-                          onClick={() => openTypeDialogForEdit(row)}
-                          aria-label="Edit leave type"
-                          title="Edit leave type"
-                        >
-                          <Pencil className="size-3.5 transition-transform duration-300 group-hover:scale-110" />
-                        </button>
-                      ) : null}
-                      {canDeleteTypes ? (
-                        <button
-                          type="button"
-                          className="group rounded-md border border-rose-200 p-1.5 text-rose-600 transition-all duration-300 hover:-translate-y-0.5 hover:scale-110 hover:bg-rose-50 hover:shadow-sm active:scale-95"
-                          onClick={() => setPendingTypeDelete(row)}
-                          aria-label="Delete leave type"
-                          title="Delete leave type"
-                        >
-                          <Trash2 className="size-3.5 transition-transform duration-300 group-hover:rotate-12 group-hover:scale-110" />
-                        </button>
-                      ) : null}
-                    </div>
-                  );
-                } },
-            ]}
-            itemsPerPage={20}
-            loading={loading}
-            storageKey="leave-types"
-          />
-
-          <Dialog
-            open={leaveTypeDetailsOpen}
-            onOpenChange={(open) => {
-              setLeaveTypeDetailsOpen(open)
-              if (!open) {
-                setSelectedLeaveTypeRow(null)
-              }
-            }}
-          >
-            <DialogPopup
-              from="bottom"
-              className="flex max-h-[min(92dvh,36rem)] w-[calc(100%-1rem)] max-w-md flex-col gap-0 overflow-hidden p-3 sm:max-w-lg sm:p-4"
-            >
-              <DialogHeader className="shrink-0 space-y-1 pr-8 text-left">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <DialogTitle className="text-base leading-snug sm:text-lg">
-                    {selectedLeaveTypeRow ? readString(selectedLeaveTypeRow, ["name"]) : "Leave type details"}
-                  </DialogTitle>
-                  {selectedLeaveTypeRow ? (
-                    <StatusIndicator status={readString(selectedLeaveTypeRow, ["status"])} />
-                  ) : null}
-                </div>
-                <DialogDescription className="text-xs">
-                  {selectedLeaveTypeRow
-                    ? readDisplayValue(selectedLeaveTypeRow, ["code"])
-                    : "Leave type details"}
-                </DialogDescription>
-              </DialogHeader>
-
-              {selectedLeaveTypeRow ? (
-                <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto overscroll-contain py-2 pr-0.5">
-                  <p className="rounded-md border border-slate-200 bg-slate-50/80 px-2.5 py-2 text-xs leading-relaxed text-slate-700">
-                    {readString(selectedLeaveTypeRow, ["description"])}
-                  </p>
-
-                  <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5 rounded-md border border-slate-200 bg-white p-2.5 text-xs sm:grid-cols-3">
-                    {[
-                      { label: "ID", value: readDisplayValue(selectedLeaveTypeRow, ["id"]) },
-                      { label: "Company", value: resolveLeaveTypeCompanyName(selectedLeaveTypeRow) },
-                      { label: "Code", value: readDisplayValue(selectedLeaveTypeRow, ["code"]) },
-                      { label: "Status", value: readDisplayValue(selectedLeaveTypeRow, ["status"]) },
-                      { label: "Paid", value: readBoolean(selectedLeaveTypeRow, ["is_paid"]) ? "Yes" : "No" },
-                      {
-                        label: "Attachment",
-                        value: readBoolean(selectedLeaveTypeRow, ["requires_attachment"]) ? "Yes" : "No",
-                      },
-                      {
-                        label: "Carry forward",
-                        value: readBoolean(selectedLeaveTypeRow, ["is_carry_forward_allowed"]) ? "Yes" : "No",
-                      },
-                      {
-                        label: "Gender",
-                        value: formatGenderRestriction(
-                          readDisplayValue(selectedLeaveTypeRow, ["gender_restriction"])
-                        ),
-                      },
-                      {
-                        label: "Max days / year",
-                        value: formatLeaveDays(readDisplayValue(selectedLeaveTypeRow, ["max_days_per_year"])),
-                      },
-                      {
-                        label: "Max CF days",
-                        value: formatLeaveDays(
-                          readDisplayValue(selectedLeaveTypeRow, ["max_carry_forward_days"])
-                        ),
-                      },
-                      {
-                        label: "Created",
-                        value: formatLeaveDateTime(readDisplayValue(selectedLeaveTypeRow, ["created_at"])),
-                      },
-                      {
-                        label: "Updated",
-                        value: formatLeaveDateTime(readDisplayValue(selectedLeaveTypeRow, ["updated_at"])),
-                      },
-                    ].map((item) => (
-                      <div key={item.label} className="min-w-0 border-b border-slate-100 pb-1.5 last:border-b-0 sm:border-b-0 sm:pb-0">
-                        <dt className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
-                          {item.label}
-                        </dt>
-                        <dd className="mt-0.5 truncate font-medium text-slate-900" title={item.value}>
-                          {item.value}
-                        </dd>
-                      </div>
-                    ))}
-                  </dl>
-                </div>
-              ) : null}
-
-              <DialogFooter className="mt-2 shrink-0 border-t border-slate-100 pt-2 sm:justify-end">
-                <button
-                  type="button"
-                  className="inline-flex h-8 items-center justify-center rounded-md border border-sky-200 px-3 text-xs font-medium text-sky-700"
-                  onClick={() => {
-                    if (!selectedLeaveTypeRow) {
-                      return
-                    }
-                    setLeaveTypeDetailsOpen(false)
-                    openTypeDialogForEdit(selectedLeaveTypeRow)
-                  }}
-                >
-                  Edit
-                </button>
-                <button
-                  type="button"
-                  className="inline-flex h-8 items-center justify-center rounded-md border border-slate-300 px-3 text-xs font-medium text-slate-700"
-                  onClick={() => setLeaveTypeDetailsOpen(false)}
-                >
-                  Close
-                </button>
-              </DialogFooter>
-            </DialogPopup>
-          </Dialog>
-        </div>
+        <LeaveTypesCatalog
+          types={types}
+          loading={loading}
+          canEdit={canCreateTypes}
+          canDelete={canDeleteTypes}
+          onRefresh={() => void reloadAll(tab, true)}
+          onCreate={openTypeDialogForCreate}
+          onEdit={openTypeDialogForEdit}
+          onDelete={(row) => setPendingTypeDelete(row)}
+          onToggleStatus={(row) => void toggleTypeStatus(row)}
+        />
       ) : null}
 
       {tab === "requests" ? (
@@ -3987,83 +3768,147 @@ export function LeaveManagementView({
               filteredRequests.map((row, index) => {
                 const permissions = getLeaveRequestPermissions(row, currentActor)
                 const rowKey = String(readNumber(row, ["id"]) ?? leaveRequestLabel(row) ?? index)
+                const status = readString(row, ["status"])
+                const normalizedStatus = normalizeLeaveStatusLabel(status)
+                const completedSuccessfully =
+                  normalizedStatus === "approved" || normalizedStatus === "completed"
+                const duration = leaveRequestDuration(row)
+                const hasActions = permissions.canApproveOrReject || permissions.canCancel
 
                 return (
                   <div
                     key={`leave-request-card-${rowKey}`}
-                    className="rounded-lg border border-border/70 bg-background p-3"
+                    className="overflow-hidden rounded-lg border border-border/70 bg-background"
                   >
                     <button
                       type="button"
-                      className="flex w-full items-start justify-between gap-2 text-left"
+                      className="flex w-full items-start justify-between gap-3 px-3 py-3 text-left transition-colors hover:bg-muted/30"
                       onClick={() => void openLeaveRequestDetails(row)}
                     >
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-foreground">
+                        <p className="truncate text-sm font-semibold text-foreground">
                           {employeeLabelFromRow(row)}
                         </p>
-                        <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                          {leaveRequestLabel(row)} · {leaveTypeLabelFromRequest(row)}
+                        <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                          {leaveRequestLabel(row)}
+                        </p>
+                        <p className="mt-1 truncate text-xs font-medium text-foreground/80">
+                          {leaveTypeLabelFromRequest(row)}
                         </p>
                       </div>
-                      <StatusIndicator status={readString(row, ["status"])} />
+                      <StatusIndicator status={status} />
                     </button>
-                    <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-                      <div>
-                        <span className="block text-[10px] uppercase tracking-wide">Start</span>
-                        <span className="font-medium text-foreground">
-                          {readString(row, ["start_date"]) || "—"}
+
+                    <div className="mx-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2 rounded-lg bg-muted/45 px-3 py-2.5">
+                      <div className="min-w-0">
+                        <span className="block text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                          Starts
+                        </span>
+                        <span className="mt-0.5 block truncate text-xs font-semibold text-foreground">
+                          {formatLeaveRequestCardDate(readString(row, ["start_date"]))}
                         </span>
                       </div>
-                      <div>
-                        <span className="block text-[10px] uppercase tracking-wide">End</span>
-                        <span className="font-medium text-foreground">
-                          {readString(row, ["end_date"]) || "—"}
+                      <div className="flex flex-col items-center gap-0.5 text-muted-foreground">
+                        <ArrowRight className="size-3.5" />
+                        {duration ? <span className="whitespace-nowrap text-[10px]">{duration}</span> : null}
+                      </div>
+                      <div className="min-w-0 text-right">
+                        <span className="block text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                          Ends
+                        </span>
+                        <span className="mt-0.5 block truncate text-xs font-semibold text-foreground">
+                          {formatLeaveRequestCardDate(readString(row, ["end_date"]))}
                         </span>
                       </div>
                     </div>
 
-                    <ApprovalChain row={row} actor={currentActor} compact />
+                    <button
+                      type="button"
+                      className="mx-3 mt-2.5 flex w-[calc(100%_-_1.5rem)] items-center gap-2 rounded-lg border border-border/60 px-2.5 py-2 text-left transition-colors hover:bg-muted/30"
+                      onClick={() => void openLeaveRequestDetails(row)}
+                    >
+                      <span
+                        className={cn(
+                          "inline-flex size-5 shrink-0 items-center justify-center",
+                          permissions.isTerminal
+                            ? completedSuccessfully
+                              ? "text-emerald-700 dark:text-emerald-300"
+                              : "text-rose-700 dark:text-rose-300"
+                            : "text-amber-700 dark:text-amber-300",
+                        )}
+                      >
+                        {permissions.isTerminal ? (
+                          completedSuccessfully ? (
+                            <Check className="size-3.5" />
+                          ) : (
+                            <X className="size-3.5" />
+                          )
+                        ) : (
+                          <Clock3 className="size-3.5" />
+                        )}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                          Approval progress
+                        </span>
+                        <span className="mt-0.5 block truncate text-xs font-medium text-foreground">
+                          {permissions.waitingLabel}
+                        </span>
+                      </span>
+                      <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+                    </button>
 
-                    <div className="mt-3 flex flex-wrap gap-1.5">
+                    {hasActions ? (
+                      <div className="mt-3 flex gap-2 border-t border-border/60 px-3 py-2.5">
+                        {permissions.canApproveOrReject ? (
+                          <>
+                            <button
+                              type="button"
+                              className="inline-flex h-8 flex-1 items-center justify-center gap-1 rounded-md bg-emerald-600 px-2 text-xs font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
+                              disabled={saving}
+                              title={permissions.reasonApprove}
+                              onClick={() => void approveRequest(row, "approve")}
+                            >
+                              <Check className="size-3.5" />
+                              Approve
+                            </button>
+                            <button
+                              type="button"
+                              className="inline-flex h-8 flex-1 items-center justify-center gap-1 rounded-md border border-rose-300 px-2 text-xs font-semibold text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-40 dark:text-rose-300 dark:hover:bg-rose-950/30"
+                              disabled={saving}
+                              title={permissions.reasonApprove}
+                              onClick={() => void approveRequest(row, "reject")}
+                            >
+                              <X className="size-3.5" />
+                              Reject
+                            </button>
+                          </>
+                        ) : null}
+                        {permissions.canCancel ? (
+                          <button
+                            type="button"
+                            className="inline-flex h-8 flex-1 items-center justify-center rounded-md border border-slate-300 px-2 text-xs font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-900"
+                            disabled={saving}
+                            title={permissions.reasonCancel}
+                            onClick={() => {
+                              setPendingRequestCancel(row)
+                              setCancelReason("Cancelled by admin")
+                            }}
+                          >
+                            Cancel request
+                          </button>
+                        ) : null}
+                      </div>
+                    ) : (
                       <button
                         type="button"
-                        className="inline-flex h-8 flex-1 items-center justify-center gap-1 rounded-md border border-emerald-300 px-2 text-xs font-medium text-emerald-700 disabled:cursor-not-allowed disabled:opacity-40 sm:flex-none"
-                        disabled={!permissions.canApproveOrReject || saving}
-                        title={permissions.reasonApprove}
-                        onClick={() => void approveRequest(row, "approve")}
+                        className="mt-2 flex w-full items-center justify-center gap-1 border-t border-border/60 px-3 py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground"
+                        onClick={() => void openLeaveRequestDetails(row)}
                       >
-                        <Check className="size-3.5" />
-                        Approve
+                        View request details
+                        <ChevronRight className="size-3.5" />
                       </button>
-                      <button
-                        type="button"
-                        className="inline-flex h-8 flex-1 items-center justify-center gap-1 rounded-md border border-amber-300 px-2 text-xs font-medium text-amber-700 disabled:cursor-not-allowed disabled:opacity-40 sm:flex-none"
-                        disabled={!permissions.canApproveOrReject || saving}
-                        title={permissions.reasonApprove}
-                        onClick={() => void approveRequest(row, "reject")}
-                      >
-                        <X className="size-3.5" />
-                        Reject
-                      </button>
-                      <button
-                        type="button"
-                        className="inline-flex h-8 flex-1 items-center justify-center gap-1 rounded-md border border-rose-300 px-2 text-xs font-medium text-rose-700 disabled:cursor-not-allowed disabled:opacity-40 sm:flex-none"
-                        disabled={!permissions.canCancel || saving}
-                        title={permissions.reasonCancel}
-                        onClick={() => {
-                          setPendingRequestCancel(row)
-                          setCancelReason("Cancelled by admin")
-                        }}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                    {!permissions.canApproveOrReject && !permissions.isTerminal ? (
-                      <p className="mt-2 text-[11px] text-muted-foreground">
-                        {permissions.waitingLabel}
-                      </p>
-                    ) : null}
+                    )}
                   </div>
                 )
               })
@@ -4558,38 +4403,44 @@ export function LeaveManagementView({
                           <Download className="size-3.5" />
                           PDF
                         </button>
-                        <button
-                          type="button"
-                          className="inline-flex h-9 flex-1 items-center justify-center gap-1 rounded-md border border-emerald-300 px-3 text-xs font-medium text-emerald-700 disabled:cursor-not-allowed disabled:opacity-40 sm:flex-none"
-                          disabled={!permissions.canApproveOrReject || saving}
-                          title={permissions.reasonApprove}
-                          onClick={() => void approveRequest(selectedLeaveRequestRow, "approve")}
-                        >
-                          <Check className="size-3.5" />
-                          Approve
-                        </button>
-                        <button
-                          type="button"
-                          className="inline-flex h-9 flex-1 items-center justify-center gap-1 rounded-md border border-amber-300 px-3 text-xs font-medium text-amber-700 disabled:cursor-not-allowed disabled:opacity-40 sm:flex-none"
-                          disabled={!permissions.canApproveOrReject || saving}
-                          title={permissions.reasonApprove}
-                          onClick={() => void approveRequest(selectedLeaveRequestRow, "reject")}
-                        >
-                          <X className="size-3.5" />
-                          Reject
-                        </button>
-                        <button
-                          type="button"
-                          className="inline-flex h-9 flex-1 items-center justify-center gap-1 rounded-md border border-rose-300 px-3 text-xs font-medium text-rose-700 disabled:cursor-not-allowed disabled:opacity-40 sm:flex-none"
-                          disabled={!permissions.canCancel || saving}
-                          title={permissions.reasonCancel}
-                          onClick={() => {
-                            setPendingRequestCancel(selectedLeaveRequestRow)
-                            setCancelReason("Cancelled by admin")
-                          }}
-                        >
-                          Cancel
-                        </button>
+                        {permissions.canApproveOrReject ? (
+                          <>
+                            <button
+                              type="button"
+                              className="inline-flex h-9 flex-1 items-center justify-center gap-1 rounded-md bg-emerald-600 px-3 text-xs font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40 sm:flex-none"
+                              disabled={saving}
+                              title={permissions.reasonApprove}
+                              onClick={() => void approveRequest(selectedLeaveRequestRow, "approve")}
+                            >
+                              <Check className="size-3.5" />
+                              Approve
+                            </button>
+                            <button
+                              type="button"
+                              className="inline-flex h-9 flex-1 items-center justify-center gap-1 rounded-md border border-rose-300 px-3 text-xs font-semibold text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-40 dark:text-rose-300 dark:hover:bg-rose-950/30 sm:flex-none"
+                              disabled={saving}
+                              title={permissions.reasonApprove}
+                              onClick={() => void approveRequest(selectedLeaveRequestRow, "reject")}
+                            >
+                              <X className="size-3.5" />
+                              Reject
+                            </button>
+                          </>
+                        ) : null}
+                        {permissions.canCancel ? (
+                          <button
+                            type="button"
+                            className="inline-flex h-9 flex-1 items-center justify-center rounded-md border border-slate-300 px-3 text-xs font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-900 sm:flex-none"
+                            disabled={saving}
+                            title={permissions.reasonCancel}
+                            onClick={() => {
+                              setPendingRequestCancel(selectedLeaveRequestRow)
+                              setCancelReason("Cancelled by admin")
+                            }}
+                          >
+                            Cancel request
+                          </button>
+                        ) : null}
                       </div>
                     )
                   })()}
@@ -4741,69 +4592,235 @@ export function LeaveManagementView({
         </DialogPopup>
       </Dialog>
 
-      <Dialog open={requestDialogOpen} onOpenChange={setRequestDialogOpen}>
-        <DialogPopup from="bottom" className="sm:max-w-3xl">
+      <Dialog
+        open={requestDialogOpen}
+        onOpenChange={(open) => {
+          setRequestDialogOpen(open)
+          if (!open) {
+            setRequestForm(emptyLeaveRequestForm())
+            setRequestDialogStep("who")
+          }
+        }}
+      >
+        <DialogPopup
+          from="bottom"
+          className="grid-rows-[auto_auto_minmax(0,1fr)_auto] overflow-hidden sm:max-w-3xl"
+        >
           <DialogHeader>
-            <DialogTitle>Create Leave Request</DialogTitle>
-            <DialogDescription>Fill leave request details then submit or save as draft.</DialogDescription>
+            <DialogTitle>Create leave request</DialogTitle>
+            <DialogDescription>
+              {requestDialogStep === "who"
+                ? "Choose the employee and the leave type they are taking."
+                : requestDialogStep === "when"
+                  ? "Set the start and end dates for this leave."
+                  : "Add a reason, then submit now or save a draft."}
+            </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-3 md:grid-cols-3">
-            <Select value={requestForm.employee_id} onValueChange={(value) => setRequestForm((prev) => ({ ...prev, employee_id: value ?? "" }))}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select employee">
-                  {employeeOptions.find((option) => option.value === requestForm.employee_id)?.label ?? "Select employee"}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {employeeOptions.map((option) => (
-                  <SelectItem key={`request-employee-dialog-${option.value}`} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={requestForm.leave_type_id} onValueChange={(value) => setRequestForm((prev) => ({ ...prev, leave_type_id: value ?? "" }))}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select leave type">
-                  {leaveTypeOptions.find((option) => option.value === requestForm.leave_type_id)?.label ?? "Select leave type"}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {leaveTypeOptions.map((option) => (
-                  <SelectItem key={`request-type-dialog-${option.value}`} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={requestForm.submit} onChange={(event) => setRequestForm((prev) => ({ ...prev, submit: event.target.value }))}>
-              <option value="true">Submit now</option>
-              <option value="false">Save draft</option>
-            </select>
-            <div className="space-y-1">
-              <p className="text-xs font-medium text-slate-600">Start date</p>
-              <DatePickerPresets value={requestForm.start_date} onChange={(value) => setRequestForm((prev) => ({ ...prev, start_date: value }))} placeholder="Start date" />
-            </div>
-            <div className="space-y-1">
-              <p className="text-xs font-medium text-slate-600">End date</p>
-              <DatePickerPresets value={requestForm.end_date} onChange={(value) => setRequestForm((prev) => ({ ...prev, end_date: value }))} placeholder="End date" />
-            </div>
-            <div />
-            <Textarea
-              containerClassName="md:col-span-3"
-              className="min-h-24 rounded-md border border-slate-300 px-3 py-2 text-sm"
-              placeholder="Reason"
-              value={requestForm.reason}
-              onChange={(event) => setRequestForm((prev) => ({ ...prev, reason: event.target.value }))}
-            />
+          <nav className="grid grid-cols-3 gap-2" aria-label="Leave request steps">
+            {LEAVE_REQUEST_WIZARD_STEPS.map((item, index) => {
+              const active = item.key === requestDialogStep
+              const done = leaveRequestWizardIndex > index
+              const unlocked =
+                item.key === "who" ||
+                (item.key === "when" && canContinueRequestWho) ||
+                (item.key === "review" && canContinueRequestWho && canContinueRequestWhen)
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  disabled={!unlocked}
+                  aria-current={active ? "step" : undefined}
+                  onClick={() => unlocked && setRequestDialogStep(item.key)}
+                  className={cn(
+                    "flex min-w-0 items-center gap-2 rounded-lg border px-2.5 py-2 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
+                    active
+                      ? "border-primary bg-primary text-white"
+                      : done
+                        ? "border-primary/20 bg-primary/5 text-primary"
+                        : unlocked
+                          ? "border-slate-200 bg-white text-slate-600 hover:border-primary/40"
+                          : "cursor-not-allowed border-slate-100 bg-slate-50 text-slate-400",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "flex size-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold",
+                      active ? "bg-white/20" : done ? "bg-primary text-white" : "bg-slate-100",
+                    )}
+                  >
+                    {done ? <Check className="size-3.5" strokeWidth={3} /> : item.number}
+                  </span>
+                  <span className="min-w-0 truncate text-xs font-semibold">{item.label}</span>
+                </button>
+              )
+            })}
+          </nav>
+          <div className="min-h-0 space-y-5 overflow-y-auto pr-1">
+            {requestDialogStep === "who" ? (
+              <section className="space-y-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Who is taking leave?</h3>
+                  <p className="mt-0.5 text-xs text-slate-500">Pick the employee and the leave type this request uses.</p>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <LeaveTypeField label="Employee" help="The person this leave request is for.">
+                    <div className="mt-1">
+                      <WorkflowSelect
+                        value={requestForm.employee_id}
+                        options={employeeOptions}
+                        placeholder="Select employee"
+                        onValueChange={(next) => setRequestForm((prev) => ({ ...prev, employee_id: next }))}
+                      />
+                    </div>
+                  </LeaveTypeField>
+                  <LeaveTypeField label="Leave type" help="Annual, sick, maternity, and other types already set up.">
+                    <div className="mt-1">
+                      <WorkflowSelect
+                        value={requestForm.leave_type_id}
+                        options={leaveTypeOptions}
+                        placeholder="Select leave type"
+                        onValueChange={(next) => setRequestForm((prev) => ({ ...prev, leave_type_id: next }))}
+                      />
+                    </div>
+                  </LeaveTypeField>
+                </div>
+              </section>
+            ) : null}
+
+            {requestDialogStep === "when" ? (
+              <section className="space-y-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-white">When is the leave?</h3>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    {requestEmployeeLabel} · {requestLeaveTypeLabel}
+                  </p>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <LeaveTypeField label="Start date" help="First day of the leave.">
+                    <div className="mt-1">
+                      <DatePickerPresets
+                        value={requestForm.start_date}
+                        onChange={(value) => setRequestForm((prev) => ({ ...prev, start_date: value }))}
+                        placeholder="Start date"
+                      />
+                    </div>
+                  </LeaveTypeField>
+                  <LeaveTypeField label="End date" help="Last day of the leave.">
+                    <div className="mt-1">
+                      <DatePickerPresets
+                        value={requestForm.end_date}
+                        onChange={(value) => setRequestForm((prev) => ({ ...prev, end_date: value }))}
+                        placeholder="End date"
+                      />
+                    </div>
+                  </LeaveTypeField>
+                </div>
+                {requestForm.start_date &&
+                requestForm.end_date &&
+                new Date(requestForm.start_date).getTime() > new Date(requestForm.end_date).getTime() ? (
+                  <p className="text-xs text-rose-600">Start date cannot be after end date.</p>
+                ) : null}
+              </section>
+            ) : null}
+
+            {requestDialogStep === "review" ? (
+              <section className="space-y-4">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {leaveRequestReviewItems.map((item) => (
+                    <div
+                      key={item.label}
+                      className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 dark:border-border dark:bg-muted/30"
+                    >
+                      <p className="text-xs font-medium text-slate-500">{item.label}</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{item.value}</p>
+                    </div>
+                  ))}
+                </div>
+                <LeaveTypeField label="Reason" help="Why this leave is needed. Approvers will see this.">
+                  <Textarea
+                    className="mt-1 min-h-24 rounded-md border border-slate-300 px-3 py-2 text-sm"
+                    placeholder="Reason for leave"
+                    value={requestForm.reason}
+                    onChange={(event) => setRequestForm((prev) => ({ ...prev, reason: event.target.value }))}
+                  />
+                </LeaveTypeField>
+                <div className="space-y-1.5">
+                  <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">What should happen next?</p>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <WorkflowChoiceCard
+                      active={requestForm.submit === "true"}
+                      layoutId="leave-request-submit-choice"
+                      onClick={() => setRequestForm((prev) => ({ ...prev, submit: "true" }))}
+                    >
+                      <span className={cn("block text-sm font-semibold", requestForm.submit === "true" ? "text-white" : "text-slate-900")}>
+                        Submit now
+                      </span>
+                      <span className={cn("mt-0.5 block text-xs", requestForm.submit === "true" ? "text-white/80" : "text-slate-500")}>
+                        Send it into the approval path.
+                      </span>
+                    </WorkflowChoiceCard>
+                    <WorkflowChoiceCard
+                      active={requestForm.submit === "false"}
+                      layoutId="leave-request-submit-choice"
+                      onClick={() => setRequestForm((prev) => ({ ...prev, submit: "false" }))}
+                    >
+                      <span className={cn("block text-sm font-semibold", requestForm.submit === "false" ? "text-white" : "text-slate-900")}>
+                        Save as draft
+                      </span>
+                      <span className={cn("mt-0.5 block text-xs", requestForm.submit === "false" ? "text-white/80" : "text-slate-500")}>
+                        Keep it until you are ready to submit.
+                      </span>
+                    </WorkflowChoiceCard>
+                  </div>
+                </div>
+              </section>
+            ) : null}
           </div>
-          <DialogFooter>
-            <button type="button" className="rounded-md border border-slate-300 px-4 py-2 text-sm" onClick={() => setRequestDialogOpen(false)}>
+          <DialogFooter className="border-t border-slate-200 pt-3 dark:border-border">
+            {requestDialogStep !== "who" ? (
+              <button
+                type="button"
+                className="rounded-md border border-slate-300 px-4 py-2 text-sm"
+                onClick={() => setRequestDialogStep(requestDialogStep === "review" ? "when" : "who")}
+              >
+                Back
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="rounded-md border border-slate-300 px-4 py-2 text-sm"
+              onClick={() => setRequestDialogOpen(false)}
+            >
               Cancel
             </button>
-            <button type="button" className="rounded-md bg-primary px-4 py-2 text-sm font-medium !text-white" disabled={saving} onClick={() => void submitRequestForm()}>
-              {saving ? "Saving..." : "Create Leave Request"}
-            </button>
+            {requestDialogStep === "who" ? (
+              <button
+                type="button"
+                className="rounded-md bg-primary px-4 py-2 text-sm font-medium !text-white disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={!canContinueRequestWho}
+                onClick={() => setRequestDialogStep("when")}
+              >
+                Next: Dates
+              </button>
+            ) : requestDialogStep === "when" ? (
+              <button
+                type="button"
+                className="rounded-md bg-primary px-4 py-2 text-sm font-medium !text-white disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={!canContinueRequestWhen}
+                onClick={() => setRequestDialogStep("review")}
+              >
+                Next: Review
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="rounded-md bg-primary px-4 py-2 text-sm font-medium !text-white disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={saving || !requestForm.reason.trim()}
+                onClick={() => void submitRequestForm()}
+              >
+                {saving ? "Saving..." : requestForm.submit === "true" ? "Submit request" : "Save draft"}
+              </button>
+            )}
           </DialogFooter>
         </DialogPopup>
       </Dialog>
@@ -4817,71 +4834,253 @@ export function LeaveManagementView({
           }
         }}
       >
-        <DialogPopup from="bottom" className="sm:max-w-3xl">
+        <DialogPopup
+          from="bottom"
+          className="grid-rows-[auto_auto_minmax(0,1fr)_auto] overflow-hidden sm:max-w-3xl"
+        >
           <DialogHeader>
             <DialogTitle>{editingLeaveTypeRow ? "Edit Leave Type" : "Create Leave Type"}</DialogTitle>
             <DialogDescription>
-              {editingLeaveTypeRow
-                ? "Update leave type details, then save your changes."
-                : "Enter leave type details, then save them."}
+              {typeDialogStep === "details"
+                ? "Start with the name employees will see."
+                : typeDialogStep === "rules"
+                  ? "Choose the simple rules for using this leave."
+                  : "Check the details before saving."}
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-3 md:grid-cols-3">
-            <input className="h-10 rounded-md border border-slate-300 px-3 text-sm" placeholder="Type name" value={typeForm.name} onChange={(event) => setTypeForm((prev) => ({ ...prev, name: event.target.value }))} />
-            <input className="h-10 rounded-md border border-slate-300 px-3 text-sm" placeholder="Type code" value={typeForm.code} onChange={(event) => setTypeForm((prev) => ({ ...prev, code: event.target.value }))} />
-            <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={typeForm.status} onChange={(event) => setTypeForm((prev) => ({ ...prev, status: event.target.value }))}>
-              <option value="active">active</option>
-              <option value="inactive">inactive</option>
-            </select>
-            <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={typeForm.is_paid} onChange={(event) => setTypeForm((prev) => ({ ...prev, is_paid: event.target.value }))}>
-              <option value="true">Paid</option>
-              <option value="false">Unpaid</option>
-            </select>
-            <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={typeForm.requires_attachment} onChange={(event) => setTypeForm((prev) => ({ ...prev, requires_attachment: event.target.value }))}>
-              <option value="false">Attachment Optional</option>
-              <option value="true">Attachment Required</option>
-            </select>
-            <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={typeForm.is_carry_forward_allowed} onChange={(event) => setTypeForm((prev) => ({ ...prev, is_carry_forward_allowed: event.target.value }))}>
-              <option value="false">No carry forward</option>
-              <option value="true">Carry forward allowed</option>
-            </select>
-            <input
-              type="number"
-              min={0}
-              className="h-10 rounded-md border border-slate-300 px-3 text-sm"
-              placeholder="Max carry forward days"
-              value={typeForm.max_carry_forward_days}
-              onChange={(event) => setTypeForm((prev) => ({ ...prev, max_carry_forward_days: event.target.value }))}
-            />
-            <input
-              type="number"
-              min={0}
-              className="h-10 rounded-md border border-slate-300 px-3 text-sm"
-              placeholder="Max days per year"
-              value={typeForm.max_days_per_year}
-              onChange={(event) => setTypeForm((prev) => ({ ...prev, max_days_per_year: event.target.value }))}
-            />
-            <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={typeForm.gender_restriction} onChange={(event) => setTypeForm((prev) => ({ ...prev, gender_restriction: event.target.value }))}>
-              <option value="any">Any gender</option>
-              <option value="male">Male only</option>
-              <option value="female">Female only</option>
-            </select>
-            <div className="md:col-span-2" />
-            <Textarea
-              containerClassName="md:col-span-3"
-              className="min-h-24 rounded-md border border-slate-300 px-3 py-2 text-sm"
-              placeholder="Description"
-              value={typeForm.description}
-              onChange={(event) => setTypeForm((prev) => ({ ...prev, description: event.target.value }))}
-            />
+          <nav className="grid grid-cols-3 gap-2" aria-label="Leave type steps">
+            {LEAVE_TYPE_WIZARD_STEPS.map((item, index) => {
+              const active = item.key === typeDialogStep
+              const done = leaveTypeWizardIndex > index
+              const unlocked = item.key === "details" || canContinueLeaveTypeWizard
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  disabled={!unlocked}
+                  aria-current={active ? "step" : undefined}
+                  onClick={() => unlocked && setTypeDialogStep(item.key)}
+                  className={cn(
+                    "flex min-w-0 items-center gap-2 rounded-lg border px-2.5 py-2 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
+                    active
+                      ? "border-primary bg-primary text-white"
+                      : done
+                        ? "border-primary/20 bg-primary/5 text-primary"
+                        : unlocked
+                          ? "border-slate-200 bg-white text-slate-600 hover:border-primary/40"
+                          : "cursor-not-allowed border-slate-100 bg-slate-50 text-slate-400",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "flex size-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold",
+                      active ? "bg-white/20" : done ? "bg-primary text-white" : "bg-slate-100",
+                    )}
+                  >
+                    {done ? <Check className="size-3.5" strokeWidth={3} /> : item.number}
+                  </span>
+                  <span className="min-w-0 truncate text-xs font-semibold">{item.label}</span>
+                </button>
+              )
+            })}
+          </nav>
+          <div className="min-h-0 space-y-5 overflow-y-auto pr-1">
+            {typeDialogStep === "details" ? (
+              <section aria-labelledby="leave-type-basic-heading" className="space-y-3">
+              <div>
+                <h3 id="leave-type-basic-heading" className="text-sm font-semibold text-slate-900 dark:text-white">
+                  Basic details
+                </h3>
+                <p className="mt-0.5 text-xs text-slate-500">How this leave type will appear to HR and employees.</p>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <LeaveTypeField label="Leave name" help="The name employees will see. Example: Sick Leave.">
+                  <input
+                    autoFocus
+                    required
+                    className={leaveTypeControlClass}
+                    placeholder="Example: Sick Leave"
+                    value={typeForm.name}
+                    onChange={(event) => {
+                      const name = event.target.value
+                      setTypeForm((prev) => ({
+                        ...prev,
+                        name,
+                        ...(typeCodeManuallyEdited ? {} : { code: deriveLeaveTypeCode(name) }),
+                      }))
+                    }}
+                  />
+                </LeaveTypeField>
+                <LeaveTypeField label="Short code" help="Created from the leave name for reports. You can change it.">
+                  <input
+                    required
+                    className={leaveTypeControlClass}
+                    placeholder="Example: SICK"
+                    value={typeForm.code}
+                    onChange={(event) => {
+                      setTypeCodeManuallyEdited(true)
+                      setTypeForm((prev) => ({ ...prev, code: event.target.value.toUpperCase() }))
+                    }}
+                  />
+                </LeaveTypeField>
+                <LeaveTypeField label="Availability" help="Active means staff can use it. Inactive turns it off.">
+                  <div className="mt-1">
+                    <WorkflowSelect
+                      value={typeForm.status}
+                      options={[
+                        { value: "active", label: "Active" },
+                        { value: "inactive", label: "Inactive" },
+                      ]}
+                      placeholder="Choose status"
+                      onValueChange={(next) => {
+                        if (next) setTypeForm((prev) => ({ ...prev, status: next }))
+                      }}
+                    />
+                  </div>
+                </LeaveTypeField>
+              </div>
+              </section>
+            ) : null}
+
+            {typeDialogStep === "rules" ? (
+              <section aria-labelledby="leave-type-rules-heading" className="space-y-3">
+              <div>
+                <h3 id="leave-type-rules-heading" className="text-sm font-semibold text-slate-900 dark:text-white">
+                  Usage rules
+                </h3>
+                <p className="mt-0.5 text-xs text-slate-500">Simple rules for pay, documents, unused days, and who can use this leave.</p>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <MarkCheckbox
+                  className="md:col-span-2"
+                  checked={typeForm.is_paid === "true"}
+                  onCheckedChange={(checked) => setTypeForm((prev) => ({ ...prev, is_paid: checked ? "true" : "false" }))}
+                  label="Paid leave"
+                  description="Employee keeps their normal salary while on this leave."
+                />
+                <MarkCheckbox
+                  className="md:col-span-2"
+                  checked={typeForm.requires_attachment === "true"}
+                  onCheckedChange={(checked) =>
+                    setTypeForm((prev) => ({ ...prev, requires_attachment: checked ? "true" : "false" }))
+                  }
+                  label="Document required"
+                  description="Employee must upload proof, such as a medical note."
+                />
+                <MarkCheckbox
+                  className="md:col-span-2"
+                  checked={typeForm.is_carry_forward_allowed === "true"}
+                  onCheckedChange={(checked) =>
+                    setTypeForm((prev) => ({
+                      ...prev,
+                      is_carry_forward_allowed: checked ? "true" : "false",
+                      ...(checked ? {} : { max_carry_forward_days: "0" }),
+                    }))
+                  }
+                  label="Carry unused days"
+                  description="Unused days can move into the next year instead of expiring."
+                />
+                {typeForm.is_carry_forward_allowed === "true" ? (
+                  <LeaveTypeField label="Days that can move forward" help="The most unused days an employee can keep for next year.">
+                    <input
+                      type="number"
+                      min={0}
+                      className={leaveTypeControlClass}
+                      value={typeForm.max_carry_forward_days}
+                      onChange={(event) => setTypeForm((prev) => ({ ...prev, max_carry_forward_days: event.target.value }))}
+                    />
+                  </LeaveTypeField>
+                ) : null}
+                <LeaveTypeField label="Yearly maximum" help="The most days an employee can receive in one year. Enter 0 for no limit.">
+                  <input
+                    type="number"
+                    min={0}
+                    className={leaveTypeControlClass}
+                    value={typeForm.max_days_per_year}
+                    onChange={(event) => setTypeForm((prev) => ({ ...prev, max_days_per_year: event.target.value }))}
+                  />
+                </LeaveTypeField>
+                <LeaveTypeField label="Who can use this leave?" help="Choose Everyone unless this leave is only for male or female staff." className={typeForm.is_carry_forward_allowed === "true" ? "md:col-span-2" : undefined}>
+                  <div className="mt-1">
+                    <WorkflowSelect
+                      value={typeForm.gender_restriction}
+                      options={[
+                        { value: "any", label: "Everyone" },
+                        { value: "male", label: "Male employees only" },
+                        { value: "female", label: "Female employees only" },
+                      ]}
+                      placeholder="Choose who can use this"
+                      onValueChange={(next) => {
+                        if (next) setTypeForm((prev) => ({ ...prev, gender_restriction: next }))
+                      }}
+                    />
+                  </div>
+                </LeaveTypeField>
+              </div>
+              </section>
+            ) : null}
+
+            {typeDialogStep === "review" ? (
+              <div className="space-y-4">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {leaveTypeReviewItems.map((item) => (
+                    <div key={item.label} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 dark:border-border dark:bg-muted/30">
+                      <p className="text-xs font-medium text-slate-500">{item.label}</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{item.value}</p>
+                    </div>
+                  ))}
+                </div>
+                <LeaveTypeField label="Description" help="Explain when this leave should be used. You can leave this blank.">
+                  <Textarea
+                    className="mt-1 min-h-24 rounded-md border border-slate-300 px-3 py-2 text-sm"
+                    placeholder="Optional description"
+                    value={typeForm.description}
+                    onChange={(event) => setTypeForm((prev) => ({ ...prev, description: event.target.value }))}
+                  />
+                </LeaveTypeField>
+              </div>
+            ) : null}
           </div>
-          <DialogFooter>
+          <DialogFooter className="border-t border-slate-200 pt-3 dark:border-border">
+            {typeDialogStep !== "details" ? (
+              <button
+                type="button"
+                className="rounded-md border border-slate-300 px-4 py-2 text-sm"
+                onClick={() => setTypeDialogStep(typeDialogStep === "review" ? "rules" : "details")}
+              >
+                Back
+              </button>
+            ) : null}
             <button type="button" className="rounded-md border border-slate-300 px-4 py-2 text-sm" onClick={() => setTypeDialogOpen(false)}>
               Cancel
             </button>
-            <button type="button" className="rounded-md bg-primary px-4 py-2 text-sm font-medium !text-white" disabled={saving} onClick={() => void submitTypeForm()}>
-              {saving ? "Saving..." : editingLeaveTypeRow ? "Save Leave Type" : "Add Leave Type"}
-            </button>
+            {typeDialogStep === "details" ? (
+              <button
+                type="button"
+                className="rounded-md bg-primary px-4 py-2 text-sm font-medium !text-white disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={!canContinueLeaveTypeWizard}
+                onClick={() => setTypeDialogStep("rules")}
+              >
+                Next: Usage rules
+              </button>
+            ) : typeDialogStep === "rules" ? (
+              <button
+                type="button"
+                className="rounded-md bg-primary px-4 py-2 text-sm font-medium !text-white"
+                onClick={() => setTypeDialogStep("review")}
+              >
+                Next: Review
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="rounded-md bg-primary px-4 py-2 text-sm font-medium !text-white disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={saving || !canContinueLeaveTypeWizard}
+                onClick={() => void submitTypeForm()}
+              >
+                {saving ? "Saving..." : editingLeaveTypeRow ? "Save Leave Type" : "Add Leave Type"}
+              </button>
+            )}
           </DialogFooter>
         </DialogPopup>
       </Dialog>
@@ -5611,78 +5810,19 @@ export function LeaveManagementView({
 
       {tab === "policies" ? (
         <div className="space-y-2">
-          <ResizableTable
-            title="Leave Policies"
-            toolbarActions={
-              <>
-                {canCreatePolicies ? (
-                  <button
-                    type="button"
-                    className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white"
-                    onClick={openCreatePolicySheet}
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    Create Policy
-                  </button>
-                ) : null}
-                {refreshButton}
-              </>
-            }
-            data={policies}
-            itemsPerPage={15}
+          <LeavePoliciesCatalog
+            policies={policies}
             loading={loading}
-            storageKey="leave-policies"
-            onRowSelect={(_, row) => {
-              if (row) openPolicyPreview(row)
-            }}
-            columns={[
-              { key: "name", label: "Name", defaultWidth: 140, sortable: true },
-              { key: "accrual_method", label: "Accrual", defaultWidth: 90, sortable: true },
-              { key: "status", label: "Status", defaultWidth: 80, sortable: true },
-              ...((canUpdatePolicies || canDeletePolicies)
-                ? [{
-                    key: "actions",
-                    label: "Actions",
-                    defaultWidth: 110,
-                    sortable: false,
-                    render: (row: AdminRecord) => (
-                      <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-                        {canUpdatePolicies ? (
-                          <>
-                            <button
-                              type="button"
-                              className="admin-table-icon-button"
-                              aria-label="Edit"
-                              onClick={() => loadPolicyIntoForm(row)}
-                            >
-                              <Pencil className="h-3.5 w-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              className="admin-table-icon-button"
-                              aria-label="Toggle status"
-                              disabled={saving}
-                              onClick={() => void togglePolicyStatus(row)}
-                            >
-                              <RefreshCw className="h-3.5 w-3.5" />
-                            </button>
-                          </>
-                        ) : null}
-                        {canDeletePolicies ? (
-                          <button
-                            type="button"
-                            className="admin-table-icon-button text-rose-600"
-                            aria-label="Delete"
-                            onClick={() => setPendingPolicyDelete(row)}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        ) : null}
-                      </div>
-                    ),
-                  }]
-                : []),
-            ]}
+            canCreate={canCreatePolicies}
+            canEdit={canUpdatePolicies}
+            canDelete={canDeletePolicies}
+            saving={saving}
+            onRefresh={() => void reloadAll(tab, true)}
+            onCreate={openCreatePolicySheet}
+            onOpen={openPolicyPreview}
+            onEdit={(row) => void loadPolicyIntoForm(row)}
+            onDelete={(row) => setPendingPolicyDelete(row)}
+            onToggleStatus={(row) => void togglePolicyStatus(row)}
           />
 
           <LeavePolicyEditorSheet
@@ -5704,224 +5844,104 @@ export function LeaveManagementView({
             onSubmit={submitPolicyForm}
           />
 
-          <Dialog open={policyPreviewOpen} onOpenChange={setPolicyPreviewOpen}>
-            <DialogPopup from="bottom" className="sm:max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>{selectedPolicyRow ? readString(selectedPolicyRow, ["name", "title"]) : "Policy details"}</DialogTitle>
-                <DialogDescription>Review policy details and open it in the editor sheet if you want to update it.</DialogDescription>
-              </DialogHeader>
-              {selectedPolicyRow ? (
-                <div className="grid gap-3 py-2 md:grid-cols-2">
-                  <div className="rounded-md border border-slate-200 p-3 text-sm"><span className="text-slate-500">Status:</span> {readString(selectedPolicyRow, ["status"])}</div>
-                  <div className="rounded-md border border-slate-200 p-3 text-sm"><span className="text-slate-500">Accrual:</span> {readString(selectedPolicyRow, ["accrual_method"])}</div>
-                  <div className="rounded-md border border-slate-200 p-3 text-sm"><span className="text-slate-500">Department:</span> {optionLabel(departments, readNumber(selectedPolicyRow, ["applicable_department_id"]), ["name", "title"])}</div>
-                  <div className="rounded-md border border-slate-200 p-3 text-sm"><span className="text-slate-500">Position:</span> {optionLabel(positions, readNumber(selectedPolicyRow, ["applicable_position_id"]), ["name", "title"])}</div>
-                  <div className="rounded-md border border-slate-200 p-3 text-sm"><span className="text-slate-500">Max consecutive days:</span> {String(readNumber(selectedPolicyRow, ["max_consecutive_days"]) ?? "-")}</div>
-                  <div className="rounded-md border border-slate-200 p-3 text-sm"><span className="text-slate-500">Min service months:</span> {String(readNumber(selectedPolicyRow, ["min_service_months"]) ?? "-")}</div>
-                  <div className="rounded-md border border-slate-200 p-3 text-sm md:col-span-2"><span className="text-slate-500">Description:</span> {readString(selectedPolicyRow, ["description"])}</div>
-                </div>
-              ) : null}
-              <DialogFooter>
-                <button type="button" className="rounded-md border border-slate-300 px-4 py-2 text-sm" onClick={() => setPolicyPreviewOpen(false)}>
-                  Close
-                </button>
-                {canUpdatePolicies ? (
-                  <button
-                    type="button"
-                    className="rounded-md bg-primary px-4 py-2 text-sm font-medium !text-white"
-                    onClick={() => {
-                      if (selectedPolicyRow) {
-                        loadPolicyIntoForm(selectedPolicyRow)
-                      }
-                      setPolicyPreviewOpen(false)
-                    }}
-                  >
-                    Open in Editor
-                  </button>
-                ) : null}
-              </DialogFooter>
-            </DialogPopup>
-          </Dialog>
+          <LeavePolicyPreviewSheet
+            open={policyPreviewOpen}
+            loading={policyPreviewLoading}
+            value={policyPreviewForm}
+            leaveTypeOptions={leaveTypeOptions}
+            branchOptions={policyBranchOptions}
+            departmentOptions={workflowDepartmentOptions}
+            positionOptions={positionOptions}
+            gradeOptions={gradeOptions}
+            canEdit={canUpdatePolicies}
+            onOpenChange={(open) => {
+              setPolicyPreviewOpen(open)
+              if (!open) {
+                setPolicyPreviewLoading(false)
+              }
+            }}
+            onEdit={() => {
+              if (selectedPolicyRow) {
+                void loadPolicyIntoForm(selectedPolicyRow)
+              }
+              setPolicyPreviewOpen(false)
+            }}
+          />
         </div>
       ) : null}
 
       {tab === "workflows" ? (
         <div className="space-y-2">
-            {workflowDraft ? (
-              <div className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-amber-950">
-                    Draft: {workflowDraft.form.name.trim() || "Untitled workflow"}
-                  </p>
-                  <p className="mt-0.5 text-xs text-amber-800">
-                    {(leaveTypeOptions.find((option) => option.value === workflowDraft.form.leave_type_id)?.label || "No leave type")}
-                    {" · "}
-                    {workflowDraft.steps.length} {workflowDraft.steps.length === 1 ? "step" : "steps"}
-                    {" · "}
-                    Continue where you left off
-                  </p>
-                </div>
-                <div className="flex shrink-0 gap-2">
-                  <button
-                    type="button"
-                    className="inline-flex h-8 items-center rounded-md border border-amber-200 bg-white px-2.5 text-xs font-medium text-amber-900 transition hover:bg-amber-100"
-                    onClick={() => {
-                      clearWorkflowCreateDraft()
-                      setWorkflowDraft(null)
-                    }}
-                  >
-                    Clear
-                  </button>
-                  <button
-                    type="button"
-                    className="inline-flex h-8 items-center rounded-md bg-primary px-2.5 text-xs font-semibold text-white transition hover:brightness-95"
-                    onClick={openCreateWorkflowSheet}
-                  >
-                    Continue draft
-                  </button>
-                </div>
-              </div>
-            ) : null}
-            <ResizableTable
-              title="Leave Workflows"
-              toolbarStart={
-                <>
-                  <SearchToggleField
-                    className="min-w-0 !w-auto !max-w-[12rem] !flex-none"
-                    placeholder="Search workflows"
-                    value={workflowSearch}
-                    onChange={setWorkflowSearch}
-                  />
-                  <select
-                    className="h-8 w-[8.5rem] shrink-0 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
-                    value={workflowStatusFilter}
-                    onChange={(event) => setWorkflowStatusFilter(event.target.value)}
-                    aria-label="Filter workflow status"
-                  >
-                    <option value="all">All statuses</option>
-                    <option value="draft">Draft</option>
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                  </select>
-                </>
-              }
-              toolbarActions={
-                <>
-                  {canCreateWorkflows ? (
-                    <button
-                      type="button"
-                      className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white"
-                      onClick={openCreateWorkflowSheet}
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                      Create Workflow
-                    </button>
-                  ) : null}
-                  {refreshButton}
-                </>
-              }
-              data={visibleWorkflows}
-              itemsPerPage={15}
+            <LeaveWorkflowsCatalog
+              workflows={workflows}
+              draftRow={workflowDraftRow}
               loading={loading}
-              storageKey="leave-workflows"
-              onRowSelect={(_, row) => {
-                if (!row) return
+              canCreate={canCreateWorkflows}
+              canEdit={canUpdateWorkflows}
+              canDelete={canDeleteWorkflows}
+              saving={saving}
+              onRefresh={() => void reloadAll(tab, true)}
+              onCreate={openCreateWorkflowSheet}
+              onOpen={(row) => {
                 if (readBoolean(row, ["_isLocalDraft"])) {
                   openCreateWorkflowSheet()
                   return
                 }
                 if (canUpdateWorkflows) void openEditWorkflowSheet(row)
               }}
-              columns={[
-                { key: "name", label: "Name", defaultWidth: 140, sortable: true },
-                {
-                  key: "status",
-                  label: "Status",
-                  defaultWidth: 80,
-                  sortable: true,
-                  render: (row: AdminRecord) => {
-                    const status = readString(row, ["status"]).toLowerCase()
-                    if (status === "draft") {
-                      return (
-                        <span className="inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
-                          Draft
-                        </span>
-                      )
-                    }
-                    return <span className="text-sm capitalize">{status || "—"}</span>
-                  },
-                },
-                { key: "is_default", label: "Default", defaultWidth: 70, sortable: true },
-                ...((canUpdateWorkflows || canDeleteWorkflows || canCreateWorkflows)
-                  ? [{
-                      key: "actions",
-                      label: "Actions",
-                      defaultWidth: 110,
-                      sortable: false,
-                      render: (row: AdminRecord) => (
-                        <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-                          {readBoolean(row, ["_isLocalDraft"]) ? (
-                            <>
-                              <button
-                                type="button"
-                                className="admin-table-icon-button"
-                                aria-label="Continue draft"
-                                onClick={openCreateWorkflowSheet}
-                              >
-                                <Pencil className="h-3.5 w-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                className="admin-table-icon-button text-rose-600"
-                                aria-label="Clear draft"
-                                onClick={() => {
-                                  clearWorkflowCreateDraft()
-                                  setWorkflowDraft(null)
-                                }}
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </>
-                          ) : (
-                            <>
-                              {canUpdateWorkflows ? (
-                                <>
-                                  <button
-                                    type="button"
-                                    className="admin-table-icon-button"
-                                    aria-label="Edit"
-                                    onClick={() => void openEditWorkflowSheet(row)}
-                                  >
-                                    <Pencil className="h-3.5 w-3.5" />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="admin-table-icon-button"
-                                    aria-label="Toggle status"
-                                    disabled={saving}
-                                    onClick={() => void toggleWorkflowStatus(row)}
-                                  >
-                                    <RefreshCw className="h-3.5 w-3.5" />
-                                  </button>
-                                </>
-                              ) : null}
-                              {canDeleteWorkflows ? (
-                                <button
-                                  type="button"
-                                  className="admin-table-icon-button text-rose-600"
-                                  aria-label="Delete"
-                                  onClick={() => setPendingWorkflowDelete(row)}
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </button>
-                              ) : null}
-                            </>
-                          )}
-                        </div>
-                      ),
-                    }]
-                  : []),
-              ]}
+              onEdit={(row) => {
+                if (readBoolean(row, ["_isLocalDraft"])) {
+                  openCreateWorkflowSheet()
+                  return
+                }
+                void openEditWorkflowSheet(row)
+              }}
+              onDelete={(row) => {
+                if (readBoolean(row, ["_isLocalDraft"])) {
+                  clearWorkflowCreateDraft()
+                  setWorkflowDraft(null)
+                  return
+                }
+                setPendingWorkflowDelete(row)
+              }}
+              onToggleStatus={(row) => void toggleWorkflowStatus(row)}
+              draftBanner={
+                workflowDraft ? (
+                  <div className="flex flex-col gap-3 border-b border-amber-200 bg-amber-50 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-amber-950">
+                        Draft: {workflowDraft.form.name.trim() || "Untitled workflow"}
+                      </p>
+                      <p className="mt-0.5 text-xs text-amber-800">
+                        {(leaveTypeOptions.find((option) => option.value === workflowDraft.form.leave_type_id)?.label || "No leave type")}
+                        {" · "}
+                        {workflowDraft.steps.length} {workflowDraft.steps.length === 1 ? "step" : "steps"}
+                        {" · "}
+                        Continue where you left off
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 gap-2">
+                      <button
+                        type="button"
+                        className="inline-flex h-8 items-center rounded-md border border-amber-200 bg-white px-2.5 text-xs font-medium text-amber-900 transition hover:bg-amber-100"
+                        onClick={() => {
+                          clearWorkflowCreateDraft()
+                          setWorkflowDraft(null)
+                        }}
+                      >
+                        Clear
+                      </button>
+                      <button
+                        type="button"
+                        className="inline-flex h-8 items-center rounded-md bg-primary px-2.5 text-xs font-semibold text-white transition hover:brightness-95"
+                        onClick={openCreateWorkflowSheet}
+                      >
+                        Continue draft
+                      </button>
+                    </div>
+                  </div>
+                ) : null
+              }
             />
 
           <LeaveWorkflowEditorSheet
