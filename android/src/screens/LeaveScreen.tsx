@@ -5,7 +5,6 @@ import {
   RefreshControl,
   ScrollView,
   StyleSheet,
-  Text,
   TextInput,
   View,
 } from 'react-native';
@@ -39,6 +38,7 @@ import { TouchableScale } from '../components/ui/touchable-scale';
 import type { UseAuthReturn } from '../hooks/useAuth';
 import { useThemePreference } from '../hooks/useThemePreference';
 import { useToast } from '../hooks/useToast';
+import { Text } from '../components/ui/text';
 
 type MobileRecord = Record<string, unknown>;
 type LeaveTab = 'requests' | 'balances' | 'holidays' | 'policies';
@@ -77,7 +77,7 @@ export function LeaveScreen({ auth, requestId }: Props) {
   const backgroundColor = isDark ? COLORS.backgroundDark : COLORS.background;
   const textColor = isDark ? COLORS.onSurfaceDark : COLORS.onSurface;
   const mutedColor = isDark ? COLORS.onSurfaceVariantDark : COLORS.onSurfaceVariant;
-  const subtleBlock = isDark ? COLORS.surfaceVariantDark : '#e8ebf5';
+  const subtleBlock = isDark ? COLORS.surfaceVariantDark : COLORS.surfaceVariant;
   const outlineColor = isDark ? COLORS.outlineDark : COLORS.outline;
   const overlayColor = isDark ? 'rgba(9,9,11,0.82)' : 'rgba(15,23,42,0.32)';
   const apiWithPolicies: MobileApi = api;
@@ -256,7 +256,7 @@ export function LeaveScreen({ auth, requestId }: Props) {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor }} edges={[]}>
-      <MobileTopBar auth={auth} variant="compact" menuPresentation="dropdown" />
+      <MobileTopBar auth={auth} title="Leave" variant="centered" menuPresentation="dropdown" />
       <ScrollView
         style={{ flex: 1, backgroundColor }}
         contentContainerStyle={styles.content}
@@ -366,12 +366,10 @@ export function LeaveScreen({ auth, requestId }: Props) {
               {holidaysQuery.data?.length ? (
                 holidaysQuery.data.map((holiday, index: number) => {
                   const item = asRecord(holiday);
-                  const holidayColors = ['#2e3d8a', '#dd3740', '#15803d', '#f59e0b', '#7c3aed'];
-                  const holidayColor = holidayColors[index % holidayColors.length];
                   return (
                     <View key={index} style={[styles.listRow, index !== 0 ? [styles.withTopBorder, { borderTopColor: outlineColor }] : null]}>
                       <View style={{ flex: 1 }}>
-                        <Text style={[styles.primaryText, { color: holidayColor, fontWeight: '700' }]}>
+                        <Text style={[styles.primaryText, { color: textColor, fontWeight: '700' }]}>
                           {readString(item, ['name', 'holiday_name']) || 'Holiday'}
                         </Text>
                         <Text style={[styles.secondaryText, { color: mutedColor }]}>
@@ -1126,6 +1124,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 15,
+    fontFamily: 'Comfortaa_400Regular',
   },
   formActions: {
     flexDirection: 'row',

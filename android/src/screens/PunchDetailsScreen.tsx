@@ -3,7 +3,6 @@ import {
   RefreshControl,
   ScrollView,
   StyleSheet,
-  Text,
   View,
   TouchableOpacity,
   Modal,
@@ -20,6 +19,7 @@ import { MobileTopBar } from '../components/layout/MobileTopBar';
 import { ScreenTransition } from '../components/ui/screen-transition';
 import type { UseAuthReturn } from '../hooks/useAuth';
 import { useThemePreference } from '../hooks/useThemePreference';
+import { Text } from '../components/ui/text';
 
 type MobileRecord = Record<string, unknown>;
 
@@ -62,7 +62,7 @@ export function PunchDetailsScreen({ auth }: Props) {
   const [pickerMonth, setPickerMonth] = React.useState(new Date(filterDate).getMonth() + 1);
   const [pickerDay, setPickerDay] = React.useState(new Date(filterDate).getDate());
 
-  const getDaysInMonth = (year, month) => new Date(year, month, 0).getDate();
+  const getDaysInMonth = (year: number, month: number) => new Date(year, month, 0).getDate();
 
   const datePunches = (punchesQuery.data || [])
     .map((item) => asRecord(item))

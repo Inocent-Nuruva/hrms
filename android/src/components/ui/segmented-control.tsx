@@ -1,7 +1,8 @@
 import React from 'react';
-import { Animated, Pressable, StyleSheet, Text, useColorScheme, View } from 'react-native';
+import { Animated, Pressable, StyleSheet, useColorScheme, View } from 'react-native';
 
 import { COLORS } from '../../lib/config';
+import { Text } from './text';
 
 type Segment = {
   key: string;
@@ -42,7 +43,7 @@ export function SegmentedControl({
       style={[
         styles.container,
         {
-          backgroundColor: isDark ? COLORS.surfaceVariantDark : '#f5f5f5',
+          backgroundColor: isDark ? COLORS.surfaceVariantDark : COLORS.surfaceVariant,
           borderColor: isDark ? COLORS.outlineDark : COLORS.outline,
         },
       ]}
@@ -97,7 +98,7 @@ export function SegmentedControl({
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    borderRadius: 16,
+    borderRadius: 8,
     borderWidth: 1,
     padding: 4,
     gap: 4,
@@ -109,11 +110,11 @@ const styles = StyleSheet.create({
     top: 4,
     bottom: 4,
     left: 4,
-    borderRadius: 12,
+    borderRadius: 6,
   },
   segment: {
     flex: 1,
-    borderRadius: 12,
+    borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 9,
     alignItems: 'center',
@@ -122,5 +123,6 @@ const styles = StyleSheet.create({
   segmentText: {
     fontSize: 12,
     fontWeight: '700',
+    fontFamily: 'Comfortaa_700Bold',
   },
 });

@@ -1,8 +1,9 @@
 import React from 'react';
-import { Text, StyleSheet, ViewStyle, TextStyle, ActivityIndicator, View, type StyleProp } from 'react-native';
+import { StyleSheet, ViewStyle, TextStyle, ActivityIndicator, View, type StyleProp } from 'react-native';
 import { COLORS } from '../../lib/config';
 import { useThemePreference } from '../../hooks/useThemePreference';
 import { TouchableScale } from './touchable-scale';
+import { Text } from './text';
 
 type Variant = 'default' | 'secondary' | 'outline' | 'ghost' | 'destructive';
 
@@ -82,10 +83,10 @@ export function Button({
 
 const styles = StyleSheet.create({
   base: {
-    minHeight: 46,
-    paddingVertical: 12,
+    minHeight: 44,
+    paddingVertical: 10,
     paddingHorizontal: 16,
-    borderRadius: 14,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
@@ -94,6 +95,7 @@ const styles = StyleSheet.create({
   text: {
     fontSize: 15,
     fontWeight: '600',
+    fontFamily: 'Comfortaa_600SemiBold',
   },
   iconWrap: {
     marginHorizontal: 4,

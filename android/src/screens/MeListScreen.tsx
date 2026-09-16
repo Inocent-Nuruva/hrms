@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MobileTopBar } from '../components/layout/MobileTopBar';
 import { COLORS } from '../lib/config';
 import { useAuth } from '../hooks/useAuth';
 import { useThemePreference } from '../hooks/useThemePreference';
+import { Text } from '../components/ui/text';
 
 type Row = Record<string, unknown>;
 

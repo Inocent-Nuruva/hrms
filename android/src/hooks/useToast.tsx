@@ -11,7 +11,6 @@ import {
   Animated,
   Pressable,
   StyleSheet,
-  Text,
   View,
   type ViewStyle,
   type TextStyle,
@@ -22,6 +21,7 @@ import { X } from 'lucide-react-native';
 
 import { useThemePreference } from './useThemePreference';
 import { COLORS } from '../lib/config';
+import { Text } from '../components/ui/text';
 
 export type ToastType = 'error' | 'success' | 'info';
 

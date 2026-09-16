@@ -3,27 +3,27 @@ import {
   RefreshControl,
   ScrollView,
   StyleSheet,
-  Text,
   View,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   CalendarDays,
-  CalendarRange,
   Clock3,
   Fingerprint,
   UserRound,
-  WalletCards,
 } from 'lucide-react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, normalizeList, buildMobilePunchPayload, formatAttendancePunchError } from '../lib/api';
 import { COLORS } from '../lib/config';
 import { MobileTopBar } from '../components/layout/MobileTopBar';
+import { Button } from '../components/ui/button';
+import { Card } from '../components/ui/card';
 import { ScreenTransition } from '../components/ui/screen-transition';
 import { TouchableScale } from '../components/ui/touchable-scale';
 import type { UseAuthReturn } from '../hooks/useAuth';
 import { useThemePreference } from '../hooks/useThemePreference';
 import { useToast } from '../hooks/useToast';
+import { Text } from '../components/ui/text';
 
 type MobileRecord = Record<string, unknown>;
 
@@ -35,13 +35,10 @@ interface Props {
 export function HomeScreen({ auth, onTabChange }: Props) {
   const queryClient = useQueryClient();
   const { isDark } = useThemePreference();
-  const insets = useSafeAreaInsets();
   const employee = asRecord(auth.employee) || asRecord(auth.user);
   const backgroundColor = isDark ? COLORS.backgroundDark : COLORS.background;
   const textColor = isDark ? COLORS.onSurfaceDark : COLORS.onSurface;
   const mutedColor = isDark ? '#a1a1aa' : '#6b7280';
-  const sheetBackground = isDark ? COLORS.surfaceDark : COLORS.surface;
-  const metricCardText = isDark ? COLORS.onSurfaceDark : COLORS.onSurface;
   const [attendanceActionOverride, setAttendanceActionOverride] = React.useState<'in' | 'out' | null>(null);
   const [currentTime, setCurrentTime] = React.useState(new Date());
 
@@ -183,12 +180,6 @@ export function HomeScreen({ auth, onTabChange }: Props) {
     return true;
   }).length;
 
-  const topMetrics = [
-    { label: 'Profile', value: readString(employee, ['employee_no', 'user_no']) || '1' },
-    { label: 'Approval', value: String(pendingRequests || 0) },
-    { label: 'Leave', value: String(availableLeaveDays || 0) },
-  ];
-
   const quickMenu = [
     { label: 'My Information', icon: <UserRound size={14} color={COLORS.primary} />, tab: 'profile' as const },
     { label: 'Attendance', icon: <Fingerprint size={14} color={COLORS.primary} />, tab: 'attendance' as const },
@@ -225,100 +216,71 @@ export function HomeScreen({ auth, onTabChange }: Props) {
         }
       >
         <ScreenTransition style={styles.screenTransition}>
-          <View style={styles.metricRow}>
-            {topMetrics.map((item) => (
-              <View key={item.label} style={styles.metricCard}>
-                <Text style={[styles.metricLabel, { color: COLORS.primary }]}>{item.label}</Text>
-                <Text style={[styles.metricValue, { color: metricCardText }]}>{item.value}</Text>
+          <View style={styles.content}>
+            <Card style={styles.checkCard}>
+              <View style={styles.checkHeader}>
+                <View style={styles.checkHeaderCopy}>
+                  <Text style={[styles.sectionTitle, { color: textColor }]}>Today&apos;s attendance</Text>
+                  <Text style={[styles.checkMeta, { color: mutedColor }]}>{todayLabel} · Regular shift</Text>
+                </View>
+                <View style={[styles.attendanceStatus, { backgroundColor: isDark ? COLORS.surfaceVariantDark : COLORS.surfaceVariant }]}>
+                  <Text style={[styles.attendanceStatusText, { color: nextAttendanceAction === 'out' ? COLORS.success : mutedColor }]}>
+                    {nextAttendanceAction === 'out' ? 'Checked in' : 'Not checked in'}
+                  </Text>
+                </View>
               </View>
-            ))}
-          </View>
+              <View style={styles.timeRow}>
+                <Clock3 size={17} color={mutedColor} />
+                <Text style={[styles.timeLabel, { color: mutedColor }]}>Time remaining</Text>
+                <Text style={[styles.timeValue, { color: textColor }]}>{remainingTime}</Text>
+              </View>
+              <Button
+                loading={checkInMutation.isPending || checkOutMutation.isPending}
+                leftIcon={<Fingerprint size={18} color={COLORS.onPrimary} />}
+                onPress={() => {
+                  if (nextAttendanceAction === 'in') void checkInMutation.mutateAsync();
+                  else void checkOutMutation.mutateAsync();
+                }}
+              >
+                {nextAttendanceAction === 'in' ? 'Check in' : 'Check out'}
+              </Button>
+            </Card>
 
-          <View style={[styles.sheet, { backgroundColor: sheetBackground, paddingBottom: Math.max(insets.bottom, 4) }]}>
             <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: textColor }]}>Quick Menu</Text>
+              <Text style={[styles.sectionTitle, { color: textColor }]}>Overview</Text>
+            </View>
+            <View style={styles.overviewRow}>
+              <OverviewItem label="Leave days" value={String(availableLeaveDays || 0)} textColor={textColor} mutedColor={mutedColor} borderColor={isDark ? COLORS.outlineDark : COLORS.outline} />
+              <OverviewItem label="Pending" value={String(pendingRequests || 0)} textColor={textColor} mutedColor={mutedColor} borderColor={isDark ? COLORS.outlineDark : COLORS.outline} />
+              <OverviewItem label="Worked" value={String(workedDays)} textColor={textColor} mutedColor={mutedColor} borderColor={isDark ? COLORS.outlineDark : COLORS.outline} />
             </View>
 
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionTitle, { color: textColor }]}>Quick access</Text>
+            </View>
             <View style={styles.quickMenuRow}>
               {quickMenu.map((item) => (
                 <TouchableScale
                   key={item.label}
-                  style={[
-                    styles.quickChip,
-                    {
-                      backgroundColor: isDark ? COLORS.surfaceVariantDark : '#e8ebf5',
-                      flex: 1,
-                    },
-                  ]}
+                  style={[styles.quickChip, { borderColor: isDark ? COLORS.outlineDark : COLORS.outline }]}
                   onPress={() => onTabChange?.(item.tab)}
-                  pressedScale={0.96}
+                  pressedScale={0.98}
                 >
                   {item.icon}
-                  <Text style={[styles.quickChipText, { color: textColor }]} numberOfLines={1}>
-                    {item.label}
-                  </Text>
+                  <Text style={[styles.quickChipText, { color: textColor }]} numberOfLines={1}>{item.label}</Text>
                 </TouchableScale>
               ))}
             </View>
 
             <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: textColor }]}>Check In-Out</Text>
+              <Text style={[styles.sectionTitle, { color: textColor }]}>This month</Text>
+              <Text style={[styles.sectionMeta, { color: mutedColor }]}>{today.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</Text>
             </View>
-
-            <View style={[styles.checkCard, { backgroundColor: isDark ? COLORS.surfaceDark : COLORS.surface, borderColor: isDark ? COLORS.outlineDark : COLORS.outline }]}>
-              <View style={styles.checkDetails}>
-                <DetailRow icon={<CalendarRange size={18} color={mutedColor} />} label="Date" value={todayLabel} textColor={textColor} mutedColor={mutedColor} />
-                <DetailRow icon={<Clock3 size={18} color={mutedColor} />} label="Remaining Time" value={remainingTime} textColor={textColor} mutedColor={mutedColor} />
-                <DetailRow icon={<WalletCards size={18} color={mutedColor} />} label="Shift" value="Regular" textColor={textColor} mutedColor={mutedColor} />
-              </View>
-              <TouchableScale
-                style={styles.fingerprintPanel}
-                pressedScale={0.97}
-                onPress={() => {
-                  if (nextAttendanceAction === 'in') {
-                    void checkInMutation.mutateAsync();
-                  } else {
-                    void checkOutMutation.mutateAsync();
-                  }
-                }}
-              >
-                <View style={styles.fingerprintCircle}>
-                  <Fingerprint size={42} color={COLORS.primary} />
-                </View>
-                <Text style={[styles.fingerprintLabel, { color: textColor }]}>
-                  {checkInMutation.isPending
-                    ? 'Checking In...'
-                    : checkOutMutation.isPending
-                      ? 'Checking Out...'
-                      : nextAttendanceAction === 'in'
-                        ? 'Check-In'
-                        : 'Check-Out'}
-                </Text>
-              </TouchableScale>
-            </View>
-
-            <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: textColor }]}>
-                Month Summary <Text style={{ color: mutedColor, fontWeight: '600' }}>| {today.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</Text>
-              </Text>
-            </View>
-
-            <View style={styles.summaryRow}>
-              {monthSummary.map((item) => (
-                <View 
-                  key={item.label} 
-                  style={[
-                    styles.summaryCard, 
-                    { 
-                      borderColor: isDark ? '#27272a' : '#e2e8f0',
-                      backgroundColor: isDark ? '#18181b' : '#ffffff',
-                      shadowOpacity: isDark ? 0.3 : 0.08,
-                    }
-                  ]}
-                >
-                  <View style={{ width: 28, height: 3, backgroundColor: item.tone, borderRadius: 2, marginBottom: 8 }} />
-                  <Text style={[styles.summaryValue, { color: textColor }]}>{item.value}</Text>
+            <View style={[styles.summaryTable, { borderColor: isDark ? COLORS.outlineDark : COLORS.outline }]}>
+              {monthSummary.map((item, index) => (
+                <View key={item.label} style={[styles.summaryRow, index > 0 && { borderTopColor: isDark ? COLORS.outlineDark : COLORS.outline, borderTopWidth: 1 }]}>
                   <Text style={[styles.summaryLabel, { color: mutedColor }]}>{item.label}</Text>
+                  <Text style={[styles.summaryValue, { color: textColor }]}>{item.value}</Text>
                 </View>
               ))}
             </View>
@@ -329,26 +291,23 @@ export function HomeScreen({ auth, onTabChange }: Props) {
   );
 }
 
-function DetailRow({
-  icon,
+function OverviewItem({
   label,
   value,
   textColor,
   mutedColor,
+  borderColor,
 }: {
-  icon: React.ReactNode;
   label: string;
   value: string;
   textColor: string;
   mutedColor: string;
+  borderColor: string;
 }) {
   return (
-    <View style={styles.detailRow}>
-      <View style={styles.detailIcon}>{icon}</View>
-      <View style={{ flex: 1 }}>
-        <Text style={[styles.detailLabel, { color: mutedColor }]}>{label}</Text>
-        <Text style={[styles.detailValue, { color: textColor }]}>{value}</Text>
-      </View>
+    <View style={[styles.overviewItem, { borderColor }]}>
+      <Text style={[styles.overviewValue, { color: textColor }]}>{value}</Text>
+      <Text style={[styles.overviewLabel, { color: mutedColor }]}>{label}</Text>
     </View>
   );
 }
@@ -459,158 +418,120 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    paddingBottom: 0,
+    paddingBottom: 28,
   },
-  heroShell: {
-    paddingTop: 0,
-    paddingBottom: 10,
-  },
-  metricRow: {
-    flexDirection: 'row',
-    gap: 10,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 4,
-  },
-  metricCard: {
-    flex: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  metricLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  metricValue: {
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  sheet: {
-    marginTop: 0,
-    borderTopLeftRadius: 26,
-    borderTopRightRadius: 26,
-    paddingHorizontal: 18,
-    paddingTop: 12,
-    flexGrow: 1,
+  content: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginTop: 22,
+    marginBottom: 10,
   },
   sectionTitle: {
-    fontSize: 19,
-    fontWeight: '800',
-    letterSpacing: -0.4,
-  },
-  sectionLink: {
-    fontSize: 14,
+    fontSize: 17,
     fontWeight: '700',
+  },
+  sectionMeta: {
+    fontSize: 12,
   },
   quickMenuRow: {
     flexDirection: 'row',
     gap: 8,
-    paddingBottom: 8,
   },
   quickChip: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
-    borderRadius: 10,
-    paddingHorizontal: 6,
-    paddingVertical: 8,
+    gap: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    minHeight: 44,
   },
   quickChipText: {
     fontSize: 11,
-    fontWeight: '700',
-  },
-  checkCard: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    padding: 0,
-    overflow: 'hidden',
-    marginBottom: 14,
-    borderRadius: 14,
-    borderWidth: 1,
-  },
-  checkDetails: {
-    flex: 1,
-    paddingHorizontal: 18,
-    paddingVertical: 18,
-    gap: 16,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  detailIcon: {
-    width: 24,
-    alignItems: 'center',
-  },
-  detailLabel: {
-    fontSize: 12,
     fontWeight: '600',
   },
-  detailValue: {
-    marginTop: 2,
-    fontSize: 16,
+  checkCard: {
+    gap: 18,
+  },
+  checkHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  checkHeaderCopy: {
+    flex: 1,
+  },
+  checkMeta: {
+    marginTop: 4,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  attendanceStatus: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  attendanceStatusText: {
+    fontSize: 12,
     fontWeight: '700',
   },
-  fingerprintPanel: {
-    width: 150,
-    borderLeftWidth: StyleSheet.hairlineWidth,
-    borderLeftColor: '#c5cde0',
+  timeRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-    paddingHorizontal: 12,
+    gap: 8,
   },
-  fingerprintCircle: {
-    width: 86,
-    height: 86,
-    borderRadius: 43,
-    backgroundColor: '#e0e5f5',
-    alignItems: 'center',
-    justifyContent: 'center',
+  timeLabel: {
+    flex: 1,
+    fontSize: 13,
   },
-  fingerprintLabel: {
-    fontSize: 15,
-    fontWeight: '800',
-    textAlign: 'center',
+  timeValue: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  overviewRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  overviewItem: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 14,
+  },
+  overviewValue: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  overviewLabel: {
+    marginTop: 4,
+    fontSize: 11,
+  },
+  summaryTable: {
+    borderWidth: 1,
+    borderRadius: 8,
+    overflow: 'hidden',
   },
   summaryRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  summaryCard: {
-    width: '30%',
-    minWidth: 0,
-    borderRadius: 14,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 14,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 4,
-    elevation: 3,
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    minHeight: 44,
   },
   summaryValue: {
-    fontSize: 22,
-    fontWeight: '800',
-    letterSpacing: -0.5,
-    marginBottom: 4,
+    fontSize: 14,
+    fontWeight: '700',
   },
   summaryLabel: {
-    fontSize: 11,
-    lineHeight: 14,
-    fontWeight: '600',
-    textAlign: 'center',
-    opacity: 0.7,
+    fontSize: 13,
   },
 });

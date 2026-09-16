@@ -35,3 +35,45 @@ Latest implementation checks: activity reports resolve names from both camel-cas
 No actionable P0, P1, or P2 findings remain. The live task list remains empty until the new backend activity endpoints are deployed; that is environment state, not a visual mismatch.
 
 final result: passed
+
+---
+
+# Android employee sign-in design QA
+
+Source visual truth: live web employee sign-in at `http://localhost:3000/login`, captured in the Codex in-app Browser on 16 September 2026. The user-provided 369 × 451 browser-comment screenshot was also used as the before-state evidence.
+
+Implementation evidence: live Expo web rendering at `http://localhost:8081/login`, captured in the Codex in-app Browser on 16 September 2026.
+
+Source pixels and CSS viewport: 731 × 411 at 1× density. Implementation pixels and CSS viewport: 369 × 451 at 1× density. The responsive comparison normalized the central authentication column rather than the full desktop frame because the web reference places the same form inside a wider card at this breakpoint.
+
+State reviewed: signed-out, empty form, light theme and dark theme. Password visibility was tested with temporary non-sensitive text and the field was cleared afterward. Browser console inspection returned no errors.
+
+## Full-view comparison evidence
+
+- Fonts and typography: the Android heading now uses the compact visual weight and scale of the web sign-in rather than the oversized before-state heading. Labels, inputs, and action text follow the same hierarchy without wrapping or truncation.
+- Spacing and layout rhythm: both implementations use a centered single-column form with a small brand mark, restrained vertical gaps, 8 px control radii, and one full-width primary action. The former decorative orbs and oversized form card were removed.
+- Colors and visual tokens: the implementation uses the shared `#303194` primary, neutral white/light surfaces, dark neutral surfaces, and the same semantic foreground hierarchy as the web portal.
+- Image quality and asset fidelity: Android uses the supplied Alliance Insurance logo asset from the repository, displayed with its original aspect ratio and without a recreated or placeholder mark.
+- Copy and content: “Welcome back”, Email, Password, Sign in, and the corporate footer match the web experience. OTP-specific copy remains available only in the OTP state.
+
+## Focused region comparison evidence
+
+- Form controls: input heights, 8 px corners, border contrast, password affordance, and button proportions were legible in the 369 px mobile capture.
+- Theme control: toggling light/dark mode updated the screen and accessible label correctly, then the preview was restored to light mode.
+- Password control: the accessible label changed from “Show password” to “Hide password” and back; no test value remained in the field.
+
+## Findings
+
+No actionable P0, P1, or P2 visual or interaction findings remain for the sign-in state.
+
+## Comparison history
+
+- Initial P2: the first Android pass still used a larger logo and heading than the web sign-in and added a subtitle absent from the reference.
+- Fix: reduced the logo and heading scale, removed the normal-state subtitle, and tightened the vertical rhythm.
+- Post-fix evidence: the final 369 × 451 capture shows the logo, heading, fields, action, and footer within one balanced mobile composition.
+
+## Follow-up polish
+
+- P3: a future authentication-parity pass can add the web portal’s forgot-password journey as a native route; it is not represented by an existing Android screen today.
+
+final result: passed

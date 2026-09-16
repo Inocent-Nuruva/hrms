@@ -1,7 +1,8 @@
 import React from 'react';
-import { Text, View, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS } from '../lib/config';
+import { Text } from '../components/ui/text';
 
 export default function PromotionsScreen() {
   return (

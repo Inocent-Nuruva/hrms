@@ -5,7 +5,6 @@ import {
   ScrollView,
   StyleSheet,
   Switch,
-  Text,
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -26,6 +25,7 @@ import { ScreenTransition } from '../components/ui/screen-transition';
 import type { UseAuthReturn } from '../hooks/useAuth';
 import { useThemePreference } from '../hooks/useThemePreference';
 import { useToast } from '../hooks/useToast';
+import { Text } from '../components/ui/text';
 
 type MobileRecord = Record<string, unknown>;
 
@@ -150,7 +150,7 @@ export function ProfileScreen({ auth }: Props) {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor }} edges={[]}>
-      <MobileTopBar auth={auth} variant="compact" />
+      <MobileTopBar auth={auth} title="Profile" variant="centered" />
       <ScrollView
         style={{ flex: 1, backgroundColor }}
         contentContainerStyle={styles.content}

@@ -106,7 +106,7 @@ function useProvideAuth() {
       const finalUser: AuthUser = user || {
         id: 'me',
         fullName: empName || 'Employee',
-        email: user?.email || employee?.email || '',
+        email: employee?.email || '',
       };
 
       // Persist lightly
