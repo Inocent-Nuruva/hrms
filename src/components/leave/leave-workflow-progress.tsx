@@ -11,6 +11,7 @@ import {
  DialogTitle,
 } from "@/components/animate-ui/components/base/dialog"
 import { Button } from "@/components/ui/button"
+import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import {
@@ -1061,7 +1062,9 @@ export function LeaveWorkflowDialog({
  const [actionMessage, setActionMessage] = React.useState<string | null>(null)
  const [busyAction, setBusyAction] = React.useState<"pdf" | "medical" | "document" | "document-download" | null>(null)
  const [medicalForm, setMedicalForm] = React.useState(createEmptyMedicalForm)
+ const [medicalAttachmentFile, setMedicalAttachmentFile] = React.useState<File | null>(null)
  const [documentFile, setDocumentFile] = React.useState<File | null>(null)
+ const medicalAttachmentInputRef = React.useRef<HTMLInputElement>(null)
 
  React.useEffect(() => {
  if (!open) {
@@ -1117,6 +1120,10 @@ export function LeaveWorkflowDialog({
    treatment_end_date: readDateInputValue(medical, "treatment_end_date"),
    attachment_url: readString(medical, ["attachment_url"]),
   })
+  setMedicalAttachmentFile(null)
+  if (medicalAttachmentInputRef.current) {
+   medicalAttachmentInputRef.current.value = ""
+  }
   setDocumentFile(null)
  }, [detail])
 
@@ -1163,6 +1170,22 @@ export function LeaveWorkflowDialog({
   setActionError(null)
   setActionMessage(null)
   try {
+   let attachmentUrl = medicalForm.attachment_url.trim()
+   if (medicalAttachmentFile) {
+    const file = await fileToBase64UploadDto(medicalAttachmentFile)
+    const uploadedDocument = asRecord(
+     await addLeaveRequestDocument(token, requestId, { file })
+    )
+    attachmentUrl = readString(uploadedDocument, ["file_url"])
+    if (!attachmentUrl) {
+     throw new Error("The attachment was uploaded, but its file reference was not returned.")
+    }
+    setMedicalForm((current) => ({ ...current, attachment_url: attachmentUrl }))
+    setMedicalAttachmentFile(null)
+    if (medicalAttachmentInputRef.current) {
+     medicalAttachmentInputRef.current.value = ""
+    }
+   }
    await patchLeaveRequestMedicalDetail(token, requestId, {
     sickness_nature: medicalForm.sickness_nature.trim() || undefined,
     doctor_name: medicalForm.doctor_name.trim() || undefined,
@@ -1170,7 +1193,7 @@ export function LeaveWorkflowDialog({
     hospital_name: medicalForm.hospital_name.trim() || undefined,
     treatment_start_date: medicalForm.treatment_start_date || undefined,
     treatment_end_date: medicalForm.treatment_end_date || undefined,
-    attachment_url: medicalForm.attachment_url.trim() || undefined,
+    attachment_url: attachmentUrl || undefined,
    })
    await refreshDetail()
    setActionMessage("Medical detail saved.")
@@ -1183,7 +1206,7 @@ export function LeaveWorkflowDialog({
   } finally {
    setBusyAction(null)
   }
- }, [medicalForm, refreshDetail, requestId, token])
+ }, [medicalAttachmentFile, medicalForm, refreshDetail, requestId, token])
 
  const handleUploadDocument = React.useCallback(async () => {
   if (!token || requestId === null) {
@@ -1341,7 +1364,7 @@ export function LeaveWorkflowDialog({
  <div>
  <p className="text-sm font-medium text-foreground">Medical detail</p>
  <p className="text-[11px] text-muted-foreground">
- Keep treatment details and any supporting attachment URL in sync with this request.
+ Keep treatment details and any supporting medical attachment in sync with this request.
  </p>
  </div>
  <Button
@@ -1405,42 +1428,48 @@ export function LeaveWorkflowDialog({
  </label>
  <label className="grid gap-1">
  <span className="text-xs font-medium text-muted-foreground">Treatment start</span>
- <Input
- type="date"
+ <DatePickerPresets
  value={medicalForm.treatment_start_date}
- onChange={(event) =>
+ placeholder="Select treatment start"
+ onChange={(value) =>
  setMedicalForm((current) => ({
  ...current,
- treatment_start_date: event.target.value,
+ treatment_start_date: value,
  }))
  }
  />
  </label>
  <label className="grid gap-1">
  <span className="text-xs font-medium text-muted-foreground">Treatment end</span>
- <Input
- type="date"
+ <DatePickerPresets
  value={medicalForm.treatment_end_date}
- onChange={(event) =>
+ placeholder="Select treatment end"
+ onChange={(value) =>
  setMedicalForm((current) => ({
  ...current,
- treatment_end_date: event.target.value,
+ treatment_end_date: value,
  }))
  }
  />
  </label>
  <label className="grid gap-1 sm:col-span-2">
- <span className="text-xs font-medium text-muted-foreground">Attachment URL</span>
+ <span className="text-xs font-medium text-muted-foreground">Medical attachment</span>
  <Input
- value={medicalForm.attachment_url}
- placeholder="https://..."
+ ref={medicalAttachmentInputRef}
+ type="file"
+ accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx,.txt"
+ className="h-auto py-2"
  onChange={(event) =>
- setMedicalForm((current) => ({
- ...current,
- attachment_url: event.target.value,
- }))
+ setMedicalAttachmentFile(event.target.files?.[0] ?? null)
  }
  />
+ <span className="text-[11px] font-normal text-muted-foreground">
+ {medicalAttachmentFile
+ ? `Ready to upload when you save: ${medicalAttachmentFile.name}`
+ : medicalForm.attachment_url
+ ? "A medical attachment is already saved. Choose another file to replace it."
+ : "Choose a PDF, image, Word, Excel, or text file (up to 10 MB)."}
+ </span>
  </label>
  </div>
  {medicalDetail && !medicalForm.attachment_url ? (
