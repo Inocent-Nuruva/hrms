@@ -436,8 +436,11 @@ export function ActivitySelfView({ activeTab }: { activeTab: ActivitySelfTab }) 
       )}
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogPopup className="max-w-xl">
-          <DialogHeader>
+        <DialogPopup
+          from="bottom"
+          className="flex max-h-[calc(100dvh-0.75rem)] w-[calc(100%-0.75rem)] max-w-xl flex-col gap-0 overflow-hidden p-0 sm:max-h-[min(90dvh,42rem)] sm:w-[calc(100%-2rem)]"
+        >
+          <DialogHeader className="m-0 shrink-0 border-b border-border px-4 py-4 pr-12 sm:px-5">
             <DialogTitle>{createMode === "report" ? "Start a daily report" : createMode === "entry" ? "Add a work item" : "Submit report"}</DialogTitle>
             <DialogDescription>
               {createMode === "report"
@@ -447,43 +450,45 @@ export function ActivitySelfView({ activeTab }: { activeTab: ActivitySelfTab }) 
                   : "Summarize the day and send it to your manager for review."}
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-3">
-            {createMode === "report" ? (
-              <label className="grid gap-1.5 text-sm">
-                <span className="font-medium">Activity date</span>
-                <input type="date" className={inputClass} value={form.activity_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, activity_date: event.target.value }))} />
-              </label>
-            ) : null}
-            {createMode === "entry" ? (
-              <>
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5">
+            <div className="grid gap-3">
+              {createMode === "report" ? (
                 <label className="grid gap-1.5 text-sm">
-                  <span className="font-medium">Category</span>
-                  <select className={inputClass} value={form.activity_category_id ?? ""} onChange={(event) => setForm((current) => ({ ...current, activity_category_id: event.target.value }))}>
-                    <option value="">Select category</option>
-                    {categories.map((category) => (
-                      <option key={rowId(category)} value={rowId(category)}>{optionLabel(category)}</option>
-                    ))}
-                  </select>
+                  <span className="font-medium">Activity date</span>
+                  <input type="date" className={inputClass} value={form.activity_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, activity_date: event.target.value }))} />
                 </label>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Title</span><input className={inputClass} value={form.title ?? ""} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} /></label>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Description</span><textarea className={textareaClass} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></label>
-                <label className="grid gap-1.5 text-sm">
-                  <span className="font-medium">Status</span>
-                  <select className={inputClass} value={form.status ?? "COMPLETED"} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}>
-                    {ENTRY_STATUSES.map((status) => <option key={status} value={status}>{prettify(status)}</option>)}
-                  </select>
-                </label>
-              </>
-            ) : null}
-            {createMode === "submit" ? (
-              <>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Summary</span><textarea className={textareaClass} value={form.employee_summary ?? ""} onChange={(event) => setForm((current) => ({ ...current, employee_summary: event.target.value }))} /></label>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Remarks</span><textarea className={textareaClass} value={form.overall_remarks ?? ""} onChange={(event) => setForm((current) => ({ ...current, overall_remarks: event.target.value }))} /></label>
-              </>
-            ) : null}
-            {formError ? <p className="text-sm text-rose-600">{formError}</p> : null}
+              ) : null}
+              {createMode === "entry" ? (
+                <>
+                  <label className="grid gap-1.5 text-sm">
+                    <span className="font-medium">Category</span>
+                    <select className={inputClass} value={form.activity_category_id ?? ""} onChange={(event) => setForm((current) => ({ ...current, activity_category_id: event.target.value }))}>
+                      <option value="">Select category</option>
+                      {categories.map((category) => (
+                        <option key={rowId(category)} value={rowId(category)}>{optionLabel(category)}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="grid gap-1.5 text-sm"><span className="font-medium">Title</span><input className={inputClass} value={form.title ?? ""} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} /></label>
+                  <label className="grid gap-1.5 text-sm"><span className="font-medium">Description</span><textarea className={textareaClass} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></label>
+                  <label className="grid gap-1.5 text-sm">
+                    <span className="font-medium">Status</span>
+                    <select className={inputClass} value={form.status ?? "COMPLETED"} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}>
+                      {ENTRY_STATUSES.map((status) => <option key={status} value={status}>{prettify(status)}</option>)}
+                    </select>
+                  </label>
+                </>
+              ) : null}
+              {createMode === "submit" ? (
+                <>
+                  <label className="grid gap-1.5 text-sm"><span className="font-medium">Summary</span><textarea className={textareaClass} value={form.employee_summary ?? ""} onChange={(event) => setForm((current) => ({ ...current, employee_summary: event.target.value }))} /></label>
+                  <label className="grid gap-1.5 text-sm"><span className="font-medium">Remarks</span><textarea className={textareaClass} value={form.overall_remarks ?? ""} onChange={(event) => setForm((current) => ({ ...current, overall_remarks: event.target.value }))} /></label>
+                </>
+              ) : null}
+              {formError ? <p className="text-sm text-rose-600">{formError}</p> : null}
+            </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="m-0 shrink-0 border-t border-border bg-background px-4 py-3 sm:px-5">
             <button type="button" className={secondaryButtonClass} onClick={() => setCreateOpen(false)}>Cancel</button>
             <button type="button" className={primaryButtonClass} onClick={() => void onSave()} disabled={saving}>{saving ? <Loader2Icon className="size-4 animate-spin" /> : "Save"}</button>
           </DialogFooter>

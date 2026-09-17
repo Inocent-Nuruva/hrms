@@ -10,7 +10,12 @@ const backendOrigin = resolveBackendOrigin();
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  allowedDevOrigins: ["192.168.1.165"],
   bundlePagesRouterDependencies: true,
+  experimental: {
+    webpackMemoryOptimizations: true,
+    preloadEntriesOnStart: false,
+  },
   turbopack: {
     root: path.resolve(process.cwd()),
   },

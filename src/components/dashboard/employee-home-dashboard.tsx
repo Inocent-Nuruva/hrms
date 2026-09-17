@@ -30,6 +30,8 @@ import {
   MailCheck,
   MailWarning,
   Loader2,
+  LogIn,
+  LogOut,
   Network,
   Wifi,
 } from "lucide-react"
@@ -68,6 +70,8 @@ import {
   createEmployeeDocument,
   fileToBase64UploadDto,
   patchEmployeeStatus,
+  createAttendanceMobilePunchCheckIn,
+  createAttendanceMobilePunchCheckOut,
   type AdminRecord,
   type EmployeeProfileSection,
 } from "@/lib/admin-api"
@@ -291,6 +295,7 @@ type EmployeeDashboardViewProps = {
   leaveBalanceTotals?: Record<string, number>
   leaveTypes?: AdminRecord[]
   payslips?: AdminRecord[]
+  onAttendanceChanged?: () => Promise<void>
 }
 
 type LeaveBalanceSummary = {
@@ -2119,6 +2124,20 @@ type NetworkCheckResult = {
   locationMessage: string | null
 }
 
+type BrowserLocationResult = Pick<
+  NetworkCheckResult,
+  "location" | "locationMessage"
+>
+
+function getBrowserConnection(): BrowserNetworkInformation | undefined {
+  const browserNavigator = navigator as NavigatorWithConnection
+  return (
+    browserNavigator.connection ??
+    browserNavigator.mozConnection ??
+    browserNavigator.webkitConnection
+  )
+}
+
 function connectionTypeLabel(type?: string): string {
   switch (type?.toLowerCase()) {
     case "wifi":
@@ -2155,6 +2174,51 @@ function locationErrorMessage(error: GeolocationPositionError) {
   }
 }
 
+function requestBrowserLocation(): Promise<BrowserLocationResult> {
+  return new Promise((resolve) => {
+    if (!window.isSecureContext) {
+      resolve({
+        location: null,
+        locationMessage:
+          "Location requires HTTPS. Use localhost during development or open the deployed secure site.",
+      })
+      return
+    }
+
+    if (!navigator.geolocation) {
+      resolve({
+        location: null,
+        locationMessage: "Location checking is not supported by this browser.",
+      })
+      return
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        resolve({
+          location: {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy,
+          },
+          locationMessage: null,
+        })
+      },
+      (error) => {
+        resolve({
+          location: null,
+          locationMessage: locationErrorMessage(error),
+        })
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 30_000,
+        timeout: 10_000,
+      },
+    )
+  })
+}
+
 function NetworkCheckButton() {
   const [open, setOpen] = React.useState(false)
   const [checking, setChecking] = React.useState(false)
@@ -2164,47 +2228,8 @@ function NetworkCheckButton() {
     setOpen(true)
     setChecking(true)
 
-    const browserNavigator = navigator as NavigatorWithConnection
-    const connection =
-      browserNavigator.connection ??
-      browserNavigator.mozConnection ??
-      browserNavigator.webkitConnection
-
-    const locationResult = await new Promise<
-      Pick<NetworkCheckResult, "location" | "locationMessage">
-    >((resolve) => {
-      if (!navigator.geolocation) {
-        resolve({
-          location: null,
-          locationMessage: "Location checking is not supported by this browser.",
-        })
-        return
-      }
-
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          resolve({
-            location: {
-              latitude: position.coords.latitude,
-              longitude: position.coords.longitude,
-              accuracy: position.coords.accuracy,
-            },
-            locationMessage: null,
-          })
-        },
-        (error) => {
-          resolve({
-            location: null,
-            locationMessage: locationErrorMessage(error),
-          })
-        },
-        {
-          enableHighAccuracy: true,
-          maximumAge: 30_000,
-          timeout: 10_000,
-        },
-      )
-    })
+    const connection = getBrowserConnection()
+    const locationResult = await requestBrowserLocation()
 
     setResult({
       online: navigator.onLine,
@@ -2226,7 +2251,7 @@ function NetworkCheckButton() {
         type="button"
         variant="outline"
         size="sm"
-        className="mt-2 h-8 gap-1.5 px-2.5 text-xs"
+        className="h-8 gap-1.5 px-2.5 text-xs"
         onClick={() => void runCheck()}
       >
         <Network className="size-3.5" aria-hidden="true" />
@@ -2310,7 +2335,7 @@ function NetworkCheckButton() {
                 </div>
 
                 <p className="text-xs leading-relaxed text-muted-foreground">
-                  For privacy, most browsers do not reveal the Wi-Fi name or always tell websites whether Wi-Fi or Ethernet is being used.
+                  Browsers do not reveal the Wi-Fi name. Attendance uses your permitted location, while the server must verify an approved office network from the request itself.
                 </p>
               </>
             ) : null}
@@ -2330,6 +2355,138 @@ function NetworkCheckButton() {
   )
 }
 
+function AttendancePunchActions({
+  employeeId,
+  canCheckIn,
+  canCheckOut,
+  onAttendanceChanged,
+}: {
+  employeeId: number
+  canCheckIn: boolean
+  canCheckOut: boolean
+  onAttendanceChanged?: () => Promise<void>
+}) {
+  const [busyAction, setBusyAction] = React.useState<"in" | "out" | null>(null)
+  const [message, setMessage] = React.useState<{
+    tone: "success" | "error"
+    text: string
+  } | null>(null)
+
+  const submitPunch = React.useCallback(
+    async (action: "in" | "out") => {
+      setMessage(null)
+      setBusyAction(action)
+
+      try {
+        if (!navigator.onLine) {
+          throw new Error("You appear to be offline. Connect to the office network and try again.")
+        }
+
+        const token = readStoredSessionTokens().accessToken
+        if (!token) {
+          throw new Error("Your session has expired. Please sign in again.")
+        }
+
+        const locationResult = await requestBrowserLocation()
+        if (!locationResult.location) {
+          throw new Error(
+            locationResult.locationMessage ||
+              "Location permission is required to record attendance.",
+          )
+        }
+
+        const connection = getBrowserConnection()
+        const payload: AdminRecord = {
+          employeeId,
+          latitude: locationResult.location.latitude,
+          longitude: locationResult.location.longitude,
+          accuracyMeters: locationResult.location.accuracy,
+          deviceIdentifier: `web-${navigator.platform || "browser"}`,
+          deviceInfo: {
+            platform: "web",
+            networkType: connection?.type,
+            effectiveType: connection?.effectiveType,
+            userAgent: navigator.userAgent,
+          },
+        }
+
+        if (action === "in") {
+          await createAttendanceMobilePunchCheckIn(token, payload)
+        } else {
+          await createAttendanceMobilePunchCheckOut(token, payload)
+        }
+
+        setMessage({
+          tone: "success",
+          text: action === "in" ? "Check-in recorded." : "Check-out recorded.",
+        })
+        await onAttendanceChanged?.().catch(() => undefined)
+      } catch (errorObject) {
+        setMessage({
+          tone: "error",
+          text:
+            errorObject instanceof Error
+              ? errorObject.message
+              : `Unable to check ${action === "in" ? "in" : "out"}.`,
+        })
+      } finally {
+        setBusyAction(null)
+      }
+    },
+    [employeeId, onAttendanceChanged],
+  )
+
+  return (
+    <div className="mt-2 space-y-1.5">
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          size="sm"
+          className="h-8 gap-1.5 px-2.5 text-xs"
+          disabled={!canCheckIn || busyAction !== null}
+          onClick={() => void submitPunch("in")}
+        >
+          {busyAction === "in" ? (
+            <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+          ) : (
+            <LogIn className="size-3.5" aria-hidden="true" />
+          )}
+          {busyAction === "in" ? "Checking in…" : "Check in"}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 gap-1.5 px-2.5 text-xs"
+          disabled={!canCheckOut || busyAction !== null}
+          onClick={() => void submitPunch("out")}
+        >
+          {busyAction === "out" ? (
+            <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+          ) : (
+            <LogOut className="size-3.5" aria-hidden="true" />
+          )}
+          {busyAction === "out" ? "Checking out…" : "Check out"}
+        </Button>
+        <NetworkCheckButton />
+      </div>
+      {message ? (
+        <p
+          className={cn(
+            "text-xs",
+            message.tone === "success"
+              ? "text-emerald-700 dark:text-emerald-400"
+              : "text-destructive",
+          )}
+          role="status"
+        >
+          {message.text}
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
 export function EmployeeDashboardView({
   dashboardData,
   attendanceToday,
@@ -2338,6 +2495,7 @@ export function EmployeeDashboardView({
   leaveBalanceTotals,
   leaveTypes,
   payslips,
+  onAttendanceChanged,
 }: EmployeeDashboardViewProps) {
   const { url: myProfilePhotoUrl } = useMyProfilePhoto()
   const actor = useDashboardActor()
@@ -2495,6 +2653,14 @@ export function EmployeeDashboardView({
   const settingsEmailVerifyHref = "/dashboard/settings?tab=email"
 
   const att = getAttendanceStatus(attendanceToday, attendancePunchesToday)
+  const hasCheckedIn = att.checkIn !== "—"
+  const hasCheckedOut = att.checkOut !== "—"
+  const canCheckIn =
+    !hasCheckedIn && (dashboardData.action_flags?.can_check_in ?? true)
+  const canCheckOut =
+    hasCheckedIn &&
+    !hasCheckedOut &&
+    (dashboardData.action_flags?.can_check_out ?? true)
   const dashboardLeaveBalances = flattenDashboardLeaveBalances(dashboardLeave)
   const resolvedLeaveBalances =
     Array.isArray(leaveBalances) && leaveBalances.length > 0 ? leaveBalances : dashboardLeaveBalances
@@ -2663,7 +2829,12 @@ export function EmployeeDashboardView({
           >
             Here&apos;s your day at a glance.
           </motion.p>
-          <NetworkCheckButton />
+          <AttendancePunchActions
+            employeeId={dashboardData.employee.id}
+            canCheckIn={canCheckIn}
+            canCheckOut={canCheckOut}
+            onAttendanceChanged={onAttendanceChanged}
+          />
         </div>
 
         <div className="w-full max-w-full min-w-0 overflow-x-auto overscroll-x-contain sm:w-auto sm:max-w-[min(100%,36rem)] sm:shrink-0">
@@ -3564,6 +3735,46 @@ export function EmployeeHomeDashboard() {
     }
   }, [fillingItemKey, formValues.country, formValues.state])
 
+  const refreshAttendance = React.useCallback(async () => {
+    const token = accessToken || readStoredSessionTokens().accessToken
+    if (!token) return
+
+    const todayIso = localDateIso()
+    const [dashboardResult, todayResult, punchesResult] = await Promise.all([
+      loadEmployeeDashboardOverview(token).catch(() => null),
+      getMyAttendanceToday(token).catch(() => null),
+      listMyAttendancePunches(token, {
+        page: 1,
+        limit: 50,
+        sortBy: "created_at",
+        sortOrder: "DESC",
+        dateFrom: todayIso,
+        dateTo: todayIso,
+      })
+        .then((result) => result.rows || [])
+        .catch(() => [] as AdminRecord[]),
+    ])
+
+    const punchesToday = (punchesResult as AdminRecord[]).filter((row) =>
+      isPunchOnLocalDate(row, todayIso),
+    )
+    setAttendanceToday((todayResult as AdminRecord | null) || null)
+    setAttendancePunchesToday(punchesToday)
+
+    if (isEmployeeDashboardData(dashboardResult)) {
+      setDashboardData((current) =>
+        current
+          ? {
+              ...current,
+              action_flags: dashboardResult.action_flags,
+              attendance_overview: dashboardResult.attendance_overview,
+              generated_at: dashboardResult.generated_at,
+            }
+          : dashboardResult,
+      )
+    }
+  }, [accessToken])
+
   if (isAdmin) {
     return null
   }
@@ -3612,6 +3823,14 @@ export function EmployeeHomeDashboard() {
   const ownedProfileItemCount = REQUIRED_ONBOARDING_ITEMS.filter((item) =>
     EMPLOYEE_OWNED_PROFILE_KEYS.has(item.key),
   ).length
+  const completedProfileItemCount = Math.max(
+    0,
+    ownedProfileItemCount - pendingItems.length,
+  )
+  const profileCompletionPercent =
+    ownedProfileItemCount > 0
+      ? Math.round((completedProfileItemCount / ownedProfileItemCount) * 100)
+      : 0
 
   const currentFillingItem = fillingItemKey
     ? REQUIRED_ONBOARDING_ITEMS.find((i) => i.key === fillingItemKey) || null
@@ -3823,46 +4042,52 @@ export function EmployeeHomeDashboard() {
         leaveBalanceTotals={leaveBalanceTotals}
         leaveTypes={leaveTypes}
         payslips={payslips}
+        onAttendanceChanged={refreshAttendance}
       />
 
       <Dialog open={showOnboardingDialog} onOpenChange={(open) => { if (!open) handleCloseOnboardingDialog() }}>
         <DialogPopup
-          from="center"
+          from="bottom"
           showCloseButton={false}
-          className="max-w-[96vw] sm:max-w-3xl lg:max-w-4xl w-full p-0 overflow-hidden rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xl bg-white dark:bg-slate-950 max-h-[90vh] flex flex-col"
+          className="flex max-h-[calc(100dvh-0.75rem)] w-[calc(100%-0.75rem)] max-w-4xl flex-col gap-0 overflow-hidden rounded-2xl border border-border bg-background p-0 shadow-2xl sm:max-h-[min(92dvh,52rem)] sm:w-[calc(100%-2rem)]"
         >
-            <DialogHeader className="px-5 sm:px-6 pt-5 pb-3 shrink-0 border-b border-slate-200 dark:border-slate-800">
-              <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white">
-                  <UserCheck className="h-5 w-5" />
+            <DialogHeader className="m-0 shrink-0 border-b border-border px-4 py-4 sm:px-6 sm:py-5">
+              <div className="flex items-start gap-3">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/15">
+                  <UserCheck className="size-5" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <DialogTitle className="text-xl font-semibold tracking-tight text-slate-900 dark:text-white">
+                  <DialogTitle className="text-lg font-semibold tracking-tight text-foreground sm:text-xl">
                     {isStillOnboarding ? "Complete your onboarding" : "Complete your profile"}
                   </DialogTitle>
-                  <DialogDescription className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">
+                  <DialogDescription className="mt-1 max-w-2xl text-xs leading-relaxed text-muted-foreground sm:text-sm">
                     {isStillOnboarding
-                      ? "Fill the missing sections to activate your account."
+                      ? "Add the remaining details so HR can finish setting up your employee account."
                       : "Some details were not filled during registration or onboarding. You can complete them now, or continue and we will remind you the next time you sign in."}
                   </DialogDescription>
                 </div>
+                <span className="hidden shrink-0 rounded-full border border-border bg-muted/50 px-3 py-1 text-xs font-semibold text-muted-foreground sm:inline-flex">
+                  {pendingItems.length} remaining
+                </span>
               </div>
 
-              <div className="mt-4">
-                <div className="flex items-center justify-between text-xs mb-1.5">
-                  <span className="font-medium text-slate-700 dark:text-slate-300">Progress</span>
-                  <span className="font-mono text-slate-500 dark:text-slate-400">{ownedProfileItemCount - pendingItems.length} / {ownedProfileItemCount}</span>
+              <div className="mt-4 rounded-xl bg-primary px-4 py-3 text-primary-foreground shadow-sm sm:px-5">
+                <div className="mb-2 flex items-center justify-between gap-3 text-xs">
+                  <span className="font-semibold">Profile progress</span>
+                  <span className="font-semibold tabular-nums">
+                    {completedProfileItemCount} of {ownedProfileItemCount} complete · {profileCompletionPercent}%
+                  </span>
                 </div>
-                <div className="h-2 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                  <div 
-                    className="h-2 rounded-full bg-blue-600 transition-all duration-300" 
-                    style={{ width: `${ownedProfileItemCount === 0 ? 0 : ((ownedProfileItemCount - pendingItems.length) / ownedProfileItemCount) * 100}%` }} 
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/20">
+                  <div
+                    className="h-full rounded-full bg-white transition-[width] duration-500"
+                    style={{ width: `${profileCompletionPercent}%` }}
                   />
                 </div>
               </div>
             </DialogHeader>
 
-            <div className="flex-1 overflow-y-auto min-h-0 px-5 sm:px-6 py-4">
+            <div className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain px-4 py-4 sm:px-6 sm:py-5">
               {pendingItems.length === 0 && !fillingItemKey ? (
                 <div className="text-center py-8">
                   <CheckCircle className="h-10 w-10 mx-auto text-emerald-600 mb-3" />
@@ -3874,23 +4099,23 @@ export function EmployeeHomeDashboard() {
                   </p>
                 </div>
               ) : fillingItemKey && currentFillingItem ? (
-                <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 sm:p-5">
+                <div className="rounded-xl border border-border bg-card p-4 shadow-sm sm:p-5">
                   <div className="mb-4 flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-2.5 pl-1">
-                      <div className="rounded-lg bg-blue-100 dark:bg-blue-950 p-1.5 text-blue-600 dark:text-blue-400">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <div className="rounded-lg bg-primary/10 p-1.5 text-primary">
                         {currentFillingItem.icon}
                       </div>
-                      <div>
-                        <div className="font-semibold text-base text-slate-900 dark:text-white">{currentFillingItem.label}</div>
-                        <div className="text-sm text-slate-500 dark:text-slate-400">{currentFillingItem.description}</div>
+                      <div className="min-w-0">
+                        <div className="text-base font-semibold text-foreground">{currentFillingItem.label}</div>
+                        <div className="text-xs leading-relaxed text-muted-foreground sm:text-sm">{currentFillingItem.description}</div>
                       </div>
                     </div>
                     <button
                       type="button"
                       onClick={cancelFilling}
-                      className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                      className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
                     >
-                      ← Back to checklist
+                      ← <span className="hidden sm:inline">Back to checklist</span><span className="sm:hidden">Back</span>
                     </button>
                   </div>
 
@@ -4085,49 +4310,53 @@ export function EmployeeHomeDashboard() {
                   </p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                  {REQUIRED_ONBOARDING_ITEMS.map((item) => {
+                <div>
+                  <div className="mb-3 flex items-end justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">Details still needed</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">Choose a section and add the information you have.</p>
+                    </div>
+                    <span className="text-xs font-medium text-muted-foreground sm:hidden">
+                      {pendingItems.length} remaining
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
+                  {REQUIRED_ONBOARDING_ITEMS.map((item, itemIndex) => {
                     const isPending = pendingItems.some(p => p.key === item.key)
                     if (!isPending) return null
                     return (
-                      <div 
+                      <button
                         key={item.key}
-                        className="group flex flex-col rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 hover:border-blue-200 dark:hover:border-blue-900/70 hover:shadow-sm transition-all"
+                        type="button"
+                        onClick={() => startFilling(item.key)}
+                        className="group flex w-full items-center gap-3 rounded-xl border border-border bg-card p-3 text-left shadow-sm transition hover:-translate-y-px hover:border-primary/30 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 sm:p-3.5"
                       >
-                        <div className="flex items-start gap-3">
-                          <div className="mt-0.5 rounded-xl bg-blue-100 p-2 text-blue-600 dark:bg-blue-950 dark:text-blue-400 group-hover:scale-[1.02] transition shrink-0">
+                        <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-bold tabular-nums text-muted-foreground">
+                          {String(itemIndex + 1).padStart(2, "0")}
+                        </span>
+                        <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary transition group-hover:bg-primary group-hover:text-primary-foreground">
                             {item.icon}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="font-semibold text-sm text-slate-900 dark:text-white tracking-tight">{item.label}</div>
-                            <p className="mt-1 text-sm text-slate-600 dark:text-slate-400 leading-snug line-clamp-2">{item.description}</p>
-                          </div>
                         </div>
-
-                        <div className="mt-auto pt-3">
-                          <Button 
-                            size="sm" 
-                            className="w-full h-9 text-sm transition-all group-hover:bg-blue-600 group-hover:text-white group-hover:border-blue-600" 
-                            variant="outline"
-                            onClick={() => startFilling(item.key)}
-                          >
-                            Fill out now
-                          </Button>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-semibold tracking-tight text-foreground">{item.label}</div>
+                          <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-muted-foreground">{item.description}</p>
                         </div>
-                      </div>
+                        <span className="shrink-0 text-lg text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-primary">→</span>
+                      </button>
                     )
                   })}
+                  </div>
                 </div>
               )}
             </div>
 
-            <DialogFooter className="border-t border-slate-200 dark:border-slate-800 px-5 sm:px-6 py-3 bg-slate-50/80 dark:bg-slate-950/80 flex flex-col-reverse sm:flex-row sm:justify-end gap-2 shrink-0">
+            <DialogFooter className="m-0 shrink-0 border-t border-border bg-background/95 px-4 py-3 backdrop-blur sm:px-6">
               <Button 
-                variant="ghost" 
+                variant="outline"
                 onClick={handleCloseOnboardingDialog} 
-                className="h-9 px-4 text-sm text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
+                className="h-9 px-4 text-sm"
               >
-                Remind me later
+                Finish later
               </Button>
               <Button 
                 onClick={handleCloseOnboardingDialog} 

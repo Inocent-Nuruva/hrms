@@ -65,7 +65,7 @@ function DialogPopup({
       <DialogPrimitive.Popup
         data-slot="dialog-popup"
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 grid max-h-[min(90dvh,calc(100vh-1.5rem))] w-[calc(100%-1.5rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl border bg-popover p-4 text-popover-foreground shadow-xl transition duration-200 ease-out data-ending-style:opacity-0 data-starting-style:opacity-0 sm:w-[calc(100%-2rem)] sm:p-5",
+          "fixed top-1/2 left-1/2 z-50 grid max-h-[calc(100dvh-0.75rem)] w-[calc(100%-0.75rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 touch-pan-y overscroll-contain overflow-y-auto rounded-xl border bg-popover p-4 text-popover-foreground shadow-xl [scrollbar-gutter:stable] transition duration-200 ease-out data-ending-style:opacity-0 data-starting-style:opacity-0 sm:max-h-[min(90dvh,calc(100vh-1.5rem))] sm:w-[calc(100%-2rem)] sm:p-5",
           fromClassName[from],
           className
         )}
