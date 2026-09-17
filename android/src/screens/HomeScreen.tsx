@@ -1,29 +1,25 @@
 import React from 'react';
 import {
+  Image,
+  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   View,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import {
-  CalendarDays,
-  Clock3,
-  Fingerprint,
-  UserRound,
-} from 'lucide-react-native';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, normalizeList, buildMobilePunchPayload, formatAttendancePunchError } from '../lib/api';
+import { ArrowRight, CalendarClock, Clock3, Landmark, Target, UserRound } from 'lucide-react-native';
+import { useQuery } from '@tanstack/react-query';
+
+import { api, normalizeList } from '../lib/api';
 import { COLORS } from '../lib/config';
 import { MobileTopBar } from '../components/layout/MobileTopBar';
-import { Button } from '../components/ui/button';
-import { Card } from '../components/ui/card';
 import { ScreenTransition } from '../components/ui/screen-transition';
 import { TouchableScale } from '../components/ui/touchable-scale';
+import { Text } from '../components/ui/text';
 import type { UseAuthReturn } from '../hooks/useAuth';
 import { useThemePreference } from '../hooks/useThemePreference';
-import { useToast } from '../hooks/useToast';
-import { Text } from '../components/ui/text';
 
 type MobileRecord = Record<string, unknown>;
 
@@ -32,27 +28,21 @@ interface Props {
   onTabChange?: (tab: 'attendance' | 'leave' | 'profile') => void;
 }
 
+const DASHBOARD_BLUE = '#087FD4';
+
 export function HomeScreen({ auth, onTabChange }: Props) {
-  const queryClient = useQueryClient();
+  const router = useRouter();
   const { isDark } = useThemePreference();
-  const employee = asRecord(auth.employee) || asRecord(auth.user);
+  const employee = asRecord(auth.employee) || {};
+  const user = asRecord(auth.user) || {};
   const backgroundColor = isDark ? COLORS.backgroundDark : COLORS.background;
   const textColor = isDark ? COLORS.onSurfaceDark : COLORS.onSurface;
-  const mutedColor = isDark ? '#a1a1aa' : '#6b7280';
-  const [attendanceActionOverride, setAttendanceActionOverride] = React.useState<'in' | 'out' | null>(null);
-  const [currentTime, setCurrentTime] = React.useState(new Date());
-
-  const toast = useToast();
+  const mutedColor = isDark ? COLORS.onSurfaceVariantDark : COLORS.onSurfaceVariant;
+  const borderColor = isDark ? COLORS.outlineDark : COLORS.outline;
 
   const balancesQuery = useQuery({
     queryKey: ['mobileHomeLeaveBalances'],
-    queryFn: async () => normalizeList(await api.listMyLeaveBalances({ limit: 6 })),
-    enabled: auth.isAuthenticated,
-  });
-
-  const requestsQuery = useQuery({
-    queryKey: ['mobileHomeLeaveRequests'],
-    queryFn: async () => normalizeList(await api.listMyLeaveRequests({ limit: 6 })),
+    queryFn: async () => normalizeList(await api.listMyLeaveBalances({ limit: 20 })),
     enabled: auth.isAuthenticated,
   });
 
@@ -68,221 +58,211 @@ export function HomeScreen({ auth, onTabChange }: Props) {
     enabled: auth.isAuthenticated,
   });
 
-  const holidaysQuery = useQuery({
-    queryKey: ['mobileHomeHolidays'],
-    queryFn: async () => normalizeList(await api.listHolidays({ limit: 12 })),
+  const profilePhotoQuery = useQuery({
+    queryKey: ['mobileHomeProfilePhoto'],
+    queryFn: () => api.getMyProfilePhotoUrl(),
     enabled: auth.isAuthenticated,
   });
 
   const onRefresh = React.useCallback(async () => {
     await Promise.all([
+      auth.refreshProfile(),
       balancesQuery.refetch(),
-      requestsQuery.refetch(),
       punchesQuery.refetch(),
       todayAttendanceQuery.refetch(),
-      holidaysQuery.refetch(),
+      profilePhotoQuery.refetch(),
     ]);
-  }, [balancesQuery, holidaysQuery, punchesQuery, requestsQuery, todayAttendanceQuery]);
+  }, [auth, balancesQuery, profilePhotoQuery, punchesQuery, todayAttendanceQuery]);
 
-  React.useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  const checkInMutation = useMutation({
-    mutationFn: async () => {
-      const payload = await buildMobilePunchPayload({ overrideReason: 'New check in' });
-      return api.checkIn(payload);
-    },
-    onSuccess: () => {
-      setAttendanceActionOverride('out');
-      toast.success('Your attendance punch was recorded successfully.');
-      void Promise.allSettled([
-        queryClient.invalidateQueries({ queryKey: ['mobileHomePunches'] }),
-        queryClient.invalidateQueries({ queryKey: ['mobileHomeAttendanceToday'] }),
-        queryClient.invalidateQueries({ queryKey: ['mobileAttendancePunches'] }),
-        queryClient.invalidateQueries({ queryKey: ['mobileAttendanceToday'] }),
-      ]);
-    },
-    onError: (error: unknown) => {
-      toast.error(formatAttendancePunchError(error, 'check-in'));
-    },
-  });
-
-  const checkOutMutation = useMutation({
-    mutationFn: async () => {
-      const payload = await buildMobilePunchPayload({ overrideReason: 'New check out' });
-      return api.checkOut(payload);
-    },
-    onSuccess: () => {
-      setAttendanceActionOverride('in');
-      toast.success('Your check-out punch was recorded successfully.');
-      void Promise.allSettled([
-        queryClient.invalidateQueries({ queryKey: ['mobileHomePunches'] }),
-        queryClient.invalidateQueries({ queryKey: ['mobileHomeAttendanceToday'] }),
-        queryClient.invalidateQueries({ queryKey: ['mobileAttendancePunches'] }),
-        queryClient.invalidateQueries({ queryKey: ['mobileAttendanceToday'] }),
-      ]);
-    },
-    onError: (error: unknown) => {
-      toast.error(formatAttendancePunchError(error, 'check-out'));
-    },
-  });
-
-  const employeeName =
-    auth.user?.fullName ||
+  const fullName =
     [readString(employee, ['first_name']), readString(employee, ['last_name'])].filter(Boolean).join(' ') ||
+    readString(user, ['fullName', 'full_name', 'name']) ||
     'Employee';
-  const employeeFirstName =
-    readString(employee, ['first_name']) ||
-    auth.user?.fullName?.trim().split(/\s+/)[0] ||
-    employeeName.trim().split(/\s+/)[0] ||
-    'Employee';
-  const today = new Date();
-  const todayLabel = today.toLocaleDateString(undefined, {
-    day: '2-digit',
-    month: 'long',
-    year: 'numeric',
-  });
-  const greeting = getGreeting(today);
-  const lastPunch = punchesQuery.data?.[0];
-  const lastPunchType = String(lastPunch?.punch_type || lastPunch?.punchType || lastPunch?.type || '').toLowerCase();
-  const todayCheckIn = readString(todayAttendanceQuery.data, ['checkInAt', 'check_in_at', 'firstCheckInAt', 'first_check_in_at']);
-  const todayCheckOut = readString(todayAttendanceQuery.data, ['checkOutAt', 'check_out_at', 'lastCheckOutAt', 'last_check_out_at']);
-  const requiresCheckout =
-    readBoolean(todayAttendanceQuery.data, ['requiresCheckout', 'requires_checkout']) ||
-    readBoolean(asRecord(todayAttendanceQuery.data?.flags), ['requiresCheckout', 'requires_checkout']);
-  const nextAttendanceAction =
-    attendanceActionOverride ||
-    (requiresCheckout || (todayCheckIn && !todayCheckOut) ? 'out' : lastPunchType.includes('in') ? 'out' : 'in');
-  const availableLeaveDays = sumNumbers(balancesQuery.data, ['remaining', 'balance']);
-  const pendingRequests = requestsQuery.data?.filter((item) =>
-    String(item.status || '').toLowerCase().includes('pending')
-  ).length ?? 0;
-  const holidayCount = holidaysQuery.data?.length ?? 0;
-  const workedDays = countUniquePunchDays(punchesQuery.data || []);
-  const totalDays = daysInMonth(today);
-  const absentDays = Math.max(totalDays - workedDays - holidayCount, 0);
-  const remainingTime = getRemainingWorkTime(currentTime);
-  const approvedLeavesThisMonth = (requestsQuery.data || []).filter((item) => {
-    const status = String(item?.status || '').toLowerCase();
-    const isApproved = status.includes('approve') || status.includes('used') || status.includes('complete') || status.includes('taken');
-    if (!isApproved) return false;
-    const start = readString(item, ['start_date', 'from_date', 'start', 'date']);
-    if (start) {
-      const d = new Date(start);
-      if (!isNaN(d.getTime()) && (d.getFullYear() !== today.getFullYear() || d.getMonth() !== today.getMonth())) {
-        return false;
-      }
-    }
-    return true;
-  }).length;
+  const preferredName = readString(employee, ['first_name']) || fullName.split(/\s+/)[0] || 'Employee';
+  const employmentStatus = readString(employee, ['employment_status', 'status']) || 'Active';
+  const employeeNo =
+    readString(employee, ['employee_no', 'user_no']) || readString(user, ['employeeId', 'employee_id']) || '—';
+  const position =
+    readString(employee, ['position_name']) || readNestedName(employee, ['position', 'primary_position']) || 'Not assigned';
+  const department =
+    readString(employee, ['department_name']) || readNestedName(employee, ['department', 'primary_department']) || 'Not assigned';
+  const branch =
+    readString(employee, ['branch_name']) || readNestedName(employee, ['branch', 'primary_branch']) || 'Not assigned';
+  const joined = formatDate(readUnknown(employee, ['hire_date', 'joining_date', 'date_joined']));
+  const role = formatTitle(readString(user, ['role', 'user_type']) || 'Company user');
+  const roleLabel = role.toLowerCase() === 'employee' ? 'Employee' : `${role} · Employee`;
 
-  const quickMenu = [
-    { label: 'My Information', icon: <UserRound size={14} color={COLORS.primary} />, tab: 'profile' as const },
-    { label: 'Attendance', icon: <Fingerprint size={14} color={COLORS.primary} />, tab: 'attendance' as const },
-    { label: 'Leave', icon: <CalendarDays size={14} color={COLORS.primary} />, tab: 'leave' as const },
+  const today = new Date();
+  const todayDateKey = today.toISOString().slice(0, 10);
+  const todayCheckIn =
+    readString(todayAttendanceQuery.data, ['checkInAt', 'check_in_at', 'firstCheckInAt', 'first_check_in_at']) ||
+    findPunchTime(punchesQuery.data || [], todayDateKey, 'in');
+  const todayCheckOut =
+    readString(todayAttendanceQuery.data, ['checkOutAt', 'check_out_at', 'lastCheckOutAt', 'last_check_out_at']) ||
+    findPunchTime(punchesQuery.data || [], todayDateKey, 'out');
+  const attendanceStatus = todayCheckOut ? 'Completed' : todayCheckIn ? 'Checked In' : 'Not Checked In';
+  const availableLeaveDays = sumNumbers(balancesQuery.data, ['remaining', 'balance']);
+  const leaveTypes = balancesQuery.data?.length || 0;
+  const isOnboarding = employmentStatus.toLowerCase() === 'onboarding';
+  const initials = getInitials(fullName);
+  const isRefreshing =
+    balancesQuery.isFetching ||
+    punchesQuery.isFetching ||
+    todayAttendanceQuery.isFetching ||
+    profilePhotoQuery.isFetching;
+
+  const snapshots = [
+    { label: 'Today', value: attendanceStatus, highlighted: true },
+    { label: 'Check in', value: formatTime(todayCheckIn) },
+    { label: 'Check out', value: formatTime(todayCheckOut) },
+    { label: 'Leave left', value: formatCompactNumber(availableLeaveDays) },
+    { label: 'Leave types', value: String(leaveTypes) },
   ];
 
-  const monthSummary = [
-    { label: 'Total Days', value: String(totalDays), tone: isDark ? '#dd3740' : '#e0e5f5' },
-    { label: 'Working Days', value: String(workedDays), tone: isDark ? COLORS.primary : '#d8ddf0' },
-    { label: 'Week Off', value: String(getWeekendCount(today.getFullYear(), today.getMonth())), tone: isDark ? '#67e8f9' : '#e8ebf5' },
-    { label: 'Holiday', value: String(holidayCount), tone: isDark ? '#4ade80' : '#e0e5f5' },
-    { label: 'No Pay', value: formatCompactNumber(absentDays), tone: isDark ? '#fbbf24' : '#f0f2f8' },
-    { label: 'Leave', value: String(approvedLeavesThisMonth), tone: isDark ? COLORS.accent : '#e8ebf5' },
+  const quickActions = [
+    { label: 'My attendance', icon: Clock3, onPress: () => onTabChange?.('attendance') },
+    { label: 'Request leave', icon: CalendarClock, onPress: () => onTabChange?.('leave') },
+    { label: 'My payroll', icon: Landmark, onPress: () => router.push('/payroll') },
+    { label: 'My performance', icon: Target, onPress: () => router.push('/performance') },
   ];
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor }} edges={[]}>
-      <MobileTopBar auth={auth} title={`Hi, ${employeeFirstName}`} subtitle={greeting} variant="dashboard" />
+    <SafeAreaView style={[styles.safeArea, { backgroundColor }]} edges={[]}>
+      <MobileTopBar auth={auth} title="Dashboard" variant="centered" />
       <ScrollView
-        style={{ flex: 1, backgroundColor }}
+        style={[styles.scroll, { backgroundColor }]}
         contentContainerStyle={styles.scrollContent}
-        refreshControl={
-          <RefreshControl
-            refreshing={
-              balancesQuery.isFetching ||
-              requestsQuery.isFetching ||
-              punchesQuery.isFetching ||
-              todayAttendanceQuery.isFetching ||
-              holidaysQuery.isFetching
-            }
-            onRefresh={onRefresh}
-            colors={[COLORS.primary]}
-          />
-        }
+        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} colors={[COLORS.primary]} />}
       >
         <ScreenTransition style={styles.screenTransition}>
-          <View style={styles.content}>
-            <Card style={styles.checkCard}>
-              <View style={styles.checkHeader}>
-                <View style={styles.checkHeaderCopy}>
-                  <Text style={[styles.sectionTitle, { color: textColor }]}>Today&apos;s attendance</Text>
-                  <Text style={[styles.checkMeta, { color: mutedColor }]}>{todayLabel} · Regular shift</Text>
-                </View>
-                <View style={[styles.attendanceStatus, { backgroundColor: isDark ? COLORS.surfaceVariantDark : COLORS.surfaceVariant }]}>
-                  <Text style={[styles.attendanceStatusText, { color: nextAttendanceAction === 'out' ? COLORS.success : mutedColor }]}>
-                    {nextAttendanceAction === 'out' ? 'Checked in' : 'Not checked in'}
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.timeRow}>
-                <Clock3 size={17} color={mutedColor} />
-                <Text style={[styles.timeLabel, { color: mutedColor }]}>Time remaining</Text>
-                <Text style={[styles.timeValue, { color: textColor }]}>{remainingTime}</Text>
-              </View>
-              <Button
-                loading={checkInMutation.isPending || checkOutMutation.isPending}
-                leftIcon={<Fingerprint size={18} color={COLORS.onPrimary} />}
-                onPress={() => {
-                  if (nextAttendanceAction === 'in') void checkInMutation.mutateAsync();
-                  else void checkOutMutation.mutateAsync();
-                }}
+          {isOnboarding ? (
+            <View
+              style={[
+                styles.onboardingBanner,
+                {
+                  backgroundColor: isDark ? '#332A18' : '#FFFBEB',
+                  borderColor: isDark ? '#765B24' : '#FDE68A',
+                },
+              ]}
+            >
+              <Text style={[styles.onboardingText, { color: isDark ? '#FDE68A' : '#92400E' }]}>
+                Your employee profile is still in onboarding.
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => onTabChange?.('profile')}
+                style={styles.onboardingButton}
               >
-                {nextAttendanceAction === 'in' ? 'Check in' : 'Check out'}
-              </Button>
-            </Card>
+                <Text style={styles.onboardingButtonText}>Finish onboarding</Text>
+              </Pressable>
+            </View>
+          ) : null}
 
-            <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: textColor }]}>Overview</Text>
-            </View>
-            <View style={styles.overviewRow}>
-              <OverviewItem label="Leave days" value={String(availableLeaveDays || 0)} textColor={textColor} mutedColor={mutedColor} borderColor={isDark ? COLORS.outlineDark : COLORS.outline} />
-              <OverviewItem label="Pending" value={String(pendingRequests || 0)} textColor={textColor} mutedColor={mutedColor} borderColor={isDark ? COLORS.outlineDark : COLORS.outline} />
-              <OverviewItem label="Worked" value={String(workedDays)} textColor={textColor} mutedColor={mutedColor} borderColor={isDark ? COLORS.outlineDark : COLORS.outline} />
-            </View>
+          <View style={styles.greetingBlock}>
+            <Text style={[styles.dateLabel, { color: mutedColor }]}>{formatHeaderDate(today)}</Text>
+            <Text style={[styles.greeting, { color: textColor }]}>
+              {getGreeting(today)},{' '}
+              <Text style={styles.greetingName}>{preferredName}</Text>
+            </Text>
+            <Text style={[styles.greetingSubtitle, { color: mutedColor }]}>Here&apos;s your day at a glance.</Text>
+          </View>
 
-            <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: textColor }]}>Quick access</Text>
-            </View>
-            <View style={styles.quickMenuRow}>
-              {quickMenu.map((item) => (
-                <TouchableScale
-                  key={item.label}
-                  style={[styles.quickChip, { borderColor: isDark ? COLORS.outlineDark : COLORS.outline }]}
-                  onPress={() => onTabChange?.(item.tab)}
-                  pressedScale={0.98}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.snapshotRow}
+            style={[styles.snapshotScroller, { borderColor }]}
+          >
+            {snapshots.map((snapshot, index) => (
+              <View
+                key={snapshot.label}
+                style={[
+                  styles.snapshotItem,
+                  snapshot.highlighted
+                    ? { backgroundColor: isDark ? '#123D39' : '#E6F8F4' }
+                    : { backgroundColor },
+                  index < snapshots.length - 1 ? { borderRightColor: borderColor, borderRightWidth: 1 } : null,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.snapshotLabel,
+                    { color: snapshot.highlighted ? (isDark ? '#6EE7D1' : '#0F766E') : mutedColor },
+                  ]}
                 >
-                  {item.icon}
-                  <Text style={[styles.quickChipText, { color: textColor }]} numberOfLines={1}>{item.label}</Text>
+                  {snapshot.label}
+                </Text>
+                <Text
+                  numberOfLines={1}
+                  style={[
+                    styles.snapshotValue,
+                    { color: snapshot.highlighted ? (isDark ? '#99F6E4' : '#047857') : textColor },
+                  ]}
+                >
+                  {snapshot.value}
+                </Text>
+              </View>
+            ))}
+          </ScrollView>
+
+          <View style={styles.profilePanel}>
+            <View style={styles.identityRow}>
+              <View style={styles.avatarShell}>
+                {profilePhotoQuery.data ? (
+                  <Image
+                    alt={`${fullName} profile photo`}
+                    source={{ uri: profilePhotoQuery.data }}
+                    style={styles.avatarImage}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <Text style={styles.avatarInitials}>{initials}</Text>
+                )}
+              </View>
+              <View style={styles.identityCopy}>
+                <View style={styles.nameRow}>
+                  <Text style={styles.employeeName}>{fullName}</Text>
+                  <Text style={styles.employeeStatus}>{formatTitle(employmentStatus)}</Text>
+                </View>
+                <Text style={styles.roleLabel}>{roleLabel}</Text>
+                <TouchableScale
+                  style={styles.profileButton}
+                  onPress={() => onTabChange?.('profile')}
+                  pressedScale={0.97}
+                >
+                  <UserRound size={14} color="#FFFFFF" />
+                  <Text style={styles.profileButtonText}>View full profile</Text>
                 </TouchableScale>
-              ))}
+              </View>
             </View>
 
-            <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: textColor }]}>This month</Text>
-              <Text style={[styles.sectionMeta, { color: mutedColor }]}>{today.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</Text>
+            <View style={styles.detailsGrid}>
+              <ProfileField label="Employee no." value={employeeNo} />
+              <ProfileField label="Position" value={position} />
+              <ProfileField label="Department" value={department} />
+              <ProfileField label="Branch" value={branch} />
+              <ProfileField label="Joined" value={joined} />
             </View>
-            <View style={[styles.summaryTable, { borderColor: isDark ? COLORS.outlineDark : COLORS.outline }]}>
-              {monthSummary.map((item, index) => (
-                <View key={item.label} style={[styles.summaryRow, index > 0 && { borderTopColor: isDark ? COLORS.outlineDark : COLORS.outline, borderTopWidth: 1 }]}>
-                  <Text style={[styles.summaryLabel, { color: mutedColor }]}>{item.label}</Text>
-                  <Text style={[styles.summaryValue, { color: textColor }]}>{item.value}</Text>
-                </View>
-              ))}
+
+            <View style={styles.quickActions}>
+              {quickActions.map((action) => {
+                const Icon = action.icon;
+                return (
+                  <TouchableScale
+                    accessibilityRole="button"
+                    key={action.label}
+                    onPress={action.onPress}
+                    pressedScale={0.985}
+                    style={styles.quickAction}
+                  >
+                    <View style={styles.quickActionIcon}>
+                      <Icon size={18} color="#FFFFFF" />
+                    </View>
+                    <Text style={styles.quickActionText}>{action.label}</Text>
+                    <ArrowRight size={17} color="rgba(255,255,255,0.9)" />
+                  </TouchableScale>
+                );
+              })}
             </View>
           </View>
         </ScreenTransition>
@@ -291,23 +271,11 @@ export function HomeScreen({ auth, onTabChange }: Props) {
   );
 }
 
-function OverviewItem({
-  label,
-  value,
-  textColor,
-  mutedColor,
-  borderColor,
-}: {
-  label: string;
-  value: string;
-  textColor: string;
-  mutedColor: string;
-  borderColor: string;
-}) {
+function ProfileField({ label, value }: { label: string; value: string }) {
   return (
-    <View style={[styles.overviewItem, { borderColor }]}>
-      <Text style={[styles.overviewValue, { color: textColor }]}>{value}</Text>
-      <Text style={[styles.overviewLabel, { color: mutedColor }]}>{label}</Text>
+    <View style={styles.profileField}>
+      <Text style={styles.profileFieldLabel}>{label}</Text>
+      <Text numberOfLines={2} style={styles.profileFieldValue}>{value}</Text>
     </View>
   );
 }
@@ -316,26 +284,36 @@ function asRecord(value: unknown): MobileRecord | null {
   return value && typeof value === 'object' ? (value as MobileRecord) : null;
 }
 
+function readUnknown(value: unknown, keys: string[]) {
+  const record = asRecord(value);
+  if (!record) return undefined;
+  for (const key of keys) {
+    if (record[key] !== null && record[key] !== undefined) return record[key];
+  }
+  return undefined;
+}
+
 function readString(value: unknown, keys: string[]) {
   const record = asRecord(value);
   if (!record) return '';
-
   for (const key of keys) {
     const candidate = record[key];
     if (typeof candidate === 'string' && candidate.trim()) return candidate.trim();
   }
-
   return '';
 }
 
-function sumNumbers(items: MobileRecord[] | undefined, keys: string[]) {
-  return (items || []).reduce((total, item) => total + readNumber(item, keys), 0);
+function readNestedName(record: MobileRecord, keys: string[]) {
+  for (const key of keys) {
+    const name = readString(record[key], ['name', 'title', 'label']);
+    if (name) return name;
+  }
+  return '';
 }
 
 function readNumber(value: unknown, keys: string[]) {
   const record = asRecord(value);
   if (!record) return 0;
-
   for (const key of keys) {
     const candidate = record[key];
     if (typeof candidate === 'number' && Number.isFinite(candidate)) return candidate;
@@ -344,194 +322,159 @@ function readNumber(value: unknown, keys: string[]) {
       if (Number.isFinite(parsed)) return parsed;
     }
   }
-
   return 0;
 }
 
-function readBoolean(value: unknown, keys: string[]) {
-  const record = asRecord(value);
-  if (!record) return false;
-
-  for (const key of keys) {
-    const candidate = record[key];
-    if (typeof candidate === 'boolean') return candidate;
-    if (typeof candidate === 'string') {
-      const normalized = candidate.trim().toLowerCase();
-      if (normalized === 'true') return true;
-      if (normalized === 'false') return false;
-    }
-  }
-
-  return false;
+function sumNumbers(items: MobileRecord[] | undefined, keys: string[]) {
+  return (items || []).reduce((total, item) => total + readNumber(item, keys), 0);
 }
 
-function countUniquePunchDays(items: MobileRecord[]) {
-  const days = new Set<string>();
-  items.forEach((item) => {
+function findPunchTime(items: MobileRecord[], dateKey: string, direction: 'in' | 'out') {
+  const match = items.find((item) => {
     const stamp = readString(item, ['punched_at', 'punchedAt', 'timestamp', 'created_at', 'createdAt']);
-    if (stamp) {
-      days.add(new Date(stamp).toISOString().slice(0, 10));
-    }
+    const type = readString(item, ['punch_type', 'punchType', 'type']).toLowerCase();
+    return stamp.startsWith(dateKey) && type.includes(direction);
   });
-  return days.size;
+  return match ? readString(match, ['punched_at', 'punchedAt', 'timestamp', 'created_at', 'createdAt']) : '';
+}
+
+function formatTime(value: string) {
+  if (!value) return '—';
+  const parsed = new Date(value);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  }
+  const timeMatch = value.match(/\b(\d{1,2}:\d{2})\b/);
+  return timeMatch?.[1] || value;
+}
+
+function formatDate(value: unknown) {
+  if (!value) return '—';
+  const parsed = new Date(String(value));
+  if (Number.isNaN(parsed.getTime())) return String(value);
+  return parsed.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function formatHeaderDate(value: Date) {
+  return value.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: '2-digit' }).toUpperCase();
 }
 
 function getGreeting(date: Date) {
   const hour = date.getHours();
-  if (hour < 12) return 'Good Morning';
-  if (hour < 17) return 'Good Afternoon';
-  return 'Good Evening';
+  if (hour < 12) return 'Good morning';
+  if (hour < 17) return 'Good afternoon';
+  return 'Good evening';
 }
 
-function daysInMonth(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+function formatTitle(value: string) {
+  return value.replace(/[_-]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function getWeekendCount(year: number, monthIndex: number) {
-  const lastDay = new Date(year, monthIndex + 1, 0).getDate();
-  let count = 0;
-  for (let day = 1; day <= lastDay; day += 1) {
-    const weekday = new Date(year, monthIndex, day).getDay();
-    if (weekday === 0 || weekday === 6) count += 1;
-  }
-  return count;
-}
-
-function getRemainingWorkTime(now: Date) {
-  const target = new Date(now);
-  target.setHours(17, 0, 0, 0);
-  const diff = Math.max(target.getTime() - now.getTime(), 0);
-  const hours = String(Math.floor(diff / 3600000)).padStart(2, '0');
-  const minutes = String(Math.floor((diff % 3600000) / 60000)).padStart(2, '0');
-  const seconds = String(Math.floor((diff % 60000) / 1000)).padStart(2, '0');
-  return `${hours}:${minutes}:${seconds}`;
+function getInitials(value: string) {
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('') || 'E';
 }
 
 function formatCompactNumber(value: number) {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
-
 const styles = StyleSheet.create({
-  screenTransition: {
-    flexGrow: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    paddingBottom: 28,
-  },
-  content: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-  },
-  sectionHeader: {
+  safeArea: { flex: 1 },
+  scroll: { flex: 1 },
+  scrollContent: { flexGrow: 1, paddingBottom: 28 },
+  screenTransition: { flexGrow: 1 },
+  onboardingBanner: {
+    minHeight: 66,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 22,
-    marginBottom: 10,
+    gap: 12,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 11,
   },
-  sectionTitle: {
-    fontSize: 17,
-    fontWeight: '700',
+  onboardingText: { flex: 1, fontSize: 13, lineHeight: 19 },
+  onboardingButton: {
+    minHeight: 40,
+    justifyContent: 'center',
+    borderRadius: 8,
+    paddingHorizontal: 13,
+    backgroundColor: DASHBOARD_BLUE,
   },
-  sectionMeta: {
-    fontSize: 12,
-  },
-  quickMenuRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  quickChip: {
-    flex: 1,
-    flexDirection: 'row',
+  onboardingButtonText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
+  greetingBlock: { paddingHorizontal: 16, paddingTop: 22, paddingBottom: 18 },
+  dateLabel: { fontSize: 11, lineHeight: 16, fontWeight: '700', letterSpacing: 1.3 },
+  greeting: { marginTop: 5, fontSize: 24, lineHeight: 31, fontWeight: '700', letterSpacing: -0.6 },
+  greetingName: { color: DASHBOARD_BLUE },
+  greetingSubtitle: { marginTop: 3, fontSize: 14, lineHeight: 20 },
+  snapshotScroller: { borderTopWidth: 1, borderBottomWidth: 1 },
+  snapshotRow: { minWidth: '100%' },
+  snapshotItem: { minWidth: 104, minHeight: 72, justifyContent: 'center', paddingHorizontal: 12, paddingVertical: 10 },
+  snapshotLabel: { fontSize: 10, lineHeight: 14, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase' },
+  snapshotValue: { marginTop: 3, fontSize: 14, lineHeight: 19, fontWeight: '700' },
+  profilePanel: { paddingHorizontal: 16, paddingTop: 24, paddingBottom: 26, backgroundColor: DASHBOARD_BLUE },
+  identityRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 14 },
+  avatarShell: {
+    width: 64,
+    height: 64,
+    flexShrink: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    paddingHorizontal: 8,
-    minHeight: 44,
-  },
-  quickChipText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  checkCard: {
-    gap: 18,
-  },
-  checkHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  checkHeaderCopy: {
-    flex: 1,
-  },
-  checkMeta: {
-    marginTop: 4,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  attendanceStatus: {
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  attendanceStatusText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  timeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  timeLabel: {
-    flex: 1,
-    fontSize: 13,
-  },
-  timeValue: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  overviewRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  overviewItem: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 14,
-  },
-  overviewValue: {
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  overviewLabel: {
-    marginTop: 4,
-    fontSize: 11,
-  },
-  summaryTable: {
-    borderWidth: 1,
-    borderRadius: 8,
     overflow: 'hidden',
+    borderRadius: 32,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.35)',
+    backgroundColor: 'rgba(255,255,255,0.18)',
   },
-  summaryRow: {
+  avatarImage: { width: '100%', height: '100%' },
+  avatarInitials: { color: '#FFFFFF', fontSize: 18, fontWeight: '700' },
+  identityCopy: { flex: 1, minWidth: 0 },
+  nameRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', gap: 7 },
+  employeeName: { color: '#FFFFFF', fontSize: 21, lineHeight: 27, fontWeight: '700', letterSpacing: -0.35 },
+  employeeStatus: { color: 'rgba(255,255,255,0.86)', fontSize: 11, fontWeight: '700' },
+  roleLabel: {
+    marginTop: 5,
+    color: 'rgba(255,255,255,0.78)',
+    fontSize: 10,
+    lineHeight: 15,
+    fontWeight: '700',
+    letterSpacing: 1.15,
+    textTransform: 'uppercase',
+  },
+  profileButton: {
+    alignSelf: 'flex-start',
+    minHeight: 34,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    minHeight: 44,
+    gap: 6,
+    marginTop: 11,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.34)',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    backgroundColor: 'rgba(255,255,255,0.1)',
   },
-  summaryValue: {
-    fontSize: 14,
-    fontWeight: '700',
+  profileButtonText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
+  detailsGrid: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 24, rowGap: 14 },
+  profileField: { width: '50%', paddingRight: 14 },
+  profileFieldLabel: { color: 'rgba(255,255,255,0.55)', fontSize: 10, lineHeight: 14, fontWeight: '700', textTransform: 'uppercase' },
+  profileFieldValue: { marginTop: 2, color: '#FFFFFF', fontSize: 13, lineHeight: 18, fontWeight: '700' },
+  quickActions: { gap: 9, marginTop: 24 },
+  quickAction: {
+    minHeight: 54,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.16)',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    backgroundColor: 'rgba(255,255,255,0.14)',
   },
-  summaryLabel: {
-    fontSize: 13,
-  },
+  quickActionIcon: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.16)' },
+  quickActionText: { flex: 1, color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
 });
