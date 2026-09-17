@@ -116,9 +116,15 @@ jobs:
           rm -rf "$release"; rm -f "$archive" "$archive.sha256"
           mkdir -p "$release/deploy/hrms-frontend" "$release/.next"
           cp -a .next/standalone/. "$release/"
-          cp -a .next/static "$release/.next/static"
-          [[ ! -d public ]] || cp -a public "$release/public"
-          cp deploy/hrms-frontend/deploy.sh deploy/hrms-frontend/stage-release.sh deploy/hrms-frontend/ecosystem.config.js "$release/deploy/hrms-frontend/"
+          # Copy contents: standalone output may already contain these directories.
+          # Copying the directory itself would create public/public or static/static.
+          mkdir -p "$release/.next/static" "$release/public"
+          cp -a .next/static/. "$release/.next/static/"
+          cp -a public/. "$release/public/"
+          cp deploy/hrms-frontend/deploy.sh deploy/hrms-frontend/stage-release.sh deploy/hrms-frontend/ecosystem.config.js deploy/hrms-frontend/check-assets.mjs "$release/deploy/hrms-frontend/"
+          [[ -f "$release/.next/BUILD_ID" && -d "$release/.next/static/chunks" && -f "$release/public/icon.png" ]]
+          cmp public/assets/alliance-logo.png "$release/public/assets/alliance-logo.png"
+          cmp public/favicon.ico "$release/public/favicon.ico"
           chmod 750 "$release/deploy/hrms-frontend/deploy.sh" "$release/deploy/hrms-frontend/stage-release.sh"
           printf '%s\n' "$GITHUB_SHA" > "$release/REVISION"
           printf '%s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" > "$release/BUILT_AT"
@@ -161,6 +167,7 @@ jobs:
       APP_PORT: ${{ vars.APP_PORT }}
       HEALTH_PATH: ${{ vars.HEALTH_PATH || '/api/health/ready' }}
       KEEP_RELEASES: ${{ vars.KEEP_RELEASES || '3' }}
+      DEPLOY_PUBLIC_URL: ${{ vars.DEPLOY_PUBLIC_URL }}
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 1, persist-credentials: false }

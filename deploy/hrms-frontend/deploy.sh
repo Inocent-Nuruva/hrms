@@ -60,7 +60,17 @@ for attempt in {1..30}; do
   log "Health attempt $attempt/30 returned HTTP $code."
   sleep 2
 done
-[[ "$HEALTH_OK" == 1 ]] || { log 'Health check failed.'; exit 1; }
+if [[ "$HEALTH_OK" != 1 ]]; then
+  log 'Health check failed.'
+  false # Trigger the ERR trap so the previous release is restored.
+fi
+
+log 'Checking rendered pages, JavaScript, CSS, and public assets.'
+node "$RELEASE_DIR/deploy/hrms-frontend/check-assets.mjs" "http://127.0.0.1:${APP_PORT}"
+if [[ -n "${DEPLOY_PUBLIC_URL:-}" ]]; then
+  log 'Checking assets through the public reverse proxy.'
+  node "$RELEASE_DIR/deploy/hrms-frontend/check-assets.mjs" "$DEPLOY_PUBLIC_URL"
+fi
 
 CURRENT_RELEASE="$(readlink -f "$CURRENT_LINK")"
 find "$RELEASES_DIR" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' | sort -nr | awk -v keep="$KEEP_RELEASES" 'NR > keep { sub(/^[^ ]+ /, ""); print }' | while IFS= read -r old; do
