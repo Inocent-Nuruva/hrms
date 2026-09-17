@@ -29,6 +29,9 @@ import {
   ShieldAlert,
   MailCheck,
   MailWarning,
+  Loader2,
+  Network,
+  Wifi,
 } from "lucide-react"
 import { countries as countryCodes } from "country-flag-icons"
 import * as FlagIcons from "country-flag-icons/react/3x2"
@@ -2087,6 +2090,246 @@ function Doodle({ name = "doodle-circles" }: { name?: string }) {
   );
 }
 
+type BrowserNetworkInformation = {
+  type?: string
+  effectiveType?: string
+  downlink?: number
+  rtt?: number
+  saveData?: boolean
+}
+
+type NavigatorWithConnection = Navigator & {
+  connection?: BrowserNetworkInformation
+  mozConnection?: BrowserNetworkInformation
+  webkitConnection?: BrowserNetworkInformation
+}
+
+type NetworkCheckResult = {
+  online: boolean
+  transport: string
+  effectiveType: string | null
+  downlink: number | null
+  rtt: number | null
+  saveData: boolean | null
+  location: {
+    latitude: number
+    longitude: number
+    accuracy: number
+  } | null
+  locationMessage: string | null
+}
+
+function connectionTypeLabel(type?: string): string {
+  switch (type?.toLowerCase()) {
+    case "wifi":
+      return "Wi-Fi"
+    case "ethernet":
+      return "Ethernet"
+    case "cellular":
+      return "Mobile data"
+    case "bluetooth":
+      return "Bluetooth"
+    case "wimax":
+      return "WiMAX"
+    case "none":
+      return "No connection"
+    case "other":
+    case "unknown":
+    case undefined:
+      return "Not shared by this browser"
+    default:
+      return type || "Not shared by this browser"
+  }
+}
+
+function locationErrorMessage(error: GeolocationPositionError) {
+  switch (error.code) {
+    case error.PERMISSION_DENIED:
+      return "Location permission was not allowed. You can enable it in your browser settings."
+    case error.POSITION_UNAVAILABLE:
+      return "Your current location could not be found."
+    case error.TIMEOUT:
+      return "The location check took too long. Please try again."
+    default:
+      return "Your location could not be checked."
+  }
+}
+
+function NetworkCheckButton() {
+  const [open, setOpen] = React.useState(false)
+  const [checking, setChecking] = React.useState(false)
+  const [result, setResult] = React.useState<NetworkCheckResult | null>(null)
+
+  const runCheck = React.useCallback(async () => {
+    setOpen(true)
+    setChecking(true)
+
+    const browserNavigator = navigator as NavigatorWithConnection
+    const connection =
+      browserNavigator.connection ??
+      browserNavigator.mozConnection ??
+      browserNavigator.webkitConnection
+
+    const locationResult = await new Promise<
+      Pick<NetworkCheckResult, "location" | "locationMessage">
+    >((resolve) => {
+      if (!navigator.geolocation) {
+        resolve({
+          location: null,
+          locationMessage: "Location checking is not supported by this browser.",
+        })
+        return
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          resolve({
+            location: {
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude,
+              accuracy: position.coords.accuracy,
+            },
+            locationMessage: null,
+          })
+        },
+        (error) => {
+          resolve({
+            location: null,
+            locationMessage: locationErrorMessage(error),
+          })
+        },
+        {
+          enableHighAccuracy: true,
+          maximumAge: 30_000,
+          timeout: 10_000,
+        },
+      )
+    })
+
+    setResult({
+      online: navigator.onLine,
+      transport: connectionTypeLabel(connection?.type),
+      effectiveType: connection?.effectiveType?.toUpperCase() ?? null,
+      downlink:
+        typeof connection?.downlink === "number" ? connection.downlink : null,
+      rtt: typeof connection?.rtt === "number" ? connection.rtt : null,
+      saveData:
+        typeof connection?.saveData === "boolean" ? connection.saveData : null,
+      ...locationResult,
+    })
+    setChecking(false)
+  }, [])
+
+  return (
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="mt-2 h-8 gap-1.5 px-2.5 text-xs"
+        onClick={() => void runCheck()}
+      >
+        <Network className="size-3.5" aria-hidden="true" />
+        Network check
+      </Button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogPopup from="center" className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Wifi className="size-5 text-primary" aria-hidden="true" />
+              Network and location check
+            </DialogTitle>
+            <DialogDescription>
+              See the connection details your browser can safely share.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 px-5 pb-2 sm:px-6" aria-live="polite">
+            {checking ? (
+              <div className="flex min-h-36 flex-col items-center justify-center gap-3 text-center">
+                <Loader2 className="size-6 animate-spin text-primary" aria-hidden="true" />
+                <div>
+                  <p className="text-sm font-medium text-foreground">Checking your connection</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Allow location access if your browser asks.
+                  </p>
+                </div>
+              </div>
+            ) : result ? (
+              <>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <div className="rounded-lg border border-border bg-muted/30 p-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Internet
+                    </p>
+                    <p className={cn("mt-1 text-sm font-semibold", result.online ? "text-emerald-600 dark:text-emerald-400" : "text-destructive")}>
+                      {result.online ? "Connected" : "Offline"}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-border bg-muted/30 p-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Connection type
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-foreground">{result.transport}</p>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-border p-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Connection details
+                  </p>
+                  <p className="mt-1 text-sm text-foreground">
+                    {result.effectiveType ? `${result.effectiveType} estimated quality` : "Quality details are not shared by this browser."}
+                  </p>
+                  {result.downlink !== null || result.rtt !== null || result.saveData !== null ? (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {[
+                        result.downlink !== null ? `About ${result.downlink} Mbps` : null,
+                        result.rtt !== null ? `${result.rtt} ms response` : null,
+                        result.saveData === true ? "Data saver is on" : null,
+                      ].filter(Boolean).join(" · ")}
+                    </p>
+                  ) : null}
+                </div>
+
+                <div className="rounded-lg border border-border p-3">
+                  <div className="flex items-start gap-2.5">
+                    <MapPin className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-foreground">Location</p>
+                      {result.location ? (
+                        <p className="mt-1 break-words text-xs text-muted-foreground">
+                          {result.location.latitude.toFixed(5)}, {result.location.longitude.toFixed(5)} · accurate to about {Math.round(result.location.accuracy)} m
+                        </p>
+                      ) : (
+                        <p className="mt-1 text-xs text-muted-foreground">{result.locationMessage}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  For privacy, most browsers do not reveal the Wi-Fi name or always tell websites whether Wi-Fi or Ethernet is being used.
+                </p>
+              </>
+            ) : null}
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+              Close
+            </Button>
+            <Button type="button" onClick={() => void runCheck()} disabled={checking}>
+              {checking ? "Checking…" : "Check again"}
+            </Button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
+    </>
+  )
+}
+
 export function EmployeeDashboardView({
   dashboardData,
   attendanceToday,
@@ -2420,6 +2663,7 @@ export function EmployeeDashboardView({
           >
             Here&apos;s your day at a glance.
           </motion.p>
+          <NetworkCheckButton />
         </div>
 
         <div className="w-full max-w-full min-w-0 overflow-x-auto overscroll-x-contain sm:w-auto sm:max-w-[min(100%,36rem)] sm:shrink-0">
