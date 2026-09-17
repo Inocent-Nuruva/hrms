@@ -2397,6 +2397,7 @@ function AttendancePunchActions({
 
         const connection = getBrowserConnection()
         const payload: AdminRecord = {
+          clientRequestId: crypto.randomUUID(),
           employeeId,
           latitude: locationResult.location.latitude,
           longitude: locationResult.location.longitude,
@@ -2405,8 +2406,6 @@ function AttendancePunchActions({
           deviceInfo: {
             platform: "web",
             networkType: connection?.type,
-            effectiveType: connection?.effectiveType,
-            userAgent: navigator.userAgent,
           },
         }
 
