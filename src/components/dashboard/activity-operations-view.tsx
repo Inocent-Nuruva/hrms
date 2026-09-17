@@ -408,12 +408,16 @@ export function ActivityOperationsView({ activeTab }: { activeTab: ActivityOpsTa
       <RecordDetailsDialog open={Boolean(detail)} onOpenChange={(open) => !open && setDetail(null)} title={optionLabel(detail) || employeeLabel(detail)} row={detail} />
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogPopup className="max-w-xl">
-          <DialogHeader>
+        <DialogPopup
+          from="bottom"
+          className="flex max-h-[calc(100dvh-0.75rem)] w-[calc(100%-0.75rem)] max-w-xl flex-col gap-0 overflow-hidden p-0 sm:max-h-[min(90dvh,42rem)] sm:w-[calc(100%-2rem)]"
+        >
+          <DialogHeader className="m-0 shrink-0 border-b border-border px-4 py-4 pr-12 sm:px-5">
             <DialogTitle>{createMode === "review" ? "Review report" : createMode === "policy" ? "Activity policy" : "Activity category"}</DialogTitle>
             <DialogDescription>Save this activity setup item.</DialogDescription>
           </DialogHeader>
-          <div className="grid gap-3">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5">
+            <div className="grid gap-3">
             {createMode === "review" ? (
               <>
                 <label className="grid gap-1.5 text-sm">
@@ -448,8 +452,9 @@ export function ActivityOperationsView({ activeTab }: { activeTab: ActivityOpsTa
               </>
             ) : null}
             {formError ? <p className="text-sm text-rose-600">{formError}</p> : null}
+            </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="m-0 shrink-0 border-t border-border bg-background px-4 py-3 sm:px-5">
             <button type="button" className={secondaryButtonClass} onClick={() => setCreateOpen(false)}>Cancel</button>
             <button type="button" className={primaryButtonClass} onClick={() => void onSave()} disabled={saving}>{saving ? <Loader2Icon className="size-4 animate-spin" /> : "Save"}</button>
           </DialogFooter>
