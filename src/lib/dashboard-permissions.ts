@@ -15,7 +15,7 @@ export const DASHBOARD_TOKEN_COOKIE = "hrms_dashboard_token"
 export const DASHBOARD_PERMISSIONS_COOKIE = "hrms_dashboard_permissions"
 
 const LEGACY_ADMIN_USER_STORAGE_KEY = "hrms.admin.user"
-const FORBIDDEN_ROUTES_STORAGE_KEY = "hrms.forbiddenRoutes.v2"
+const FORBIDDEN_ROUTES_STORAGE_KEY = "hrms.forbiddenRoutes.v3"
 const CONFIRMED_PLATFORM_ROUTES_STORAGE_KEY = "hrms.confirmedPlatformRoutes"
 const FORBIDDEN_ROUTES_EVENT = "hrms:forbidden-routes-changed"
 
@@ -115,12 +115,18 @@ const PERFORMANCE_MODULE_WIDE = [
 export const PERFORMANCE_ROUTE_PERMISSION: PermissionRequirement = {
   permissions: [
     ...PERFORMANCE_MODULE_WIDE,
+    "view_company_dashboard",
     "performance_years:read",
+    "performance_financial_years:read",
     "performance_periods:read",
     "performance_kpis:read",
+    "kpi_definitions:read",
     "performance_plans:read",
     "performance_reviews:read",
+    "performance_reviews:approve",
+    "performance_dashboards:read",
     "performance_improvement_plans:read",
+    "performance_pip:read",
   ],
   mode: "any",
 }
@@ -128,13 +134,18 @@ export const PERFORMANCE_ROUTE_PERMISSION: PermissionRequirement = {
 export const PERFORMANCE_SETUP_PERMISSION: PermissionRequirement = {
   permissions: [
     ...PERFORMANCE_MODULE_WIDE,
+    "view_company_dashboard",
     "performance_years:read",
+    "performance_financial_years:read",
     "performance_periods:read",
+    "performance_periods:create",
     "performance_kpis:read",
+    "kpi_definitions:read",
     "performance_templates:read",
     "kpi_templates:read",
     "performance_rating_scales:read",
     "kpi_rules:read",
+    "kpi_applicability_rules:read",
   ],
   mode: "any",
 }
@@ -145,12 +156,23 @@ export const PERFORMANCE_PLANS_PERMISSION: PermissionRequirement = {
 }
 
 export const PERFORMANCE_REVIEWS_PERMISSION: PermissionRequirement = {
-  permissions: [...PERFORMANCE_MODULE_WIDE, "performance_reviews:read", "performance_appeals:read"],
+  permissions: [
+    ...PERFORMANCE_MODULE_WIDE,
+    "performance_reviews:read",
+    "performance_reviews:approve",
+    "performance_reviews:moderate",
+    "performance_appeals:read",
+    "performance_reviews:appeal-review",
+  ],
   mode: "any",
 }
 
 export const PERFORMANCE_IMPROVEMENT_PERMISSION: PermissionRequirement = {
-  permissions: [...PERFORMANCE_MODULE_WIDE, "performance_improvement_plans:read"],
+  permissions: [
+    ...PERFORMANCE_MODULE_WIDE,
+    "performance_improvement_plans:read",
+    "performance_pip:read",
+  ],
   mode: "any",
 }
 
@@ -1623,13 +1645,18 @@ const PERFORMANCE_ADMIN_SHELL_PERMISSION: PermissionRequirement = {
     "performance:update",
     "manage_performance",
     "performance_years:read",
+    "performance_financial_years:read",
     "performance_periods:read",
     "performance_kpis:read",
+    "kpi_definitions:read",
     "performance_templates:read",
     "performance_plans:read",
     "performance_reviews:read",
+    "performance_reviews:approve",
     "performance_improvement_plans:read",
+    "performance_pip:read",
     "performance_appeals:read",
+    "performance_dashboards:read",
   ],
   mode: "any",
 }
@@ -1788,7 +1815,18 @@ export function canAccessDashboardRoute(
 
   const requiredShell = resolveDashboardRouteShellRequirement(path)
   if (requiredShell && accessMode && accessMode !== requiredShell) {
-    return false
+    const isHrPerformancePath =
+      path === "/dashboard/performance" ||
+      path.startsWith("/dashboard/performance/")
+    if (
+      !(
+        isHrPerformancePath &&
+        requiredShell === "admin" &&
+        canViewCompanyDashboard(permissionLabels)
+      )
+    ) {
+      return false
+    }
   }
 
   if (path === "/dashboard/sms/platform" || path.startsWith("/dashboard/sms/platform/")) {
@@ -1862,13 +1900,9 @@ function resolveDashboardActorIdentity(...sources: unknown[]): DashboardActorIde
   const hasPermissionBasedAdminAccess = hasAdminDashboardAccess(permissionLabels)
   const hasAdminRole = roleNames.some(roleNameImpliesAdminShell)
   const accessMode: DashboardAccessMode =
-    explicitAccessMode === "admin"
+    explicitAccessMode === "admin" || hasExplicitAdminIdentity || hasAdminRole
       ? "admin"
-      : explicitAccessMode === "employee"
-        ? "employee"
-        : hasExplicitAdminIdentity || hasAdminRole
-          ? "admin"
-          : "employee"
+      : "employee"
 
   return {
     permissionLabels,
@@ -2122,9 +2156,11 @@ export function readDashboardActorSnapshotFromBrowser(): DashboardActorSnapshot 
       )
       const storedScope = window.sessionStorage.getItem(DASHBOARD_SCOPE_STORAGE_KEY)
       const accessMode: DashboardAccessMode =
-        storedAccessMode === "admin" || storedAccessMode === "employee"
-          ? storedAccessMode
-          : derivedSnapshot.accessMode
+        derivedSnapshot.accessMode === "admin"
+          ? "admin"
+          : storedAccessMode === "admin" || storedAccessMode === "employee"
+            ? storedAccessMode
+            : derivedSnapshot.accessMode
       const rawRoleNames = window.sessionStorage.getItem(DASHBOARD_ROLES_STORAGE_KEY)
       let roleNames = derivedSnapshot.roleNames
       try {

@@ -225,23 +225,23 @@ describe("tightened dashboard permissions", () => {
     ).toBe(true)
   })
 
-  it("keeps explicit employee dashboard_type ahead of permission-based shell fallback", () => {
+  it("lets HR Manager open the admin shell even if login still says employee", () => {
     expect(
       buildDashboardActorSnapshotFromSources({
         dashboard_type: "employee",
-        roles: [{ name: "ADMIN" }],
-        permissions: ["*", "branches:read"],
+        roles: [{ name: "HR_MANAGER" }],
+        permissions: ["view_company_dashboard"],
       }).accessMode,
-    ).toBe("employee")
+    ).toBe("admin")
   })
 
-  it("uses the first explicit API dashboard_type ahead of token fallback claims", () => {
+  it("uses an explicit admin dashboard_type ahead of token fallback claims", () => {
     expect(
       buildDashboardActorSnapshotFromSources(
-        { dashboard_type: "employee", roles: [{ name: "ADMIN" }] },
-        { dashboard_type: "admin" },
+        { dashboard_type: "admin", roles: [{ name: "EMPLOYEE" }] },
+        { dashboard_type: "employee" },
       ).accessMode,
-    ).toBe("employee")
+    ).toBe("admin")
   })
 
   it("preserves platform scope independently from the admin dashboard type", () => {

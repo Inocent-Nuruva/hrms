@@ -6,7 +6,6 @@ import {
   PlusIcon,
   RefreshCwIcon,
 } from "lucide-react"
-import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 
 import { SearchToggleField } from "@/components/common/search-toggle-field"
@@ -25,7 +24,6 @@ import {
   employeeLabel,
   formatDate,
   inputClass,
-  isPermissionError,
   optionLabel,
   prettify,
   primaryButtonClass,
@@ -83,6 +81,7 @@ import {
   type AdminRecord,
 } from "@/lib/admin-api"
 import { canAccessDashboardRoute, canPerformPermission } from "@/lib/dashboard-permissions"
+import { forgetForbiddenRoute } from "@/lib/forbidden-routes"
 import { readStoredSessionTokens } from "@/lib/session-client"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 
@@ -250,16 +249,30 @@ export function PerformanceManagementView({
 }: {
   activeTab: PerformanceHrTab
 }) {
-  const router = useRouter()
   const actor = useDashboardActor()
+  const performancePath =
+    activeTab === "overview"
+      ? "/dashboard/performance/overview"
+      : `/dashboard/performance/${activeTab}`
   const canAccess =
     actor.ready &&
-    canAccessDashboardRoute("/dashboard/performance/overview", actor.permissionLabels, actor.accessMode)
+    (canAccessDashboardRoute(
+      performancePath,
+      actor.permissionLabels,
+      actor.accessMode,
+    ) ||
+      canAccessDashboardRoute(
+        "/dashboard/performance/overview",
+        actor.permissionLabels,
+        actor.accessMode,
+      ))
   const canCreatePerformance = canPerformPermission(actor.permissionLabels, {
     permissions: [
+      "view_company_dashboard",
       "performance:create",
       "performance:update",
       "performance_periods:create",
+      "performance_financial_years:create",
       "manage_performance",
     ],
     mode: "any",
@@ -282,13 +295,14 @@ export function PerformanceManagementView({
     mode: "any",
   })
 
-  const fallbackHref =
-    actor.accessMode === "employee" ? "/dashboard/me/performance/overview" : "/dashboard"
-
   React.useEffect(() => {
-    if (!actor.ready || canAccess) return
-    router.replace(fallbackHref)
-  }, [actor.ready, canAccess, fallbackHref, router])
+    forgetForbiddenRoute("/dashboard/performance")
+    forgetForbiddenRoute("/dashboard/performance/overview")
+    forgetForbiddenRoute("/dashboard/performance/setup")
+    forgetForbiddenRoute("/dashboard/performance/plans")
+    forgetForbiddenRoute("/dashboard/performance/reviews")
+    forgetForbiddenRoute("/dashboard/performance/improvement")
+  }, [])
 
   const [setupTab, setSetupTab] = React.useState<SetupTab>("years")
   const [dashboard, setDashboard] = React.useState<AdminRecord | null>(null)
@@ -325,55 +339,66 @@ export function PerformanceManagementView({
     setLoading(true)
     setError(null)
     try {
-      const requests: Array<Promise<unknown>> = [
-        getPerformanceDashboard(token).then(setDashboard),
-        listPerformanceFinancialYears(token).then(setYears),
-        listPerformancePeriods(token).then(setPeriods),
-      ]
-      if (activeTab === "setup" || activeTab === "overview") {
-        requests.push(
-          listPerformanceKpis(token).then(setKpis),
-          listPerformanceKpiTemplates(token).then(setTemplates),
-          listPerformanceKpiRules(token).then(setRules),
-          listPerformanceCompetencyTemplates(token).then(setCompetencies),
-          listPerformanceRatingScales(token).then(setScales),
-        )
-      }
-      if (activeTab === "plans" || activeTab === "overview") {
-        requests.push(
-          listPerformancePlans(token).then(setPlans),
-          listPerformanceKpis(token).then(setKpis),
-          listEmployees(token, { limit: 100 }).then((result) => setEmployees(result.rows)),
-        )
-      }
-      if (activeTab === "reviews" || activeTab === "overview") {
-        requests.push(listPerformanceAppeals(token).then(setAppeals))
-      }
-      if (activeTab === "improvement" || activeTab === "reviews" || activeTab === "overview") {
-        requests.push(listPerformanceImprovementPlans(token).then(setPips))
-      }
-      const results = await Promise.allSettled(requests)
-      const permissionFailure = results.find(
-        (result) => result.status === "rejected" && isPermissionError(result.reason),
-      )
-      if (permissionFailure && permissionFailure.status === "rejected") {
-        router.replace(fallbackHref)
-        return
-      }
-      const firstError = results.find((result) => result.status === "rejected")
-      if (firstError && firstError.status === "rejected") {
-        setError(firstError.reason instanceof Error ? firstError.reason.message : "Could not load performance data.")
+      const optional = <T,>(promise: Promise<T>, fallback: T) =>
+        promise.catch(() => fallback)
+
+      if (activeTab === "overview") {
+        const [summary, yearRows, periodRows] = await Promise.all([
+          optional(getPerformanceDashboard(token), null),
+          optional(listPerformanceFinancialYears(token), [] as AdminRecord[]),
+          optional(listPerformancePeriods(token), [] as AdminRecord[]),
+        ])
+        setDashboard(summary)
+        setYears(yearRows)
+        setPeriods(periodRows)
+      } else if (activeTab === "setup") {
+        if (setupTab === "years") {
+          setYears(await listPerformanceFinancialYears(token))
+        } else if (setupTab === "periods") {
+          const [periodRows, yearRows] = await Promise.all([
+            listPerformancePeriods(token),
+            optional(listPerformanceFinancialYears(token), [] as AdminRecord[]),
+          ])
+          setPeriods(periodRows)
+          setYears(yearRows)
+        } else if (setupTab === "kpis") {
+          setKpis(await listPerformanceKpis(token))
+        } else if (setupTab === "templates") {
+          setTemplates(await listPerformanceKpiTemplates(token))
+        } else if (setupTab === "rules") {
+          setRules(await listPerformanceKpiRules(token))
+        } else if (setupTab === "competencies") {
+          setCompetencies(await listPerformanceCompetencyTemplates(token))
+        } else if (setupTab === "scales") {
+          setScales(await listPerformanceRatingScales(token))
+        }
+      } else if (activeTab === "plans") {
+        const [planRows, kpiRows, employeeRows] = await Promise.all([
+          listPerformancePlans(token),
+          optional(listPerformanceKpis(token), [] as AdminRecord[]),
+          listEmployees(token, { limit: 100 })
+            .then((result) => result.rows)
+            .catch(() => [] as AdminRecord[]),
+        ])
+        setPlans(planRows)
+        setKpis(kpiRows)
+        setEmployees(employeeRows)
+      } else if (activeTab === "reviews") {
+        const [appealRows, pipRows] = await Promise.all([
+          listPerformanceAppeals(token),
+          optional(listPerformanceImprovementPlans(token), [] as AdminRecord[]),
+        ])
+        setAppeals(appealRows)
+        setPips(pipRows)
+      } else if (activeTab === "improvement") {
+        setPips(await listPerformanceImprovementPlans(token))
       }
     } catch (errorObject) {
-      if (isPermissionError(errorObject)) {
-        router.replace(fallbackHref)
-        return
-      }
       setError(errorObject instanceof Error ? errorObject.message : "Could not load performance data.")
     } finally {
       setLoading(false)
     }
-  }, [activeTab, fallbackHref, router])
+  }, [activeTab, setupTab])
 
   React.useEffect(() => {
     if (!canAccess) return
@@ -1082,7 +1107,18 @@ export function PerformanceManagementView({
                             ? "Reopen review"
                             : "Review milestone"
 
-  if (!canAccess) return null
+  if (actor.ready && !canAccess) {
+    return (
+      <section className="space-y-3">
+        <h1 className="text-xl font-semibold tracking-tight">Performance setup</h1>
+        <p className="text-sm text-muted-foreground">
+          This HR workspace is available, but the signed-in account is still being
+          treated as employee-only. Open Roles, confirm HR Manager has company
+          dashboard access, then sign out and sign in again.
+        </p>
+      </section>
+    )
+  }
 
   return (
     <section className="space-y-4">

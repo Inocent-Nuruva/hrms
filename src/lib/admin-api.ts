@@ -15352,6 +15352,11 @@ export async function calculatePerformanceAggregates(
   );
 }
 
+/**
+ * HR catalogue: GET /api/performance/periods (Performance_listPeriods).
+ * There is no GET /api/performance/me/periods. Employee pages must use
+ * GET /api/performance/me/assignments and GET /api/performance/me/kpis.
+ */
 export async function listPerformancePeriods(token: string) {
   const payload = await adminRequest<unknown>("/api/performance/periods", {
     token,

@@ -7,6 +7,7 @@ import {
   hasPerformanceAccess,
   hasProbationAccess,
 } from "./dashboard-permissions"
+import { canSeeDashboardPage } from "./forbidden-routes"
 
 const COMPANY_ADMIN_PERMISSIONS = [
   "view_company_dashboard",
@@ -17,15 +18,52 @@ const COMPANY_ADMIN_PERMISSIONS = [
 ]
 
 describe("performance and probation route access", () => {
-  it("hides HR performance from company admins without performance permissions", () => {
+  it("shows HR performance setup to company-dashboard actors", () => {
     expect(
       canAccessDashboardRoute(
         "/dashboard/performance/overview",
         COMPANY_ADMIN_PERMISSIONS,
         "admin",
       ),
-    ).toBe(false)
-    expect(hasPerformanceAccess(COMPANY_ADMIN_PERMISSIONS)).toBe(false)
+    ).toBe(true)
+    expect(
+      canAccessDashboardRoute(
+        "/dashboard/performance/setup",
+        COMPANY_ADMIN_PERMISSIONS,
+        "admin",
+      ),
+    ).toBe(true)
+    expect(
+      canAccessDashboardRoute(
+        "/dashboard/performance/setup",
+        COMPANY_ADMIN_PERMISSIONS,
+        "employee",
+      ),
+    ).toBe(true)
+    expect(
+      canSeeDashboardPage(
+        "/dashboard/performance/setup",
+        COMPANY_ADMIN_PERMISSIONS,
+        "employee",
+      ),
+    ).toBe(true)
+  })
+
+  it("shows HR setup when the API grant is performance_periods:read", () => {
+    expect(
+      canAccessDashboardRoute(
+        "/dashboard/performance/overview",
+        ["performance_periods:read"],
+        "admin",
+      ),
+    ).toBe(true)
+    expect(
+      canAccessDashboardRoute(
+        "/dashboard/performance/setup",
+        ["performance_financial_years:read", "performance_periods:read"],
+        "admin",
+      ),
+    ).toBe(true)
   })
 
   it("keeps HR performance for actors with performance:read", () => {
