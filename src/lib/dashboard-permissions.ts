@@ -831,6 +831,7 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/me/finance/payroll": null,
   "/dashboard/me/performance": null,
   "/dashboard/me/performance/overview": null,
+  "/dashboard/me/performance/kpis": null,
   "/dashboard/me/performance/assignments": null,
   "/dashboard/me/performance/assign-tasks": {
     permissions: ["work_activities:manager:review"],
@@ -840,6 +841,7 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/me/performance/achievements": null,
   "/dashboard/me/performance/improvement": null,
   "/dashboard/me/performance/team": MANAGER_ROUTE_PERMISSION,
+  "/dashboard/me/performance/kpi-reviews": MANAGER_ROUTE_PERMISSION,
   "/dashboard/me/probation": null,
   "/dashboard/me/field": null,
   "/dashboard/me/field/visits": null,

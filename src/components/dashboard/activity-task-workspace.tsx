@@ -60,8 +60,10 @@ import {
   getMyActivityReport,
   listManagerActivityAssignees,
   listManagerActivityTasks,
+  listManagerEmployeeKpis,
   listMyActivities,
   listMyActivityTasks,
+  listMyEmployeeKpis,
   submitMyActivityReport,
   updateMyActivityEntry,
   extractProfilePhotoUrl,
@@ -85,6 +87,8 @@ const statusLabel: Record<string, string> = {
   DRAFT: "Draft",
   SUBMITTED: "Submitted",
   APPROVED: "Approved",
+  PENDING: "Pending review",
+  NOT_REQUIRED: "No review",
   RETURNED_FOR_CORRECTION: "Returned",
   REJECTED: "Rejected",
 }
@@ -129,6 +133,10 @@ function taskStatus(task: AdminRecord) {
 
 function taskPriority(task: AdminRecord) {
   return readString(task, ["priority"], "MEDIUM").toUpperCase()
+}
+
+function taskReviewStatus(task: AdminRecord) {
+  return readString(task, ["reviewStatus", "review_status"], "NOT_REQUIRED").toUpperCase()
 }
 
 function reportIdOf(row: AdminRecord | null | undefined) {
@@ -258,10 +266,12 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
   const [tasks, setTasks] = React.useState<AdminRecord[]>([])
   const [reports, setReports] = React.useState<AdminRecord[]>([])
   const [team, setTeam] = React.useState<AdminRecord[]>([])
+  const [employeeKpis, setEmployeeKpis] = React.useState<AdminRecord[]>([])
   const [selected, setSelected] = React.useState<AdminRecord | null>(null)
   const [query, setQuery] = React.useState("")
   const [statusFilter, setStatusFilter] = React.useState("ALL")
   const [priorityFilter, setPriorityFilter] = React.useState("ALL")
+  const [reviewFilter, setReviewFilter] = React.useState("ALL")
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [form, setForm] = React.useState<Record<string, string>>({ activity_date: today(), priority: "MEDIUM" })
@@ -279,6 +289,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
   const [previewSummary, setPreviewSummary] = React.useState("")
   const [previewEntryIds, setPreviewEntryIds] = React.useState<string[]>([])
   const [taskEditStatus, setTaskEditStatus] = React.useState("PLANNED")
+  const [taskOutcome, setTaskOutcome] = React.useState("")
   const [audience, setAudience] = React.useState<"employee" | "self">(mode === "manager" ? "employee" : "self")
   const [updatingChecklistId, setUpdatingChecklistId] = React.useState<string | null>(null)
   const [updatingTaskId, setUpdatingTaskId] = React.useState<string | null>(null)
@@ -296,9 +307,10 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
     setError(null)
     try {
       if (mode === "self") {
-        const [taskRows, reportRows] = await Promise.all([
+        const [taskRows, reportRows, kpiRows] = await Promise.all([
           listMyActivityTasks(accessToken, { limit: 100 }).catch(() => []),
           listMyActivities(accessToken, { limit: 100 }),
+          listMyEmployeeKpis(accessToken, { status: "APPROVED", limit: 100 }).catch(() => []),
         ])
         const fromReports = entriesFromReports(reportRows)
         const reportEntryById = new Map(fromReports.map((entry) => [entryIdOf(entry) || rowId(entry), entry]))
@@ -321,10 +333,12 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
         setTasks(mergedTasks)
         setReports(reportRows)
         setTeam([])
+        setEmployeeKpis(kpiRows)
       } else {
-        const [taskRows, teamRows] = await Promise.all([
+        const [taskRows, teamRows, kpiRows] = await Promise.all([
           listManagerActivityTasks(accessToken, { limit: 100 }).catch(() => []),
           listManagerActivityAssignees(accessToken).catch(() => []),
+          listManagerEmployeeKpis(accessToken, { status: "APPROVED", limit: 100 }).catch(() => []),
         ])
         setTasks(
           taskRows
@@ -332,6 +346,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
             .map((task) => ({ ...task, report_id: reportIdOf(task) })),
         )
         setTeam(teamRows)
+        setEmployeeKpis(kpiRows)
       }
     } catch (errorObject) {
       if (leaveIfForbidden(errorObject)) return
@@ -385,9 +400,10 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
     return source.filter((task) => {
       if (statusFilter !== "ALL" && taskStatus(task) !== statusFilter) return false
       if (priorityFilter !== "ALL" && taskPriority(task) !== priorityFilter) return false
+      if (reviewFilter !== "ALL" && taskReviewStatus(task) !== reviewFilter) return false
       return matchesQuery(task)
     })
-  }, [groupedTasks.today, groupedTasks.upcoming, historyReports, myEmployeeId, priorityFilter, query, statusFilter, tab, tasks])
+  }, [groupedTasks.today, groupedTasks.upcoming, historyReports, myEmployeeId, priorityFilter, query, reviewFilter, statusFilter, tab, tasks])
 
   const canAssign = team.length > 0
   const filteredTeam = React.useMemo(() => {
@@ -406,6 +422,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
           : await getManagerActivityReport(accessToken, reportId)
         if (task.is_report_row) {
           setSelected(asReportRow((report ?? task) as AdminRecord))
+          setTaskOutcome("")
           return
         }
         const wanted = entryIdOf(task)
@@ -436,6 +453,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
             }
         setSelected(detail)
         setTaskEditStatus(taskStatus(detail))
+        setTaskOutcome(readString(detail, ["outcome"]))
         return
       } catch {
         // Keep the grid row available when the detail request is unavailable.
@@ -443,6 +461,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
     }
     setSelected({ ...task, report_id: reportId })
     setTaskEditStatus(taskStatus(task))
+    setTaskOutcome(readString(task, ["outcome"]))
   }
 
   React.useEffect(() => {
@@ -516,12 +535,20 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
       if (existing && isClosedReportStatus(reportStatusOf(existing))) {
         throw new Error("That day is already closed. Pick another date.")
       }
+      const relatedKpi = employeeKpis.find((kpi) => rowId(kpi) === form.employee_kpi_id)
+      const canLinkRelatedKpi = Boolean(relatedKpi) && (
+        audience !== "employee" ||
+        (employeeIds.length === 1 && readString(relatedKpi, ["employeeId", "employee_id"]) === employeeIds[0])
+      )
       const taskPayload = {
         activity_date: targetDate,
         title: form.title.trim(),
         description: form.description.trim(),
         planned_start_time: `${targetDate}T09:00:00.000Z`,
         planned_end_time: form.due_date ? `${form.due_date}T17:00:00.000Z` : undefined,
+        due_date: form.due_date || undefined,
+        expected_result: form.expected_result?.trim() || undefined,
+        employee_kpi_id: canLinkRelatedKpi ? Number(form.employee_kpi_id) : undefined,
         priority: form.priority || "MEDIUM",
         checklist: checklistPayload(),
       }
@@ -621,9 +648,10 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
       await patchEntry(selected, {
         status: taskEditStatus,
         completion_percentage: taskEditStatus === "COMPLETED" ? 100 : taskEditStatus === "IN_PROGRESS" ? 50 : 0,
+        outcome: taskOutcome.trim() || undefined,
       })
       toast.success("Progress saved.")
-      setSelected((current) => current ? { ...current, status: taskEditStatus } : current)
+      setSelected((current) => current ? { ...current, status: taskEditStatus, outcome: taskOutcome.trim() || current.outcome } : current)
       await load()
     } catch (errorObject) {
       toast.error(errorObject instanceof Error ? errorObject.message : "Could not update task.")
@@ -829,6 +857,18 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                 <option value="IN_PROGRESS">In progress</option>
                 <option value="COMPLETED">Completed</option>
               </select>
+              <select
+                className="h-9 w-32 max-w-32 shrink-0 rounded-md border border-slate-300 bg-white px-2 text-sm text-foreground outline-none [field-sizing:fixed] focus-visible:ring-2 focus-visible:ring-ring/40 dark:border-border dark:bg-background"
+                value={reviewFilter}
+                onChange={(event) => setReviewFilter(event.target.value)}
+              >
+                <option value="ALL">Review status</option>
+                <option value="NOT_REQUIRED">No review</option>
+                <option value="PENDING">Pending</option>
+                <option value="APPROVED">Approved</option>
+                <option value="RETURNED">Returned</option>
+                <option value="REJECTED">Rejected</option>
+              </select>
             </>
           ) : null}
         </div>
@@ -857,7 +897,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
           <div className="hidden grid-cols-[minmax(120px,0.7fr)_minmax(180px,1.4fr)_88px] gap-2 border-b border-slate-200 bg-slate-50 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500 lg:grid">
             <span>Date</span>
             <span>Work on that day</span>
-            <span>Status</span>
+            <span>Work / review</span>
           </div>
         ) : (
           <div className="hidden grid-cols-[28px_minmax(160px,1.5fr)_minmax(120px,0.8fr)_88px_88px_72px_88px] gap-2 border-b border-slate-200 bg-slate-50 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500 lg:grid">
@@ -963,7 +1003,10 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                     <PriorityDot priority={priority} /> {priority.charAt(0) + priority.slice(1).toLowerCase()}
                   </button>
                   <button type="button" className="hidden lg:block" onClick={() => void openTask(task)}>
-                    <StatusPill value={status} />
+                    <span className="flex flex-col items-start gap-1">
+                      <StatusPill value={status} />
+                      {taskReviewStatus(task) !== "NOT_REQUIRED" ? <StatusPill value={taskReviewStatus(task)} /> : null}
+                    </span>
                   </button>
                 </div>
               )
@@ -1068,6 +1111,24 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                 <DatePickerPresets value={form.due_date ?? ""} onChange={(value) => setForm((current) => ({ ...current, due_date: value }))} placeholder="Select due date" />
               </label>
               <label className="grid gap-1.5 text-sm">
+                <span className="font-medium">Related KPI <span className="font-normal text-slate-500">(optional)</span></span>
+                <select className={inputClass} value={form.employee_kpi_id ?? ""} onChange={(event) => setForm((current) => ({ ...current, employee_kpi_id: event.target.value }))}>
+                  <option value="">No related KPI</option>
+                  {employeeKpis
+                    .filter((kpi) => {
+                      if (audience !== "employee") return true
+                      if (employeeIds.length !== 1) return false
+                      return readString(kpi, ["employeeId", "employee_id"]) === employeeIds[0]
+                    })
+                    .map((kpi) => (
+                      <option key={rowId(kpi)} value={rowId(kpi)}>{optionLabel(kpi)}</option>
+                    ))}
+                </select>
+                {audience === "employee" && employeeIds.length !== 1 ? (
+                  <span className="text-xs text-slate-500">Select one employee to link this task to a KPI.</span>
+                ) : null}
+              </label>
+              <label className="grid gap-1.5 text-sm">
                 <span className="font-medium">Priority</span>
                 <select className={inputClass} value={form.priority ?? "MEDIUM"} onChange={(event) => setForm((current) => ({ ...current, priority: event.target.value }))}>
                   <option value="LOW">Low</option>
@@ -1079,6 +1140,10 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
               <label className="grid gap-1.5 text-sm md:col-span-2">
                 <span className="font-medium">Notes</span>
                 <textarea className={`${inputClass} min-h-24 py-2`} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} placeholder="What should be delivered?" />
+              </label>
+              <label className="grid gap-1.5 text-sm md:col-span-2">
+                <span className="font-medium">Expected result <span className="font-normal text-slate-500">(optional)</span></span>
+                <textarea className={`${inputClass} min-h-20 py-2`} value={form.expected_result ?? ""} onChange={(event) => setForm((current) => ({ ...current, expected_result: event.target.value }))} placeholder="Describe the result that will count as complete." />
               </label>
               <div className="grid content-start gap-1.5 text-sm md:col-span-2">
                 <span className="font-medium">Checklist <span className="font-normal text-slate-500">(optional)</span></span>
@@ -1291,6 +1356,10 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                       Priority
                       <span className="flex h-10 items-center gap-1.5 text-sm font-medium text-slate-800"><PriorityDot priority={taskPriority(selected)} /> {taskPriority(selected).charAt(0) + taskPriority(selected).slice(1).toLowerCase()}</span>
                     </label>
+                    <div className="grid gap-1 text-xs font-medium text-slate-500">
+                      Review status
+                      <span className="flex h-10 items-center"><StatusPill value={taskReviewStatus(selected)} /></span>
+                    </div>
                     {plannedStartDateOf(selected) ? (
                       <div className="grid gap-1 text-xs font-medium text-slate-500">
                         Start date
@@ -1307,7 +1376,20 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                     )}
                   </div>
                   {mode === "self" && canEditTask(selected) ? (
-                    <button type="button" className={secondaryButtonClass} onClick={() => void updateTaskStatus()}>Save progress</button>
+                    <div className="space-y-3">
+                      <label className="grid gap-1.5 text-sm">
+                        <span className="font-medium">Outcome / actual result</span>
+                        <textarea className={`${inputClass} min-h-20 py-2`} value={taskOutcome} onChange={(event) => setTaskOutcome(event.target.value)} placeholder="Describe what was delivered, especially before marking the activity complete." />
+                      </label>
+                      <button type="button" className={secondaryButtonClass} onClick={() => void updateTaskStatus()}>Save progress</button>
+                    </div>
+                  ) : null}
+
+                  {mode !== "self" && readString(selected, ["outcome"]) ? (
+                    <div>
+                      <h3 className="mb-1 text-sm font-semibold">Outcome / actual result</h3>
+                      <p className="text-sm leading-6 text-slate-600">{readString(selected, ["outcome"])}</p>
+                    </div>
                   ) : null}
 
                   <div>
@@ -1341,6 +1423,22 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                     <h3 className="mb-1 text-sm font-semibold">Notes</h3>
                     <p className="text-sm leading-6 text-slate-600">{readString(selected, ["description"], "No notes")}</p>
                   </div>
+
+                  {readString(selected, ["expectedResult", "expected_result"]) ? (
+                    <div>
+                      <h3 className="mb-1 text-sm font-semibold">Expected result</h3>
+                      <p className="text-sm leading-6 text-slate-600">{readString(selected, ["expectedResult", "expected_result"])}</p>
+                    </div>
+                  ) : null}
+
+                  {readString(selected, ["employeeKpiId", "employee_kpi_id"]) ? (
+                    <div>
+                      <h3 className="mb-1 text-sm font-semibold">Related KPI</h3>
+                      <p className="text-sm leading-6 text-slate-600">
+                        {optionLabel(employeeKpis.find((kpi) => rowId(kpi) === readString(selected, ["employeeKpiId", "employee_kpi_id"])) ?? {})}
+                      </p>
+                    </div>
+                  ) : null}
 
                   <div>
                     <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold"><MessageSquareIcon className="size-4 text-sky-700" /> Activity</h3>
