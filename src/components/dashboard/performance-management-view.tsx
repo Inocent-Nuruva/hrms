@@ -46,8 +46,10 @@ import {
 } from "@/components/animate-ui/components/base/dialog"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import {
+  activatePerformancePeriod,
   approvePerformanceReview,
   calculatePerformanceAggregates,
+  closePerformancePeriod,
   closePerformanceImprovementPlan,
   createPerformanceCompetencyTemplate,
   createPerformanceFinancialYear,
@@ -56,6 +58,7 @@ import {
   createPerformanceKpiRule,
   createPerformanceKpiTemplate,
   createPerformanceKpiVersion,
+  createPerformancePeriod,
   createPerformancePeriodAssignments,
   createPerformancePlan,
   createPerformanceRatingScale,
@@ -96,6 +99,7 @@ type SetupTab =
 
 type CreateMode =
   | "year"
+  | "period"
   | "kpi"
   | "kpi-version"
   | "template"
@@ -171,6 +175,7 @@ const DATA_SOURCES = [
 ] as const
 
 const FREQUENCIES = ["MONTHLY", "QUARTERLY", "HALF_YEARLY", "ANNUAL"] as const
+const PERIOD_TYPES = ["MONTHLY", "QUARTERLY", "HALF_YEARLY", "ANNUAL"] as const
 
 function readStoredToken() {
   return readStoredSessionTokens().accessToken.trim()
@@ -251,7 +256,20 @@ export function PerformanceManagementView({
     actor.ready &&
     canAccessDashboardRoute("/dashboard/performance/overview", actor.permissionLabels, actor.accessMode)
   const canCreatePerformance = canPerformPermission(actor.permissionLabels, {
-    permissions: ["performance:create", "performance:update", "manage_performance"],
+    permissions: [
+      "performance:create",
+      "performance:update",
+      "performance_periods:create",
+      "manage_performance",
+    ],
+    mode: "any",
+  })
+  const canActivatePeriod = canPerformPermission(actor.permissionLabels, {
+    permissions: ["performance_periods:activate", "performance:update", "manage_performance"],
+    mode: "any",
+  })
+  const canClosePeriod = canPerformPermission(actor.permissionLabels, {
+    permissions: ["performance_periods:close", "performance:update", "manage_performance"],
     mode: "any",
   })
   const canModerateReviews = canPerformPermission(actor.permissionLabels, {
@@ -427,7 +445,11 @@ export function PerformanceManagementView({
 
   function openCreate(mode: CreateMode, seed: Record<string, string> = {}) {
     setCreateMode(mode)
-    setForm(seed)
+    setForm(
+      mode === "period"
+        ? { period_type: "MONTHLY", sequence_number: "1", ...seed }
+        : seed,
+    )
     setFormError(null)
     setCreateOpen(true)
   }
@@ -466,6 +488,19 @@ export function PerformanceManagementView({
           start_date: form.start_date,
           end_date: form.end_date,
           annual_aggregation_method: form.annual_aggregation_method || undefined,
+        })
+      } else if (createMode === "period") {
+        if (!form.financial_year_id || !form.name || !form.period_type || !form.sequence_number || !form.start_date || !form.end_date) {
+          throw new Error("Year, name, type, sequence, start date, and end date are required.")
+        }
+        await createPerformancePeriod(token, {
+          financial_year_id: Number(form.financial_year_id),
+          name: form.name,
+          description: form.description || undefined,
+          period_type: form.period_type,
+          sequence_number: Number(form.sequence_number),
+          start_date: form.start_date,
+          end_date: form.end_date,
         })
       } else if (createMode === "kpi" || createMode === "kpi-version") {
         if (!form.code || !form.name || !form.description || !form.measurement_unit) {
@@ -750,8 +785,35 @@ export function PerformanceManagementView({
           label: "Actions",
           render: (row) => {
             const id = rowId(row)
+            const status = readString(row, ["status"], "DRAFT")
             return (
               <div className="flex flex-wrap gap-1">
+                {canActivatePeriod && status === "DRAFT" ? (
+                  <button
+                    type="button"
+                    className={actionButtonClass}
+                    disabled={busyId === `activate-${id}`}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      void runAction(`activate-${id}`, (token) => activatePerformancePeriod(token, id), "Performance period activated.")
+                    }}
+                  >
+                    {busyId === `activate-${id}` ? <Loader2Icon className="size-3.5 animate-spin" /> : "Activate"}
+                  </button>
+                ) : null}
+                {canClosePeriod && !["DRAFT", "LOCKED", "CANCELLED"].includes(status) ? (
+                  <button
+                    type="button"
+                    className={actionButtonClass}
+                    disabled={busyId === `close-period-${id}`}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      void runAction(`close-period-${id}`, (token) => closePerformancePeriod(token, id), "Performance period closed.")
+                    }}
+                  >
+                    {busyId === `close-period-${id}` ? <Loader2Icon className="size-3.5 animate-spin" /> : "Close"}
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className={actionButtonClass}
@@ -987,11 +1049,13 @@ export function PerformanceManagementView({
         render: (row) => formatDate(row.updatedAt ?? row.updated_at),
       },
     ]
-  }, [activeTab, busyId, setupTab])
+  }, [activeTab, busyId, canActivatePeriod, canClosePeriod, setupTab])
 
   const createLabel =
     createMode === "year"
       ? "New financial year"
+      : createMode === "period"
+        ? "New performance period"
       : createMode === "kpi"
         ? "New KPI"
         : createMode === "kpi-version"
@@ -1123,6 +1187,8 @@ export function PerformanceManagementView({
                     openCreate(
                       setupTab === "years"
                         ? "year"
+                        : setupTab === "periods"
+                          ? "period"
                         : setupTab === "kpis"
                           ? "kpi"
                           : setupTab === "templates"
@@ -1136,7 +1202,6 @@ export function PerformanceManagementView({
                                   : "year",
                     )
                   }
-                  disabled={setupTab === "periods"}
                 >
                   <PlusIcon className="size-4" />
                   New
@@ -1248,6 +1313,26 @@ export function PerformanceManagementView({
                     ))}
                   </select>
                 </Field>
+              </>
+            ) : null}
+            {createMode === "period" ? (
+              <>
+                <Field label="Financial year">
+                  <select className={inputClass} value={form.financial_year_id ?? ""} onChange={(event) => setForm((current) => ({ ...current, financial_year_id: event.target.value }))}>
+                    <option value="">Select financial year</option>
+                    {years.map((year) => <option key={rowId(year)} value={rowId(year)}>{optionLabel(year)}</option>)}
+                  </select>
+                </Field>
+                <Field label="Name"><input className={inputClass} value={form.name ?? ""} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} /></Field>
+                <Field label="Description"><textarea className={textareaClass} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></Field>
+                <Field label="Period type">
+                  <select className={inputClass} value={form.period_type ?? "MONTHLY"} onChange={(event) => setForm((current) => ({ ...current, period_type: event.target.value }))}>
+                    {PERIOD_TYPES.map((item) => <option key={item} value={item}>{prettify(item)}</option>)}
+                  </select>
+                </Field>
+                <Field label="Sequence"><input type="number" min="1" className={inputClass} value={form.sequence_number ?? ""} onChange={(event) => setForm((current) => ({ ...current, sequence_number: event.target.value }))} /></Field>
+                <Field label="Start date"><input type="date" className={inputClass} value={form.start_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, start_date: event.target.value }))} /></Field>
+                <Field label="End date"><input type="date" className={inputClass} value={form.end_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, end_date: event.target.value }))} /></Field>
               </>
             ) : null}
             {createMode === "kpi" || createMode === "kpi-version" ? (

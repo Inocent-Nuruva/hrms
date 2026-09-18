@@ -4,6 +4,7 @@ import {
   PerformanceSelfView,
   type PerformanceSelfTab,
 } from "@/components/dashboard/performance-self-view"
+import { EmployeeKpiWorkspace } from "@/components/dashboard/employee-kpi-workspace"
 
 const ALLOWED_VIEWS = new Set<PerformanceSelfTab>([
   "overview",
@@ -25,6 +26,15 @@ export default async function SelfPerformanceViewPage({
   params,
 }: SelfPerformanceViewPageProps) {
   const { view } = await params
+
+  if (view?.toLowerCase() === "kpis") {
+    return <EmployeeKpiWorkspace mode="self" />
+  }
+
+  if (view?.toLowerCase() === "kpi-reviews") {
+    return <EmployeeKpiWorkspace mode="manager" />
+  }
+
   const normalized = view?.toLowerCase() as PerformanceSelfTab
 
   if (normalized === "assign-tasks") {

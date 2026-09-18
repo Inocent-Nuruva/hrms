@@ -15359,6 +15359,40 @@ export async function listPerformancePeriods(token: string) {
   return normalizeList(payload);
 }
 
+export async function createPerformancePeriod(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/performance/periods", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function updatePerformancePeriod(
+  token: string,
+  periodId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/performance/periods/${periodId}`, {
+    method: "PATCH",
+    token,
+    body: data,
+  });
+}
+
+export async function activatePerformancePeriod(token: string, periodId: string | number) {
+  return adminRequest<unknown>(`/api/performance/periods/${periodId}/activate`, {
+    method: "POST",
+    token,
+  });
+}
+
+export async function closePerformancePeriod(token: string, periodId: string | number) {
+  return adminRequest<unknown>(`/api/performance/periods/${periodId}/close`, {
+    method: "POST",
+    token,
+  });
+}
+
 export async function createPerformancePeriodAssignments(
   token: string,
   periodId: string | number,
@@ -15609,6 +15643,92 @@ export async function getMyPerformanceSummary(token: string) {
     token,
   });
   return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+function buildEmployeeKpiQuery(params: AdminRecord = {}) {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") {
+      query.set(key, String(value));
+    }
+  });
+  const value = query.toString();
+  return value ? `?${value}` : "";
+}
+
+export async function listMyEmployeeKpis(token: string, params: AdminRecord = {}) {
+  const payload = await adminRequest<unknown>(
+    `/api/performance/me/kpis${buildEmployeeKpiQuery(params)}`,
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function createMyEmployeeKpi(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/performance/me/kpis", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function updateMyEmployeeKpi(
+  token: string,
+  kpiId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/performance/me/kpis/${kpiId}`, {
+    method: "PATCH",
+    token,
+    body: data,
+  });
+}
+
+export async function submitMyEmployeeKpis(token: string, periodId: string | number) {
+  return adminRequest<unknown>(
+    `/api/performance/me/kpis/periods/${periodId}/submit`,
+    { method: "POST", token },
+  );
+}
+
+export async function updateMyEmployeeKpiActual(
+  token: string,
+  kpiId: string | number,
+  actualValue: number,
+) {
+  return adminRequest<unknown>(`/api/performance/me/kpis/${kpiId}/actual`, {
+    method: "PATCH",
+    token,
+    body: { actual_value: actualValue },
+  });
+}
+
+export async function listManagerEmployeeKpis(token: string, params: AdminRecord = {}) {
+  const payload = await adminRequest<unknown>(
+    `/api/performance/manager/kpis${buildEmployeeKpiQuery(params)}`,
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function beginManagerEmployeeKpiReview(token: string, kpiId: string | number) {
+  return adminRequest<unknown>(
+    `/api/performance/manager/kpis/${kpiId}/begin-review`,
+    { method: "POST", token },
+  );
+}
+
+export async function reviewManagerEmployeeKpi(
+  token: string,
+  kpiId: string | number,
+  decision: "APPROVE" | "RETURN" | "REJECT",
+  comment?: string,
+) {
+  return adminRequest<unknown>(`/api/performance/manager/kpis/${kpiId}/review`, {
+    method: "POST",
+    token,
+    body: { decision, comment },
+  });
 }
 
 export async function listMyPerformanceAssignments(token: string) {
