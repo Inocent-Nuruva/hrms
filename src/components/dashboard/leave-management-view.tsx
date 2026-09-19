@@ -1240,7 +1240,9 @@ export function LeaveManagementView({
   const [currentActor, setCurrentActor] = React.useState<LeaveActor | null>(null)
   const [cancelReason, setCancelReason] = React.useState("Cancelled by admin")
   const [leaveMedicalForm, setLeaveMedicalForm] = React.useState(createEmptyLeaveMedicalForm)
+  const [leaveMedicalAttachmentFile, setLeaveMedicalAttachmentFile] = React.useState<File | null>(null)
   const [leaveDocumentFile, setLeaveDocumentFile] = React.useState<File | null>(null)
+  const leaveMedicalAttachmentInputRef = React.useRef<HTMLInputElement>(null)
   const [selectedWorkflowId, setSelectedWorkflowId] = React.useState("")
   const [holidayImportCountry, setHolidayImportCountry] = React.useState<HolidayImportCountryCode>("TZ")
   const [holidayImportYear, setHolidayImportYear] = React.useState(String(new Date().getFullYear()))
@@ -1371,6 +1373,10 @@ export function LeaveManagementView({
 
   React.useEffect(() => {
     hydrateLeaveMedicalForm(selectedLeaveRequestRow)
+    setLeaveMedicalAttachmentFile(null)
+    if (leaveMedicalAttachmentInputRef.current) {
+      leaveMedicalAttachmentInputRef.current.value = ""
+    }
     setLeaveDocumentFile(null)
   }, [hydrateLeaveMedicalForm, selectedLeaveRequestRow])
 
@@ -3484,6 +3490,22 @@ export function LeaveManagementView({
 
     setSaving(true)
     try {
+      let attachmentUrl = leaveMedicalForm.attachment_url.trim()
+      if (leaveMedicalAttachmentFile) {
+        const file = await fileToBase64UploadDto(leaveMedicalAttachmentFile)
+        const uploadedDocument = asRecord(
+          await addLeaveRequestDocument(token, id, { file })
+        )
+        attachmentUrl = uploadedDocument ? readString(uploadedDocument, ["file_url"]) : ""
+        if (!attachmentUrl) {
+          throw new Error("The attachment was uploaded, but its file reference was not returned.")
+        }
+        setLeaveMedicalForm((current) => ({ ...current, attachment_url: attachmentUrl }))
+        setLeaveMedicalAttachmentFile(null)
+        if (leaveMedicalAttachmentInputRef.current) {
+          leaveMedicalAttachmentInputRef.current.value = ""
+        }
+      }
       await patchLeaveRequestMedicalDetail(token, id, {
         sickness_nature: leaveMedicalForm.sickness_nature.trim() || undefined,
         doctor_name: leaveMedicalForm.doctor_name.trim() || undefined,
@@ -3491,7 +3513,7 @@ export function LeaveManagementView({
         hospital_name: leaveMedicalForm.hospital_name.trim() || undefined,
         treatment_start_date: leaveMedicalForm.treatment_start_date || undefined,
         treatment_end_date: leaveMedicalForm.treatment_end_date || undefined,
-        attachment_url: leaveMedicalForm.attachment_url.trim() || undefined,
+        attachment_url: attachmentUrl || undefined,
       })
       await refreshLeaveRequestDetail(row)
       showSuccessAlert("Medical detail saved.")
@@ -4202,7 +4224,7 @@ export function LeaveManagementView({
                       <div>
                         <p className="text-sm font-medium text-foreground">Medical detail</p>
                         <p className="text-[11px] text-muted-foreground">
-                          Save treatment details and any medical attachment URL returned by your document store.
+                          Save treatment details and upload a supporting medical attachment.
                         </p>
                       </div>
                       <button
@@ -4269,45 +4291,48 @@ export function LeaveManagementView({
                       </div>
                       <div className="space-y-1">
                         <p className="text-xs font-medium text-slate-600">Treatment start</p>
-                        <input
-                          type="date"
-                          className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                        <DatePickerPresets
                           value={leaveMedicalForm.treatment_start_date}
-                          onChange={(event) =>
+                          placeholder="Select treatment start"
+                          onChange={(value) =>
                             setLeaveMedicalForm((current) => ({
                               ...current,
-                              treatment_start_date: event.target.value,
+                              treatment_start_date: value,
                             }))
                           }
                         />
                       </div>
                       <div className="space-y-1">
                         <p className="text-xs font-medium text-slate-600">Treatment end</p>
-                        <input
-                          type="date"
-                          className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                        <DatePickerPresets
                           value={leaveMedicalForm.treatment_end_date}
-                          onChange={(event) =>
+                          placeholder="Select treatment end"
+                          onChange={(value) =>
                             setLeaveMedicalForm((current) => ({
                               ...current,
-                              treatment_end_date: event.target.value,
+                              treatment_end_date: value,
                             }))
                           }
                         />
                       </div>
                       <div className="space-y-1 sm:col-span-2">
-                        <p className="text-xs font-medium text-slate-600">Attachment URL</p>
+                        <p className="text-xs font-medium text-slate-600">Medical attachment</p>
                         <input
-                          className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
-                          placeholder="https://..."
-                          value={leaveMedicalForm.attachment_url}
+                          ref={leaveMedicalAttachmentInputRef}
+                          type="file"
+                          accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx,.txt"
+                          className="block w-full rounded-md border border-slate-300 px-3 py-2 text-xs text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-900 file:px-3 file:py-2 file:text-xs file:font-medium file:text-white"
                           onChange={(event) =>
-                            setLeaveMedicalForm((current) => ({
-                              ...current,
-                              attachment_url: event.target.value,
-                            }))
+                            setLeaveMedicalAttachmentFile(event.target.files?.[0] ?? null)
                           }
                         />
+                        <p className="text-[11px] text-muted-foreground">
+                          {leaveMedicalAttachmentFile
+                            ? `Ready to upload when you save: ${leaveMedicalAttachmentFile.name}`
+                            : leaveMedicalForm.attachment_url
+                              ? "A medical attachment is already saved. Choose another file to replace it."
+                              : "Choose a PDF, image, Word, Excel, or text file (up to 10 MB)."}
+                        </p>
                       </div>
                     </div>
                   </div>
