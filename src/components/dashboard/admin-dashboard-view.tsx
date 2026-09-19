@@ -1366,6 +1366,13 @@ export default function AdminDashboardView({
     }
 
     if (
+      currentPath === "/dashboard/performance" ||
+      currentPath.startsWith("/dashboard/performance/")
+    ) {
+      return;
+    }
+
+    if (
       !canAccessDashboardRoute(
         currentPath,
         effectivePermissionLabels,

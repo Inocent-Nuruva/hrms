@@ -88,6 +88,26 @@ describe("forbidden route memory", () => {
     ).toBe("/dashboard/structure/cost-centers")
   })
 
+  it("does not bounce HR performance setup after a catalogue 403", () => {
+    stubSession()
+    rememberForbiddenRoute("/dashboard/performance/setup")
+    expect(isRememberedForbiddenRoute("/dashboard/performance/setup")).toBe(false)
+    expect(
+      canSeeDashboardPage(
+        "/dashboard/performance/setup",
+        ["view_company_dashboard"],
+        "admin",
+      ),
+    ).toBe(true)
+    expect(
+      canSeeDashboardPage(
+        "/dashboard/performance/setup",
+        ["view_company_dashboard"],
+        "employee",
+      ),
+    ).toBe(true)
+  })
+
   it("does not hide My pages after an API permission error", () => {
     stubSession()
     rememberForbiddenRoute("/dashboard/me/performance")
@@ -140,7 +160,10 @@ describe("forbidden route memory", () => {
     expect(canSeeDashboardPage("/dashboard/performance/overview", ["performance:read"], "employee")).toBe(false)
     expect(
       firstVisibleSiblingOrHome("/dashboard/performance/overview", ["performance:read"], "employee"),
-    ).toBe("/dashboard/me/performance/overview")
+    ).toBe("/dashboard/performance/overview")
+    expect(
+      firstVisibleSiblingOrHome("/dashboard/performance/setup", ["performance:read"], "employee"),
+    ).toBe("/dashboard/performance/overview")
     expect(canAccessDashboardRoute("/dashboard/probation/cases", ["probation:read"], "employee")).toBe(false)
     expect(
       firstVisibleSiblingOrHome("/dashboard/probation/cases", ["probation:read"], "employee"),

@@ -21,7 +21,7 @@ export const FORBIDDEN_ROUTES_EVENT = "hrms:forbidden-routes-changed"
 // Version the learned-denial cache whenever route permission semantics change.
 // Otherwise a route denied under an older frontend policy stays hidden even
 // after a newly supported backend permission has been granted.
-const STORAGE_KEY = "hrms.forbiddenRoutes.v2"
+const STORAGE_KEY = "hrms.forbiddenRoutes.v3"
 const CONFIRMED_STORAGE_KEY = "hrms.confirmedPlatformRoutes"
 
 // Attendance download still works without analytics grants. A 403 from
@@ -34,6 +34,12 @@ const DO_NOT_REMEMBER = new Set([
   "/dashboard/sms/overview",
   "/dashboard/sms/registry",
   "/dashboard/sms/logs",
+  "/dashboard/performance",
+  "/dashboard/performance/overview",
+  "/dashboard/performance/setup",
+  "/dashboard/performance/plans",
+  "/dashboard/performance/reviews",
+  "/dashboard/performance/improvement",
 ])
 
 function shouldRememberForbiddenRoute(url: string) {
@@ -232,6 +238,9 @@ export function firstVisibleSiblingOrHome(
       canSeeDashboardPage(item.url, permissionLabels, accessMode),
     )
     if (visible) return visible.url
+  }
+  if (path === "/dashboard/performance" || path.startsWith("/dashboard/performance/")) {
+    return "/dashboard/performance/overview"
   }
   if (accessMode === "employee") {
     return selfServiceHomeFor(path) ?? "/dashboard"

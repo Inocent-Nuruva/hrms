@@ -56,7 +56,7 @@ describe("dashboard access snapshots", () => {
       ready: true,
       version: 1,
     })
-    sessionStore.set("hrms.forbiddenRoutes.v2", JSON.stringify(["/dashboard/payroll"]))
+    sessionStore.set("hrms.forbiddenRoutes.v3", JSON.stringify(["/dashboard/payroll"]))
     sessionStore.set(
       "hrms.confirmedPlatformRoutes",
       JSON.stringify(["/dashboard/companies"]),
@@ -72,7 +72,7 @@ describe("dashboard access snapshots", () => {
       version: 2,
     })
 
-    expect(sessionStore.has("hrms.forbiddenRoutes.v2")).toBe(false)
+    expect(sessionStore.has("hrms.forbiddenRoutes.v3")).toBe(false)
     expect(sessionStore.has("hrms.confirmedPlatformRoutes")).toBe(false)
   })
 

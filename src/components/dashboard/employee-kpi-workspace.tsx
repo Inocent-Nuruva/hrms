@@ -27,6 +27,7 @@ import {
   employeeLabel,
   formatDate,
   inputClass,
+  isPermissionError,
   optionLabel,
   primaryButtonClass,
   readNumber,
@@ -39,14 +40,32 @@ import {
   createMyEmployeeKpi,
   listManagerEmployeeKpis,
   listMyEmployeeKpis,
-  listPerformancePeriods,
+  listMyPerformanceAssignments,
   reviewManagerEmployeeKpi,
   submitMyEmployeeKpis,
   updateMyEmployeeKpi,
   updateMyEmployeeKpiActual,
   type AdminRecord,
 } from "@/lib/admin-api";
+import {
+  canProposeEmployeeKpis,
+  collectEmployeeKpiPeriods,
+  employeeKpiPeriodId,
+  firstWritableEmployeeKpiPeriod,
+} from "@/lib/employee-kpi-periods";
+import { forgetForbiddenRoute } from "@/lib/forbidden-routes";
 import { readStoredSessionTokens } from "@/lib/session-client";
+
+async function loadSelfServiceList(
+  loader: () => Promise<AdminRecord[]>,
+): Promise<AdminRecord[]> {
+  try {
+    return await loader();
+  } catch (error) {
+    if (isPermissionError(error)) return [];
+    throw error;
+  }
+}
 
 type WorkspaceMode = "self" | "manager";
 type DialogMode = "create" | "edit" | "actual" | "review";
@@ -91,16 +110,21 @@ export function EmployeeKpiWorkspace({ mode }: { mode: WorkspaceMode }) {
       if (mode === "manager") {
         setRows(await listManagerEmployeeKpis(accessToken, { limit: 100 }));
       } else {
-        const [kpis, allPeriods] = await Promise.all([
-          listMyEmployeeKpis(accessToken, { limit: 100 }),
-          listPerformancePeriods(accessToken),
+        const [kpis, assignments] = await Promise.all([
+          loadSelfServiceList(() => listMyEmployeeKpis(accessToken)),
+          loadSelfServiceList(() => listMyPerformanceAssignments(accessToken)),
         ]);
+        const allPeriods = collectEmployeeKpiPeriods([...assignments, ...kpis]);
         setRows(kpis);
         setPeriods(allPeriods);
-        const openPeriod = allPeriods.find(
-          (period) => readString(period, ["status"]) === "OPEN",
+        const writablePeriod = firstWritableEmployeeKpiPeriod(allPeriods);
+        setPeriodId(
+          (current) =>
+            current ||
+            employeeKpiPeriodId(writablePeriod) ||
+            employeeKpiPeriodId(allPeriods[0]) ||
+            "",
         );
-        setPeriodId((current) => current || rowId(openPeriod ?? {}) || "");
       }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not load KPIs.");
@@ -108,6 +132,10 @@ export function EmployeeKpiWorkspace({ mode }: { mode: WorkspaceMode }) {
       setLoading(false);
     }
   }, [mode]);
+
+  React.useEffect(() => {
+    forgetForbiddenRoute("/dashboard/me/performance/kpis");
+  }, []);
 
   React.useEffect(() => {
     void load();
@@ -141,11 +169,23 @@ export function EmployeeKpiWorkspace({ mode }: { mode: WorkspaceMode }) {
     0,
   );
 
+  const selectedPeriod =
+    periods.find((period) => employeeKpiPeriodId(period) === periodId) ?? null;
+  const writablePeriod =
+    (canProposeEmployeeKpis(selectedPeriod) ? selectedPeriod : null) ??
+    firstWritableEmployeeKpiPeriod(periods);
+  const canCreateKpi = Boolean(writablePeriod);
+
   function showCreate() {
+    const nextPeriodId =
+      employeeKpiPeriodId(writablePeriod) || periodId;
+    if (nextPeriodId && nextPeriodId !== periodId) {
+      setPeriodId(nextPeriodId);
+    }
     setSelected(null);
     setDialogMode("create");
     setForm({
-      performance_period_id: periodId,
+      performance_period_id: nextPeriodId,
       measurement_type: "PERCENTAGE",
       progress_source: "MANUAL",
       weight: "",
@@ -461,13 +501,7 @@ export function EmployeeKpiWorkspace({ mode }: { mode: WorkspaceMode }) {
                 type="button"
                 className={primaryButtonClass}
                 onClick={showCreate}
-                disabled={
-                  !periodId ||
-                  readString(
-                    periods.find((period) => rowId(period) === periodId) ?? {},
-                    ["status"],
-                  ) !== "OPEN"
-                }
+                disabled={!canCreateKpi}
               >
                 <PlusIcon className="size-4" /> New KPI
               </button>
@@ -599,6 +633,33 @@ export function EmployeeKpiWorkspace({ mode }: { mode: WorkspaceMode }) {
             </label>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2">
+              {dialogMode === "create" ? (
+                <label className="grid gap-1.5 text-sm sm:col-span-2">
+                  <span className="font-medium">Period</span>
+                  <select
+                    className={inputClass}
+                    value={form.performance_period_id ?? ""}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        performance_period_id: event.target.value,
+                      }))
+                    }
+                  >
+                    {periods.filter(canProposeEmployeeKpis).map((period) => (
+                      <option
+                        key={employeeKpiPeriodId(period)}
+                        value={employeeKpiPeriodId(period)}
+                      >
+                        {optionLabel(period)}
+                        {readString(period, ["status"])
+                          ? ` · ${readString(period, ["status"])}`
+                          : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
               <label className="grid gap-1.5 text-sm sm:col-span-2">
                 <span className="font-medium">Title</span>
                 <input
