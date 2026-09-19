@@ -8,6 +8,7 @@ readonly DOMAIN='hrms.alliance.co.tz'
 readonly APP_PORT='8880'
 readonly HEALTH_PATH='/api/health/ready'
 readonly APP_HEALTH_URL="http://127.0.0.1:${APP_PORT}${HEALTH_PATH}"
+readonly LOCAL_NGINX_HEALTH_URL="http://127.0.0.1${HEALTH_PATH}"
 readonly PUBLIC_HTTP_URL="http://${DOMAIN}${HEALTH_PATH}"
 readonly PUBLIC_HTTPS_URL="https://${DOMAIN}${HEALTH_PATH}"
 readonly SITE_NAME='hrms.alliance.co.tz'
@@ -77,7 +78,7 @@ site_has_expected_base() {
 
 print_status() {
   log "Frontend PM2 target: 127.0.0.1:${APP_PORT}"
-  if curl --fail --silent --show-error --connect-timeout 3 --max-time 10 "$APP_HEALTH_URL" >/dev/null; then
+  if curl --noproxy '*' --fail --silent --show-error --connect-timeout 3 --max-time 10 "$APP_HEALTH_URL" >/dev/null; then
     log 'Frontend port 8880 status: ready'
   else
     warn 'Frontend port 8880 status: unavailable'
@@ -142,7 +143,7 @@ for enabled_site in /etc/nginx/sites-enabled/*; do
   fi
 done
 
-curl --fail --silent --show-error --connect-timeout 3 --max-time 10 "$APP_HEALTH_URL" >/dev/null || {
+curl --noproxy '*' --fail --silent --show-error --connect-timeout 3 --max-time 10 "$APP_HEALTH_URL" >/dev/null || {
   die "Production frontend is not healthy at ${APP_HEALTH_URL}; Nginx was not changed."
 }
 log 'Production frontend local health check passed.'
@@ -223,8 +224,11 @@ else
 fi
 log 'Nginx configuration is valid and the service is active.'
 
-curl --fail --silent --show-error --connect-timeout 3 --max-time 10 \
-  --resolve "${DOMAIN}:80:127.0.0.1" "$PUBLIC_HTTP_URL" >/dev/null || {
+curl --noproxy '*' --fail --silent --show-error --connect-timeout 3 --max-time 10 \
+  --header "Host: ${DOMAIN}" "$LOCAL_NGINX_HEALTH_URL" >/dev/null || {
+    warn "Local probe details for ${LOCAL_NGINX_HEALTH_URL} with Host ${DOMAIN}:"
+    curl --noproxy '*' --silent --show-error --include --connect-timeout 3 --max-time 10 \
+      --header "Host: ${DOMAIN}" "$LOCAL_NGINX_HEALTH_URL" >&2 || true
     restore_site
     die 'The local Nginx reverse-proxy health check failed; the previous site was restored.'
   }
@@ -288,7 +292,7 @@ else
     print_status
     exit 0
   fi
-  if ! curl --fail --silent --show-error --connect-timeout 5 --max-time 20 "$PUBLIC_HTTP_URL" >/dev/null; then
+  if ! curl --noproxy '*' --fail --silent --show-error --connect-timeout 5 --max-time 20 "$PUBLIC_HTTP_URL" >/dev/null; then
     printf '%s\n' "$expected_hash" > "$TEMPLATE_HASH_FILE"
     ssl_failure 'SSL certificate issuance skipped because public HTTP is not reachable from this server. Verify DNS, NAT, firewall, and ports 80/443.'
     print_status
@@ -350,7 +354,7 @@ else
 fi
 
 certbot certificates || true
-if ! curl --fail --silent --show-error --location --connect-timeout 5 --max-time 30 "$PUBLIC_HTTPS_URL" >/dev/null; then
+if ! curl --noproxy '*' --fail --silent --show-error --location --connect-timeout 5 --max-time 30 "$PUBLIC_HTTPS_URL" >/dev/null; then
   ssl_failure "Domain health check failed at ${PUBLIC_HTTPS_URL}. Verify public DNS and ports 80/443."
 else
   log "Domain health-check result: ${PUBLIC_HTTPS_URL} is ready."

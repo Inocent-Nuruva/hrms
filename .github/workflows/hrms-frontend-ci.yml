@@ -224,7 +224,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           [[ "$APP_PORT" == 8880 ]]
-          curl --fail --silent --show-error "$HEALTH_URL" >/dev/null
+          curl --noproxy '*' --fail --silent --show-error "$HEALTH_URL" >/dev/null
           pm2 status "$PM2_APP_NAME"
           [[ -x /usr/local/sbin/hrms-frontend-edge ]] || {
             echo "Missing /usr/local/sbin/hrms-frontend-edge. The setup bundle is available at $BASE_DIR/current/deploy/hrms-frontend/server-setup.sh and must be run once as root." >&2
@@ -240,7 +240,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          curl --fail --silent --show-error "$HEALTH_URL" >/dev/null
+          curl --noproxy '*' --fail --silent --show-error "$HEALTH_URL" >/dev/null
           pm2 status "$PM2_APP_NAME"
           [[ "$(readlink -f "$BASE_DIR/current")" == "$BASE_DIR/releases/$GITHUB_SHA" ]]
           if [[ "$APP_ENV" == production ]]; then
