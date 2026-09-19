@@ -71,7 +71,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          for file in package.json package-lock.json next.config.ts deploy/hrms-frontend/deploy.sh deploy/hrms-frontend/stage-release.sh deploy/hrms-frontend/rollback.sh deploy/hrms-frontend/server-setup.sh deploy/hrms-frontend/ecosystem.config.js; do
+          for file in package.json package-lock.json next.config.ts deploy/hrms-frontend/deploy.sh deploy/hrms-frontend/stage-release.sh deploy/hrms-frontend/rollback.sh deploy/hrms-frontend/server-setup.sh deploy/hrms-frontend/production-edge.sh deploy/hrms-frontend/nginx/hrms.alliance.co.tz.conf deploy/hrms-frontend/ecosystem.config.js; do
             [[ -f "$file" ]] || { echo "Required file missing: $file"; exit 1; }
           done
           for file in deploy/hrms-frontend/*.sh; do
@@ -79,6 +79,8 @@ jobs:
             bash -n "$file"
           done
           node --check deploy/hrms-frontend/ecosystem.config.js
+          grep -Fq 'server_name hrms.alliance.co.tz;' deploy/hrms-frontend/nginx/hrms.alliance.co.tz.conf
+          grep -Fq 'proxy_pass http://127.0.0.1:8880;' deploy/hrms-frontend/nginx/hrms.alliance.co.tz.conf
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
       - name: Validate package scripts
@@ -168,6 +170,8 @@ jobs:
       HEALTH_PATH: ${{ vars.HEALTH_PATH || '/api/health/ready' }}
       KEEP_RELEASES: ${{ vars.KEEP_RELEASES || '3' }}
       DEPLOY_PUBLIC_URL: ${{ vars.DEPLOY_PUBLIC_URL }}
+      REQUIRE_SSL: ${{ vars.REQUIRE_SSL || 'false' }}
+      FRONTEND_PUBLIC_IP: ${{ vars.FRONTEND_PUBLIC_IP }}
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 1, persist-credentials: false }
@@ -182,6 +186,8 @@ jobs:
           for name in BASE_DIR PM2_APP_NAME APP_ENV APP_HOST APP_PORT HEALTH_PATH; do [[ -n "${!name}" ]] || { echo "Missing $name"; exit 1; }; done
           [[ "$APP_PORT" =~ ^[0-9]+$ && "$KEEP_RELEASES" =~ ^[0-9]+$ ]]
           [[ "$TARGET_ENV" == uat && "$APP_ENV" == uat || "$TARGET_ENV" == production && "$APP_ENV" == production ]]
+          [[ "$TARGET_ENV" == uat && "$APP_PORT" == 9990 || "$TARGET_ENV" == production && "$APP_PORT" == 8880 ]]
+          [[ "$REQUIRE_SSL" == true || "$REQUIRE_SSL" == false ]]
           [[ "$(id -u)" -ne 0 && -w "$BASE_DIR/releases" && -w "$BASE_DIR/shared" && -w "$BASE_DIR/tmp" ]]
           echo "HEALTH_URL=http://127.0.0.1:${APP_PORT}${HEALTH_PATH}" >> "$GITHUB_ENV"
           cd "$RUNNER_TEMP/hrms-frontend-artifact"; sha256sum --check hrms-frontend-release.tar.gz.sha256
@@ -193,6 +199,26 @@ jobs:
           stage="$RUNNER_TEMP/stage-hrms-frontend-$GITHUB_SHA.sh"
           install -m 0750 deploy/hrms-frontend/stage-release.sh "$stage"
           bash "$stage" "$GITHUB_SHA" "$archive"
+      - name: Configure Production Nginx and SSL
+        if: env.TARGET_ENV == 'production' && env.APP_ENV == 'production'
+        shell: bash
+        env:
+          SSL_EMAIL: ${{ secrets.SSL_EMAIL }}
+        run: |
+          set -Eeuo pipefail
+          [[ "$APP_PORT" == 8880 ]]
+          curl --fail --silent --show-error "$HEALTH_URL" >/dev/null
+          pm2 status "$PM2_APP_NAME"
+          [[ -x /usr/local/sbin/hrms-frontend-edge ]] || {
+            echo 'Missing /usr/local/sbin/hrms-frontend-edge. Run deploy/hrms-frontend/server-setup.sh once as root.' >&2
+            exit 1
+          }
+          cmp -s deploy/hrms-frontend/production-edge.sh /usr/local/sbin/hrms-frontend-edge && \
+            cmp -s deploy/hrms-frontend/nginx/hrms.alliance.co.tz.conf /usr/local/share/hrms-frontend/nginx/hrms.alliance.co.tz.conf || {
+              echo 'The installed Production edge helper/template is stale. Rerun deploy/hrms-frontend/server-setup.sh as root.' >&2
+              exit 1
+            }
+          printf '%s\n%s\n' "${SSL_EMAIL:-}" "${FRONTEND_PUBLIC_IP:-}" | sudo -n /usr/local/sbin/hrms-frontend-edge configure "$REQUIRE_SSL"
       - name: Verify deployment
         shell: bash
         run: |
@@ -200,3 +226,6 @@ jobs:
           curl --fail --silent --show-error "$HEALTH_URL" >/dev/null
           pm2 status "$PM2_APP_NAME"
           [[ "$(readlink -f "$BASE_DIR/current")" == "$BASE_DIR/releases/$GITHUB_SHA" ]]
+          if [[ "$APP_ENV" == production ]]; then
+            sudo -n /usr/local/sbin/hrms-frontend-edge status false </dev/null
+          fi

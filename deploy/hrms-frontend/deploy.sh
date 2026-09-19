@@ -69,7 +69,13 @@ log 'Checking rendered pages, JavaScript, CSS, and public assets.'
 node "$RELEASE_DIR/deploy/hrms-frontend/check-assets.mjs" "http://127.0.0.1:${APP_PORT}"
 if [[ -n "${DEPLOY_PUBLIC_URL:-}" ]]; then
   log 'Checking assets through the public reverse proxy.'
-  node "$RELEASE_DIR/deploy/hrms-frontend/check-assets.mjs" "$DEPLOY_PUBLIC_URL"
+  if ! node "$RELEASE_DIR/deploy/hrms-frontend/check-assets.mjs" "$DEPLOY_PUBLIC_URL"; then
+    if [[ "$APP_ENV" == production ]]; then
+      log 'WARNING: Public proxy validation failed. The Production Nginx/SSL step will retry after edge configuration.'
+    else
+      false
+    fi
+  fi
 fi
 
 CURRENT_RELEASE="$(readlink -f "$CURRENT_LINK")"

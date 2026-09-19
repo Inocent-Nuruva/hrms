@@ -6,6 +6,7 @@ umask 027
 
 DEPLOY_USER="${DEPLOY_USER:-hrms-deploy}"
 APP_ROOT="${APP_ROOT:-/opt/apps/hrms-v2}"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
 [[ "$EUID" -eq 0 ]] || {
   echo "Run once as root." >&2
@@ -14,6 +15,11 @@ APP_ROOT="${APP_ROOT:-/opt/apps/hrms-v2}"
 
 id "$DEPLOY_USER" >/dev/null 2>&1 || {
   echo "Missing deploy user: $DEPLOY_USER" >&2
+  exit 1
+}
+
+[[ "$DEPLOY_USER" =~ ^[a-z_][a-z0-9_-]*[$]?$ ]] || {
+  echo "Unsafe deploy user name: $DEPLOY_USER" >&2
   exit 1
 }
 
@@ -28,10 +34,46 @@ apt-get update
 
 apt-get install -y \
   ca-certificates \
+  certbot \
   curl \
   gzip \
+  nginx \
+  openssl \
+  python3-certbot-nginx \
+  sudo \
   tar \
   util-linux
+
+for file in \
+  "$SCRIPT_DIR/production-edge.sh" \
+  "$SCRIPT_DIR/nginx/hrms.alliance.co.tz.conf"; do
+  [[ -f "$file" ]] || {
+    echo "Missing production edge deployment file: $file" >&2
+    exit 1
+  }
+done
+
+install -d -o root -g root -m 0755 /usr/local/share/hrms-frontend/nginx
+install -o root -g root -m 0755 \
+  "$SCRIPT_DIR/production-edge.sh" \
+  /usr/local/sbin/hrms-frontend-edge
+install -o root -g root -m 0644 \
+  "$SCRIPT_DIR/nginx/hrms.alliance.co.tz.conf" \
+  /usr/local/share/hrms-frontend/nginx/hrms.alliance.co.tz.conf
+
+sudoers_tmp="$(mktemp)"
+trap 'rm -f -- "$sudoers_tmp"' EXIT
+cat > "$sudoers_tmp" <<EOF
+$DEPLOY_USER ALL=(root) NOPASSWD: /usr/local/sbin/hrms-frontend-edge configure false
+$DEPLOY_USER ALL=(root) NOPASSWD: /usr/local/sbin/hrms-frontend-edge configure true
+$DEPLOY_USER ALL=(root) NOPASSWD: /usr/local/sbin/hrms-frontend-edge preflight false
+$DEPLOY_USER ALL=(root) NOPASSWD: /usr/local/sbin/hrms-frontend-edge status false
+EOF
+chmod 0440 "$sudoers_tmp"
+visudo -cf "$sudoers_tmp"
+install -o root -g root -m 0440 "$sudoers_tmp" /etc/sudoers.d/hrms-frontend-edge
+rm -f -- "$sudoers_tmp"
+trap - EXIT
 
 for command in node npm pm2; do
   command -v "$command" >/dev/null || {
