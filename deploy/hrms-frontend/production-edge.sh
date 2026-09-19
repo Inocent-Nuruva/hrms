@@ -14,6 +14,7 @@ readonly PUBLIC_HTTPS_URL="https://${DOMAIN}${HEALTH_PATH}"
 readonly SITE_NAME='hrms.alliance.co.tz'
 readonly SITE_AVAILABLE="/etc/nginx/sites-available/${SITE_NAME}"
 readonly SITE_ENABLED="/etc/nginx/sites-enabled/${SITE_NAME}"
+readonly SITE_CONF_D="/etc/nginx/conf.d/${SITE_NAME}.conf"
 readonly TEMPLATE='/usr/local/share/hrms-frontend/nginx/hrms.alliance.co.tz.conf'
 readonly STATE_DIR='/var/lib/hrms-frontend-edge'
 readonly TEMPLATE_HASH_FILE="${STATE_DIR}/nginx-template.sha256"
@@ -76,6 +77,13 @@ site_has_expected_base() {
     grep -Fq 'proxy_pass http://127.0.0.1:8880;' "$SITE_AVAILABLE"
 }
 
+nginx_loads_file() {
+  local config_path="$1"
+  local config_dump
+  config_dump="$(nginx -T 2>&1)" || return 1
+  grep -Fq "# configuration file ${config_path}:" <<<"$config_dump"
+}
+
 print_status() {
   log "Frontend PM2 target: 127.0.0.1:${APP_PORT}"
   if curl --noproxy '*' --fail --silent --show-error --connect-timeout 3 --max-time 10 "$APP_HEALTH_URL" >/dev/null; then
@@ -134,8 +142,9 @@ if [[ -e "$SITE_AVAILABLE" || -L "$SITE_AVAILABLE" ]]; then
     die "${SITE_AVAILABLE} exists and is not a regular file; refusing to overwrite it."
   }
 fi
-for enabled_site in /etc/nginx/sites-enabled/*; do
+for enabled_site in /etc/nginx/sites-enabled/* /etc/nginx/conf.d/*.conf; do
   [[ -e "$enabled_site" || -L "$enabled_site" ]] || continue
+  [[ "$enabled_site" == "$SITE_ENABLED" || "$enabled_site" == "$SITE_CONF_D" ]] && continue
   enabled_target="$(readlink -f "$enabled_site" 2>/dev/null || true)"
   [[ "$enabled_target" == "$SITE_AVAILABLE" ]] && continue
   if grep -Eq '^[[:space:]]*server_name[[:space:]][^;]*hrms\.alliance\.co\.tz([[:space:];])' "$enabled_site" 2>/dev/null; then
@@ -156,6 +165,8 @@ config_update_deferred=0
 backup=''
 site_created=0
 link_created=0
+conf_d_link_created=0
+conf_d_link_removed=0
 
 if [[ ! -f "$SITE_AVAILABLE" || "$expected_hash" != "$installed_hash" ]] || ! site_has_expected_base; then
   if [[ -f "$SITE_AVAILABLE" ]] && certificate_valid && [[ -z "$SSL_EMAIL" ]]; then
@@ -189,6 +200,12 @@ if [[ ! -e "$SITE_ENABLED" ]]; then
   config_changed=1
 fi
 
+if [[ -e "$SITE_CONF_D" || -L "$SITE_CONF_D" ]]; then
+  [[ -L "$SITE_CONF_D" && "$(readlink "$SITE_CONF_D")" == "$SITE_AVAILABLE" ]] || {
+    die "${SITE_CONF_D} belongs to another configuration; refusing to overwrite it."
+  }
+fi
+
 restore_site() {
   if [[ -n "$backup" && -f "$backup" ]]; then
     cp -a "$backup" "$SITE_AVAILABLE"
@@ -198,8 +215,37 @@ restore_site() {
   if [[ "$link_created" == 1 ]]; then
     rm -f "$SITE_ENABLED"
   fi
+  if [[ "$conf_d_link_created" == 1 ]]; then
+    rm -f "$SITE_CONF_D"
+  elif [[ "$conf_d_link_removed" == 1 ]]; then
+    ln -s "$SITE_AVAILABLE" "$SITE_CONF_D"
+  fi
   nginx -t >/dev/null 2>&1 && systemctl reload nginx >/dev/null 2>&1 || true
 }
+
+if nginx_loads_file "$SITE_ENABLED"; then
+  if [[ -L "$SITE_CONF_D" ]] && nginx_loads_file "$SITE_CONF_D"; then
+    rm -f "$SITE_CONF_D"
+    conf_d_link_removed=1
+    config_changed=1
+    log 'Removed the no-longer-required conf.d compatibility link.'
+  fi
+else
+  if [[ ! -d /etc/nginx/conf.d ]]; then
+    restore_site
+    die 'Nginx does not load sites-enabled and /etc/nginx/conf.d is unavailable.'
+  fi
+  if [[ ! -L "$SITE_CONF_D" ]]; then
+    ln -s "$SITE_AVAILABLE" "$SITE_CONF_D"
+    conf_d_link_created=1
+    config_changed=1
+  fi
+  if ! nginx_loads_file "$SITE_CONF_D"; then
+    restore_site
+    die 'Nginx does not load the HRMS site from sites-enabled or conf.d. Review the include directives in /etc/nginx/nginx.conf.'
+  fi
+  log 'Nginx does not load sites-enabled; using the conf.d compatibility link.'
+fi
 
 if ! nginx -t; then
   warn 'Nginx validation failed; restoring the previous HRMS site configuration.'
