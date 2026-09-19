@@ -20,7 +20,21 @@ else
   tar -xzf "$ARCHIVE_FILE" -C "$STAGING_DIR"
   CONTENT_DIR="$STAGING_DIR"
 fi
-for file in "$CONTENT_DIR/server.js" "$CONTENT_DIR/REVISION" "$CONTENT_DIR/.next/BUILD_ID" "$CONTENT_DIR/public/icon.png" "$CONTENT_DIR/deploy/hrms-frontend/check-assets.mjs" "$CONTENT_DIR/deploy/hrms-frontend/deploy.sh" "$CONTENT_DIR/deploy/hrms-frontend/ecosystem.config.js"; do [[ -f "$file" ]] || { echo "Missing release file: $file" >&2; exit 1; }; done
+for file in \
+  "$CONTENT_DIR/server.js" \
+  "$CONTENT_DIR/REVISION" \
+  "$CONTENT_DIR/.next/BUILD_ID" \
+  "$CONTENT_DIR/public/icon.png" \
+  "$CONTENT_DIR/deploy/hrms-frontend/check-assets.mjs" \
+  "$CONTENT_DIR/deploy/hrms-frontend/deploy.sh" \
+  "$CONTENT_DIR/deploy/hrms-frontend/stage-release.sh" \
+  "$CONTENT_DIR/deploy/hrms-frontend/rollback.sh" \
+  "$CONTENT_DIR/deploy/hrms-frontend/server-setup.sh" \
+  "$CONTENT_DIR/deploy/hrms-frontend/production-edge.sh" \
+  "$CONTENT_DIR/deploy/hrms-frontend/ecosystem.config.js" \
+  "$CONTENT_DIR/deploy/hrms-frontend/nginx/hrms.alliance.co.tz.conf"; do
+  [[ -f "$file" ]] || { echo "Missing release file: $file" >&2; exit 1; }
+done
 [[ -d "$CONTENT_DIR/.next/static/chunks" ]] || { echo 'Missing release .next/static/chunks directory.' >&2; exit 1; }
 for asset in assets/alliance-logo.png favicon.ico; do
   [[ -s "$CONTENT_DIR/public/$asset" ]] || { echo "Missing release public/$asset" >&2; exit 1; }
@@ -28,5 +42,5 @@ done
 [[ "$(tr -d '[:space:]' < "$CONTENT_DIR/REVISION")" == "$RELEASE_ID" ]] || { echo 'Artifact revision mismatch.' >&2; exit 1; }
 if [[ -n "$STAGING_DIR" ]]; then mv "$STAGING_DIR" "$RELEASE_DIR"; STAGING_DIR=''; fi
 install -m 0640 "$RELEASE_DIR/deploy/hrms-frontend/ecosystem.config.js" "$SHARED_DIR/ecosystem.config.js"
-chmod 0750 "$RELEASE_DIR/deploy/hrms-frontend/deploy.sh"
+chmod 0750 "$RELEASE_DIR"/deploy/hrms-frontend/*.sh
 bash "$RELEASE_DIR/deploy/hrms-frontend/deploy.sh" "$RELEASE_ID"

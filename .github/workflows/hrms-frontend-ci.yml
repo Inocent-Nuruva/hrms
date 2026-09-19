@@ -123,11 +123,22 @@ jobs:
           mkdir -p "$release/.next/static" "$release/public"
           cp -a .next/static/. "$release/.next/static/"
           cp -a public/. "$release/public/"
-          cp deploy/hrms-frontend/deploy.sh deploy/hrms-frontend/stage-release.sh deploy/hrms-frontend/ecosystem.config.js deploy/hrms-frontend/check-assets.mjs "$release/deploy/hrms-frontend/"
+          cp -a deploy/hrms-frontend/. "$release/deploy/hrms-frontend/"
           [[ -f "$release/.next/BUILD_ID" && -d "$release/.next/static/chunks" && -f "$release/public/icon.png" ]]
+          for file in \
+            deploy/hrms-frontend/deploy.sh \
+            deploy/hrms-frontend/stage-release.sh \
+            deploy/hrms-frontend/rollback.sh \
+            deploy/hrms-frontend/server-setup.sh \
+            deploy/hrms-frontend/production-edge.sh \
+            deploy/hrms-frontend/ecosystem.config.js \
+            deploy/hrms-frontend/check-assets.mjs \
+            deploy/hrms-frontend/nginx/hrms.alliance.co.tz.conf; do
+            [[ -f "$release/$file" ]] || { echo "Release is missing $file" >&2; exit 1; }
+          done
           cmp public/assets/alliance-logo.png "$release/public/assets/alliance-logo.png"
           cmp public/favicon.ico "$release/public/favicon.ico"
-          chmod 750 "$release/deploy/hrms-frontend/deploy.sh" "$release/deploy/hrms-frontend/stage-release.sh"
+          chmod 750 "$release"/deploy/hrms-frontend/*.sh
           printf '%s\n' "$GITHUB_SHA" > "$release/REVISION"
           printf '%s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" > "$release/BUILT_AT"
           tar -C "$release" -czf "$archive" .
@@ -199,6 +210,12 @@ jobs:
           stage="$RUNNER_TEMP/stage-hrms-frontend-$GITHUB_SHA.sh"
           install -m 0750 deploy/hrms-frontend/stage-release.sh "$stage"
           bash "$stage" "$GITHUB_SHA" "$archive"
+          for file in \
+            deploy/hrms-frontend/server-setup.sh \
+            deploy/hrms-frontend/production-edge.sh \
+            deploy/hrms-frontend/nginx/hrms.alliance.co.tz.conf; do
+            [[ -f "$BASE_DIR/releases/$GITHUB_SHA/$file" ]] || { echo "Deployed release is missing $file" >&2; exit 1; }
+          done
       - name: Configure Production Nginx and SSL
         if: env.TARGET_ENV == 'production' && env.APP_ENV == 'production'
         shell: bash
@@ -210,12 +227,12 @@ jobs:
           curl --fail --silent --show-error "$HEALTH_URL" >/dev/null
           pm2 status "$PM2_APP_NAME"
           [[ -x /usr/local/sbin/hrms-frontend-edge ]] || {
-            echo 'Missing /usr/local/sbin/hrms-frontend-edge. Run deploy/hrms-frontend/server-setup.sh once as root.' >&2
+            echo "Missing /usr/local/sbin/hrms-frontend-edge. The setup bundle is available at $BASE_DIR/current/deploy/hrms-frontend/server-setup.sh and must be run once as root." >&2
             exit 1
           }
-          cmp -s deploy/hrms-frontend/production-edge.sh /usr/local/sbin/hrms-frontend-edge && \
-            cmp -s deploy/hrms-frontend/nginx/hrms.alliance.co.tz.conf /usr/local/share/hrms-frontend/nginx/hrms.alliance.co.tz.conf || {
-              echo 'The installed Production edge helper/template is stale. Rerun deploy/hrms-frontend/server-setup.sh as root.' >&2
+          cmp -s "$BASE_DIR/current/deploy/hrms-frontend/production-edge.sh" /usr/local/sbin/hrms-frontend-edge && \
+            cmp -s "$BASE_DIR/current/deploy/hrms-frontend/nginx/hrms.alliance.co.tz.conf" /usr/local/share/hrms-frontend/nginx/hrms.alliance.co.tz.conf || {
+              echo "The installed Production edge helper/template is stale. Rerun $BASE_DIR/current/deploy/hrms-frontend/server-setup.sh as root." >&2
               exit 1
             }
           printf '%s\n%s\n' "${SSL_EMAIL:-}" "${FRONTEND_PUBLIC_IP:-}" | sudo -n /usr/local/sbin/hrms-frontend-edge configure "$REQUIRE_SSL"

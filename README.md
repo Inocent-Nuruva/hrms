@@ -72,6 +72,8 @@ GitHub Actions artifact
 
 Runtime configuration is held outside releases in `shared/.env`. Logs are in `shared/logs`, and only the configured number of immutable releases is retained. A failed application deployment invokes the existing rollback logic.
 
+Every release artifact contains the complete `deploy/hrms-frontend` bundle. After deployment, the setup script, production edge helper, and Nginx template are available under `$BASE_DIR/current/deploy/hrms-frontend`; staging fails if any required deployment file is missing.
+
 Environment behavior:
 
 | Environment | Trigger | GitHub environment | Directory | Local port | Edge automation |
@@ -115,11 +117,12 @@ Add these only to the `hrms-frontend-production` GitHub environment:
 
 ## One-time Ubuntu setup
 
-Run the checked-out setup script once as root, and rerun it after changing the committed edge helper or Nginx template:
+Run the setup script from the deployed production release once as root, and rerun it after changing the committed edge helper or Nginx template. No server-side Git checkout or pull is required:
 
 ```bash
-cd /path/to/frontend
-DEPLOY_USER=hrms-deploy bash deploy/hrms-frontend/server-setup.sh
+DEPLOY_USER=hrms-deploy \
+  APP_ROOT=/opt/apps/hrms-v2 \
+  bash /opt/apps/hrms-v2/prod/frontend/current/deploy/hrms-frontend/server-setup.sh
 ```
 
 The setup is idempotent and:
