@@ -339,10 +339,7 @@ else
     exit 0
   fi
   if ! curl --noproxy '*' --fail --silent --show-error --connect-timeout 5 --max-time 20 "$PUBLIC_HTTP_URL" >/dev/null; then
-    printf '%s\n' "$expected_hash" > "$TEMPLATE_HASH_FILE"
-    ssl_failure 'SSL certificate issuance skipped because public HTTP is not reachable from this server. Verify DNS, NAT, firewall, and ports 80/443.'
-    print_status
-    exit 0
+    warn 'This server cannot reach its own public HTTP address. Continuing because NAT loopback may be unavailable; Certbot will perform the authoritative external validation.'
   fi
 fi
 
@@ -400,10 +397,17 @@ else
 fi
 
 certbot certificates || true
-if ! curl --noproxy '*' --fail --silent --show-error --location --connect-timeout 5 --max-time 30 "$PUBLIC_HTTPS_URL" >/dev/null; then
-  ssl_failure "Domain health check failed at ${PUBLIC_HTTPS_URL}. Verify public DNS and ports 80/443."
+if ! curl --noproxy '*' --fail --silent --show-error --location --connect-timeout 5 --max-time 30 \
+  --resolve "${DOMAIN}:443:127.0.0.1" "$PUBLIC_HTTPS_URL" >/dev/null; then
+  ssl_failure "Local HTTPS health check failed for ${DOMAIN}. Review the certificate and Nginx SSL configuration."
 else
-  log "Domain health-check result: ${PUBLIC_HTTPS_URL} is ready."
+  log "Local HTTPS health-check result: ${PUBLIC_HTTPS_URL} is ready."
+fi
+
+if ! curl --noproxy '*' --fail --silent --show-error --location --connect-timeout 5 --max-time 30 "$PUBLIC_HTTPS_URL" >/dev/null; then
+  warn 'Public HTTPS cannot be checked from this server, possibly because NAT loopback is unavailable. The GitHub-hosted verification job will test it externally.'
+else
+  log "Server-side public HTTPS check: ${PUBLIC_HTTPS_URL} is ready."
 fi
 
 print_status

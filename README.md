@@ -162,10 +162,10 @@ The first eligible production deployment creates `/etc/nginx/sites-available/hrm
 - The helper backs up an existing HRMS site, runs `nginx -t`, and reloads only after validation succeeds.
 - A failed Nginx or local reverse-proxy validation restores the previous HRMS site configuration.
 - A valid existing certificate is reused. Certbot is invoked only when a certificate/configuration install is needed.
-- Before a first certificate request, DNS must resolve to `FRONTEND_PUBLIC_IP` and public HTTP must be reachable. Failed attempts are rate-limited locally for six hours.
+- Before a first certificate request, DNS must resolve to `FRONTEND_PUBLIC_IP`. A failed server-to-public-IP probe is treated as a possible NAT-loopback limitation; Certbot performs the authoritative external HTTP validation, and failed Certbot attempts are rate-limited locally for six hours.
 - If Certbot fails, the last working SSL site is restored when available; on a first install the working HTTP proxy remains available.
 - DNS/network/SSL failures are warnings when `REQUIRE_SSL=false` and fail the edge step when `REQUIRE_SSL=true`. They do not roll back the already healthy PM2 release.
-- `certbot.timer` is enabled and checked after successful SSL configuration. Each production deployment reports PM2, port `8880`, Nginx validation/service, certificate, and HTTPS health status.
+- `certbot.timer` is enabled and checked after successful SSL configuration. Each production deployment reports PM2, port `8880`, Nginx validation/service, certificate, and local HTTPS health status; a separate GitHub-hosted job then verifies the domain externally.
 
 To inspect production state on the server:
 
