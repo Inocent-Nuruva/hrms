@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Loader2Icon, PlusIcon, RefreshCwIcon } from "lucide-react"
+import { Loader2Icon, PlusIcon, RefreshCwIcon, TrashIcon } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 
@@ -43,6 +43,8 @@ import {
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import {
   createProbationPolicy,
+  deleteProbationCase,
+  deleteProbationPolicy,
   generateProbationLetter,
   getProbationCase,
   getProbationDashboard,
@@ -95,12 +97,17 @@ const HR_DECISIONS = [
 ] as const
 
 const CASE_CYCLE = [
-  "OPEN",
-  "IN_PROGRESS",
-  "SELF_ASSESSED",
-  "MANAGER_REVIEWED",
-  "HR_REVIEW",
+  "DRAFT",
+  "ACTIVE",
+  "OBJECTIVES_PENDING",
+  "SELF_ASSESSMENT_PENDING",
+  "MANAGER_REVIEW_PENDING",
+  "HR_REVIEW_PENDING",
+  "EXTENDED",
   "CONFIRMED",
+  "NOT_CONFIRMED",
+  "TERMINATION_RECOMMENDED",
+  "CANCELLED",
 ]
 
 function readStoredToken() {
@@ -122,11 +129,27 @@ export function ProbationManagementView({
     actor.ready &&
     canAccessDashboardRoute("/dashboard/probation/overview", actor.permissionLabels, actor.accessMode)
   const canCreatePolicy = canPerformPermission(actor.permissionLabels, {
-    permissions: ["probation:create", "probation:update", "probation_policies:create", "manage_probation"],
+    permissions: ["probation_policies:create"],
     mode: "any",
   })
-  const canReviewCases = canPerformPermission(actor.permissionLabels, {
-    permissions: ["probation:update", "probation_cases:update", "manage_probation"],
+  const canUpdatePolicy = canPerformPermission(actor.permissionLabels, {
+    permissions: ["probation_policies:update"],
+    mode: "any",
+  })
+  const canDeletePolicy = canPerformPermission(actor.permissionLabels, {
+    permissions: ["probation_policies:delete"],
+    mode: "any",
+  })
+  const canDeleteCase = canPerformPermission(actor.permissionLabels, {
+    permissions: ["probation_cases:delete"],
+    mode: "any",
+  })
+  const canManagerReview = canPerformPermission(actor.permissionLabels, {
+    permissions: ["probation_reviews:manager-review", "probation_reviews:manager-review-any"],
+    mode: "any",
+  })
+  const canHrDecision = canPerformPermission(actor.permissionLabels, {
+    permissions: ["probation_reviews:hr-decision"],
     mode: "any",
   })
 
@@ -157,6 +180,9 @@ export function ProbationManagementView({
   const [formError, setFormError] = React.useState<string | null>(null)
   const [saving, setSaving] = React.useState(false)
   const [busyId, setBusyId] = React.useState("")
+  const [criteriaRows, setCriteriaRows] = React.useState<
+    Array<{ code: string; name: string; weight: string; description: string }>
+  >([])
 
   const load = React.useCallback(async () => {
     const token = readStoredToken()
@@ -244,9 +270,14 @@ export function ProbationManagementView({
     }
   }
 
-  function openForm(mode: FormMode, seed: Record<string, string> = {}) {
+  function openForm(
+    mode: FormMode,
+    seed: Record<string, string> = {},
+    criteria: Array<{ code: string; name: string; weight: string; description: string }> = [],
+  ) {
     setFormMode(mode)
     setForm(seed)
+    setCriteriaRows(mode === "policy" ? (criteria.length > 0 ? criteria : [{ code: "", name: "", weight: "100", description: "" }]) : [])
     setFormError(null)
     setFormOpen(true)
   }
@@ -283,18 +314,14 @@ export function ProbationManagementView({
           is_default: form.is_default === "true",
           effective_from: form.effective_from,
           effective_to: form.effective_to || undefined,
-          criteria: form.criterion_code && form.criterion_name && form.criterion_weight
-            ? [
-                {
-                  code: form.criterion_code,
-                  name: form.criterion_name,
-                  weight: Number(form.criterion_weight),
-                  description: form.criterion_description || undefined,
-                  self_rating_enabled: true,
-                  is_required: true,
-                },
-              ]
-            : undefined,
+          criteria: criteriaRows.filter((row) => row.code && row.name && row.weight).map((row) => ({
+            code: row.code,
+            name: row.name,
+            weight: Number(row.weight),
+            description: row.description || undefined,
+            self_rating_enabled: true,
+            is_required: true,
+          })),
         }
         if (form.id) {
           await updateProbationPolicy(token, form.id, payload)
@@ -338,6 +365,41 @@ export function ProbationManagementView({
     }
   }
 
+  async function onDeletePolicy(row: AdminRecord) {
+    const token = readStoredToken()
+    const id = rowId(row)
+    if (!token || !id) return
+    if (!window.confirm(`Delete policy "${optionLabel(row)}"? This cannot be undone.`)) return
+    setBusyId(`policy-${id}`)
+    try {
+      await deleteProbationPolicy(token, id)
+      toast.success("Policy deleted.")
+      await load()
+    } catch (errorObject) {
+      toast.error(errorObject instanceof Error ? errorObject.message : "Could not delete the policy.")
+    } finally {
+      setBusyId("")
+    }
+  }
+
+  async function onDeleteCase(row: AdminRecord) {
+    const token = readStoredToken()
+    const id = rowId(row)
+    if (!token || !id) return
+    if (!window.confirm(`Delete case "${caseNo(row)}"? This cannot be undone.`)) return
+    setBusyId(`case-${id}`)
+    try {
+      await deleteProbationCase(token, id)
+      toast.success("Case deleted.")
+      setCaseOpen(false)
+      await load()
+    } catch (errorObject) {
+      toast.error(errorObject instanceof Error ? errorObject.message : "Could not delete the case.")
+    } finally {
+      setBusyId("")
+    }
+  }
+
   const columns = React.useMemo<Column<AdminRecord>[]>(() => {
     if (activeTab === "policies") {
       return [
@@ -370,25 +432,52 @@ export function ProbationManagementView({
           key: "actions",
           label: "Actions",
           render: (row) => (
-            <button
-              type="button"
-              className={actionButtonClass}
-              onClick={(event) => {
-                event.stopPropagation()
-                openForm("policy", {
-                  id: rowId(row),
-                  code: readString(row, ["code"]),
-                  name: readString(row, ["name"]),
-                  description: readString(row, ["description"]),
-                  employment_type: readString(row, ["employmentType", "employment_type"]),
-                  probation_period_days: readString(row, ["probationPeriodDays", "probation_period_days"]),
-                  effective_from: String(row.effectiveFrom ?? row.effective_from ?? "").slice(0, 10),
-                  minimum_confirmation_score: readString(row, ["minimumConfirmationScore", "minimum_confirmation_score"]),
-                })
-              }}
-            >
-              Edit
-            </button>
+            <div className="flex items-center gap-2">
+              {canUpdatePolicy ? (
+                <button
+                  type="button"
+                  className={actionButtonClass}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    const criteria = asRecordArray(row.criteria).map((criterion) => ({
+                      code: readString(criterion, ["code"]),
+                      name: readString(criterion, ["name"]),
+                      weight: readString(criterion, ["weight"]),
+                      description: readString(criterion, ["description"]),
+                    }))
+                    openForm(
+                      "policy",
+                      {
+                        id: rowId(row),
+                        code: readString(row, ["code"]),
+                        name: readString(row, ["name"]),
+                        description: readString(row, ["description"]),
+                        employment_type: readString(row, ["employmentType", "employment_type"]),
+                        probation_period_days: readString(row, ["probationPeriodDays", "probation_period_days"]),
+                        effective_from: String(row.effectiveFrom ?? row.effective_from ?? "").slice(0, 10),
+                        minimum_confirmation_score: readString(row, ["minimumConfirmationScore", "minimum_confirmation_score"]),
+                      },
+                      criteria,
+                    )
+                  }}
+                >
+                  Edit
+                </button>
+              ) : null}
+              {canDeletePolicy ? (
+                <button
+                  type="button"
+                  className={cn(actionButtonClass, "text-rose-600")}
+                  disabled={busyId === `policy-${rowId(row)}`}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    void onDeletePolicy(row)
+                  }}
+                >
+                  {busyId === `policy-${rowId(row)}` ? <Loader2Icon className="size-4 animate-spin" /> : <TrashIcon className="size-4" />}
+                </button>
+              ) : null}
+            </div>
           ),
         },
       ]
@@ -423,20 +512,35 @@ export function ProbationManagementView({
         key: "actions",
         label: "Actions",
         render: (row) => (
-          <button
-            type="button"
-            className={actionButtonClass}
-            onClick={(event) => {
-              event.stopPropagation()
-              void openCase(row)
-            }}
-          >
-            Open
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className={actionButtonClass}
+              onClick={(event) => {
+                event.stopPropagation()
+                void openCase(row)
+              }}
+            >
+              Open
+            </button>
+            {canDeleteCase ? (
+              <button
+                type="button"
+                className={cn(actionButtonClass, "text-rose-600")}
+                disabled={busyId === `case-${rowId(row)}`}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  void onDeleteCase(row)
+                }}
+              >
+                {busyId === `case-${rowId(row)}` ? <Loader2Icon className="size-4 animate-spin" /> : <TrashIcon className="size-4" />}
+              </button>
+            ) : null}
+          </div>
         ),
       },
     ]
-  }, [activeTab])
+  }, [activeTab, canUpdatePolicy, canDeletePolicy, canDeleteCase, busyId])
 
   if (!canAccess) return null
 
@@ -671,7 +775,7 @@ export function ProbationManagementView({
             </div>
           ) : null}
           <SheetFooter className="gap-2">
-            {canReviewCases ? (
+            {canManagerReview ? (
               <button
                 type="button"
                 className={secondaryButtonClass}
@@ -685,7 +789,7 @@ export function ProbationManagementView({
                 Manager review
               </button>
             ) : null}
-            {canReviewCases ? (
+            {canHrDecision ? (
               <button
                 type="button"
                 className={secondaryButtonClass}
@@ -697,6 +801,19 @@ export function ProbationManagementView({
                 }
               >
                 HR decision
+              </button>
+            ) : null}
+            {canDeleteCase ? (
+              <button
+                type="button"
+                className={cn(secondaryButtonClass, "text-rose-600")}
+                disabled={busyId === `case-${rowId(caseDetail)}`}
+                onClick={() => {
+                  if (!caseDetail) return
+                  void onDeleteCase(caseDetail)
+                }}
+              >
+                {busyId === `case-${rowId(caseDetail)}` ? <Loader2Icon className="size-4 animate-spin" /> : "Delete case"}
               </button>
             ) : null}
             <button
@@ -751,9 +868,75 @@ export function ProbationManagementView({
                 <Field label="Probation days"><input className={inputClass} value={form.probation_period_days ?? "90"} onChange={(event) => setForm((current) => ({ ...current, probation_period_days: event.target.value }))} /></Field>
                 <Field label="Minimum score"><input className={inputClass} value={form.minimum_confirmation_score ?? ""} onChange={(event) => setForm((current) => ({ ...current, minimum_confirmation_score: event.target.value }))} /></Field>
                 <Field label="Effective from"><input type="date" className={inputClass} value={form.effective_from ?? ""} onChange={(event) => setForm((current) => ({ ...current, effective_from: event.target.value }))} /></Field>
-                <Field label="Criterion code"><input className={inputClass} value={form.criterion_code ?? ""} onChange={(event) => setForm((current) => ({ ...current, criterion_code: event.target.value }))} /></Field>
-                <Field label="Criterion name"><input className={inputClass} value={form.criterion_name ?? ""} onChange={(event) => setForm((current) => ({ ...current, criterion_name: event.target.value }))} /></Field>
-                <Field label="Criterion weight"><input className={inputClass} value={form.criterion_weight ?? ""} onChange={(event) => setForm((current) => ({ ...current, criterion_weight: event.target.value }))} /></Field>
+                <div className="grid gap-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-foreground">Criteria (weights must total 100)</span>
+                    <button
+                      type="button"
+                      className={secondaryButtonClass}
+                      onClick={() =>
+                        setCriteriaRows((current) => [...current, { code: "", name: "", weight: "", description: "" }])
+                      }
+                    >
+                      <PlusIcon className="size-4" />
+                      Add criterion
+                    </button>
+                  </div>
+                  {criteriaRows.map((row, index) => (
+                    <div key={index} className="grid gap-2 rounded-lg border border-border p-3 sm:grid-cols-[1fr_1fr_90px_auto]">
+                      <input
+                        className={inputClass}
+                        placeholder="Code"
+                        value={row.code}
+                        onChange={(event) =>
+                          setCriteriaRows((current) =>
+                            current.map((item, i) => (i === index ? { ...item, code: event.target.value } : item)),
+                          )
+                        }
+                      />
+                      <input
+                        className={inputClass}
+                        placeholder="Name"
+                        value={row.name}
+                        onChange={(event) =>
+                          setCriteriaRows((current) =>
+                            current.map((item, i) => (i === index ? { ...item, name: event.target.value } : item)),
+                          )
+                        }
+                      />
+                      <input
+                        className={inputClass}
+                        placeholder="Weight"
+                        value={row.weight}
+                        onChange={(event) =>
+                          setCriteriaRows((current) =>
+                            current.map((item, i) => (i === index ? { ...item, weight: event.target.value } : item)),
+                          )
+                        }
+                      />
+                      <button
+                        type="button"
+                        className={cn(actionButtonClass, "text-rose-600")}
+                        onClick={() => setCriteriaRows((current) => current.filter((_, i) => i !== index))}
+                      >
+                        <TrashIcon className="size-4" />
+                      </button>
+                      <input
+                        className={cn(inputClass, "sm:col-span-4")}
+                        placeholder="Description (optional)"
+                        value={row.description}
+                        onChange={(event) =>
+                          setCriteriaRows((current) =>
+                            current.map((item, i) => (i === index ? { ...item, description: event.target.value } : item)),
+                          )
+                        }
+                      />
+                    </div>
+                  ))}
+                  <p className="text-xs text-muted-foreground">
+                    Current total: {criteriaRows.reduce((sum, row) => sum + (Number(row.weight) || 0), 0)}
+                  </p>
+                </div>
               </>
             ) : null}
             {formMode === "manager-review" ? (

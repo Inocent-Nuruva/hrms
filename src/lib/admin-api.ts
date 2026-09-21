@@ -15909,6 +15909,16 @@ export async function updateProbationPolicy(
   });
 }
 
+export async function deleteProbationPolicy(
+  token: string,
+  id: string | number,
+) {
+  return adminRequest<unknown>(`/api/probation/policies/${id}`, {
+    method: "DELETE",
+    token,
+  });
+}
+
 export async function listProbationCases(token: string, status?: string) {
   const payload = await adminRequest<unknown>(
     `/api/probation/cases${buildStatusQuery(status)}`,
@@ -15930,6 +15940,16 @@ export async function getProbationCase(token: string, id: string | number) {
     token,
   });
   return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function deleteProbationCase(
+  token: string,
+  id: string | number,
+) {
+  return adminRequest<unknown>(`/api/probation/cases/${id}`, {
+    method: "DELETE",
+    token,
+  });
 }
 
 export async function submitProbationManagerReview(
