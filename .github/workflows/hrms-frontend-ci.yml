@@ -109,7 +109,11 @@ jobs:
             exit 1
           }
       - name: Build release artifact
-        if: github.event_name != 'pull_request'
+        if: >-
+          (github.event_name == 'push' && github.ref == 'refs/heads/uat') ||
+          (github.event_name == 'workflow_dispatch' &&
+           ((github.ref == 'refs/heads/uat' && inputs.environment == 'uat') ||
+            (github.ref == 'refs/heads/master' && inputs.environment == 'production')))
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -144,7 +148,11 @@ jobs:
           tar -C "$release" -czf "$archive" .
           (cd "$RUNNER_TEMP"; sha256sum hrms-frontend-release.tar.gz > hrms-frontend-release.tar.gz.sha256; sha256sum --check hrms-frontend-release.tar.gz.sha256)
       - name: Upload frontend artifact
-        if: github.event_name != 'pull_request'
+        if: >-
+          (github.event_name == 'push' && github.ref == 'refs/heads/uat') ||
+          (github.event_name == 'workflow_dispatch' &&
+           ((github.ref == 'refs/heads/uat' && inputs.environment == 'uat') ||
+            (github.ref == 'refs/heads/master' && inputs.environment == 'production')))
         uses: actions/upload-artifact@v4
         with:
           name: hrms-frontend-release-${{ github.sha }}
@@ -152,7 +160,7 @@ jobs:
             ${{ runner.temp }}/hrms-frontend-release.tar.gz
             ${{ runner.temp }}/hrms-frontend-release.tar.gz.sha256
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 1
           compression-level: 0
 
   deploy:
