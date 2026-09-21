@@ -60,12 +60,21 @@ import {
   createPerformancePeriodAssignments,
   createPerformancePlan,
   createPerformanceRatingScale,
+  createPerformanceScorecard,
+  createPerformanceWorkflow,
+  createPerformanceDevelopmentPlan,
+  downloadPerformanceReport,
   generatePerformancePeriods,
   generatePerformancePlanFromRules,
   getPerformanceDashboard,
+  getPerformanceCalibrationDepartments,
+  getPerformanceFeedback360Summary,
+  invitePerformanceFeedback360,
+  listPerformanceFeedback360,
   listEmployees,
   listPerformanceAppeals,
   listPerformanceCompetencyTemplates,
+  listPerformanceDevelopmentPlans,
   listPerformanceFinancialYears,
   listPerformanceImprovementPlans,
   listPerformanceKpiRules,
@@ -74,6 +83,9 @@ import {
   listPerformancePeriods,
   listPerformancePlans,
   listPerformanceRatingScales,
+  listPerformanceReportCatalog,
+  listPerformanceScorecards,
+  listPerformanceWorkflows,
   moderatePerformanceReview,
   reopenPerformanceReview,
   reviewPerformanceImprovementMilestone,
@@ -85,7 +97,7 @@ import { forgetForbiddenRoute } from "@/lib/forbidden-routes"
 import { readStoredSessionTokens } from "@/lib/session-client"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 
-export type PerformanceHrTab = "overview" | "setup" | "plans" | "reviews" | "improvement"
+export type PerformanceHrTab = "overview" | "setup" | "plans" | "development" | "reviews" | "improvement" | "reports" | "calibration"
 
 type SetupTab =
   | "years"
@@ -95,6 +107,8 @@ type SetupTab =
   | "rules"
   | "competencies"
   | "scales"
+  | "scorecards"
+  | "workflows"
 
 type CreateMode =
   | "year"
@@ -105,11 +119,15 @@ type CreateMode =
   | "rule"
   | "competency"
   | "scale"
+  | "scorecard"
+  | "workflow"
+  | "development"
   | "plan"
   | "generate-plan"
   | "pip"
   | "moderate"
   | "approve"
+  | "feedback"
   | "reopen"
   | "milestone"
 
@@ -121,6 +139,8 @@ const SETUP_TABS: Array<{ id: SetupTab; label: string }> = [
   { id: "rules", label: "Rules" },
   { id: "competencies", label: "Competencies" },
   { id: "scales", label: "Rating scales" },
+  { id: "scorecards", label: "Scorecards" },
+  { id: "workflows", label: "Workflows" },
 ]
 
 const PERIOD_CYCLE = [
@@ -175,6 +195,60 @@ const DATA_SOURCES = [
 
 const FREQUENCIES = ["MONTHLY", "QUARTERLY", "HALF_YEARLY", "ANNUAL"] as const
 const PERIOD_TYPES = ["MONTHLY", "QUARTERLY", "HALF_YEARLY", "ANNUAL"] as const
+const SCORECARD_COMPONENT_TYPES = [
+  "KPI",
+  "ACTIVITIES",
+  "COMPETENCY",
+  "ATTENDANCE",
+  "MANAGER_ASSESSMENT",
+  "SELF_ASSESSMENT",
+  "PEER_FEEDBACK",
+  "ADJUSTMENT",
+  "MANUAL",
+] as const
+
+const WORKFLOW_STEP_TYPES = [
+  "DIRECT_SUPERVISOR",
+  "DEPARTMENT_MANAGER",
+  "HR_REVIEW",
+  "FINAL_APPROVAL",
+  "CUSTOM",
+] as const
+
+type ScorecardComponentDraft = {
+  id: string
+  code: string
+  label: string
+  type: (typeof SCORECARD_COMPONENT_TYPES)[number]
+  weight: string
+  enabled: boolean
+  required: boolean
+}
+
+type WorkflowStepDraft = {
+  id: string
+  code: string
+  label: string
+  type: (typeof WORKFLOW_STEP_TYPES)[number]
+  sequenceNumber: string
+  required: boolean
+  canFinalize: boolean
+}
+
+const DEFAULT_SCORECARD_COMPONENTS: ScorecardComponentDraft[] = [
+  { id: "kpi", code: "KPI", label: "KPI performance", type: "KPI", weight: "50", enabled: true, required: true },
+  { id: "competency", code: "COMPETENCY", label: "Competency assessment", type: "COMPETENCY", weight: "20", enabled: true, required: true },
+  { id: "activities", code: "ACTIVITIES", label: "Activities performance", type: "ACTIVITIES", weight: "15", enabled: true, required: false },
+  { id: "attendance", code: "ATTENDANCE", label: "Attendance and punctuality", type: "ATTENDANCE", weight: "5", enabled: true, required: false },
+  { id: "manager", code: "MANAGER", label: "Manager assessment", type: "MANAGER_ASSESSMENT", weight: "10", enabled: true, required: false },
+]
+
+const DEFAULT_WORKFLOW_STEPS: WorkflowStepDraft[] = [
+  { id: "supervisor", code: "SUPERVISOR", label: "Supervisor review", type: "DIRECT_SUPERVISOR", sequenceNumber: "1", required: true, canFinalize: false },
+  { id: "dept-manager", code: "DEPT_MANAGER", label: "Department manager review", type: "DEPARTMENT_MANAGER", sequenceNumber: "2", required: true, canFinalize: false },
+  { id: "hr", code: "HR_REVIEW", label: "HR review", type: "HR_REVIEW", sequenceNumber: "3", required: true, canFinalize: false },
+  { id: "final", code: "FINAL_APPROVAL", label: "Final approval", type: "FINAL_APPROVAL", sequenceNumber: "4", required: true, canFinalize: true },
+]
 
 function readStoredToken() {
   return readStoredSessionTokens().accessToken.trim()
@@ -242,6 +316,101 @@ function seedKpiVersionForm(row: AdminRecord) {
     manual_entry_allowed: readString(current, ["manualEntryAllowed", "manual_entry_allowed"], "true"),
     evidence_required: readString(current, ["evidenceRequired", "evidence_required"], "false"),
   }
+}
+
+function createScorecardComponentDraft(): ScorecardComponentDraft {
+  const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`
+  return {
+    id: suffix,
+    code: "MANUAL",
+    label: "Manual component",
+    type: "MANUAL",
+    weight: "0",
+    enabled: true,
+    required: false,
+  }
+}
+
+function createWorkflowStepDraft(nextSequence: number): WorkflowStepDraft {
+  const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`
+  return {
+    id: suffix,
+    code: "CUSTOM",
+    label: "Custom approval",
+    type: "CUSTOM",
+    sequenceNumber: String(nextSequence),
+    required: true,
+    canFinalize: false,
+  }
+}
+
+function scorecardWeightTotal(components: ScorecardComponentDraft[]) {
+  return components
+    .filter((component) => component.enabled)
+    .reduce((sum, component) => sum + (Number(component.weight) || 0), 0)
+}
+
+function buildScorecardComponents(components: ScorecardComponentDraft[]) {
+  if (components.length === 0) {
+    throw new Error("At least one scorecard component is required.")
+  }
+  const payload = components.map((component) => {
+    const weight = Number(component.weight)
+    if (!component.code.trim() || !component.label.trim()) {
+      throw new Error("Each scorecard component needs a code and label.")
+    }
+    if (!Number.isFinite(weight) || weight < 0 || weight > 100) {
+      throw new Error(`Invalid weight for ${component.label}.`)
+    }
+    return {
+      code: component.code.trim().toUpperCase(),
+      label: component.label.trim(),
+      type: component.type,
+      weight,
+      enabled: component.enabled,
+      required: component.required,
+    }
+  })
+  const total = payload.filter((component) => component.enabled).reduce((sum, component) => sum + component.weight, 0)
+  if (Math.round(total * 100) / 100 !== 100) {
+    throw new Error(`Enabled scorecard component weights must total 100. Current total: ${total}.`)
+  }
+  return payload
+}
+
+function buildWorkflowSteps(steps: WorkflowStepDraft[]) {
+  if (steps.length === 0) {
+    throw new Error("At least one workflow step is required.")
+  }
+  const payload = steps.map((step) => {
+    const sequence = Number(step.sequenceNumber)
+    if (!step.code.trim() || !step.label.trim()) {
+      throw new Error("Each workflow step needs a code and label.")
+    }
+    if (!Number.isInteger(sequence) || sequence < 1) {
+      throw new Error(`Invalid sequence for ${step.label}.`)
+    }
+    return {
+      code: step.code.trim().toUpperCase(),
+      label: step.label.trim(),
+      type: step.type,
+      sequence_number: sequence,
+      required: step.required,
+      can_finalize: step.canFinalize,
+    }
+  })
+  const sequences = new Set(payload.map((step) => step.sequence_number))
+  const codes = new Set(payload.map((step) => step.code))
+  if (sequences.size !== payload.length) {
+    throw new Error("Workflow step sequence numbers must be unique.")
+  }
+  if (codes.size !== payload.length) {
+    throw new Error("Workflow step codes must be unique.")
+  }
+  if (!payload.some((step) => step.can_finalize)) {
+    payload[payload.length - 1].can_finalize = true
+  }
+  return payload.sort((left, right) => left.sequence_number - right.sequence_number)
 }
 
 export function PerformanceManagementView({
@@ -313,7 +482,12 @@ export function PerformanceManagementView({
   const [rules, setRules] = React.useState<AdminRecord[]>([])
   const [competencies, setCompetencies] = React.useState<AdminRecord[]>([])
   const [scales, setScales] = React.useState<AdminRecord[]>([])
+  const [scorecards, setScorecards] = React.useState<AdminRecord[]>([])
+  const [workflows, setWorkflows] = React.useState<AdminRecord[]>([])
   const [plans, setPlans] = React.useState<AdminRecord[]>([])
+  const [developmentPlans, setDevelopmentPlans] = React.useState<AdminRecord[]>([])
+  const [reports, setReports] = React.useState<AdminRecord[]>([])
+  const [calibrationRows, setCalibrationRows] = React.useState<AdminRecord[]>([])
   const [appeals, setAppeals] = React.useState<AdminRecord[]>([])
   const [pips, setPips] = React.useState<AdminRecord[]>([])
   const [employees, setEmployees] = React.useState<AdminRecord[]>([])
@@ -328,6 +502,8 @@ export function PerformanceManagementView({
   const [saving, setSaving] = React.useState(false)
   const [busyId, setBusyId] = React.useState("")
   const [form, setForm] = React.useState<Record<string, string>>({})
+  const [scorecardComponents, setScorecardComponents] = React.useState<ScorecardComponentDraft[]>(DEFAULT_SCORECARD_COMPONENTS)
+  const [workflowSteps, setWorkflowSteps] = React.useState<WorkflowStepDraft[]>(DEFAULT_WORKFLOW_STEPS)
 
   const load = React.useCallback(async () => {
     const token = readStoredToken()
@@ -371,6 +547,10 @@ export function PerformanceManagementView({
           setCompetencies(await listPerformanceCompetencyTemplates(token))
         } else if (setupTab === "scales") {
           setScales(await listPerformanceRatingScales(token))
+        } else if (setupTab === "scorecards") {
+          setScorecards(await listPerformanceScorecards(token))
+        } else if (setupTab === "workflows") {
+          setWorkflows(await listPerformanceWorkflows(token))
         }
       } else if (activeTab === "plans") {
         const [planRows, kpiRows, employeeRows] = await Promise.all([
@@ -383,6 +563,15 @@ export function PerformanceManagementView({
         setPlans(planRows)
         setKpis(kpiRows)
         setEmployees(employeeRows)
+      } else if (activeTab === "development") {
+        const [developmentRows, employeeRows] = await Promise.all([
+          listPerformanceDevelopmentPlans(token),
+          listEmployees(token, { limit: 100 })
+            .then((result) => result.rows)
+            .catch(() => [] as AdminRecord[]),
+        ])
+        setDevelopmentPlans(developmentRows)
+        setEmployees(employeeRows)
       } else if (activeTab === "reviews") {
         const [appealRows, pipRows] = await Promise.all([
           listPerformanceAppeals(token),
@@ -392,6 +581,10 @@ export function PerformanceManagementView({
         setPips(pipRows)
       } else if (activeTab === "improvement") {
         setPips(await listPerformanceImprovementPlans(token))
+      } else if (activeTab === "reports") {
+        setReports(await listPerformanceReportCatalog(token))
+      } else if (activeTab === "calibration") {
+        setCalibrationRows(await getPerformanceCalibrationDepartments(token))
       }
     } catch (errorObject) {
       setError(errorObject instanceof Error ? errorObject.message : "Could not load performance data.")
@@ -428,16 +621,27 @@ export function PerformanceManagementView({
   const pipCount =
     readNumber(dashboard, ["open_improvement_plans", "openImprovementPlans", "pip_count"]) ??
     pips.length
+  const developmentPlanCount =
+    readNumber(dashboard, ["active_development_plans", "activeDevelopmentPlans"]) ??
+    developmentPlans.length
+  const pendingFeedbackCount =
+    readNumber(dashboard, ["pending_feedback_360", "pendingFeedback360"]) ?? 0
 
   const currentPeriod = periods[0] ?? null
   const visibleRows = React.useMemo(() => {
     const source =
       activeTab === "plans"
         ? plans
+        : activeTab === "development"
+          ? developmentPlans
         : activeTab === "reviews"
           ? appeals
-          : activeTab === "improvement"
-            ? pips
+        : activeTab === "improvement"
+          ? pips
+        : activeTab === "reports"
+          ? reports
+        : activeTab === "calibration"
+          ? calibrationRows
             : setupTab === "years"
               ? years
               : setupTab === "periods"
@@ -450,21 +654,30 @@ export function PerformanceManagementView({
                       ? rules
                       : setupTab === "competencies"
                         ? competencies
-                        : scales
+                        : setupTab === "scales"
+                          ? scales
+                          : setupTab === "scorecards"
+                            ? scorecards
+                            : workflows
     return source.filter((row) => matchesSearch(row, search))
   }, [
     activeTab,
     appeals,
+    calibrationRows,
     competencies,
+    developmentPlans,
     kpis,
     periods,
     pips,
     plans,
+    reports,
     rules,
     scales,
+    scorecards,
     search,
     setupTab,
     templates,
+    workflows,
     years,
   ])
 
@@ -473,8 +686,18 @@ export function PerformanceManagementView({
     setForm(
       mode === "period"
         ? { period_type: "MONTHLY", sequence_number: "1", ...seed }
+        : mode === "scorecard"
+          ? { is_default: "true", ...seed }
+        : mode === "workflow"
+          ? { is_default: "true", ...seed }
         : seed,
     )
+    if (mode === "scorecard") {
+      setScorecardComponents(DEFAULT_SCORECARD_COMPONENTS)
+    }
+    if (mode === "workflow") {
+      setWorkflowSteps(DEFAULT_WORKFLOW_STEPS)
+    }
     setFormError(null)
     setCreateOpen(true)
   }
@@ -637,6 +860,56 @@ export function PerformanceManagementView({
             },
           ],
         })
+      } else if (createMode === "scorecard") {
+        if (!form.code || !form.name) {
+          throw new Error("Code and name are required.")
+        }
+        await createPerformanceScorecard(token, {
+          code: form.code,
+          name: form.name,
+          description: form.description || undefined,
+          is_default: form.is_default !== "false",
+          effective_from: form.effective_from || undefined,
+          effective_to: form.effective_to || undefined,
+          components: buildScorecardComponents(scorecardComponents),
+        })
+      } else if (createMode === "workflow") {
+        if (!form.code || !form.name) {
+          throw new Error("Code and name are required.")
+        }
+        await createPerformanceWorkflow(token, {
+          code: form.code,
+          name: form.name,
+          description: form.description || undefined,
+          is_default: form.is_default !== "false",
+          applies_to_department_id: form.applies_to_department_id ? Number(form.applies_to_department_id) : undefined,
+          applies_to_position_id: form.applies_to_position_id ? Number(form.applies_to_position_id) : undefined,
+          review_type: form.review_type || undefined,
+          steps: buildWorkflowSteps(workflowSteps),
+        })
+      } else if (createMode === "development") {
+        if (!form.employee_id || !form.title || !form.goal_title) {
+          throw new Error("Employee, plan title, and first goal are required.")
+        }
+        await createPerformanceDevelopmentPlan(token, {
+          employee_id: Number(form.employee_id),
+          manager_employee_id: form.manager_employee_id ? Number(form.manager_employee_id) : undefined,
+          source_review_id: form.source_review_id ? Number(form.source_review_id) : undefined,
+          title: form.title,
+          description: form.description || undefined,
+          start_date: form.start_date || undefined,
+          target_completion_date: form.target_completion_date || undefined,
+          goals: [
+            {
+              title: form.goal_title,
+              description: form.goal_description || undefined,
+              category: form.goal_category || undefined,
+              target_date: form.goal_target_date || undefined,
+              success_measure: form.success_measure || undefined,
+              support_required: form.support_required || undefined,
+            },
+          ],
+        })
       } else if (createMode === "plan") {
         if (!form.employee_id || !form.financial_year_id || !form.effective_from || !form.kpi_definition_version_id || !form.weight) {
           throw new Error("Employee, year, start date, KPI version, and weight are required.")
@@ -695,6 +968,36 @@ export function PerformanceManagementView({
           publish: form.publish !== "false",
           hr_review: form.hr_review ? { comment: form.hr_review } : undefined,
         })
+      } else if (createMode === "feedback") {
+        if (!form.review_id || !form.rater_employee_ids) {
+          throw new Error("Review ID and at least one rater employee ID are required.")
+        }
+        const raterIds = form.rater_employee_ids
+          .split(/[\n,]+/)
+          .map((item) => item.trim())
+          .filter(Boolean)
+          .map(Number)
+        if (!raterIds.length || raterIds.some((id) => !Number.isInteger(id) || id < 1)) {
+          throw new Error("Rater employee IDs must be valid numbers.")
+        }
+        await invitePerformanceFeedback360(token, form.review_id, {
+          invitations: raterIds.map((id) => ({
+            rater_employee_id: id,
+            relationship_type: form.relationship_type || "PEER",
+            due_date: form.due_date || undefined,
+            is_anonymous: form.is_anonymous !== "false",
+          })),
+        })
+        const [items, summary] = await Promise.all([
+          listPerformanceFeedback360(token, form.review_id),
+          getPerformanceFeedback360Summary(token, form.review_id),
+        ])
+        setDetailRecord({
+          review_id: form.review_id,
+          summary,
+          invitations: items,
+        })
+        setDetailOpen(true)
       } else if (createMode === "reopen") {
         if (!form.review_id || !form.reason) throw new Error("Review and reason are required.")
         await reopenPerformanceReview(token, form.review_id, form.reason)
@@ -716,6 +1019,112 @@ export function PerformanceManagementView({
   }
 
   const columns = React.useMemo<Column<AdminRecord>[]>(() => {
+    if (activeTab === "development") {
+      return [
+        {
+          key: "plan",
+          label: "Plan",
+          render: (row) => (
+            <div className="space-y-0.5">
+              <p className="font-medium">{readString(row, ["title"], `Development plan #${rowId(row)}`)}</p>
+              <p className="text-xs text-muted-foreground">Employee #{readNumber(row, ["employeeId", "employee_id"]) ?? "N/A"}</p>
+            </div>
+          ),
+        },
+        {
+          key: "status",
+          label: "Status",
+          render: (row) => <StatusChip value={readString(row, ["status"], "ACTIVE")} />,
+        },
+        {
+          key: "goals",
+          label: "Goals",
+          render: (row) => String(asRecordArray(row.goals).length),
+        },
+        {
+          key: "target",
+          label: "Target",
+          render: (row) => formatDate(row.targetCompletionDate ?? row.target_completion_date),
+        },
+      ]
+    }
+    if (activeTab === "reports") {
+      return [
+        {
+          key: "report",
+          label: "Report",
+          render: (row) => (
+            <div className="space-y-0.5">
+              <p className="font-medium">{readString(row, ["name"], optionLabel(row))}</p>
+              <p className="text-xs text-muted-foreground">{readString(row, ["code"])}</p>
+            </div>
+          ),
+        },
+        {
+          key: "description",
+          label: "Description",
+          render: (row) => readString(row, ["description"], "N/A"),
+        },
+        {
+          key: "actions",
+          label: "Exports",
+          render: (row) => {
+            const code = readString(row, ["code"])
+            const formats = ["csv", "xlsx", "pdf"] as const
+            return (
+              <div className="flex flex-wrap gap-1">
+                {formats.map((format) => (
+                  <button
+                    key={format}
+                    type="button"
+                    className={actionButtonClass}
+                    disabled={!code || busyId === `${code}-${format}`}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      void runAction(`${code}-${format}`, async (token) => {
+                        const blob = await downloadPerformanceReport(token, code, format)
+                        const url = URL.createObjectURL(blob)
+                        const link = document.createElement("a")
+                        link.href = url
+                        link.download = `${code.toLowerCase()}.${format}`
+                        link.click()
+                        URL.revokeObjectURL(url)
+                      }, `${format.toUpperCase()} export downloaded.`)
+                    }}
+                  >
+                    {busyId === `${code}-${format}` ? <Loader2Icon className="size-3.5 animate-spin" /> : format.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+            )
+          },
+        },
+      ]
+    }
+    if (activeTab === "calibration") {
+      return [
+        {
+          key: "department",
+          label: "Department",
+          render: (row) => readString(row, ["department_name"], "Unassigned"),
+        },
+        {
+          key: "average",
+          label: "Average",
+          render: (row) => readString(row, ["average_score"], "N/A"),
+        },
+        {
+          key: "range",
+          label: "Range",
+          render: (row) => `${readString(row, ["minimum_score"], "N/A")} - ${readString(row, ["maximum_score"], "N/A")}`,
+        },
+        {
+          key: "pending",
+          label: "Pending",
+          render: (row) => readString(row, ["pending_reviews"], "0"),
+        },
+      ]
+    }
     if (activeTab === "plans") {
       return [
         {
@@ -1052,6 +1461,75 @@ export function PerformanceManagementView({
         },
       ]
     }
+    if (setupTab === "scorecards") {
+      return [
+        {
+          key: "name",
+          label: "Scorecard",
+          render: (row) => (
+            <div className="space-y-0.5">
+              <p className="font-medium">{optionLabel(row)}</p>
+              <p className="text-xs text-muted-foreground">{readString(row, ["code"])}</p>
+            </div>
+          ),
+        },
+        {
+          key: "components",
+          label: "Components",
+          render: (row) => String(asRecordArray(row.components).filter((item) => item.enabled !== false).length),
+        },
+        {
+          key: "default",
+          label: "Default",
+          render: (row) => (row.isDefault || row.is_default ? "Yes" : "No"),
+        },
+        {
+          key: "status",
+          label: "Status",
+          render: (row) => <StatusChip value={readString(row, ["status"], "ACTIVE")} />,
+        },
+      ]
+    }
+    if (setupTab === "workflows") {
+      return [
+        {
+          key: "name",
+          label: "Workflow",
+          render: (row) => (
+            <div className="space-y-0.5">
+              <p className="font-medium">{optionLabel(row)}</p>
+              <p className="text-xs text-muted-foreground">{readString(row, ["code"])}</p>
+            </div>
+          ),
+        },
+        {
+          key: "steps",
+          label: "Steps",
+          render: (row) => String(asRecordArray(row.steps).length),
+        },
+        {
+          key: "scope",
+          label: "Scope",
+          render: (row) => {
+            const departmentId = readNumber(row, ["appliesToDepartmentId", "applies_to_department_id"])
+            const positionId = readNumber(row, ["appliesToPositionId", "applies_to_position_id"])
+            if (departmentId !== null) return `Dept #${departmentId}`
+            if (positionId !== null) return `Position #${positionId}`
+            return "Company default"
+          },
+        },
+        {
+          key: "default",
+          label: "Default",
+          render: (row) => (row.isDefault || row.is_default ? "Yes" : "No"),
+        },
+        {
+          key: "status",
+          label: "Status",
+          render: (row) => <StatusChip value={readString(row, ["status"], "ACTIVE")} />,
+        },
+      ]
+    }
     return [
       {
         key: "name",
@@ -1093,19 +1571,27 @@ export function PerformanceManagementView({
               ? "New competency template"
               : createMode === "scale"
                 ? "New rating scale"
-                : createMode === "plan"
-                  ? "New plan"
-                  : createMode === "generate-plan"
-                    ? "Generate plan from rules"
-                    : createMode === "pip"
-                      ? "New improvement plan"
-                      : createMode === "moderate"
-                        ? "Moderate review"
-                        : createMode === "approve"
-                          ? "Approve review"
-                          : createMode === "reopen"
-                            ? "Reopen review"
-                            : "Review milestone"
+                : createMode === "scorecard"
+                  ? "New scorecard"
+                  : createMode === "workflow"
+                    ? "New workflow"
+                  : createMode === "development"
+                    ? "New development plan"
+                  : createMode === "plan"
+                    ? "New plan"
+                    : createMode === "generate-plan"
+                      ? "Generate plan from rules"
+                      : createMode === "pip"
+                        ? "New improvement plan"
+                        : createMode === "moderate"
+                          ? "Moderate review"
+                          : createMode === "approve"
+                            ? "Approve review"
+                            : createMode === "feedback"
+                              ? "Invite 360 feedback"
+                            : createMode === "reopen"
+                              ? "Reopen review"
+                              : "Review milestone"
 
   if (actor.ready && !canAccess) {
     return (
@@ -1154,6 +1640,8 @@ export function PerformanceManagementView({
               />
               <MetricTile label="Plans" value={plans.length || years.length} hint="Active employee plans" />
               <MetricTile label="Improvement plans" value={pipCount} hint="Open PIPs" />
+              <MetricTile label="Development" value={developmentPlanCount} hint="Active development plans" />
+              <MetricTile label="360 feedback" value={pendingFeedbackCount} hint="Feedback requests pending" />
             </div>
           </div>
           <div className="grid gap-4 xl:grid-cols-2">
@@ -1183,18 +1671,30 @@ export function PerformanceManagementView({
                 ? "Performance setup"
                 : activeTab === "plans"
                   ? "Employee plans"
-                  : activeTab === "reviews"
-                    ? "Reviews and appeals"
+                  : activeTab === "development"
+                    ? "Development plans"
+                : activeTab === "reviews"
+                  ? "Reviews and appeals"
+                  : activeTab === "reports"
+                    ? "Performance reports"
+                  : activeTab === "calibration"
+                    ? "Calibration"
                     : "Improvement plans"}
             </h1>
             <p className="text-sm text-muted-foreground">
               {activeTab === "setup"
-                ? "Years, periods, KPIs, templates, rules, competencies, and rating scales."
+                ? "Years, periods, KPIs, templates, rules, competencies, rating scales, scorecards, and workflows."
                 : activeTab === "plans"
                   ? "Assign or generate the KPI set each employee is measured on."
-                  : activeTab === "reviews"
-                    ? "Moderate, approve, or reopen reviews and inspect open appeals."
-                    : "Track PIPs, close them, and review milestones."}
+                : activeTab === "development"
+                  ? "Create growth plans, track goals, and carry development forward."
+                : activeTab === "reviews"
+                  ? "Moderate, approve, or reopen reviews and inspect open appeals."
+                : activeTab === "reports"
+                  ? "Download KPI, appraisal, PIP, development, and feedback reports."
+                : activeTab === "calibration"
+                  ? "Compare appraisal outcomes across departments."
+                  : "Track PIPs, close them, and review milestones."}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -1235,7 +1735,11 @@ export function PerformanceManagementView({
                                 ? "competency"
                                 : setupTab === "scales"
                                   ? "scale"
-                                  : "year",
+                                  : setupTab === "scorecards"
+                                    ? "scorecard"
+                                    : setupTab === "workflows"
+                                      ? "workflow"
+                                    : "year",
                     )
                   }
                 >
@@ -1262,6 +1766,9 @@ export function PerformanceManagementView({
                 </button>
                 <button type="button" className={secondaryButtonClass} onClick={() => openCreate("reopen")}>
                   Reopen
+                </button>
+                <button type="button" className={secondaryButtonClass} onClick={() => openCreate("feedback", { relationship_type: "PEER", is_anonymous: "true" })}>
+                  360 feedback
                 </button>
                 <button type="button" className={primaryButtonClass} onClick={() => openCreate("approve")}>
                   Approve
@@ -1484,6 +1991,52 @@ export function PerformanceManagementView({
                 <Field label="Band max"><input className={inputClass} value={form.band_max ?? "100"} onChange={(event) => setForm((current) => ({ ...current, band_max: event.target.value }))} /></Field>
               </>
             ) : null}
+            {activeTab === "development" && canCreatePerformance ? (
+              <button type="button" className={primaryButtonClass} onClick={() => openCreate("development")}>
+                <PlusIcon className="size-4" />
+                New plan
+              </button>
+            ) : null}
+            {createMode === "scorecard" ? (
+              <>
+                <Field label="Scorecard code"><input className={inputClass} value={form.code ?? ""} onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))} /></Field>
+                <Field label="Scorecard name"><input className={inputClass} value={form.name ?? ""} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} /></Field>
+                <Field label="Description"><textarea className={textareaClass} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></Field>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <Field label="Default">
+                    <select className={inputClass} value={form.is_default ?? "true"} onChange={(event) => setForm((current) => ({ ...current, is_default: event.target.value }))}>
+                      <option value="true">Yes</option>
+                      <option value="false">No</option>
+                    </select>
+                  </Field>
+                  <Field label="Effective from"><input type="date" className={inputClass} value={form.effective_from ?? ""} onChange={(event) => setForm((current) => ({ ...current, effective_from: event.target.value }))} /></Field>
+                  <Field label="Effective to"><input type="date" className={inputClass} value={form.effective_to ?? ""} onChange={(event) => setForm((current) => ({ ...current, effective_to: event.target.value }))} /></Field>
+                </div>
+                <ScorecardComponentBuilder
+                  components={scorecardComponents}
+                  onChange={setScorecardComponents}
+                />
+              </>
+            ) : null}
+            {createMode === "workflow" ? (
+              <>
+                <Field label="Workflow code"><input className={inputClass} value={form.code ?? ""} onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))} /></Field>
+                <Field label="Workflow name"><input className={inputClass} value={form.name ?? ""} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} /></Field>
+                <Field label="Description"><textarea className={textareaClass} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></Field>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <Field label="Default">
+                    <select className={inputClass} value={form.is_default ?? "true"} onChange={(event) => setForm((current) => ({ ...current, is_default: event.target.value }))}>
+                      <option value="true">Yes</option>
+                      <option value="false">No</option>
+                    </select>
+                  </Field>
+                  <Field label="Department ID"><input className={inputClass} inputMode="numeric" value={form.applies_to_department_id ?? ""} onChange={(event) => setForm((current) => ({ ...current, applies_to_department_id: event.target.value }))} /></Field>
+                  <Field label="Position ID"><input className={inputClass} inputMode="numeric" value={form.applies_to_position_id ?? ""} onChange={(event) => setForm((current) => ({ ...current, applies_to_position_id: event.target.value }))} /></Field>
+                </div>
+                <Field label="Review type"><input className={inputClass} value={form.review_type ?? ""} onChange={(event) => setForm((current) => ({ ...current, review_type: event.target.value }))} /></Field>
+                <WorkflowStepBuilder steps={workflowSteps} onChange={setWorkflowSteps} />
+              </>
+            ) : null}
             {createMode === "plan" || createMode === "generate-plan" ? (
               <>
                 <Field label="Employee">
@@ -1509,6 +2062,33 @@ export function PerformanceManagementView({
             {createMode === "plan" ? (
               <Field label="Weight"><input className={inputClass} value={form.weight ?? ""} onChange={(event) => setForm((current) => ({ ...current, weight: event.target.value }))} /></Field>
             ) : null}
+            {createMode === "development" ? (
+              <>
+                <Field label="Employee">
+                  <select className={inputClass} value={form.employee_id ?? ""} onChange={(event) => setForm((current) => ({ ...current, employee_id: event.target.value }))}>
+                    <option value="">Select employee</option>
+                    {employees.map((employee) => (
+                      <option key={rowId(employee)} value={rowId(employee)}>{employeeLabel(employee)}</option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Plan title"><input className={inputClass} value={form.title ?? ""} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} /></Field>
+                <Field label="Description"><textarea className={textareaClass} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></Field>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <Field label="Start date"><input type="date" className={inputClass} value={form.start_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, start_date: event.target.value }))} /></Field>
+                  <Field label="Target date"><input type="date" className={inputClass} value={form.target_completion_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, target_completion_date: event.target.value }))} /></Field>
+                  <Field label="Source review ID"><input className={inputClass} inputMode="numeric" value={form.source_review_id ?? ""} onChange={(event) => setForm((current) => ({ ...current, source_review_id: event.target.value }))} /></Field>
+                </div>
+                <Field label="First goal"><input className={inputClass} value={form.goal_title ?? ""} onChange={(event) => setForm((current) => ({ ...current, goal_title: event.target.value }))} /></Field>
+                <Field label="Goal notes"><textarea className={textareaClass} value={form.goal_description ?? ""} onChange={(event) => setForm((current) => ({ ...current, goal_description: event.target.value }))} /></Field>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label="Goal category"><input className={inputClass} value={form.goal_category ?? ""} onChange={(event) => setForm((current) => ({ ...current, goal_category: event.target.value }))} /></Field>
+                  <Field label="Goal target date"><input type="date" className={inputClass} value={form.goal_target_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, goal_target_date: event.target.value }))} /></Field>
+                </div>
+                <Field label="Success measure"><textarea className={textareaClass} value={form.success_measure ?? ""} onChange={(event) => setForm((current) => ({ ...current, success_measure: event.target.value }))} /></Field>
+                <Field label="Support required"><textarea className={textareaClass} value={form.support_required ?? ""} onChange={(event) => setForm((current) => ({ ...current, support_required: event.target.value }))} /></Field>
+              </>
+            ) : null}
             {createMode === "pip" ? (
               <>
                 <Field label="Review ID"><input className={inputClass} value={form.review_id ?? ""} onChange={(event) => setForm((current) => ({ ...current, review_id: event.target.value }))} /></Field>
@@ -1532,6 +2112,37 @@ export function PerformanceManagementView({
                 <Field label="Period assignment ID"><input className={inputClass} value={form.period_assignment_id ?? ""} onChange={(event) => setForm((current) => ({ ...current, period_assignment_id: event.target.value }))} /></Field>
                 <Field label="HR comment"><textarea className={textareaClass} value={form.hr_review ?? ""} onChange={(event) => setForm((current) => ({ ...current, hr_review: event.target.value }))} /></Field>
                 <Field label="Adjustment score"><input className={inputClass} value={form.adjustment_score ?? ""} onChange={(event) => setForm((current) => ({ ...current, adjustment_score: event.target.value }))} /></Field>
+              </>
+            ) : null}
+            {createMode === "feedback" ? (
+              <>
+                <Field label="Review ID"><input className={inputClass} value={form.review_id ?? ""} onChange={(event) => setForm((current) => ({ ...current, review_id: event.target.value }))} /></Field>
+                <Field label="Rater employee IDs">
+                  <textarea
+                    className={textareaClass}
+                    placeholder="One ID per line, or comma-separated"
+                    value={form.rater_employee_ids ?? ""}
+                    onChange={(event) => setForm((current) => ({ ...current, rater_employee_ids: event.target.value }))}
+                  />
+                </Field>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <Field label="Relationship">
+                    <select className={inputClass} value={form.relationship_type ?? "PEER"} onChange={(event) => setForm((current) => ({ ...current, relationship_type: event.target.value }))}>
+                      <option value="PEER">Peer</option>
+                      <option value="SUBORDINATE">Subordinate</option>
+                      <option value="STAKEHOLDER">Stakeholder</option>
+                      <option value="MANAGER">Manager</option>
+                      <option value="OTHER">Other</option>
+                    </select>
+                  </Field>
+                  <Field label="Due date"><input type="date" className={inputClass} value={form.due_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, due_date: event.target.value }))} /></Field>
+                  <Field label="Anonymous">
+                    <select className={inputClass} value={form.is_anonymous ?? "true"} onChange={(event) => setForm((current) => ({ ...current, is_anonymous: event.target.value }))}>
+                      <option value="true">Yes</option>
+                      <option value="false">No</option>
+                    </select>
+                  </Field>
+                </div>
               </>
             ) : null}
             {createMode === "milestone" ? (
@@ -1562,6 +2173,269 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <span className="font-medium text-foreground">{label}</span>
       {children}
     </label>
+  )
+}
+
+function ScorecardComponentBuilder({
+  components,
+  onChange,
+}: {
+  components: ScorecardComponentDraft[]
+  onChange: React.Dispatch<React.SetStateAction<ScorecardComponentDraft[]>>
+}) {
+  const total = scorecardWeightTotal(components)
+  const totalState =
+    Math.round(total * 100) / 100 === 100
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-300"
+      : "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300"
+
+  function updateComponent(id: string, patch: Partial<ScorecardComponentDraft>) {
+    onChange((current) =>
+      current.map((component) =>
+        component.id === id ? { ...component, ...patch } : component,
+      ),
+    )
+  }
+
+  function removeComponent(id: string) {
+    onChange((current) => current.filter((component) => component.id !== id))
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h3 className="text-sm font-semibold text-foreground">Components</h3>
+          <p className="text-xs text-muted-foreground">Enabled weights must total 100.</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={`rounded-md border px-2.5 py-1 text-xs font-semibold ${totalState}`}>
+            {total.toFixed(total % 1 === 0 ? 0 : 2)}%
+          </span>
+          <button
+            type="button"
+            className={secondaryButtonClass}
+            onClick={() => onChange((current) => [...current, createScorecardComponentDraft()])}
+          >
+            <PlusIcon className="size-4" />
+            Add
+          </button>
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-lg border border-border">
+        <div className="hidden grid-cols-[minmax(8rem,1fr)_minmax(9rem,1.1fr)_minmax(9rem,1fr)_5rem_5rem_5rem_5rem] gap-2 border-b border-border bg-muted/40 px-3 py-2 text-xs font-semibold text-muted-foreground lg:grid">
+          <span>Code</span>
+          <span>Label</span>
+          <span>Type</span>
+          <span>Weight</span>
+          <span>Enabled</span>
+          <span>Required</span>
+          <span />
+        </div>
+        <div className="divide-y divide-border">
+          {components.map((component) => (
+            <div
+              key={component.id}
+              className="grid gap-2 px-3 py-3 lg:grid-cols-[minmax(8rem,1fr)_minmax(9rem,1.1fr)_minmax(9rem,1fr)_5rem_5rem_5rem_5rem] lg:items-center"
+            >
+              <label className="grid gap-1 text-xs lg:block">
+                <span className="font-semibold text-muted-foreground lg:hidden">Code</span>
+                <input
+                  className={inputClass}
+                  value={component.code}
+                  onChange={(event) => updateComponent(component.id, { code: event.target.value })}
+                />
+              </label>
+              <label className="grid gap-1 text-xs lg:block">
+                <span className="font-semibold text-muted-foreground lg:hidden">Label</span>
+                <input
+                  className={inputClass}
+                  value={component.label}
+                  onChange={(event) => updateComponent(component.id, { label: event.target.value })}
+                />
+              </label>
+              <label className="grid gap-1 text-xs lg:block">
+                <span className="font-semibold text-muted-foreground lg:hidden">Type</span>
+                <select
+                  className={inputClass}
+                  value={component.type}
+                  onChange={(event) =>
+                    updateComponent(component.id, {
+                      type: event.target.value as ScorecardComponentDraft["type"],
+                    })
+                  }
+                >
+                  {SCORECARD_COMPONENT_TYPES.map((type) => (
+                    <option key={type} value={type}>
+                      {prettify(type)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="grid gap-1 text-xs lg:block">
+                <span className="font-semibold text-muted-foreground lg:hidden">Weight</span>
+                <input
+                  className={inputClass}
+                  inputMode="decimal"
+                  value={component.weight}
+                  onChange={(event) => updateComponent(component.id, { weight: event.target.value })}
+                />
+              </label>
+              <label className="flex items-center justify-between gap-2 rounded-md border border-border px-3 py-2 text-xs font-medium lg:justify-center lg:border-0 lg:px-0">
+                <span className="text-muted-foreground lg:hidden">Enabled</span>
+                <input
+                  type="checkbox"
+                  checked={component.enabled}
+                  onChange={(event) => updateComponent(component.id, { enabled: event.target.checked })}
+                />
+              </label>
+              <label className="flex items-center justify-between gap-2 rounded-md border border-border px-3 py-2 text-xs font-medium lg:justify-center lg:border-0 lg:px-0">
+                <span className="text-muted-foreground lg:hidden">Required</span>
+                <input
+                  type="checkbox"
+                  checked={component.required}
+                  onChange={(event) => updateComponent(component.id, { required: event.target.checked })}
+                />
+              </label>
+              <button
+                type="button"
+                className="inline-flex h-9 items-center justify-center rounded-md border border-border px-3 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
+                onClick={() => removeComponent(component.id)}
+                disabled={components.length <= 1}
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function WorkflowStepBuilder({
+  steps,
+  onChange,
+}: {
+  steps: WorkflowStepDraft[]
+  onChange: React.Dispatch<React.SetStateAction<WorkflowStepDraft[]>>
+}) {
+  function updateStep(id: string, patch: Partial<WorkflowStepDraft>) {
+    onChange((current) =>
+      current.map((step) => (step.id === id ? { ...step, ...patch } : step)),
+    )
+  }
+
+  function removeStep(id: string) {
+    onChange((current) => current.filter((step) => step.id !== id))
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h3 className="text-sm font-semibold text-foreground">Approval chain</h3>
+          <p className="text-xs text-muted-foreground">Steps run by ascending sequence number.</p>
+        </div>
+        <button
+          type="button"
+          className={secondaryButtonClass}
+          onClick={() => onChange((current) => [...current, createWorkflowStepDraft(current.length + 1)])}
+        >
+          <PlusIcon className="size-4" />
+          Add
+        </button>
+      </div>
+
+      <div className="overflow-hidden rounded-lg border border-border">
+        <div className="hidden grid-cols-[minmax(7rem,1fr)_minmax(9rem,1.2fr)_minmax(9rem,1fr)_4.5rem_5rem_5rem_5rem] gap-2 border-b border-border bg-muted/40 px-3 py-2 text-xs font-semibold text-muted-foreground lg:grid">
+          <span>Code</span>
+          <span>Label</span>
+          <span>Approver</span>
+          <span>Seq.</span>
+          <span>Required</span>
+          <span>Final</span>
+          <span />
+        </div>
+        <div className="divide-y divide-border">
+          {steps.map((step) => (
+            <div
+              key={step.id}
+              className="grid gap-2 px-3 py-3 lg:grid-cols-[minmax(7rem,1fr)_minmax(9rem,1.2fr)_minmax(9rem,1fr)_4.5rem_5rem_5rem_5rem] lg:items-center"
+            >
+              <label className="grid gap-1 text-xs lg:block">
+                <span className="font-semibold text-muted-foreground lg:hidden">Code</span>
+                <input
+                  className={inputClass}
+                  value={step.code}
+                  onChange={(event) => updateStep(step.id, { code: event.target.value })}
+                />
+              </label>
+              <label className="grid gap-1 text-xs lg:block">
+                <span className="font-semibold text-muted-foreground lg:hidden">Label</span>
+                <input
+                  className={inputClass}
+                  value={step.label}
+                  onChange={(event) => updateStep(step.id, { label: event.target.value })}
+                />
+              </label>
+              <label className="grid gap-1 text-xs lg:block">
+                <span className="font-semibold text-muted-foreground lg:hidden">Approver</span>
+                <select
+                  className={inputClass}
+                  value={step.type}
+                  onChange={(event) =>
+                    updateStep(step.id, {
+                      type: event.target.value as WorkflowStepDraft["type"],
+                    })
+                  }
+                >
+                  {WORKFLOW_STEP_TYPES.map((type) => (
+                    <option key={type} value={type}>
+                      {prettify(type)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="grid gap-1 text-xs lg:block">
+                <span className="font-semibold text-muted-foreground lg:hidden">Sequence</span>
+                <input
+                  className={inputClass}
+                  inputMode="numeric"
+                  value={step.sequenceNumber}
+                  onChange={(event) => updateStep(step.id, { sequenceNumber: event.target.value })}
+                />
+              </label>
+              <label className="flex items-center justify-between gap-2 rounded-md border border-border px-3 py-2 text-xs font-medium lg:justify-center lg:border-0 lg:px-0">
+                <span className="text-muted-foreground lg:hidden">Required</span>
+                <input
+                  type="checkbox"
+                  checked={step.required}
+                  onChange={(event) => updateStep(step.id, { required: event.target.checked })}
+                />
+              </label>
+              <label className="flex items-center justify-between gap-2 rounded-md border border-border px-3 py-2 text-xs font-medium lg:justify-center lg:border-0 lg:px-0">
+                <span className="text-muted-foreground lg:hidden">Final</span>
+                <input
+                  type="checkbox"
+                  checked={step.canFinalize}
+                  onChange={(event) => updateStep(step.id, { canFinalize: event.target.checked })}
+                />
+              </label>
+              <button
+                type="button"
+                className="inline-flex h-9 items-center justify-center rounded-md border border-border px-3 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
+                onClick={() => removeStep(step.id)}
+                disabled={steps.length <= 1}
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
   )
 }
 

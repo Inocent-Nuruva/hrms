@@ -11,6 +11,8 @@ const ALLOWED_VIEWS = new Set<PerformanceSelfTab>([
   "assignments",
   "assign-tasks",
   "reviews",
+  "feedback",
+  "development",
   "achievements",
   "improvement",
   "team",

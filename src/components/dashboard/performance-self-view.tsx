@@ -42,19 +42,24 @@ import {
   acknowledgeMyPerformanceImprovementPlan,
   createManagerActivityTask,
   createMyActivityTask,
+  declineMyPerformanceFeedback360,
   getManagerPerformanceSummary,
   getMyPerformanceSummary,
   listManagerActivityAssignees,
   listManagerTeamAchievements,
   listMyPerformanceAchievements,
   listMyPerformanceAssignments,
+  listMyPerformanceDevelopmentPlans,
+  listMyPerformanceFeedback360,
   listMyPerformanceImprovementPlans,
   listMyPerformanceReviews,
   listMyActivityTasks,
   submitManagerPerformanceReview,
   submitMyPerformanceAppeal,
+  submitMyPerformanceFeedback360,
   submitMyPerformanceSelfReview,
   updateMyPerformanceAchievement,
+  updateMyPerformanceDevelopmentGoal,
   validateManagerAchievement,
   type AdminRecord,
 } from "@/lib/admin-api"
@@ -69,11 +74,13 @@ export type PerformanceSelfTab =
   | "assignments"
   | "assign-tasks"
   | "reviews"
+  | "feedback"
+  | "development"
   | "achievements"
   | "improvement"
   | "team"
 
-type ActionMode = "self-review" | "appeal" | "achievement" | "manager-review" | "validate"
+type ActionMode = "self-review" | "appeal" | "achievement" | "manager-review" | "validate" | "feedback-360" | "development-goal"
 
 const PERFORMANCE_CYCLE_STEPS = [
   {
@@ -225,6 +232,8 @@ export function PerformanceSelfView({
   const [taskEmployees, setTaskEmployees] = React.useState<AdminRecord[]>([])
   const [activityTasks, setActivityTasks] = React.useState<AdminRecord[]>([])
   const [reviews, setReviews] = React.useState<AdminRecord[]>([])
+  const [feedback360, setFeedback360] = React.useState<AdminRecord[]>([])
+  const [developmentPlans, setDevelopmentPlans] = React.useState<AdminRecord[]>([])
   const [achievements, setAchievements] = React.useState<AdminRecord[]>([])
   const [pips, setPips] = React.useState<AdminRecord[]>([])
   const [teamAchievements, setTeamAchievements] = React.useState<AdminRecord[]>([])
@@ -265,6 +274,8 @@ export function PerformanceSelfView({
           getMyPerformanceSummary(token).then(setSummary),
           listMyPerformanceAssignments(token).then(setAssignments),
           listMyPerformanceReviews(token).then(setReviews),
+          listMyPerformanceFeedback360(token).then(setFeedback360).catch(() => setFeedback360([])),
+          listMyPerformanceDevelopmentPlans(token).then(setDevelopmentPlans).catch(() => setDevelopmentPlans([])),
           listMyPerformanceAchievements(token).then(setAchievements),
           listMyPerformanceImprovementPlans(token).then(setPips),
         )
@@ -321,6 +332,8 @@ export function PerformanceSelfView({
     forgetForbiddenRoute("/dashboard/me/performance/assignments")
     forgetForbiddenRoute("/dashboard/me/performance/assign-tasks")
     forgetForbiddenRoute("/dashboard/me/performance/reviews")
+    forgetForbiddenRoute("/dashboard/me/performance/feedback")
+    forgetForbiddenRoute("/dashboard/me/performance/development")
     forgetForbiddenRoute("/dashboard/me/performance/achievements")
     forgetForbiddenRoute("/dashboard/me/performance/improvement")
     forgetForbiddenRoute("/dashboard/me/performance/team")
@@ -344,6 +357,15 @@ export function PerformanceSelfView({
       ? assignments
       : activeTab === "reviews"
         ? reviews
+        : activeTab === "feedback"
+          ? feedback360
+        : activeTab === "development"
+          ? developmentPlans.flatMap((plan) =>
+              asRecordArray(plan.goals).map((goal) => ({
+                ...goal,
+                plan_title: readString(plan, ["title"], `Plan #${rowId(plan)}`),
+              })),
+            )
         : activeTab === "achievements"
           ? achievements
           : activeTab === "improvement"
@@ -462,6 +484,32 @@ export function PerformanceSelfView({
           override_reason: form.override_reason || undefined,
           submit_for_hr: form.submit_for_hr === "true",
         })
+      } else if (actionMode === "feedback-360") {
+        const id = rowId(actionRow)
+        const overallScore = Number(form.overall_score)
+        if (!id) throw new Error("Feedback request is missing.")
+        if (!Number.isFinite(overallScore) || overallScore < 0 || overallScore > 100) {
+          throw new Error("Overall score must be between 0 and 100.")
+        }
+        await submitMyPerformanceFeedback360(token, id, {
+          overall_score: overallScore,
+          ratings: {
+            collaboration: Number(form.collaboration_score || overallScore),
+            communication: Number(form.communication_score || overallScore),
+            ownership: Number(form.ownership_score || overallScore),
+          },
+          strengths: form.strengths || undefined,
+          improvement_areas: form.improvement_areas || undefined,
+          comments: form.comments || undefined,
+        })
+      } else if (actionMode === "development-goal") {
+        const id = rowId(actionRow)
+        if (!id) throw new Error("Development goal is missing.")
+        await updateMyPerformanceDevelopmentGoal(token, id, {
+          status: form.status || undefined,
+          progress_percent: form.progress_percent ? Number(form.progress_percent) : undefined,
+          employee_comment: form.employee_comment || undefined,
+        })
       }
       toast.success("Saved.")
       setActionOpen(false)
@@ -540,6 +588,128 @@ export function PerformanceSelfView({
                 Appeal
               </button>
             </div>
+          ),
+        },
+      ]
+    }
+    if (activeTab === "feedback") {
+      return [
+        {
+          key: "review",
+          label: "Review",
+          render: (row) => (
+            <div className="space-y-0.5">
+              <p className="font-medium">Review #{readNumber(row, ["performanceReviewId", "performance_review_id"]) ?? "N/A"}</p>
+              <p className="text-xs text-muted-foreground">
+                {prettify(readString(row, ["relationshipType", "relationship_type"], "PEER"))}
+              </p>
+            </div>
+          ),
+        },
+        {
+          key: "status",
+          label: "Status",
+          render: (row) => <StatusChip value={readString(row, ["status"], "PENDING")} />,
+        },
+        {
+          key: "due",
+          label: "Due",
+          render: (row) => readString(row, ["dueDate", "due_date"], "N/A"),
+        },
+        {
+          key: "score",
+          label: "Score",
+          render: (row) => readString(row, ["overallScore", "overall_score"], "N/A"),
+        },
+        {
+          key: "actions",
+          label: "Actions",
+          render: (row) => {
+            const id = rowId(row)
+            const status = readString(row, ["status"], "PENDING")
+            const isPending = status === "PENDING"
+            return (
+              <div className="flex flex-wrap gap-1">
+                <button
+                  type="button"
+                  className={actionButtonClass}
+                  disabled={!isPending}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    openAction("feedback-360", row)
+                  }}
+                >
+                  Submit
+                </button>
+                <button
+                  type="button"
+                  className={actionButtonClass}
+                  disabled={!isPending || busyId === `decline-${id}`}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    const token = readStoredToken()
+                    if (!token || !id) return
+                    setBusyId(`decline-${id}`)
+                    void declineMyPerformanceFeedback360(token, id)
+                      .then(() => {
+                        toast.success("Feedback request declined.")
+                        return load()
+                      })
+                      .catch((errorObject) => {
+                        toast.error(errorObject instanceof Error ? errorObject.message : "Could not decline.")
+                      })
+                      .finally(() => setBusyId(""))
+                  }}
+                >
+                  {busyId === `decline-${id}` ? <Loader2Icon className="size-3.5 animate-spin" /> : "Decline"}
+                </button>
+              </div>
+            )
+          },
+        },
+      ]
+    }
+    if (activeTab === "development") {
+      return [
+        {
+          key: "goal",
+          label: "Goal",
+          render: (row) => (
+            <div className="space-y-0.5">
+              <p className="font-medium">{readString(row, ["title"], `Goal #${rowId(row)}`)}</p>
+              <p className="text-xs text-muted-foreground">{readString(row, ["plan_title"], "Development plan")}</p>
+            </div>
+          ),
+        },
+        {
+          key: "status",
+          label: "Status",
+          render: (row) => <StatusChip value={readString(row, ["status"], "OPEN")} />,
+        },
+        {
+          key: "progress",
+          label: "Progress",
+          render: (row) => `${readString(row, ["progressPercent", "progress_percent"], "0")}%`,
+        },
+        {
+          key: "target",
+          label: "Target",
+          render: (row) => readString(row, ["targetDate", "target_date"], "N/A"),
+        },
+        {
+          key: "actions",
+          label: "Actions",
+          render: (row) => (
+            <button
+              type="button"
+              className={actionButtonClass}
+              onClick={(event) => {
+                event.stopPropagation()
+                openAction("development-goal", row)
+              }}
+            >
+              Update
+            </button>
           ),
         },
       ]
@@ -703,6 +873,8 @@ export function PerformanceSelfView({
               { label: "Review assignments", value: String(assignments.length) },
               { label: "Assigned work", value: String(activityTasks.length) },
               { label: "Reviews", value: String(reviews.length) },
+              { label: "Feedback", value: String(feedback360.filter((item) => readString(item, ["status"], "PENDING") === "PENDING").length) },
+              { label: "Development", value: String(developmentPlans.length || readNumber(summary, ["development_plans", "developmentPlans"]) || 0) },
               { label: "Achievements", value: String(achievements.length) },
               { label: "Improvement", value: String(pips.length) },
             ]}
@@ -751,6 +923,10 @@ export function PerformanceSelfView({
                 ? "Team performance"
                 : activeTab === "assign-tasks"
                   ? "Assign tasks"
+                  : activeTab === "feedback"
+                    ? "360 feedback"
+                  : activeTab === "development"
+                    ? "Development"
                   : prettify(activeTab)}
             </h1>
             <p className="text-sm text-muted-foreground">
@@ -758,6 +934,10 @@ export function PerformanceSelfView({
                 ? "Validate team achievements and submit manager reviews."
                 : activeTab === "assign-tasks"
                   ? "Create a task for a direct report and track the handover in daily activities."
+                  : activeTab === "feedback"
+                    ? "Respond to peer, subordinate, and stakeholder feedback requests."
+                  : activeTab === "development"
+                    ? "Track development goals and update progress."
                   : "Work that belongs to your current review cycle."}
             </p>
           </div>
@@ -912,9 +1092,17 @@ export function PerformanceSelfView({
                     ? "Update achievement"
                     : actionMode === "validate"
                       ? "Validate achievement"
+                      : actionMode === "feedback-360"
+                        ? "Submit 360 feedback"
+                      : actionMode === "development-goal"
+                        ? "Update development goal"
                       : "Submit manager review"}
             </DialogTitle>
-            <DialogDescription>Sends the documented self-service or manager payload.</DialogDescription>
+            <DialogDescription>
+              {actionMode === "feedback-360"
+                ? "Share specific, fair feedback for this review cycle."
+                : "Sends the documented self-service or manager payload."}
+            </DialogDescription>
           </DialogHeader>
           <div className="grid gap-3">
             {actionMode === "self-review" || actionMode === "manager-review" ? (
@@ -962,6 +1150,60 @@ export function PerformanceSelfView({
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Improvements (one per line)</span>
                   <textarea className={textareaClass} value={form.areas_for_improvement ?? ""} onChange={(event) => setForm((current) => ({ ...current, areas_for_improvement: event.target.value }))} />
+                </label>
+              </>
+            ) : null}
+            {actionMode === "feedback-360" ? (
+              <>
+                <label className="grid gap-1.5 text-sm">
+                  <span className="font-medium">Overall score</span>
+                  <input className={inputClass} inputMode="decimal" placeholder="0-100" value={form.overall_score ?? ""} onChange={(event) => setForm((current) => ({ ...current, overall_score: event.target.value }))} />
+                </label>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <label className="grid gap-1.5 text-sm">
+                    <span className="font-medium">Collaboration</span>
+                    <input className={inputClass} inputMode="decimal" placeholder="0-100" value={form.collaboration_score ?? ""} onChange={(event) => setForm((current) => ({ ...current, collaboration_score: event.target.value }))} />
+                  </label>
+                  <label className="grid gap-1.5 text-sm">
+                    <span className="font-medium">Communication</span>
+                    <input className={inputClass} inputMode="decimal" placeholder="0-100" value={form.communication_score ?? ""} onChange={(event) => setForm((current) => ({ ...current, communication_score: event.target.value }))} />
+                  </label>
+                  <label className="grid gap-1.5 text-sm">
+                    <span className="font-medium">Ownership</span>
+                    <input className={inputClass} inputMode="decimal" placeholder="0-100" value={form.ownership_score ?? ""} onChange={(event) => setForm((current) => ({ ...current, ownership_score: event.target.value }))} />
+                  </label>
+                </div>
+                <label className="grid gap-1.5 text-sm">
+                  <span className="font-medium">Strengths</span>
+                  <textarea className={textareaClass} value={form.strengths ?? ""} onChange={(event) => setForm((current) => ({ ...current, strengths: event.target.value }))} />
+                </label>
+                <label className="grid gap-1.5 text-sm">
+                  <span className="font-medium">Improvement areas</span>
+                  <textarea className={textareaClass} value={form.improvement_areas ?? ""} onChange={(event) => setForm((current) => ({ ...current, improvement_areas: event.target.value }))} />
+                </label>
+                <label className="grid gap-1.5 text-sm">
+                  <span className="font-medium">Comments</span>
+                  <textarea className={textareaClass} value={form.comments ?? ""} onChange={(event) => setForm((current) => ({ ...current, comments: event.target.value }))} />
+                </label>
+              </>
+            ) : null}
+            {actionMode === "development-goal" ? (
+              <>
+                <label className="grid gap-1.5 text-sm">
+                  <span className="font-medium">Status</span>
+                  <select className={inputClass} value={form.status ?? readString(actionRow, ["status"], "IN_PROGRESS")} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}>
+                    <option value="OPEN">Open</option>
+                    <option value="IN_PROGRESS">In progress</option>
+                    <option value="COMPLETED">Completed</option>
+                  </select>
+                </label>
+                <label className="grid gap-1.5 text-sm">
+                  <span className="font-medium">Progress percent</span>
+                  <input className={inputClass} inputMode="numeric" value={form.progress_percent ?? readString(actionRow, ["progressPercent", "progress_percent"], "0")} onChange={(event) => setForm((current) => ({ ...current, progress_percent: event.target.value }))} />
+                </label>
+                <label className="grid gap-1.5 text-sm">
+                  <span className="font-medium">Comment</span>
+                  <textarea className={textareaClass} value={form.employee_comment ?? ""} onChange={(event) => setForm((current) => ({ ...current, employee_comment: event.target.value }))} />
                 </label>
               </>
             ) : null}

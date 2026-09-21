@@ -67,6 +67,7 @@ export const ADMIN_SMOKE_ROUTES: string[] = [
   "/dashboard/movements/overview",
   "/dashboard/movements/cases",
   "/dashboard/movements/operations",
+  "/dashboard/team/movements",
   "/dashboard/branches",
   "/dashboard/departments",
   "/dashboard/positions",

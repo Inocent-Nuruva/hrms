@@ -34,9 +34,7 @@ import {
 } from "lucide-react"
 import type { AdminResourceKey } from "@/lib/admin-api"
 import type { AuthScope } from "@/types"
-import {
-  normalizePermissionLabels,
-} from "@/lib/dashboard-permissions"
+import { normalizePermissionLabels } from "@/lib/dashboard-permissions"
 import {
   isSelfServiceDashboardRoute,
   mergeUniqueNavItems,
@@ -70,7 +68,12 @@ const IPromotion = <TrendingUp />
 
 type AppSidebarAccessMode = "admin" | "employee"
 
-type SearchItem = { title: string; url: string; section: string; keywords: string[] }
+type SearchItem = {
+  title: string
+  url: string
+  section: string
+  keywords: string[]
+}
 type SidebarNavItem = {
   title: string
   url?: string
@@ -198,14 +201,19 @@ const adminData: SidebarData = {
         "/dashboard/performance/overview",
         "/dashboard/performance/setup",
         "/dashboard/performance/plans",
+        "/dashboard/performance/development",
         "/dashboard/performance/reviews",
         "/dashboard/performance/improvement",
+        "/dashboard/performance/reports",
+        "/dashboard/performance/calibration",
         "/dashboard/me/performance",
         "/dashboard/me/performance/overview",
         "/dashboard/me/performance/kpis",
         "/dashboard/me/performance/assignments",
         "/dashboard/me/performance/assign-tasks",
         "/dashboard/me/performance/reviews",
+        "/dashboard/me/performance/feedback",
+        "/dashboard/me/performance/development",
         "/dashboard/me/performance/achievements",
         "/dashboard/me/performance/improvement",
         "/dashboard/me/performance/team",
@@ -284,6 +292,7 @@ const adminData: SidebarData = {
         "/dashboard/movements/overview",
         "/dashboard/movements/cases",
         "/dashboard/movements/operations",
+        "/dashboard/team/movements",
         "/dashboard/me/movements",
       ],
       icon: IMovements,
@@ -410,107 +419,618 @@ const platformData: SidebarData = {
 }
 
 const platformSearchIndex: SearchItem[] = [
-  { title: "Dashboard", url: "/dashboard", section: "Platform", keywords: ["platform", "overview"] },
-  { title: "Companies", url: "/dashboard/companies", section: "Platform", keywords: ["tenants", "organizations"] },
-  { title: "Roles", url: "/dashboard/roles", section: "Governance", keywords: ["access", "roles"] },
-  { title: "Permissions", url: "/dashboard/permissions", section: "Governance", keywords: ["access", "permissions"] },
-  { title: "Notifications", url: "/dashboard/operations/notifications", section: "Delivery", keywords: ["email", "channels", "logs"] },
-  { title: "SMS Platform", url: "/dashboard/sms/platform", section: "Delivery", keywords: ["sms", "registry", "logs"] },
+  {
+    title: "Dashboard",
+    url: "/dashboard",
+    section: "Platform",
+    keywords: ["platform", "overview"],
+  },
+  {
+    title: "Companies",
+    url: "/dashboard/companies",
+    section: "Platform",
+    keywords: ["tenants", "organizations"],
+  },
+  {
+    title: "Roles",
+    url: "/dashboard/roles",
+    section: "Governance",
+    keywords: ["access", "roles"],
+  },
+  {
+    title: "Permissions",
+    url: "/dashboard/permissions",
+    section: "Governance",
+    keywords: ["access", "permissions"],
+  },
+  {
+    title: "Notifications",
+    url: "/dashboard/operations/notifications",
+    section: "Delivery",
+    keywords: ["email", "channels", "logs"],
+  },
+  {
+    title: "SMS Platform",
+    url: "/dashboard/sms/platform",
+    section: "Delivery",
+    keywords: ["sms", "registry", "logs"],
+  },
 ]
 
 const adminSearchIndex = [
-  { title: "Dashboard", url: "/dashboard", section: "General", keywords: ["home", "overview"] },
-  { title: "Employees / All Employees", url: "/dashboard/employees/all", section: "Employees", keywords: ["employee", "directory", "staff"] },
-  { title: "Employees / Inactive Employees", url: "/dashboard/employees/inactive", section: "Employees", keywords: ["employee", "inactive", "archived", "removed"] },
-  { title: "Employees / Profile Updates", url: "/dashboard/employees/profile-update-approvals", section: "Employees", keywords: ["employee", "profile", "changes", "approval"] },
-  { title: "Employees / Profile Changes", url: "/dashboard/employees/profile-change-requests", section: "Employees", keywords: ["employee", "profile", "change request"] },
-  { title: "Employees / Offboarding", url: "/dashboard/employees/offboarding", section: "Employees", keywords: ["employee", "exit"] },
-  { title: "Employees / Onboarding", url: "/dashboard/employees/onboarding", section: "Employees", keywords: ["employee", "workflow", "request", "approve"] },
-  { title: "Attendance / Attendance Setup / Policies", url: "/dashboard/attendance/policies", section: "Attendance Setup", keywords: ["attendance", "policies"] },
-  { title: "Attendance / Attendance Setup / Holiday Groups", url: "/dashboard/attendance/holiday-groups", section: "Attendance Setup", keywords: ["attendance", "holiday groups", "calendar"] },
-  { title: "Attendance / Attendance Setup / Holidays", url: "/dashboard/attendance/holidays", section: "Attendance Setup", keywords: ["attendance", "holidays"] },
-  { title: "Access Control / Devices", url: "/dashboard/access-control/devices", section: "Access Control", keywords: ["attendance", "devices", "terminal"] },
-  { title: "Attendance / Attendance Setup / Geofences", url: "/dashboard/attendance/geofences", section: "Attendance Setup", keywords: ["attendance", "geofence", "gps", "location"] },
-  { title: "Attendance / Attendance Setup / Wi-Fi Networks", url: "/dashboard/attendance/wifi-networks", section: "Attendance Setup", keywords: ["attendance", "wifi", "network", "ssid"] },
-  { title: "Attendance / Attendance Setup / Checkpoints", url: "/dashboard/attendance/checkpoints", section: "Attendance Setup", keywords: ["attendance", "checkpoints"] },
-  { title: "Attendance / Shift Management / Shifts", url: "/dashboard/attendance/shifts", section: "Shift Management", keywords: ["attendance", "shift", "schedule"] },
-  { title: "Attendance / Shift Management / Shift Breaks", url: "/dashboard/attendance/shift-breaks", section: "Shift Management", keywords: ["attendance", "shift", "break"] },
-  { title: "Attendance / Shift Management / Shift Assignments", url: "/dashboard/attendance/shift-assignments", section: "Shift Management", keywords: ["attendance", "shift", "assignments"] },
-  { title: "Attendance / Shift Management / Shift Schedules", url: "/dashboard/attendance/shift-schedules", section: "Shift Management", keywords: ["attendance", "shift", "schedules"] },
-  { title: "Attendance / Shift Management / Rotation Groups and Rules", url: "/dashboard/attendance/shift-rotation-groups", section: "Shift Management", keywords: ["attendance", "shift", "rotation"] },
-  { title: "Attendance / Correction Requests", url: "/dashboard/attendance/correction-requests", section: "Correction Requests", keywords: ["attendance", "correction", "request", "approve", "hr"] },
-  { title: "Attendance / Timetable Management / Timetables", url: "/dashboard/attendance/timetables", section: "Timetable Management", keywords: ["attendance", "timetable"] },
-  { title: "Attendance / Timetable Management / Timetable Days", url: "/dashboard/attendance/timetable-days", section: "Timetable Management", keywords: ["attendance", "timetable", "days"] },
-  { title: "Attendance / Timetable Management / Timetable Holiday Rules", url: "/dashboard/attendance/timetable-holiday-rules", section: "Timetable Management", keywords: ["attendance", "timetable", "holiday rules"] },
-  { title: "Attendance / Timetable Management / Timetable Rotations and Rules", url: "/dashboard/attendance/timetable-rotations", section: "Timetable Management", keywords: ["attendance", "timetable", "rotation"] },
-  { title: "Attendance / Timetable Management / Employee Timetables", url: "/dashboard/attendance/employee-timetables", section: "Timetable Management", keywords: ["attendance", "employee", "timetable"] },
-  { title: "Attendance / Attendance Operations / Mobile Punch Review", url: "/dashboard/attendance/mobile-punches", section: "Attendance Operations", keywords: ["attendance", "mobile", "punches", "check in", "check out"] },
-  { title: "Attendance / Attendance Operations / Daily Summaries", url: "/dashboard/attendance/daily-summaries", section: "Attendance Operations", keywords: ["attendance", "daily", "summaries", "processed"] },
-  { title: "Attendance / Attendance Operations / Recalculation Jobs", url: "/dashboard/attendance/recalculation-jobs", section: "Attendance Operations", keywords: ["attendance", "recalculation", "jobs", "processing"] },
-  { title: "Attendance / Attendance Operations / Unmatched Logs", url: "/dashboard/attendance/unmatched-logs", section: "Attendance Operations", keywords: ["attendance", "unmatched", "logs", "processing"] },
-  { title: "Attendance / Attendance Operations / Device Sync Logs", url: "/dashboard/attendance/device-sync-logs", section: "Attendance Operations", keywords: ["attendance", "sync logs"] },
-  { title: "Access Control / Doors", url: "/dashboard/access-control/doors", section: "Access Control", keywords: ["attendance", "doors", "access"] },
-  { title: "Access Control / Templates", url: "/dashboard/access-control/templates", section: "Access Control", keywords: ["attendance", "templates", "schedule"] },
-  { title: "Access Control / Week Plans", url: "/dashboard/access-control/week-plans", section: "Access Control", keywords: ["attendance", "week plan", "schedule"] },
-  { title: "Access Control / Organization", url: "/dashboard/access-control/organizations", section: "Access Control", keywords: ["attendance", "organization", "access"] },
-  { title: "Access Control / Groups", url: "/dashboard/access-control/groups", section: "Access Control", keywords: ["attendance", "groups", "access"] },
-  { title: "Access Control / Credentials", url: "/dashboard/access-control/access-credentials", section: "Access Control", keywords: ["credential", "card", "fingerprint", "pin"] },
-  { title: "Access Control / Audit Logs", url: "/dashboard/access-control/audit-logs", section: "Access Control", keywords: ["audit", "logs", "device access"] },
-  { title: "Access Control / Command Logs", url: "/dashboard/access-control/device-command-logs", section: "Access Control", keywords: ["command", "logs", "hikvision"] },
-  { title: "Access Control / Sync Logs", url: "/dashboard/access-control/hikvision-sync-logs", section: "Access Control", keywords: ["sync", "logs", "hikvision"] },
-  { title: "Leave Management / Leave Types", url: "/dashboard/leave-management/types", section: "Leave", keywords: ["leave", "types", "vacation"] },
-  { title: "Leave Management / Leave Requests", url: "/dashboard/leave-management/requests", section: "Leave", keywords: ["leave", "request", "approval"] },
-  { title: "Leave Management / Leave Balances", url: "/dashboard/leave-management/balances", section: "Leave", keywords: ["leave", "balance", "quota"] },
-  { title: "Leave Management / Business Trips", url: "/dashboard/leave-management/business-trips", section: "Leave", keywords: ["leave", "business trip", "travel", "client visit"] },
-  { title: "Leave Management / Holidays", url: "/dashboard/leave-management/holidays", section: "Leave", keywords: ["leave", "holiday", "calendar"] },
-  { title: "Leave Management / Policies", url: "/dashboard/leave-management/policies", section: "Leave", keywords: ["leave", "policy", "quota"] },
-  { title: "Leave Management / Workflows", url: "/dashboard/leave-management/workflows", section: "Leave", keywords: ["leave", "workflow", "approval"] },
-  { title: "Performance / Overview", url: "/dashboard/performance/overview", section: "Performance", keywords: ["performance", "kpi", "review", "score"] },
-  { title: "Performance / Setup", url: "/dashboard/performance/setup", section: "Performance", keywords: ["performance", "kpi", "year", "period", "template"] },
-  { title: "Performance / Plans", url: "/dashboard/performance/plans", section: "Performance", keywords: ["performance", "plan", "kpi"] },
-  { title: "Performance / Reviews", url: "/dashboard/performance/reviews", section: "Performance", keywords: ["performance", "review", "appeal", "moderation"] },
-  { title: "Performance / Improvement", url: "/dashboard/performance/improvement", section: "Performance", keywords: ["performance", "pip", "improvement"] },
-  { title: "Probation / Overview", url: "/dashboard/probation/overview", section: "Probation", keywords: ["probation", "confirmation"] },
-  { title: "Probation / Policies", url: "/dashboard/probation/policies", section: "Probation", keywords: ["probation", "policy"] },
-  { title: "Probation / Cases", url: "/dashboard/probation/cases", section: "Probation", keywords: ["probation", "case", "confirmation"] },
-  { title: "Probation / Team", url: "/dashboard/probation/team", section: "Probation", keywords: ["probation", "team", "manager"] },
-  { title: "Field / Overview", url: "/dashboard/field/overview", section: "Field", keywords: ["field", "visit", "map"] },
-  { title: "Field / Visits", url: "/dashboard/field/visits", section: "Field", keywords: ["field", "visit"] },
-  { title: "Field / Parties", url: "/dashboard/field/parties", section: "Field", keywords: ["field", "customer", "party"] },
-  { title: "Finance / Overview", url: "/dashboard/finance/overview", section: "Finance", keywords: ["finance", "loan", "advance"] },
-  { title: "Finance / Products", url: "/dashboard/finance/products", section: "Finance", keywords: ["loan", "advance", "product"] },
-  { title: "Finance / Applications", url: "/dashboard/finance/applications", section: "Finance", keywords: ["loan", "advance", "application"] },
-  { title: "Finance / Accounts", url: "/dashboard/finance/accounts", section: "Finance", keywords: ["loan", "repayment", "disbursement"] },
-  { title: "Activities / Overview", url: "/dashboard/activities/overview", section: "Activities", keywords: ["activity", "daily", "report"] },
-  { title: "Activities / Reports", url: "/dashboard/activities/reports", section: "Activities", keywords: ["activity", "report"] },
-  { title: "Activities / Reviews", url: "/dashboard/activities/reviews", section: "Activities", keywords: ["activity", "review", "approve"] },
-  { title: "Activities / Exceptions", url: "/dashboard/activities/exceptions", section: "Activities", keywords: ["activity", "exception"] },
-  { title: "Movements / Overview", url: "/dashboard/movements/overview", section: "Movements", keywords: ["movement", "transfer", "promotion"] },
-  { title: "Movements / Cases", url: "/dashboard/movements/cases", section: "Movements", keywords: ["movement", "approve", "apply"] },
-  { title: "Movements / Operations", url: "/dashboard/movements/operations", section: "Movements", keywords: ["movement", "retry", "operation"] },
-  { title: "SMS / Overview", url: "/dashboard/sms/overview", section: "SMS", keywords: ["sms", "text", "message"] },
-  { title: "SMS / Registry", url: "/dashboard/sms/registry", section: "SMS", keywords: ["sms", "template", "registry"] },
-  { title: "SMS / Logs", url: "/dashboard/sms/logs", section: "SMS", keywords: ["sms", "log", "retry"] },
-  { title: "SMTP Settings", url: "/dashboard/smtp", section: "Delivery", keywords: ["smtp", "email", "mail", "invitation", "reports"] },
-  { title: "Structure / Cost centers", url: "/dashboard/structure/cost-centers", section: "Structure", keywords: ["cost center", "grade"] },
-  { title: "Structure / Grades", url: "/dashboard/structure/grades", section: "Structure", keywords: ["grade", "level"] },
-  { title: "Insights / HR", url: "/dashboard/insights/hr", section: "Insights", keywords: ["dashboard", "hr", "analytics"] },
-  { title: "Insights / Readiness", url: "/dashboard/insights/readiness", section: "Insights", keywords: ["launch", "health", "security"] },
-  { title: "Companies", url: "/dashboard/companies", section: "Organization", keywords: ["company", "organization", "tenant"] },
-  { title: "Departments", url: "/dashboard/departments", section: "Organization", keywords: ["department", "org"] },
-  { title: "Branches", url: "/dashboard/branches", section: "Organization", keywords: ["branch", "location"] },
-  { title: "Positions", url: "/dashboard/positions", section: "Organization", keywords: ["position", "job title"] },
-  { title: "Invite & register", url: "/dashboard/operations/recruitment", section: "Operations", keywords: ["hiring", "talent", "recruitment", "invite"] },
-  { title: "Structure / Numbering", url: "/dashboard/structure/numbering", section: "Structure", keywords: ["employee number", "prefix"] },
-  { title: "Insights / Sales field", url: "/dashboard/insights/sales-field", section: "Insights", keywords: ["sales", "field", "analytics"] },
-  { title: "Help", url: "/dashboard/help", section: "General", keywords: ["help", "support", "sso", "shortcuts"] },
-  { title: "Payroll", url: "/dashboard/operations/payroll", section: "Operations", keywords: ["payroll", "runs", "payslips", "salary", "banking"] },
-  { title: "Reports", url: "/dashboard/operations/reports", section: "Operations", keywords: ["attendance", "download", "xlsx", "csv", "pdf", "scheduled", "smtp", "templates"] },
-  { title: "Scheduled Reporting", url: "/dashboard/operations/scheduled-reporting", section: "Operations", keywords: ["scheduled reporting", "templates", "schedules", "executions", "smtp"] },
-  { title: "Notifications", url: "/dashboard/operations/notifications", section: "Operations", keywords: ["notifications", "inbox", "alerts", "read", "seen", "archive"] },
-  { title: "Access Control / Roles", url: "/dashboard/access-control/roles", section: "Access Control", keywords: ["role", "access", "authorization"] },
-  { title: "Access Control / Permissions", url: "/dashboard/access-control/permissions", section: "Access Control", keywords: ["permission", "policy", "authorization"] },
-  { title: "Settings", url: "/dashboard/settings", section: "General", keywords: ["preferences", "account"] },
+  {
+    title: "Dashboard",
+    url: "/dashboard",
+    section: "General",
+    keywords: ["home", "overview"],
+  },
+  {
+    title: "Employees / All Employees",
+    url: "/dashboard/employees/all",
+    section: "Employees",
+    keywords: ["employee", "directory", "staff"],
+  },
+  {
+    title: "Employees / Inactive Employees",
+    url: "/dashboard/employees/inactive",
+    section: "Employees",
+    keywords: ["employee", "inactive", "archived", "removed"],
+  },
+  {
+    title: "Employees / Profile Updates",
+    url: "/dashboard/employees/profile-update-approvals",
+    section: "Employees",
+    keywords: ["employee", "profile", "changes", "approval"],
+  },
+  {
+    title: "Employees / Profile Changes",
+    url: "/dashboard/employees/profile-change-requests",
+    section: "Employees",
+    keywords: ["employee", "profile", "change request"],
+  },
+  {
+    title: "Employees / Offboarding",
+    url: "/dashboard/employees/offboarding",
+    section: "Employees",
+    keywords: ["employee", "exit"],
+  },
+  {
+    title: "Employees / Onboarding",
+    url: "/dashboard/employees/onboarding",
+    section: "Employees",
+    keywords: ["employee", "workflow", "request", "approve"],
+  },
+  {
+    title: "Attendance / Attendance Setup / Policies",
+    url: "/dashboard/attendance/policies",
+    section: "Attendance Setup",
+    keywords: ["attendance", "policies"],
+  },
+  {
+    title: "Attendance / Attendance Setup / Holiday Groups",
+    url: "/dashboard/attendance/holiday-groups",
+    section: "Attendance Setup",
+    keywords: ["attendance", "holiday groups", "calendar"],
+  },
+  {
+    title: "Attendance / Attendance Setup / Holidays",
+    url: "/dashboard/attendance/holidays",
+    section: "Attendance Setup",
+    keywords: ["attendance", "holidays"],
+  },
+  {
+    title: "Access Control / Devices",
+    url: "/dashboard/access-control/devices",
+    section: "Access Control",
+    keywords: ["attendance", "devices", "terminal"],
+  },
+  {
+    title: "Attendance / Attendance Setup / Geofences",
+    url: "/dashboard/attendance/geofences",
+    section: "Attendance Setup",
+    keywords: ["attendance", "geofence", "gps", "location"],
+  },
+  {
+    title: "Attendance / Attendance Setup / Wi-Fi Networks",
+    url: "/dashboard/attendance/wifi-networks",
+    section: "Attendance Setup",
+    keywords: ["attendance", "wifi", "network", "ssid"],
+  },
+  {
+    title: "Attendance / Attendance Setup / Checkpoints",
+    url: "/dashboard/attendance/checkpoints",
+    section: "Attendance Setup",
+    keywords: ["attendance", "checkpoints"],
+  },
+  {
+    title: "Attendance / Shift Management / Shifts",
+    url: "/dashboard/attendance/shifts",
+    section: "Shift Management",
+    keywords: ["attendance", "shift", "schedule"],
+  },
+  {
+    title: "Attendance / Shift Management / Shift Breaks",
+    url: "/dashboard/attendance/shift-breaks",
+    section: "Shift Management",
+    keywords: ["attendance", "shift", "break"],
+  },
+  {
+    title: "Attendance / Shift Management / Shift Assignments",
+    url: "/dashboard/attendance/shift-assignments",
+    section: "Shift Management",
+    keywords: ["attendance", "shift", "assignments"],
+  },
+  {
+    title: "Attendance / Shift Management / Shift Schedules",
+    url: "/dashboard/attendance/shift-schedules",
+    section: "Shift Management",
+    keywords: ["attendance", "shift", "schedules"],
+  },
+  {
+    title: "Attendance / Shift Management / Rotation Groups and Rules",
+    url: "/dashboard/attendance/shift-rotation-groups",
+    section: "Shift Management",
+    keywords: ["attendance", "shift", "rotation"],
+  },
+  {
+    title: "Attendance / Correction Requests",
+    url: "/dashboard/attendance/correction-requests",
+    section: "Correction Requests",
+    keywords: ["attendance", "correction", "request", "approve", "hr"],
+  },
+  {
+    title: "Attendance / Timetable Management / Timetables",
+    url: "/dashboard/attendance/timetables",
+    section: "Timetable Management",
+    keywords: ["attendance", "timetable"],
+  },
+  {
+    title: "Attendance / Timetable Management / Timetable Days",
+    url: "/dashboard/attendance/timetable-days",
+    section: "Timetable Management",
+    keywords: ["attendance", "timetable", "days"],
+  },
+  {
+    title: "Attendance / Timetable Management / Timetable Holiday Rules",
+    url: "/dashboard/attendance/timetable-holiday-rules",
+    section: "Timetable Management",
+    keywords: ["attendance", "timetable", "holiday rules"],
+  },
+  {
+    title: "Attendance / Timetable Management / Timetable Rotations and Rules",
+    url: "/dashboard/attendance/timetable-rotations",
+    section: "Timetable Management",
+    keywords: ["attendance", "timetable", "rotation"],
+  },
+  {
+    title: "Attendance / Timetable Management / Employee Timetables",
+    url: "/dashboard/attendance/employee-timetables",
+    section: "Timetable Management",
+    keywords: ["attendance", "employee", "timetable"],
+  },
+  {
+    title: "Attendance / Attendance Operations / Mobile Punch Review",
+    url: "/dashboard/attendance/mobile-punches",
+    section: "Attendance Operations",
+    keywords: ["attendance", "mobile", "punches", "check in", "check out"],
+  },
+  {
+    title: "Attendance / Attendance Operations / Daily Summaries",
+    url: "/dashboard/attendance/daily-summaries",
+    section: "Attendance Operations",
+    keywords: ["attendance", "daily", "summaries", "processed"],
+  },
+  {
+    title: "Attendance / Attendance Operations / Recalculation Jobs",
+    url: "/dashboard/attendance/recalculation-jobs",
+    section: "Attendance Operations",
+    keywords: ["attendance", "recalculation", "jobs", "processing"],
+  },
+  {
+    title: "Attendance / Attendance Operations / Unmatched Logs",
+    url: "/dashboard/attendance/unmatched-logs",
+    section: "Attendance Operations",
+    keywords: ["attendance", "unmatched", "logs", "processing"],
+  },
+  {
+    title: "Attendance / Attendance Operations / Device Sync Logs",
+    url: "/dashboard/attendance/device-sync-logs",
+    section: "Attendance Operations",
+    keywords: ["attendance", "sync logs"],
+  },
+  {
+    title: "Access Control / Doors",
+    url: "/dashboard/access-control/doors",
+    section: "Access Control",
+    keywords: ["attendance", "doors", "access"],
+  },
+  {
+    title: "Access Control / Templates",
+    url: "/dashboard/access-control/templates",
+    section: "Access Control",
+    keywords: ["attendance", "templates", "schedule"],
+  },
+  {
+    title: "Access Control / Week Plans",
+    url: "/dashboard/access-control/week-plans",
+    section: "Access Control",
+    keywords: ["attendance", "week plan", "schedule"],
+  },
+  {
+    title: "Access Control / Organization",
+    url: "/dashboard/access-control/organizations",
+    section: "Access Control",
+    keywords: ["attendance", "organization", "access"],
+  },
+  {
+    title: "Access Control / Groups",
+    url: "/dashboard/access-control/groups",
+    section: "Access Control",
+    keywords: ["attendance", "groups", "access"],
+  },
+  {
+    title: "Access Control / Credentials",
+    url: "/dashboard/access-control/access-credentials",
+    section: "Access Control",
+    keywords: ["credential", "card", "fingerprint", "pin"],
+  },
+  {
+    title: "Access Control / Audit Logs",
+    url: "/dashboard/access-control/audit-logs",
+    section: "Access Control",
+    keywords: ["audit", "logs", "device access"],
+  },
+  {
+    title: "Access Control / Command Logs",
+    url: "/dashboard/access-control/device-command-logs",
+    section: "Access Control",
+    keywords: ["command", "logs", "hikvision"],
+  },
+  {
+    title: "Access Control / Sync Logs",
+    url: "/dashboard/access-control/hikvision-sync-logs",
+    section: "Access Control",
+    keywords: ["sync", "logs", "hikvision"],
+  },
+  {
+    title: "Leave Management / Leave Types",
+    url: "/dashboard/leave-management/types",
+    section: "Leave",
+    keywords: ["leave", "types", "vacation"],
+  },
+  {
+    title: "Leave Management / Leave Requests",
+    url: "/dashboard/leave-management/requests",
+    section: "Leave",
+    keywords: ["leave", "request", "approval"],
+  },
+  {
+    title: "Leave Management / Leave Balances",
+    url: "/dashboard/leave-management/balances",
+    section: "Leave",
+    keywords: ["leave", "balance", "quota"],
+  },
+  {
+    title: "Leave Management / Business Trips",
+    url: "/dashboard/leave-management/business-trips",
+    section: "Leave",
+    keywords: ["leave", "business trip", "travel", "client visit"],
+  },
+  {
+    title: "Leave Management / Holidays",
+    url: "/dashboard/leave-management/holidays",
+    section: "Leave",
+    keywords: ["leave", "holiday", "calendar"],
+  },
+  {
+    title: "Leave Management / Policies",
+    url: "/dashboard/leave-management/policies",
+    section: "Leave",
+    keywords: ["leave", "policy", "quota"],
+  },
+  {
+    title: "Leave Management / Workflows",
+    url: "/dashboard/leave-management/workflows",
+    section: "Leave",
+    keywords: ["leave", "workflow", "approval"],
+  },
+  {
+    title: "Performance / Overview",
+    url: "/dashboard/performance/overview",
+    section: "Performance",
+    keywords: ["performance", "kpi", "review", "score"],
+  },
+  {
+    title: "Performance / Setup",
+    url: "/dashboard/performance/setup",
+    section: "Performance",
+    keywords: ["performance", "kpi", "year", "period", "template"],
+  },
+  {
+    title: "Performance / Plans",
+    url: "/dashboard/performance/plans",
+    section: "Performance",
+    keywords: ["performance", "plan", "kpi"],
+  },
+  {
+    title: "Performance / Reviews",
+    url: "/dashboard/performance/reviews",
+    section: "Performance",
+    keywords: ["performance", "review", "appeal", "moderation"],
+  },
+  {
+    title: "Performance / Improvement",
+    url: "/dashboard/performance/improvement",
+    section: "Performance",
+    keywords: ["performance", "pip", "improvement"],
+  },
+  {
+    title: "Probation / Overview",
+    url: "/dashboard/probation/overview",
+    section: "Probation",
+    keywords: ["probation", "confirmation"],
+  },
+  {
+    title: "Probation / Policies",
+    url: "/dashboard/probation/policies",
+    section: "Probation",
+    keywords: ["probation", "policy"],
+  },
+  {
+    title: "Probation / Cases",
+    url: "/dashboard/probation/cases",
+    section: "Probation",
+    keywords: ["probation", "case", "confirmation"],
+  },
+  {
+    title: "Probation / Team",
+    url: "/dashboard/probation/team",
+    section: "Probation",
+    keywords: ["probation", "team", "manager"],
+  },
+  {
+    title: "Field / Overview",
+    url: "/dashboard/field/overview",
+    section: "Field",
+    keywords: ["field", "visit", "map"],
+  },
+  {
+    title: "Field / Visits",
+    url: "/dashboard/field/visits",
+    section: "Field",
+    keywords: ["field", "visit"],
+  },
+  {
+    title: "Field / Parties",
+    url: "/dashboard/field/parties",
+    section: "Field",
+    keywords: ["field", "customer", "party"],
+  },
+  {
+    title: "Finance / Overview",
+    url: "/dashboard/finance/overview",
+    section: "Finance",
+    keywords: ["finance", "loan", "advance"],
+  },
+  {
+    title: "Finance / Products",
+    url: "/dashboard/finance/products",
+    section: "Finance",
+    keywords: ["loan", "advance", "product"],
+  },
+  {
+    title: "Finance / Applications",
+    url: "/dashboard/finance/applications",
+    section: "Finance",
+    keywords: ["loan", "advance", "application"],
+  },
+  {
+    title: "Finance / Accounts",
+    url: "/dashboard/finance/accounts",
+    section: "Finance",
+    keywords: ["loan", "repayment", "disbursement"],
+  },
+  {
+    title: "Activities / Overview",
+    url: "/dashboard/activities/overview",
+    section: "Activities",
+    keywords: ["activity", "daily", "report"],
+  },
+  {
+    title: "Activities / Reports",
+    url: "/dashboard/activities/reports",
+    section: "Activities",
+    keywords: ["activity", "report"],
+  },
+  {
+    title: "Activities / Reviews",
+    url: "/dashboard/activities/reviews",
+    section: "Activities",
+    keywords: ["activity", "review", "approve"],
+  },
+  {
+    title: "Activities / Exceptions",
+    url: "/dashboard/activities/exceptions",
+    section: "Activities",
+    keywords: ["activity", "exception"],
+  },
+  {
+    title: "Movements / Overview",
+    url: "/dashboard/movements/overview",
+    section: "Movements",
+    keywords: ["movement", "transfer", "promotion"],
+  },
+  {
+    title: "Team Movements",
+    url: "/dashboard/team/movements",
+    section: "Movements",
+    keywords: ["movement", "team", "manager", "transfer"],
+  },
+  {
+    title: "Movements / Cases",
+    url: "/dashboard/movements/cases",
+    section: "Movements",
+    keywords: ["movement", "approve", "apply"],
+  },
+  {
+    title: "Movements / Operations",
+    url: "/dashboard/movements/operations",
+    section: "Movements",
+    keywords: ["movement", "retry", "operation"],
+  },
+  {
+    title: "SMS / Overview",
+    url: "/dashboard/sms/overview",
+    section: "SMS",
+    keywords: ["sms", "text", "message"],
+  },
+  {
+    title: "SMS / Registry",
+    url: "/dashboard/sms/registry",
+    section: "SMS",
+    keywords: ["sms", "template", "registry"],
+  },
+  {
+    title: "SMS / Logs",
+    url: "/dashboard/sms/logs",
+    section: "SMS",
+    keywords: ["sms", "log", "retry"],
+  },
+  {
+    title: "SMTP Settings",
+    url: "/dashboard/smtp",
+    section: "Delivery",
+    keywords: ["smtp", "email", "mail", "invitation", "reports"],
+  },
+  {
+    title: "Structure / Cost centers",
+    url: "/dashboard/structure/cost-centers",
+    section: "Structure",
+    keywords: ["cost center", "grade"],
+  },
+  {
+    title: "Structure / Grades",
+    url: "/dashboard/structure/grades",
+    section: "Structure",
+    keywords: ["grade", "level"],
+  },
+  {
+    title: "Insights / HR",
+    url: "/dashboard/insights/hr",
+    section: "Insights",
+    keywords: ["dashboard", "hr", "analytics"],
+  },
+  {
+    title: "Insights / Readiness",
+    url: "/dashboard/insights/readiness",
+    section: "Insights",
+    keywords: ["launch", "health", "security"],
+  },
+  {
+    title: "Companies",
+    url: "/dashboard/companies",
+    section: "Organization",
+    keywords: ["company", "organization", "tenant"],
+  },
+  {
+    title: "Departments",
+    url: "/dashboard/departments",
+    section: "Organization",
+    keywords: ["department", "org"],
+  },
+  {
+    title: "Branches",
+    url: "/dashboard/branches",
+    section: "Organization",
+    keywords: ["branch", "location"],
+  },
+  {
+    title: "Positions",
+    url: "/dashboard/positions",
+    section: "Organization",
+    keywords: ["position", "job title"],
+  },
+  {
+    title: "Invite & register",
+    url: "/dashboard/operations/recruitment",
+    section: "Operations",
+    keywords: ["hiring", "talent", "recruitment", "invite"],
+  },
+  {
+    title: "Structure / Numbering",
+    url: "/dashboard/structure/numbering",
+    section: "Structure",
+    keywords: ["employee number", "prefix"],
+  },
+  {
+    title: "Insights / Sales field",
+    url: "/dashboard/insights/sales-field",
+    section: "Insights",
+    keywords: ["sales", "field", "analytics"],
+  },
+  {
+    title: "Help",
+    url: "/dashboard/help",
+    section: "General",
+    keywords: ["help", "support", "sso", "shortcuts"],
+  },
+  {
+    title: "Payroll",
+    url: "/dashboard/operations/payroll",
+    section: "Operations",
+    keywords: ["payroll", "runs", "payslips", "salary", "banking"],
+  },
+  {
+    title: "Reports",
+    url: "/dashboard/operations/reports",
+    section: "Operations",
+    keywords: [
+      "attendance",
+      "download",
+      "xlsx",
+      "csv",
+      "pdf",
+      "scheduled",
+      "smtp",
+      "templates",
+    ],
+  },
+  {
+    title: "Scheduled Reporting",
+    url: "/dashboard/operations/scheduled-reporting",
+    section: "Operations",
+    keywords: [
+      "scheduled reporting",
+      "templates",
+      "schedules",
+      "executions",
+      "smtp",
+    ],
+  },
+  {
+    title: "Notifications",
+    url: "/dashboard/operations/notifications",
+    section: "Operations",
+    keywords: ["notifications", "inbox", "alerts", "read", "seen", "archive"],
+  },
+  {
+    title: "Access Control / Roles",
+    url: "/dashboard/access-control/roles",
+    section: "Access Control",
+    keywords: ["role", "access", "authorization"],
+  },
+  {
+    title: "Access Control / Permissions",
+    url: "/dashboard/access-control/permissions",
+    section: "Access Control",
+    keywords: ["permission", "policy", "authorization"],
+  },
+  {
+    title: "Settings",
+    url: "/dashboard/settings",
+    section: "General",
+    keywords: ["preferences", "account"],
+  },
   {
     title: "Settings / Default Avatars",
     url: "/dashboard/settings/default-avatars",
@@ -541,42 +1061,252 @@ const employeeData: SidebarData = {
 }
 
 const employeeSearchIndex = [
-  { title: "Dashboard", url: "/dashboard", section: "General", keywords: ["home", "overview"] },
-  { title: "My Info", url: "/dashboard/me/profile", section: "Employees", keywords: ["profile", "my info", "account"] },
-  { title: "Promotion", url: "/dashboard/me/promotion", section: "Promotion", keywords: ["promotion", "career", "movement", "progression"] },
-  { title: "My Attendance / Overview", url: "/dashboard/attendance/today", section: "Employees", keywords: ["attendance", "timesheet"] },
-  { title: "My Attendance / Today", url: "/dashboard/attendance/today", section: "Employee Attendance", keywords: ["attendance", "today", "state"] },
-  { title: "My Attendance / Attendance History", url: "/dashboard/attendance/attendance-history", section: "Employee Attendance", keywords: ["attendance", "history", "punch"] },
-  { title: "My Attendance / Schedule Preview", url: "/dashboard/attendance/schedule-preview", section: "Employee Attendance", keywords: ["attendance", "schedule preview"] },
-  { title: "My Attendance / Correction Requests", url: "/dashboard/attendance/corrections", section: "Employee Attendance", keywords: ["attendance", "correction", "request"] },
-  { title: "My Leave / Requests", url: "/dashboard/me/leave/requests", section: "Leave", keywords: ["leave", "request"] },
-  { title: "My Leave / Balances", url: "/dashboard/me/leave/balances", section: "Leave", keywords: ["leave", "balance", "quota"] },
-  { title: "My Leave / Holidays", url: "/dashboard/me/leave/holidays", section: "Leave", keywords: ["leave", "holiday"] },
-  { title: "My Leave / Policies", url: "/dashboard/me/leave/policies", section: "Leave", keywords: ["leave", "policy"] },
-  { title: "My Payroll", url: "/dashboard/me/finance/payroll", section: "Finance", keywords: ["payroll", "payslips", "salary", "earnings", "deductions"] },
-  { title: "My Performance", url: "/dashboard/me/performance/overview", section: "Performance", keywords: ["performance", "kpi", "review", "score", "self review"] },
-  { title: "My KPIs", url: "/dashboard/me/performance/kpis", section: "Performance", keywords: ["performance", "kpi", "goals", "targets"] },
-  { title: "My Performance / Team", url: "/dashboard/me/performance/team", section: "Performance", keywords: ["performance", "team", "manager", "review"] },
-  { title: "KPI Reviews", url: "/dashboard/me/performance/kpi-reviews", section: "Performance", keywords: ["performance", "kpi", "manager", "approval", "review"] },
-  { title: "My Probation", url: "/dashboard/me/probation", section: "Probation", keywords: ["probation", "confirmation", "self assessment"] },
-  { title: "My Field", url: "/dashboard/me/field/visits", section: "Field", keywords: ["field", "visit", "check in", "plan"] },
-  { title: "My Finance", url: "/dashboard/me/finance/payroll", section: "Finance", keywords: ["loan", "advance", "application", "finance", "payroll"] },
-  { title: "My Activities", url: "/dashboard/me/activities/today", section: "Activities", keywords: ["activity", "daily", "report"] },
-  { title: "My Movements", url: "/dashboard/me/movements", section: "Movements", keywords: ["movement", "transfer", "acknowledge"] },
-  { title: "My Team", url: "/dashboard/me/team/overview", section: "Team", keywords: ["team", "manager", "direct reports", "action items"] },
-  { title: "My Requests", url: "/dashboard/me/requests/actions", section: "Requests", keywords: ["request", "document", "resignation", "profile change"] },
-  { title: "Structure", url: "/dashboard/structure/cost-centers", section: "Structure", keywords: ["cost center", "grade"] },
-  { title: "Insights", url: "/dashboard/insights/hr", section: "Insights", keywords: ["dashboard", "hr"] },
-  { title: "SMS", url: "/dashboard/sms/overview", section: "SMS", keywords: ["sms", "text"] },
-  { title: "Field", url: "/dashboard/field/overview", section: "Field", keywords: ["field", "visit"] },
-  { title: "Finance", url: "/dashboard/finance/overview", section: "Finance", keywords: ["finance", "loan", "advance"] },
-  { title: "Activities", url: "/dashboard/activities/overview", section: "Activities", keywords: ["activity", "report"] },
-  { title: "Team Activities", url: "/dashboard/activities/team", section: "Activities", keywords: ["activity", "assign", "tasks", "manager"] },
-  { title: "Movements", url: "/dashboard/movements/overview", section: "Movements", keywords: ["movement", "transfer"] },
-  { title: "Onboarding", url: "/dashboard/me/onboarding", section: "Employees", keywords: ["employee", "onboarding", "acknowledge"] },
-  { title: "Offboarding", url: "/dashboard/me/offboarding", section: "Employees", keywords: ["employee", "exit"] },
-  { title: "Settings", url: "/dashboard/settings", section: "General", keywords: ["preferences", "account"] },
-  { title: "Help", url: "/dashboard/help", section: "General", keywords: ["help", "support", "shortcuts", "sso"] },
+  {
+    title: "Dashboard",
+    url: "/dashboard",
+    section: "General",
+    keywords: ["home", "overview"],
+  },
+  {
+    title: "My Info",
+    url: "/dashboard/me/profile",
+    section: "Employees",
+    keywords: ["profile", "my info", "account"],
+  },
+  {
+    title: "Promotion",
+    url: "/dashboard/me/promotion",
+    section: "Promotion",
+    keywords: ["promotion", "career", "movement", "progression"],
+  },
+  {
+    title: "My Attendance / Overview",
+    url: "/dashboard/attendance/today",
+    section: "Employees",
+    keywords: ["attendance", "timesheet"],
+  },
+  {
+    title: "My Attendance / Today",
+    url: "/dashboard/attendance/today",
+    section: "Employee Attendance",
+    keywords: ["attendance", "today", "state"],
+  },
+  {
+    title: "My Attendance / Attendance History",
+    url: "/dashboard/attendance/attendance-history",
+    section: "Employee Attendance",
+    keywords: ["attendance", "history", "punch"],
+  },
+  {
+    title: "My Attendance / Schedule Preview",
+    url: "/dashboard/attendance/schedule-preview",
+    section: "Employee Attendance",
+    keywords: ["attendance", "schedule preview"],
+  },
+  {
+    title: "My Attendance / Correction Requests",
+    url: "/dashboard/attendance/corrections",
+    section: "Employee Attendance",
+    keywords: ["attendance", "correction", "request"],
+  },
+  {
+    title: "My Leave / Requests",
+    url: "/dashboard/me/leave/requests",
+    section: "Leave",
+    keywords: ["leave", "request"],
+  },
+  {
+    title: "My Leave / Balances",
+    url: "/dashboard/me/leave/balances",
+    section: "Leave",
+    keywords: ["leave", "balance", "quota"],
+  },
+  {
+    title: "My Leave / Holidays",
+    url: "/dashboard/me/leave/holidays",
+    section: "Leave",
+    keywords: ["leave", "holiday"],
+  },
+  {
+    title: "My Leave / Policies",
+    url: "/dashboard/me/leave/policies",
+    section: "Leave",
+    keywords: ["leave", "policy"],
+  },
+  {
+    title: "My Payroll",
+    url: "/dashboard/me/finance/payroll",
+    section: "Finance",
+    keywords: ["payroll", "payslips", "salary", "earnings", "deductions"],
+  },
+  {
+    title: "My Performance",
+    url: "/dashboard/me/performance/overview",
+    section: "Performance",
+    keywords: ["performance", "kpi", "review", "score", "self review"],
+  },
+  {
+    title: "My KPIs",
+    url: "/dashboard/me/performance/kpis",
+    section: "Performance",
+    keywords: ["performance", "kpi", "goals", "targets"],
+  },
+  {
+    title: "My Performance / Team",
+    url: "/dashboard/me/performance/team",
+    section: "Performance",
+    keywords: ["performance", "team", "manager", "review"],
+  },
+  {
+    title: "My 360 Feedback",
+    url: "/dashboard/me/performance/feedback",
+    section: "Performance",
+    keywords: ["performance", "feedback", "360", "review"],
+  },
+  {
+    title: "KPI Reviews",
+    url: "/dashboard/me/performance/kpi-reviews",
+    section: "Performance",
+    keywords: ["performance", "kpi", "manager", "approval", "review"],
+  },
+  {
+    title: "Performance Reports",
+    url: "/dashboard/performance/reports",
+    section: "Performance",
+    keywords: ["performance", "reports", "export", "pdf", "excel"],
+  },
+  {
+    title: "Performance Calibration",
+    url: "/dashboard/performance/calibration",
+    section: "Performance",
+    keywords: ["performance", "calibration", "department", "comparison"],
+  },
+  {
+    title: "Development Plans",
+    url: "/dashboard/performance/development",
+    section: "Performance",
+    keywords: ["performance", "development", "goals", "growth"],
+  },
+  {
+    title: "My Probation",
+    url: "/dashboard/me/probation",
+    section: "Probation",
+    keywords: ["probation", "confirmation", "self assessment"],
+  },
+  {
+    title: "My Field",
+    url: "/dashboard/me/field/visits",
+    section: "Field",
+    keywords: ["field", "visit", "check in", "plan"],
+  },
+  {
+    title: "My Finance",
+    url: "/dashboard/me/finance/payroll",
+    section: "Finance",
+    keywords: ["loan", "advance", "application", "finance", "payroll"],
+  },
+  {
+    title: "My Activities",
+    url: "/dashboard/me/activities/today",
+    section: "Activities",
+    keywords: ["activity", "daily", "report"],
+  },
+  {
+    title: "My Movements",
+    url: "/dashboard/me/movements",
+    section: "Movements",
+    keywords: ["movement", "transfer", "acknowledge"],
+  },
+  {
+    title: "My Team",
+    url: "/dashboard/me/team/overview",
+    section: "Team",
+    keywords: ["team", "manager", "direct reports", "action items"],
+  },
+  {
+    title: "My Requests",
+    url: "/dashboard/me/requests/actions",
+    section: "Requests",
+    keywords: ["request", "document", "resignation", "profile change"],
+  },
+  {
+    title: "Structure",
+    url: "/dashboard/structure/cost-centers",
+    section: "Structure",
+    keywords: ["cost center", "grade"],
+  },
+  {
+    title: "Insights",
+    url: "/dashboard/insights/hr",
+    section: "Insights",
+    keywords: ["dashboard", "hr"],
+  },
+  {
+    title: "SMS",
+    url: "/dashboard/sms/overview",
+    section: "SMS",
+    keywords: ["sms", "text"],
+  },
+  {
+    title: "Field",
+    url: "/dashboard/field/overview",
+    section: "Field",
+    keywords: ["field", "visit"],
+  },
+  {
+    title: "Finance",
+    url: "/dashboard/finance/overview",
+    section: "Finance",
+    keywords: ["finance", "loan", "advance"],
+  },
+  {
+    title: "Activities",
+    url: "/dashboard/activities/overview",
+    section: "Activities",
+    keywords: ["activity", "report"],
+  },
+  {
+    title: "Team Activities",
+    url: "/dashboard/activities/team",
+    section: "Activities",
+    keywords: ["activity", "assign", "tasks", "manager"],
+  },
+  {
+    title: "Team Movements",
+    url: "/dashboard/team/movements",
+    section: "Movements",
+    keywords: ["movement", "team", "manager"],
+  },
+  {
+    title: "Movements",
+    url: "/dashboard/movements/overview",
+    section: "Movements",
+    keywords: ["movement", "transfer"],
+  },
+  {
+    title: "Onboarding",
+    url: "/dashboard/me/onboarding",
+    section: "Employees",
+    keywords: ["employee", "onboarding", "acknowledge"],
+  },
+  {
+    title: "Offboarding",
+    url: "/dashboard/me/offboarding",
+    section: "Employees",
+    keywords: ["employee", "exit"],
+  },
+  {
+    title: "Settings",
+    url: "/dashboard/settings",
+    section: "General",
+    keywords: ["preferences", "account"],
+  },
+  {
+    title: "Help",
+    url: "/dashboard/help",
+    section: "General",
+    keywords: ["help", "support", "shortcuts", "sso"],
+  },
 ]
 
 interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
@@ -604,14 +1334,19 @@ function firstAccessibleNavUrl(
     ...(url ? [url] : []),
     ...(Array.isArray(matchUrls) ? matchUrls : []),
   ]
-  const orderedCandidates = accessMode === "employee"
-    ? [
-        ...candidates.filter(isSelfServiceDashboardRoute),
-        ...candidates.filter((candidate) => !isSelfServiceDashboardRoute(candidate)),
-      ]
-    : candidates
+  const orderedCandidates =
+    accessMode === "employee"
+      ? [
+          ...candidates.filter(isSelfServiceDashboardRoute),
+          ...candidates.filter(
+            (candidate) => !isSelfServiceDashboardRoute(candidate),
+          ),
+        ]
+      : candidates
   return orderedCandidates.find((candidate) =>
-    canSeeDashboardPage(candidate, normalizedPermissions, accessMode, { homeDashboardKind }),
+    canSeeDashboardPage(candidate, normalizedPermissions, accessMode, {
+      homeDashboardKind,
+    }),
   )
 }
 
@@ -634,7 +1369,9 @@ function filterNavByPermissions(
 
       if (!hasChildren) {
         if (!accessibleUrl) return null
-        return accessibleUrl === item.url ? item : { ...item, url: accessibleUrl }
+        return accessibleUrl === item.url
+          ? item
+          : { ...item, url: accessibleUrl }
       }
 
       const filteredItems: SidebarNavItem[] = filterNavByPermissions(
@@ -662,7 +1399,9 @@ function filterAdminSearchByPermissions(
   homeDashboardKind?: HomeDashboardKind,
 ) {
   return searchItems.filter((item) =>
-    canSeeDashboardPage(item.url, normalizedPermissions, accessMode, { homeDashboardKind }),
+    canSeeDashboardPage(item.url, normalizedPermissions, accessMode, {
+      homeDashboardKind,
+    }),
   )
 }
 
@@ -682,12 +1421,21 @@ export function AppSidebar({
   const pathname = usePathname()
   const { isMobile, setOpenMobile } = useSidebar()
   // Keep footer avatar in sync with Change Photo / default avatar selection.
-  const { url: liveProfilePhotoUrl, revision: photoRevision } = useMyProfilePhoto()
+  const { url: liveProfilePhotoUrl, revision: photoRevision } =
+    useMyProfilePhoto()
   const footerAvatar = React.useMemo(() => {
-    const live = resolveBackendMediaUrl(liveProfilePhotoUrl) || liveProfilePhotoUrl?.trim() || ""
+    const live =
+      resolveBackendMediaUrl(liveProfilePhotoUrl) ||
+      liveProfilePhotoUrl?.trim() ||
+      ""
     const prop = resolveBackendMediaUrl(userAvatar) || userAvatar?.trim() || ""
     const base = live || prop || "/assets/alliance-logo.png"
-    if (!base || base.startsWith("data:") || base.startsWith("blob:") || base.startsWith("/assets/")) {
+    if (
+      !base ||
+      base.startsWith("data:") ||
+      base.startsWith("blob:") ||
+      base.startsWith("/assets/")
+    ) {
       return base
     }
     if (photoRevision <= 0) return base
@@ -696,7 +1444,7 @@ export function AppSidebar({
   }, [liveProfilePhotoUrl, photoRevision, userAvatar])
   const normalizedPermissions = React.useMemo(
     () => normalizePermissionLabels(permissionLabels),
-    [permissionLabels]
+    [permissionLabels],
   )
   const resolvedAccessMode = accessMode
   const forbiddenVersion = useForbiddenPrefixes()
@@ -720,11 +1468,12 @@ export function AppSidebar({
   const permissionsResolved = navReady && identityReady
 
   const navData = React.useMemo(() => {
-    const secondary = scope === "platform"
-      ? platformData.navSecondary
-      : resolvedAccessMode === "employee"
-        ? employeeData.navSecondary
-        : adminData.navSecondary
+    const secondary =
+      scope === "platform"
+        ? platformData.navSecondary
+        : resolvedAccessMode === "employee"
+          ? employeeData.navSecondary
+          : adminData.navSecondary
     // Do not paint the full admin/employee catalog first and then hide items.
     // SSR and the first client frame both render an empty rail; after identity
     // is known we show only the routes this person may open.
@@ -821,11 +1570,18 @@ export function AppSidebar({
         ) : (
           <div className="space-y-1.5 px-1" aria-hidden>
             {Array.from({ length: 8 }, (_, index) => (
-              <div key={index} className="h-8 animate-pulse rounded-lg bg-muted/50" />
+              <div
+                key={index}
+                className="h-8 animate-pulse rounded-lg bg-muted/50"
+              />
             ))}
           </div>
         )}
-        <NavSecondary items={navData.navSecondary} searchItems={searchIndex} className="mt-auto pt-1" />
+        <NavSecondary
+          items={navData.navSecondary}
+          searchItems={searchIndex}
+          className="mt-auto pt-1"
+        />
       </SidebarContent>
       <SidebarFooter className="relative z-[1]">
         <NavUser

@@ -4,8 +4,10 @@ import { asRecord, readString } from "@/utils/token-utils"
 import type { AuthScope } from "@/types"
 
 export const DASHBOARD_ACTOR_EVENT = "hrms:dashboard-actor-changed"
-export const DASHBOARD_ACCESS_REFRESH_EVENT = "hrms:dashboard-access-refresh-requested"
-export const DASHBOARD_PERMISSION_STORAGE_KEY = "hrms.dashboard.actorPermissions"
+export const DASHBOARD_ACCESS_REFRESH_EVENT =
+  "hrms:dashboard-access-refresh-requested"
+export const DASHBOARD_PERMISSION_STORAGE_KEY =
+  "hrms.dashboard.actorPermissions"
 export const DASHBOARD_ACCESS_MODE_STORAGE_KEY = "hrms.dashboard.accessMode"
 export const DASHBOARD_IS_ADMIN_STORAGE_KEY = "hrms.dashboard.isAdmin"
 export const DASHBOARD_ROLES_STORAGE_KEY = "hrms.dashboard.actorRoles"
@@ -67,10 +69,7 @@ const GLOBAL_BYPASS_LABELS = new Set(["*", "*:*", "all"])
  * Aligns with other company-level routes that already use `view_company_data`.
  */
 export const COMPANY_DASHBOARD_PERMISSION: PermissionRequirement = {
-  permissions: [
-    "view_company_dashboard",
-    "view_company_data",
-  ],
+  permissions: ["view_company_dashboard", "view_company_data"],
   mode: "any",
 }
 
@@ -189,7 +188,11 @@ const PROBATION_MODULE_WIDE = [
 ]
 
 export const PROBATION_ROUTE_PERMISSION: PermissionRequirement = {
-  permissions: [...PROBATION_MODULE_WIDE, "probation_policies:read", "probation_cases:read"],
+  permissions: [
+    ...PROBATION_MODULE_WIDE,
+    "probation_policies:read",
+    "probation_cases:read",
+  ],
   mode: "any",
 }
 
@@ -204,7 +207,25 @@ export const PROBATION_CASES_PERMISSION: PermissionRequirement = {
 }
 
 export const PROBATION_TEAM_PERMISSION: PermissionRequirement = {
-  permissions: [...PROBATION_MODULE_WIDE, "manager:read", "team:read", "view_team"],
+  permissions: [
+    ...PROBATION_MODULE_WIDE,
+    "probation_cases:read-team",
+    "probation_reviews:manager-review",
+    "manager:read",
+    "manager_team:read",
+    "manager_self_service:read",
+    "data_scope:team",
+    "team:read",
+    "view_team",
+  ],
+  mode: "any",
+}
+
+export const PROBATION_SHELL_PERMISSION: PermissionRequirement = {
+  permissions: [
+    ...PROBATION_ROUTE_PERMISSION.permissions,
+    ...PROBATION_TEAM_PERMISSION.permissions,
+  ],
   mode: "any",
 }
 
@@ -244,7 +265,11 @@ export const FIELD_VISITS_PERMISSION: PermissionRequirement = {
 }
 
 export const FIELD_PARTIES_PERMISSION: PermissionRequirement = {
-  permissions: [...FIELD_MODULE_WIDE, "field_parties:read", "field_parties:create"],
+  permissions: [
+    ...FIELD_MODULE_WIDE,
+    "field_parties:read",
+    "field_parties:create",
+  ],
   mode: "any",
 }
 
@@ -377,6 +402,18 @@ export const MOVEMENT_OPERATIONS_PERMISSION: PermissionRequirement = {
   mode: "any",
 }
 
+export const TEAM_MOVEMENT_ROUTE_PERMISSION: PermissionRequirement = {
+  permissions: [
+    "manager_team:read",
+    "manager_self_service:read",
+    "manager:read",
+    "data_scope:team",
+    "employee_movements:read",
+    "manage_employee_movements",
+  ],
+  mode: "any",
+}
+
 const SMS_SETTINGS_READ_LABELS = [
   "sms:settings:read",
   "sms:read",
@@ -399,17 +436,9 @@ const SMS_LOGS_READ_LABELS = [
   "manage_sms",
 ]
 
-const SMS_LOGS_RETRY_LABELS = [
-  "sms:logs:retry",
-  "sms:update",
-  "manage_sms",
-]
+const SMS_LOGS_RETRY_LABELS = ["sms:logs:retry", "sms:update", "manage_sms"]
 
-const SMS_TEST_LABELS = [
-  "sms:test",
-  "sms:create",
-  "manage_sms",
-]
+const SMS_TEST_LABELS = ["sms:test", "sms:create", "manage_sms"]
 
 /**
  * Company SMS operations (`/dashboard/sms/*`).
@@ -558,7 +587,11 @@ export const INSIGHTS_MANAGER_PERMISSION: PermissionRequirement = {
 }
 
 export const INSIGHTS_READINESS_PERMISSION: PermissionRequirement = {
-  permissions: ["launch_readiness:read", "security_events:read", "view_launch_readiness"],
+  permissions: [
+    "launch_readiness:read",
+    "security_events:read",
+    "view_launch_readiness",
+  ],
   mode: "any",
 }
 
@@ -667,7 +700,12 @@ export const ATTENDANCE_REPORTS_ROUTE_PERMISSION: PermissionRequirement = {
  * page — those users get "Platform access is required" from GET /api/companies.
  */
 export const COMPANY_MANAGEMENT_ROUTE_PERMISSION: PermissionRequirement = {
-  permissions: ["companies:read", "companies:update", "view_companies", "update_company"],
+  permissions: [
+    "companies:read",
+    "companies:update",
+    "view_companies",
+    "update_company",
+  ],
   mode: "any",
 }
 
@@ -796,7 +834,11 @@ function roleNameImpliesAdminShell(value: string) {
   if (!name || EMPLOYEE_IDENTITY_HINTS.has(name)) {
     return false
   }
-  if (name.includes("employee") && !name.includes("admin") && !name.includes("hr")) {
+  if (
+    name.includes("employee") &&
+    !name.includes("admin") &&
+    !name.includes("hr")
+  ) {
     return false
   }
   if (ADMIN_IDENTITY_HINTS.has(name)) {
@@ -845,7 +887,10 @@ const ATTENDANCE_ROUTE_PERMISSIONS: PermissionRequirement = {
   mode: "any",
 }
 
-export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement | null> = {
+export const DASHBOARD_ROUTE_PERMISSIONS: Record<
+  string,
+  PermissionRequirement | null
+> = {
   "/dashboard/me/profile": null,
   "/dashboard/me/organization": null,
   "/dashboard/me/promotion": null,
@@ -860,6 +905,8 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
     mode: "any",
   },
   "/dashboard/me/performance/reviews": null,
+  "/dashboard/me/performance/feedback": null,
+  "/dashboard/me/performance/development": null,
   "/dashboard/me/performance/achievements": null,
   "/dashboard/me/performance/improvement": null,
   "/dashboard/me/performance/team": MANAGER_ROUTE_PERMISSION,
@@ -932,8 +979,10 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   // Other employees' profiles — not self profile under /dashboard/me/profile.
   "/dashboard/employees/profile": EMPLOYEE_DIRECTORY_ROUTE_PERMISSION,
   "/dashboard/employees/profile/": EMPLOYEE_DIRECTORY_ROUTE_PERMISSION,
-  "/dashboard/employees/profile-update-approvals": "self_service_requests:approve",
-  "/dashboard/employees/profile-change-requests": "self_service_requests:approve",
+  "/dashboard/employees/profile-update-approvals":
+    "self_service_requests:approve",
+  "/dashboard/employees/profile-change-requests":
+    "self_service_requests:approve",
   "/dashboard/attendance": ATTENDANCE_ROUTE_PERMISSIONS,
   "/dashboard/attendance/settings": "attendance_policies:read",
   "/dashboard/attendance/policies": "attendance_policies:read",
@@ -948,7 +997,10 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/attendance/daily-summaries": "attendance_summaries:read",
   "/dashboard/attendance/processing-exceptions": "attendance_processing:read",
   "/dashboard/attendance/recalculation-jobs": {
-    permissions: ["attendance_processing:read", "attendance_recalculation:execute"],
+    permissions: [
+      "attendance_processing:read",
+      "attendance_recalculation:execute",
+    ],
     mode: "any",
   },
   "/dashboard/attendance/unmatched-logs": "attendance_processing:read",
@@ -961,9 +1013,11 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/attendance/correction-requests": "self_service_requests:approve",
   "/dashboard/attendance/timetables": "timetables:read",
   "/dashboard/attendance/timetable-days": "timetable_days:read",
-  "/dashboard/attendance/timetable-holiday-rules": "timetable_holiday_rules:read",
+  "/dashboard/attendance/timetable-holiday-rules":
+    "timetable_holiday_rules:read",
   "/dashboard/attendance/timetable-rotations": "timetable_rotations:read",
-  "/dashboard/attendance/timetable-rotation-rules": "timetable_rotation_rules:read",
+  "/dashboard/attendance/timetable-rotation-rules":
+    "timetable_rotation_rules:read",
   "/dashboard/attendance/employee-timetables": "employee_timetables:read",
   "/dashboard/departments": "departments:read",
   "/dashboard/branches": "branches:read",
@@ -994,14 +1048,23 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
     mode: "any",
   },
   "/dashboard/leave-management/balances": {
-    permissions: ["leave_balances:read", "leave-balances.view", "leave-balances.manage"],
+    permissions: [
+      "leave_balances:read",
+      "leave-balances.view",
+      "leave-balances.manage",
+    ],
     mode: "any",
   },
   "/dashboard/leave-management/transactions": {
-    permissions: ["leave_balances:read", "leave-balances.view", "leave-balances.manage"],
+    permissions: [
+      "leave_balances:read",
+      "leave-balances.view",
+      "leave-balances.manage",
+    ],
     mode: "any",
   },
-  "/dashboard/leave-management/business-trips": ATTENDANCE_BUSINESS_TRIPS_ROUTE_PERMISSION,
+  "/dashboard/leave-management/business-trips":
+    ATTENDANCE_BUSINESS_TRIPS_ROUTE_PERMISSION,
   "/dashboard/leave-management/holidays": {
     permissions: ["holidays:read", "attendance_holidays:read"],
     mode: "any",
@@ -1014,15 +1077,19 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/operations/recruitment": EMPLOYEE_DIRECTORY_MANAGE_PERMISSIONS,
   "/dashboard/operations/payroll": PAYROLL_ROUTE_PERMISSION,
   "/dashboard/operations/reports": ATTENDANCE_REPORTS_ROUTE_PERMISSION,
-  "/dashboard/operations/scheduled-reporting": SCHEDULED_REPORTING_ROUTE_PERMISSION,
+  "/dashboard/operations/scheduled-reporting":
+    SCHEDULED_REPORTING_ROUTE_PERMISSION,
   "/dashboard/operations/notifications": NOTIFICATIONS_ADMIN_ROUTE_PERMISSION,
   "/dashboard/performance": PERFORMANCE_ROUTE_PERMISSION,
   "/dashboard/performance/overview": PERFORMANCE_ROUTE_PERMISSION,
   "/dashboard/performance/setup": PERFORMANCE_SETUP_PERMISSION,
   "/dashboard/performance/plans": PERFORMANCE_PLANS_PERMISSION,
+  "/dashboard/performance/development": PERFORMANCE_PLANS_PERMISSION,
   "/dashboard/performance/reviews": PERFORMANCE_REVIEWS_PERMISSION,
   "/dashboard/performance/improvement": PERFORMANCE_IMPROVEMENT_PERMISSION,
-  "/dashboard/probation": PROBATION_ROUTE_PERMISSION,
+  "/dashboard/performance/reports": PERFORMANCE_ROUTE_PERMISSION,
+  "/dashboard/performance/calibration": PERFORMANCE_REVIEWS_PERMISSION,
+  "/dashboard/probation": PROBATION_SHELL_PERMISSION,
   "/dashboard/probation/overview": PROBATION_ROUTE_PERMISSION,
   "/dashboard/probation/policies": PROBATION_POLICIES_PERMISSION,
   "/dashboard/probation/cases": PROBATION_CASES_PERMISSION,
@@ -1042,7 +1109,10 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/activities/overview": ACTIVITY_ROUTE_PERMISSION,
   "/dashboard/activities/reports": ACTIVITY_ROUTE_PERMISSION,
   "/dashboard/activities/team": {
-    permissions: ["work_activities:manager:read", "work_activities:manager:review"],
+    permissions: [
+      "work_activities:manager:read",
+      "work_activities:manager:review",
+    ],
     mode: "any",
   },
   "/dashboard/activities/reviews": ACTIVITY_REVIEWS_PERMISSION,
@@ -1052,6 +1122,7 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/movements/overview": MOVEMENT_ROUTE_PERMISSION,
   "/dashboard/movements/cases": MOVEMENT_ROUTE_PERMISSION,
   "/dashboard/movements/operations": MOVEMENT_OPERATIONS_PERMISSION,
+  "/dashboard/team/movements": TEAM_MOVEMENT_ROUTE_PERMISSION,
   "/dashboard/sms": SMS_ROUTE_PERMISSION,
   "/dashboard/sms/overview": SMS_ROUTE_PERMISSION,
   "/dashboard/sms/registry": SMS_SETTINGS_READ_PERMISSION,
@@ -1132,10 +1203,16 @@ function decodeBase64Url(input: string) {
   try {
     if (typeof atob === "function") {
       const normalized = input.replace(/-/g, "+").replace(/_/g, "/")
-      const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=")
+      const padded = normalized.padEnd(
+        Math.ceil(normalized.length / 4) * 4,
+        "=",
+      )
       return atob(padded)
     }
-    return Buffer.from(input.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8")
+    return Buffer.from(
+      input.replace(/-/g, "+").replace(/_/g, "/"),
+      "base64",
+    ).toString("utf8")
   } catch {
     return null
   }
@@ -1158,7 +1235,10 @@ function permissionMatches(owned: string, required: string) {
   }
   if (owned.endsWith(":*")) {
     const resource = owned.slice(0, -2)
-    return Boolean(resource) && (required === resource || required.startsWith(`${resource}:`))
+    return (
+      Boolean(resource) &&
+      (required === resource || required.startsWith(`${resource}:`))
+    )
   }
   return false
 }
@@ -1181,8 +1261,8 @@ export function normalizePermissionLabels(permissionLabels: string[]) {
     new Set(
       permissionLabels
         .map((label) => canonicalizePermissionLabel(label))
-        .filter((label) => label.length > 0)
-    )
+        .filter((label) => label.length > 0),
+    ),
   )
 }
 
@@ -1204,7 +1284,10 @@ export function decodeJwtPayload(token: string) {
   }
 }
 
-export function collectPermissionLabelsFromUnknown(value: unknown, sink: Set<string>) {
+export function collectPermissionLabelsFromUnknown(
+  value: unknown,
+  sink: Set<string>,
+) {
   if (typeof value === "string" && value.trim()) {
     const normalized = canonicalizePermissionLabel(value)
     if (looksLikePermissionLabel(normalized)) {
@@ -1281,7 +1364,9 @@ function normalizeIdentityHint(value: string) {
   return value.trim().toLowerCase().replace(/[_-]+/g, " ")
 }
 
-function normalizeDashboardAccessMode(value: unknown): DashboardAccessMode | null {
+function normalizeDashboardAccessMode(
+  value: unknown,
+): DashboardAccessMode | null {
   if (typeof value !== "string") {
     return null
   }
@@ -1300,7 +1385,9 @@ function normalizeDashboardScope(value: unknown): AuthScope | null {
   }
 
   const normalized = value.trim().toLowerCase()
-  return normalized === "platform" || normalized === "company" ? normalized : null
+  return normalized === "platform" || normalized === "company"
+    ? normalized
+    : null
 }
 
 function readDashboardScopeFromUnknown(value: unknown): AuthScope | null {
@@ -1323,7 +1410,16 @@ function readDashboardScopeFromUnknown(value: unknown): AuthScope | null {
   const direct = normalizeDashboardScope(record.scope)
   if (direct) return direct
 
-  for (const key of ["user", "profile", "data", "result", "tokens", "accessToken", "access_token", "token"]) {
+  for (const key of [
+    "user",
+    "profile",
+    "data",
+    "result",
+    "tokens",
+    "accessToken",
+    "access_token",
+    "token",
+  ]) {
     const scope = readDashboardScopeFromUnknown(record[key])
     if (scope) return scope
   }
@@ -1338,7 +1434,9 @@ function readDashboardScope(...sources: unknown[]): AuthScope | null {
   return null
 }
 
-function readExplicitDashboardAccessModeFromUnknown(value: unknown): DashboardAccessMode | null {
+function readExplicitDashboardAccessModeFromUnknown(
+  value: unknown,
+): DashboardAccessMode | null {
   if (!value) {
     return null
   }
@@ -1408,7 +1506,7 @@ function readExplicitDashboardAccessMode(...sources: unknown[]) {
 
 function collectDashboardIdentityHintsFromUnknown(
   value: unknown,
-  sink: Set<string>
+  sink: Set<string>,
 ) {
   if (typeof value === "string" && value.trim()) {
     sink.add(normalizeIdentityHint(value))
@@ -1416,7 +1514,9 @@ function collectDashboardIdentityHintsFromUnknown(
   }
 
   if (Array.isArray(value)) {
-    value.forEach((entry) => collectDashboardIdentityHintsFromUnknown(entry, sink))
+    value.forEach((entry) =>
+      collectDashboardIdentityHintsFromUnknown(entry, sink),
+    )
     return
   }
 
@@ -1439,7 +1539,15 @@ function collectDashboardIdentityHintsFromUnknown(
     sink.add(normalizeIdentityHint(direct))
   }
 
-  for (const key of ["user", "profile", "role", "roles", "data", "items", "results"]) {
+  for (const key of [
+    "user",
+    "profile",
+    "role",
+    "roles",
+    "data",
+    "items",
+    "results",
+  ]) {
     collectDashboardIdentityHintsFromUnknown(record[key], sink)
   }
 }
@@ -1528,7 +1636,7 @@ function readDashboardIdentityHintsFromUnknown(...sources: unknown[]) {
 }
 
 function resolvePermissionRequirement(
-  requirement: PermissionRequirement | null | undefined
+  requirement: PermissionRequirement | null | undefined,
 ): { permissions: string[]; mode: PermissionMode } | null {
   if (!requirement) {
     return null
@@ -1546,7 +1654,7 @@ function resolvePermissionRequirement(
 
 export function hasPermission(
   permissionLabels: string[],
-  requirement: PermissionRequirement | null | undefined
+  requirement: PermissionRequirement | null | undefined,
 ) {
   const resolved = resolvePermissionRequirement(requirement)
   if (!resolved || resolved.permissions.length === 0) {
@@ -1569,12 +1677,12 @@ export function hasPermission(
 
   if (resolved.mode === "all") {
     return requiredPermissions.every((required) =>
-      normalizedPermissions.some((owned) => permissionMatches(owned, required))
+      normalizedPermissions.some((owned) => permissionMatches(owned, required)),
     )
   }
 
   return requiredPermissions.some((required) =>
-    normalizedPermissions.some((owned) => permissionMatches(owned, required))
+    normalizedPermissions.some((owned) => permissionMatches(owned, required)),
   )
 }
 
@@ -1586,7 +1694,11 @@ function resolveRequiredPermissions(url: string) {
 
   const matchedEntry = Object.entries(DASHBOARD_ROUTE_PERMISSIONS)
     .sort(([left], [right]) => right.length - left.length)
-    .find(([route]) => route !== "/dashboard" && (url === route || url.startsWith(`${route}/`)))
+    .find(
+      ([route]) =>
+        route !== "/dashboard" &&
+        (url === route || url.startsWith(`${route}/`)),
+    )
 
   return matchedEntry?.[1]
 }
@@ -1666,7 +1778,7 @@ function hasHrPerformanceAdminAccess(permissionLabels: string[]) {
 }
 
 export function hasProbationAccess(permissionLabels: string[]) {
-  return hasPrefixedAccess(permissionLabels, PROBATION_ROUTE_PERMISSION, [
+  return hasPrefixedAccess(permissionLabels, PROBATION_SHELL_PERMISSION, [
     "probation",
     "view_probation",
     "manage_probation",
@@ -1790,7 +1902,11 @@ function resolveDashboardRouteShellRequirement(url: string) {
 
   const matchedEntry = Object.entries(DASHBOARD_ROUTE_SHELLS)
     .sort(([left], [right]) => right.length - left.length)
-    .find(([route]) => route !== "/dashboard" && (url === route || url.startsWith(`${route}/`)))
+    .find(
+      ([route]) =>
+        route !== "/dashboard" &&
+        (url === route || url.startsWith(`${route}/`)),
+    )
 
   return matchedEntry?.[1]
 }
@@ -1805,7 +1921,7 @@ export function hasSmsPlatformAccess(permissionLabels: string[]) {
 export function canAccessDashboardRoute(
   url: string,
   permissionLabels: string[],
-  accessMode?: DashboardAccessMode
+  accessMode?: DashboardAccessMode,
 ) {
   const path = url.split("?")[0] ?? url
 
@@ -1818,18 +1934,19 @@ export function canAccessDashboardRoute(
     const isHrPerformancePath =
       path === "/dashboard/performance" ||
       path.startsWith("/dashboard/performance/")
-    if (
-      !(
-        isHrPerformancePath &&
-        requiredShell === "admin" &&
-        canViewCompanyDashboard(permissionLabels)
-      )
-    ) {
+    if (!(
+      isHrPerformancePath &&
+      requiredShell === "admin" &&
+      canViewCompanyDashboard(permissionLabels)
+    )) {
       return false
     }
   }
 
-  if (path === "/dashboard/sms/platform" || path.startsWith("/dashboard/sms/platform/")) {
+  if (
+    path === "/dashboard/sms/platform" ||
+    path.startsWith("/dashboard/sms/platform/")
+  ) {
     return hasSmsPlatformAccess(permissionLabels)
   }
 
@@ -1847,7 +1964,7 @@ export function canAccessDashboardRoute(
 
 export function canPerformPermission(
   permissionLabels: string[],
-  requirement: PermissionRequirement
+  requirement: PermissionRequirement,
 ) {
   return hasPermission(permissionLabels, requirement)
 }
@@ -1885,19 +2002,22 @@ export function hasAdminDashboardAccess(permissionLabels: string[]) {
   })
 }
 
-function resolveDashboardActorIdentity(...sources: unknown[]): DashboardActorIdentityResolution {
+function resolveDashboardActorIdentity(
+  ...sources: unknown[]
+): DashboardActorIdentityResolution {
   const explicitAccessMode = readExplicitDashboardAccessMode(...sources)
   const scope = readDashboardScope(...sources)
   const permissionLabels = readPermissionLabelsFromUnknown(...sources)
   const roleNames = readRoleNamesFromUnknown(...sources)
   const identityHints = readDashboardIdentityHintsFromUnknown(...sources)
   const hasExplicitAdminIdentity = Array.from(identityHints).some((hint) =>
-    ADMIN_IDENTITY_HINTS.has(hint)
+    ADMIN_IDENTITY_HINTS.has(hint),
   )
   const hasExplicitEmployeeIdentity = Array.from(identityHints).some((hint) =>
-    EMPLOYEE_IDENTITY_HINTS.has(hint)
+    EMPLOYEE_IDENTITY_HINTS.has(hint),
   )
-  const hasPermissionBasedAdminAccess = hasAdminDashboardAccess(permissionLabels)
+  const hasPermissionBasedAdminAccess =
+    hasAdminDashboardAccess(permissionLabels)
   const hasAdminRole = roleNames.some(roleNameImpliesAdminShell)
   const accessMode: DashboardAccessMode =
     explicitAccessMode === "admin" || hasExplicitAdminIdentity || hasAdminRole
@@ -1925,7 +2045,11 @@ function writeCookie(name: string, value: string, maxAgeSeconds?: number) {
     return
   }
 
-  const parts = [`${name}=${encodeURIComponent(value)}`, "Path=/", "SameSite=Lax"]
+  const parts = [
+    `${name}=${encodeURIComponent(value)}`,
+    "Path=/",
+    "SameSite=Lax",
+  ]
   if (typeof window !== "undefined" && window.location.protocol === "https:") {
     parts.push("Secure")
   }
@@ -1956,7 +2080,9 @@ export function buildDashboardActorSnapshotFromSources(
   }
 }
 
-export function publishDashboardActorSnapshot(snapshot: DashboardActorSnapshot) {
+export function publishDashboardActorSnapshot(
+  snapshot: DashboardActorSnapshot,
+) {
   if (typeof window === "undefined") {
     return
   }
@@ -1967,10 +2093,14 @@ export function publishDashboardActorSnapshot(snapshot: DashboardActorSnapshot) 
   const previousAccessMode = window.sessionStorage.getItem(
     DASHBOARD_ACCESS_MODE_STORAGE_KEY,
   )
-  const previousScope = window.sessionStorage.getItem(DASHBOARD_SCOPE_STORAGE_KEY)
+  const previousScope = window.sessionStorage.getItem(
+    DASHBOARD_SCOPE_STORAGE_KEY,
+  )
   let previousPermissions: string[] = []
   try {
-    const parsed = previousPermissionsRaw ? JSON.parse(previousPermissionsRaw) : []
+    const parsed = previousPermissionsRaw
+      ? JSON.parse(previousPermissionsRaw)
+      : []
     previousPermissions = Array.isArray(parsed)
       ? parsed.filter((entry): entry is string => typeof entry === "string")
       : []
@@ -1988,20 +2118,27 @@ export function publishDashboardActorSnapshot(snapshot: DashboardActorSnapshot) 
     snapshot.scope ?? "",
     ...normalizePermissionLabels(snapshot.permissionLabels).sort(),
   ].join("|")
-  const accessChanged = Boolean(previousPermissionsRaw) && previousFingerprint !== nextFingerprint
+  const accessChanged =
+    Boolean(previousPermissionsRaw) && previousFingerprint !== nextFingerprint
 
   dashboardActorVerifiedThisPage = true
   window.sessionStorage.setItem(
     DASHBOARD_PERMISSION_STORAGE_KEY,
-    JSON.stringify(snapshot.permissionLabels)
+    JSON.stringify(snapshot.permissionLabels),
   )
-  window.sessionStorage.setItem(DASHBOARD_ACCESS_MODE_STORAGE_KEY, snapshot.accessMode)
+  window.sessionStorage.setItem(
+    DASHBOARD_ACCESS_MODE_STORAGE_KEY,
+    snapshot.accessMode,
+  )
   if (snapshot.scope) {
     window.sessionStorage.setItem(DASHBOARD_SCOPE_STORAGE_KEY, snapshot.scope)
   } else {
     window.sessionStorage.removeItem(DASHBOARD_SCOPE_STORAGE_KEY)
   }
-  window.sessionStorage.setItem(DASHBOARD_IS_ADMIN_STORAGE_KEY, snapshot.isAdmin ? "1" : "0")
+  window.sessionStorage.setItem(
+    DASHBOARD_IS_ADMIN_STORAGE_KEY,
+    snapshot.isAdmin ? "1" : "0",
+  )
   window.sessionStorage.setItem(
     DASHBOARD_ROLES_STORAGE_KEY,
     JSON.stringify(snapshot.roleNames ?? []),
@@ -2024,11 +2161,13 @@ export function publishDashboardActorSnapshot(snapshot: DashboardActorSnapshot) 
   window.dispatchEvent(
     new CustomEvent<DashboardActorSnapshot>(DASHBOARD_ACTOR_EVENT, {
       detail: snapshot,
-    })
+    }),
   )
 }
 
-export function publishDashboardActorSnapshotFromSources(...sources: unknown[]) {
+export function publishDashboardActorSnapshotFromSources(
+  ...sources: unknown[]
+) {
   const snapshot = buildDashboardActorSnapshotFromSources(...sources)
   publishDashboardActorSnapshot(snapshot)
   return snapshot
@@ -2062,7 +2201,7 @@ export function clearDashboardActorSnapshot() {
         ready: true,
         version: Date.now(),
       },
-    })
+    }),
   )
 }
 
@@ -2141,27 +2280,35 @@ export function readDashboardActorSnapshotFromBrowser(): DashboardActorSnapshot 
     }
   }
 
-  const rawPermissions = window.sessionStorage.getItem(DASHBOARD_PERMISSION_STORAGE_KEY)
+  const rawPermissions = window.sessionStorage.getItem(
+    DASHBOARD_PERMISSION_STORAGE_KEY,
+  )
   if (rawPermissions) {
     try {
       const parsed = JSON.parse(rawPermissions) as unknown
       const permissionLabels = normalizePermissionLabels(
-        Array.isArray(parsed) ? parsed.filter((entry) => typeof entry === "string") : []
+        Array.isArray(parsed)
+          ? parsed.filter((entry) => typeof entry === "string")
+          : [],
       )
       const derivedSnapshot = buildDashboardActorSnapshotFromSources(
-        ...readDashboardActorBrowserSources()
+        ...readDashboardActorBrowserSources(),
       )
       const storedAccessMode = window.sessionStorage.getItem(
         DASHBOARD_ACCESS_MODE_STORAGE_KEY,
       )
-      const storedScope = window.sessionStorage.getItem(DASHBOARD_SCOPE_STORAGE_KEY)
+      const storedScope = window.sessionStorage.getItem(
+        DASHBOARD_SCOPE_STORAGE_KEY,
+      )
       const accessMode: DashboardAccessMode =
         derivedSnapshot.accessMode === "admin"
           ? "admin"
           : storedAccessMode === "admin" || storedAccessMode === "employee"
             ? storedAccessMode
             : derivedSnapshot.accessMode
-      const rawRoleNames = window.sessionStorage.getItem(DASHBOARD_ROLES_STORAGE_KEY)
+      const rawRoleNames = window.sessionStorage.getItem(
+        DASHBOARD_ROLES_STORAGE_KEY,
+      )
       let roleNames = derivedSnapshot.roleNames
       try {
         const parsedRoleNames = rawRoleNames ? JSON.parse(rawRoleNames) : []
@@ -2192,7 +2339,9 @@ export function readDashboardActorSnapshotFromBrowser(): DashboardActorSnapshot 
     }
   }
 
-  const snapshot = buildDashboardActorSnapshotFromSources(...readDashboardActorBrowserSources())
+  const snapshot = buildDashboardActorSnapshotFromSources(
+    ...readDashboardActorBrowserSources(),
+  )
   return {
     ...snapshot,
     ready: dashboardActorVerifiedThisPage,
@@ -2226,10 +2375,12 @@ export function persistDashboardAccessToken(token: string) {
   writeCookie(DASHBOARD_TOKEN_COOKIE, token.trim())
 }
 
-export function publishDashboardActorSnapshotFromBrowserStorage(...sources: unknown[]) {
+export function publishDashboardActorSnapshotFromBrowserStorage(
+  ...sources: unknown[]
+) {
   const snapshot = buildDashboardActorSnapshotFromSources(
     ...readDashboardActorBrowserSources(),
-    ...sources
+    ...sources,
   )
   publishDashboardActorSnapshot(snapshot)
   return snapshot
@@ -2242,9 +2393,7 @@ export function requestDashboardAccessRefresh() {
   window.dispatchEvent(new Event(DASHBOARD_ACCESS_REFRESH_EVENT))
 }
 
-export function subscribeToDashboardActorSnapshot(
-  listener: () => void
-) {
+export function subscribeToDashboardActorSnapshot(listener: () => void) {
   if (typeof window === "undefined") {
     return () => undefined
   }

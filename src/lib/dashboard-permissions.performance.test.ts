@@ -139,5 +139,11 @@ describe("performance and probation route access", () => {
     expect(
       canAccessDashboardRoute("/dashboard/probation/team", ["manager:read"], "admin"),
     ).toBe(true)
+    expect(
+      canAccessDashboardRoute("/dashboard/probation/team", ["probation_cases:read-team"], "admin"),
+    ).toBe(true)
+    expect(
+      canAccessDashboardRoute("/dashboard/probation", ["manager_team:read"], "admin"),
+    ).toBe(true)
   })
 })

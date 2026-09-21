@@ -42,6 +42,7 @@ import {
 } from "@/components/animate-ui/components/base/dialog"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import {
+  createProbationCase,
   createProbationPolicy,
   deleteProbationCase,
   deleteProbationPolicy,
@@ -53,6 +54,7 @@ import {
   listProbationPolicies,
   submitProbationHrDecision,
   submitProbationManagerReview,
+  updateProbationCase,
   updateProbationPolicy,
   type AdminRecord,
 } from "@/lib/admin-api"
@@ -70,7 +72,9 @@ import {
 
 export type ProbationHrTab = "overview" | "policies" | "cases" | "team"
 
-type FormMode = "policy" | "manager-review" | "hr-decision"
+type FormMode = "policy" | "manager-review" | "hr-decision" | "case" | "case-edit"
+
+const CASE_EDITABLE_STATUSES = ["ACTIVE", "OBJECTIVES_PENDING"]
 
 const EMPLOYMENT_TYPES = [
   "full_time",
@@ -125,9 +129,17 @@ export function ProbationManagementView({
 }) {
   const router = useRouter()
   const actor = useDashboardActor()
+  const activeRoute =
+    activeTab === "overview"
+      ? "/dashboard/probation/overview"
+      : activeTab === "policies"
+        ? "/dashboard/probation/policies"
+        : activeTab === "cases"
+          ? "/dashboard/probation/cases"
+          : "/dashboard/probation/team"
   const canAccess =
     actor.ready &&
-    canAccessDashboardRoute("/dashboard/probation/overview", actor.permissionLabels, actor.accessMode)
+    canAccessDashboardRoute(activeRoute, actor.permissionLabels, actor.accessMode)
   const canCreatePolicy = canPerformPermission(actor.permissionLabels, {
     permissions: ["probation_policies:create"],
     mode: "any",
@@ -144,12 +156,24 @@ export function ProbationManagementView({
     permissions: ["probation_cases:delete"],
     mode: "any",
   })
+  const canCreateCase = canPerformPermission(actor.permissionLabels, {
+    permissions: ["probation_cases:create"],
+    mode: "any",
+  })
+  const canUpdateCase = canPerformPermission(actor.permissionLabels, {
+    permissions: ["probation_cases:update"],
+    mode: "any",
+  })
   const canManagerReview = canPerformPermission(actor.permissionLabels, {
     permissions: ["probation_reviews:manager-review", "probation_reviews:manager-review-any"],
     mode: "any",
   })
   const canHrDecision = canPerformPermission(actor.permissionLabels, {
     permissions: ["probation_reviews:hr-decision"],
+    mode: "any",
+  })
+  const canGenerateLetter = canPerformPermission(actor.permissionLabels, {
+    permissions: ["probation_letters:generate"],
     mode: "any",
   })
 
@@ -195,8 +219,8 @@ export function ProbationManagementView({
     setError(null)
     try {
       const tasks: Array<Promise<unknown>> = [getProbationDashboard(token).then(setDashboard)]
-      if (activeTab === "policies" || activeTab === "overview") {
-        tasks.push(listProbationPolicies(token, statusFilter || undefined).then(setPolicies))
+      if (activeTab === "policies" || activeTab === "overview" || activeTab === "cases") {
+        tasks.push(listProbationPolicies(token).then(setPolicies))
       }
       if (activeTab === "cases" || activeTab === "overview") {
         tasks.push(listProbationCases(token, statusFilter || undefined).then(setCases))
@@ -349,6 +373,24 @@ export function ProbationManagementView({
           confirmation_date: form.confirmation_date || undefined,
           extension_days: form.extension_days ? Number(form.extension_days) : undefined,
           extension_end_date: form.extension_end_date || undefined,
+        })
+      } else if (formMode === "case") {
+        if (!form.employee_id || !form.start_date) {
+          throw new Error("Employee and start date are required.")
+        }
+        await createProbationCase(token, {
+          employee_id: Number(form.employee_id),
+          start_date: form.start_date,
+          policy_id: form.policy_id ? Number(form.policy_id) : undefined,
+        })
+      } else if (formMode === "case-edit") {
+        if (!form.case_id) {
+          throw new Error("Missing case reference.")
+        }
+        await updateProbationCase(token, form.case_id, {
+          start_date: form.start_date || undefined,
+          current_due_date: form.current_due_date || undefined,
+          policy_id: form.policy_id ? Number(form.policy_id) : undefined,
         })
       }
       toast.success("Saved.")
@@ -664,6 +706,12 @@ export function ProbationManagementView({
                 New policy
               </button>
             ) : null}
+            {activeTab === "cases" && canCreateCase ? (
+              <button type="button" className={primaryButtonClass} onClick={() => openForm("case", { start_date: new Date().toISOString().slice(0, 10) })}>
+                <PlusIcon className="size-4" />
+                New case
+              </button>
+            ) : null}
           </div>
         </div>
       )}
@@ -775,6 +823,22 @@ export function ProbationManagementView({
             </div>
           ) : null}
           <SheetFooter className="gap-2">
+            {canUpdateCase && caseDetail && CASE_EDITABLE_STATUSES.includes(readString(caseDetail, ["status"]).toUpperCase()) ? (
+              <button
+                type="button"
+                className={secondaryButtonClass}
+                onClick={() =>
+                  openForm("case-edit", {
+                    case_id: rowId(caseDetail),
+                    start_date: String(caseDetail.currentStartDate ?? caseDetail.current_start_date ?? "").slice(0, 10),
+                    current_due_date: String(caseDetail.currentDueDate ?? caseDetail.current_due_date ?? "").slice(0, 10),
+                    policy_id: readString(caseDetail, ["policyId", "policy_id"]),
+                  })
+                }
+              >
+                Edit case
+              </button>
+            ) : null}
             {canManagerReview ? (
               <button
                 type="button"
@@ -816,25 +880,27 @@ export function ProbationManagementView({
                 {busyId === `case-${rowId(caseDetail)}` ? <Loader2Icon className="size-4 animate-spin" /> : "Delete case"}
               </button>
             ) : null}
-            <button
-              type="button"
-              className={primaryButtonClass}
-              disabled={busyId === "letter"}
-              onClick={() => {
-                const token = readStoredToken()
-                const id = rowId(caseDetail)
-                if (!token || !id) return
-                setBusyId("letter")
-                void generateProbationLetter(token, id)
-                  .then(() => toast.success("Confirmation letter generated."))
-                  .catch((errorObject) =>
-                    toast.error(errorObject instanceof Error ? errorObject.message : "Could not generate the letter."),
-                  )
-                  .finally(() => setBusyId(""))
-              }}
-            >
-              {busyId === "letter" ? <Loader2Icon className="size-4 animate-spin" /> : "Generate letter"}
-            </button>
+            {canGenerateLetter ? (
+              <button
+                type="button"
+                className={primaryButtonClass}
+                disabled={busyId === "letter"}
+                onClick={() => {
+                  const token = readStoredToken()
+                  const id = rowId(caseDetail)
+                  if (!token || !id) return
+                  setBusyId("letter")
+                  void generateProbationLetter(token, id)
+                    .then(() => toast.success("Confirmation letter generated."))
+                    .catch((errorObject) =>
+                      toast.error(errorObject instanceof Error ? errorObject.message : "Could not generate the letter."),
+                    )
+                    .finally(() => setBusyId(""))
+                }}
+              >
+                {busyId === "letter" ? <Loader2Icon className="size-4 animate-spin" /> : "Generate letter"}
+              </button>
+            ) : null}
           </SheetFooter>
         </SheetContent>
       </Sheet>
@@ -849,7 +915,11 @@ export function ProbationManagementView({
                   : "New policy"
                 : formMode === "manager-review"
                   ? "Manager review"
-                  : "HR decision"}
+                  : formMode === "hr-decision"
+                    ? "HR decision"
+                    : formMode === "case"
+                      ? "New probation case"
+                      : "Edit probation case"}
             </DialogTitle>
             <DialogDescription>Save the details for this probation record.</DialogDescription>
           </DialogHeader>
@@ -960,6 +1030,34 @@ export function ProbationManagementView({
                 <Field label="Comments"><textarea className={textareaClass} value={form.comments ?? ""} onChange={(event) => setForm((current) => ({ ...current, comments: event.target.value }))} /></Field>
                 <Field label="Confirmation date"><input type="date" className={inputClass} value={form.confirmation_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, confirmation_date: event.target.value }))} /></Field>
                 <Field label="Extension days"><input className={inputClass} value={form.extension_days ?? ""} onChange={(event) => setForm((current) => ({ ...current, extension_days: event.target.value }))} /></Field>
+              </>
+            ) : null}
+            {formMode === "case" ? (
+              <>
+                <Field label="Employee ID"><input className={inputClass} value={form.employee_id ?? ""} onChange={(event) => setForm((current) => ({ ...current, employee_id: event.target.value }))} /></Field>
+                <Field label="Start date"><input type="date" className={inputClass} value={form.start_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, start_date: event.target.value }))} /></Field>
+                <Field label="Policy (optional)">
+                  <select className={inputClass} value={form.policy_id ?? ""} onChange={(event) => setForm((current) => ({ ...current, policy_id: event.target.value }))}>
+                    <option value="">Auto-resolve</option>
+                    {policies.map((policy) => (
+                      <option key={rowId(policy)} value={rowId(policy)}>{optionLabel(policy)}</option>
+                    ))}
+                  </select>
+                </Field>
+              </>
+            ) : null}
+            {formMode === "case-edit" ? (
+              <>
+                <Field label="Start date"><input type="date" className={inputClass} value={form.start_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, start_date: event.target.value }))} /></Field>
+                <Field label="Due date"><input type="date" className={inputClass} value={form.current_due_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, current_due_date: event.target.value }))} /></Field>
+                <Field label="Policy">
+                  <select className={inputClass} value={form.policy_id ?? ""} onChange={(event) => setForm((current) => ({ ...current, policy_id: event.target.value }))}>
+                    <option value="">Keep current</option>
+                    {policies.map((policy) => (
+                      <option key={rowId(policy)} value={rowId(policy)}>{optionLabel(policy)}</option>
+                    ))}
+                  </select>
+                </Field>
               </>
             ) : null}
             {formError ? <p className="text-sm text-rose-600">{formError}</p> : null}

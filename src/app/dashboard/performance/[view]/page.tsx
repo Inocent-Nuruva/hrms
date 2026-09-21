@@ -9,8 +9,11 @@ const ALLOWED_VIEWS = new Set<PerformanceHrTab>([
   "overview",
   "setup",
   "plans",
+  "development",
   "reviews",
   "improvement",
+  "reports",
+  "calibration",
 ])
 
 interface PerformanceViewPageProps {

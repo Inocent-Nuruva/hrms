@@ -15554,6 +15554,64 @@ export async function createPerformanceRatingScale(
   });
 }
 
+export async function listPerformanceScorecards(token: string) {
+  const payload = await adminRequest<unknown>("/api/performance/scorecards", {
+    token,
+  });
+  return normalizeList(payload);
+}
+
+export async function createPerformanceScorecard(
+  token: string,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>("/api/performance/scorecards", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function listPerformanceWorkflows(token: string) {
+  const payload = await adminRequest<unknown>("/api/performance/workflows", {
+    token,
+  });
+  return normalizeList(payload);
+}
+
+export async function createPerformanceWorkflow(
+  token: string,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>("/api/performance/workflows", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function getPerformanceReviewWorkflow(
+  token: string,
+  reviewId: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/performance/reviews/${reviewId}/workflow`,
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function actionPerformanceReviewWorkflow(
+  token: string,
+  reviewId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    `/api/performance/reviews/${reviewId}/workflow/action`,
+    { method: "POST", token, body: data },
+  );
+}
+
 export async function listPerformancePlans(token: string) {
   const payload = await adminRequest<unknown>("/api/performance/plans", {
     token,
@@ -15583,6 +15641,87 @@ export async function generatePerformancePlanFromRules(
 export async function listPerformanceImprovementPlans(token: string) {
   const payload = await adminRequest<unknown>(
     "/api/performance/improvement-plans",
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function listPerformanceDevelopmentPlans(token: string) {
+  const payload = await adminRequest<unknown>(
+    "/api/performance/development-plans",
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function createPerformanceDevelopmentPlan(
+  token: string,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>("/api/performance/development-plans", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function updatePerformanceDevelopmentGoal(
+  token: string,
+  goalId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    `/api/performance/development-goals/${goalId}`,
+    { method: "PATCH", token, body: data },
+  );
+}
+
+export async function carryForwardPerformanceDevelopmentGoals(
+  token: string,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    "/api/performance/development-plans/carry-forward",
+    { method: "POST", token, body: data },
+  );
+}
+
+export async function listPerformanceReportCatalog(token: string) {
+  const payload = await adminRequest<unknown>("/api/performance/reports/catalog", {
+    token,
+  });
+  return normalizeList(payload);
+}
+
+export async function downloadPerformanceReport(
+  token: string,
+  reportCode: string,
+  format: "csv" | "xlsx" | "pdf" | "json",
+) {
+  const response = await fetch(
+    buildUrl(`/api/performance/reports/${reportCode}/export?format=${format}`),
+    {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    },
+  );
+  if (!response.ok) {
+    throw new Error(await response.text().catch(() => "Report export failed."));
+  }
+  return response.blob();
+}
+
+export async function getPerformanceCalibrationDepartments(token: string) {
+  const payload = await adminRequest<unknown>(
+    "/api/performance/calibration/departments",
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function getPerformanceCalibrationComparison(token: string) {
+  const payload = await adminRequest<unknown>(
+    "/api/performance/calibration/comparison",
     { token },
   );
   return normalizeList(payload);
@@ -15656,6 +15795,39 @@ export async function approvePerformanceReview(
     `/api/performance/reviews/${periodAssignmentId}/approve`,
     { method: "POST", token, body: data },
   );
+}
+
+export async function invitePerformanceFeedback360(
+  token: string,
+  reviewId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    `/api/performance/reviews/${reviewId}/feedback-360/invitations`,
+    { method: "POST", token, body: data },
+  );
+}
+
+export async function listPerformanceFeedback360(
+  token: string,
+  reviewId: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/performance/reviews/${reviewId}/feedback-360`,
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function getPerformanceFeedback360Summary(
+  token: string,
+  reviewId: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/performance/reviews/${reviewId}/feedback-360/summary`,
+    { token },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
 }
 
 export async function listPerformanceAppeals(token: string) {
@@ -15795,6 +15967,14 @@ export async function listMyPerformanceReviews(token: string) {
   return normalizeList(payload);
 }
 
+export async function listMyPerformanceFeedback360(token: string) {
+  const payload = await adminRequest<unknown>(
+    "/api/performance/me/feedback-360",
+    { token },
+  );
+  return normalizeList(payload);
+}
+
 export async function submitMyPerformanceSelfReview(
   token: string,
   periodAssignmentId: string | number,
@@ -15803,6 +15983,28 @@ export async function submitMyPerformanceSelfReview(
   return adminRequest<unknown>(
     `/api/performance/me/reviews/${periodAssignmentId}/self-review`,
     { method: "POST", token, body: { review } },
+  );
+}
+
+export async function submitMyPerformanceFeedback360(
+  token: string,
+  requestId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    `/api/performance/me/feedback-360/${requestId}/submit`,
+    { method: "POST", token, body: data },
+  );
+}
+
+export async function declineMyPerformanceFeedback360(
+  token: string,
+  requestId: string | number,
+  reason?: string,
+) {
+  return adminRequest<unknown>(
+    `/api/performance/me/feedback-360/${requestId}/decline`,
+    { method: "POST", token, body: { reason } },
   );
 }
 
@@ -15827,6 +16029,25 @@ export async function listMyPerformanceImprovementPlans(token: string) {
     { token },
   );
   return normalizeList(payload);
+}
+
+export async function listMyPerformanceDevelopmentPlans(token: string) {
+  const payload = await adminRequest<unknown>(
+    "/api/performance/me/development-plans",
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function updateMyPerformanceDevelopmentGoal(
+  token: string,
+  goalId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    `/api/performance/me/development-goals/${goalId}`,
+    { method: "PATCH", token, body: data },
+  );
 }
 
 export async function acknowledgeMyPerformanceImprovementPlan(
@@ -15974,6 +16195,26 @@ export async function deleteProbationCase(
   });
 }
 
+export async function createProbationCase(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/probation/cases", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function updateProbationCase(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/probation/cases/${id}`, {
+    method: "PATCH",
+    token,
+    body: data,
+  });
+}
+
 export async function submitProbationManagerReview(
   token: string,
   caseId: string | number,
@@ -16010,6 +16251,21 @@ export async function generateProbationLetter(
     {
       method: "POST",
       token,
+    },
+  );
+}
+
+export async function generateEmployeeMovementLetter(
+  token: string,
+  movementId: string | number,
+  letterType: string,
+) {
+  return adminRequest<unknown>(
+    `/api/employee-movements/${movementId}/generate-letter`,
+    {
+      method: "POST",
+      token,
+      body: { letter_type: letterType },
     },
   );
 }
