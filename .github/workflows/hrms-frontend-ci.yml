@@ -79,7 +79,7 @@ jobs:
             bash -n "$file"
           done
           node --check deploy/hrms-frontend/ecosystem.config.js
-          grep -Fq 'server_name hrms.alliance.co.tz;' deploy/hrms-frontend/nginx/hrms.alliance.co.tz.conf
+          grep -Eq '^[[:space:]]*server_name[[:space:]][^;]*hrms\.alliance\.co\.tz[^;]*;' deploy/hrms-frontend/nginx/hrms.alliance.co.tz.conf
           grep -Fq 'proxy_pass http://127.0.0.1:8880;' deploy/hrms-frontend/nginx/hrms.alliance.co.tz.conf
       - name: Install dependencies
         run: npm ci --no-audit --no-fund

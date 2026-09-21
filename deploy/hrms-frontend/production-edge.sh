@@ -73,7 +73,7 @@ configured_hash() {
 
 site_has_expected_base() {
   [[ -f "$SITE_AVAILABLE" ]] || return 1
-  grep -Fq 'server_name hrms.alliance.co.tz;' "$SITE_AVAILABLE" &&
+  grep -Eq '^[[:space:]]*server_name[[:space:]][^;]*hrms\.alliance\.co\.tz[^;]*;' "$SITE_AVAILABLE" &&
     grep -Fq 'proxy_pass http://127.0.0.1:8880;' "$SITE_AVAILABLE"
 }
 
