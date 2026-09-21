@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Loader2Icon, PlusIcon, RefreshCwIcon } from "lucide-react"
+import { Loader2Icon, PencilIcon, PlusIcon, RefreshCwIcon, Trash2Icon } from "lucide-react"
 import { toast } from "sonner"
 
 import { SearchToggleField } from "@/components/common/search-toggle-field"
@@ -17,6 +17,7 @@ import {
   optionLabel,
   prettify,
   primaryButtonClass,
+  readNumber,
   readString,
   rowId,
   secondaryButtonClass,
@@ -37,6 +38,8 @@ import {
   approveEmployeeMovement,
   cancelEmployeeMovement,
   createEmployeeMovement,
+  deleteEmployeeMovement,
+  getEmployeeMovement,
   listBranches,
   listCostCenters,
   listDepartments,
@@ -49,6 +52,7 @@ import {
   retryEmployeeMovementOperation,
   returnEmployeeMovement,
   submitEmployeeMovement,
+  updateEmployeeMovement,
   type AdminRecord,
 } from "@/lib/admin-api"
 import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
@@ -89,6 +93,57 @@ function statusOf(row: AdminRecord) {
   return readString(row, ["status"], "DRAFT").toUpperCase()
 }
 
+function recordValue(row: AdminRecord | null | undefined, keys: string[]) {
+  if (!row) return undefined
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(row, key)) return row[key]
+  }
+  return undefined
+}
+
+function asPlainRecord(value: unknown): AdminRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? (value as AdminRecord) : {}
+}
+
+function formValue(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return String(value)
+  if (typeof value === "string" && value.trim()) return value
+  return ""
+}
+
+function changedSnapshotValue(row: AdminRecord, key: string) {
+  const current = asPlainRecord(recordValue(row, ["currentSnapshot", "current_snapshot"]))
+  const proposed = asPlainRecord(recordValue(row, ["proposedSnapshot", "proposed_snapshot"]))
+  return proposed[key] !== current[key] ? proposed[key] : undefined
+}
+
+function buildMovementForm(row: AdminRecord): Record<string, string> {
+  const salaryChange = Array.isArray(row.changes)
+    ? row.changes.find((entry) => readString(asPlainRecord(entry), ["field"], "").toUpperCase() === "BASE_SALARY")
+    : undefined
+  const salaryNewValue = asPlainRecord(recordValue(asPlainRecord(salaryChange), ["newValue", "new_value"]))
+  const salaryChanged = Boolean(salaryChange) || changedSnapshotValue(row, "base_salary") !== undefined
+  return {
+    id: rowId(row),
+    employee_id: formValue(readNumber(row, ["employeeId", "employee_id"]) ?? readNumber(asPlainRecord(row.employee), ["id"])),
+    movement_type: readString(row, ["movementType", "movement_type"], "DEPARTMENT_TRANSFER"),
+    title: readString(row, ["title"], ""),
+    reason: readString(row, ["reason"], ""),
+    effective_date: readString(row, ["effectiveDate", "effective_date"], ""),
+    new_branch_id: formValue(changedSnapshotValue(row, "branch_id")),
+    new_department_id: formValue(changedSnapshotValue(row, "department_id")),
+    new_position_id: formValue(changedSnapshotValue(row, "position_id")),
+    new_grade_id: formValue(changedSnapshotValue(row, "grade_id")),
+    new_cost_center_id: formValue(changedSnapshotValue(row, "cost_center_id")),
+    new_manager_employee_id: formValue(changedSnapshotValue(row, "reporting_manager_employee_id")),
+    new_employment_type: formValue(changedSnapshotValue(row, "employment_type")),
+    base_salary: salaryChanged ? formValue(salaryNewValue.amount ?? changedSnapshotValue(row, "base_salary")) : "",
+    currency: salaryChanged ? formValue(salaryNewValue.currency ?? changedSnapshotValue(row, "salary_currency")) || "TZS" : "TZS",
+    salary_structure_code: salaryChanged ? formValue(salaryNewValue.salary_structure_code ?? changedSnapshotValue(row, "salary_structure_code")) : "",
+    justification: formValue(salaryNewValue.justification),
+  }
+}
+
 export function MovementOperationsView({ activeTab }: { activeTab: MovementOpsTab }) {
   const actor = useDashboardActor()
   const canAccess =
@@ -111,7 +166,7 @@ export function MovementOperationsView({ activeTab }: { activeTab: MovementOpsTa
   const [search, setSearch] = React.useState("")
   const [detail, setDetail] = React.useState<AdminRecord | null>(null)
   const [createOpen, setCreateOpen] = React.useState(false)
-  const [createMode, setCreateMode] = React.useState<"create" | "decide">("create")
+  const [createMode, setCreateMode] = React.useState<"create" | "edit" | "decide">("create")
   const [form, setForm] = React.useState<Record<string, string>>({})
   const [formError, setFormError] = React.useState<string | null>(null)
   const [saving, setSaving] = React.useState(false)
@@ -192,13 +247,49 @@ export function MovementOperationsView({ activeTab }: { activeTab: MovementOpsTa
     }
   }
 
+  async function openEdit(row: AdminRecord) {
+    const token = readStoredToken()
+    const id = rowId(row)
+    if (!token || !id) return
+    setBusyId(`edit-${id}`)
+    try {
+      const movement = await getEmployeeMovement(token, id)
+      if (!movement) throw new Error("Movement was not found.")
+      setCreateMode("edit")
+      setForm(buildMovementForm(movement))
+      setFormError(null)
+      setCreateOpen(true)
+    } catch (errorObject) {
+      toast.error(errorObject instanceof Error ? errorObject.message : "Could not load movement.")
+    } finally {
+      setBusyId("")
+    }
+  }
+
+  async function deleteMovement(row: AdminRecord) {
+    const token = readStoredToken()
+    const id = rowId(row)
+    if (!token || !id) return
+    if (!window.confirm("Delete this draft movement? This cannot be undone.")) return
+    setBusyId(`delete-${id}`)
+    try {
+      await deleteEmployeeMovement(token, id)
+      toast.success("Movement deleted.")
+      await load()
+    } catch (errorObject) {
+      toast.error(errorObject instanceof Error ? errorObject.message : "Could not delete movement.")
+    } finally {
+      setBusyId("")
+    }
+  }
+
   async function onSave() {
     const token = readStoredToken()
     if (!token) return
     setSaving(true)
     setFormError(null)
     try {
-      if (createMode === "create") {
+      if (createMode === "create" || createMode === "edit") {
         if (!form.employee_id || !form.movement_type || !form.title || !form.reason || !form.effective_date) {
           throw new Error("Employee, type, title, reason, and effective date are required.")
         }
@@ -216,17 +307,23 @@ export function MovementOperationsView({ activeTab }: { activeTab: MovementOpsTa
         if (form.new_cost_center_id) payload.new_cost_center_id = Number(form.new_cost_center_id)
         if (form.new_manager_employee_id) payload.new_manager_employee_id = Number(form.new_manager_employee_id)
         if (form.new_employment_type) payload.new_employment_type = form.new_employment_type
-        if (form.movement_type === "SALARY_REVISION") {
+        if (["SALARY_REVISION", "COMPOSITE"].includes(form.movement_type)) {
           if (!form.base_salary || !form.currency || !form.justification) {
             throw new Error("Salary, currency, and justification are required.")
           }
           payload.salary_revision = {
             base_salary: form.base_salary,
             currency: form.currency,
+            salary_structure_code: form.salary_structure_code || undefined,
             justification: form.justification,
           }
         }
-        await createEmployeeMovement(token, payload)
+        if (createMode === "edit") {
+          if (!form.id) throw new Error("Movement id is required.")
+          await updateEmployeeMovement(token, form.id, payload)
+        } else {
+          await createEmployeeMovement(token, payload)
+        }
       } else {
         if (!form.id || !form.decision) throw new Error("A decision is required.")
         if (form.decision !== "APPROVE" && !form.comments) throw new Error("Comments are required.")
@@ -280,7 +377,17 @@ export function MovementOperationsView({ activeTab }: { activeTab: MovementOpsTa
         return (
           <div className="flex flex-wrap gap-1">
             {["DRAFT", "RETURNED_FOR_CORRECTION"].includes(status) ? (
-              <button type="button" className={actionButtonClass} disabled={busyId === `submit-${id}`} onClick={() => void runAction(row, "submit")}>Submit</button>
+              <>
+                <button type="button" className={actionButtonClass} disabled={busyId === `edit-${id}`} onClick={() => void openEdit(row)}>
+                  {busyId === `edit-${id}` ? <Loader2Icon className="size-3.5 animate-spin" /> : <PencilIcon className="size-3.5" />}
+                  Edit
+                </button>
+                <button type="button" className={actionButtonClass} disabled={busyId === `delete-${id}`} onClick={() => void deleteMovement(row)}>
+                  {busyId === `delete-${id}` ? <Loader2Icon className="size-3.5 animate-spin" /> : <Trash2Icon className="size-3.5" />}
+                  Delete
+                </button>
+                <button type="button" className={actionButtonClass} disabled={busyId === `submit-${id}`} onClick={() => void runAction(row, "submit")}>Submit</button>
+              </>
             ) : null}
             {["DRAFT", "SUBMITTED", "PENDING_APPROVAL", "RETURNED_FOR_CORRECTION"].includes(status) ? (
               <button type="button" className={actionButtonClass} disabled={busyId === `cancel-${id}`} onClick={() => void runAction(row, "cancel")}>Cancel</button>
@@ -508,11 +615,11 @@ export function MovementOperationsView({ activeTab }: { activeTab: MovementOpsTa
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogPopup className="max-w-xl">
           <DialogHeader>
-            <DialogTitle>{createMode === "create" ? "New movement" : "Decide movement"}</DialogTitle>
-            <DialogDescription>Create a movement or record your decision.</DialogDescription>
+            <DialogTitle>{createMode === "create" ? "New movement" : createMode === "edit" ? "Edit movement" : "Decide movement"}</DialogTitle>
+            <DialogDescription>{createMode === "decide" ? "Record your approval decision." : "Record the employee, effective date, and proposed changes."}</DialogDescription>
           </DialogHeader>
           <div className="grid gap-3">
-            {createMode === "create" ? (
+            {createMode === "create" || createMode === "edit" ? (
               <>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Employee</span>
@@ -595,10 +702,11 @@ export function MovementOperationsView({ activeTab }: { activeTab: MovementOpsTa
                     </select>
                   </label>
                 ) : null}
-                {form.movement_type === "SALARY_REVISION" ? (
+                {["SALARY_REVISION", "COMPOSITE"].includes(form.movement_type) ? (
                   <>
                     <label className="grid gap-1.5 text-sm"><span className="font-medium">Base salary</span><input className={inputClass} value={form.base_salary ?? ""} onChange={(event) => setForm((current) => ({ ...current, base_salary: event.target.value }))} /></label>
                     <label className="grid gap-1.5 text-sm"><span className="font-medium">Currency</span><input className={inputClass} value={form.currency ?? "TZS"} onChange={(event) => setForm((current) => ({ ...current, currency: event.target.value }))} /></label>
+                    <label className="grid gap-1.5 text-sm"><span className="font-medium">Salary structure code</span><input className={inputClass} value={form.salary_structure_code ?? ""} onChange={(event) => setForm((current) => ({ ...current, salary_structure_code: event.target.value }))} /></label>
                     <label className="grid gap-1.5 text-sm"><span className="font-medium">Justification</span><textarea className={textareaClass} value={form.justification ?? ""} onChange={(event) => setForm((current) => ({ ...current, justification: event.target.value }))} /></label>
                   </>
                 ) : null}

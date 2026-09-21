@@ -6,6 +6,7 @@ import {
   clearAttendanceDailySummaryAdjustment,
   createEmployeeGrade,
   createEmployeeMovement,
+  deleteEmployeeMovement,
   deleteEmployeeGrade,
   getEmployeeGrade,
   getEmployeeMovement,
@@ -19,6 +20,7 @@ import {
   patchEmployeeGrade,
   submitEmployeeMovement,
   updateAttendanceProcessingException,
+  updateEmployeeMovement,
   updateEmployeeNumbering,
   upsertAttendanceDailySummaryAdjustment,
 } from "./admin-api"
@@ -282,10 +284,12 @@ describe("batch 2 admin API helpers", () => {
     ])
   })
 
-  it("creates, submits, and cancels employee movements", async () => {
+  it("creates, updates, deletes, submits, and cancels employee movements", async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse({ id: 18, status: "DRAFT" }))
+      .mockResolvedValueOnce(jsonResponse({ id: 18, status: "DRAFT" }))
+      .mockResolvedValueOnce(jsonResponse({ message: "Employee movement deleted." }))
       .mockResolvedValueOnce(jsonResponse({ id: 18, status: "PENDING_APPROVAL" }))
       .mockResolvedValueOnce(jsonResponse({ id: 18, status: "CANCELLED" }))
     vi.stubGlobal("fetch", fetchMock)
@@ -295,6 +299,11 @@ describe("batch 2 admin API helpers", () => {
       movement_type: "TRANSFER",
       effective_date: "2026-08-13",
     })
+    await updateEmployeeMovement("token", 18, {
+      title: "Updated transfer",
+      reason: "Updated business need",
+    })
+    await deleteEmployeeMovement("token", 18)
     await submitEmployeeMovement("token", 18)
     await cancelEmployeeMovement("token", 18)
 
@@ -312,13 +321,31 @@ describe("batch 2 admin API helpers", () => {
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
+      "http://localhost:8888/api/employee-movements/18",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({
+          title: "Updated transfer",
+          reason: "Updated business need",
+        }),
+      })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "http://localhost:8888/api/employee-movements/18",
+      expect.objectContaining({
+        method: "DELETE",
+      })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
       "http://localhost:8888/api/employee-movements/18/submit",
       expect.objectContaining({
         method: "POST",
       })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
-      3,
+      5,
       "http://localhost:8888/api/employee-movements/18/cancel",
       expect.objectContaining({
         method: "POST",

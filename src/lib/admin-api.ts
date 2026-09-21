@@ -6586,6 +6586,28 @@ export async function createEmployeeMovement(token: string, data: AdminRecord) {
   });
 }
 
+export async function updateEmployeeMovement(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/employee-movements/${id}`, {
+    method: "PATCH",
+    token,
+    body: data,
+  });
+}
+
+export async function deleteEmployeeMovement(
+  token: string,
+  id: string | number,
+) {
+  return adminRequest<unknown>(`/api/employee-movements/${id}`, {
+    method: "DELETE",
+    token,
+  });
+}
+
 export async function submitEmployeeMovement(
   token: string,
   id: string | number,
