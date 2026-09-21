@@ -20,6 +20,10 @@ const nextConfig: NextConfig = {
     root: path.resolve(process.cwd()),
   },
   async rewrites() {
+    if (!backendOrigin) {
+      return [];
+    }
+
     return [
       {
         source: "/socket.io",

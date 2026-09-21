@@ -37,8 +37,11 @@ src/
 Copy `.env.example` to `.env.local` and set:
 
 ```env
-# Origin only (no trailing /api) — request paths already start with /api/...
-NEXT_PUBLIC_API_BASE_URL=http://192.168.1.30:8888
+# Use same-origin API proxy in deployed builds so both public and private URLs work.
+NEXT_PUBLIC_API_BASE_URL=/api
+
+# Local development can point directly at the backend instead.
+# NEXT_PUBLIC_API_BASE_URL=http://192.168.1.30:8888
 ```
 
 ## API integration points

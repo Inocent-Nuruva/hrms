@@ -1,9 +1,30 @@
 import { z } from "zod"
 
+const apiBaseUrlSchema = z
+  .string()
+  .trim()
+  .default("http://localhost:8888")
+  .refine(
+    (value) => {
+      if (value === "" || value === "/api") return true
+      try {
+        const url = new URL(value)
+        return url.protocol === "http:" || url.protocol === "https:"
+      } catch {
+        return false
+      }
+    },
+    { message: "NEXT_PUBLIC_API_BASE_URL must be an HTTP(S) URL, /api, or empty." },
+  )
+
+function normalizeApiBaseUrl(value: string) {
+  return value.trim().replace(/\/api\/?$/i, "").replace(/\/$/, "")
+}
+
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   NEXT_PUBLIC_APP_NAME: z.string().default("HRMS"),
-  NEXT_PUBLIC_API_BASE_URL: z.url().default("http://localhost:8888"),
+  NEXT_PUBLIC_API_BASE_URL: apiBaseUrlSchema,
   NEXT_PUBLIC_USE_MOCK_AUTH: z
     .string()
     .default("false")
@@ -45,7 +66,7 @@ if (!parsed.success) {
 
 export const env = {
   ...parsed.data,
-  NEXT_PUBLIC_API_BASE_URL: parsed.data.NEXT_PUBLIC_API_BASE_URL.replace(/\/$/, ""),
+  NEXT_PUBLIC_API_BASE_URL: normalizeApiBaseUrl(parsed.data.NEXT_PUBLIC_API_BASE_URL),
   COUNTRIES_API_BASE_URL: parsed.data.COUNTRIES_API_BASE_URL.replace(/\/$/, ""),
   IS_DEV: parsed.data.NODE_ENV === "development",
   IS_PROD: parsed.data.NODE_ENV === "production",
