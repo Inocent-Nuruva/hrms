@@ -1,4 +1,4 @@
-export type RoleKey = "admin" | "hr"
+export type RoleKey = "admin" | "hr";
 
 export const ADMIN_SMOKE_ROUTES: string[] = [
   "/dashboard",
@@ -58,6 +58,8 @@ export const ADMIN_SMOKE_ROUTES: string[] = [
   "/dashboard/finance/products",
   "/dashboard/finance/applications",
   "/dashboard/finance/accounts",
+  "/dashboard/finance/reports",
+  "/dashboard/me/finance/applications",
   "/dashboard/activities/overview",
   "/dashboard/activities/reports",
   "/dashboard/activities/team",
@@ -102,7 +104,7 @@ export const ADMIN_SMOKE_ROUTES: string[] = [
   "/dashboard/insights/readiness",
   "/dashboard/help",
   "/dashboard/settings",
-]
+];
 
 export const HR_SMOKE_ROUTES: string[] = [
   "/dashboard",
@@ -149,12 +151,15 @@ export const HR_SMOKE_ROUTES: string[] = [
   "/dashboard/me/movements",
   "/dashboard/help",
   "/dashboard/settings",
-]
+];
 
 export const JOURNEY_CREATE_PAGES = [
   { path: "/dashboard/attendance/timetables", title: "Timetables" },
   { path: "/dashboard/attendance/timetable-days", title: "Timetable Days" },
   { path: "/dashboard/attendance/shifts", title: "Shifts" },
-  { path: "/dashboard/attendance/employee-timetables", title: "Employee Timetables" },
+  {
+    path: "/dashboard/attendance/employee-timetables",
+    title: "Employee Timetables",
+  },
   { path: "/dashboard/leave-management/types", title: "Leave Types" },
-]
+];

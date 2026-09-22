@@ -283,6 +283,7 @@ const financeOperationsSectionTabGroups: DashboardSectionTabGroup[] = [
       { title: "Products", url: "/dashboard/finance/products" },
       { title: "Applications", url: "/dashboard/finance/applications" },
       { title: "Accounts", url: "/dashboard/finance/accounts" },
+      { title: "Reports", url: "/dashboard/finance/reports" },
     ],
   },
 ]

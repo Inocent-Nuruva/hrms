@@ -10,6 +10,7 @@ const ALLOWED_VIEWS = new Set<FinanceOpsTab>([
   "products",
   "applications",
   "accounts",
+  "reports",
 ])
 
 interface FinanceViewPageProps {

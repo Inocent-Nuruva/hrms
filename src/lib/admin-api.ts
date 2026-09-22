@@ -4354,12 +4354,18 @@ export async function listAllLeaveBalances(
     }
 
     const employee = asRecord(row.employee) ?? asRecord(row.Employee);
-    const employeeId = readNumberFromRecord(employee, ["id", "employee_id", "employeeId"]);
+    const employeeId = readNumberFromRecord(employee, [
+      "id",
+      "employee_id",
+      "employeeId",
+    ]);
 
     return nestedBalances.map((balance) => ({
       ...balance,
       ...(balance.employee === undefined && employee ? { employee } : {}),
-      ...(balance.employee_id === undefined && employeeId !== null ? { employee_id: employeeId } : {}),
+      ...(balance.employee_id === undefined && employeeId !== null
+        ? { employee_id: employeeId }
+        : {}),
     }));
   });
 
@@ -7911,31 +7917,55 @@ export type LeaveBalanceImportResult = {
 export async function downloadLeaveBalanceImportTemplate(
   token: string,
 ): Promise<{ blob: Blob; filename: string }> {
-  const response = await fetch(buildUrl("/api/leave/balances/import/template"), {
-    headers: { accept: "*/*", Authorization: `Bearer ${token}` },
-    cache: "no-store",
-  });
-  if (!response.ok) throw new Error(await response.text() || "Could not download leave balance template.");
+  const response = await fetch(
+    buildUrl("/api/leave/balances/import/template"),
+    {
+      headers: { accept: "*/*", Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    },
+  );
+  if (!response.ok)
+    throw new Error(
+      (await response.text()) || "Could not download leave balance template.",
+    );
   const disposition = response.headers.get("content-disposition") ?? "";
-  const match = disposition.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i);
-  return { blob: await response.blob(), filename: decodeURIComponent(match?.[1] ?? match?.[2] ?? "leave-balance-import-template.xlsx") };
+  const match = disposition.match(
+    /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i,
+  );
+  return {
+    blob: await response.blob(),
+    filename: decodeURIComponent(
+      match?.[1] ?? match?.[2] ?? "leave-balance-import-template.xlsx",
+    ),
+  };
 }
 
-export async function importLeaveBalances(token: string, file: File): Promise<LeaveBalanceImportResult> {
+export async function importLeaveBalances(
+  token: string,
+  file: File,
+): Promise<LeaveBalanceImportResult> {
   const body = new FormData();
   body.set("file", file, file.name || "leave-balance-import.xlsx");
-  const response = await fetch(buildUrl("/api/leave/balances/import"), { method: "POST", headers: { Authorization: `Bearer ${token}` }, body });
-  if (!response.ok) throw new Error(await response.text() || "Leave balance import failed.");
+  const response = await fetch(buildUrl("/api/leave/balances/import"), {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body,
+  });
+  if (!response.ok)
+    throw new Error((await response.text()) || "Leave balance import failed.");
   return (await response.json()) as LeaveBalanceImportResult;
 }
 
 export async function downloadLeaveImportTemplate(
   token: string,
 ): Promise<{ blob: Blob; filename: string }> {
-  const response = await fetch(buildUrl("/api/leave/requests/import/template"), {
-    headers: { accept: "*/*", Authorization: `Bearer ${token}` },
-    cache: "no-store",
-  });
+  const response = await fetch(
+    buildUrl("/api/leave/requests/import/template"),
+    {
+      headers: { accept: "*/*", Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    },
+  );
   if (!response.ok) {
     const text = await response.text();
     throw new Error(
@@ -7946,10 +7976,14 @@ export async function downloadLeaveImportTemplate(
     );
   }
   const disposition = response.headers.get("content-disposition") ?? "";
-  const match = disposition.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i);
+  const match = disposition.match(
+    /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i,
+  );
   return {
     blob: await response.blob(),
-    filename: decodeURIComponent(match?.[1] ?? match?.[2] ?? "leave-import-template.xlsx"),
+    filename: decodeURIComponent(
+      match?.[1] ?? match?.[2] ?? "leave-import-template.xlsx",
+    ),
   };
 }
 
@@ -7966,7 +8000,10 @@ export async function importLeaveRequests(
     cache: "no-store",
   });
   const text = await response.text();
-  const payload = parseResponseBodyText(text, response.headers.get("content-type"));
+  const payload = parseResponseBodyText(
+    text,
+    response.headers.get("content-type"),
+  );
   if (!response.ok) throw new Error(extractMessage(payload, response.status));
   return payload as LeaveImportResult;
 }
@@ -14185,13 +14222,10 @@ export async function unlinkEmployeeCompanyUser(
   token: string,
   employeeId: string | number,
 ) {
-  return adminRequest<unknown>(
-    `/api/employees/${employeeId}/company-user`,
-    {
-      method: "DELETE",
-      token,
-    },
-  );
+  return adminRequest<unknown>(`/api/employees/${employeeId}/company-user`, {
+    method: "DELETE",
+    token,
+  });
 }
 
 export async function removeEmployeeLinkedAccount(
@@ -15075,7 +15109,10 @@ export async function createPayrollInput(token: string, data: AdminRecord) {
   });
 }
 
-export async function createPayrollAdjustment(token: string, data: AdminRecord) {
+export async function createPayrollAdjustment(
+  token: string,
+  data: AdminRecord,
+) {
   return adminRequest<unknown>("/api/payroll/inputs/adjustments", {
     method: "POST",
     token,
@@ -15128,6 +15165,14 @@ export async function generatePayrollSources(token: string, data: AdminRecord) {
   });
 }
 
+export async function importPayrollSources(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/payroll/sources/import", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
 export async function approvePayrollSource(token: string, id: string | number) {
   const payload = await adminRequest<unknown>(
     `/api/payroll/sources/${id}/approve`,
@@ -15165,7 +15210,11 @@ export async function listPayrollOvertimeApprovals(
   token: string,
   params: PayrollListParams & { start_date?: string; end_date?: string } = {},
 ) {
-  return listPayrollCollection("/api/payroll/overtime-approvals", token, params);
+  return listPayrollCollection(
+    "/api/payroll/overtime-approvals",
+    token,
+    params,
+  );
 }
 
 export async function approvePayrollOvertime(
@@ -15514,6 +15563,70 @@ export async function generatePayrollAccountingJournals(
   return normalizeSingle(payload) ?? asRecord(payload);
 }
 
+export async function exportPayrollAccountingJournal(
+  token: string,
+  batchId: string | number,
+  format = "csv",
+) {
+  const response = await fetch(
+    buildUrl(
+      `/api/payroll/accounting/journals/${batchId}/export?format=${encodeURIComponent(format)}`,
+    ),
+    {
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  );
+  if (!response.ok) {
+    throw new Error(`Failed to export journal (${response.status})`);
+  }
+  const payload = (await response.json()) as AdminRecord;
+  const content = typeof payload.content === "string" ? payload.content : "";
+  return {
+    blob: new Blob([content], {
+      type:
+        typeof payload.mime_type === "string"
+          ? payload.mime_type
+          : "text/plain",
+    }),
+    filename:
+      typeof payload.file_name === "string"
+        ? payload.file_name
+        : `payroll-journal-${batchId}.${format}`,
+  };
+}
+
+export async function postPayrollAccountingJournal(
+  token: string,
+  batchId: string | number,
+  data: AdminRecord,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/payroll/accounting/journals/${batchId}/post`,
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function reversePayrollAccountingJournal(
+  token: string,
+  batchId: string | number,
+  data: AdminRecord,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/payroll/accounting/journals/${batchId}/reverse`,
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
 export async function reconcilePayrollPayment(
   token: string,
   runId: string | number,
@@ -15526,11 +15639,52 @@ export async function reconcilePayrollPayment(
   });
 }
 
+export async function importPayrollBankStatement(
+  token: string,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>("/api/payroll/banking/imports", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
 export async function listPayrollReportCatalog(token: string) {
   const payload = await adminRequest<unknown>("/api/payroll/reports/catalog", {
     token,
   });
   return normalizeList(payload);
+}
+
+export async function getPayrollIntegrationCatalog(token: string) {
+  const payload = await adminRequest<unknown>(
+    "/api/payroll/reports/integrations/catalog",
+    {
+      token,
+    },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function getPayrollNotificationCatalog(token: string) {
+  const payload = await adminRequest<unknown>(
+    "/api/payroll/reports/notifications/catalog",
+    {
+      token,
+    },
+  );
+  return normalizeList(payload);
+}
+
+export async function getPayrollReadiness(token: string) {
+  const payload = await adminRequest<unknown>(
+    "/api/payroll/reports/readiness",
+    {
+      token,
+    },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
 }
 
 export async function getPayrollReport(
@@ -15627,7 +15781,10 @@ export async function listPerformancePeriods(token: string) {
   return normalizeList(payload);
 }
 
-export async function createPerformancePeriod(token: string, data: AdminRecord) {
+export async function createPerformancePeriod(
+  token: string,
+  data: AdminRecord,
+) {
   return adminRequest<unknown>("/api/performance/periods", {
     method: "POST",
     token,
@@ -15647,14 +15804,23 @@ export async function updatePerformancePeriod(
   });
 }
 
-export async function activatePerformancePeriod(token: string, periodId: string | number) {
-  return adminRequest<unknown>(`/api/performance/periods/${periodId}/activate`, {
-    method: "POST",
-    token,
-  });
+export async function activatePerformancePeriod(
+  token: string,
+  periodId: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/performance/periods/${periodId}/activate`,
+    {
+      method: "POST",
+      token,
+    },
+  );
 }
 
-export async function closePerformancePeriod(token: string, periodId: string | number) {
+export async function closePerformancePeriod(
+  token: string,
+  periodId: string | number,
+) {
   return adminRequest<unknown>(`/api/performance/periods/${periodId}/close`, {
     method: "POST",
     token,
@@ -15716,7 +15882,10 @@ export async function updatePerformanceKpi(
   });
 }
 
-export async function deletePerformanceKpi(token: string, kpiId: string | number) {
+export async function deletePerformanceKpi(
+  token: string,
+  kpiId: string | number,
+) {
   return adminRequest<unknown>(`/api/performance/kpis/${kpiId}`, {
     method: "DELETE",
     token,
@@ -15904,14 +16073,11 @@ export async function createPayrollOvertimePolicy(
   token: string,
   data: AdminRecord,
 ) {
-  return adminRequest<unknown>(
-    "/api/payroll/configuration/overtime-policies",
-    {
-      method: "POST",
-      token,
-      body: data,
-    },
-  );
+  return adminRequest<unknown>("/api/payroll/configuration/overtime-policies", {
+    method: "POST",
+    token,
+    body: data,
+  });
 }
 
 export async function listPayrollBonusSchemes(token: string) {
@@ -15993,10 +16159,11 @@ export async function updatePerformanceDevelopmentGoal(
   goalId: string | number,
   data: AdminRecord,
 ) {
-  return adminRequest<unknown>(
-    `/api/performance/development-goals/${goalId}`,
-    { method: "PATCH", token, body: data },
-  );
+  return adminRequest<unknown>(`/api/performance/development-goals/${goalId}`, {
+    method: "PATCH",
+    token,
+    body: data,
+  });
 }
 
 export async function carryForwardPerformanceDevelopmentGoals(
@@ -16010,9 +16177,12 @@ export async function carryForwardPerformanceDevelopmentGoals(
 }
 
 export async function listPerformanceReportCatalog(token: string) {
-  const payload = await adminRequest<unknown>("/api/performance/reports/catalog", {
-    token,
-  });
+  const payload = await adminRequest<unknown>(
+    "/api/performance/reports/catalog",
+    {
+      token,
+    },
+  );
   return normalizeList(payload);
 }
 
@@ -16178,7 +16348,10 @@ function buildEmployeeKpiQuery(params: AdminRecord = {}) {
   return value ? `?${value}` : "";
 }
 
-export async function listMyEmployeeKpis(token: string, params: AdminRecord = {}) {
+export async function listMyEmployeeKpis(
+  token: string,
+  params: AdminRecord = {},
+) {
   const payload = await adminRequest<unknown>(
     `/api/performance/me/kpis${buildEmployeeKpiQuery(params)}`,
     { token },
@@ -16206,14 +16379,20 @@ export async function updateMyEmployeeKpi(
   });
 }
 
-export async function deleteMyEmployeeKpi(token: string, kpiId: string | number) {
+export async function deleteMyEmployeeKpi(
+  token: string,
+  kpiId: string | number,
+) {
   return adminRequest<unknown>(`/api/performance/me/kpis/${kpiId}`, {
     method: "DELETE",
     token,
   });
 }
 
-export async function submitMyEmployeeKpis(token: string, periodId: string | number) {
+export async function submitMyEmployeeKpis(
+  token: string,
+  periodId: string | number,
+) {
   return adminRequest<unknown>(
     `/api/performance/me/kpis/periods/${periodId}/submit`,
     { method: "POST", token },
@@ -16232,7 +16411,10 @@ export async function updateMyEmployeeKpiActual(
   });
 }
 
-export async function listManagerEmployeeKpis(token: string, params: AdminRecord = {}) {
+export async function listManagerEmployeeKpis(
+  token: string,
+  params: AdminRecord = {},
+) {
   const payload = await adminRequest<unknown>(
     `/api/performance/manager/kpis${buildEmployeeKpiQuery(params)}`,
     { token },
@@ -16240,7 +16422,10 @@ export async function listManagerEmployeeKpis(token: string, params: AdminRecord
   return normalizeList(payload);
 }
 
-export async function beginManagerEmployeeKpiReview(token: string, kpiId: string | number) {
+export async function beginManagerEmployeeKpiReview(
+  token: string,
+  kpiId: string | number,
+) {
   return adminRequest<unknown>(
     `/api/performance/manager/kpis/${kpiId}/begin-review`,
     { method: "POST", token },
@@ -16253,11 +16438,14 @@ export async function reviewManagerEmployeeKpi(
   decision: "APPROVE" | "RETURN" | "REJECT",
   comment?: string,
 ) {
-  return adminRequest<unknown>(`/api/performance/manager/kpis/${kpiId}/review`, {
-    method: "POST",
-    token,
-    body: { decision, comment },
-  });
+  return adminRequest<unknown>(
+    `/api/performance/manager/kpis/${kpiId}/review`,
+    {
+      method: "POST",
+      token,
+      body: { decision, comment },
+    },
+  );
 }
 
 export async function listMyPerformanceAssignments(token: string) {
@@ -16406,20 +16594,23 @@ export async function listManagerTeamAchievements(token: string) {
   return normalizeList(payload);
 }
 
-export async function createManagerActivityTask(token: string, data: AdminRecord) {
+export async function createManagerActivityTask(
+  token: string,
+  data: AdminRecord,
+) {
   return adminRequest<unknown>("/api/manager/activities/tasks", {
     method: "POST",
     token,
     body: data,
-  })
+  });
 }
 
 export async function listManagerActivityCategories(token: string) {
   const payload = await adminRequest<unknown>(
     "/api/manager/activities/categories",
     { token },
-  )
-  return normalizeList(payload)
+  );
+  return normalizeList(payload);
 }
 
 export async function validateManagerAchievement(
@@ -16515,10 +16706,7 @@ export async function getProbationCase(token: string, id: string | number) {
   return normalizeSingle(payload) ?? asRecord(payload);
 }
 
-export async function deleteProbationCase(
-  token: string,
-  id: string | number,
-) {
+export async function deleteProbationCase(token: string, id: string | number) {
   return adminRequest<unknown>(`/api/probation/cases/${id}`, {
     method: "DELETE",
     token,
@@ -17015,7 +17203,10 @@ export async function updateMyFieldFollowUp(
   });
 }
 
-export async function cancelMyFieldFollowUp(token: string, id: string | number) {
+export async function cancelMyFieldFollowUp(
+  token: string,
+  id: string | number,
+) {
   return adminRequest<unknown>(`/api/me/field-visits/follow-ups/${id}`, {
     method: "DELETE",
     token,
@@ -17094,6 +17285,29 @@ export async function getEmployeeFinanceDashboard(token: string) {
   return normalizeSingle(payload) ?? asRecord(payload);
 }
 
+export async function getEmployeeFinanceReport(
+  token: string,
+  reportType: string,
+  params: Record<string, string | number | undefined> = {},
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/employee-finance/reports/${encodeURIComponent(reportType)}${buildRecordQuery(params)}`,
+    { token },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function listEmployeeFinanceAuditTimeline(
+  token: string,
+  params: Record<string, string | number | undefined> = {},
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/employee-finance/reports/audit${buildRecordQuery(params)}`,
+    { token },
+  );
+  return normalizeList(payload);
+}
+
 export async function listEmployeeFinanceProducts(token: string) {
   const payload = await adminRequest<unknown>(
     "/api/employee-finance/products",
@@ -17124,6 +17338,18 @@ export async function evaluateEmployeeFinanceEligibility(
     token,
     body: data,
   });
+}
+
+export async function evaluateMyFinanceEligibility(
+  token: string,
+  data: AdminRecord,
+) {
+  const payload = await adminRequest<unknown>("/api/me/finance/eligibility", {
+    method: "POST",
+    token,
+    body: data,
+  });
+  return normalizeSingle(payload) ?? asRecord(payload);
 }
 
 export async function listEmployeeFinanceApplications(
@@ -17195,6 +17421,17 @@ export async function listEmployeeFinanceAccounts(
     { token },
   );
   return normalizeList(payload);
+}
+
+export async function getEmployeeFinanceAccountStatement(
+  token: string,
+  accountId: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/finance/employee-finance/accounts/${accountId}/statement`,
+    { token },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
 }
 
 export async function createEmployeeFinanceDisbursement(
@@ -17288,6 +17525,55 @@ export async function runEmployeeFinanceReconciliation(token: string) {
   });
 }
 
+export async function listEmployeeFinanceApplicationDocuments(
+  token: string,
+  applicationId: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/employee-finance/applications/${applicationId}/documents`,
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function verifyEmployeeFinanceApplicationDocument(
+  token: string,
+  applicationId: string | number,
+  documentId: string | number,
+  data: AdminRecord = {},
+) {
+  return adminRequest<unknown>(
+    `/api/employee-finance/applications/${applicationId}/documents/${documentId}/verify`,
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
+  );
+}
+
+export async function listEmployeeFinanceApplicationGuarantors(
+  token: string,
+  applicationId: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/employee-finance/applications/${applicationId}/guarantors`,
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function getEmployeeFinanceSanctionLetter(
+  token: string,
+  applicationId: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/employee-finance/applications/${applicationId}/sanction-letter`,
+    { token },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
 export async function listMyFinanceApplications(token: string) {
   const payload = await adminRequest<unknown>("/api/me/finance/applications", {
     token,
@@ -17304,6 +17590,154 @@ export async function createMyFinanceApplication(
     token,
     body: data,
   });
+}
+
+export async function addMyFinanceApplicationDocument(
+  token: string,
+  applicationId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    `/api/me/finance/applications/${applicationId}/documents`,
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
+  );
+}
+
+export async function uploadMyFinanceApplicationDocument(
+  token: string,
+  applicationId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    `/api/me/finance/applications/${applicationId}/documents/upload`,
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
+  );
+}
+
+export async function importEmployeeFinancePayments(
+  token: string,
+  file: File,
+  options: { dryRun?: boolean } = {},
+) {
+  return adminRequest<unknown>(
+    "/api/finance/employee-finance/payments/import",
+    {
+      method: "POST",
+      token,
+      body: {
+        file: await fileToBase64UploadDto(file),
+        dry_run: options.dryRun ?? true,
+      },
+    },
+  );
+}
+
+export async function postEmployeeFinanceAccounting(
+  token: string,
+  data: AdminRecord = {},
+) {
+  return adminRequest<unknown>(
+    "/api/finance/employee-finance/accounting/post",
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
+  );
+}
+
+export async function listEmployeeFinanceReportCatalog(token: string) {
+  const payload = await adminRequest<unknown>(
+    "/api/employee-finance/reports/catalog",
+    {
+      token,
+    },
+  );
+  return normalizeList(payload);
+}
+
+export async function listEmployeeFinanceNotificationCatalog(token: string) {
+  const payload = await adminRequest<unknown>(
+    "/api/employee-finance/reports/notifications/catalog",
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function getEmployeeFinanceReadiness(token: string) {
+  const payload = await adminRequest<unknown>(
+    "/api/employee-finance/reports/readiness",
+    { token },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function listMyFinanceApplicationDocuments(
+  token: string,
+  applicationId: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/me/finance/applications/${applicationId}/documents`,
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function addMyFinanceApplicationGuarantor(
+  token: string,
+  applicationId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    `/api/me/finance/applications/${applicationId}/guarantors`,
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
+  );
+}
+
+export async function listMyFinanceApplicationGuarantors(
+  token: string,
+  applicationId: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/me/finance/applications/${applicationId}/guarantors`,
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function listMyFinanceGuarantorRequests(token: string) {
+  const payload = await adminRequest<unknown>(
+    "/api/me/finance/guarantor-requests",
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function decideMyFinanceGuarantorRequest(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    `/api/me/finance/guarantor-requests/${id}/decide`,
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
+  );
 }
 
 export async function submitMyFinanceApplication(
@@ -17387,8 +17821,8 @@ export async function listMyActivityTasks(
   const payload = await adminRequest<unknown>(
     `/api/me/activities/tasks${buildRecordQuery(params)}`,
     { token },
-  )
-  return normalizeList(payload)
+  );
+  return normalizeList(payload);
 }
 
 export async function createMyActivityTask(token: string, data: AdminRecord) {
@@ -17404,11 +17838,14 @@ export async function addMyActivityComment(
   entryId: string | number,
   body: string,
 ) {
-  return adminRequest<unknown>(`/api/me/activities/entries/${entryId}/comments`, {
-    method: "POST",
-    token,
-    body: { body },
-  })
+  return adminRequest<unknown>(
+    `/api/me/activities/entries/${entryId}/comments`,
+    {
+      method: "POST",
+      token,
+      body: { body },
+    },
+  );
 }
 
 export async function createMyActivityReport(token: string, data: AdminRecord) {
@@ -17531,13 +17968,16 @@ export async function listManagerActivityTasks(
   const payload = await adminRequest<unknown>(
     `/api/manager/activities/tasks${buildRecordQuery(params)}`,
     { token },
-  )
-  return normalizeList(payload)
+  );
+  return normalizeList(payload);
 }
 
 export async function listManagerActivityAssignees(token: string) {
-  const payload = await adminRequest<unknown>("/api/manager/activities/assignees", { token })
-  return normalizeList(payload)
+  const payload = await adminRequest<unknown>(
+    "/api/manager/activities/assignees",
+    { token },
+  );
+  return normalizeList(payload);
 }
 
 export async function addManagerActivityComment(
@@ -17545,11 +17985,14 @@ export async function addManagerActivityComment(
   entryId: string | number,
   body: string,
 ) {
-  return adminRequest<unknown>(`/api/manager/activities/entries/${entryId}/comments`, {
-    method: "POST",
-    token,
-    body: { body },
-  })
+  return adminRequest<unknown>(
+    `/api/manager/activities/entries/${entryId}/comments`,
+    {
+      method: "POST",
+      token,
+      body: { body },
+    },
+  );
 }
 
 export async function getManagerActivityReport(

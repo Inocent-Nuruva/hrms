@@ -1016,6 +1016,7 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/finance/products": FINANCE_PRODUCTS_PERMISSION,
   "/dashboard/finance/applications": FINANCE_ROUTE_PERMISSION,
   "/dashboard/finance/accounts": FINANCE_ACCOUNTS_PERMISSION,
+  "/dashboard/finance/reports": FINANCE_ROUTE_PERMISSION,
   "/dashboard/activities": ACTIVITY_ROUTE_PERMISSION,
   "/dashboard/activities/overview": ACTIVITY_ROUTE_PERMISSION,
   "/dashboard/activities/reports": ACTIVITY_ROUTE_PERMISSION,
