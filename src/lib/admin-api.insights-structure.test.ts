@@ -6,6 +6,7 @@ import {
   getHrAttendanceSchedulePreview,
   getHrDashboard,
   getHrLaunchReadiness,
+  getHrLaunchReadinessEmployees,
   getMyDashboard,
   getSystemHealth,
   listSecurityEvents,
@@ -35,6 +36,15 @@ describe("insights, readiness, and payroll report API helpers", () => {
       .mockResolvedValueOnce(jsonResponse({ data: { headcount: 120 } }))
       .mockResolvedValueOnce(jsonResponse({ status: "ok" }))
       .mockResolvedValueOnce(jsonResponse({ data: { blockers: [] } }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: {
+            summary: { totalEmployees: 2, readyCount: 1, notReadyCount: 1 },
+            ready: [{ employeeId: 1 }],
+            notReady: [{ employeeId: 2 }],
+          },
+        }),
+      )
       .mockResolvedValueOnce(jsonResponse({ data: { items: [{ id: 7, event_type: "LOGIN" }] } }))
     vi.stubGlobal("fetch", fetchMock)
 
@@ -42,6 +52,7 @@ describe("insights, readiness, and payroll report API helpers", () => {
     const dashboard = await getHrDashboard("token", "hr", { date_from: "2026-08-01" })
     const health = await getSystemHealth("token")
     const readiness = await getHrLaunchReadiness("token")
+    const employeeReadiness = await getHrLaunchReadinessEmployees("token")
     const events = await listSecurityEvents("token", { page: 1, limit: 20, outcome: "SUCCESS" })
 
     expect(fetchMock).toHaveBeenNthCalledWith(
@@ -66,6 +77,11 @@ describe("insights, readiness, and payroll report API helpers", () => {
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       5,
+      "http://localhost:8888/api/hr/launch-readiness/employees",
+      expect.objectContaining({ method: "GET" }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      6,
       "http://localhost:8888/api/security-events?page=1&limit=20&outcome=SUCCESS",
       expect.objectContaining({ method: "GET" }),
     )
@@ -73,6 +89,13 @@ describe("insights, readiness, and payroll report API helpers", () => {
     expect(dashboard).toEqual(expect.objectContaining({ headcount: 120 }))
     expect(health).toEqual(expect.objectContaining({ status: "ok" }))
     expect(readiness).toEqual(expect.objectContaining({ blockers: [] }))
+    expect(employeeReadiness).toEqual(
+      expect.objectContaining({
+        summary: { totalEmployees: 2, readyCount: 1, notReadyCount: 1 },
+        ready: [expect.objectContaining({ employeeId: 1 })],
+        notReady: [expect.objectContaining({ employeeId: 2 })],
+      }),
+    )
     expect(events).toEqual([expect.objectContaining({ id: 7 })])
   })
 

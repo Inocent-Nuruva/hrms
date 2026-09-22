@@ -439,6 +439,7 @@ export interface EmployeePositionsQueryParams extends UsersQueryParams {
   position_id?: number;
   status?: string;
   assignment_type?: string;
+  is_primary?: boolean;
 }
 
 export interface EmployeeMovementsQueryParams extends UsersQueryParams {
@@ -1990,6 +1991,9 @@ function buildEmployeePositionsQuery(params: EmployeePositionsQueryParams) {
   }
   if (params.assignment_type && params.assignment_type.trim()) {
     searchParams.set("assignment_type", params.assignment_type.trim());
+  }
+  if (typeof params.is_primary === "boolean") {
+    searchParams.set("is_primary", String(params.is_primary));
   }
   const query = searchParams.toString();
   return query ? `?${query}` : "";
@@ -17600,7 +17604,7 @@ export async function getHrLaunchReadinessEmployees(token: string) {
     "/api/hr/launch-readiness/employees",
     { token },
   );
-  return normalizeList(payload);
+  return normalizeSingle(payload) ?? asRecord(payload);
 }
 
 export async function getHrAttendanceSetupStatus(token: string) {

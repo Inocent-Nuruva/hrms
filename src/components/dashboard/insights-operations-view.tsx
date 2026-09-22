@@ -509,7 +509,20 @@ export function InsightsOperationsView({
           setReadiness(null)
           throw errorObject
         }),
-        getHrLaunchReadinessEmployees(token).then(setEmployees).catch(() => setEmployees([])),
+        getHrLaunchReadinessEmployees(token)
+          .then((report) => {
+            const record = report && typeof report === "object" && !Array.isArray(report) ? report : null
+            const readinessRows = [
+              ...asRecordArray(record?.ready),
+              ...asRecordArray(record?.notReady),
+            ]
+            setEmployees(
+              readinessRows.length > 0
+                ? readinessRows
+                : asRecordArray(record?.items ?? record?.employees ?? report),
+            )
+          })
+          .catch(() => setEmployees([])),
         getSystemHealth(token).then(setHealth).catch(() => setHealth(null)),
         getSystemHealthLive(token).then(setLive).catch(() => setLive(null)),
         getSystemHealthReady(token).then(setReady).catch(() => setReady(null)),
