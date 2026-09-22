@@ -15,7 +15,7 @@ export const DASHBOARD_TOKEN_COOKIE = "hrms_dashboard_token"
 export const DASHBOARD_PERMISSIONS_COOKIE = "hrms_dashboard_permissions"
 
 const LEGACY_ADMIN_USER_STORAGE_KEY = "hrms.admin.user"
-const FORBIDDEN_ROUTES_STORAGE_KEY = "hrms.forbiddenRoutes.v2"
+const FORBIDDEN_ROUTES_STORAGE_KEY = "hrms.forbiddenRoutes.v3"
 const CONFIRMED_PLATFORM_ROUTES_STORAGE_KEY = "hrms.confirmedPlatformRoutes"
 const FORBIDDEN_ROUTES_EVENT = "hrms:forbidden-routes-changed"
 
@@ -102,7 +102,8 @@ export const PAYROLL_ROUTE_PERMISSION: PermissionRequirement = {
 
 /**
  * HR Performance (`/dashboard/performance/*`).
- * Company dashboard access is not enough — /api/performance/* is its own grant.
+ * Company dashboard actors can see the HR performance overview/setup shell; deeper
+ * workflows still use their feature-specific grants.
  */
 const PERFORMANCE_MODULE_WIDE = [
   "performance:read",
@@ -121,6 +122,7 @@ export const PERFORMANCE_ROUTE_PERMISSION: PermissionRequirement = {
     "performance_plans:read",
     "performance_reviews:read",
     "performance_improvement_plans:read",
+    COMPANY_DASHBOARD_SWITCH_PERMISSION,
   ],
   mode: "any",
 }
@@ -135,6 +137,7 @@ export const PERFORMANCE_SETUP_PERMISSION: PermissionRequirement = {
     "kpi_templates:read",
     "performance_rating_scales:read",
     "kpi_rules:read",
+    COMPANY_DASHBOARD_SWITCH_PERMISSION,
   ],
   mode: "any",
 }
@@ -182,7 +185,28 @@ export const PROBATION_CASES_PERMISSION: PermissionRequirement = {
 }
 
 export const PROBATION_TEAM_PERMISSION: PermissionRequirement = {
-  permissions: [...PROBATION_MODULE_WIDE, "manager:read", "team:read", "view_team"],
+  permissions: [
+    ...PROBATION_MODULE_WIDE,
+    "probation_cases:read-team",
+    "manager:read",
+    "team:read",
+    "view_team",
+    "manager_team:read",
+  ],
+  mode: "any",
+}
+
+export const PROBATION_SECTION_PERMISSION: PermissionRequirement = {
+  permissions: [
+    ...PROBATION_MODULE_WIDE,
+    "probation_policies:read",
+    "probation_cases:read",
+    "probation_cases:read-team",
+    "manager:read",
+    "team:read",
+    "view_team",
+    "manager_team:read",
+  ],
   mode: "any",
 }
 
@@ -1000,7 +1024,7 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/performance/plans": PERFORMANCE_PLANS_PERMISSION,
   "/dashboard/performance/reviews": PERFORMANCE_REVIEWS_PERMISSION,
   "/dashboard/performance/improvement": PERFORMANCE_IMPROVEMENT_PERMISSION,
-  "/dashboard/probation": PROBATION_ROUTE_PERMISSION,
+  "/dashboard/probation": PROBATION_SECTION_PERMISSION,
   "/dashboard/probation/overview": PROBATION_ROUTE_PERMISSION,
   "/dashboard/probation/policies": PROBATION_POLICIES_PERMISSION,
   "/dashboard/probation/cases": PROBATION_CASES_PERMISSION,
@@ -1031,6 +1055,7 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/movements/overview": MOVEMENT_ROUTE_PERMISSION,
   "/dashboard/movements/cases": MOVEMENT_ROUTE_PERMISSION,
   "/dashboard/movements/operations": MOVEMENT_OPERATIONS_PERMISSION,
+  "/dashboard/team/movements": MANAGER_ROUTE_PERMISSION,
   "/dashboard/sms": SMS_ROUTE_PERMISSION,
   "/dashboard/sms/overview": SMS_ROUTE_PERMISSION,
   "/dashboard/sms/registry": SMS_SETTINGS_READ_PERMISSION,
@@ -1789,7 +1814,13 @@ export function canAccessDashboardRoute(
 
   const requiredShell = resolveDashboardRouteShellRequirement(path)
   if (requiredShell && accessMode && accessMode !== requiredShell) {
-    return false
+    const canRecoverStalePerformanceShell =
+      requiredShell === "admin" &&
+      path.startsWith("/dashboard/performance") &&
+      canViewCompanyDashboard(permissionLabels)
+    if (!canRecoverStalePerformanceShell) {
+      return false
+    }
   }
 
   if (path === "/dashboard/sms/platform" || path.startsWith("/dashboard/sms/platform/")) {
@@ -1863,7 +1894,8 @@ function resolveDashboardActorIdentity(...sources: unknown[]): DashboardActorIde
   const hasPermissionBasedAdminAccess = hasAdminDashboardAccess(permissionLabels)
   const hasAdminRole = roleNames.some(roleNameImpliesAdminShell)
   const accessMode: DashboardAccessMode =
-    explicitAccessMode === "admin"
+    explicitAccessMode === "admin" ||
+    (explicitAccessMode === "employee" && hasAdminRole && hasPermissionBasedAdminAccess)
       ? "admin"
       : explicitAccessMode === "employee"
         ? "employee"
