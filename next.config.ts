@@ -14,9 +14,9 @@ const nextConfig: NextConfig = {
   bundlePagesRouterDependencies: true,
   experimental: {
     webpackMemoryOptimizations: true,
-    // Compile route entries during startup so the first visit does not block
-    // on a large on-demand webpack compilation.
-    preloadEntriesOnStart: true,
+    // Avoid compiling every route into one large resident process. Routes are
+    // compiled on first visit instead, keeping development memory bounded.
+    preloadEntriesOnStart: false,
     // Turbopack's native compiler runs alongside Node. Keep its target below
     // the Node heap cap so a long dev session remains usable on typical PCs.
     turbopackMemoryLimit: 768 * 1024 * 1024,
