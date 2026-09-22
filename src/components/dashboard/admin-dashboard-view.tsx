@@ -14,6 +14,7 @@ import {
   DialogTitle,
 } from "@/components/animate-ui/components/base/dialog";
 import { DashboardSectionTabs } from "@/components/dashboard/dashboard-section-tabs";
+import { DashboardAttendanceQuickActions } from "@/components/dashboard/dashboard-attendance-actions";
 import { SiteHeader } from "@/components/site-header";
 import {
   accessControlSectionTabGroups,
@@ -1437,6 +1438,11 @@ export default function AdminDashboardView({
         />
         <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain">
           <div className="@container/main flex min-w-0 max-w-full flex-col">
+            {resolvedShowOverview &&
+            accessIdentityReady &&
+            effectiveHomeDashboardKind !== "employee" ? (
+              <DashboardAttendanceQuickActions />
+            ) : null}
             {resolvedShowOverview && showWorkforceDashboard ? (
               <HrAnalyticsDashboard
                 refreshKey={overviewRefreshKey}

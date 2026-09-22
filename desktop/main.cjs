@@ -5,17 +5,31 @@ const next = require("next");
 
 const HOSTNAME = "127.0.0.1";
 const START_PATH = "/dashboard";
+const DEV_NODE_HEAP_LIMIT_MB = 1280;
+const isDevelopment = !app.isPackaged && process.env.NODE_ENV !== "production";
 
 let nextServer;
 
+// In development Electron hosts Next in its main process. Without a cap, the
+// V8 heap can expand toward several GB while its compiler watches the project.
+if (isDevelopment) {
+  app.commandLine.appendSwitch(
+    "js-flags",
+    `--max-old-space-size=${DEV_NODE_HEAP_LIMIT_MB}`,
+  );
+}
+
 async function startNextServer() {
   const appRoot = app.getAppPath();
-  const dev = !app.isPackaged && process.env.NODE_ENV !== "production";
+  const dev = isDevelopment;
   const nextApp = next({
     dev,
     dir: appRoot,
     hostname: HOSTNAME,
     quiet: !dev,
+    // This custom server must opt in explicitly. Turbopack compiles lazily and
+    // uses less memory than the previous forced Webpack development server.
+    turbopack: dev,
   });
   const handle = nextApp.getRequestHandler();
 

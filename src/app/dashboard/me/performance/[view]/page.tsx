@@ -8,6 +8,7 @@ import { EmployeeKpiWorkspace } from "@/components/dashboard/employee-kpi-worksp
 
 const ALLOWED_VIEWS = new Set<PerformanceSelfTab>([
   "overview",
+  "kpis",
   "assignments",
   "assign-tasks",
   "reviews",
@@ -16,6 +17,7 @@ const ALLOWED_VIEWS = new Set<PerformanceSelfTab>([
   "achievements",
   "improvement",
   "team",
+  "manager-kpis",
 ])
 
 interface SelfPerformanceViewPageProps {
