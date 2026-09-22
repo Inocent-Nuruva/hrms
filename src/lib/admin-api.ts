@@ -14860,6 +14860,8 @@ export interface PayrollListParams {
   search?: string;
   employee_id?: number;
   payroll_period_id?: number;
+  payroll_run_id?: number;
+  year?: number;
   status?: string;
 }
 
@@ -14892,8 +14894,25 @@ function buildPayrollQuery(params: PayrollListParams = {}) {
   ) {
     searchParams.set("payroll_period_id", String(params.payroll_period_id));
   }
+  if (
+    typeof params.payroll_run_id === "number" &&
+    Number.isFinite(params.payroll_run_id)
+  ) {
+    searchParams.set("payroll_run_id", String(params.payroll_run_id));
+  }
+  if (typeof params.year === "number" && Number.isFinite(params.year)) {
+    searchParams.set("year", String(params.year));
+  }
   if (params.status?.trim()) {
     searchParams.set("status", params.status.trim());
+  }
+  const startDate = (params as Record<string, unknown>).start_date;
+  if (typeof startDate === "string" && startDate.trim()) {
+    searchParams.set("start_date", startDate.trim());
+  }
+  const endDate = (params as Record<string, unknown>).end_date;
+  if (typeof endDate === "string" && endDate.trim()) {
+    searchParams.set("end_date", endDate.trim());
   }
   const query = searchParams.toString();
   return query ? `?${query}` : "";
@@ -15016,6 +15035,31 @@ export async function lockPayrollRun(token: string, id: string | number) {
   return normalizeSingle(payload) ?? asRecord(payload);
 }
 
+export async function validatePayrollRun(token: string, id: string | number) {
+  return adminRequest<unknown>(`/api/payroll/runs/${id}/validation`, {
+    token,
+  });
+}
+
+export async function markPayrollRunPaid(token: string, id: string | number) {
+  const payload = await adminRequest<unknown>(
+    `/api/payroll/runs/${id}/mark-paid`,
+    {
+      method: "POST",
+      token,
+    },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function closePayrollRun(token: string, id: string | number) {
+  const payload = await adminRequest<unknown>(`/api/payroll/runs/${id}/close`, {
+    method: "POST",
+    token,
+  });
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
 export async function listPayrollInputs(
   token: string,
   params: PayrollListParams = {},
@@ -15031,12 +15075,126 @@ export async function createPayrollInput(token: string, data: AdminRecord) {
   });
 }
 
+export async function createPayrollAdjustment(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/payroll/inputs/adjustments", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
 export async function approvePayrollInput(token: string, id: string | number) {
   const payload = await adminRequest<unknown>(
     `/api/payroll/inputs/${id}/approve`,
     {
       method: "POST",
       token,
+    },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function listPayrollSources(
+  token: string,
+  params: PayrollListParams = {},
+) {
+  return listPayrollCollection("/api/payroll/sources", token, params);
+}
+
+export async function createPayrollSource(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/payroll/sources", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function createPayrollSourcesBatch(
+  token: string,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>("/api/payroll/sources/batch", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function generatePayrollSources(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/payroll/sources/generate", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function approvePayrollSource(token: string, id: string | number) {
+  const payload = await adminRequest<unknown>(
+    `/api/payroll/sources/${id}/approve`,
+    {
+      method: "POST",
+      token,
+    },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function rejectPayrollSource(token: string, id: string | number) {
+  const payload = await adminRequest<unknown>(
+    `/api/payroll/sources/${id}/reject`,
+    {
+      method: "POST",
+      token,
+    },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function postPayrollSource(token: string, id: string | number) {
+  const payload = await adminRequest<unknown>(
+    `/api/payroll/sources/${id}/post`,
+    {
+      method: "POST",
+      token,
+    },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function listPayrollOvertimeApprovals(
+  token: string,
+  params: PayrollListParams & { start_date?: string; end_date?: string } = {},
+) {
+  return listPayrollCollection("/api/payroll/overtime-approvals", token, params);
+}
+
+export async function approvePayrollOvertime(
+  token: string,
+  id: string | number,
+  data: AdminRecord = {},
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/payroll/overtime-approvals/${id}/approve`,
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function rejectPayrollOvertime(
+  token: string,
+  id: string | number,
+  data: AdminRecord = {},
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/payroll/overtime-approvals/${id}/reject`,
+    {
+      method: "POST",
+      token,
+      body: data,
     },
   );
   return normalizeSingle(payload) ?? asRecord(payload);
@@ -15208,6 +15366,45 @@ export async function createPayrollAccountingMapping(
   );
 }
 
+export async function listPayrollGroupAssignments(token: string) {
+  const payload = await adminRequest<unknown>(
+    "/api/payroll/configuration/group-assignments",
+    {
+      token,
+    },
+  );
+  return normalizeList(payload);
+}
+
+export async function createPayrollGroupAssignment(
+  token: string,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>("/api/payroll/configuration/group-assignments", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function listPayrollLeaveRules(token: string) {
+  const payload = await adminRequest<unknown>(
+    "/api/payroll/configuration/leave-rules",
+    {
+      token,
+    },
+  );
+  return normalizeList(payload);
+}
+
+export async function createPayrollLeaveRule(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/payroll/configuration/leave-rules", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
 export async function listPayrollPayslipsForRun(
   token: string,
   runId: string | number,
@@ -15315,6 +15512,46 @@ export async function generatePayrollAccountingJournals(
     },
   );
   return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function reconcilePayrollPayment(
+  token: string,
+  runId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/payroll/banking/runs/${runId}/reconcile`, {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function listPayrollReportCatalog(token: string) {
+  const payload = await adminRequest<unknown>("/api/payroll/reports/catalog", {
+    token,
+  });
+  return normalizeList(payload);
+}
+
+export async function getPayrollReport(
+  token: string,
+  code: string,
+  params: PayrollListParams & { payroll_run_id?: number; year?: number } = {},
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/payroll/reports/${encodeURIComponent(code)}${buildPayrollQuery(params)}`,
+    {
+      token,
+    },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function getMyPayrollSummary(token: string, year?: number) {
+  const suffix = year ? `?year=${encodeURIComponent(String(year))}` : "";
+  return adminRequest<unknown>(`/api/me/payslips/summary/current${suffix}`, {
+    token,
+  });
 }
 
 function buildStatusQuery(status?: string) {
@@ -15633,6 +15870,69 @@ export async function actionPerformanceReviewWorkflow(
     `/api/performance/reviews/${reviewId}/workflow/action`,
     { method: "POST", token, body: data },
   );
+}
+
+export async function listPayrollGroups(token: string) {
+  const payload = await adminRequest<unknown>(
+    "/api/payroll/configuration/groups",
+    {
+      token,
+    },
+  );
+  return normalizeList(payload);
+}
+
+export async function createPayrollGroup(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/payroll/configuration/groups", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function listPayrollOvertimePolicies(token: string) {
+  const payload = await adminRequest<unknown>(
+    "/api/payroll/configuration/overtime-policies",
+    {
+      token,
+    },
+  );
+  return normalizeList(payload);
+}
+
+export async function createPayrollOvertimePolicy(
+  token: string,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    "/api/payroll/configuration/overtime-policies",
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
+  );
+}
+
+export async function listPayrollBonusSchemes(token: string) {
+  const payload = await adminRequest<unknown>(
+    "/api/payroll/configuration/bonus-schemes",
+    {
+      token,
+    },
+  );
+  return normalizeList(payload);
+}
+
+export async function createPayrollBonusScheme(
+  token: string,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>("/api/payroll/configuration/bonus-schemes", {
+    method: "POST",
+    token,
+    body: data,
+  });
 }
 
 export async function listPerformancePlans(token: string) {

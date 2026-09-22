@@ -19,13 +19,24 @@ import {
 } from "@/components/dashboard/admin-view-shared"
 import {
   approvePayrollInput,
+  approvePayrollOvertime,
   approvePayrollRun,
+  approvePayrollSource,
+  closePayrollRun,
+  createPayrollAdjustment,
   createPayrollAccountingMapping,
+  createPayrollBonusScheme,
   createPayrollCalendar,
   createPayrollComponent,
+  createPayrollGroup,
+  createPayrollGroupAssignment,
   createPayrollInput,
+  createPayrollLeaveRule,
+  createPayrollOvertimePolicy,
   createPayrollRun,
   createPayrollSalaryStructure,
+  createPayrollSource,
+  generatePayrollSources,
   createPayrollStatutoryRule,
   createPayrollStatutoryScheme,
   downloadPayrollBankingBatch,
@@ -33,24 +44,39 @@ import {
   generatePayrollBankingBatch,
   generatePayrollPayslipsForRun,
   generatePayrollPeriod,
+  getPayrollReport,
   calculatePayrollFinalSettlement,
   getPayrollDashboard,
   getPayrollRun,
   getPayrollSalaryStructure,
+  listPayrollReportCatalog,
   listAllEmployees,
   listEmployeePayrollProfiles,
   listOffboardingRequests,
   listPayrollAccountingMappings,
+  listPayrollBonusSchemes,
   listPayrollCalendars,
   listPayrollComponents,
+  listPayrollGroupAssignments,
+  listPayrollGroups,
   listPayrollInputs,
+  listPayrollLeaveRules,
+  listPayrollOvertimeApprovals,
+  listPayrollOvertimePolicies,
   listPayrollPayslipsForRun,
   listPayrollPeriods,
   listPayrollRuns,
   listPayrollSalaryStructures,
+  listPayrollSources,
   listPayrollStatutorySchemes,
   lockPayrollRun,
+  markPayrollRunPaid,
   processPayrollRun,
+  postPayrollSource,
+  reconcilePayrollPayment,
+  rejectPayrollOvertime,
+  rejectPayrollSource,
+  validatePayrollRun,
   runPayrollReconciliation,
   runPayrollRunVariance,
   type AdminRecord,
@@ -73,6 +99,8 @@ type PayrollTab =
   | "overview"
   | "runs"
   | "inputs"
+  | "sources"
+  | "overtimeApprovals"
   | "profiles"
   | "periods"
   | "reports"
@@ -84,6 +112,11 @@ type PayrollConfigTab =
   | "structures"
   | "schemes"
   | "mappings"
+  | "groups"
+  | "assignments"
+  | "overtime"
+  | "bonus"
+  | "leaveRules"
 
 type CreateDialogMode =
   | "run"
@@ -95,11 +128,21 @@ type CreateDialogMode =
   | "structure"
   | "scheme"
   | "mapping"
+  | "group"
+  | "assignment"
+  | "overtime"
+  | "bonus"
+  | "leaveRule"
+  | "source"
+  | "sourceGenerate"
+  | "adjustment"
 
 const TABS: Array<{ id: PayrollTab; label: string }> = [
   { id: "overview", label: "Overview" },
   { id: "runs", label: "Runs" },
   { id: "inputs", label: "Inputs" },
+  { id: "sources", label: "Sources" },
+  { id: "overtimeApprovals", label: "OT approvals" },
   { id: "profiles", label: "Profiles" },
   { id: "periods", label: "Periods" },
   { id: "reports", label: "Reports" },
@@ -112,6 +155,11 @@ const CONFIG_TABS: Array<{ id: PayrollConfigTab; label: string }> = [
   { id: "structures", label: "Structures" },
   { id: "schemes", label: "Schemes" },
   { id: "mappings", label: "Mappings" },
+  { id: "groups", label: "Groups" },
+  { id: "assignments", label: "Assignments" },
+  { id: "overtime", label: "Overtime" },
+  { id: "bonus", label: "Bonus" },
+  { id: "leaveRules", label: "Leave rules" },
 ]
 
 const RUN_TYPES = [
@@ -119,8 +167,57 @@ const RUN_TYPES = [
   "SUPPLEMENTARY",
   "OFF_CYCLE",
   "FINAL_SETTLEMENT",
+  "BONUS",
+  "ARREARS",
+  "ADJUSTMENT",
   "REVERSAL",
   "PARALLEL_TEST",
+] as const
+
+const PAYROLL_REPORT_CODES = [
+  "payroll-register",
+  "payroll-summary",
+  "employee-payroll-history",
+  "department-payroll",
+  "branch-payroll",
+  "cost-centre-payroll",
+  "gross-to-net",
+  "allowances",
+  "deductions",
+  "deduction-shortfalls",
+  "overtime",
+  "loan",
+  "advance",
+  "employer-contributions",
+  "tax",
+  "pension",
+  "wcf",
+  "bank-payment",
+  "payroll-journal",
+  "payroll-cost",
+  "headcount-vs-payroll",
+  "ytd-earnings",
+  "ytd-tax",
+  "ytd-contributions",
+] as const
+
+const PAYROLL_REPORT_SHORTCUTS = [
+  { code: "payroll-register", label: "Register" },
+  { code: "tax", label: "Tax" },
+  { code: "pension", label: "Pension" },
+  { code: "wcf", label: "WCF" },
+  { code: "payroll-cost", label: "Cost" },
+  { code: "headcount-vs-payroll", label: "Headcount" },
+] as const
+
+const PAYROLL_DRILLDOWN_SHORTCUTS = [
+  { code: "loan", label: "Loans" },
+  { code: "advance", label: "Advances" },
+  { code: "deduction-shortfalls", label: "Shortfalls" },
+  { code: "ytd-earnings", label: "YTD" },
+  { code: "ytd-tax", label: "YTD tax" },
+  { code: "ytd-contributions", label: "Pension YTD" },
+  { code: "employee-payroll-history", label: "History" },
 ] as const
 
 const APPROVAL_STAGES = ["HR", "FINANCE", "MANAGEMENT"] as const
@@ -462,6 +559,7 @@ function readStatus(row: AdminRecord | null | undefined) {
 function emptyRunForm() {
   return {
     payrollPeriodId: "",
+    payrollGroupId: "",
     runType: "REGULAR",
     parentRunId: "",
     offboardingRequestId: "",
@@ -607,7 +705,79 @@ function emptyMappingForm() {
     componentCode: "",
     debitAccountCode: "",
     creditAccountCode: "",
+    projectDebitMap: "",
+    projectCreditMap: "",
+    costCenterDebitMap: "",
+    costCenterCreditMap: "",
+    departmentDebitMap: "",
+    departmentCreditMap: "",
+    branchDebitMap: "",
+    branchCreditMap: "",
+    categoryDebitMap: "",
+    categoryCreditMap: "",
+    groupDebitMap: "",
+    groupCreditMap: "",
     dimensionsJson: "",
+  }
+}
+
+function emptyAdvancedPayrollForm() {
+  const today = new Date().toISOString().slice(0, 10)
+  return {
+    code: "",
+    name: "",
+    frequency: "MONTHLY",
+    payrollCalendarId: "",
+    branchId: "",
+    departmentId: "",
+    employeeCategory: "",
+    employmentType: "",
+    currency: "TZS",
+    componentCode: "",
+    regularMultiplier: "1.5",
+    weekendMultiplier: "2",
+    holidayMultiplier: "2",
+    minimumMinutes: "0",
+    effectiveFrom: today,
+    effectiveTo: "",
+    schemeType: "BONUS",
+    calculationMethod: "FIXED_AMOUNT",
+    defaultAmount: "",
+    defaultRate: "",
+    payrollPeriodId: "",
+    employeeId: "",
+    amount: "",
+    reason: "",
+    adjustmentType: "ADJUSTMENT",
+    effectivePeriodCode: "",
+    performancePeriodId: "",
+    financialYearId: "",
+    periodType: "",
+    sequenceNumber: "",
+    amountPerScorePoint: "",
+    minimumScore: "",
+    autoApprove: "true",
+    replaceExisting: "false",
+    reportCode: "",
+    reportRunId: "",
+    reportYear: String(new Date().getFullYear()),
+    paymentReference: "",
+    paymentDate: today,
+    paidAmount: "",
+    sourceType: "SALES",
+    sourceReference: "",
+    schemeCode: "",
+    sourceAmount: "",
+    quantity: "",
+    rate: "",
+    calculatedAmount: "",
+    payrollGroupId: "",
+    leaveTypeCode: "",
+    paidPercentage: "100",
+    paidDaysCap: "",
+    halfPayAfterDays: "",
+    unpaidAfterDays: "",
+    carryForwardCapDays: "",
   }
 }
 
@@ -617,6 +787,37 @@ function emptyApproveRunForm() {
     calculationHash: "",
     comments: "",
   }
+}
+
+function parseAccountingDimensionMap(value: string) {
+  const entries = value
+    .split(/\r?\n|,/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [key, ...rest] = line.split("=")
+      return [key?.trim(), rest.join("=").trim()] as const
+    })
+    .filter(([key, account]) => key && account)
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined
+}
+
+function setDimensionMap(
+  target: Record<string, unknown>,
+  key: string,
+  value: string,
+) {
+  const parsed = parseAccountingDimensionMap(value)
+  if (parsed) target[key] = parsed
+}
+
+function reportRowsToCsv(rows: AdminRecord[]) {
+  const columns = Array.from(new Set(rows.flatMap((row) => Object.keys(row)))).slice(0, 24)
+  const escape = (value: unknown) => `"${formatAdminValue(value).replace(/"/g, '""')}"`
+  return [
+    columns.join(","),
+    ...rows.map((row) => columns.map((column) => escape(row[column])).join(",")),
+  ].join("\n")
 }
 
 function Field({
@@ -1032,6 +1233,11 @@ export function PayrollOperationsView() {
   const [structures, setStructures] = React.useState<AdminRecord[]>([])
   const [schemes, setSchemes] = React.useState<AdminRecord[]>([])
   const [mappings, setMappings] = React.useState<AdminRecord[]>([])
+  const [groups, setGroups] = React.useState<AdminRecord[]>([])
+  const [groupAssignments, setGroupAssignments] = React.useState<AdminRecord[]>([])
+  const [overtimePolicies, setOvertimePolicies] = React.useState<AdminRecord[]>([])
+  const [bonusSchemes, setBonusSchemes] = React.useState<AdminRecord[]>([])
+  const [leaveRules, setLeaveRules] = React.useState<AdminRecord[]>([])
   const [recentRuns, setRecentRuns] = React.useState<AdminRecord[]>([])
   const [offboardingRequests, setOffboardingRequests] = React.useState<AdminRecord[]>([])
   const [varianceRunId, setVarianceRunId] = React.useState("")
@@ -1039,7 +1245,8 @@ export function PayrollOperationsView() {
   const [settlementRequestId, setSettlementRequestId] = React.useState("")
   const [reportBusy, setReportBusy] = React.useState("")
   const [reportResult, setReportResult] = React.useState<AdminRecord | null>(null)
-  const [reportKind, setReportKind] = React.useState<"reconciliation" | "variance" | "settlement" | "">("")
+  const [reportKind, setReportKind] = React.useState<"reconciliation" | "variance" | "settlement" | "validation" | "catalog" | "report" | "">("")
+  const [reportCatalog, setReportCatalog] = React.useState<AdminRecord[]>([])
   const [issueDialogCode, setIssueDialogCode] = React.useState("")
   const [issueSearch, setIssueSearch] = React.useState("")
   const [employeeNames, setEmployeeNames] = React.useState<EmployeeNameLookup>(new Map())
@@ -1071,14 +1278,21 @@ export function PayrollOperationsView() {
   const [schemeForm, setSchemeForm] = React.useState(emptySchemeForm)
   const [ruleForm, setRuleForm] = React.useState(emptyRuleForm)
   const [mappingForm, setMappingForm] = React.useState(emptyMappingForm)
+  const [advancedForm, setAdvancedForm] = React.useState(emptyAdvancedPayrollForm)
   const [approveForm, setApproveForm] = React.useState(emptyApproveRunForm)
 
   const [processingRunId, setProcessingRunId] = React.useState("")
   const [lockingRunId, setLockingRunId] = React.useState("")
+  const [validatingRunId, setValidatingRunId] = React.useState("")
+  const [paidRunId, setPaidRunId] = React.useState("")
+  const [closingRunId, setClosingRunId] = React.useState("")
+  const [reconcilingRunId, setReconcilingRunId] = React.useState("")
   const [payslipRunId, setPayslipRunId] = React.useState("")
   const [bankingRunId, setBankingRunId] = React.useState("")
   const [journalRunId, setJournalRunId] = React.useState("")
   const [approvingInputId, setApprovingInputId] = React.useState("")
+  const [sourceActionId, setSourceActionId] = React.useState("")
+  const [overtimeActionId, setOvertimeActionId] = React.useState("")
   const requestIdRef = React.useRef(0)
   const lookupsCacheRef = React.useRef<{
     dashboard: AdminRecord | null
@@ -1088,6 +1302,11 @@ export function PayrollOperationsView() {
     structures: AdminRecord[]
     schemes: AdminRecord[]
     mappings: AdminRecord[]
+    groups: AdminRecord[]
+    groupAssignments: AdminRecord[]
+    overtimePolicies: AdminRecord[]
+    bonusSchemes: AdminRecord[]
+    leaveRules: AdminRecord[]
     recentRuns: AdminRecord[]
   } | null>(null)
 
@@ -1100,6 +1319,11 @@ export function PayrollOperationsView() {
       setStructures(next.structures)
       setSchemes(next.schemes)
       setMappings(next.mappings)
+      setGroups(next.groups)
+      setGroupAssignments(next.groupAssignments)
+      setOvertimePolicies(next.overtimePolicies)
+      setBonusSchemes(next.bonusSchemes)
+      setLeaveRules(next.leaveRules)
       setRecentRuns(next.recentRuns)
     },
     [],
@@ -1119,6 +1343,11 @@ export function PayrollOperationsView() {
         structuresResult,
         schemesResult,
         mappingsResult,
+        groupsResult,
+        groupAssignmentsResult,
+        overtimePoliciesResult,
+        bonusSchemesResult,
+        leaveRulesResult,
         recentRunsResult,
       ] = await Promise.allSettled([
         getPayrollDashboard(token),
@@ -1128,6 +1357,11 @@ export function PayrollOperationsView() {
         listPayrollSalaryStructures(token),
         listPayrollStatutorySchemes(token),
         listPayrollAccountingMappings(token),
+        listPayrollGroups(token),
+        listPayrollGroupAssignments(token),
+        listPayrollOvertimePolicies(token),
+        listPayrollBonusSchemes(token),
+        listPayrollLeaveRules(token),
         listPayrollRuns(token, { page: 1, limit: 5 }),
       ])
 
@@ -1142,6 +1376,13 @@ export function PayrollOperationsView() {
         structures: structuresResult.status === "fulfilled" ? structuresResult.value : [],
         schemes: schemesResult.status === "fulfilled" ? schemesResult.value : [],
         mappings: mappingsResult.status === "fulfilled" ? mappingsResult.value : [],
+        groups: groupsResult.status === "fulfilled" ? groupsResult.value : [],
+        groupAssignments:
+          groupAssignmentsResult.status === "fulfilled" ? groupAssignmentsResult.value : [],
+        overtimePolicies:
+          overtimePoliciesResult.status === "fulfilled" ? overtimePoliciesResult.value : [],
+        bonusSchemes: bonusSchemesResult.status === "fulfilled" ? bonusSchemesResult.value : [],
+        leaveRules: leaveRulesResult.status === "fulfilled" ? leaveRulesResult.value : [],
         recentRuns:
           recentRunsResult.status === "fulfilled" ? recentRunsResult.value.rows ?? [] : [],
       }
@@ -1221,6 +1462,28 @@ export function PayrollOperationsView() {
         return
       }
 
+      if (tab === "sources") {
+        const result = await listPayrollSources(token, {
+          page: 1,
+          limit: 100,
+          search: search.trim() || undefined,
+          status: statusFilter || undefined,
+          payroll_period_id: periodFilter ? Number(periodFilter) : undefined,
+        })
+        if (requestIdRef.current === requestId) setRows(result.rows)
+        return
+      }
+
+      if (tab === "overtimeApprovals") {
+        const result = await listPayrollOvertimeApprovals(token, {
+          page: 1,
+          limit: 100,
+          status: statusFilter || "PENDING",
+        })
+        if (requestIdRef.current === requestId) setRows(result.rows)
+        return
+      }
+
       if (tab === "profiles") {
         const result = await listEmployeePayrollProfiles(token, {
           page: 1,
@@ -1260,7 +1523,17 @@ export function PayrollOperationsView() {
               ? lookups.structures
               : configTab === "schemes"
                 ? lookups.schemes
-                : lookups.mappings
+                : configTab === "mappings"
+                  ? lookups.mappings
+                  : configTab === "groups"
+                    ? lookups.groups
+                    : configTab === "overtime"
+                      ? lookups.overtimePolicies
+                      : configTab === "bonus"
+                        ? lookups.bonusSchemes
+                        : configTab === "assignments"
+                          ? lookups.groupAssignments
+                          : lookups.leaveRules
 
       const query = search.trim().toLowerCase()
       const filtered = configRows.filter((row) => {
@@ -1298,6 +1571,9 @@ export function PayrollOperationsView() {
   const openCreate = (mode: CreateDialogMode) => {
     setFormError(null)
     setCreateMode(mode)
+    if (["group", "assignment", "overtime", "bonus", "leaveRule", "source", "sourceGenerate", "adjustment"].includes(mode)) {
+      setAdvancedForm(emptyAdvancedPayrollForm())
+    }
     setCreateOpen(true)
   }
 
@@ -1315,11 +1591,15 @@ export function PayrollOperationsView() {
           ? "Payroll inputs"
           : tab === "profiles"
             ? "Employee payroll profiles"
-            : tab === "periods"
-              ? "Payroll periods"
-              : tab === "reports"
-                ? "Payroll reports"
-              : `Payroll ${CONFIG_TABS.find((entry) => entry.id === configTab)?.label.toLowerCase()}`
+            : tab === "sources"
+              ? "Payroll source records"
+              : tab === "overtimeApprovals"
+                ? "Overtime approvals"
+                : tab === "periods"
+                  ? "Payroll periods"
+                  : tab === "reports"
+                    ? "Payroll reports"
+                    : `Payroll ${CONFIG_TABS.find((entry) => entry.id === configTab)?.label.toLowerCase()}`
 
   const canMutatePayroll = canPerformPermission(actor.permissionLabels, {
     permissions: [
@@ -1340,8 +1620,20 @@ export function PayrollOperationsView() {
     canMutatePayroll &&
     tab !== "overview" &&
     tab !== "reports" &&
+    tab !== "overtimeApprovals" &&
     (tab !== "configuration" ||
-      ["components", "calendars", "structures", "schemes", "mappings"].includes(configTab))
+      [
+        "components",
+        "calendars",
+        "structures",
+        "schemes",
+        "mappings",
+        "groups",
+        "assignments",
+        "overtime",
+        "bonus",
+        "leaveRules",
+      ].includes(configTab))
 
   const createButtonLabel =
     createMode === "run"
@@ -1360,7 +1652,23 @@ export function PayrollOperationsView() {
                   ? "New structure"
                   : createMode === "scheme"
                     ? "New scheme"
-                    : "New mapping"
+                    : createMode === "mapping"
+                      ? "New mapping"
+                      : createMode === "group"
+                        ? "New group"
+                        : createMode === "assignment"
+                          ? "Assign employee"
+                          : createMode === "overtime"
+                            ? "New overtime policy"
+                            : createMode === "bonus"
+                              ? "New bonus scheme"
+                              : createMode === "leaveRule"
+                                ? "New leave rule"
+                                : createMode === "source"
+                                  ? "New source"
+                                  : createMode === "sourceGenerate"
+                                    ? "Generate sources"
+                                    : "New adjustment"
 
   const columns = React.useMemo<Column<AdminRecord>[]>(() => {
     if (tab === "runs") {
@@ -1478,6 +1786,17 @@ export function PayrollOperationsView() {
                     {lockingRunId === id ? <Loader2Icon className="size-3.5 animate-spin" /> : "Lock"}
                   </button>
                 ) : null}
+                <button
+                  type="button"
+                  className={actionButtonClass}
+                  disabled={validatingRunId === id}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    void onValidateRun(row)
+                  }}
+                >
+                  {validatingRunId === id ? <Loader2Icon className="size-3.5 animate-spin" /> : "Validate"}
+                </button>
                 {canMutatePayroll ? (
                   <button
                     type="button"
@@ -1504,6 +1823,19 @@ export function PayrollOperationsView() {
                     {bankingRunId === id ? <Loader2Icon className="size-3.5 animate-spin" /> : "Bank file"}
                   </button>
                 ) : null}
+                {canMutatePayroll ? (
+                  <button
+                    type="button"
+                    className={actionButtonClass}
+                    disabled={reconcilingRunId === id}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      void onReconcileRunPayment(row)
+                    }}
+                  >
+                    {reconcilingRunId === id ? <Loader2Icon className="size-3.5 animate-spin" /> : "Reconcile"}
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className={actionButtonClass}
@@ -1515,6 +1847,32 @@ export function PayrollOperationsView() {
                 >
                   {journalRunId === id ? <Loader2Icon className="size-3.5 animate-spin" /> : "Journals"}
                 </button>
+                {canMutatePayroll ? (
+                  <button
+                    type="button"
+                    className={actionButtonClass}
+                    disabled={paidRunId === id}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      void onMarkRunPaid(row)
+                    }}
+                  >
+                    {paidRunId === id ? <Loader2Icon className="size-3.5 animate-spin" /> : "Paid"}
+                  </button>
+                ) : null}
+                {canApprovePayroll ? (
+                  <button
+                    type="button"
+                    className={actionButtonClass}
+                    disabled={closingRunId === id}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      void onCloseRun(row)
+                    }}
+                  >
+                    {closingRunId === id ? <Loader2Icon className="size-3.5 animate-spin" /> : "Close"}
+                  </button>
+                ) : null}
               </div>
             )
           },
@@ -1593,6 +1951,156 @@ export function PayrollOperationsView() {
                 >
                   {approvingInputId === id ? <Loader2Icon className="size-3.5 animate-spin" /> : "Approve"}
                 </button>
+              </div>
+            )
+          },
+        },
+      ]
+    }
+
+    if (tab === "sources") {
+      return [
+        {
+          key: "source",
+          label: "Source",
+          render: (row) => (
+            <div className="space-y-0.5">
+              <p className="font-medium">{prettify(readString(row, ["source_type", "sourceType"], "SOURCE"))}</p>
+              <p className="text-xs text-muted-foreground">
+                {readString(row, ["source_reference", "sourceReference"], "Reference pending")}
+              </p>
+            </div>
+          ),
+        },
+        {
+          key: "employee",
+          label: "Employee",
+          render: (row) => readEmployeeLabel(row),
+        },
+        {
+          key: "component",
+          label: "Component",
+          render: (row) => readString(row, ["component_code", "componentCode"], "—"),
+        },
+        {
+          key: "amount",
+          label: "Calculated",
+          render: (row) =>
+            formatCurrencyAmount(row.calculated_amount ?? row.calculatedAmount, readString(row, ["currency"], "TZS")),
+        },
+        {
+          key: "status",
+          label: "Status",
+          render: (row) => (
+            <Badge variant="outline" className={cn("capitalize", statusTone(readStatus(row)))}>
+              {prettify(readStatus(row))}
+            </Badge>
+          ),
+        },
+        {
+          key: "actions",
+          label: "Actions",
+          render: (row) => {
+            const id = rowId(row)
+            const status = readStatus(row).toUpperCase()
+            return (
+              <div className="flex flex-wrap gap-1">
+                <button type="button" className={actionButtonClass} onClick={(event) => {
+                  event.stopPropagation()
+                  void openDetail(row)
+                }}>
+                  View
+                </button>
+                {canApprovePayroll ? (
+                  <button type="button" className={actionButtonClass} disabled={sourceActionId === id || status === "APPROVED" || status === "POSTED"} onClick={(event) => {
+                    event.stopPropagation()
+                    void onApproveSource(row)
+                  }}>
+                    {sourceActionId === id ? <Loader2Icon className="size-3.5 animate-spin" /> : "Approve"}
+                  </button>
+                ) : null}
+                {canMutatePayroll ? (
+                  <button type="button" className={actionButtonClass} disabled={sourceActionId === id || status !== "APPROVED"} onClick={(event) => {
+                    event.stopPropagation()
+                    void onPostSource(row)
+                  }}>
+                    {sourceActionId === id ? <Loader2Icon className="size-3.5 animate-spin" /> : "Post"}
+                  </button>
+                ) : null}
+                {canApprovePayroll ? (
+                  <button type="button" className={actionButtonClass} disabled={sourceActionId === id || status === "POSTED" || status === "REJECTED"} onClick={(event) => {
+                    event.stopPropagation()
+                    void onRejectSource(row)
+                  }}>
+                    Reject
+                  </button>
+                ) : null}
+              </div>
+            )
+          },
+        },
+      ]
+    }
+
+    if (tab === "overtimeApprovals") {
+      return [
+        {
+          key: "employee",
+          label: "Employee",
+          render: (row) => readEmployeeLabel(row),
+        },
+        {
+          key: "attendance_date",
+          label: "Date",
+          render: (row) => formatAdminValue(row.attendance_date ?? row.attendanceDate),
+        },
+        {
+          key: "minutes",
+          label: "Minutes",
+          render: (row) => readString(row, ["overtime_minutes", "overtimeMinutes"], "0"),
+        },
+        {
+          key: "status",
+          label: "Status",
+          render: (row) => {
+            const flags = typeof row.flags === "object" && row.flags ? row.flags as AdminRecord : {}
+            const status = readString(flags, ["otApprovalStatus"], readBoolean(flags, ["overtimeApproved", "otApproved"]) ? "APPROVED" : "PENDING")
+            return (
+              <Badge variant="outline" className={cn("capitalize", statusTone(status))}>
+                {prettify(status)}
+              </Badge>
+            )
+          },
+        },
+        {
+          key: "actions",
+          label: "Actions",
+          render: (row) => {
+            const id = rowId(row)
+            return (
+              <div className="flex flex-wrap gap-1">
+                <button type="button" className={actionButtonClass} onClick={(event) => {
+                  event.stopPropagation()
+                  void openDetail(row)
+                }}>
+                  View
+                </button>
+                {canApprovePayroll ? (
+                  <button type="button" className={actionButtonClass} disabled={overtimeActionId === id} onClick={(event) => {
+                    event.stopPropagation()
+                    void onApproveOvertime(row)
+                  }}>
+                    {overtimeActionId === id ? <Loader2Icon className="size-3.5 animate-spin" /> : "Approve"}
+                  </button>
+                ) : null}
+                {canApprovePayroll ? (
+                  <button type="button" className={actionButtonClass} disabled={overtimeActionId === id} onClick={(event) => {
+                    event.stopPropagation()
+                    void onRejectOvertime(row)
+                  }}>
+                    Reject
+                  </button>
+                ) : null}
               </div>
             )
           },
@@ -1827,6 +2335,145 @@ export function PayrollOperationsView() {
       ]
     }
 
+    if (configTab === "groups") {
+      return [
+        {
+          key: "group",
+          label: "Group",
+          render: (row) => (
+            <div className="space-y-0.5">
+              <p className="font-medium">{optionLabel(row)}</p>
+              <p className="text-xs text-muted-foreground">
+                {prettify(readString(row, ["frequency"], "MONTHLY"))}
+              </p>
+            </div>
+          ),
+        },
+        {
+          key: "rules",
+          label: "Rule filters",
+          render: (row) => [
+            readString(row, ["branch_id", "branchId"]),
+            readString(row, ["department_id", "departmentId"]),
+            readString(row, ["employee_category", "employeeCategory"]),
+            readString(row, ["employment_type", "employmentType"]),
+          ].filter(Boolean).join(" / ") || "All eligible",
+        },
+        {
+          key: "currency",
+          label: "Currency",
+          render: (row) => readString(row, ["currency"], "TZS"),
+        },
+      ]
+    }
+
+    if (configTab === "assignments") {
+      return [
+        {
+          key: "group",
+          label: "Group",
+          render: (row) => `Group #${readString(row, ["payroll_group_id", "payrollGroupId"], "")}`,
+        },
+        {
+          key: "employee",
+          label: "Employee",
+          render: (row) => readEmployeeLabel(row),
+        },
+        {
+          key: "effective",
+          label: "Effective",
+          render: (row) => `${formatAdminValue(row.effective_from ?? row.effectiveFrom)} - ${formatAdminValue(row.effective_to ?? row.effectiveTo)}`,
+        },
+        {
+          key: "status",
+          label: "Status",
+          render: (row) => (
+            <Badge variant="outline" className={cn("capitalize", statusTone(readStatus(row)))}>
+              {prettify(readStatus(row))}
+            </Badge>
+          ),
+        },
+      ]
+    }
+
+    if (configTab === "overtime") {
+      return [
+        {
+          key: "policy",
+          label: "Policy",
+          render: (row) => (
+            <div className="space-y-0.5">
+              <p className="font-medium">{optionLabel(row)}</p>
+              <p className="text-xs text-muted-foreground">{readString(row, ["component_code", "componentCode"], "OVERTIME")}</p>
+            </div>
+          ),
+        },
+        {
+          key: "multipliers",
+          label: "Multipliers",
+          render: (row) =>
+            `R ${readString(row, ["regular_multiplier", "regularMultiplier"], "1.5")} / W ${readString(row, ["weekend_multiplier", "weekendMultiplier"], "2")} / H ${readString(row, ["holiday_multiplier", "holidayMultiplier"], "2")}`,
+        },
+        {
+          key: "approval",
+          label: "Approval",
+          render: (row) => readBoolean(row, ["approval_required", "approvalRequired"]) ? "Required" : "Not required",
+        },
+      ]
+    }
+
+    if (configTab === "bonus") {
+      return [
+        {
+          key: "scheme",
+          label: "Scheme",
+          render: (row) => (
+            <div className="space-y-0.5">
+              <p className="font-medium">{optionLabel(row)}</p>
+              <p className="text-xs text-muted-foreground">{readString(row, ["component_code", "componentCode"], "BONUS")}</p>
+            </div>
+          ),
+        },
+        {
+          key: "method",
+          label: "Method",
+          render: (row) => prettify(readString(row, ["calculation_method", "calculationMethod"], "FIXED_AMOUNT")),
+        },
+        {
+          key: "default",
+          label: "Default",
+          render: (row) => readString(row, ["default_amount", "defaultAmount", "default_rate", "defaultRate"], "-"),
+        },
+      ]
+    }
+
+    if (configTab === "leaveRules") {
+      return [
+        {
+          key: "rule",
+          label: "Rule",
+          render: (row) => (
+            <div className="space-y-0.5">
+              <p className="font-medium">{optionLabel(row)}</p>
+              <p className="text-xs text-muted-foreground">{readString(row, ["leave_type_code", "leaveTypeCode"], "LEAVE")}</p>
+            </div>
+          ),
+        },
+        {
+          key: "pay",
+          label: "Pay behavior",
+          render: (row) =>
+            `${readString(row, ["paid_percentage", "paidPercentage"], "100")}% paid, half after ${readString(row, ["half_pay_after_days", "halfPayAfterDays"], "-")}`,
+        },
+        {
+          key: "caps",
+          label: "Caps",
+          render: (row) =>
+            `Paid ${readString(row, ["paid_days_cap", "paidDaysCap"], "-")} / unpaid after ${readString(row, ["unpaid_after_days", "unpaidAfterDays"], "-")}`,
+        },
+      ]
+    }
+
     return [
       {
         key: "component_code",
@@ -1850,10 +2497,12 @@ export function PayrollOperationsView() {
     configTab,
     journalRunId,
     lockingRunId,
+    overtimeActionId,
     payslipRunId,
     canApprovePayroll,
     canMutatePayroll,
     processingRunId,
+    sourceActionId,
     tab,
   ])
 
@@ -1924,6 +2573,56 @@ export function PayrollOperationsView() {
     }
   }
 
+  async function onValidateRun(row: AdminRecord) {
+    const token = readStoredToken()
+    const id = rowId(row)
+    if (!token || !id) return
+    setValidatingRunId(id)
+    try {
+      const result = await validatePayrollRun(token, id)
+      setReportKind("validation")
+      setReportResult((result as AdminRecord | null) ?? { status: "validated" })
+      toast.success("Payroll validation completed.")
+      await loadRows({ refreshLookups: true })
+    } catch (errorObject) {
+      toast.error(errorObject instanceof Error ? errorObject.message : "Failed to validate run.")
+    } finally {
+      setValidatingRunId("")
+    }
+  }
+
+  async function onMarkRunPaid(row: AdminRecord) {
+    const token = readStoredToken()
+    const id = rowId(row)
+    if (!token || !id) return
+    setPaidRunId(id)
+    try {
+      await markPayrollRunPaid(token, id)
+      toast.success("Payroll run marked as paid.")
+      await loadRows({ refreshLookups: true })
+    } catch (errorObject) {
+      toast.error(errorObject instanceof Error ? errorObject.message : "Failed to mark run as paid.")
+    } finally {
+      setPaidRunId("")
+    }
+  }
+
+  async function onCloseRun(row: AdminRecord) {
+    const token = readStoredToken()
+    const id = rowId(row)
+    if (!token || !id) return
+    setClosingRunId(id)
+    try {
+      await closePayrollRun(token, id)
+      toast.success("Payroll period closed.")
+      await loadRows({ refreshLookups: true })
+    } catch (errorObject) {
+      toast.error(errorObject instanceof Error ? errorObject.message : "Failed to close payroll run.")
+    } finally {
+      setClosingRunId("")
+    }
+  }
+
   async function onGeneratePayslips(row: AdminRecord) {
     const token = readStoredToken()
     const id = rowId(row)
@@ -1951,6 +2650,46 @@ export function PayrollOperationsView() {
       toast.success("Payroll reconciliation started.")
     } catch (errorObject) {
       toast.error(errorObject instanceof Error ? errorObject.message : "Failed to run reconciliation.")
+    } finally {
+      setReportBusy("")
+    }
+  }
+
+  async function onRunCatalog() {
+    const token = readStoredToken()
+    if (!token) return
+    setReportBusy("catalog")
+    try {
+      const rows = await listPayrollReportCatalog(token)
+      setReportCatalog(rows)
+      setReportKind("catalog")
+      setReportResult({ status: "ready", reports: rows, issues: [] })
+      toast.success("Report catalog loaded.")
+    } catch (errorObject) {
+      toast.error(errorObject instanceof Error ? errorObject.message : "Failed to load report catalog.")
+    } finally {
+      setReportBusy("")
+    }
+  }
+
+  async function onRunCatalogReport(reportCodeOverride?: string) {
+    const token = readStoredToken()
+    const reportCode = (reportCodeOverride ?? advancedForm.reportCode).trim()
+    if (!token || !reportCode) return
+    setReportBusy("catalog-report")
+    try {
+      const result = await getPayrollReport(token, reportCode, {
+        payroll_run_id: advancedForm.reportRunId ? Number(advancedForm.reportRunId) : undefined,
+        payroll_period_id: periodFilter ? Number(periodFilter) : undefined,
+        year: advancedForm.reportYear ? Number(advancedForm.reportYear) : undefined,
+        limit: 500,
+      })
+      setReportKind("report")
+      setAdvancedForm((current) => ({ ...current, reportCode }))
+      setReportResult((result as AdminRecord | null) ?? { status: "ready" })
+      toast.success("Payroll report loaded.")
+    } catch (errorObject) {
+      toast.error(errorObject instanceof Error ? errorObject.message : "Failed to load payroll report.")
     } finally {
       setReportBusy("")
     }
@@ -2022,6 +2761,40 @@ export function PayrollOperationsView() {
     }
   }
 
+  async function onReconcileRunPayment(row: AdminRecord) {
+    const token = readStoredToken()
+    const id = rowId(row)
+    if (!token || !id) return
+    const currency = readString(row, ["currency"], "TZS")
+    const paidAmount =
+      advancedForm.paidAmount.trim() ||
+      String(
+        readNumber(row, ["net_pay", "netPay", "total_net_pay", "totalNetPay"]) ??
+          readNumber(row, ["totalAmount", "total_amount"]) ??
+          "",
+      )
+    setReconcilingRunId(id)
+    try {
+      await reconcilePayrollPayment(token, id, {
+        payment_reference: advancedForm.paymentReference.trim() || `PAYROLL-${id}`,
+        payment_date: advancedForm.paymentDate || new Date().toISOString().slice(0, 10),
+        paid_amount: paidAmount,
+        currency,
+      })
+      toast.success("Payment reconciliation saved.")
+      setAdvancedForm((current) => ({
+        ...current,
+        paymentReference: "",
+        paidAmount: "",
+      }))
+      await loadRows({ refreshLookups: true })
+    } catch (errorObject) {
+      toast.error(errorObject instanceof Error ? errorObject.message : "Failed to reconcile payment.")
+    } finally {
+      setReconcilingRunId("")
+    }
+  }
+
   async function onGenerateJournals(row: AdminRecord) {
     const token = readStoredToken()
     const id = rowId(row)
@@ -2054,6 +2827,86 @@ export function PayrollOperationsView() {
     }
   }
 
+  async function onApproveSource(row: AdminRecord) {
+    const token = readStoredToken()
+    const id = rowId(row)
+    if (!token || !id) return
+    setSourceActionId(id)
+    try {
+      await approvePayrollSource(token, id)
+      toast.success("Payroll source approved.")
+      await loadRows({ refreshLookups: true })
+    } catch (errorObject) {
+      toast.error(errorObject instanceof Error ? errorObject.message : "Failed to approve source.")
+    } finally {
+      setSourceActionId("")
+    }
+  }
+
+  async function onRejectSource(row: AdminRecord) {
+    const token = readStoredToken()
+    const id = rowId(row)
+    if (!token || !id) return
+    setSourceActionId(id)
+    try {
+      await rejectPayrollSource(token, id)
+      toast.success("Payroll source rejected.")
+      await loadRows({ refreshLookups: true })
+    } catch (errorObject) {
+      toast.error(errorObject instanceof Error ? errorObject.message : "Failed to reject source.")
+    } finally {
+      setSourceActionId("")
+    }
+  }
+
+  async function onPostSource(row: AdminRecord) {
+    const token = readStoredToken()
+    const id = rowId(row)
+    if (!token || !id) return
+    setSourceActionId(id)
+    try {
+      await postPayrollSource(token, id)
+      toast.success("Payroll source posted to inputs.")
+      await loadRows({ refreshLookups: true })
+    } catch (errorObject) {
+      toast.error(errorObject instanceof Error ? errorObject.message : "Failed to post source.")
+    } finally {
+      setSourceActionId("")
+    }
+  }
+
+  async function onApproveOvertime(row: AdminRecord) {
+    const token = readStoredToken()
+    const id = rowId(row)
+    if (!token || !id) return
+    setOvertimeActionId(id)
+    try {
+      await approvePayrollOvertime(token, id)
+      toast.success("Overtime approved for payroll.")
+      await loadRows({ refreshLookups: true })
+    } catch (errorObject) {
+      toast.error(errorObject instanceof Error ? errorObject.message : "Failed to approve overtime.")
+    } finally {
+      setOvertimeActionId("")
+    }
+  }
+
+  async function onRejectOvertime(row: AdminRecord) {
+    const token = readStoredToken()
+    const id = rowId(row)
+    if (!token || !id) return
+    setOvertimeActionId(id)
+    try {
+      await rejectPayrollOvertime(token, id)
+      toast.success("Overtime rejected.")
+      await loadRows({ refreshLookups: true })
+    } catch (errorObject) {
+      toast.error(errorObject instanceof Error ? errorObject.message : "Failed to reject overtime.")
+    } finally {
+      setOvertimeActionId("")
+    }
+  }
+
   async function onCreate() {
     const token = readStoredToken()
     if (!token) {
@@ -2070,6 +2923,7 @@ export function PayrollOperationsView() {
         }
         await createPayrollRun(token, {
           payroll_period_id: Number(runForm.payrollPeriodId),
+          payroll_group_id: runForm.payrollGroupId ? Number(runForm.payrollGroupId) : undefined,
           run_type: runForm.runType,
           parent_run_id: runForm.parentRunId ? Number(runForm.parentRunId) : undefined,
           offboarding_request_id: runForm.offboardingRequestId
@@ -2091,6 +2945,41 @@ export function PayrollOperationsView() {
           rate: inputForm.rate.trim() || undefined,
           currency: inputForm.currency.trim() || undefined,
           status: inputForm.status,
+        })
+      } else if (createMode === "source") {
+        if (!advancedForm.payrollPeriodId || !advancedForm.componentCode.trim()) {
+          throw new Error("Payroll period and component code are required.")
+        }
+        await createPayrollSource(token, {
+          payroll_period_id: Number(advancedForm.payrollPeriodId),
+          employee_id: advancedForm.employeeId ? Number(advancedForm.employeeId) : undefined,
+          source_type: advancedForm.sourceType,
+          source_reference: advancedForm.sourceReference.trim() || undefined,
+          scheme_code: advancedForm.schemeCode.trim() || undefined,
+          component_code: advancedForm.componentCode.trim(),
+          source_amount: advancedForm.sourceAmount.trim() || undefined,
+          quantity: advancedForm.quantity.trim() || undefined,
+          rate: advancedForm.rate.trim() || undefined,
+          calculated_amount: advancedForm.calculatedAmount.trim() || undefined,
+          currency: advancedForm.currency.trim() || undefined,
+        })
+      } else if (createMode === "sourceGenerate") {
+        if (!advancedForm.payrollPeriodId) {
+          throw new Error("Payroll period is required.")
+        }
+        await generatePayrollSources(token, {
+          payroll_period_id: Number(advancedForm.payrollPeriodId),
+          source_type: advancedForm.sourceType === "PERFORMANCE" ? "PERFORMANCE" : "KPI",
+          performance_period_id: advancedForm.performancePeriodId ? Number(advancedForm.performancePeriodId) : undefined,
+          financial_year_id: advancedForm.financialYearId ? Number(advancedForm.financialYearId) : undefined,
+          period_type: advancedForm.periodType.trim() || undefined,
+          sequence_number: advancedForm.sequenceNumber ? Number(advancedForm.sequenceNumber) : undefined,
+          scheme_code: advancedForm.schemeCode.trim() || undefined,
+          component_code: advancedForm.componentCode.trim() || undefined,
+          amount_per_score_point: advancedForm.amountPerScorePoint.trim() || undefined,
+          minimum_score: advancedForm.minimumScore.trim() || undefined,
+          auto_approve: advancedForm.autoApprove === "true",
+          replace_existing: advancedForm.replaceExisting === "true",
         })
       } else if (createMode === "profile") {
         if (!profileForm.employeeId || !profileForm.payrollNumber.trim() || !profileForm.effectiveFrom) {
@@ -2191,7 +3080,7 @@ export function PayrollOperationsView() {
           scheme_type: schemeForm.schemeType,
           jurisdiction: schemeForm.jurisdiction.trim() || undefined,
         })
-      } else {
+      } else if (createMode === "mapping") {
         if (!mappingForm.componentCode.trim() || !mappingForm.debitAccountCode.trim() || !mappingForm.creditAccountCode.trim()) {
           throw new Error("Component code, debit account, and credit account are required.")
         }
@@ -2203,11 +3092,108 @@ export function PayrollOperationsView() {
             throw new Error("Dimensions must be valid JSON.")
           }
         }
+        const guidedDimensions = { ...(dimensions ?? {}) }
+        setDimensionMap(guidedDimensions, "debit_accounts_by_project", mappingForm.projectDebitMap)
+        setDimensionMap(guidedDimensions, "credit_accounts_by_project", mappingForm.projectCreditMap)
+        setDimensionMap(guidedDimensions, "debit_accounts_by_cost_center", mappingForm.costCenterDebitMap)
+        setDimensionMap(guidedDimensions, "credit_accounts_by_cost_center", mappingForm.costCenterCreditMap)
+        setDimensionMap(guidedDimensions, "debit_accounts_by_department", mappingForm.departmentDebitMap)
+        setDimensionMap(guidedDimensions, "credit_accounts_by_department", mappingForm.departmentCreditMap)
+        setDimensionMap(guidedDimensions, "debit_accounts_by_branch", mappingForm.branchDebitMap)
+        setDimensionMap(guidedDimensions, "credit_accounts_by_branch", mappingForm.branchCreditMap)
+        setDimensionMap(guidedDimensions, "debit_accounts_by_employee_category", mappingForm.categoryDebitMap)
+        setDimensionMap(guidedDimensions, "credit_accounts_by_employee_category", mappingForm.categoryCreditMap)
+        setDimensionMap(guidedDimensions, "debit_accounts_by_payroll_group", mappingForm.groupDebitMap)
+        setDimensionMap(guidedDimensions, "credit_accounts_by_payroll_group", mappingForm.groupCreditMap)
         await createPayrollAccountingMapping(token, {
           component_code: mappingForm.componentCode.trim(),
           debit_account_code: mappingForm.debitAccountCode.trim(),
           credit_account_code: mappingForm.creditAccountCode.trim(),
-          dimensions,
+          dimensions: Object.keys(guidedDimensions).length > 0 ? guidedDimensions : undefined,
+        })
+      } else if (createMode === "group") {
+        if (!advancedForm.code.trim() || !advancedForm.name.trim()) {
+          throw new Error("Code and name are required.")
+        }
+        await createPayrollGroup(token, {
+          code: advancedForm.code.trim(),
+          name: advancedForm.name.trim(),
+          frequency: advancedForm.frequency,
+          payroll_calendar_id: advancedForm.payrollCalendarId ? Number(advancedForm.payrollCalendarId) : undefined,
+          branch_id: advancedForm.branchId ? Number(advancedForm.branchId) : undefined,
+          department_id: advancedForm.departmentId ? Number(advancedForm.departmentId) : undefined,
+          employee_category: advancedForm.employeeCategory.trim() || undefined,
+          employment_type: advancedForm.employmentType.trim() || undefined,
+          currency: advancedForm.currency.trim() || undefined,
+        })
+      } else if (createMode === "assignment") {
+        if (!advancedForm.payrollGroupId || !advancedForm.employeeId || !advancedForm.effectiveFrom) {
+          throw new Error("Payroll group, employee ID, and effective from are required.")
+        }
+        await createPayrollGroupAssignment(token, {
+          payroll_group_id: Number(advancedForm.payrollGroupId),
+          employee_id: Number(advancedForm.employeeId),
+          effective_from: advancedForm.effectiveFrom,
+          effective_to: advancedForm.effectiveTo || undefined,
+        })
+      } else if (createMode === "overtime") {
+        if (!advancedForm.code.trim() || !advancedForm.name.trim() || !advancedForm.componentCode.trim()) {
+          throw new Error("Code, name, and component code are required.")
+        }
+        await createPayrollOvertimePolicy(token, {
+          code: advancedForm.code.trim(),
+          name: advancedForm.name.trim(),
+          component_code: advancedForm.componentCode.trim(),
+          regular_multiplier: advancedForm.regularMultiplier.trim() || undefined,
+          weekend_multiplier: advancedForm.weekendMultiplier.trim() || undefined,
+          holiday_multiplier: advancedForm.holidayMultiplier.trim() || undefined,
+          minimum_minutes: Number(advancedForm.minimumMinutes) || 0,
+          effective_from: advancedForm.effectiveFrom || undefined,
+          effective_to: advancedForm.effectiveTo || undefined,
+        })
+      } else if (createMode === "bonus") {
+        if (!advancedForm.code.trim() || !advancedForm.name.trim() || !advancedForm.componentCode.trim()) {
+          throw new Error("Code, name, and component code are required.")
+        }
+        await createPayrollBonusScheme(token, {
+          code: advancedForm.code.trim(),
+          name: advancedForm.name.trim(),
+          scheme_type: advancedForm.schemeType,
+          component_code: advancedForm.componentCode.trim(),
+          calculation_method: advancedForm.calculationMethod,
+          default_amount: advancedForm.defaultAmount.trim() || undefined,
+          default_rate: advancedForm.defaultRate.trim() || undefined,
+          effective_from: advancedForm.effectiveFrom || undefined,
+          effective_to: advancedForm.effectiveTo || undefined,
+        })
+      } else if (createMode === "leaveRule") {
+        if (!advancedForm.code.trim() || !advancedForm.name.trim() || !advancedForm.leaveTypeCode.trim()) {
+          throw new Error("Code, name, and leave type code are required.")
+        }
+        await createPayrollLeaveRule(token, {
+          code: advancedForm.code.trim(),
+          name: advancedForm.name.trim(),
+          leave_type_code: advancedForm.leaveTypeCode.trim(),
+          paid_percentage: advancedForm.paidPercentage.trim() || undefined,
+          paid_days_cap: advancedForm.paidDaysCap.trim() || undefined,
+          half_pay_after_days: advancedForm.halfPayAfterDays.trim() || undefined,
+          unpaid_after_days: advancedForm.unpaidAfterDays.trim() || undefined,
+          carry_forward_cap_days: advancedForm.carryForwardCapDays.trim() || undefined,
+          effective_from: advancedForm.effectiveFrom || undefined,
+          effective_to: advancedForm.effectiveTo || undefined,
+        })
+      } else if (createMode === "adjustment") {
+        if (!advancedForm.payrollPeriodId || !advancedForm.employeeId || !advancedForm.componentCode.trim() || !advancedForm.amount.trim()) {
+          throw new Error("Payroll period, employee ID, component code, and amount are required.")
+        }
+        await createPayrollAdjustment(token, {
+          payroll_period_id: Number(advancedForm.payrollPeriodId),
+          employee_id: Number(advancedForm.employeeId),
+          component_code: advancedForm.componentCode.trim(),
+          amount: advancedForm.amount.trim(),
+          reason: advancedForm.reason.trim() || undefined,
+          adjustment_type: advancedForm.adjustmentType,
+          effective_period_code: advancedForm.effectivePeriodCode.trim() || undefined,
         })
       }
 
@@ -2222,6 +3208,7 @@ export function PayrollOperationsView() {
       setStructureForm(emptyStructureForm())
       setSchemeForm(emptySchemeForm())
       setMappingForm(emptyMappingForm())
+      setAdvancedForm(emptyAdvancedPayrollForm())
       await loadRows({ refreshLookups: true })
     } catch (errorObject) {
       setFormError(errorObject instanceof Error ? errorObject.message : "Failed to save payroll record.")
@@ -2336,6 +3323,24 @@ export function PayrollOperationsView() {
                   {prettify(value)}
                 </option>
               ))}
+            </select>
+          </Field>
+          <Field label="Payroll group">
+            <select
+              className={inputClass}
+              value={runForm.payrollGroupId}
+              onChange={(event) => setRunForm((current) => ({ ...current, payrollGroupId: event.target.value }))}
+            >
+              <option value="">All eligible employees</option>
+              {groups.map((row, index) => {
+                const id = readNumber(row, ["id"])
+                if (id === null) return null
+                return (
+                  <option key={`run-group-${id}-${index}`} value={String(id)}>
+                    {optionLabel(row)}
+                  </option>
+                )
+              })}
             </select>
           </Field>
           <Field label="Parent run ID">
@@ -2463,6 +3468,328 @@ export function PayrollOperationsView() {
               onChange={(event) => setInputForm((current) => ({ ...current, sourceReference: event.target.value }))}
               placeholder="Optional reference"
             />
+          </Field>
+        </div>
+      )
+    }
+
+    if (createMode === "source") {
+      return (
+        <div className="grid gap-3 md:grid-cols-2">
+          <Field label="Payroll period">
+            <select className={inputClass} value={advancedForm.payrollPeriodId} onChange={(event) => setAdvancedForm((current) => ({ ...current, payrollPeriodId: event.target.value }))}>
+              <option value="">Select a period</option>
+              {periods.map((row, index) => {
+                const id = readNumber(row, ["id"])
+                if (id === null) return null
+                return <option key={`source-period-${id}-${index}`} value={String(id)}>{readPeriodLabel(row)}</option>
+              })}
+            </select>
+          </Field>
+          <Field label="Source type">
+            <select className={inputClass} value={advancedForm.sourceType} onChange={(event) => setAdvancedForm((current) => ({ ...current, sourceType: event.target.value }))}>
+              {["SALES", "KPI", "PERFORMANCE", "COMMISSION"].map((value) => (
+                <option key={value} value={value}>{prettify(value)}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Employee ID">
+            <input className={inputClass} value={advancedForm.employeeId} onChange={(event) => setAdvancedForm((current) => ({ ...current, employeeId: event.target.value }))} placeholder="Optional for company-wide input" />
+          </Field>
+          <Field label="Component code">
+            <input className={inputClass} value={advancedForm.componentCode} onChange={(event) => setAdvancedForm((current) => ({ ...current, componentCode: event.target.value }))} list="payroll-component-codes" />
+          </Field>
+          <Field label="Source reference">
+            <input className={inputClass} value={advancedForm.sourceReference} onChange={(event) => setAdvancedForm((current) => ({ ...current, sourceReference: event.target.value }))} placeholder="Invoice, KPI batch, deal ID" />
+          </Field>
+          <Field label="Scheme code">
+            <input className={inputClass} value={advancedForm.schemeCode} onChange={(event) => setAdvancedForm((current) => ({ ...current, schemeCode: event.target.value }))} placeholder="Optional" />
+          </Field>
+          <Field label="Source amount">
+            <input className={inputClass} value={advancedForm.sourceAmount} onChange={(event) => setAdvancedForm((current) => ({ ...current, sourceAmount: event.target.value }))} placeholder="0.00" />
+          </Field>
+          <Field label="Calculated amount">
+            <input className={inputClass} value={advancedForm.calculatedAmount} onChange={(event) => setAdvancedForm((current) => ({ ...current, calculatedAmount: event.target.value }))} placeholder="Overrides quantity x rate" />
+          </Field>
+          <Field label="Quantity">
+            <input className={inputClass} value={advancedForm.quantity} onChange={(event) => setAdvancedForm((current) => ({ ...current, quantity: event.target.value }))} placeholder="Optional" />
+          </Field>
+          <Field label="Rate">
+            <input className={inputClass} value={advancedForm.rate} onChange={(event) => setAdvancedForm((current) => ({ ...current, rate: event.target.value }))} placeholder="Optional" />
+          </Field>
+          <Field label="Currency">
+            <input className={inputClass} value={advancedForm.currency} onChange={(event) => setAdvancedForm((current) => ({ ...current, currency: event.target.value }))} />
+          </Field>
+        </div>
+      )
+    }
+
+    if (createMode === "sourceGenerate") {
+      return (
+        <div className="grid gap-3 md:grid-cols-2">
+          <Field label="Payroll period">
+            <select className={inputClass} value={advancedForm.payrollPeriodId} onChange={(event) => setAdvancedForm((current) => ({ ...current, payrollPeriodId: event.target.value }))}>
+              <option value="">Select a payroll period</option>
+              {periods.map((row, index) => {
+                const id = readNumber(row, ["id"])
+                if (id === null) return null
+                return <option key={`generate-source-period-${id}-${index}`} value={String(id)}>{readPeriodLabel(row)}</option>
+              })}
+            </select>
+          </Field>
+          <Field label="Source type">
+            <select className={inputClass} value={advancedForm.sourceType} onChange={(event) => setAdvancedForm((current) => ({ ...current, sourceType: event.target.value }))}>
+              <option value="KPI">KPI</option>
+              <option value="PERFORMANCE">Performance</option>
+            </select>
+          </Field>
+          <Field label="Performance period ID">
+            <input className={inputClass} value={advancedForm.performancePeriodId} onChange={(event) => setAdvancedForm((current) => ({ ...current, performancePeriodId: event.target.value }))} placeholder="Optional KPI period" />
+          </Field>
+          <Field label="Financial year ID">
+            <input className={inputClass} value={advancedForm.financialYearId} onChange={(event) => setAdvancedForm((current) => ({ ...current, financialYearId: event.target.value }))} placeholder="Performance aggregates" />
+          </Field>
+          <Field label="Period type">
+            <input className={inputClass} value={advancedForm.periodType} onChange={(event) => setAdvancedForm((current) => ({ ...current, periodType: event.target.value }))} placeholder="MONTHLY, QUARTERLY, ANNUAL" />
+          </Field>
+          <Field label="Sequence number">
+            <input className={inputClass} value={advancedForm.sequenceNumber} onChange={(event) => setAdvancedForm((current) => ({ ...current, sequenceNumber: event.target.value }))} placeholder="Optional" />
+          </Field>
+          <Field label="Scheme code">
+            <input className={inputClass} value={advancedForm.schemeCode} onChange={(event) => setAdvancedForm((current) => ({ ...current, schemeCode: event.target.value }))} placeholder="Optional bonus scheme" />
+          </Field>
+          <Field label="Component code">
+            <input className={inputClass} value={advancedForm.componentCode} onChange={(event) => setAdvancedForm((current) => ({ ...current, componentCode: event.target.value }))} list="payroll-component-codes" placeholder="Optional override" />
+          </Field>
+          <Field label="Amount per score point">
+            <input className={inputClass} value={advancedForm.amountPerScorePoint} onChange={(event) => setAdvancedForm((current) => ({ ...current, amountPerScorePoint: event.target.value }))} placeholder="Uses scheme rate if empty" />
+          </Field>
+          <Field label="Minimum score">
+            <input className={inputClass} value={advancedForm.minimumScore} onChange={(event) => setAdvancedForm((current) => ({ ...current, minimumScore: event.target.value }))} placeholder="Optional threshold" />
+          </Field>
+          <Field label="Auto approve">
+            <select className={inputClass} value={advancedForm.autoApprove} onChange={(event) => setAdvancedForm((current) => ({ ...current, autoApprove: event.target.value }))}>
+              <option value="true">Yes</option>
+              <option value="false">No</option>
+            </select>
+          </Field>
+          <Field label="Replace draft/rejected">
+            <select className={inputClass} value={advancedForm.replaceExisting} onChange={(event) => setAdvancedForm((current) => ({ ...current, replaceExisting: event.target.value }))}>
+              <option value="false">No</option>
+              <option value="true">Yes</option>
+            </select>
+          </Field>
+        </div>
+      )
+    }
+
+    if (createMode === "adjustment") {
+      return (
+        <div className="grid gap-3 md:grid-cols-2">
+          <Field label="Payroll period">
+            <select
+              className={inputClass}
+              value={advancedForm.payrollPeriodId}
+              onChange={(event) => setAdvancedForm((current) => ({ ...current, payrollPeriodId: event.target.value }))}
+            >
+              <option value="">Select a period</option>
+              {periods.map((row, index) => {
+                const id = readNumber(row, ["id"])
+                if (id === null) return null
+                return (
+                  <option key={`adjustment-period-${id}-${index}`} value={String(id)}>
+                    {readPeriodLabel(row)}
+                  </option>
+                )
+              })}
+            </select>
+          </Field>
+          <Field label="Employee ID">
+            <input
+              className={inputClass}
+              value={advancedForm.employeeId}
+              onChange={(event) => setAdvancedForm((current) => ({ ...current, employeeId: event.target.value }))}
+            />
+          </Field>
+          <Field label="Component code">
+            <input
+              className={inputClass}
+              value={advancedForm.componentCode}
+              onChange={(event) => setAdvancedForm((current) => ({ ...current, componentCode: event.target.value }))}
+              list="payroll-component-codes"
+            />
+          </Field>
+          <Field label="Amount">
+            <input
+              className={inputClass}
+              value={advancedForm.amount}
+              onChange={(event) => setAdvancedForm((current) => ({ ...current, amount: event.target.value }))}
+              placeholder="0.00"
+            />
+          </Field>
+          <Field label="Adjustment type">
+            <select
+              className={inputClass}
+              value={advancedForm.adjustmentType}
+              onChange={(event) => setAdvancedForm((current) => ({ ...current, adjustmentType: event.target.value }))}
+            >
+              <option value="ADJUSTMENT">Adjustment</option>
+              <option value="ARREARS">Arrears</option>
+              <option value="RETROACTIVE_SALARY">Retroactive salary</option>
+              <option value="CORRECTION">Correction</option>
+              <option value="BONUS">Bonus</option>
+              <option value="COMMISSION">Commission</option>
+            </select>
+          </Field>
+          <Field label="Effective period code">
+            <input
+              className={inputClass}
+              value={advancedForm.effectivePeriodCode}
+              onChange={(event) => setAdvancedForm((current) => ({ ...current, effectivePeriodCode: event.target.value }))}
+              placeholder="Optional"
+            />
+          </Field>
+          <Field label="Reason" className="md:col-span-2">
+            <textarea
+              className={textareaClass}
+              value={advancedForm.reason}
+              onChange={(event) => setAdvancedForm((current) => ({ ...current, reason: event.target.value }))}
+              placeholder="Reason for the adjustment"
+            />
+          </Field>
+        </div>
+      )
+    }
+
+    if (createMode === "group") {
+      return (
+        <div className="grid gap-3 md:grid-cols-2">
+          <Field label="Code">
+            <input className={inputClass} value={advancedForm.code} onChange={(event) => setAdvancedForm((current) => ({ ...current, code: event.target.value }))} />
+          </Field>
+          <Field label="Name">
+            <input className={inputClass} value={advancedForm.name} onChange={(event) => setAdvancedForm((current) => ({ ...current, name: event.target.value }))} />
+          </Field>
+          <Field label="Frequency">
+            <select className={inputClass} value={advancedForm.frequency} onChange={(event) => setAdvancedForm((current) => ({ ...current, frequency: event.target.value }))}>
+              {PAY_FREQUENCIES.map((value) => (
+                <option key={value} value={value}>
+                  {prettify(value)}
+                </option>
+              ))}
+              <option value="CASUAL">Casual</option>
+              <option value="DAILY">Daily</option>
+            </select>
+          </Field>
+          <Field label="Calendar">
+            <select className={inputClass} value={advancedForm.payrollCalendarId} onChange={(event) => setAdvancedForm((current) => ({ ...current, payrollCalendarId: event.target.value }))}>
+              <option value="">Optional</option>
+              {calendars.map((row, index) => {
+                const id = readNumber(row, ["id"])
+                if (id === null) return null
+                return (
+                  <option key={`group-calendar-${id}-${index}`} value={String(id)}>
+                    {optionLabel(row)}
+                  </option>
+                )
+              })}
+            </select>
+          </Field>
+          <Field label="Branch ID">
+            <input className={inputClass} value={advancedForm.branchId} onChange={(event) => setAdvancedForm((current) => ({ ...current, branchId: event.target.value }))} placeholder="Optional" />
+          </Field>
+          <Field label="Department ID">
+            <input className={inputClass} value={advancedForm.departmentId} onChange={(event) => setAdvancedForm((current) => ({ ...current, departmentId: event.target.value }))} placeholder="Optional" />
+          </Field>
+          <Field label="Employee category">
+            <input className={inputClass} value={advancedForm.employeeCategory} onChange={(event) => setAdvancedForm((current) => ({ ...current, employeeCategory: event.target.value }))} placeholder="Management, expatriate, branch..." />
+          </Field>
+          <Field label="Employment type">
+            <input className={inputClass} value={advancedForm.employmentType} onChange={(event) => setAdvancedForm((current) => ({ ...current, employmentType: event.target.value }))} placeholder="Permanent, casual, contract..." />
+          </Field>
+          <Field label="Currency">
+            <input className={inputClass} value={advancedForm.currency} onChange={(event) => setAdvancedForm((current) => ({ ...current, currency: event.target.value }))} />
+          </Field>
+        </div>
+      )
+    }
+
+    if (createMode === "overtime") {
+      return (
+        <div className="grid gap-3 md:grid-cols-2">
+          <Field label="Code">
+            <input className={inputClass} value={advancedForm.code} onChange={(event) => setAdvancedForm((current) => ({ ...current, code: event.target.value }))} />
+          </Field>
+          <Field label="Name">
+            <input className={inputClass} value={advancedForm.name} onChange={(event) => setAdvancedForm((current) => ({ ...current, name: event.target.value }))} />
+          </Field>
+          <Field label="Payroll component">
+            <input className={inputClass} value={advancedForm.componentCode} onChange={(event) => setAdvancedForm((current) => ({ ...current, componentCode: event.target.value }))} list="payroll-component-codes" />
+          </Field>
+          <Field label="Regular multiplier">
+            <input className={inputClass} value={advancedForm.regularMultiplier} onChange={(event) => setAdvancedForm((current) => ({ ...current, regularMultiplier: event.target.value }))} />
+          </Field>
+          <Field label="Weekend multiplier">
+            <input className={inputClass} value={advancedForm.weekendMultiplier} onChange={(event) => setAdvancedForm((current) => ({ ...current, weekendMultiplier: event.target.value }))} />
+          </Field>
+          <Field label="Holiday multiplier">
+            <input className={inputClass} value={advancedForm.holidayMultiplier} onChange={(event) => setAdvancedForm((current) => ({ ...current, holidayMultiplier: event.target.value }))} />
+          </Field>
+          <Field label="Minimum minutes">
+            <input className={inputClass} value={advancedForm.minimumMinutes} onChange={(event) => setAdvancedForm((current) => ({ ...current, minimumMinutes: event.target.value }))} />
+          </Field>
+          <Field label="Effective from">
+            <input className={inputClass} type="date" value={advancedForm.effectiveFrom} onChange={(event) => setAdvancedForm((current) => ({ ...current, effectiveFrom: event.target.value }))} />
+          </Field>
+          <Field label="Effective to">
+            <input className={inputClass} type="date" value={advancedForm.effectiveTo} onChange={(event) => setAdvancedForm((current) => ({ ...current, effectiveTo: event.target.value }))} />
+          </Field>
+        </div>
+      )
+    }
+
+    if (createMode === "bonus") {
+      return (
+        <div className="grid gap-3 md:grid-cols-2">
+          <Field label="Code">
+            <input className={inputClass} value={advancedForm.code} onChange={(event) => setAdvancedForm((current) => ({ ...current, code: event.target.value }))} />
+          </Field>
+          <Field label="Name">
+            <input className={inputClass} value={advancedForm.name} onChange={(event) => setAdvancedForm((current) => ({ ...current, name: event.target.value }))} />
+          </Field>
+          <Field label="Scheme type">
+            <select className={inputClass} value={advancedForm.schemeType} onChange={(event) => setAdvancedForm((current) => ({ ...current, schemeType: event.target.value }))}>
+              <option value="BONUS">Bonus</option>
+              <option value="COMMISSION">Commission</option>
+              <option value="INCENTIVE">Incentive</option>
+              <option value="THIRTEENTH_MONTH">Thirteenth month</option>
+            </select>
+          </Field>
+          <Field label="Payroll component">
+            <input className={inputClass} value={advancedForm.componentCode} onChange={(event) => setAdvancedForm((current) => ({ ...current, componentCode: event.target.value }))} list="payroll-component-codes" />
+          </Field>
+          <Field label="Calculation method">
+            <select className={inputClass} value={advancedForm.calculationMethod} onChange={(event) => setAdvancedForm((current) => ({ ...current, calculationMethod: event.target.value }))}>
+              {CALCULATION_METHODS.map((value) => (
+                <option key={value} value={value}>
+                  {prettify(value)}
+                </option>
+              ))}
+              <option value="PERCENTAGE_OF_SALES">Percentage of sales</option>
+              <option value="FORMULA">Formula</option>
+            </select>
+          </Field>
+          <Field label="Default amount">
+            <input className={inputClass} value={advancedForm.defaultAmount} onChange={(event) => setAdvancedForm((current) => ({ ...current, defaultAmount: event.target.value }))} placeholder="Optional" />
+          </Field>
+          <Field label="Default rate">
+            <input className={inputClass} value={advancedForm.defaultRate} onChange={(event) => setAdvancedForm((current) => ({ ...current, defaultRate: event.target.value }))} placeholder="Optional" />
+          </Field>
+          <Field label="Effective from">
+            <input className={inputClass} type="date" value={advancedForm.effectiveFrom} onChange={(event) => setAdvancedForm((current) => ({ ...current, effectiveFrom: event.target.value }))} />
+          </Field>
+          <Field label="Effective to">
+            <input className={inputClass} type="date" value={advancedForm.effectiveTo} onChange={(event) => setAdvancedForm((current) => ({ ...current, effectiveTo: event.target.value }))} />
           </Field>
         </div>
       )
@@ -2975,6 +4302,184 @@ export function PayrollOperationsView() {
       )
     }
 
+    if (false) {
+      return (
+        <div className="grid gap-3 md:grid-cols-2">
+          <Field label="Code">
+            <input className={inputClass} value={advancedForm.code} onChange={(event) => setAdvancedForm((current) => ({ ...current, code: event.target.value }))} />
+          </Field>
+          <Field label="Name">
+            <input className={inputClass} value={advancedForm.name} onChange={(event) => setAdvancedForm((current) => ({ ...current, name: event.target.value }))} />
+          </Field>
+          <Field label="Frequency">
+            <select className={inputClass} value={advancedForm.frequency} onChange={(event) => setAdvancedForm((current) => ({ ...current, frequency: event.target.value }))}>
+              {PAY_FREQUENCIES.map((value) => <option key={value} value={value}>{prettify(value)}</option>)}
+            </select>
+          </Field>
+          <Field label="Payroll calendar">
+            <select className={inputClass} value={advancedForm.payrollCalendarId} onChange={(event) => setAdvancedForm((current) => ({ ...current, payrollCalendarId: event.target.value }))}>
+              <option value="">Optional</option>
+              {calendars.map((row, index) => {
+                const id = readNumber(row, ["id"])
+                if (id === null) return null
+                return <option key={`group-calendar-${id}-${index}`} value={String(id)}>{optionLabel(row)}</option>
+              })}
+            </select>
+          </Field>
+          <Field label="Branch ID">
+            <input className={inputClass} value={advancedForm.branchId} onChange={(event) => setAdvancedForm((current) => ({ ...current, branchId: event.target.value }))} placeholder="Optional" />
+          </Field>
+          <Field label="Department ID">
+            <input className={inputClass} value={advancedForm.departmentId} onChange={(event) => setAdvancedForm((current) => ({ ...current, departmentId: event.target.value }))} placeholder="Optional" />
+          </Field>
+          <Field label="Employee category">
+            <input className={inputClass} value={advancedForm.employeeCategory} onChange={(event) => setAdvancedForm((current) => ({ ...current, employeeCategory: event.target.value }))} placeholder="Management, expatriate, casual" />
+          </Field>
+          <Field label="Employment type">
+            <input className={inputClass} value={advancedForm.employmentType} onChange={(event) => setAdvancedForm((current) => ({ ...current, employmentType: event.target.value }))} placeholder="Permanent, casual, contract" />
+          </Field>
+          <Field label="Currency">
+            <input className={inputClass} value={advancedForm.currency} onChange={(event) => setAdvancedForm((current) => ({ ...current, currency: event.target.value }))} />
+          </Field>
+        </div>
+      )
+    }
+
+    if (createMode === "assignment") {
+      return (
+        <div className="grid gap-3 md:grid-cols-2">
+          <Field label="Payroll group">
+            <select className={inputClass} value={advancedForm.payrollGroupId} onChange={(event) => setAdvancedForm((current) => ({ ...current, payrollGroupId: event.target.value }))}>
+              <option value="">Select a group</option>
+              {groups.map((row, index) => {
+                const id = readNumber(row, ["id"])
+                if (id === null) return null
+                return <option key={`assignment-group-${id}-${index}`} value={String(id)}>{optionLabel(row)}</option>
+              })}
+            </select>
+          </Field>
+          <Field label="Employee ID">
+            <input className={inputClass} value={advancedForm.employeeId} onChange={(event) => setAdvancedForm((current) => ({ ...current, employeeId: event.target.value }))} />
+          </Field>
+          <Field label="Effective from">
+            <input className={inputClass} type="date" value={advancedForm.effectiveFrom} onChange={(event) => setAdvancedForm((current) => ({ ...current, effectiveFrom: event.target.value }))} />
+          </Field>
+          <Field label="Effective to">
+            <input className={inputClass} type="date" value={advancedForm.effectiveTo} onChange={(event) => setAdvancedForm((current) => ({ ...current, effectiveTo: event.target.value }))} />
+          </Field>
+        </div>
+      )
+    }
+
+    if (false) {
+      return (
+        <div className="grid gap-3 md:grid-cols-2">
+          <Field label="Code">
+            <input className={inputClass} value={advancedForm.code} onChange={(event) => setAdvancedForm((current) => ({ ...current, code: event.target.value }))} />
+          </Field>
+          <Field label="Name">
+            <input className={inputClass} value={advancedForm.name} onChange={(event) => setAdvancedForm((current) => ({ ...current, name: event.target.value }))} />
+          </Field>
+          <Field label="Component code">
+            <input className={inputClass} value={advancedForm.componentCode} onChange={(event) => setAdvancedForm((current) => ({ ...current, componentCode: event.target.value }))} list="payroll-component-codes" />
+          </Field>
+          <Field label="Regular multiplier">
+            <input className={inputClass} value={advancedForm.regularMultiplier} onChange={(event) => setAdvancedForm((current) => ({ ...current, regularMultiplier: event.target.value }))} />
+          </Field>
+          <Field label="Weekend multiplier">
+            <input className={inputClass} value={advancedForm.weekendMultiplier} onChange={(event) => setAdvancedForm((current) => ({ ...current, weekendMultiplier: event.target.value }))} />
+          </Field>
+          <Field label="Holiday multiplier">
+            <input className={inputClass} value={advancedForm.holidayMultiplier} onChange={(event) => setAdvancedForm((current) => ({ ...current, holidayMultiplier: event.target.value }))} />
+          </Field>
+          <Field label="Minimum minutes">
+            <input className={inputClass} value={advancedForm.minimumMinutes} onChange={(event) => setAdvancedForm((current) => ({ ...current, minimumMinutes: event.target.value }))} />
+          </Field>
+          <Field label="Effective from">
+            <input className={inputClass} type="date" value={advancedForm.effectiveFrom} onChange={(event) => setAdvancedForm((current) => ({ ...current, effectiveFrom: event.target.value }))} />
+          </Field>
+          <Field label="Effective to">
+            <input className={inputClass} type="date" value={advancedForm.effectiveTo} onChange={(event) => setAdvancedForm((current) => ({ ...current, effectiveTo: event.target.value }))} />
+          </Field>
+        </div>
+      )
+    }
+
+    if (false) {
+      return (
+        <div className="grid gap-3 md:grid-cols-2">
+          <Field label="Code">
+            <input className={inputClass} value={advancedForm.code} onChange={(event) => setAdvancedForm((current) => ({ ...current, code: event.target.value }))} />
+          </Field>
+          <Field label="Name">
+            <input className={inputClass} value={advancedForm.name} onChange={(event) => setAdvancedForm((current) => ({ ...current, name: event.target.value }))} />
+          </Field>
+          <Field label="Scheme type">
+            <select className={inputClass} value={advancedForm.schemeType} onChange={(event) => setAdvancedForm((current) => ({ ...current, schemeType: event.target.value }))}>
+              {["BONUS", "COMMISSION", "KPI", "PERFORMANCE"].map((value) => <option key={value} value={value}>{prettify(value)}</option>)}
+            </select>
+          </Field>
+          <Field label="Component code">
+            <input className={inputClass} value={advancedForm.componentCode} onChange={(event) => setAdvancedForm((current) => ({ ...current, componentCode: event.target.value }))} list="payroll-component-codes" />
+          </Field>
+          <Field label="Calculation method">
+            <select className={inputClass} value={advancedForm.calculationMethod} onChange={(event) => setAdvancedForm((current) => ({ ...current, calculationMethod: event.target.value }))}>
+              {["FIXED_AMOUNT", "PERCENTAGE_OF_BASE", "PERCENTAGE_OF_SALES", "FORMULA"].map((value) => <option key={value} value={value}>{prettify(value)}</option>)}
+            </select>
+          </Field>
+          <Field label="Default amount">
+            <input className={inputClass} value={advancedForm.defaultAmount} onChange={(event) => setAdvancedForm((current) => ({ ...current, defaultAmount: event.target.value }))} placeholder="Optional" />
+          </Field>
+          <Field label="Default rate">
+            <input className={inputClass} value={advancedForm.defaultRate} onChange={(event) => setAdvancedForm((current) => ({ ...current, defaultRate: event.target.value }))} placeholder="Optional" />
+          </Field>
+          <Field label="Effective from">
+            <input className={inputClass} type="date" value={advancedForm.effectiveFrom} onChange={(event) => setAdvancedForm((current) => ({ ...current, effectiveFrom: event.target.value }))} />
+          </Field>
+          <Field label="Effective to">
+            <input className={inputClass} type="date" value={advancedForm.effectiveTo} onChange={(event) => setAdvancedForm((current) => ({ ...current, effectiveTo: event.target.value }))} />
+          </Field>
+        </div>
+      )
+    }
+
+    if (createMode === "leaveRule") {
+      return (
+        <div className="grid gap-3 md:grid-cols-2">
+          <Field label="Code">
+            <input className={inputClass} value={advancedForm.code} onChange={(event) => setAdvancedForm((current) => ({ ...current, code: event.target.value }))} />
+          </Field>
+          <Field label="Name">
+            <input className={inputClass} value={advancedForm.name} onChange={(event) => setAdvancedForm((current) => ({ ...current, name: event.target.value }))} />
+          </Field>
+          <Field label="Leave type code">
+            <input className={inputClass} value={advancedForm.leaveTypeCode} onChange={(event) => setAdvancedForm((current) => ({ ...current, leaveTypeCode: event.target.value }))} placeholder="SICK, MATERNITY, ANNUAL" />
+          </Field>
+          <Field label="Paid percentage">
+            <input className={inputClass} value={advancedForm.paidPercentage} onChange={(event) => setAdvancedForm((current) => ({ ...current, paidPercentage: event.target.value }))} />
+          </Field>
+          <Field label="Paid days cap">
+            <input className={inputClass} value={advancedForm.paidDaysCap} onChange={(event) => setAdvancedForm((current) => ({ ...current, paidDaysCap: event.target.value }))} placeholder="Optional" />
+          </Field>
+          <Field label="Half pay after days">
+            <input className={inputClass} value={advancedForm.halfPayAfterDays} onChange={(event) => setAdvancedForm((current) => ({ ...current, halfPayAfterDays: event.target.value }))} placeholder="Optional" />
+          </Field>
+          <Field label="Unpaid after days">
+            <input className={inputClass} value={advancedForm.unpaidAfterDays} onChange={(event) => setAdvancedForm((current) => ({ ...current, unpaidAfterDays: event.target.value }))} placeholder="Optional" />
+          </Field>
+          <Field label="Carry forward cap">
+            <input className={inputClass} value={advancedForm.carryForwardCapDays} onChange={(event) => setAdvancedForm((current) => ({ ...current, carryForwardCapDays: event.target.value }))} placeholder="Optional" />
+          </Field>
+          <Field label="Effective from">
+            <input className={inputClass} type="date" value={advancedForm.effectiveFrom} onChange={(event) => setAdvancedForm((current) => ({ ...current, effectiveFrom: event.target.value }))} />
+          </Field>
+          <Field label="Effective to">
+            <input className={inputClass} type="date" value={advancedForm.effectiveTo} onChange={(event) => setAdvancedForm((current) => ({ ...current, effectiveTo: event.target.value }))} />
+          </Field>
+        </div>
+      )
+    }
+
     return (
       <div className="grid gap-3 md:grid-cols-2">
         <Field label="Component code">
@@ -2990,6 +4495,42 @@ export function PayrollOperationsView() {
         </Field>
         <Field label="Credit account code">
           <input className={inputClass} value={mappingForm.creditAccountCode} onChange={(event) => setMappingForm((current) => ({ ...current, creditAccountCode: event.target.value }))} />
+        </Field>
+        <Field label="Debit by project">
+          <textarea className={textareaClass} value={mappingForm.projectDebitMap} onChange={(event) => setMappingForm((current) => ({ ...current, projectDebitMap: event.target.value }))} placeholder="PROJECT_A=5010" />
+        </Field>
+        <Field label="Credit by project">
+          <textarea className={textareaClass} value={mappingForm.projectCreditMap} onChange={(event) => setMappingForm((current) => ({ ...current, projectCreditMap: event.target.value }))} placeholder="PROJECT_A=2110" />
+        </Field>
+        <Field label="Debit by cost center">
+          <textarea className={textareaClass} value={mappingForm.costCenterDebitMap} onChange={(event) => setMappingForm((current) => ({ ...current, costCenterDebitMap: event.target.value }))} placeholder="CC-100=5020" />
+        </Field>
+        <Field label="Credit by cost center">
+          <textarea className={textareaClass} value={mappingForm.costCenterCreditMap} onChange={(event) => setMappingForm((current) => ({ ...current, costCenterCreditMap: event.target.value }))} placeholder="CC-100=2120" />
+        </Field>
+        <Field label="Debit by department">
+          <textarea className={textareaClass} value={mappingForm.departmentDebitMap} onChange={(event) => setMappingForm((current) => ({ ...current, departmentDebitMap: event.target.value }))} placeholder="10=5030" />
+        </Field>
+        <Field label="Credit by department">
+          <textarea className={textareaClass} value={mappingForm.departmentCreditMap} onChange={(event) => setMappingForm((current) => ({ ...current, departmentCreditMap: event.target.value }))} placeholder="10=2130" />
+        </Field>
+        <Field label="Debit by branch">
+          <textarea className={textareaClass} value={mappingForm.branchDebitMap} onChange={(event) => setMappingForm((current) => ({ ...current, branchDebitMap: event.target.value }))} placeholder="3=5040" />
+        </Field>
+        <Field label="Credit by branch">
+          <textarea className={textareaClass} value={mappingForm.branchCreditMap} onChange={(event) => setMappingForm((current) => ({ ...current, branchCreditMap: event.target.value }))} placeholder="3=2140" />
+        </Field>
+        <Field label="Debit by category">
+          <textarea className={textareaClass} value={mappingForm.categoryDebitMap} onChange={(event) => setMappingForm((current) => ({ ...current, categoryDebitMap: event.target.value }))} placeholder="MANAGEMENT=5050" />
+        </Field>
+        <Field label="Credit by category">
+          <textarea className={textareaClass} value={mappingForm.categoryCreditMap} onChange={(event) => setMappingForm((current) => ({ ...current, categoryCreditMap: event.target.value }))} placeholder="MANAGEMENT=2150" />
+        </Field>
+        <Field label="Debit by payroll group">
+          <textarea className={textareaClass} value={mappingForm.groupDebitMap} onChange={(event) => setMappingForm((current) => ({ ...current, groupDebitMap: event.target.value }))} placeholder="MGMT=5060" />
+        </Field>
+        <Field label="Credit by payroll group">
+          <textarea className={textareaClass} value={mappingForm.groupCreditMap} onChange={(event) => setMappingForm((current) => ({ ...current, groupCreditMap: event.target.value }))} placeholder="MGMT=2160" />
         </Field>
         <Field label="Dimensions JSON" className="md:col-span-2">
           <textarea className={textareaClass} value={mappingForm.dimensionsJson} onChange={(event) => setMappingForm((current) => ({ ...current, dimensionsJson: event.target.value }))} placeholder='{"department":"HQ"}' />
@@ -3298,6 +4839,89 @@ export function PayrollOperationsView() {
               </div>
             </div>
           </div>
+          <div className="overflow-hidden rounded-xl border border-border bg-card p-4">
+            <div className="grid gap-3 lg:grid-cols-[1fr_1fr_0.75fr_auto_auto] lg:items-end">
+              <Field label="Report">
+                <select
+                  className={inputClass}
+                  value={advancedForm.reportCode}
+                  onChange={(event) => setAdvancedForm((current) => ({ ...current, reportCode: event.target.value }))}
+                >
+                  <option value="">Select report</option>
+                  {(reportCatalog.length > 0 ? reportCatalog : PAYROLL_REPORT_CODES.map((code) => ({ code }))).map((row, index) => {
+                    const code = readString(row, ["code"], "")
+                    if (!code) return null
+                    return (
+                      <option key={`payroll-report-${code}-${index}`} value={code}>
+                        {readString(row, ["name"], prettify(code))}
+                      </option>
+                    )
+                  })}
+                </select>
+              </Field>
+              <Field label="Run">
+                <select className={inputClass} value={advancedForm.reportRunId} onChange={(event) => setAdvancedForm((current) => ({ ...current, reportRunId: event.target.value }))}>
+                  <option value="">Any recent run</option>
+                  {recentRuns.map((row) => (
+                    <option key={`report-run-${rowId(row)}`} value={rowId(row)}>
+                      {readPeriodLabel(row) !== "-" ? readPeriodLabel(row) : `Run #${rowId(row)}`}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Year">
+                <input className={inputClass} value={advancedForm.reportYear} onChange={(event) => setAdvancedForm((current) => ({ ...current, reportYear: event.target.value }))} />
+              </Field>
+              <button type="button" className={secondaryButtonClass} disabled={reportBusy === "catalog"} onClick={() => void onRunCatalog()}>
+                {reportBusy === "catalog" ? <Loader2Icon className="h-3.5 w-3.5 animate-spin" /> : null}
+                Catalog
+              </button>
+              <button type="button" className={primaryButtonClass} disabled={reportBusy === "catalog-report" || !advancedForm.reportCode} onClick={() => void onRunCatalogReport()}>
+                {reportBusy === "catalog-report" ? <Loader2Icon className="h-3.5 w-3.5 animate-spin" /> : null}
+                Load
+              </button>
+            </div>
+          </div>
+          <div className="grid gap-4 xl:grid-cols-2">
+            <div className="rounded-xl border border-border bg-card p-4">
+              <div className="mb-3">
+                <h2 className="text-sm font-semibold">Statutory and cost reports</h2>
+                <p className="mt-1 text-xs text-muted-foreground">Payroll register, tax, pension, WCF, cost, and headcount views.</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {PAYROLL_REPORT_SHORTCUTS.map((item) => (
+                  <button
+                    key={item.code}
+                    type="button"
+                    className={secondaryButtonClass}
+                    disabled={reportBusy === "catalog-report"}
+                    onClick={() => void onRunCatalogReport(item.code)}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="rounded-xl border border-border bg-card p-4">
+              <div className="mb-3">
+                <h2 className="text-sm font-semibold">Employee drilldowns</h2>
+                <p className="mt-1 text-xs text-muted-foreground">Focused views for loans, advances, shortfalls, YTD, and payroll history.</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {PAYROLL_DRILLDOWN_SHORTCUTS.map((item) => (
+                  <button
+                    key={item.code}
+                    type="button"
+                    className={secondaryButtonClass}
+                    disabled={reportBusy === "catalog-report"}
+                    onClick={() => void onRunCatalogReport(item.code)}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
           {reportResult ? (
             <div className="rounded-xl border border-border bg-card p-4">
               <h2 className="text-sm font-semibold">
@@ -3305,13 +4929,23 @@ export function PayrollOperationsView() {
                   ? "Variance summary"
                   : reportKind === "settlement"
                     ? "Settlement summary"
-                    : "Reconciliation summary"}
+                    : reportKind === "validation"
+                      ? "Validation summary"
+                      : reportKind === "catalog"
+                        ? "Report catalog"
+                        : reportKind === "report"
+                          ? "Report result"
+                          : "Reconciliation summary"}
               </h2>
               {(() => {
                 const summary = groupReportIssues(reportResult)
                 const net = readNumber(reportResult, ["net", "net_amount", "netAmount", "net_pay", "netPay"])
                 const gross = readNumber(reportResult, ["gross", "gross_amount", "grossAmount"])
                 const status = readString(reportResult, ["status"], "")
+                const reportRows =
+                  asRecordArray(reportResult.rows) ||
+                  asRecordArray(reportResult.data) ||
+                  asRecordArray(reportResult.reports)
                 return (
                   <div className="mt-4 space-y-4">
                     <div className="grid gap-3 sm:grid-cols-3">
@@ -3364,6 +4998,43 @@ export function PayrollOperationsView() {
                     ) : summary.issueCount === 0 ? (
                       <p className="text-sm text-muted-foreground">No issues returned.</p>
                     ) : null}
+                    {reportRows && reportRows.length > 0 ? (
+                      <div className="space-y-2">
+                        <div className="flex justify-end">
+                          <button
+                            type="button"
+                            className={secondaryButtonClass}
+                            onClick={() => downloadBlob(new Blob([reportRowsToCsv(reportRows)], { type: "text/csv;charset=utf-8" }), `payroll-${advancedForm.reportCode || reportKind || "report"}.csv`)}
+                          >
+                            Export CSV
+                          </button>
+                        </div>
+                        <div className="overflow-x-auto rounded-lg border border-border">
+                          <table className="min-w-full divide-y divide-border text-xs">
+                            <thead className="bg-muted/40 text-muted-foreground">
+                              <tr>
+                                {Object.keys(reportRows[0]).slice(0, 8).map((key) => (
+                                  <th key={key} className="px-3 py-2 text-left font-semibold">
+                                    {prettify(key)}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-border">
+                              {reportRows.slice(0, 50).map((row, index) => (
+                                <tr key={`report-row-${index}`}>
+                                  {Object.keys(reportRows[0]).slice(0, 8).map((key) => (
+                                    <td key={`${key}-${index}`} className="px-3 py-2 text-muted-foreground">
+                                      {formatAdminValue(row[key])}
+                                    </td>
+                                  ))}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 )
               })()}
@@ -3392,7 +5063,7 @@ export function PayrollOperationsView() {
                 value={search}
                 onChange={setSearch}
               />
-              {["runs", "inputs", "profiles"].includes(tab) ? (
+              {["runs", "inputs", "sources", "profiles"].includes(tab) ? (
                 <select
                   className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm dark:border-border dark:bg-background"
                   value={periodFilter}
@@ -3410,7 +5081,7 @@ export function PayrollOperationsView() {
                   })}
                 </select>
               ) : null}
-              {["runs", "inputs", "profiles", "periods"].includes(tab) ? (
+              {["runs", "inputs", "sources", "overtimeApprovals", "profiles", "periods"].includes(tab) ? (
                 <input
                   className="h-10 w-28 rounded-md border border-slate-300 bg-white px-3 text-sm dark:border-border dark:bg-background"
                   value={statusFilter}
@@ -3428,6 +5099,8 @@ export function PayrollOperationsView() {
                         ? "run"
                         : tab === "inputs"
                           ? "input"
+                          : tab === "sources"
+                            ? "source"
                           : tab === "profiles"
                             ? "profile"
                             : tab === "periods"
@@ -3440,7 +5113,17 @@ export function PayrollOperationsView() {
                                     ? "structure"
                                     : configTab === "schemes"
                                       ? "scheme"
-                                      : "mapping",
+                                      : configTab === "mappings"
+                                        ? "mapping"
+                                        : configTab === "groups"
+                                          ? "group"
+                                          : configTab === "assignments"
+                                            ? "assignment"
+                                            : configTab === "overtime"
+                                              ? "overtime"
+                                              : configTab === "bonus"
+                                                ? "bonus"
+                                                : "leaveRule",
                     )
                   }
                 >
@@ -3458,6 +5141,26 @@ export function PayrollOperationsView() {
                 >
                   <PlusIcon className="h-3.5 w-3.5" />
                   Add rule
+                </button>
+              ) : null}
+              {tab === "inputs" && canMutatePayroll ? (
+                <button
+                  type="button"
+                  className={secondaryButtonClass}
+                  onClick={() => openCreate("adjustment")}
+                >
+                  <PlusIcon className="h-3.5 w-3.5" />
+                  Adjustment
+                </button>
+              ) : null}
+              {tab === "sources" && canMutatePayroll ? (
+                <button
+                  type="button"
+                  className={secondaryButtonClass}
+                  onClick={() => openCreate("sourceGenerate")}
+                >
+                  <PlusIcon className="h-3.5 w-3.5" />
+                  Generate
                 </button>
               ) : null}
               <button

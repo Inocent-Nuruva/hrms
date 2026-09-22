@@ -62,6 +62,7 @@ import {
   downloadMyLeaveRequestPdf,
   getMyLeaveRequest,
   getMyPayslip,
+  getMyPayrollSummary,
   submitMyLeaveRequest,
   uploadMyProfilePhoto,
   selectMyProfileAvatar,
@@ -126,6 +127,15 @@ const SELF_SERVICE_UNAVAILABLE_MESSAGE = "This section is not available for your
 
 function asRecord(value: unknown): AdminRecord | null {
   return typeof value === "object" && value !== null ? (value as AdminRecord) : null
+}
+
+function asRecordArray(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter(
+        (entry): entry is AdminRecord =>
+          typeof entry === "object" && entry !== null && !Array.isArray(entry)
+      )
+    : []
 }
 
 function readString(row: AdminRecord | null, keys: string[], fallback = "-") {
@@ -5063,6 +5073,7 @@ export function EmployeePayrollView() {
   const [payslipsLoading, setPayslipsLoading] = React.useState(false)
   const [payslipsError, setPayslipsError] = React.useState<string | null>(null)
   const [payslips, setPayslips] = React.useState<AdminRecord[]>([])
+  const [payrollSummaryDetails, setPayrollSummaryDetails] = React.useState<AdminRecord | null>(null)
   const [mounted, setMounted] = React.useState(false)
   const [detailOpen, setDetailOpen] = React.useState(false)
   const [detailLoading, setDetailLoading] = React.useState(false)
@@ -5072,16 +5083,29 @@ export function EmployeePayrollView() {
   const loadPayslips = React.useCallback(async () => {
     if (!token) {
       setPayslips([])
+      setPayrollSummaryDetails(null)
       return
     }
 
     setPayslipsLoading(true)
     setPayslipsError(null)
     try {
-      const rows = await listMyPayslips(token)
-      setPayslips(rows)
+      const [payslipResult, summaryResult] = await Promise.allSettled([
+        listMyPayslips(token),
+        getMyPayrollSummary(token),
+      ])
+      if (payslipResult.status === "fulfilled") {
+        setPayslips(payslipResult.value)
+      } else {
+        setPayslips([])
+        throw payslipResult.reason
+      }
+      setPayrollSummaryDetails(
+        summaryResult.status === "fulfilled" ? asRecord(summaryResult.value) : null
+      )
     } catch (errorObject) {
       setPayslips([])
+      setPayrollSummaryDetails(null)
       setPayslipsError(
         errorObject instanceof Error ? errorObject.message : "Could not load your payslips."
       )
@@ -5153,6 +5177,23 @@ export function EmployeePayrollView() {
   const selectedCurrency = readPayslipCurrency(selectedPayslip)
   const earningsRows = readPayslipLineItems(selectedPayslip, ["earnings", "earning_lines", "earningLines"])
   const deductionRows = readPayslipLineItems(selectedPayslip, ["deductions", "deduction_lines", "deductionLines"])
+  const ytdSummary = asRecord(payrollSummaryDetails?.ytd)
+  const taxSummaryRows = asRecordArray(payrollSummaryDetails?.tax_summary)
+  const pensionSummaryRows = asRecordArray(payrollSummaryDetails?.pension_summary)
+  const salaryHistoryRows = asRecordArray(payrollSummaryDetails?.salary_history)
+  const payrollDocuments = asRecordArray(payrollSummaryDetails?.payroll_documents)
+  const bankDetails = asRecord(payrollSummaryDetails?.bank_details)
+  const summaryCurrency =
+    readString(salaryHistoryRows[0] ?? null, ["currency"], "") ||
+    readPayslipCurrency(payslips[0] ?? null)
+  const taxTotal = taxSummaryRows.reduce(
+    (sum, row) => sum + (readNumberish(row.amount) ?? 0),
+    0,
+  )
+  const pensionTotal = pensionSummaryRows.reduce(
+    (sum, row) => sum + (readNumberish(row.amount) ?? 0),
+    0,
+  )
 
   const listLoading = loading || payslipsLoading
 
@@ -5182,6 +5223,83 @@ export function EmployeePayrollView() {
           { label: "Latest net", value: payslipSummary.latestNet },
         ]}
       />
+      {payrollSummaryDetails ? (
+        <div className="grid gap-3 xl:grid-cols-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">YTD pay</CardTitle>
+              <CardDescription>
+                {String(readNumber(payrollSummaryDetails, ["year"]) ?? new Date().getFullYear())}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-2 text-sm">
+              <AssignmentField label="Gross" value={formatPayslipMoney(ytdSummary?.gross_pay, summaryCurrency)} />
+              <AssignmentField label="Taxable" value={formatPayslipMoney(ytdSummary?.taxable_pay, summaryCurrency)} />
+              <AssignmentField label="Deductions" value={formatPayslipMoney(ytdSummary?.deductions, summaryCurrency)} />
+              <AssignmentField label="Net" value={formatPayslipMoney(ytdSummary?.net_pay, summaryCurrency)} />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Tax and pension</CardTitle>
+              <CardDescription>Current year totals</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-2 text-sm">
+              <AssignmentField label="Tax" value={formatPayslipMoney(taxTotal, summaryCurrency)} />
+              <AssignmentField label="Pension" value={formatPayslipMoney(pensionTotal, summaryCurrency)} />
+              <AssignmentField label="Tax rows" value={String(taxSummaryRows.length)} />
+              <AssignmentField label="Pension rows" value={String(pensionSummaryRows.length)} />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Bank payroll</CardTitle>
+              <CardDescription>Payment destination</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-2 text-sm">
+              <AssignmentField label="Bank" value={readString(bankDetails, ["bank_name"], "—")} />
+              <AssignmentField label="Branch" value={readString(bankDetails, ["bank_branch_code"], "—")} />
+              <AssignmentField label="Account" value={readString(bankDetails, ["account_number_masked"], "—")} />
+              <AssignmentField label="Status" value={readString(bankDetails, ["verification_status"], "—")} />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Documents</CardTitle>
+              <CardDescription>Published payroll files</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-2 text-sm">
+              <AssignmentField label="Payslips" value={String(payrollDocuments.length)} />
+              <AssignmentField label="Salary records" value={String(salaryHistoryRows.length)} />
+              <AssignmentField
+                label="Latest salary"
+                value={formatPayslipMoney(salaryHistoryRows[0]?.base_salary, readString(salaryHistoryRows[0] ?? null, ["currency"], summaryCurrency))}
+              />
+              <AssignmentField label="Effective" value={formatDate(salaryHistoryRows[0]?.effective_from)} />
+            </CardContent>
+          </Card>
+        </div>
+      ) : null}
+      {salaryHistoryRows.length > 0 ? (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Salary history</CardTitle>
+            <CardDescription>Compensation changes used by payroll.</CardDescription>
+          </CardHeader>
+          <CardContent className="divide-y divide-border/70 p-0">
+            {salaryHistoryRows.slice(0, 5).map((row, index) => (
+              <div key={`salary-history-${readString(row, ["id"], String(index))}`} className="grid gap-2 px-4 py-3 text-sm md:grid-cols-4">
+                <span className="font-medium text-foreground">
+                  {formatPayslipMoney(row.base_salary, readString(row, ["currency"], summaryCurrency))}
+                </span>
+                <span className="text-muted-foreground">{readString(row, ["pay_frequency"], "—")}</span>
+                <span className="text-muted-foreground">{formatDate(row.effective_from)}</span>
+                <span className="text-muted-foreground">{readString(row, ["status"], "—")}</span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
       {payslipsError ? (
         <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-300">
           {payslipsError}
