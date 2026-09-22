@@ -90,6 +90,8 @@ import {
   reopenPerformanceReview,
   reviewPerformanceImprovementMilestone,
   syncPerformanceSystemKpis,
+  deletePerformanceKpi,
+  updatePerformanceKpi,
   type AdminRecord,
 } from "@/lib/admin-api"
 import { canAccessDashboardRoute, canPerformPermission } from "@/lib/dashboard-permissions"
@@ -114,6 +116,7 @@ type CreateMode =
   | "year"
   | "period"
   | "kpi"
+  | "kpi-edit"
   | "kpi-version"
   | "template"
   | "rule"
@@ -308,6 +311,26 @@ function seedKpiVersionForm(row: AdminRecord) {
       ["measurementDirection", "measurement_direction"],
       "HIGHER_IS_BETTER",
     ),
+    scoring_formula: readString(current, ["scoringFormula", "scoring_formula"], "PERCENT_TO_TARGET"),
+    data_source_type: readString(current, ["dataSourceType", "data_source_type"], "MANUAL_EMPLOYEE"),
+    default_target_value: readString(current, ["defaultTargetValue", "default_target_value"]),
+    frequency: readString(current, ["frequency"], "MONTHLY"),
+    approval_authority: readString(current, ["approvalAuthority", "approval_authority"]),
+    manual_entry_allowed: readString(current, ["manualEntryAllowed", "manual_entry_allowed"], "true"),
+    evidence_required: readString(current, ["evidenceRequired", "evidence_required"], "false"),
+  }
+}
+
+function seedKpiDefinitionForm(row: AdminRecord) {
+  const current = currentKpiVersion(row)
+  return {
+    kpi_id: rowId(row),
+    code: readString(row, ["code"]),
+    name: readString(row, ["name"]),
+    category: readString(row, ["category"]),
+    description: readString(row, ["description"]) || readString(current, ["description"]),
+    measurement_unit: readString(current, ["measurementUnit", "measurement_unit"], "%"),
+    measurement_direction: readString(current, ["measurementDirection", "measurement_direction"], "HIGHER_IS_BETTER"),
     scoring_formula: readString(current, ["scoringFormula", "scoring_formula"], "PERCENT_TO_TARGET"),
     data_source_type: readString(current, ["dataSourceType", "data_source_type"], "MANUAL_EMPLOYEE"),
     default_target_value: readString(current, ["defaultTargetValue", "default_target_value"]),
@@ -750,7 +773,7 @@ export function PerformanceManagementView({
           start_date: form.start_date,
           end_date: form.end_date,
         })
-      } else if (createMode === "kpi" || createMode === "kpi-version") {
+      } else if (createMode === "kpi" || createMode === "kpi-edit" || createMode === "kpi-version") {
         if (!form.code || !form.name || !form.description || !form.measurement_unit) {
           throw new Error("Code, name, description, and measurement unit are required.")
         }
@@ -769,7 +792,10 @@ export function PerformanceManagementView({
           manual_entry_allowed: form.manual_entry_allowed === "true",
           evidence_required: form.evidence_required === "true",
         }
-        if (createMode === "kpi-version") {
+        if (createMode === "kpi-edit") {
+          if (!form.kpi_id) throw new Error("KPI is missing.")
+          await updatePerformanceKpi(token, form.kpi_id, kpiPayload)
+        } else if (createMode === "kpi-version") {
           if (!form.kpi_id) throw new Error("Select a KPI to version.")
           const created = await createPerformanceKpiVersion(token, form.kpi_id, kpiPayload)
           const createdRecord = asRecord(created) ?? asRecord(asRecord(created)?.data)
@@ -785,7 +811,9 @@ export function PerformanceManagementView({
           await load()
           return
         }
-        await createPerformanceKpi(token, kpiPayload)
+        if (createMode === "kpi") {
+          await createPerformanceKpi(token, kpiPayload)
+        }
       } else if (createMode === "template") {
         if (!form.code || !form.name || !form.kpi_definition_version_id || !form.weight) {
           throw new Error("Code, name, KPI version, and weight are required.")
@@ -1319,16 +1347,40 @@ export function PerformanceManagementView({
           key: "actions",
           label: "Actions",
           render: (row) => (
-            <button
-              type="button"
-              className={actionButtonClass}
-              onClick={(event) => {
-                event.stopPropagation()
-                openCreate("kpi-version", seedKpiVersionForm(row))
-              }}
-            >
-              New version
-            </button>
+            <div className="flex flex-wrap gap-1">
+              <button
+                type="button"
+                className={actionButtonClass}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  openCreate("kpi-edit", seedKpiDefinitionForm(row))
+                }}
+              >
+                Edit
+              </button>
+              <button
+                type="button"
+                className={actionButtonClass}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  openCreate("kpi-version", seedKpiVersionForm(row))
+                }}
+              >
+                New version
+              </button>
+              <button
+                type="button"
+                className={actionButtonClass}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  const id = rowId(row)
+                  if (!id || !window.confirm(`Archive KPI ${optionLabel(row)}?`)) return
+                  void runAction(`delete-kpi-${id}`, (token) => deletePerformanceKpi(token, id), "KPI archived.")
+                }}
+              >
+                Delete
+              </button>
+            </div>
           ),
         },
       ]
@@ -1561,6 +1613,8 @@ export function PerformanceManagementView({
         ? "New performance period"
       : createMode === "kpi"
         ? "New KPI"
+        : createMode === "kpi-edit"
+          ? "Edit KPI"
         : createMode === "kpi-version"
           ? "New KPI version"
         : createMode === "template"
@@ -1878,7 +1932,7 @@ export function PerformanceManagementView({
                 <Field label="End date"><input type="date" className={inputClass} value={form.end_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, end_date: event.target.value }))} /></Field>
               </>
             ) : null}
-            {createMode === "kpi" || createMode === "kpi-version" ? (
+            {createMode === "kpi" || createMode === "kpi-edit" || createMode === "kpi-version" ? (
               <>
                 {createMode === "kpi-version" ? (
                   <>

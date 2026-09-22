@@ -38,6 +38,7 @@ import {
 } from "@/components/dashboard/talent-visuals";
 import {
   createMyEmployeeKpi,
+  deleteMyEmployeeKpi,
   listManagerEmployeeKpis,
   listMyEmployeeKpis,
   listMyPerformanceAssignments,
@@ -330,6 +331,25 @@ export function EmployeeKpiWorkspace({ mode }: { mode: WorkspaceMode }) {
     }
   }
 
+  async function removeKpi(row: AdminRecord) {
+    const id = rowId(row);
+    if (!id || !window.confirm(`Delete KPI ${readString(row, ["title"], `#${id}`)}?`)) return;
+    const accessToken = token();
+    if (!accessToken) return;
+    setSaving(true);
+    try {
+      await deleteMyEmployeeKpi(accessToken, id);
+      toast.success("KPI deleted.");
+      await load();
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : "Could not delete KPI.";
+      setError(message);
+      toast.error(message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   const columns = React.useMemo<Column<AdminRecord>[]>(() => {
     const base: Column<AdminRecord>[] = [
       ...(mode === "manager"
@@ -432,16 +452,31 @@ export function EmployeeKpiWorkspace({ mode }: { mode: WorkspaceMode }) {
           }
           if (["DRAFT", "RETURNED"].includes(status)) {
             return (
-              <button
-                type="button"
-                className={actionButtonClass}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  showEdit(row);
-                }}
-              >
-                Edit
-              </button>
+              <div className="flex flex-wrap gap-1">
+                <button
+                  type="button"
+                  className={actionButtonClass}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    showEdit(row);
+                  }}
+                >
+                  Edit
+                </button>
+                {mode === "self" ? (
+                  <button
+                    type="button"
+                    className={actionButtonClass}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void removeKpi(row);
+                    }}
+                    disabled={saving}
+                  >
+                    Delete
+                  </button>
+                ) : null}
+              </div>
             );
           }
           if (

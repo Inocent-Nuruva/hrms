@@ -15467,6 +15467,25 @@ export async function createPerformanceKpi(token: string, data: AdminRecord) {
   });
 }
 
+export async function updatePerformanceKpi(
+  token: string,
+  kpiId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/performance/kpis/${kpiId}`, {
+    method: "PATCH",
+    token,
+    body: data,
+  });
+}
+
+export async function deletePerformanceKpi(token: string, kpiId: string | number) {
+  return adminRequest<unknown>(`/api/performance/kpis/${kpiId}`, {
+    method: "DELETE",
+    token,
+  });
+}
+
 export async function createPerformanceKpiVersion(
   token: string,
   kpiId: string | number,
@@ -15884,6 +15903,13 @@ export async function updateMyEmployeeKpi(
     method: "PATCH",
     token,
     body: data,
+  });
+}
+
+export async function deleteMyEmployeeKpi(token: string, kpiId: string | number) {
+  return adminRequest<unknown>(`/api/performance/me/kpis/${kpiId}`, {
+    method: "DELETE",
+    token,
   });
 }
 
