@@ -71,6 +71,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 
 export type PerformanceSelfTab =
   | "overview"
+  | "kpis"
   | "assignments"
   | "assign-tasks"
   | "reviews"
@@ -79,6 +80,7 @@ export type PerformanceSelfTab =
   | "achievements"
   | "improvement"
   | "team"
+  | "manager-kpis"
 
 type ActionMode = "self-review" | "appeal" | "achievement" | "manager-review" | "validate" | "feedback-360" | "development-goal"
 

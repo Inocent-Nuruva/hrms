@@ -15,6 +15,9 @@ const nextConfig: NextConfig = {
   experimental: {
     webpackMemoryOptimizations: true,
     preloadEntriesOnStart: false,
+    // Turbopack's native compiler runs alongside Node. Keep its target below
+    // the Node heap cap so a long dev session remains usable on typical PCs.
+    turbopackMemoryLimit: 768 * 1024 * 1024,
   },
   turbopack: {
     root: path.resolve(process.cwd()),
