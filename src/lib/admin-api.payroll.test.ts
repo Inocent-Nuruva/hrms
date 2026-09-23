@@ -10,6 +10,7 @@ import {
   generatePayrollPeriod,
   getPayrollIntegrationCatalog,
   getPayrollNotificationCatalog,
+  getPayrollRunReconciliation,
   getPayrollReadiness,
   getMyPayslip,
   importPayrollBankStatement,
@@ -409,6 +410,33 @@ describe("payroll admin API helpers", () => {
     expect(notifications).toEqual([
       expect.objectContaining({ code: "payroll.run.created" }),
     ]);
+  });
+
+  it("loads the run reconciliation report with payroll run scope", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      jsonResponse({
+        data: {
+          code: "payroll-run-reconciliation",
+          summary: { issue_count: 0, shortfall_count: 1 },
+          rows: [{ instruction_id: 9, reserved_amount: "100.00" }],
+          shortfalls: [{ id: 3, deferred_amount: "50.00" }],
+        },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await getPayrollRunReconciliation("token", 41);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8888/api/payroll/reports/payroll-run-reconciliation?payroll_run_id=41",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(result).toEqual(
+      expect.objectContaining({
+        code: "payroll-run-reconciliation",
+        rows: [expect.objectContaining({ instruction_id: 9 })],
+      }),
+    );
   });
 
   it("lists, fetches, and downloads my payslips", async () => {

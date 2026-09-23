@@ -15701,6 +15701,15 @@ export async function getPayrollReport(
   return normalizeSingle(payload) ?? asRecord(payload);
 }
 
+export async function getPayrollRunReconciliation(
+  token: string,
+  runId: string | number,
+) {
+  return getPayrollReport(token, "payroll-run-reconciliation", {
+    payroll_run_id: Number(runId),
+  });
+}
+
 export async function getMyPayrollSummary(token: string, year?: number) {
   const suffix = year ? `?year=${encodeURIComponent(String(year))}` : "";
   return adminRequest<unknown>(`/api/me/payslips/summary/current${suffix}`, {

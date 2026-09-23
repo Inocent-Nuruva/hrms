@@ -136,6 +136,49 @@ function statementArray(statement: AdminRecord | null, key: string) {
     : [];
 }
 
+function sumRecordAmounts(rows: AdminRecord[], keys: string[]) {
+  return rows.reduce((sum, row) => {
+    const value = readNumber(row, keys);
+    return sum + (value ?? 0);
+  }, 0);
+}
+
+function csvValue(value: unknown) {
+  const text =
+    value === null || value === undefined
+      ? ""
+      : typeof value === "string"
+        ? value
+        : JSON.stringify(value);
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+function rowsToCsv(rows: AdminRecord[]) {
+  if (rows.length === 0) return "";
+  const keys = Array.from(
+    rows.reduce((set, row) => {
+      Object.keys(row).forEach((key) => set.add(key));
+      return set;
+    }, new Set<string>()),
+  );
+  return [
+    keys.map(csvValue).join(","),
+    ...rows.map((row) => keys.map((key) => csvValue(row[key])).join(",")),
+  ].join("\n");
+}
+
+function downloadTextFile(content: string, filename: string, type: string) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 const financeReportTypes = [
   { value: "aging", label: "Aging" },
   { value: "exposure", label: "Outstanding exposure" },
@@ -1017,6 +1060,26 @@ export function FinanceOperationsView({
     accountStatement,
     "settlementQuotes",
   );
+  const installmentScheduledTotal = sumRecordAmounts(accountInstallments, [
+    "totalDue",
+    "total_due",
+  ]);
+  const installmentPaidTotal = sumRecordAmounts(accountInstallments, [
+    "paidAmount",
+    "paid_amount",
+  ]);
+  const ledgerCreditTotal = sumRecordAmounts(
+    accountLedger.filter(
+      (entry) => readString(entry, ["direction"]).toUpperCase() === "CREDIT",
+    ),
+    ["totalAmount", "total_amount"],
+  );
+  const ledgerDebitTotal = sumRecordAmounts(
+    accountLedger.filter(
+      (entry) => readString(entry, ["direction"]).toUpperCase() === "DEBIT",
+    ),
+    ["totalAmount", "total_amount"],
+  );
   const nextInstallment =
     accountInstallments.find((installment) =>
       ["SCHEDULED", "PARTIALLY_PAID", "OVERDUE"].includes(
@@ -1026,6 +1089,41 @@ export function FinanceOperationsView({
   const currentReportRows = reportRows(reportData);
   const reportTotals =
     asRecord(reportData?.totals) ?? asRecord(reportData?.buckets);
+
+  function exportAccountStatement() {
+    if (!statementAccount || !accountStatement) return;
+    const accountNo = readString(
+      statementAccount,
+      ["accountNo", "account_no"],
+      rowId(statementAccount) || "account",
+    );
+    const rows = [
+      ...accountInstallments.map((row) => ({
+        section: "installments",
+        ...row,
+      })),
+      ...accountLedger.map((row) => ({ section: "ledger", ...row })),
+      ...accountDisbursements.map((row) => ({
+        section: "disbursements",
+        ...row,
+      })),
+      ...accountRepayments.map((row) => ({ section: "repayments", ...row })),
+      ...accountDeferments.map((row) => ({ section: "deferments", ...row })),
+      ...accountReschedules.map((row) => ({
+        section: "reschedules",
+        ...row,
+      })),
+      ...accountSettlementQuotes.map((row) => ({
+        section: "settlement_quotes",
+        ...row,
+      })),
+    ];
+    downloadTextFile(
+      rowsToCsv(rows),
+      `finance-statement-${accountNo}.csv`,
+      "text/csv;charset=utf-8",
+    );
+  }
 
   if (!canAccess) return null;
 
@@ -1854,8 +1952,34 @@ export function FinanceOperationsView({
                 }
               />
             </div>
+            <div className="grid gap-3 md:grid-cols-4">
+              <MetricTile
+                label="Scheduled"
+                value={installmentScheduledTotal.toFixed(2)}
+              />
+              <MetricTile
+                label="Paid schedule"
+                value={installmentPaidTotal.toFixed(2)}
+              />
+              <MetricTile
+                label="Ledger debits"
+                value={ledgerDebitTotal.toFixed(2)}
+              />
+              <MetricTile
+                label="Ledger credits"
+                value={ledgerCreditTotal.toFixed(2)}
+              />
+            </div>
 
             <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className={secondaryButtonClass}
+                disabled={!accountStatement}
+                onClick={exportAccountStatement}
+              >
+                Export statement
+              </button>
               <button
                 type="button"
                 className={secondaryButtonClass}

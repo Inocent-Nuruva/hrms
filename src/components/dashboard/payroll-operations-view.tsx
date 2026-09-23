@@ -196,6 +196,7 @@ const PAYROLL_REPORT_CODES = [
   "overtime",
   "loan",
   "advance",
+  "payroll-run-reconciliation",
   "employer-contributions",
   "tax",
   "pension",
@@ -219,6 +220,7 @@ const PAYROLL_REPORT_SHORTCUTS = [
 ] as const;
 
 const PAYROLL_DRILLDOWN_SHORTCUTS = [
+  { code: "payroll-run-reconciliation", label: "Run reconciliation" },
   { code: "loan", label: "Loans" },
   { code: "advance", label: "Advances" },
   { code: "deduction-shortfalls", label: "Shortfalls" },
@@ -7956,7 +7958,7 @@ export function PayrollOperationsView() {
             </div>
           </div>
           <div className="overflow-hidden rounded-xl border border-border bg-card p-4">
-            <div className="grid gap-3 lg:grid-cols-[1fr_1fr_0.75fr_auto_auto] lg:items-end">
+            <div className="grid gap-3 lg:grid-cols-[1fr_1fr_0.75fr_auto_auto_auto] lg:items-end">
               <Field label="Report">
                 <select
                   className={inputClass}
@@ -8042,6 +8044,22 @@ export function PayrollOperationsView() {
                   <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
                 ) : null}
                 Load
+              </button>
+              <button
+                type="button"
+                className={secondaryButtonClass}
+                disabled={
+                  reportBusy === "catalog-report" || !advancedForm.reportRunId
+                }
+                onClick={() =>
+                  void onRunCatalogReport("payroll-run-reconciliation")
+                }
+              >
+                {reportBusy === "catalog-report" &&
+                advancedForm.reportCode === "payroll-run-reconciliation" ? (
+                  <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                ) : null}
+                Reconcile run
               </button>
             </div>
           </div>
@@ -8412,6 +8430,210 @@ export function PayrollOperationsView() {
                             </div>
                           );
                         })}
+                      </div>
+                    ) : null}
+                    {readString(reportResult, ["code"]) ===
+                    "payroll-run-reconciliation" ? (
+                      <div className="grid gap-3 xl:grid-cols-2">
+                        <div className="rounded-lg border border-border bg-muted/20 p-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <h3 className="text-sm font-semibold">
+                              Deduction preview
+                            </h3>
+                            <Badge variant="outline">
+                              {asRecordArray(reportResult.rows).length}
+                            </Badge>
+                          </div>
+                          <div className="mt-3 max-h-72 overflow-auto rounded-md border border-border bg-background">
+                            <table className="w-full text-left text-xs">
+                              <thead className="sticky top-0 bg-muted text-muted-foreground">
+                                <tr>
+                                  <th className="px-3 py-2">Employee</th>
+                                  <th className="px-3 py-2">Component</th>
+                                  <th className="px-3 py-2">Requested</th>
+                                  <th className="px-3 py-2">Reserved</th>
+                                  <th className="px-3 py-2">Status</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-border">
+                                {asRecordArray(reportResult.rows).map(
+                                  (row, index) => (
+                                    <tr key={`deduction-preview-${index}`}>
+                                      <td className="px-3 py-2">
+                                        {readNumber(row, [
+                                          "employee_id",
+                                          "employeeId",
+                                        ]) ?? "-"}
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        {readString(row, [
+                                          "component_code",
+                                          "componentCode",
+                                        ])}
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        {readString(row, [
+                                          "requested_amount",
+                                          "requestedAmount",
+                                        ])}
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        {readString(row, [
+                                          "reserved_amount",
+                                          "reservedAmount",
+                                        ])}
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        <Badge
+                                          variant="outline"
+                                          className={statusTone(
+                                            readString(row, ["status"], ""),
+                                          )}
+                                        >
+                                          {prettify(
+                                            readString(row, ["status"], "-"),
+                                          )}
+                                        </Badge>
+                                      </td>
+                                    </tr>
+                                  ),
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                        <div className="rounded-lg border border-border bg-muted/20 p-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <h3 className="text-sm font-semibold">
+                              Shortfall drilldown
+                            </h3>
+                            <Badge variant="outline">
+                              {asRecordArray(reportResult.shortfalls).length}
+                            </Badge>
+                          </div>
+                          <div className="mt-3 space-y-2">
+                            {asRecordArray(reportResult.shortfalls).length ===
+                            0 ? (
+                              <p className="text-sm text-muted-foreground">
+                                No payroll deduction shortfalls returned.
+                              </p>
+                            ) : (
+                              asRecordArray(reportResult.shortfalls)
+                                .slice(0, 8)
+                                .map((row, index) => (
+                                  <div
+                                    key={`payroll-shortfall-${index}`}
+                                    className="rounded-md border border-border bg-background px-3 py-2"
+                                  >
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="text-sm font-medium">
+                                        Employee{" "}
+                                        {readNumber(row, [
+                                          "employee_id",
+                                          "employeeId",
+                                        ]) ?? "-"}
+                                      </span>
+                                      <Badge
+                                        variant="outline"
+                                        className={statusTone(
+                                          readString(row, ["status"], ""),
+                                        )}
+                                      >
+                                        {prettify(
+                                          readString(row, ["status"], "OPEN"),
+                                        )}
+                                      </Badge>
+                                    </div>
+                                    <p className="mt-1 text-xs text-muted-foreground">
+                                      {readString(row, [
+                                        "component_code",
+                                        "componentCode",
+                                      ])}{" "}
+                                      deferred{" "}
+                                      {readString(row, [
+                                        "deferred_amount",
+                                        "deferredAmount",
+                                      ])}{" "}
+                                      from{" "}
+                                      {readString(row, [
+                                        "requested_amount",
+                                        "requestedAmount",
+                                      ])}
+                                    </p>
+                                  </div>
+                                ))
+                            )}
+                          </div>
+                        </div>
+                        <div className="rounded-lg border border-border bg-muted/20 p-3">
+                          <h3 className="text-sm font-semibold">
+                            Approval checklist
+                          </h3>
+                          <div className="mt-3 space-y-2">
+                            {asRecordArray(reportResult.approvals).length ===
+                            0 ? (
+                              <p className="text-sm text-muted-foreground">
+                                No approval records returned.
+                              </p>
+                            ) : (
+                              asRecordArray(reportResult.approvals).map(
+                                (row, index) => (
+                                  <div
+                                    key={`payroll-approval-${index}`}
+                                    className="flex items-center justify-between gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm"
+                                  >
+                                    <span>
+                                      {prettify(
+                                        readString(row, ["stage"], "stage"),
+                                      )}
+                                    </span>
+                                    <Badge variant="outline">
+                                      {prettify(
+                                        readString(row, ["decision", "status"]),
+                                      )}
+                                    </Badge>
+                                  </div>
+                                ),
+                              )
+                            )}
+                          </div>
+                        </div>
+                        <div className="rounded-lg border border-border bg-muted/20 p-3">
+                          <h3 className="text-sm font-semibold">
+                            Reconciliation outputs
+                          </h3>
+                          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                            {[
+                              ["Bank batch", reportResult.bank_batch],
+                              ["Journal batch", reportResult.journal_batch],
+                            ].map(([label, value]) => {
+                              const record = asRecord(value);
+                              return (
+                                <div
+                                  key={String(label)}
+                                  className="rounded-md border border-border bg-background px-3 py-2"
+                                >
+                                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                    {String(label)}
+                                  </p>
+                                  <p className="mt-1 text-sm font-medium">
+                                    {record
+                                      ? `#${rowId(record)} ${prettify(readString(record, ["status"], "generated"))}`
+                                      : "Not generated"}
+                                  </p>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <p className="mt-3 text-xs text-muted-foreground">
+                            {
+                              asRecordArray(
+                                reportResult.payment_reconciliations,
+                              ).length
+                            }{" "}
+                            payment reconciliation records returned.
+                          </p>
+                        </div>
                       </div>
                     ) : null}
                     {summary.groups.length > 0 ? (
