@@ -654,6 +654,21 @@ export const NOTIFICATIONS_ADMIN_ROUTE_PERMISSION: PermissionRequirement = {
 
 export const ATTENDANCE_REPORTS_ROUTE_PERMISSION: PermissionRequirement = {
   permissions: [
+    "reports.view",
+    "reports.export",
+    "reports.custom.create",
+    "reports.custom.manage",
+    "employee_reports.view",
+    "attendance_reports.view",
+    "leave_reports.view",
+    "field_reports.view",
+    "activity_reports.view",
+    "performance_reports.view",
+    "payroll_reports.view",
+    "loan_reports.view",
+    "analytics:reports",
+    "analytics:exports",
+    "analytics:dashboards:hr",
     "attendance_summaries:read",
     "attendance_processing:read",
     "attendance_reports:read",

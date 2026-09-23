@@ -315,7 +315,7 @@ const adminData: SidebarData = {
       icon: IUsers,
     },
     {
-      title: "Reports",
+      title: "Reports & Analytics",
       url: "/dashboard/operations/reports",
       matchUrls: [
         "/dashboard/operations/reports",
@@ -505,7 +505,7 @@ const adminSearchIndex = [
   { title: "Insights / Sales field", url: "/dashboard/insights/sales-field", section: "Insights", keywords: ["sales", "field", "analytics"] },
   { title: "Help", url: "/dashboard/help", section: "General", keywords: ["help", "support", "sso", "shortcuts"] },
   { title: "Payroll", url: "/dashboard/operations/payroll", section: "Operations", keywords: ["payroll", "runs", "payslips", "salary", "banking"] },
-  { title: "Reports", url: "/dashboard/operations/reports", section: "Operations", keywords: ["attendance", "download", "xlsx", "csv", "pdf", "scheduled", "smtp", "templates"] },
+  { title: "Reports & Analytics", url: "/dashboard/operations/reports", section: "Operations", keywords: ["reports", "analytics", "attendance", "download", "xlsx", "csv", "pdf", "scheduled", "smtp", "templates"] },
   { title: "Scheduled Reporting", url: "/dashboard/operations/scheduled-reporting", section: "Operations", keywords: ["scheduled reporting", "templates", "schedules", "executions", "smtp"] },
   { title: "Notifications", url: "/dashboard/operations/notifications", section: "Operations", keywords: ["notifications", "inbox", "alerts", "read", "seen", "archive"] },
   { title: "Access Control / Roles", url: "/dashboard/access-control/roles", section: "Access Control", keywords: ["role", "access", "authorization"] },

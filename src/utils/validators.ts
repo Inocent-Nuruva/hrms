@@ -1,5 +1,3 @@
-import { ONBOARDING_STEPS } from "./constants";
-
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function isValidEmail(value: string): boolean {
@@ -36,6 +34,3 @@ export function validatePasswordPolicy(password: string): string[] {
   return issues;
 }
 
-export function isOnboardingStep(step: string): boolean {
-  return ONBOARDING_STEPS.some((item) => item.id === step);
-}

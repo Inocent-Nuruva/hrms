@@ -18452,8 +18452,17 @@ export interface AnalyticsCustomReportPayload extends AnalyticsQueryParams {
 }
 
 export interface AnalyticsExportPayload extends AnalyticsCustomReportPayload {
-  output_format?: "CSV" | "JSON";
+  output_format?: "CSV" | "XLSX" | "PDF" | "JSON";
   idempotency_key?: string;
+}
+
+export interface SaveAnalyticsReportPayload extends AnalyticsCustomReportPayload {
+  name: string;
+  description?: string;
+  sorting?: Record<string, unknown>;
+  grouping?: Record<string, unknown>;
+  visibility?: "PRIVATE" | "DEPARTMENT" | "SHARED" | "ADMIN_ONLY";
+  department_scope_id?: number | null;
 }
 
 export interface AnalyticsRefreshPayload extends AnalyticsQueryParams {
@@ -18720,6 +18729,160 @@ export async function runAnalyticsCustomReport(
   return normalizeSingle(payload) ?? asRecord(payload);
 }
 
+export async function getAnalyticsReportCatalog(token: string) {
+  const payload = await adminRequest<unknown>("/api/analytics/reports/catalog", {
+    token,
+  });
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function listOperationalAnalyticsReports(token: string) {
+  const payload = await adminRequest<unknown>("/api/analytics/reports/operational", {
+    token,
+  });
+  return normalizeList(payload);
+}
+
+export async function runOperationalAnalyticsReport(
+  token: string,
+  code: string,
+  params: Record<string, string | number | undefined> = {},
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/analytics/reports/operational/${encodeURIComponent(code)}${buildRecordQuery(params)}`,
+    { token },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function downloadOperationalAnalyticsReport(
+  token: string,
+  code: string,
+  params: Record<string, string | number | undefined> = {},
+): Promise<{ blob: Blob; filename: string; contentType: string | null }> {
+  const response = await fetch(
+    buildUrl(
+      `/api/analytics/reports/operational/${encodeURIComponent(code)}/export${buildRecordQuery(params)}`,
+    ),
+    {
+      method: "GET",
+      headers: {
+        accept: "*/*",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      cache: "no-store",
+    },
+  );
+
+  if (!response.ok) {
+    const text = await response.text();
+    let payload: unknown = null;
+    if (text) {
+      try {
+        payload = JSON.parse(text) as unknown;
+      } catch {
+        payload = { message: text };
+      }
+    }
+    const error = new Error(
+      extractMessage(payload, response.status),
+    ) as Error & {
+      status?: number;
+      payload?: unknown;
+    };
+    error.status = response.status;
+    error.payload = payload;
+    throw error;
+  }
+
+  const blob = await response.blob();
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const filenameMatch = disposition.match(
+    /filename\*=UTF-8''([^;]+)|filename=\"?([^\";]+)\"?/i,
+  );
+  const rawFilename =
+    filenameMatch?.[1] ?? filenameMatch?.[2] ?? `${code.toLowerCase()}-report`;
+
+  return {
+    blob,
+    filename: decodeURIComponent(rawFilename),
+    contentType: response.headers.get("content-type"),
+  };
+}
+
+export async function listSavedAnalyticsReports(
+  token: string,
+  params: Record<string, string | number | undefined> = {},
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/analytics/reports/saved${buildRecordQuery(params)}`,
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function saveAnalyticsReport(
+  token: string,
+  data: SaveAnalyticsReportPayload,
+) {
+  const payload = await adminRequest<unknown>("/api/analytics/reports/saved", {
+    method: "POST",
+    token,
+    body: data,
+  });
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function updateSavedAnalyticsReport(
+  token: string,
+  id: string | number,
+  data: Partial<SaveAnalyticsReportPayload>,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/analytics/reports/saved/${id}`,
+    {
+      method: "PUT",
+      token,
+      body: data,
+    },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function runSavedAnalyticsReport(
+  token: string,
+  id: string | number,
+  data: AnalyticsQueryParams,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/analytics/reports/saved/${id}/run`,
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
+  );
+  const list = normalizeList(payload);
+  if (list.length > 0) {
+    return list;
+  }
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function deleteSavedAnalyticsReport(
+  token: string,
+  id: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/analytics/reports/saved/${id}`,
+    {
+      method: "DELETE",
+      token,
+    },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
 export async function exportAnalyticsReport(
   token: string,
   data: AnalyticsExportPayload,
@@ -18730,6 +18893,58 @@ export async function exportAnalyticsReport(
     body: data,
   });
   return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function downloadAnalyticsExport(
+  token: string,
+  id: string | number,
+): Promise<{ blob: Blob; filename: string; contentType: string | null }> {
+  const response = await fetch(
+    buildUrl(`/api/analytics/exports/${id}/download`),
+    {
+      method: "GET",
+      headers: {
+        accept: "*/*",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      cache: "no-store",
+    },
+  );
+
+  if (!response.ok) {
+    const text = await response.text();
+    let payload: unknown = null;
+    if (text) {
+      try {
+        payload = JSON.parse(text) as unknown;
+      } catch {
+        payload = { message: text };
+      }
+    }
+    const error = new Error(
+      extractMessage(payload, response.status),
+    ) as Error & {
+      status?: number;
+      payload?: unknown;
+    };
+    error.status = response.status;
+    error.payload = payload;
+    throw error;
+  }
+
+  const blob = await response.blob();
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const filenameMatch = disposition.match(
+    /filename\*=UTF-8''([^;]+)|filename=\"?([^\";]+)\"?/i,
+  );
+  const rawFilename =
+    filenameMatch?.[1] ?? filenameMatch?.[2] ?? `analytics-export-${id}`;
+
+  return {
+    blob,
+    filename: decodeURIComponent(rawFilename),
+    contentType: response.headers.get("content-type"),
+  };
 }
 
 export async function runAnalyticsReconciliation(token: string) {

@@ -110,13 +110,6 @@ export interface AuthSwitchCompanyResponse {
   companyName?: string;
 }
 
-export interface OnboardingStep {
-  id: string;
-  title: string;
-  description: string;
-  route: string;
-}
-
 export interface ApiErrorResponse {
   message: string;
   statusCode?: number;

@@ -1,12 +1,14 @@
-import { useEffect } from "react";
-import { useRouter } from "next/router";
+import type { GetServerSideProps } from "next";
 
-export default function OnboardingDashboardPage() {
-  const router = useRouter();
+const DASHBOARD_ONBOARDING_PATH = "/dashboard/me/onboarding";
 
-  useEffect(() => {
-    void router.replace("/dashboard");
-  }, [router]);
+export const getServerSideProps: GetServerSideProps = async () => ({
+  redirect: {
+    destination: DASHBOARD_ONBOARDING_PATH,
+    permanent: false,
+  },
+});
 
+export default function LegacyOnboardingDashboardRedirectPage() {
   return null;
 }

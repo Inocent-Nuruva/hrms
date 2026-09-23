@@ -22,7 +22,7 @@ export function DashboardLayout({ title, onLogout, children }: DashboardLayoutPr
           <Logo compact />
           <nav className="dashboard-nav" aria-label="Main navigation">
             <Link href="/dashboard">Dashboard</Link>
-            <Link href="/onboarding">Onboarding</Link>
+            <Link href="/dashboard/me/onboarding">Onboarding</Link>
             <Link href={buildDashboardResetPasswordHref()}>Security</Link>
           </nav>
           {onLogout ? (

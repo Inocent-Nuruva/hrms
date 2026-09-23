@@ -1,4 +1,3 @@
-import type { OnboardingStep } from "@/types";
 import { env } from "@/lib/env";
 
 /** Normalize API base (strip trailing /api if someone set full API root). */
@@ -23,7 +22,7 @@ export const ROUTES = {
   resetPassword: "/reset-password",
   dashboard: "/dashboard",
   dashboardSettings: "/dashboard/settings",
-  onboarding: "/onboarding",
+  onboarding: "/dashboard/me/onboarding",
 } as const;
 
 export const SETTINGS_SECURITY_TABS = {
@@ -57,29 +56,3 @@ export function isDashboardResetPasswordLocation(
   return tab === "password" || tab === SETTINGS_SECURITY_TABS.resetPassword
 }
 
-export const ONBOARDING_STEPS: OnboardingStep[] = [
-  {
-    id: "profile",
-    title: "Profile Information",
-    description: "Complete and confirm your personal profile details.",
-    route: "/onboarding/profile",
-  },
-  {
-    id: "documents",
-    title: "Document Upload",
-    description: "Upload required HR and compliance documents.",
-    route: "/onboarding/documents",
-  },
-  {
-    id: "banking",
-    title: "Banking & Payroll",
-    description: "Provide payroll and banking information for salary processing.",
-    route: "/onboarding/banking",
-  },
-  {
-    id: "review",
-    title: "Final Review",
-    description: "Review details and submit your onboarding package.",
-    route: "/onboarding/review",
-  },
-];
