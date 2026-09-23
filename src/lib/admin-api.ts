@@ -288,11 +288,27 @@ export type NotificationPreferenceType =
   | "OFFBOARDING_SETTLEMENT_OVERDUE"
   | "OFFBOARDING_COMPLETED"
   | "ATTENDANCE_CORRECTION"
+  | "ATTENDANCE_MISSING"
+  | "ATTENDANCE_LATE"
+  | "DAILY_ACTIVITY_NOT_SUBMITTED"
+  | "FIELD_VISIT_REPORT_PENDING"
+  | "PROBATION_CONFIRMATION_DUE"
+  | "PROBATION_CONFIRMATION_OVERDUE"
+  | "KPI_UPDATE_PENDING"
+  | "KPI_SCORE_PUBLISHED"
+  | "PERFORMANCE_DEADLINE_REMINDER"
+  | "PERFORMANCE_PIP_REMINDER"
+  | "PERFORMANCE_DEVELOPMENT_REMINDER"
+  | "PAYROLL_PROCESSED"
+  | "PAYSLIP_AVAILABLE"
+  | "STAFF_LOAN_INSTALLMENT_DEDUCTED"
+  | "APPROVAL_OVERDUE"
   | "SYSTEM_ALERT";
 export type NotificationDeliveryStatus =
   "PENDING" | "DELIVERED" | "FAILED" | "SKIPPED";
 export type NotificationMailLogStatus =
   "PENDING" | "SENT" | "SKIPPED" | "FAILED";
+export type NotificationTemplateStatus = "ACTIVE" | "INACTIVE";
 
 export type NotificationItem = AdminRecord & {
   id?: number | string;
@@ -390,6 +406,57 @@ export type NotificationChannelRegistryItem = AdminRecord & {
   created_at?: string;
   updatedAt?: string;
   updated_at?: string;
+};
+
+export interface NotificationTemplateQueryParams {
+  search?: string;
+  template_code?: string;
+  status?: NotificationTemplateStatus;
+}
+
+export type NotificationTemplateItem = AdminRecord & {
+  id?: number | string;
+  companyId?: number | string | null;
+  company_id?: number | string | null;
+  templateCode?: string;
+  template_code?: string;
+  title?: string;
+  emailSubject?: string | null;
+  email_subject?: string | null;
+  systemMessage?: string;
+  system_message?: string;
+  emailBody?: string | null;
+  email_body?: string | null;
+  mobileMessage?: string | null;
+  mobile_message?: string | null;
+  availableVariables?: string[];
+  available_variables?: string[];
+  status?: NotificationTemplateStatus | string;
+};
+
+export interface NotificationRuleQueryParams {
+  search?: string;
+  notification_type?: string;
+  trigger_event?: string;
+  related_module?: string;
+  enabled?: boolean;
+}
+
+export type NotificationRuleItem = AdminRecord & {
+  id?: number | string;
+  companyId?: number | string | null;
+  company_id?: number | string | null;
+  notificationType?: string;
+  notification_type?: string;
+  triggerEvent?: string;
+  trigger_event?: string;
+  relatedModule?: string | null;
+  related_module?: string | null;
+  recipientType?: string;
+  recipient_type?: string;
+  channels?: NotificationChannel[] | string[];
+  priority?: NotificationPriority | string;
+  enabled?: boolean;
 };
 
 export type NotificationPreference = AdminRecord & {
@@ -1593,6 +1660,42 @@ function buildNotificationChannelRegistryQuery(
   }
   if (params.search && params.search.trim()) {
     searchParams.set("search", params.search.trim());
+  }
+  const query = searchParams.toString();
+  return query ? `?${query}` : "";
+}
+
+function buildNotificationTemplateQuery(params: NotificationTemplateQueryParams) {
+  const searchParams = new URLSearchParams();
+  if (params.search && params.search.trim()) {
+    searchParams.set("search", params.search.trim());
+  }
+  if (params.template_code && params.template_code.trim()) {
+    searchParams.set("template_code", params.template_code.trim());
+  }
+  if (params.status) {
+    searchParams.set("status", params.status);
+  }
+  const query = searchParams.toString();
+  return query ? `?${query}` : "";
+}
+
+function buildNotificationRuleQuery(params: NotificationRuleQueryParams) {
+  const searchParams = new URLSearchParams();
+  if (params.search && params.search.trim()) {
+    searchParams.set("search", params.search.trim());
+  }
+  if (params.notification_type && params.notification_type.trim()) {
+    searchParams.set("notification_type", params.notification_type.trim());
+  }
+  if (params.trigger_event && params.trigger_event.trim()) {
+    searchParams.set("trigger_event", params.trigger_event.trim());
+  }
+  if (params.related_module && params.related_module.trim()) {
+    searchParams.set("related_module", params.related_module.trim());
+  }
+  if (typeof params.enabled === "boolean") {
+    searchParams.set("enabled", String(params.enabled));
   }
   const query = searchParams.toString();
   return query ? `?${query}` : "";
@@ -3420,6 +3523,121 @@ export async function updatePlatformNotificationChannelRegistryItem(
   return (
     (normalizeSingle(payload) as NotificationChannelRegistryItem | null) ??
     (asRecord(payload) as NotificationChannelRegistryItem | null)
+  );
+}
+
+export async function listNotificationTemplates(
+  token: string,
+  params: NotificationTemplateQueryParams = {},
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/notifications/templates${buildNotificationTemplateQuery(params)}`,
+    { token },
+  );
+  return normalizeList(payload) as NotificationTemplateItem[];
+}
+
+export async function getNotificationTemplate(
+  token: string,
+  id: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/notifications/templates/${id}`,
+    { token },
+  );
+  return (
+    (normalizeSingle(payload) as NotificationTemplateItem | null) ??
+    (asRecord(payload) as NotificationTemplateItem | null)
+  );
+}
+
+export async function createNotificationTemplate(
+  token: string,
+  data: AdminRecord,
+) {
+  const payload = await adminRequest<unknown>("/api/notifications/templates", {
+    method: "POST",
+    token,
+    body: data,
+  });
+  return (
+    (normalizeSingle(payload) as NotificationTemplateItem | null) ??
+    (asRecord(payload) as NotificationTemplateItem | null)
+  );
+}
+
+export async function updateNotificationTemplate(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/notifications/templates/${id}`,
+    {
+      method: "PATCH",
+      token,
+      body: data,
+    },
+  );
+  return (
+    (normalizeSingle(payload) as NotificationTemplateItem | null) ??
+    (asRecord(payload) as NotificationTemplateItem | null)
+  );
+}
+
+export async function listNotificationRules(
+  token: string,
+  params: NotificationRuleQueryParams = {},
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/notifications/rules${buildNotificationRuleQuery(params)}`,
+    { token },
+  );
+  return normalizeList(payload) as NotificationRuleItem[];
+}
+
+export async function getNotificationRule(
+  token: string,
+  id: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/notifications/rules/${id}`,
+    { token },
+  );
+  return (
+    (normalizeSingle(payload) as NotificationRuleItem | null) ??
+    (asRecord(payload) as NotificationRuleItem | null)
+  );
+}
+
+export async function createNotificationRule(token: string, data: AdminRecord) {
+  const payload = await adminRequest<unknown>("/api/notifications/rules", {
+    method: "POST",
+    token,
+    body: data,
+  });
+  return (
+    (normalizeSingle(payload) as NotificationRuleItem | null) ??
+    (asRecord(payload) as NotificationRuleItem | null)
+  );
+}
+
+export async function updateNotificationRule(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/notifications/rules/${id}`,
+    {
+      method: "PATCH",
+      token,
+      body: data,
+    },
+  );
+  return (
+    (normalizeSingle(payload) as NotificationRuleItem | null) ??
+    (asRecord(payload) as NotificationRuleItem | null)
   );
 }
 

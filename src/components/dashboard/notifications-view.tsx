@@ -10,6 +10,7 @@ import {
   Loader2Icon,
   RefreshCwIcon,
   RotateCcwIcon,
+  ToggleLeftIcon,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -21,11 +22,15 @@ import {
   getNotificationChannelSetting,
   getNotificationDelivery,
   getNotificationMailLog,
+  getNotificationRule,
+  getNotificationTemplate,
   getPlatformNotificationMailLog,
   listNotificationChannelRegistry,
   listNotificationChannelSettings,
   listNotificationDeliveries,
   listNotificationMailLogs,
+  listNotificationRules,
+  listNotificationTemplates,
   listNotifications,
   listPlatformNotificationChannelRegistry,
   listPlatformNotificationChannelSettings,
@@ -35,6 +40,8 @@ import {
   markNotificationAsSeen,
   retryPlatformNotificationMailLog,
   retryNotificationMailLog,
+  updateNotificationRule,
+  updateNotificationTemplate,
   updateNotificationChannelRegistryItem,
   updateNotificationChannelSetting,
   updatePlatformNotificationChannelRegistryItem,
@@ -49,6 +56,7 @@ import {
   type NotificationMailLogStatus,
   type NotificationPriority,
   type NotificationQueryParams,
+  type NotificationTemplateStatus,
 } from "@/lib/admin-api"
 import { DEFAULT_NOTIFICATION_QUERY, useNotifications } from "@/lib/notifications-store"
 import { readStoredSessionTokens } from "@/lib/session-client"
@@ -70,6 +78,8 @@ type NotificationsTab =
   | "deliveries"
   | "settings"
   | "mail-logs"
+  | "templates"
+  | "rules"
   | "registry"
   | "platform-registry"
   | "platform-settings"
@@ -78,11 +88,15 @@ type InboxStatusFilterValue = "all" | "UNREAD" | "READ"
 type DeliveryStatusFilterValue = "all" | NotificationDeliveryStatus
 type MailLogStatusFilterValue = "all" | NotificationMailLogStatus
 type ChannelFilterValue = "all" | NotificationChannel
+type TemplateStatusFilterValue = "all" | NotificationTemplateStatus
+type RuleEnabledFilterValue = "all" | "enabled" | "disabled"
 
 const TABS: Array<{ id: NotificationsTab; label: string }> = [
   { id: "inbox", label: "Inbox" },
   { id: "deliveries", label: "Deliveries" },
   { id: "settings", label: "Channel Settings" },
+  { id: "templates", label: "Templates" },
+  { id: "rules", label: "Rules" },
   { id: "mail-logs", label: "Mail Logs" },
   { id: "registry", label: "Channel Registry" },
   { id: "platform-registry", label: "Platform Registry" },
@@ -415,6 +429,42 @@ function readRegistryIdentity(row: AdminRecord | null | undefined) {
   return channel && code ? `${channel}:${code}` : ""
 }
 
+function readTemplateId(row: AdminRecord | null | undefined) {
+  return readNumber(row, ["id", "template_id", "templateId"])
+}
+
+function readTemplateCode(row: AdminRecord | null | undefined) {
+  return readString(row, ["template_code", "templateCode", "code"]).toUpperCase()
+}
+
+function templateStatusLabel(row: AdminRecord | null | undefined) {
+  return readString(row, ["status"], "ACTIVE").toUpperCase() === "ACTIVE" ? "Active" : "Inactive"
+}
+
+function templateEnabled(row: AdminRecord | null | undefined) {
+  return templateStatusLabel(row) === "Active"
+}
+
+function readRuleId(row: AdminRecord | null | undefined) {
+  return readNumber(row, ["id", "rule_id", "ruleId"])
+}
+
+function readRuleType(row: AdminRecord | null | undefined) {
+  return readString(row, ["notificationType", "notification_type"], "GENERAL")
+}
+
+function readRuleEvent(row: AdminRecord | null | undefined) {
+  return readString(row, ["triggerEvent", "trigger_event"], "notification.triggered")
+}
+
+function ruleEnabled(row: AdminRecord | null | undefined) {
+  return readBoolean(row, ["enabled", "is_enabled", "isEnabled"]) !== false
+}
+
+function ruleStatusLabel(row: AdminRecord | null | undefined) {
+  return ruleEnabled(row) ? "Enabled" : "Disabled"
+}
+
 function channelSettingEnabled(row: AdminRecord | null | undefined) {
   return Boolean(readBoolean(row, ["isEnabled", "is_enabled"]))
 }
@@ -477,6 +527,12 @@ function rowIdentity(tab: NotificationsTab, row: AdminRecord | null | undefined)
   if (tab === "platform-registry") {
     return readRegistryIdentity(row)
   }
+  if (tab === "templates") {
+    return String(readTemplateId(row) ?? "")
+  }
+  if (tab === "rules") {
+    return String(readRuleId(row) ?? "")
+  }
   if (tab === "deliveries") {
     return String(readDeliveryId(row) ?? "")
   }
@@ -536,6 +592,10 @@ export function NotificationsView() {
     React.useState<ChannelFilterValue>("all")
   const [mailLogStatusFilter, setMailLogStatusFilter] =
     React.useState<MailLogStatusFilterValue>("all")
+  const [templateStatusFilter, setTemplateStatusFilter] =
+    React.useState<TemplateStatusFilterValue>("all")
+  const [ruleEnabledFilter, setRuleEnabledFilter] =
+    React.useState<RuleEnabledFilterValue>("all")
   const [detailOpen, setDetailOpen] = React.useState(false)
   const [detailLoading, setDetailLoading] = React.useState(false)
   const [selectedRow, setSelectedRow] = React.useState<AdminRecord | null>(null)
@@ -583,6 +643,10 @@ export function NotificationsView() {
         ? [Boolean(deferredSearch), deliveryStatusFilter !== "all", channelFilter !== "all"].filter(Boolean).length
         : tab === "registry" || tab === "platform-registry"
           ? [Boolean(deferredSearch), channelFilter !== "all"].filter(Boolean).length
+        : tab === "templates"
+          ? [Boolean(deferredSearch), templateStatusFilter !== "all"].filter(Boolean).length
+        : tab === "rules"
+          ? [Boolean(deferredSearch), ruleEnabledFilter !== "all"].filter(Boolean).length
         : tab === "mail-logs"
           ? [Boolean(deferredSearch), mailLogStatusFilter !== "all"].filter(Boolean).length
           : tab === "platform-mail-logs"
@@ -681,6 +745,26 @@ export function NotificationsView() {
         return
       }
 
+      if (tab === "templates") {
+        const result = await listNotificationTemplates(token, {
+          ...(deferredSearch ? { search: deferredSearch } : {}),
+          ...(templateStatusFilter !== "all" ? { status: templateStatusFilter } : {}),
+        })
+        if (loadRequestIdRef.current !== requestId) return
+        setRows(result)
+        return
+      }
+
+      if (tab === "rules") {
+        const result = await listNotificationRules(token, {
+          ...(deferredSearch ? { search: deferredSearch } : {}),
+          ...(ruleEnabledFilter !== "all" ? { enabled: ruleEnabledFilter === "enabled" } : {}),
+        })
+        if (loadRequestIdRef.current !== requestId) return
+        setRows(result)
+        return
+      }
+
       if (tab === "platform-mail-logs") {
         const result = await listPlatformNotificationMailLogs(token, {
           page: 1,
@@ -727,7 +811,9 @@ export function NotificationsView() {
     includeArchived,
     mailLogStatusFilter,
     priorityFilter,
+    ruleEnabledFilter,
     tab,
+    templateStatusFilter,
   ])
 
   React.useEffect(() => {
@@ -810,6 +896,18 @@ export function NotificationsView() {
           }
         } else if (tab === "platform-settings") {
           setSelectedRow(row)
+        } else if (tab === "templates") {
+          const id = readTemplateId(row)
+          if (id !== null) {
+            const detail = await getNotificationTemplate(token, id)
+            if (detail) setSelectedRow(detail)
+          }
+        } else if (tab === "rules") {
+          const id = readRuleId(row)
+          if (id !== null) {
+            const detail = await getNotificationRule(token, id)
+            if (detail) setSelectedRow(detail)
+          }
         } else if (tab === "mail-logs") {
           const id = readMailLogId(row)
           if (id !== null) {
@@ -1160,6 +1258,78 @@ export function NotificationsView() {
           errorObject instanceof Error
             ? errorObject.message
             : "Failed to update platform channel registry item.",
+        )
+      } finally {
+        markBusy(key, false)
+      }
+    },
+    [markBusy, updateRow],
+  )
+
+  const handleToggleTemplate = React.useCallback(
+    async (row: AdminRecord) => {
+      const token = readStoredToken()
+      const id = readTemplateId(row)
+      if (!token || id === null) return
+
+      const key = rowIdentity("templates", row)
+      markBusy(key, true)
+      try {
+        const updated = await updateNotificationTemplate(token, id, {
+          status: templateEnabled(row) ? "INACTIVE" : "ACTIVE",
+        })
+        updateRow(
+          "templates",
+          key,
+          (updated as AdminRecord | null) ?? {
+            ...row,
+            status: templateEnabled(row) ? "INACTIVE" : "ACTIVE",
+          },
+        )
+        toast.success(
+          templateEnabled(row)
+            ? "Notification template deactivated."
+            : "Notification template activated.",
+        )
+      } catch (errorObject) {
+        toast.error(
+          errorObject instanceof Error
+            ? errorObject.message
+            : "Failed to update notification template.",
+        )
+      } finally {
+        markBusy(key, false)
+      }
+    },
+    [markBusy, updateRow],
+  )
+
+  const handleToggleRule = React.useCallback(
+    async (row: AdminRecord) => {
+      const token = readStoredToken()
+      const id = readRuleId(row)
+      if (!token || id === null) return
+
+      const key = rowIdentity("rules", row)
+      markBusy(key, true)
+      try {
+        const updated = await updateNotificationRule(token, id, {
+          enabled: !ruleEnabled(row),
+        })
+        updateRow(
+          "rules",
+          key,
+          (updated as AdminRecord | null) ?? {
+            ...row,
+            enabled: !ruleEnabled(row),
+          },
+        )
+        toast.success(ruleEnabled(row) ? "Notification rule disabled." : "Notification rule enabled.")
+      } catch (errorObject) {
+        toast.error(
+          errorObject instanceof Error
+            ? errorObject.message
+            : "Failed to update notification rule.",
         )
       } finally {
         markBusy(key, false)
@@ -1751,6 +1921,166 @@ export function NotificationsView() {
       ]
     }
 
+    if (tab === "templates") {
+      return [
+        {
+          key: "template_code",
+          label: "Template",
+          defaultWidth: 240,
+          render: (row) => (
+            <div className="min-w-0">
+              <p className="truncate text-xs font-medium text-foreground">
+                {readString(row, ["title"], "Untitled template")}
+              </p>
+              <p className="truncate text-[11px] text-muted-foreground">
+                {readTemplateCode(row) || "NO_CODE"}
+              </p>
+            </div>
+          ),
+        },
+        {
+          key: "message",
+          label: "System Message",
+          defaultWidth: 260,
+          render: (row) => (
+            <span className="block truncate text-xs text-muted-foreground">
+              {readString(row, ["systemMessage", "system_message"], "—")}
+            </span>
+          ),
+        },
+        {
+          key: "status",
+          label: "Status",
+          defaultWidth: 90,
+          render: (row) => (
+            <Badge variant="outline" className={cn("text-[10px]", statusTone(templateStatusLabel(row)))}>
+              {templateStatusLabel(row)}
+            </Badge>
+          ),
+        },
+        {
+          key: "actions",
+          label: "Actions",
+          defaultWidth: 112,
+          sortable: false,
+          render: (row) => {
+            const key = rowIdentity("templates", row)
+            const busy = busyKeys.includes(key)
+            return (
+              <div className="flex justify-end gap-1" onClick={(event) => event.stopPropagation()}>
+                <button
+                  type="button"
+                  className="rounded-md px-2 py-1 text-[11px] font-medium text-primary hover:bg-primary/10"
+                  onClick={() => void openDetail(row)}
+                >
+                  View
+                </button>
+                <button
+                  type="button"
+                  className="admin-table-icon-button"
+                  title={templateEnabled(row) ? "Deactivate" : "Activate"}
+                  aria-label={templateEnabled(row) ? "Deactivate" : "Activate"}
+                  disabled={busy}
+                  onClick={() => void handleToggleTemplate(row)}
+                >
+                  {busy ? (
+                    <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <ToggleLeftIcon className="h-3.5 w-3.5" />
+                  )}
+                </button>
+              </div>
+            )
+          },
+        },
+      ]
+    }
+
+    if (tab === "rules") {
+      return [
+        {
+          key: "notification_type",
+          label: "Rule",
+          defaultWidth: 240,
+          render: (row) => (
+            <div className="min-w-0">
+              <p className="truncate text-xs font-medium text-foreground">
+                {formatLabel(readRuleType(row))}
+              </p>
+              <p className="truncate text-[11px] text-muted-foreground">
+                {readRuleEvent(row)}
+              </p>
+            </div>
+          ),
+        },
+        {
+          key: "recipient_type",
+          label: "Recipient",
+          defaultWidth: 150,
+          render: (row) => (
+            <span className="text-xs text-muted-foreground">
+              {formatLabel(readString(row, ["recipientType", "recipient_type"], "recipient"))}
+            </span>
+          ),
+        },
+        {
+          key: "channels",
+          label: "Channels",
+          defaultWidth: 140,
+          render: (row) => {
+            const value = row.channels
+            const channels = Array.isArray(value) ? value.join(", ") : readString(row, ["channels"], "—")
+            return <span className="text-xs text-muted-foreground">{channels}</span>
+          },
+        },
+        {
+          key: "enabled",
+          label: "Status",
+          defaultWidth: 90,
+          render: (row) => (
+            <Badge variant="outline" className={cn("text-[10px]", statusTone(ruleStatusLabel(row)))}>
+              {ruleStatusLabel(row)}
+            </Badge>
+          ),
+        },
+        {
+          key: "actions",
+          label: "Actions",
+          defaultWidth: 112,
+          sortable: false,
+          render: (row) => {
+            const key = rowIdentity("rules", row)
+            const busy = busyKeys.includes(key)
+            return (
+              <div className="flex justify-end gap-1" onClick={(event) => event.stopPropagation()}>
+                <button
+                  type="button"
+                  className="rounded-md px-2 py-1 text-[11px] font-medium text-primary hover:bg-primary/10"
+                  onClick={() => void openDetail(row)}
+                >
+                  View
+                </button>
+                <button
+                  type="button"
+                  className="admin-table-icon-button"
+                  title={ruleEnabled(row) ? "Disable" : "Enable"}
+                  aria-label={ruleEnabled(row) ? "Disable" : "Enable"}
+                  disabled={busy}
+                  onClick={() => void handleToggleRule(row)}
+                >
+                  {busy ? (
+                    <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <ToggleLeftIcon className="h-3.5 w-3.5" />
+                  )}
+                </button>
+              </div>
+            )
+          },
+        },
+      ]
+    }
+
     return [
       {
         key: "recipient_email",
@@ -1847,6 +2177,8 @@ export function NotificationsView() {
     handleMarkSeen,
     handleRetryPlatformMailLog,
     handleRetryMailLog,
+    handleToggleTemplate,
+    handleToggleRule,
     handleTogglePlatformChannelSetting,
     handleTogglePlatformRegistryItem,
     handleToggleRegistryItem,
@@ -1866,6 +2198,10 @@ export function NotificationsView() {
         ? "Deliveries"
         : tab === "settings"
           ? "Channel Settings"
+        : tab === "templates"
+          ? "Templates"
+        : tab === "rules"
+          ? "Rules"
             : tab === "mail-logs"
               ? "Mail Logs"
               : tab === "registry"
@@ -2060,6 +2396,34 @@ export function NotificationsView() {
                     {option.label}
                   </option>
                 ))}
+              </select>
+            ) : null}
+
+            {tab === "templates" ? (
+              <select
+                className={inputClass}
+                value={templateStatusFilter}
+                onChange={(event) =>
+                  setTemplateStatusFilter(event.target.value as TemplateStatusFilterValue)
+                }
+              >
+                <option value="all">All statuses</option>
+                <option value="ACTIVE">Active</option>
+                <option value="INACTIVE">Inactive</option>
+              </select>
+            ) : null}
+
+            {tab === "rules" ? (
+              <select
+                className={inputClass}
+                value={ruleEnabledFilter}
+                onChange={(event) =>
+                  setRuleEnabledFilter(event.target.value as RuleEnabledFilterValue)
+                }
+              >
+                <option value="all">All statuses</option>
+                <option value="enabled">Enabled</option>
+                <option value="disabled">Disabled</option>
               </select>
             ) : null}
 
@@ -2391,6 +2755,101 @@ export function NotificationsView() {
                       ["Created", formatDateTime(selectedRow.createdAt ?? selectedRow.created_at)],
                       ["Updated", formatDateTime(selectedRow.updatedAt ?? selectedRow.updated_at)],
                       ["Description", readString(selectedRow, ["description"], "—")],
+                    ])}
+                  </>
+                ) : null}
+
+                {tab === "templates" ? (
+                  <>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        className="inline-flex h-8 items-center gap-1 rounded-lg border border-border px-2.5 text-xs font-medium disabled:opacity-60"
+                        disabled={selectedBusy}
+                        onClick={() => void handleToggleTemplate(selectedRow)}
+                      >
+                        {selectedBusy ? <Loader2Icon className="size-3.5 animate-spin" /> : <ToggleLeftIcon className="size-3.5" />}
+                        {templateEnabled(selectedRow) ? "Deactivate template" : "Activate template"}
+                      </button>
+                    </div>
+                    {renderSummaryCards([
+                      ["Code", readTemplateCode(selectedRow) || "—"],
+                      ["Status", templateStatusLabel(selectedRow)],
+                      ["Title", readString(selectedRow, ["title"], "—")],
+                      ["Email subject", readString(selectedRow, ["emailSubject", "email_subject"], "—")],
+                      [
+                        "Variables",
+                        Array.isArray(selectedRow.availableVariables)
+                          ? selectedRow.availableVariables.join(", ")
+                          : Array.isArray(selectedRow.available_variables)
+                            ? selectedRow.available_variables.join(", ")
+                            : "—",
+                      ],
+                      ["Updated", formatDateTime(selectedRow.updatedAt ?? selectedRow.updated_at)],
+                    ])}
+                    <div className="rounded-md border border-border bg-background px-3 py-3">
+                      <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                        System message
+                      </p>
+                      <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">
+                        {readString(selectedRow, ["systemMessage", "system_message"], "—")}
+                      </p>
+                    </div>
+                    {readString(selectedRow, ["emailBody", "email_body"]) ? (
+                      <div className="rounded-md border border-border bg-background px-3 py-3">
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                          Email body
+                        </p>
+                        <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">
+                          {readString(selectedRow, ["emailBody", "email_body"])}
+                        </p>
+                      </div>
+                    ) : null}
+                  </>
+                ) : null}
+
+                {tab === "rules" ? (
+                  <>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        className="inline-flex h-8 items-center gap-1 rounded-lg border border-border px-2.5 text-xs font-medium disabled:opacity-60"
+                        disabled={selectedBusy}
+                        onClick={() => void handleToggleRule(selectedRow)}
+                      >
+                        {selectedBusy ? <Loader2Icon className="size-3.5 animate-spin" /> : <ToggleLeftIcon className="size-3.5" />}
+                        {ruleEnabled(selectedRow) ? "Disable rule" : "Enable rule"}
+                      </button>
+                    </div>
+                    {renderSummaryCards([
+                      ["Status", ruleStatusLabel(selectedRow)],
+                      ["Type", formatLabel(readRuleType(selectedRow))],
+                      ["Trigger", readRuleEvent(selectedRow)],
+                      ["Module", readString(selectedRow, ["relatedModule", "related_module"], "—")],
+                      ["Recipient", formatLabel(readString(selectedRow, ["recipientType", "recipient_type"], "recipient"))],
+                      [
+                        "Channels",
+                        Array.isArray(selectedRow.channels)
+                          ? selectedRow.channels.join(", ")
+                          : readString(selectedRow, ["channels"], "—"),
+                      ],
+                      ["Priority", formatLabel(readString(selectedRow, ["priority"], "MEDIUM"))],
+                      [
+                        "Reminder before",
+                        String(readNumber(selectedRow, ["reminderBeforeMinutes", "reminder_before_minutes"]) ?? "—"),
+                      ],
+                      [
+                        "Reminder after",
+                        String(readNumber(selectedRow, ["reminderAfterMinutes", "reminder_after_minutes"]) ?? "—"),
+                      ],
+                      [
+                        "Escalation after",
+                        String(readNumber(selectedRow, ["escalationAfterMinutes", "escalation_after_minutes"]) ?? "—"),
+                      ],
+                      [
+                        "Repeat interval",
+                        String(readNumber(selectedRow, ["repeatIntervalMinutes", "repeat_interval_minutes"]) ?? "—"),
+                      ],
                     ])}
                   </>
                 ) : null}

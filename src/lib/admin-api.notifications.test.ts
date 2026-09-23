@@ -2,13 +2,19 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
   createTestNotification,
+  createNotificationRule,
+  createNotificationTemplate,
   deleteNotification,
+  getNotificationRule,
+  getNotificationTemplate,
   getNotificationChannelRegistryItem,
   getNotificationChannelSetting,
   getNotificationDelivery,
   getNotificationMailLog,
   getPlatformNotificationMailLog,
   listNotificationChannelRegistry,
+  listNotificationRules,
+  listNotificationTemplates,
   listNotifications,
   listNotificationChannelSettings,
   listNotificationDeliveries,
@@ -25,6 +31,8 @@ import {
   setMyNotificationPreference,
   updateNotificationChannelRegistryItem,
   updateNotificationChannelSetting,
+  updateNotificationRule,
+  updateNotificationTemplate,
   updatePlatformNotificationChannelRegistryItem,
   updatePlatformNotificationChannelSetting,
 } from "./admin-api"
@@ -631,6 +639,130 @@ describe("notifications admin API helpers", () => {
     expect(updated).toEqual(
       expect.objectContaining({
         isEnabled: false,
+      })
+    )
+  })
+
+  it("lists, creates, fetches, and updates notification templates", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: [
+            {
+              id: 7,
+              template_code: "leave.approved",
+              title: "Leave approved",
+              status: "ACTIVE",
+            },
+          ],
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: {
+            id: 8,
+            template_code: "probation.due",
+            title: "Probation due",
+          },
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: {
+            id: 7,
+            template_code: "leave.approved",
+            title: "Leave approved",
+          },
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: {
+            id: 7,
+            status: "INACTIVE",
+          },
+        })
+      )
+    vi.stubGlobal("fetch", fetchMock)
+
+    await listNotificationTemplates("token", { search: "leave", status: "ACTIVE" })
+    await createNotificationTemplate("token", {
+      template_code: "probation.due",
+      title: "Probation due",
+      system_message: "{{employee_name}} probation is due.",
+    })
+    await getNotificationTemplate("token", 7)
+    await updateNotificationTemplate("token", 7, { status: "INACTIVE" })
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "http://localhost:8888/api/notifications/templates?search=leave&status=ACTIVE",
+      expect.objectContaining({ method: "GET" })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "http://localhost:8888/api/notifications/templates",
+      expect.objectContaining({ method: "POST" })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "http://localhost:8888/api/notifications/templates/7",
+      expect.objectContaining({ method: "GET" })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
+      "http://localhost:8888/api/notifications/templates/7",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ status: "INACTIVE" }),
+      })
+    )
+  })
+
+  it("lists, creates, fetches, and updates notification rules", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ data: [{ id: 12, enabled: true }] }))
+      .mockResolvedValueOnce(jsonResponse({ data: { id: 13, enabled: true } }))
+      .mockResolvedValueOnce(jsonResponse({ data: { id: 12, enabled: true } }))
+      .mockResolvedValueOnce(jsonResponse({ data: { id: 12, enabled: false } }))
+    vi.stubGlobal("fetch", fetchMock)
+
+    await listNotificationRules("token", {
+      notification_type: "LEAVE_APPROVAL_REQUIRED",
+      enabled: true,
+    })
+    await createNotificationRule("token", {
+      notification_type: "LEAVE_APPROVAL_REQUIRED",
+      trigger_event: "leave.pending",
+      recipient_type: "CURRENT_APPROVER",
+      channels: ["IN_APP", "EMAIL"],
+    })
+    await getNotificationRule("token", 12)
+    await updateNotificationRule("token", 12, { enabled: false })
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "http://localhost:8888/api/notifications/rules?notification_type=LEAVE_APPROVAL_REQUIRED&enabled=true",
+      expect.objectContaining({ method: "GET" })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "http://localhost:8888/api/notifications/rules",
+      expect.objectContaining({ method: "POST" })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "http://localhost:8888/api/notifications/rules/12",
+      expect.objectContaining({ method: "GET" })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
+      "http://localhost:8888/api/notifications/rules/12",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ enabled: false }),
       })
     )
   })
